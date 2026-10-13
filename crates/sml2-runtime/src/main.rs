@@ -1060,6 +1060,13 @@ fn run_replay(
             // a screen transition skips the player update — the camera's
             // `$0DED` handler moves Mario instead.
             if cam.transition == 0 {
+                // $307D — `$0F71`'s FIRST call: the B+Down/B+Up crouch-look
+                // pan runs at the *top* of the player update, before the body,
+                // so its `sMarioOnGround`/`sMarioOnObject` gate reads the
+                // flags the previous frame settled (`PlayerSim::step` would
+                // overwrite them). Still before `cam.step` below, and skipped
+                // whenever `$0F71` is — see `CameraSim::crouch_pan`.
+                cam.crouch_pan(&sim, &keys);
                 sim.step(&keys, a_pressed, layout);
             }
             // `$3451` id 4's conditional `sStompChainCount` reset (star
@@ -1726,6 +1733,8 @@ fn run_play(
             sim.death_arc(cam.y);
         } else {
             if cam.transition == 0 {
+                // $307D — `$0F71`'s first call; see the replay loop above.
+                cam.crouch_pan(&sim, &keys);
                 sim.step(&keys, a_pressed, layout);
             }
             // `$3451` id 4's `sStompChainCount` reset — see the replay loop.

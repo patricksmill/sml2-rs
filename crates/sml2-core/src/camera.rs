@@ -23,10 +23,14 @@
 //!   camera moves. Both follow axes test those bits, so a level whose table
 //!   is not loaded scrolls with every edge clear — down 8 px early on each
 //!   descent, which ratchets the camera below the level.
+//! - `$307D` (the crouch-look pan) also lives here even though it is
+//!   `$0F71`'s first call, not part of `$0B2A`: it needs `&mut` camera state.
+//!   See [`CameraSim::crouch_pan`] — the frame loop calls it at the top of the
+//!   player update, before `step`.
 //! - All arithmetic on the low bytes like the engine; the hi byte is masked
 //!   to `$0F` (12-bit world).
 
-use crate::player_sim::PlayerSim;
+use crate::player_sim::{PlayerKeys, PlayerSim};
 
 #[derive(Debug, Clone)]
 pub struct CameraSim {
@@ -126,6 +130,111 @@ impl CameraSim {
     /// camera crosses a screen boundary, so the check runs before the step).
     pub fn edge_byte(&self) -> u8 {
         self.edge_bits()
+    }
+
+    /// `$307D`: the crouch-look pan. This is the FIRST call of the player
+    /// update `$0F71` (`home.asm:2102`), so the frame loop runs it at the top
+    /// of the player update — before the player body and before this module's
+    /// `step` (`$0B2A`). It reads the same `PlayerKeys` the caller hands to
+    /// `PlayerSim::step` (the sim keeps no copy of the held buttons).
+    ///
+    /// The trigger is `hKeysHeld` (`$FF80`) tested with `cp` — an EXACT byte
+    /// equality, not a mask. `ReadJoypad` (`$1FD2`) builds the byte as
+    /// `(button nibble) | (direction nibble << 4)`, so the layout is
+    ///
+    /// ```text
+    /// bit 0 A · bit 1 B · bit 2 Select · bit 3 Start
+    /// bit 4 Right · bit 5 Left · bit 6 Up · bit 7 Down
+    /// ```
+    ///
+    /// (cross-checks: the soft-reset test at `$0275` is `and $0F / cp $0F`
+    /// for A+B+Start+Select; `$1189`/`$11C0` test `bit 7` for a DOWN pipe and
+    /// `bit 6` for an UP pipe; `$101D`/`$134F` test `bit 0` for A.)
+    ///
+    /// So `$82` is exactly B+Down and `$42` exactly B+Up: holding *any* extra
+    /// button — A, the opposite direction, left/right, Select/Start — makes
+    /// the byte unequal and cancels the pan (including Up+Down together).
+    /// `PlayerKeys` has no Select/Start, so they can never be "extra" here;
+    /// every button it does model must be clear except the pair.
+    ///
+    /// Call position: at `$0F71`'s own position, i.e. *before*
+    /// `PlayerSim::step`, so the `sMarioOnGround`/`sMarioOnObject` gate reads
+    /// the flags the previous frame settled — the console sees them at the top
+    /// of the player update, before this frame's landing/jump writes them.
+    /// Running it after `PlayerSim::step` would pan one frame early on the
+    /// landing frame and skip the jump frame (where the body clears
+    /// `on_ground`). The frame loop skips `$0F71` wholesale while
+    /// `sScreenTransition != 0` (`$05E4`), so callers must not call this
+    /// during a transition.
+    pub fn crouch_pan(&mut self, sim: &PlayerSim, keys: &PlayerKeys) {
+        // $307D head: a running scene parks the pan (the *whole* byte, unlike
+        // `step`, which only tests the high nibble).
+        if self.scene_state != 0 {
+            return;
+        }
+        // `sMarioOnGround | sMarioOnObject` — neither → skip.
+        if !(sim.on_ground || sim.on_ground_obj) {
+            return;
+        }
+        // The `cp $82` / `cp $42` tests, in that order. "Exactly B+Down" means
+        // every other button PlayerKeys models is clear — the byte-equality
+        // test, not a mask. Verified against `ReadJoypad` ($1FD2): hKeysHeld
+        // packs directions in bits 4-7 (bit7 Down, bit6 Up, bit5 Left,
+        // bit4 Right) and actions in bits 0-3 (bit1 B, bit0 A, bit2 Select,
+        // bit3 Start), so $82 is exactly Down+B and $42 exactly Up+B.
+        // Select and Start are the two bits `cp` also tests that PlayerKeys
+        // cannot express today: holding either must CANCEL the pan. That is
+        // latent until START is modelled (see the `pause_and_palette_flash`
+        // queue item), at which point this gate has to include it.
+        let b_down = keys.b && keys.down && !(keys.a || keys.up || keys.left || keys.right);
+        let b_up = keys.b && keys.up && !(keys.a || keys.down || keys.left || keys.right);
+        if b_down {
+            self.pan_down();
+        } else if b_up {
+            self.pan_up();
+        }
+    }
+
+    /// `sMarioScreenY` (`$A23B`) as this port models it — the draw step's
+    /// `$FFC4 = marioY − camY + 98`, which `step` computes as `sy98` from the
+    /// previous frame's Mario Y latch and the camera Y it is about to move.
+    /// Both pan arms gate on it.
+    fn screen_y98(&self) -> u8 {
+        (self.prev_mario_y_lo.wrapping_sub(self.y as u8)).wrapping_add(98)
+    }
+
+    /// `$3098`: the B+Down arm. Needs `sMarioScreenY >= $20` (room below Mario
+    /// on screen), then the cell's hard down edge (bit 3) blocks the pan at
+    /// the `$C0` lock row. The scroll flag (bit 7) is set before that guard —
+    /// a blocked pan still reports the down scroll.
+    fn pan_down(&mut self) {
+        if self.screen_y98() < 0x20 {
+            return;
+        }
+        // The `$0B39` lookup, read at the *pre-move* cell. `$FF98` itself is
+        // scratch: the camera step recomputes it at `$0B39` before anything
+        // else reads it, so the port derives the byte here without storing it.
+        let e = self.edge_bits();
+        self.map_scroll_flags |= 0x80;
+        if e & 8 != 0 && (self.y as u8) >= 0xC0 {
+            return;
+        }
+        self.y = self.y.wrapping_add(1) & 0x0FFF;
+    }
+
+    /// `$30D9`: the B+Up arm. Needs `sMarioScreenY < $70`, then the cell's up
+    /// edge (bit 2) blocks the pan below the `$48` lock row. Bit 6 of the
+    /// scroll flags is set before that guard.
+    fn pan_up(&mut self) {
+        if self.screen_y98() >= 0x70 {
+            return;
+        }
+        let e = self.edge_bits();
+        self.map_scroll_flags |= 0x40;
+        if e & 4 != 0 && (self.y as u8) < 0x49 {
+            return;
+        }
+        self.y = self.y.wrapping_sub(1) & 0x0FFF;
     }
 
     /// The draw-step half (`$54A7`): Mario's screen X sets the enable for
@@ -428,4 +537,308 @@ mod tests {
         assert_eq!(without_edge.y, 0x144, "bit3 clear: 84 >= $50, it follows");
     }
 
+    // ---- $307D: the crouch-look pan -------------------------------------
+
+    /// A camera at row 1 (all-clear edge table), Mario latched level with it
+    /// so `sMarioScreenY` = `$00 − $00 + $62` = `$62` — mid-screen, inside
+    /// both pan gates.
+    fn pan_cam(y: u16) -> CameraSim {
+        let mut c = CameraSim::new(0, y);
+        c.prev_mario_y_lo = y as u8;
+        c
+    }
+
+    fn grounded() -> PlayerSim {
+        let mut s = PlayerSim::new();
+        s.on_ground = true;
+        s
+    }
+
+    /// `hKeysHeld == $82`: B + Down, nothing else.
+    fn b_down() -> PlayerKeys {
+        PlayerKeys {
+            down: true,
+            b: true,
+            ..Default::default()
+        }
+    }
+
+    /// `hKeysHeld == $42`: B + Up, nothing else.
+    fn b_up() -> PlayerKeys {
+        PlayerKeys {
+            up: true,
+            b: true,
+            ..Default::default()
+        }
+    }
+
+    /// `$3098`: B+Down pans the camera down exactly 1 px and sets
+    /// `sMapScrollFlags` bit 7.
+    #[test]
+    fn crouch_pan_down_moves_the_camera_one_pixel() {
+        let mut c = pan_cam(0x140);
+        c.crouch_pan(&grounded(), &b_down());
+        assert_eq!(c.y, 0x141);
+        assert_eq!(c.map_scroll_flags, 0x80, "bit7 = the down-scroll flag");
+    }
+
+    /// `$30D9`: B+Up pans the camera up exactly 1 px and sets bit 6.
+    #[test]
+    fn crouch_pan_up_moves_the_camera_one_pixel() {
+        let mut c = pan_cam(0x140);
+        c.crouch_pan(&grounded(), &b_up());
+        assert_eq!(c.y, 0x13F);
+        assert_eq!(c.map_scroll_flags, 0x40, "bit6 = the up-scroll flag");
+    }
+
+    /// `$3098`'s hard down edge: with bit3 set the pan is blocked once the
+    /// camera's lo byte reaches the `$C0` lock row, so it cannot scroll past
+    /// a locked screen boundary. One px earlier it still runs, and with bit3
+    /// clear the row is no obstacle. The scroll flag is set *before* the
+    /// guard, so a blocked pan still reports the down scroll.
+    #[test]
+    fn crouch_pan_down_stops_at_the_hard_down_edge() {
+        let mut c = pan_cam(0x1C0);
+        c.edge_map[16] = 0x08; // bit3 set in row 1, x cell 0
+        c.crouch_pan(&grounded(), &b_down());
+        assert_eq!(c.y, 0x1C0, "$C0 row + bit3: the pan is blocked");
+        assert_eq!(c.map_scroll_flags, 0x80, "the flag is set before the guard");
+
+        let mut c = pan_cam(0x1BF);
+        c.edge_map[16] = 0x08;
+        c.crouch_pan(&grounded(), &b_down());
+        assert_eq!(c.y, 0x1C0, "below the lock row the pan still runs");
+
+        let mut c = pan_cam(0x1C0);
+        c.edge_map[16] = 0x04; // bit3 clear
+        c.crouch_pan(&grounded(), &b_down());
+        assert_eq!(c.y, 0x1C1, "no hard down edge: the row is no obstacle");
+    }
+
+    /// `$30D9`'s up edge: bit2 set blocks the pan while the camera's lo byte
+    /// is below `$49` (the ROM returns for lo < `$49`), so the camera cannot
+    /// scroll above the `$48` lock row. Bit 6 of the scroll flags is set
+    /// before the guard.
+    #[test]
+    fn crouch_pan_up_stops_at_the_up_edge() {
+        let mut c = pan_cam(0x140);
+        c.edge_map[16] = 0x04; // bit2 set
+        c.crouch_pan(&grounded(), &b_up());
+        assert_eq!(c.y, 0x140, "bit2 + lo < $49: the pan is blocked");
+        assert_eq!(c.map_scroll_flags, 0x40, "the flag is set before the guard");
+
+        let mut c = pan_cam(0x149);
+        c.edge_map[16] = 0x04;
+        c.crouch_pan(&grounded(), &b_up());
+        assert_eq!(c.y, 0x148, "at lo $49 the guard opens");
+
+        let mut c = pan_cam(0x100);
+        c.edge_map[16] = 0x08; // only the down edge
+        c.crouch_pan(&grounded(), &b_up());
+        assert_eq!(c.y, 0x0FF, "no up edge: the pan runs from anywhere");
+    }
+
+    /// `$3098`'s `sMarioScreenY` gate: `cp $20 / ret c`, so screen Y `$1F`
+    /// blocks and `$20` passes. The gate precedes the flag set.
+    #[test]
+    fn crouch_pan_down_needs_screen_y_at_least_20() {
+        let mut c = pan_cam(0x140);
+        c.prev_mario_y_lo = 0xEE; // $EE − $40 + $62 = $10: near the screen top
+        c.crouch_pan(&grounded(), &b_down());
+        assert_eq!(c.y, 0x140);
+        assert_eq!(c.map_scroll_flags, 0x00, "the gate precedes the flag set");
+
+        let mut c = pan_cam(0x140);
+        c.prev_mario_y_lo = 0xFE; // $FE − $40 + $62 = $20
+        c.crouch_pan(&grounded(), &b_down());
+        assert_eq!(c.y, 0x141, "$20 is allowed (`ret c` is < $20)");
+    }
+
+    /// `$30D9`'s gate: `cp $70 / ret nc`, so screen Y `$70` blocks and `$6F`
+    /// passes. The gate precedes the flag set.
+    #[test]
+    fn crouch_pan_up_needs_screen_y_below_70() {
+        let mut c = pan_cam(0x140);
+        c.prev_mario_y_lo = 0x4E; // $4E − $40 + $62 = $70
+        c.crouch_pan(&grounded(), &b_up());
+        assert_eq!(c.y, 0x140);
+        assert_eq!(c.map_scroll_flags, 0x00, "the gate precedes the flag set");
+
+        let mut c = pan_cam(0x140);
+        c.prev_mario_y_lo = 0x4D; // $4D − $40 + $62 = $6F
+        c.crouch_pan(&grounded(), &b_up());
+        assert_eq!(c.y, 0x13F);
+    }
+
+    /// `$307D`'s head: `sMarioOnGround | sMarioOnObject` must be nonzero —
+    /// neither grounded nor on an object skips the pan, and standing on an
+    /// object alone is enough.
+    #[test]
+    fn crouch_pan_needs_ground_or_an_object() {
+        let mut airborne = grounded();
+        airborne.on_ground = false;
+        let mut c = pan_cam(0x140);
+        c.crouch_pan(&airborne, &b_down());
+        assert_eq!(c.y, 0x140, "airborne: no pan");
+        assert_eq!(c.map_scroll_flags, 0x00);
+
+        let mut on_obj = grounded();
+        on_obj.on_ground = false;
+        on_obj.on_ground_obj = true;
+        let mut c = pan_cam(0x140);
+        c.crouch_pan(&on_obj, &b_down());
+        assert_eq!(c.y, 0x141, "on an object alone pans");
+    }
+
+    /// `cp $82` / `cp $42` are byte-equality tests on `hKeysHeld`, not masks:
+    /// any extra held button — A, the opposite direction, left/right — makes
+    /// the byte unequal and cancels the pan. (`$82` = B+Down, `$42` = B+Up in
+    /// the `$1FD2` layout: bit0 A, bit1 B, bit2 Select, bit3 Start, bit4
+    /// Right, bit5 Left, bit6 Up, bit7 Down.) `PlayerKeys` has no
+    /// Select/Start, so those can never be the extra button here.
+    #[test]
+    fn crouch_pan_requires_exactly_b_plus_the_direction() {
+        let not_b_down: [(&str, PlayerKeys); 6] = [
+            (
+                "B+Down+A ($83)",
+                PlayerKeys {
+                    down: true,
+                    b: true,
+                    a: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "B+Down+Up ($C2)",
+                PlayerKeys {
+                    up: true,
+                    down: true,
+                    b: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "B+Down+Right ($92)",
+                PlayerKeys {
+                    right: true,
+                    down: true,
+                    b: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "B+Down+Left ($A2)",
+                PlayerKeys {
+                    left: true,
+                    down: true,
+                    b: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "B alone ($02)",
+                PlayerKeys {
+                    b: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "Down alone ($80)",
+                PlayerKeys {
+                    down: true,
+                    ..Default::default()
+                },
+            ),
+        ];
+        for (what, k) in not_b_down {
+            let mut c = pan_cam(0x140);
+            c.crouch_pan(&grounded(), &k);
+            assert_eq!(c.y, 0x140, "{what} must not pan down");
+            assert_eq!(c.map_scroll_flags, 0x00, "{what} must not flag a scroll");
+        }
+
+        let mut c = pan_cam(0x140);
+        c.crouch_pan(
+            &grounded(),
+            &PlayerKeys {
+                up: true,
+                b: true,
+                right: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(c.y, 0x140, "B+Up+Right ($52) must not pan up");
+
+        // The bare pairs still pan, so the extra-button rule is what blocked
+        // the cases above.
+        let mut c = pan_cam(0x140);
+        c.crouch_pan(&grounded(), &b_down());
+        assert_eq!(c.y, 0x141);
+    }
+
+    /// `$307D`: a running scene (`sSceneState != 0` — the whole byte, not just
+    /// the high nibble `step` parks on) skips the pan entirely.
+    #[test]
+    fn crouch_pan_is_parked_by_a_running_scene() {
+        for state in [1u8, 0x10, 0xF0] {
+            let mut c = pan_cam(0x140);
+            c.scene_state = state;
+            c.crouch_pan(&grounded(), &b_down());
+            assert_eq!(c.y, 0x140, "sSceneState ${state:02X}: no pan");
+            assert_eq!(c.map_scroll_flags, 0x00);
+        }
+    }
+
+    /// The edge byte is the `$0B39` lookup at the *pre-move* cell: at `$0FF`
+    /// the camera is in row 0, and the `+1` carries it into row 1 — whose
+    /// cell carries the hard down edge and would block. The row-0 cell
+    /// decides, so the pan runs and crosses.
+    #[test]
+    fn crouch_pan_reads_the_edge_cell_before_it_moves() {
+        let mut c = pan_cam(0x0FF);
+        c.edge_map[0] = 0x00; // row 0, x cell 0
+        c.edge_map[16] = 0x08; // row 1 carries the hard down edge
+        c.prev_mario_y_lo = 0x00; // screen Y $00 − $FF + $62 = $63
+        c.crouch_pan(&grounded(), &b_down());
+        assert_eq!(c.y, 0x100, "the pre-move row-0 cell has no bit3");
+    }
+
+    /// The 16-bit add/sub: the `+1` carries and the `−1` borrows across the
+    /// lo byte.
+    #[test]
+    fn crouch_pan_carries_across_the_lo_byte() {
+        let mut c = pan_cam(0x1FF);
+        c.prev_mario_y_lo = 0xFF; // screen Y $FF − $FF + $62 = $62
+        c.crouch_pan(&grounded(), &b_down());
+        assert_eq!(c.y, 0x200, "the +1 carries into the hi byte");
+
+        let mut c = pan_cam(0x100);
+        c.prev_mario_y_lo = 0x00; // screen Y $62
+        c.crouch_pan(&grounded(), &b_up());
+        assert_eq!(c.y, 0x0FF, "the −1 borrows from the hi byte");
+    }
+
+    /// The port's 12-bit world: a pan never leaves the hi byte wider than four
+    /// bits (the ROM keeps `$FFC9` to four bits elsewhere in the camera code,
+    /// and the `$0B39` index masks it anyway).
+    #[test]
+    fn crouch_pan_keeps_the_hi_byte_to_four_bits() {
+        let mut c = pan_cam(0x0FFF);
+        c.prev_mario_y_lo = 0xFF; // screen Y $62
+        c.crouch_pan(&grounded(), &b_down());
+        assert_eq!(c.y, 0x000, "$FFF + 1 wraps to $000");
+    }
+
+    /// The gate reads the draw step's `sMarioScreenY` — the previous frame's
+    /// Mario Y latch (`prev_mario_y_lo`) against the camera — exactly like
+    /// `step`'s `sy98`; the live `sim.y` is not what the pan gates on.
+    #[test]
+    fn crouch_pan_gates_on_the_screen_y_latch() {
+        let mut sim = grounded();
+        sim.y = 0x00;
+        let mut c = pan_cam(0x140);
+        c.prev_mario_y_lo = 0x4E; // screen Y $70 → blocked regardless of sim.y
+        c.crouch_pan(&sim, &b_up());
+        assert_eq!(c.y, 0x140);
+    }
 }
