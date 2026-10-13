@@ -1699,10 +1699,15 @@ impl PlayerSim {
 
     /// `$287E` (state `$07`) — one frame of the GAME OVER screen's poll: the
     /// `$27AF` 255-frame fade ticks down (VBlank keeps decrementing
-    /// `sFadeTimer`), and once it reads 0 the screen waits for START
-    /// (`hKeysPressed == $08`). Returns true on the frame that hands back to
-    /// state `$00` (`Init`), which also requests `sMusicRequest = $FF`.
-    pub fn game_over_step(&mut self, start_pressed: bool) -> bool {
+    /// `sFadeTimer`), and once it reads 0 the screen waits for START.
+    /// Returns true on the frame that hands back to state `$00` (`Init`), which
+    /// also requests `sMusicRequest = $FF`.
+    ///
+    /// `keys_pressed` is the whole `hKeysPressed` byte, not a flag, because the
+    /// ROM compares it *exactly*: `ldh a,[hKeysPressed] / cp $08 / ret nz` — so
+    /// holding A or SELECT as well as START does **not** advance. A `bool` here
+    /// would quietly accept that input.
+    pub fn game_over_step(&mut self, keys_pressed: u8) -> bool {
         if !self.game_over {
             return false;
         }
@@ -1710,7 +1715,7 @@ impl PlayerSim {
             self.fade_timer -= 1;
             return false;
         }
-        if !start_pressed {
+        if keys_pressed != 0x08 {
             return false;
         }
         self.game_over = false;
@@ -2020,7 +2025,7 @@ impl PlayerSim {
         rec[0x43] = self.lives;
         rec[0x44] = money_bag;
         rec[0x45] = rec[..0x45].iter().fold(0u8, |c, b| c.wrapping_add(*b));
-        rec[0x46..0x4B].copy_from_slice(&crate::map::SAVE_SIGNATURE);
+        rec[0x46..0x4A].copy_from_slice(&crate::map::SAVE_SIGNATURE);
         rec
     }
 
@@ -3804,7 +3809,8 @@ mod tests {
     }
 
     /// `$287E`: the fade ticks down for 255 frames, then the screen waits for
-    /// START, which hands back to state `$00` with `sMusicRequest = $FF`.
+    /// START, which hands back to state `$00` with `sMusicRequest = $FF`. The
+    /// compare is exact (`cp $08`), so START *plus* anything else is not START.
     #[test]
     fn game_over_step_ticks_the_fade_then_waits_for_start() {
         let mut sim = PlayerSim::new();
@@ -3814,20 +3820,28 @@ mod tests {
         sim.game_over_enter();
         // The fade runs out over 255 frames; START during it does nothing.
         assert!(
-            !sim.game_over_step(true),
+            !sim.game_over_step(0x08),
             "START on the fade's first frame is ignored"
         );
         for _ in 0..254 {
-            assert!(!sim.game_over_step(false));
+            assert!(!sim.game_over_step(0x00));
         }
         assert_eq!(sim.fade_timer, 0);
-        assert!(!sim.game_over_step(false), "no START, no hand-off");
+        assert!(!sim.game_over_step(0x00), "no START, no hand-off");
         assert_eq!(sim.fade_timer, 0);
-        assert!(sim.game_over_step(true), "the $00 hand-off frame");
+        // `$287E` is `cp $08` — an exact compare, so START held with A or SELECT
+        // does not advance, which a `bool` parameter would have accepted.
+        for other in [0x01u8, 0x04, 0x09, 0x0C] {
+            assert!(
+                !sim.game_over_step(other),
+                "hKeysPressed ${other:02X} is not exactly START"
+            );
+        }
+        assert!(sim.game_over_step(0x08), "the $00 hand-off frame");
         assert!(!sim.game_over);
         assert_eq!(sim.music_request, 0xFF);
         // The hand-off is one-shot: the phase is over.
-        assert!(!sim.game_over_step(true));
+        assert!(!sim.game_over_step(0x08));
     }
 
     /// Outside the game-over phase the poll is inert (the flag gates it), and
@@ -3836,7 +3850,7 @@ mod tests {
     fn game_over_step_needs_the_phase_and_respawn_clears_it() {
         let mut sim = PlayerSim::new();
         sim.fade_timer = 0;
-        assert!(!sim.game_over_step(true));
+        assert!(!sim.game_over_step(0x08));
         sim.game_over = true;
         sim.respawn(112, 240);
         assert!(!sim.game_over);

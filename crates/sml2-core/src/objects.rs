@@ -2478,6 +2478,80 @@ mod tests {
         assert!(obj.unported.is_empty(), "anim 16 must have a ported body");
     }
 
+    /// Anim 22 — the goal bell's own script (`$587BD`) and its ring tick
+    /// (`$5B545`). Un-touched it re-stages type `$86` every frame (item id 6, the
+    /// strike); one touch — `+$17` bit 4, which `$2DC6` sets — flips it to frame
+    /// state 1 with the type cleared, and from then on the tick walks the
+    /// 4-phase ping-pong with the X mirror on phase 3, one phase per `$FFF0 & 3`.
+    ///
+    /// The same tick routine serves anim 23 and *is* capture-verified through it
+    /// (traj13's touch shows the 8-frame steps and the mirror at phase 3), but no
+    /// capture ever touches anim 22: level 1's bell sits at anchor y 360, the
+    /// measured jump apex on that floor is y 399, and the touch window is
+    /// `marioY - objectY` in `[-43, -13)` — 44 px short. This test is that gap's
+    /// only coverage, and the cadence it pins is the console-measured one.
+    #[test]
+    fn the_goal_bells_own_script_arms_then_ping_pongs() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../extracted/objects.json");
+        let Ok(txt) = std::fs::read_to_string(path) else {
+            eprintln!("skip: {path} not built");
+            return;
+        };
+        let t: ObjectTables = serde_json::from_str(&txt).expect("objects.json parses");
+        assert_eq!(
+            t.behavior_for(0, 22),
+            Some(0x587BD),
+            "anim 22 is the bell's script"
+        );
+
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        let mut st = Staging::default();
+        st.b[B_DEF] = 22;
+        st.b[B_SPRITE] = 0x1F; // anim_to_sprite_a[22], what $8240 stages
+
+        // Un-rung: the type is re-staged every frame, which is what lets the
+        // strike happen at all.
+        obj.fff0 = 0;
+        obj.run_handler(&mut st, &blank_layout(), &t);
+        assert!(obj.unported.is_empty(), "the bell's script is ported");
+        assert_eq!(st.b[B_TYPE], 0x86, "un-rung type = item id 6");
+        assert_eq!(st.b[B_FSTATE], 0, "frame state 0");
+        assert_eq!(st.b[B_SPRITE], 0x1F, "and the sprite is untouched");
+
+        // One touch.
+        st.b[B_FLAGS] |= 0x10; // +$17 bit 4, set by $2DC6
+        obj.run_handler(&mut st, &blank_layout(), &t);
+        assert_eq!(st.b[B_FSTATE], 1, "ringing");
+        assert_eq!(st.b[B_TYPE], 0, "and no longer collectible");
+        assert_eq!(st.b[B_SPRITE], 0x1F, "the touch frame does not tick");
+
+        // The tick: `$FFF0 & 3` gates it, so one phase per 4 engine frames = 8
+        // game frames, which is the cadence the console showed.
+        st.b[B_FLAGS] &= !0x10;
+        for (i, (sprite, mirror)) in [(0x20u8, 0u8), (0x1F, 0), (0x20, 0x20), (0x1F, 0)]
+            .into_iter()
+            .enumerate()
+        {
+            obj.fff0 = 4; // == 0 mod 4: the gate opens
+            obj.run_handler(&mut st, &blank_layout(), &t);
+            let n = i + 1;
+            assert_eq!(st.b[B_ANIMFRAME], (n % 4) as u8, "counter after tick {n}");
+            assert_eq!(st.b[B_SPRITE], sprite, "sprite after tick {n}");
+            assert_eq!(st.b[B_FLIP] & 0x20, mirror, "mirror after tick {n}");
+        }
+
+        // A frame whose gate is closed changes nothing at all.
+        obj.fff0 = 5;
+        let before = (st.b[B_SPRITE], st.b[B_ANIMFRAME], st.b[B_FLIP]);
+        obj.run_handler(&mut st, &blank_layout(), &t);
+        assert_eq!(
+            (st.b[B_SPRITE], st.b[B_ANIMFRAME], st.b[B_FLIP]),
+            before,
+            "$5B545 returns without ticking when $FFF0 & 3 != 0"
+        );
+    }
+
     /// `$EC40`'s sprite-map mode rule — `ld a,[sCurLevel] / cp $0A / ret c`, so
     /// level `$0A` itself already uses the "B" pair. The port had `> 0x0A`, which
     /// put level `$0A` in mode A: one level's worth of objects and anim profiles

@@ -100,19 +100,22 @@ impl MapNodes {
     }
 }
 
-/// The five bytes the fresh-file init writes after the checksum, which `$28EC`
-/// checks before it will accept a slot. `$2934` itself never rewrites them.
-pub const SAVE_SIGNATURE: [u8; 5] = [0x12, 0x34, 0x56, 0x78, 0x78];
+/// The four bytes the fresh-file init (`$30226`) and the blank-slot writer
+/// (`$2913`) both put after the checksum, which `$28EC` checks before it will
+/// accept a slot. `$2934` itself never writes them — and never writes the byte
+/// after them either, so a validator that also required `+$4A` would be stricter
+/// than the ROM.
+pub const SAVE_SIGNATURE: [u8; 4] = [0x12, 0x34, 0x56, 0x78];
 
 /// `$28EC`'s validation of one 0x50-byte save record: the checksum at +$45 must
-/// be the sum of the 69 bytes before it, and the five signature bytes at +$46
+/// be the sum of the 69 bytes before it, and the four signature bytes at +$46
 /// must be the constant the fresh-file init writes.
 pub fn save_record_valid(record: &[u8]) -> bool {
     if record.len() < 0x4B {
         return false;
     }
     let sum = record[..0x45].iter().fold(0u8, |c, b| c.wrapping_add(*b));
-    sum == record[0x45] && record[0x46..0x4B] == SAVE_SIGNATURE
+    sum == record[0x45] && record[0x46..0x4A] == SAVE_SIGNATURE
 }
 
 #[cfg(test)]
@@ -223,8 +226,10 @@ mod tests {
         assert_eq!(empty.progress_slot(0), None);
     }
 
-    /// `$28EC`: the checksum is the sum of the 69 bytes before it, and the
-    /// signature bytes must be the init constant.
+    /// `$28EC`: the checksum is the sum of the 69 bytes before it, and the four
+    /// signature bytes must be the init constant. The byte *after* them is not
+    /// checked — `$2934` never writes it and the ROM's validator stops at +$49,
+    /// so requiring it (as this port used to) was stricter than the ROM.
     #[test]
     fn the_save_validator_checks_sum_and_signature() {
         let mut rec = [0u8; 0x50];
@@ -232,14 +237,20 @@ mod tests {
         rec[0x43] = 5;
         let sum = rec[..0x45].iter().fold(0u8, |c, b| c.wrapping_add(*b));
         rec[0x45] = sum;
-        rec[0x46..0x4B].copy_from_slice(&[0x12, 0x34, 0x56, 0x78, 0x78]);
+        rec[0x46..0x4A].copy_from_slice(&SAVE_SIGNATURE);
         assert!(save_record_valid(&rec));
 
         rec[0x45] = sum.wrapping_add(1);
         assert!(!save_record_valid(&rec), "a bad checksum fails");
         rec[0x45] = sum;
-        rec[0x4A] = 0x00;
+        rec[0x49] = 0x00;
         assert!(!save_record_valid(&rec), "a bad signature fails");
+        rec[0x49] = 0x78;
+        rec[0x4A] = 0xFF;
+        assert!(
+            save_record_valid(&rec),
+            "but +$4A is not part of the check — the ROM's compare stops at +$49"
+        );
         assert!(!save_record_valid(&[0u8; 8]), "a short record fails");
     }
 }

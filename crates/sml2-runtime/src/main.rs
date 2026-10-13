@@ -1308,6 +1308,9 @@ fn run_replay(
                 // $27AF's state writes, then $07's fade + START poll (which
                 // the caller drives via `game_over_step`).
                 sim.game_over_enter();
+                // `$27AF` clears `sMoneyBagCount` along with the coins, and that
+                // byte lives on the object engine, so the caller clears it here.
+                obj.money_bag = 0;
             } else {
                 // $0F2A + $04F1 + $EBBB: the reload puts Mario back at the
                 // header spawn and clears the object scratch (fff0 persists).
