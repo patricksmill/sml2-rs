@@ -864,3 +864,21 @@ Verified engine semantics to preserve in the port:
   `$50` column creeps back +1/frame (observed live and required for
   parity). Vertical: follows the player's Y change only outside the
   [`$28`(`$40` with `sMapScrollLimit`), `$50`] dead zone.
+- **Autoscroll levels replace that whole horizontal section** (`$0DAF`,
+  ported 2026-10-13; the levels are 20, 26 and 31 by file name, i.e.
+  `--level 19/25/30`). With `sAutoScroll != 0` the `$0B2A` dispatcher calls
+  `$0DAF` instead of the right/left chains and then jumps straight to `$0C7D`,
+  so the vertical follow is shared but the horizontal rules are entirely
+  different: `$0DAF` never applies the player-speed latches, never reads
+  either enable, has no ±1 park nudge and no `$FF99` pull-back, and no left
+  edge lock or left transition. It does exactly three things — a right-edge
+  trigger (`>= $B0` where `$0B5E` tests `== $B0`, and a screen X below `$A1`
+  `ret`s outright rather than falling through), a **one-pixel-per-two-frames**
+  scroll (`$FF97 & 1` must be clear, and the enabled-by-default left scroll is
+  cleared with `sMapScrollFlags` bit 4 set), and nothing else. Mario is not
+  driven by the camera at all on those levels: he keeps normal physics and
+  drifts toward the left of the screen. Because `$0DAF` jumps to `$0C7D`, it
+  skips `$0C76`'s `sScrollDelta*` clear — the port derives its deltas from
+  `x_sub` every frame, so that has no analogue here. No capture in the suite is
+  an autoscroll level, so this path is unit-pinned only (6 tests) plus a
+  play-mode smoke run; the capture is queued as `autoscroll_capture`.

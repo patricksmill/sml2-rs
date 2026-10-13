@@ -213,7 +213,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cam.map_scroll_limit = manifest.properties.unknown != 0;
         cam.auto_scroll = manifest.properties.auto_scroll;
         if cam.auto_scroll != 0 {
-            println!("note: level is autoscroll; that path is not modelled");
+            println!("note: autoscroll level: $0DAF ported, but no capture covers it");
         }
         let obj = sml2_core::objects::ObjectSim::new(manifest.spawns.records.clone(), cam.x);
         return run_play(
@@ -1038,7 +1038,11 @@ fn run_replay(
         .map(|s| s.tables.clone())
         .ok_or("replay requires objects.json (no sprite context)")?;
     if cam.auto_scroll != 0 {
-        println!("note: level is autoscroll; that path is not modelled");
+        // $0DAF is ported now (`camera.rs::run_autoscroll`), so this is no
+        // longer a "not modelled" flag — it marks the path as *capture-less*:
+        // no level in the suite has `properties.auto_scroll != 0`, so nothing
+        // here is gate-verified. It is what would fail a gate that added one.
+        println!("note: autoscroll level: $0DAF ported, but no capture covers it");
     }
     if let Some(dir) = filmstrip {
         fs::create_dir_all(dir)?;

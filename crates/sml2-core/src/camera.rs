@@ -251,6 +251,41 @@ impl CameraSim {
         }
     }
 
+    /// `$0DAF`: the autoscroll horizontal path. `$0B2A` calls it *instead of*
+    /// the whole right/left section when `sAutoScroll != 0`, then jumps
+    /// straight to `$0C7D`, so the vertical follow below still runs.
+    ///
+    /// It does only three things: the right-edge transition trigger, a
+    /// one-pixel-per-two-frames scroll, and `sScrollLeftEnabled` cleared with
+    /// `sMapScrollFlags` bit 4 set. Unlike `$0B5E`/`$0BE5` it never applies the
+    /// player-speed latches (`d_r`/`d_l`), never reads either enable flag, has
+    /// no ±1 park correction, no `$FF99` pull-back, no left edge lock and no
+    /// left transition. Mario is not driven by it at all — he keeps normal
+    /// physics and drifts toward the left of the screen.
+    fn run_autoscroll(&mut self, sim: &mut PlayerSim) {
+        let cam_lo = self.x as u8;
+        if self.edge_bits() & 1 != 0 && cam_lo >= 0xB0 {
+            // The same shape as `$0B5E`, but `>=` where that one tests `==`,
+            // and a Mario screen X below $A1 `ret`s outright — it does not
+            // fall through to the scroll the way $0B5E's tail does.
+            let sx = ((sim.x as u8).wrapping_sub(cam_lo)).wrapping_add(96);
+            if sx < 0xA1 {
+                return;
+            }
+            self.transition = 1;
+            self.scene_lookup(sim);
+            return;
+        }
+        // $0DCA: `ldh a,[$FF97] / and $01 / ret nz` — one px per TWO frames.
+        if sim.phase & 1 != 0 {
+            return;
+        }
+        self.left_enabled = false;
+        // The carry lands in the camera's high byte, masked to four bits.
+        self.x = self.x.wrapping_add(1) & 0x0FFF;
+        self.map_scroll_flags |= 0x10;
+    }
+
     /// One camera frame. `delta_right`/`delta_left` come from the player
     /// update (`$14BF`), `mario`/`mario_y_lo` from the post-player state.
     /// Takes `&mut PlayerSim` because the `$0DED` transition handler writes
@@ -280,57 +315,67 @@ impl CameraSim {
         let my_lo = sim.y as u8;
         let edges = self.edge_bits();
 
-        // $0B5E right edge (bit0): at the $B0 column the transition fires
-        // once Mario's screen X >= $A1; above it the camera pulls back; else
-        // the normal right scroll. All paths then fall into $0BE5.
-        if edges & 1 != 0 && (self.x as u8) == 0xB0 {
-            let sx = (mx_lo.wrapping_sub(self.x as u8)).wrapping_add(96);
-            if sx >= 0xA1 {
-                self.transition = 1;
-                self.scene_lookup(sim);
-            }
-        } else if edges & 1 != 0 && (self.x as u8) > 0xB0 {
-            self.x = self.x.wrapping_sub(1);
-            self.x &= 0x0FFF;
-        } else if d_r != 0 && self.right_enabled {
-            // $0B90: right scroll
-            self.left_enabled = false;
-            self.x = self.x.wrapping_add(d_r as u16);
-            self.map_scroll_flags |= 0x10;
-            let sx = (mx_lo.wrapping_sub(self.x as u8)).wrapping_add(96);
-            if sx >= 0x40 {
-                self.x = self.x.wrapping_add(1);
-            } else if sx < 0x3F {
+        // $0B2A's dispatcher: with `sAutoScroll` set, `$0DAF` replaces the
+        // ENTIRE horizontal section and then jumps straight to `$0C7D`, so
+        // neither the right nor the left chain below runs on an autoscroll
+        // frame. (`$0C76`'s scroll-delta clear is skipped too; the port
+        // derives its deltas from `x_sub` every frame, so it has no state
+        // to clear.)
+        if self.auto_scroll != 0 {
+            self.run_autoscroll(sim);
+        } else {
+            // $0B5E right edge (bit0): at the $B0 column the transition fires
+            // once Mario's screen X >= $A1; above it the camera pulls back; else
+            // the normal right scroll. All paths then fall into $0BE5.
+            if edges & 1 != 0 && (self.x as u8) == 0xB0 {
+                let sx = (mx_lo.wrapping_sub(self.x as u8)).wrapping_add(96);
+                if sx >= 0xA1 {
+                    self.transition = 1;
+                    self.scene_lookup(sim);
+                }
+            } else if edges & 1 != 0 && (self.x as u8) > 0xB0 {
                 self.x = self.x.wrapping_sub(1);
+                self.x &= 0x0FFF;
+            } else if d_r != 0 && self.right_enabled {
+                // $0B90: right scroll
+                self.left_enabled = false;
+                self.x = self.x.wrapping_add(d_r as u16);
+                self.map_scroll_flags |= 0x10;
+                let sx = (mx_lo.wrapping_sub(self.x as u8)).wrapping_add(96);
+                if sx >= 0x40 {
+                    self.x = self.x.wrapping_add(1);
+                } else if sx < 0x3F {
+                    self.x = self.x.wrapping_sub(1);
+                }
+                self.x &= 0x0FFF;
             }
-            self.x &= 0x0FFF;
-        }
-        // $0BE5 left edge (bit1): at the $50 column the transition fires
-        // once Mario's screen X < $0F (Mario warps to x=0, hi+1); below it a
-        // pull-back; else the normal left scroll.
-        if edges & 2 != 0 && (self.x as u8) == 0x50 {
-            let sx = (mx_lo.wrapping_sub(self.x as u8)).wrapping_add(96);
-            if sx < 0x0F {
-                // MarioX = 0, MarioX_hi += 1 (mod $10) — $FFC2/$FFC3
-                self.transition = 2;
-                sim.x = (((sim.x >> 8).wrapping_add(1)) & 0x0F) << 8;
-                self.scene_lookup(sim);
-            }
-        } else if edges & 2 != 0 && (self.x as u8) < 0x50 {
-            // pull back toward the $50 lock column (no left scroll)
-            self.x = self.x.wrapping_add(1);
-            self.x &= 0x0FFF;
-        } else if d_l != 0 && self.left_enabled {
-            self.right_enabled = false;
-            self.x = self.x.wrapping_sub(d_l as u16);
-            self.map_scroll_flags |= 0x20;
-            let sx = (mx_lo.wrapping_sub(self.x as u8)).wrapping_add(96);
-            if sx < 0x70 {
-                self.x = self.x.wrapping_sub(1);
-            } else if sx >= 0x71 {
+            // $0BE5 left edge (bit1): at the $50 column the transition fires
+            // once Mario's screen X < $0F (Mario warps to x=0, hi+1); below it a
+            // pull-back; else the normal left scroll.
+            if edges & 2 != 0 && (self.x as u8) == 0x50 {
+                let sx = (mx_lo.wrapping_sub(self.x as u8)).wrapping_add(96);
+                if sx < 0x0F {
+                    // MarioX = 0, MarioX_hi += 1 (mod $10) — $FFC2/$FFC3
+                    self.transition = 2;
+                    sim.x = (((sim.x >> 8).wrapping_add(1)) & 0x0F) << 8;
+                    self.scene_lookup(sim);
+                }
+            } else if edges & 2 != 0 && (self.x as u8) < 0x50 {
+                // pull back toward the $50 lock column (no left scroll)
                 self.x = self.x.wrapping_add(1);
+                self.x &= 0x0FFF;
+            } else if d_l != 0 && self.left_enabled {
+                self.right_enabled = false;
+                self.x = self.x.wrapping_sub(d_l as u16);
+                self.map_scroll_flags |= 0x20;
+                let sx = (mx_lo.wrapping_sub(self.x as u8)).wrapping_add(96);
+                if sx < 0x70 {
+                    self.x = self.x.wrapping_sub(1);
+                } else if sx >= 0x71 {
+                    self.x = self.x.wrapping_add(1);
+                }
+                self.x &= 0x0FFF;
             }
-            self.x &= 0x0FFF;
         }
 
         // $0C7D: vertical follow. `$FF99` (the follow metric) is
@@ -861,5 +906,129 @@ mod tests {
         c.prev_mario_y_lo = 0x4E; // screen Y $70 → blocked regardless of sim.y
         c.crouch_pan(&sim, &b_up());
         assert_eq!(c.y, 0x140);
+    }
+
+    // ---- $0DAF: the autoscroll path -------------------------------------
+
+    /// An autoscroll camera with an all-clear edge table and Mario latched
+    /// level with its row, so the vertical follow has nothing to do and every
+    /// assertion is about the horizontal path. `sim.phase = 0` is `$FF97`
+    /// bit 0 clear, i.e. an even frame — the frames that scroll.
+    fn auto_cam(x: u16, y: u16) -> (CameraSim, PlayerSim) {
+        let mut c = CameraSim::new(x, y);
+        c.edge_map = [0u8; 48];
+        c.auto_scroll = 1;
+        c.prev_mario_y_lo = y as u8;
+        let mut sim = PlayerSim::new();
+        sim.x = x;
+        sim.y = y as u8 as u16;
+        sim.phase = 0;
+        (c, sim)
+    }
+
+    /// `$0DCA`: `ldh a,[$FF97] / and $01 / ret nz` — the scroll is one pixel
+    /// per TWO frames, so an odd frame does nothing at all. An even frame
+    /// clears `sScrollLeftEnabled` and sets `sMapScrollFlags` bit 4.
+    #[test]
+    fn autoscroll_scrolls_one_pixel_on_even_frames_only() {
+        let (mut c, mut sim) = auto_cam(0x100, 0x140);
+        c.left_enabled = true;
+        c.step(&mut sim);
+        assert_eq!(c.x, 0x101, "even frame: one px");
+        assert!(!c.left_enabled, "$0DCA clears sScrollLeftEnabled");
+        assert_eq!(c.map_scroll_flags & 0x10, 0x10, "and sets bit 4");
+
+        let (mut odd, mut sim2) = auto_cam(0x100, 0x140);
+        sim2.phase = 1; // $FF97 bit 0 set
+        odd.step(&mut sim2);
+        assert_eq!(odd.x, 0x100, "odd frame: the routine returns at `ret nz`");
+        assert_eq!(odd.map_scroll_flags & 0x10, 0, "and sets no scroll flag");
+    }
+
+    /// `$0DAF` never applies the player-speed latches (`$14BF`'s deltas),
+    /// never reads the draw's enable flags, and has no ±1 park correction: a
+    /// running Mario scrolls the camera exactly one pixel, not `x_sub`.
+    #[test]
+    fn autoscroll_ignores_the_latches_and_the_enables() {
+        let (mut c, mut sim) = auto_cam(0x100, 0x140);
+        sim.x_sub = 40; // the normal path would scroll 40 px
+        c.right_enabled = false;
+        c.left_enabled = false;
+        c.step(&mut sim);
+        assert_eq!(
+            c.x, 0x101,
+            "$0DAF: one px, whatever d_r and the enables say"
+        );
+    }
+
+    /// The carry lands in the camera's high byte, masked to four bits.
+    #[test]
+    fn autoscroll_wraps_the_camera_high_byte() {
+        let (mut c, mut sim) = auto_cam(0x0FFF, 0x140);
+        sim.x = 0x00FF;
+        c.step(&mut sim);
+        assert_eq!(c.x, 0x0000, "$0FFF + 1 masked to $0F | $00");
+    }
+
+    /// The right-edge trigger, $0B5E-shaped but with `>= $B0` instead of
+    /// `== $B0`, and an outright return below `sMarioScreenX = $A1` — where
+    /// `$0B5E`'s tail would scroll instead.
+    #[test]
+    fn autoscroll_right_edge_needs_b0_and_a1() {
+        // Camera at the $B0 column, Mario's screen X $A5: the transition fires.
+        let (mut c, mut sim) = auto_cam(0x00B0, 0x140);
+        c.edge_map[16] = 0x01; // row 1, cell 0: bit0 (the right edge)
+        sim.x = 0x00F5; // sx = $F5 - $B0 + $60 = $A5
+        c.step(&mut sim);
+        assert_eq!(
+            c.transition, 1,
+            "sScreenTransition = 1, then the $0F0B latch"
+        );
+        assert_eq!(c.x, 0x00B0, "the transition arm does not scroll");
+
+        // Same column, screen X $70: below $A1 the routine returns outright —
+        // even though the frame is even and the scroll would otherwise run.
+        let (mut low, mut sim2) = auto_cam(0x00B0, 0x140);
+        low.edge_map[16] = 0x01;
+        sim2.x = 0x00C0; // sx = $70
+        low.step(&mut sim2);
+        assert_eq!(low.transition, 0);
+        assert_eq!(
+            low.x, 0x00B0,
+            "`cp $A1 / ret c`: neither a transition nor a scroll"
+        );
+
+        // One pixel below the column: the `>= $B0` test fails, so it scrolls.
+        let (mut under, mut sim3) = auto_cam(0x00AF, 0x140);
+        under.edge_map[16] = 0x01;
+        sim3.x = 0x00F5;
+        under.step(&mut sim3);
+        assert_eq!(under.transition, 0, "`>= $B0` is not $0B5E's `== $B0`");
+        assert_eq!(under.x, 0x00B0, "so the autoscroll px is what happens");
+    }
+
+    /// `$0DAF` re-branches straight to `$0C7D`, so the left chain never runs:
+    /// the `$50`-column left transition (which warps Mario to x=0, hi+1) cannot
+    /// fire on an autoscroll frame.
+    #[test]
+    fn autoscroll_skips_the_left_chain_entirely() {
+        let (mut c, mut sim) = auto_cam(0x0050, 0x140);
+        c.edge_map[16] = 0x02; // row 1, cell 0: bit1 (the left edge)
+        sim.x = 0x00F5; // sx = $05 < $0F: the left transition's own gate
+        c.step(&mut sim);
+        assert_eq!(c.transition, 0, "no left transition on an autoscroll frame");
+        assert_eq!(sim.x, 0x00F5, "and Mario is not warped to x=0, hi+1");
+        assert_eq!(c.x, 0x0051, "the autoscroll px happens instead");
+    }
+
+    /// The vertical follow is *shared*: `$0DAF` jumps to `$0C7D`, so an
+    /// autoscroll frame still follows Mario down.
+    #[test]
+    fn autoscroll_still_runs_the_vertical_follow() {
+        let (mut c, mut sim) = auto_cam(0x100, 0x140);
+        sim.y = 0x40;
+        c.prev_mario_y_lo = 0x30; // descended 16 px
+        c.step(&mut sim);
+        assert!(c.y > 0x140, "the $0C7D follow ran (y {} )", c.y);
     }
 }
