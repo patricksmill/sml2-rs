@@ -697,6 +697,14 @@ impl ObjectSim {
             0x58758 => self.itempose_body(st),
             0x587BD => self.handler_pose86(st),
             0x587D7 => self.handler_pose87(st, tables),
+            // $58100 — a bare `ret` (ROM bytes: the single byte `$C9` right after
+            // the 192-byte mode-A table at $58040). Nineteen mode-A indices and
+            // eleven mode-B ones dispatch here, and it is a *real* target, not a
+            // missing one: the $58000 prelude still runs (interaction, bounce,
+            // star), only the per-anim body does nothing. Dispatching it
+            // explicitly keeps it out of `note_unported`, where it would look
+            // like a gap in the port rather than a fixture of the ROM.
+            0x58100 => {}
             h => self.note_unported(h),
         }
     }
@@ -2468,6 +2476,53 @@ mod tests {
         st.b[B_DEF] = 16;
         obj.run_handler(&mut st, &blank_layout(), &t);
         assert!(obj.unported.is_empty(), "anim 16 must have a ported body");
+    }
+
+    /// `$EC40`'s sprite-map mode rule — `ld a,[sCurLevel] / cp $0A / ret c`, so
+    /// level `$0A` itself already uses the "B" pair. The port had `> 0x0A`, which
+    /// put level `$0A` in mode A: one level's worth of objects and anim profiles
+    /// read from the wrong table.
+    #[test]
+    fn the_sprite_map_mode_rule_is_inclusive_at_0a() {
+        assert_eq!(crate::object::sprite_map_index(0x00), 0);
+        assert_eq!(crate::object::sprite_map_index(0x09), 0);
+        assert_eq!(
+            crate::object::sprite_map_index(0x0A),
+            1,
+            "$EC52: cp $0A / ret c — $0A is mode B"
+        );
+        assert_eq!(crate::object::sprite_map_index(0x1F), 1);
+    }
+
+    /// `$58100` is a bare `ret` — the ROM byte is `$C9`, immediately after the
+    /// 192-byte mode-A table at `$58040` — and nineteen mode-A anims plus eleven
+    /// mode-B ones dispatch to it. It is a *fixture*, not a gap: the `$8000`
+    /// prelude still runs, only the per-anim body does nothing. Routing it
+    /// explicitly is what keeps it out of `unported`, where it would read as
+    /// port debt and could turn into a spurious gate `note:`.
+    #[test]
+    fn the_58100_no_op_is_dispatched_and_not_flagged() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../extracted/objects.json");
+        let Ok(txt) = std::fs::read_to_string(path) else {
+            eprintln!("skip: {path} not built");
+            return;
+        };
+        let t: ObjectTables = serde_json::from_str(&txt).expect("objects.json parses");
+        // One of the nineteen from each mode's index list.
+        assert_eq!(t.behavior_for(0, 5), Some(0x58100), "mode A anim 5");
+        assert_eq!(t.behavior_for(0x0B, 40), Some(0x58100), "mode B anim 40");
+
+        for (level, anim) in [(0u8, 5u8), (0x0B, 40)] {
+            let mut obj = ObjectSim::new(Vec::new(), 0);
+            obj.configure(level);
+            let mut st = Staging::default();
+            st.b[B_DEF] = anim;
+            obj.run_handler(&mut st, &blank_layout(), &t);
+            assert!(
+                obj.unported.is_empty(),
+                "level {level} anim {anim}: the no-op must not be flagged"
+            );
+        }
     }
 
     // -----------------------------------------------------------------

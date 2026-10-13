@@ -31,9 +31,10 @@ use serde::{Deserialize, Serialize};
 pub const OBJECTS_SCHEMA: &str = "sml2-objects/3";
 
 /// The `sSpriteMapIndex` value a level is loaded with (main.asm ~$9050:
-/// level ids above `$0A` use the "B" tables).
+/// `ld a,[sCurLevel] / cp $0A / ret c` — so level ids **`>= $0A`** use the "B"
+/// tables, and level `$0A` itself is mode B).
 pub fn sprite_map_index(level_id: u8) -> u8 {
-    u8::from(level_id > 0x0A)
+    u8::from(level_id >= 0x0A)
 }
 
 /// One sprite's 4-byte collision extents, `[x0, x1, y0, y1]`.
