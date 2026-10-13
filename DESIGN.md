@@ -705,6 +705,29 @@ Verified engine semantics to preserve in the port:
   defeat arm — also capture-less, same engagement gate). The `$532D` spin
   *pose* is still unmodelled: its table index is `$FF97 & $0C` and captures
   record only `& 7`.
+- **`sMarioOnObject` comes from the object pass, never from the floor probe**
+  (closed 2026-10-13). `$2D7D` clears it at the top of the interaction pass and
+  `$2DF7`/`$2E1A` raises it to 255 when Mario's contact box meets an object
+  whose `sObjectType & $23` has bit 5 — the stand-on walkers/platforms. It is a
+  cross-frame byte: the pass writes it, and the *next* frame's `$129F` reads it
+  to short-circuit to `$1378` (`sMarioOnGround = 255`, `sPipeTravelDirection`
+  cleared, the floor probe skipped entirely), while `$5375`/`$53FE`'s frame
+  test and `$307D`'s pan gate read it too. A pass the frame loop skips (pipe
+  travel) leaves the byte at its previous value, so the port only writes it
+  when the pass actually runs. Until this was threaded, all three readers saw
+  `false` forever — and no capture could have shown it: level 1 has no object
+  type with bit 5 in `& $23` (`$4E` ×38 and `$56` ×1 are the only types Mario
+  ever contacts, both `& $23 == $02`), so the branch is unit-pinned and its
+  capture is quarantined in the queue as `obj_on_object_capture`.
+- **The two frame loops share one `MarioContact` constructor** (`build_contact`,
+  same date). They used to assemble it separately, and the play loop passed
+  defaults for `star_high`, `invincibility` and `on_object` while the replay
+  path passed the sim's values — plus the play loop never performed the
+  `on_ground_cleared` write-back. Three silent divergences no capture can show,
+  because only `--play` had them; this is the class queued as
+  `infra_play_parity_harness`. `pan`, `scene_state` and `flutter` are still 0 in
+  both paths: nothing drives `sCameraPanTimer`, `sSceneState` or
+  `sFlutterTimer` yet.
 - **The bell strike saves no respawn coordinates** (measured 2026-10-13,
   `captures/probe_bell_checkpoint.py`). The "midpoint bell saves the
   checkpoint" premise is not in the ROM: `$34EC` (item id 6) writes only

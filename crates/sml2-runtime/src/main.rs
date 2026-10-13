@@ -934,6 +934,39 @@ struct GapJ {
     seq: Vec<[u64; 2]>,
 }
 
+/// The `MarioContact` both loops hand to the object engine (`$2D7D`'s view of
+/// Mario). One constructor, because each loop used to build it by hand and the
+/// play loop quietly passed defaults for `star_high`, `invincibility` and
+/// `on_object` — a divergence no capture can show, since only `--play` had it
+/// (the class queued as `infra_play_parity_harness`).
+///
+/// `pan` is `sCameraPanTimer` (`$A2B3`, the `$2062` scroll-Y nudge): the replay
+/// path takes it from its capture, play mode has no source for it yet and
+/// passes 0. `scene_state` and `flutter` are 0 in both paths for the same
+/// reason — nothing in the port drives `sSceneState` or `sFlutterTimer` yet.
+fn build_contact(sim: &PlayerSim, keys: &PlayerKeys, pan: u8) -> sml2_core::objects::MarioContact {
+    sml2_core::objects::MarioContact {
+        x: sim.x,
+        y: sim.y,
+        dead: sim.dead,
+        powerup: sim.powerup,
+        ducking: keys.down && sim.on_ground,
+        spin_jump: sim.spin_jump != 0,
+        star_high: sim.star_high,
+        invincibility: sim.invincibility,
+        flutter: 0,
+        vvel: sim.vvel,
+        on_ground: sim.on_ground,
+        on_object: sim.on_ground_obj,
+        b_held: keys.b,
+        a_held: keys.a,
+        scene_state: 0,
+        moon_physics: sim.moon,
+        pan,
+        travelling: sim.pipe_dir >= 0x10,
+    }
+}
+
 /// Replay a captured trajectory through `sml2_core::player_sim` and report
 /// frame-by-frame divergences from the live console state. With `filmstrip`,
 /// also renders every 30th frame (sim + camera + player draw) as a 2x PNG.
@@ -1123,26 +1156,7 @@ fn run_replay(
         // captured byte is what the camera ran with, so the check is a
         // tautology — the missing-table note above is what fails the gate.
         let edge_derived = if own_edges { cam_edge_before } else { f.edge };
-        let mario = sml2_core::objects::MarioContact {
-            x: sim.x,
-            y: sim.y,
-            dead: sim.dead,
-            powerup: sim.powerup,
-            ducking: keys.down && sim.on_ground,
-            spin_jump: sim.spin_jump != 0,
-            star_high: sim.star_high,
-            invincibility: sim.invincibility,
-            flutter: 0,
-            vvel: sim.vvel,
-            on_ground: sim.on_ground,
-            on_object: false,
-            b_held: keys.b,
-            a_held: keys.a,
-            scene_state: 0,
-            moon_physics: sim.moon,
-            pan: f.pan.unwrap_or(0),
-            travelling: sim.pipe_dir >= 0x10,
-        };
+        let mario = build_contact(&sim, &keys, f.pan.unwrap_or(0));
         // $2D0A: the frame selection runs *before* the interaction pass, so
         // on the contact frame the sprite still shows the grounded pose.
         let frame_idx = if was_dead {
@@ -1182,6 +1196,14 @@ fn run_replay(
             if obj.on_ground_cleared {
                 sim.on_ground = false;
             }
+            // $2D7D clears `sMarioOnObject` at the top of the pass and $2DF7
+            // raises it to 255 when Mario stands on a bit5 object; a pass the
+            // frame loop skips (pipe travel) leaves the byte alone, which is
+            // what `step`'s own `!travelling` guard reproduces. Three readers
+            // consume it — `$129F`'s landing arm (via `$1378`), the
+            // `$5375`/`$53FE` frame test and `$307D`'s pan gate — and every one
+            // of them was inert while this stayed false.
+            sim.on_ground_obj = obj.on_object;
             if obj.stomp_jump {
                 sim.in_air = true;
                 sim.vvel = if keys.a { 75 } else { 48 };
@@ -1798,20 +1820,7 @@ fn run_play(
         }
         if let Some(tables) = &obj_tables {
             if !frozen {
-                let mario = sml2_core::objects::MarioContact {
-                    x: sim.x,
-                    y: sim.y,
-                    dead: sim.dead,
-                    powerup: sim.powerup,
-                    ducking: keys.down && sim.on_ground,
-                    spin_jump: sim.spin_jump != 0,
-                    vvel: sim.vvel,
-                    on_ground: sim.on_ground,
-                    b_held: keys.b,
-                    a_held: keys.a,
-                    travelling: sim.pipe_dir >= 0x10,
-                    ..Default::default()
-                };
+                let mario = build_contact(&sim, &keys, 0);
                 obj.mario_dead = sim.dead;
                 obj.step(cam.x, cam.y, layout, tables, &mario);
                 if sim.dead == 0 && obj.mario_dead != 0 {
@@ -1824,6 +1833,13 @@ fn run_play(
                 if let Some(y) = obj.mario_y_adjust {
                     sim.y = y;
                 }
+                // The replay path's write-back list, kept identical: this one
+                // was missing `on_ground_cleared` and `on_ground_obj` outright,
+                // so play mode disagreed with every capture on both.
+                if obj.on_ground_cleared {
+                    sim.on_ground = false;
+                }
+                sim.on_ground_obj = obj.on_object;
                 if obj.stomp_jump {
                     sim.in_air = true;
                     sim.vvel = if keys.a { 75 } else { 48 };

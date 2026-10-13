@@ -1817,6 +1817,74 @@ mod tests {
         sim
     }
 
+    /// `$129F`'s second test is `sMarioOnObject`: when it is set the routine
+    /// jumps to `$1378`, which forces `sMarioOnGround = 255`, clears
+    /// `sPipeTravelDirection` and returns — the floor probe never runs. The
+    /// runtime did not set the flag until the object engine's on-object result
+    /// was threaded back (before that it was false forever), so this reading of
+    /// it was inert: Mario standing on a walker fell through it for the one
+    /// frame the probe owned.
+    #[test]
+    fn on_object_skips_the_floor_probe_and_keeps_mario_grounded() {
+        let layout = blank_layout(); // no floor anywhere
+        let mut sim = small_sim();
+        sim.vvel = 0;
+        sim.on_ground = false;
+        sim.on_ground_obj = true;
+        sim.collision_tile = 0x99; // a sentinel only the probe would overwrite
+        sim.step(&PlayerKeys::default(), false, &layout);
+        assert!(sim.on_ground, "$1378 sets sMarioOnGround = 255");
+        assert_eq!(sim.collision_tile, 0x99, "the probe is skipped entirely");
+    }
+
+    /// The control for the test above: with the flag clear the same blank
+    /// layout falls through to the probe, finds nothing, and launches the
+    /// grounded-but-fast Mario off the ledge (`$129F`: `hvel - 72 >= $78`,
+    /// i.e. `hvel >= $C0` — the running-right and running-left bands).
+    #[test]
+    fn without_on_object_the_blank_layout_launches_him_off_the_ledge() {
+        let layout = blank_layout();
+        // Running fast ($C0 is the launch band's floor): the launch fires, and
+        // the frame's own later +-1 leaves `vvel` at 27, not 28.
+        let mut fast = small_sim();
+        fast.vvel = 0;
+        fast.on_ground = true;
+        fast.on_ground_obj = false;
+        fast.hvel = 0xC0;
+        fast.step(&PlayerKeys::default(), false, &layout);
+        assert!(!fast.on_ground, "nothing under him and nothing to stand on");
+        assert_eq!(
+            fast.vvel, 27,
+            "$129F sets 28; the rest of the frame leaves 27 (hvel {})",
+            fast.hvel
+        );
+        // Ambling at the neutral speed, below the band: no launch at all.
+        let mut slow = small_sim();
+        slow.vvel = 0;
+        slow.on_ground = true;
+        slow.on_ground_obj = false;
+        slow.hvel = 0x80;
+        slow.step(&PlayerKeys::default(), false, &layout);
+        assert_eq!(slow.vvel, 0, "below $C0 the launch does not fire");
+    }
+
+    /// `$5375`/`$53FE`: the walk-cycle arm's test is
+    /// `sMarioOnGround | sMarioOnObject`, so a Mario standing on an object
+    /// draws the standing/walk pose with `sMarioOnGround` clear — the state the
+    /// runtime left him in while it never set the flag, so the air pose won.
+    #[test]
+    fn on_object_draws_the_walk_pose_with_ground_clear() {
+        let mut sim = small_sim();
+        sim.in_air = true; // he is standing on something that is not the floor
+        sim.on_ground = false;
+        sim.hvel = 0x80;
+        sim.dir_right = true;
+        sim.on_ground_obj = true;
+        assert_eq!(sim.frame_index(0), 32, "the standing pose, small (+32)");
+        sim.on_ground_obj = false;
+        assert_eq!(sim.frame_index(0), 40, "the air pose (+32) wins instead");
+    }
+
     #[test]
     fn coin_touch_credits_clears_the_cell_and_is_not_a_wall() {
         let mut layout = blank_layout();
