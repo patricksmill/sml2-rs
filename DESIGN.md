@@ -414,13 +414,20 @@ exactly**, and a ten like `$10` decrements to `$09` with the game continuing.
 loads, `sBGPalette = $E4`, `sSavedLCDC = $C3`, **`sLives` back to 5**, the
 coin/money counters cleared, the `sLevelTally` penalty (`sub c / daa`, c = the
 set high bits of the six `sGoldenCoin1-6` bytes at `$A84D-$A865` — map-side save
-bytes with no in-level writer, so 0 here), `sFadeTimerLow = 255`,
-`sMusicRequest = 7`, then `$FF9B = 7`. State `$07` (`$287E`) calls the bank-12
-`$30884` (which draws the `$2874` "GAME OVER" string), polls `sFadeTimer` to 0,
-then waits for START (`hKeysPressed == $08`) and hands back to `$FF9B = 0`
-(`Init`) with `sMusicRequest = $FF`. Modelled as `PlayerSim::game_over` +
-`game_over_enter`/`game_over_step`; the art, the bank-12 `$2934` save and the
-string draw are not (see the omissions list above). No capture reaches zero
+bytes with no in-level writer, so 0 here), the six golden-coin bytes then
+**wiped**, `sFadeTimerLow = 255`, `sMusicRequest = 7`, and a `$2934` save, then
+`$FF9B = 7`. State `$07` (`$287E`) calls the bank-12 `$30884` (which stages the
+six golden-coin *icons*), polls `sFadeTimer` to 0, then waits for START and hands
+back to `$FF9B = 0` (`Init`) with `sMusicRequest = $FF`. Two corrections worth
+carrying: the START test is an **exact** compare (`ldh a,[hKeysPressed] /
+cp $08`), so START held with A or SELECT does not advance; and the `$2874`
+"GAME OVER" string (`db $90,$8A,$96,$8E,$FF,$98,$9F,$8E,$9B,$80`) is **dead
+data** — no code in the ROM reads it, and the screen's actual title is an OAM
+mural (tiles `$50-$79`, mappings 227/228 alternating on `$FF97` bit 4, sliding up
+during the fade's first 64 frames). Modelled as `PlayerSim::game_over` +
+`game_over_enter`/`game_over_step`; the art, the screen's own `$2934` save (the
+record builder is the same one the hand-off uses) and the mural are not (see the
+omissions list above). No capture reaches zero
 lives — every gate capture survives — so the whole path is unit-pinned
 (`death_fade_*`, `game_over_*`), and the replay harness's death-cycle gap takes
 the `$05` branch instead of the level reload when the flag is set.
