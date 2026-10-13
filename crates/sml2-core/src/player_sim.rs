@@ -31,15 +31,16 @@
 //! The engine's `ld b; add 16; ld b; add b; sub 16` position trick is a
 //! signed add: values $F0..$FF subtract 16..1 (`sdelta` below).
 //!
-//! Omitted (flagged, not guessed): the `$532D` spin-jump pose (its `$FF97 &
-//! $0C` table index needs bit 3, which captures do not record), the goal
-//! bell's ring animation, fireball paths, and the `$14` level-clear/map
-//! hand-off's banked body (`$3EF2B`: the palette swap, the map-node advance
-//! and the save) — the port marks the hand-off reach
-//! ([`PlayerSim::exit_completed`]) but keeps freezing. The same applies to the
-//! game-over screen's banked body (`$27AF`: the `$4C92` graphics and `$6492`
-//! tilemap loads, the `$2874` "GAME OVER" string, the `$2934` save) — the port
-//! models its state writes and the `$07` START poll, not the art. Ported
+//! Omitted (flagged, not guessed): the goal bell's ring animation, fireball
+//! paths, and the `$14` level-clear/map hand-off's banked body (`$3EF2B`: the
+//! palette swap, the map-node advance and the save) — the port marks the
+//! hand-off reach ([`PlayerSim::exit_completed`]) but keeps freezing. The same
+//! applies to the game-over screen's banked body (`$27AF`: the `$4C92`
+//! graphics and `$6492` tilemap loads, the `$2874` "GAME OVER" string, the
+//! `$2934` save) — the port models its state writes and the `$07` START poll,
+//! not the art. The `$532D` spin-jump pose is modelled
+//! ([`PlayerSim::frame_index`]) but only unit-tested: its `$FF97 & $0C` index
+//! needs bit 3, and captures record three bits of `$FF97`. Ported
 //! since the first cut (this list used to claim otherwise): pipe
 //! arming/entry/travel, water
 //! detection (`$1BFF`), the `$129F` ledge launch, the death arc/fade/respawn
@@ -1940,12 +1941,18 @@ impl PlayerSim {
         }
     }
 
+    /// `$5348`: the spin jump's four frame ids, indexed by `($FF97 & $0C) >> 2`.
+    /// The ROM keeps them in a 4-byte table immediately after the code that
+    /// indexes them.
+    const SPIN_JUMP_FRAMES: [u8; 4] = [0x04, 0x10, 0x00, 0x11];
+
     /// The frame index the draw would put in `$FFC6` (powerup offsets
     /// included). Model: right stand 0 / walk 1-3 / skid 13; left stand 4 /
     /// walk 5-7 / skid 12; duck 14/15; air 8/9; grounded-in-air 10/11;
     /// small +32, bunny +69 (flutter +26 not modelled), fire +112
-    /// (throw +32 not modelled). The `$532D` spin pose (its table index is
-    /// `$FF97 & $0C` — bit 3 is not captured), moon and pipes not modelled.
+    /// (throw +32 not modelled). The `$532D` spin pose is modelled from
+    /// [`Self::SPIN_JUMP_FRAMES`], but its index needs `$FF97` bit 3, which no
+    /// capture records. Moon and pipes (as poses) not modelled.
     pub fn frame_index(&mut self, walk_timer: u8) -> u8 {
         let cell = (walk_timer & 0x0C) >> 2;
         let f = if self.pipe_dir >= 0x10 {
@@ -1957,6 +1964,15 @@ impl PlayerSim {
                 0x40 => cell + 5,
                 _ => 16,
             }
+        } else if self.spin_jump != 0 {
+            // $532D: a spin jump overrides every other pose. The ROM tests it
+            // *before* `$534C`'s long chain but *after* the pipe-direction
+            // branch, so a spinning Mario in a pipe still shows the pipe frame.
+            // The index is `($FF97 & 0C) >> 2`: bit 2 comes from `phase`, which
+            // the captures record, and bit 3 from `frame_counter`, which they do
+            // not — see the note on this in the module header.
+            let idx = ((self.phase >> 2) & 1) | (((self.frame_counter >> 3) & 1) << 1);
+            Self::SPIN_JUMP_FRAMES[idx as usize]
         } else if self.ducking {
             if self.dir_right {
                 14
@@ -2414,6 +2430,53 @@ mod tests {
         assert_eq!(sim.fade_timer, 5);
         assert_eq!(sim.level_tally, 0);
         assert!(!sim.exit_completed);
+    }
+
+    /// `$532D`: while `sSpinJump` is set the pose comes from `$5348`, indexed by
+    /// `($FF97 & $0C) >> 2` — and it overrides the grounded and air poses, which
+    /// is the point of the branch. Big Mario (`powerup = 1`) so the `$5447`
+    /// powerup offset is 0 and the table values are visible as-is.
+    #[test]
+    fn the_spin_jump_pose_overrides_every_other_frame() {
+        let mut sim = small_sim();
+        sim.powerup = 1;
+        sim.on_ground = true;
+        sim.dir_right = true;
+        sim.hvel = 0x80;
+        assert_eq!(sim.frame_index(0), 0, "the standing pose, with no spin");
+
+        sim.spin_jump = 0xFF;
+        for (counter, want) in [
+            (0x00u8, 0x04u8),
+            (0x04, 0x10),
+            (0x08, 0x00),
+            (0x0C, 0x11),
+            (0x14, 0x10), // wraps: bit 2 alone would give 1, not 3
+        ] {
+            sim.frame_counter = counter;
+            sim.phase = counter & 7;
+            assert_eq!(sim.frame_index(0), want, "$FF97 = ${counter:02X}");
+        }
+
+        // It overrides the air pose too, not only the standing one.
+        sim.frame_counter = 0;
+        sim.phase = 0;
+        sim.on_ground = false;
+        sim.in_air = true;
+        assert_eq!(sim.frame_index(0), 0x04, "still the spin frame");
+
+        // ...but `$530D` tests the pipe direction first, so a spinning Mario in
+        // a pipe still shows the pipe frame.
+        sim.pipe_dir = 0x20;
+        assert_eq!(sim.frame_index(0), 16, "the pipe frame wins");
+
+        // With the spin cleared the normal pose comes back.
+        sim.pipe_dir = 0;
+        sim.in_air = false;
+        sim.on_ground = true;
+        sim.spin_jump = 0;
+        sim.hvel = 0x80;
+        assert_eq!(sim.frame_index(0), 0);
     }
 
     /// The write-back list both frame loops call. The play loop's own copy of it

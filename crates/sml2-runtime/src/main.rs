@@ -1163,6 +1163,11 @@ fn run_replay(
         } else {
             f.phase
         };
+        // `$FF97`'s bits above 2 are not in the capture record, so the full
+        // counter is a best-effort free run here (only `$532D`'s spin-jump pose
+        // reads bit 3, and no capture spins). The *low* bits still come from the
+        // record above, which is what every other reader uses.
+        sim.frame_counter = sim.frame_counter.wrapping_add(1);
         sim.camx = f.camx as u16;
         sim.camy = f.camy as u16;
         // $05E4/$0640: the frame loop's three branches. Dead (`$FF`) runs only
