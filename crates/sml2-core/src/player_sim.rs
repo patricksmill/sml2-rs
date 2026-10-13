@@ -276,9 +276,24 @@ pub struct PlayerSim {
     pub exit_phase: bool,
     /// `$FF9B = 20` — `$14`, the level-clear/map hand-off the `$3547` tail
     /// enters once the exit fade's last frame has run. The hand-off's banked
-    /// body (`$3EF2B`: the map-node advance and save) is not modelled, so the
-    /// port keeps freezing on `exit_phase`; this flag marks that the tail ran.
+    /// body is modelled by [`PlayerSim::map_handoff`] as far as the port can
+    /// observe it (the map-node rewrite, the progress bit and the move to the
+    /// map state); the overworld it hands off *to* is not ported, so the port
+    /// keeps freezing on `exit_phase` afterwards. This flag marks that the tail
+    /// ran.
     pub exit_completed: bool,
+    /// `sMapNode` (`$A840`) — the overworld node the player is on. The `$14`
+    /// hand-off rewrites it (see [`PlayerSim::map_handoff`]) and the map state
+    /// reads it to choose the next level, so it is progress state and survives
+    /// a level reload. A level entered from the map starts with the node the
+    /// map selected; a plain level's node is 0, which is exactly the case the
+    /// hand-off's tail keys on.
+    pub map_node: u8,
+    /// The port's marker that the `$FF9B = $14` body has run. The ROM needs no
+    /// flag: the body ends by setting `$FF9B = 12` (the map), so it runs on
+    /// exactly one frame. Without an overworld to enter, the port records it
+    /// here instead — cleared by a level reload like the other phase flags.
+    pub map_handoff_done: bool,
     /// `$FF9B = 5` — the GAME OVER screen (`$27AF`), entered from the death
     /// fade's borrow (`$311A`'s `sub 1 / daa` on `sLives` with carry set,
     /// i.e. `sLives == 0`). The bank-12 body is not modelled (the `$4C92`
@@ -448,6 +463,8 @@ impl PlayerSim {
             dead_fade: false,
             exit_phase: false,
             exit_completed: false,
+            map_node: 0,
+            map_handoff_done: false,
             game_over: false,
             paused: false,
             level_progress_flags: 0,
@@ -1672,6 +1689,64 @@ impl PlayerSim {
         }
     }
 
+    /// The `$FF9B = $14` level-clear hand-off. `$2C23` maps bank 15 in and jumps
+    /// to its `$6F2B` (file offset `$3EF2B`) body, which the ROM runs for exactly
+    /// one frame because it ends by setting `$FF9B = 12` (the overworld map) —
+    /// hence [`PlayerSim::map_handoff_done`] here.
+    ///
+    /// What the body does, and what of it this port can observe:
+    ///
+    /// * It swaps in the overworld's palettes — `sBGPalette = $E4`,
+    ///   `sOAMPalette1 = $D0`, `sOAMPalette2 = $39`. Unobservable here: those
+    ///   bytes belong to the map, and this port renders the level from the
+    ///   extracted manifest rather than from `sBGPalette`.
+    /// * With `sGoalBell` set (item id 6, `$34EC`) it calls `$3F4B1` or
+    ///   `$3F5A4` — the castle walk/ending sequences (bank-25 gfx, the castle
+    ///   RAM block, `sMapScreenId = 14`) — and then hands to the map. Also the
+    ///   map's; only the state move is modelled.
+    /// * Otherwise, and only for the `$4B` exit tile on a live Mario, it rewrites
+    ///   `sMapNode`, because that exit opens a different node than the level it
+    ///   was entered from: `$48 -> $47`, `$05`/`$12`/`$1A -> $69`,
+    ///   `$29 -> $2C`, `$2A -> $2F`, `$3C -> $40`.
+    /// * The common tail then handles a *plain* level, whose node is 0: it sets
+    ///   `sLevelProgressFlags` bit 7 — the "already cleared" bit the tally path
+    ///   and the SELECT abandon both read — and moves the node to 20 (`$14`).
+    ///   The `$05`/`$1A` nodes instead move to the castle node `$3F`, and nodes
+    ///   of `$1E` and up take map-screen branches this port does not model.
+    /// * `$2934` is the save. The port has no SRAM, so it is not modelled.
+    ///
+    /// Returns true the first time it runs.
+    pub fn map_handoff(&mut self) -> bool {
+        if self.map_handoff_done {
+            return false;
+        }
+        self.map_handoff_done = true;
+        if self.goal_bell {
+            return true;
+        }
+        if self.exit_tile_flag != 0 && self.dead == 0 {
+            self.map_node = match self.map_node {
+                0x48 => 0x47,
+                0x05 | 0x12 | 0x1A => 0x69,
+                0x29 => 0x2C,
+                0x2A => 0x2F,
+                0x3C => 0x40,
+                node => node,
+            };
+        }
+        match self.map_node {
+            // $3F014: a live Mario on the $05/$1A nodes moves to the castle.
+            0x05 | 0x1A if self.dead == 0 => self.map_node = 0x3F,
+            // $3F024: a plain level — mark the stage cleared, move to node $14.
+            0 if self.dead == 0 => {
+                self.level_progress_flags |= 0x80;
+                self.map_node = 0x14;
+            }
+            _ => {}
+        }
+        true
+    }
+
     /// `$0F2A` (level restart) + the fade tail's `$04F1` clears: Mario is put
     /// back at the header spawn with hvel $80 / vvel 24, facing right, with
     /// the death/powerup/invincibility state cleared. Fields the reload does
@@ -1687,6 +1762,8 @@ impl PlayerSim {
         self.dead_fade = false;
         self.exit_phase = false;
         self.exit_completed = false;
+        self.map_handoff_done = false;
+        // `sMapNode` is progress, not level state: the reload leaves it alone.
         self.game_over = false;
         self.paused = false;
         self.fade_timer = 0;
@@ -2195,6 +2272,122 @@ mod tests {
         assert_eq!(sim.fade_timer, 5);
         assert_eq!(sim.level_tally, 0);
         assert!(!sim.exit_completed);
+    }
+
+    // -----------------------------------------------------------------
+    // $14 — the level-clear/map hand-off ($2C23 -> bank 15 $6F2B).
+    //
+    // The gate cannot see any of this: no capture runs past the exit fade
+    // (`$FF9B = $14` freezes the port), so every branch is pinned here.
+    // -----------------------------------------------------------------
+
+    /// Level 1's own case: the `$4A` exit bell sets neither `sGoalBell` nor
+    /// `sExitTileFlag`, and a level entered from the map has node 0 — which is
+    /// exactly the branch that marks the stage cleared and moves the node on.
+    #[test]
+    fn map_handoff_marks_a_plain_level_cleared() {
+        let mut sim = small_sim();
+        assert_eq!(sim.map_node, 0, "a fresh sim is on node 0");
+        assert!(!sim.goal_bell && sim.exit_tile_flag == 0 && sim.dead == 0);
+
+        assert!(sim.map_handoff(), "the body runs once");
+        assert_eq!(sim.level_progress_flags & 0x80, 0x80, "$3F024 sets bit 7");
+        assert_eq!(sim.map_node, 0x14, "and moves the node to 20");
+        assert!(
+            !sim.map_handoff(),
+            "the ROM sets $FF9B = 12, so it runs once"
+        );
+        assert_eq!(sim.map_node, 0x14);
+    }
+
+    /// The `$4B` secret exit rewrites the node: that exit opens a different
+    /// node than the one the level was entered from.
+    #[test]
+    fn map_handoff_rewrites_the_node_for_the_secret_exit() {
+        for (from, want) in [
+            (0x48u8, 0x47u8),
+            (0x05, 0x69),
+            (0x12, 0x69),
+            (0x1A, 0x69),
+            (0x29, 0x2C),
+            (0x2A, 0x2F),
+            (0x3C, 0x40),
+        ] {
+            let mut sim = small_sim();
+            sim.map_node = from;
+            sim.exit_tile_flag = 0xFF;
+            assert!(sim.map_handoff());
+            assert_eq!(sim.map_node, want, "node ${from:02X}");
+        }
+        // A node the chain does not know is left alone, and — being neither 0
+        // nor $05/$1A — takes none of the tail's branches either.
+        let mut sim = small_sim();
+        sim.map_node = 0x07;
+        sim.exit_tile_flag = 0xFF;
+        sim.map_handoff();
+        assert_eq!(sim.map_node, 0x07);
+        assert_eq!(sim.level_progress_flags & 0x80, 0);
+    }
+
+    /// The bell path (item id 6 set `sGoalBell`) hands to the map through the
+    /// castle sequences and never touches the node or the progress bit.
+    #[test]
+    fn map_handoff_bell_path_skips_the_node_work() {
+        let mut sim = small_sim();
+        sim.goal_bell = true;
+        sim.exit_tile_flag = 0xFF; // would otherwise rewrite the node
+        sim.map_node = 0x48;
+        assert!(sim.map_handoff());
+        assert_eq!(sim.map_node, 0x48);
+        assert_eq!(sim.level_progress_flags & 0x80, 0);
+    }
+
+    /// Every branch of the body is gated on a live Mario (`sMarioDead`).
+    #[test]
+    fn map_handoff_needs_a_live_mario() {
+        let mut sim = small_sim();
+        sim.dead = 0x0F;
+        sim.exit_tile_flag = 0xFF;
+        sim.map_node = 0x48;
+        sim.map_handoff();
+        assert_eq!(sim.map_node, 0x48, "the rewrite is skipped");
+        assert_eq!(sim.level_progress_flags & 0x80, 0, "and so is the tail");
+
+        // Node 0 with a dead Mario: still nothing.
+        let mut dead_plain = small_sim();
+        dead_plain.dead = 0x80;
+        dead_plain.map_handoff();
+        assert_eq!(dead_plain.map_node, 0);
+        assert_eq!(dead_plain.level_progress_flags & 0x80, 0);
+    }
+
+    /// The `$05`/`$1A` nodes move to the castle node `$3F` — but only when the
+    /// secret-exit rewrite has not already sent them to `$69`.
+    #[test]
+    fn map_handoff_moves_the_castle_nodes() {
+        for from in [0x05u8, 0x1A] {
+            let mut sim = small_sim();
+            sim.map_node = from;
+            sim.map_handoff();
+            assert_eq!(sim.map_node, 0x3F, "node ${from:02X} -> the castle");
+        }
+        let mut secret = small_sim();
+        secret.map_node = 0x05;
+        secret.exit_tile_flag = 0xFF;
+        secret.map_handoff();
+        assert_eq!(secret.map_node, 0x69, "the $4B rewrite wins");
+    }
+
+    /// A level reload clears the port's own marker but leaves `sMapNode` alone:
+    /// the node is progress, not level state.
+    #[test]
+    fn a_level_reload_keeps_the_map_node() {
+        let mut sim = small_sim();
+        sim.map_handoff();
+        assert_eq!(sim.map_node, 0x14);
+        sim.respawn(112, 240);
+        assert!(!sim.map_handoff_done, "the marker is a phase flag");
+        assert_eq!(sim.map_node, 0x14, "the node survives the reload");
     }
 
     // -----------------------------------------------------------------

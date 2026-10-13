@@ -931,6 +931,26 @@ Verified engine semantics to preserve in the port:
   `$0F2A`, transition frames, parked frames), and the register's own readers are
   the two lock rows the transition ends never straddle with a stale value — so
   the proxy is right on every frame it is read.
+- **The `$14` level-clear hand-off** (ported 2026-10-14). `$2C23` maps bank 15
+  in and jumps to its `$6F2B` (file offset `$3EF2B`); the body runs for exactly
+  one frame because it ends by setting `$FF9B = 12` — the overworld map state
+  (`$0C` → bank 15 `$4000`), which this port does not have. Its port-relevant
+  work is progress bookkeeping. With `sGoalBell` set (item id 6, `$34EC`) it
+  goes through the castle walk/ending sequences (`$3F4B1`/`$3F5A4`: bank-25 gfx,
+  the castle RAM block, `sMapScreenId = 14`). Otherwise, and only for the `$4B`
+  exit tile on a live Mario, it rewrites `sMapNode` (`$A840`) — `$48→$47`,
+  `$05`/`$12`/`$1A→$69`, `$29→$2C`, `$2A→$2F`, `$3C→$40` — and then the common
+  tail keys on the node being **0**, which is what a plain level's node is: it
+  sets `sLevelProgressFlags` bit 7 (the "already cleared" bit the `$3547` tally
+  guard and the `$2756` SELECT abandon both read) and moves the node to `$14`.
+  The `$05`/`$1A` nodes move to the castle node `$3F` instead, and nodes of
+  `$1E` and up take map-screen branches. The hand-off also swaps in the
+  overworld's palettes (`sBGPalette`/`sOAMPalette1`/`sOAMPalette2` =
+  `$E4`/`$D0`/`$39`) and calls `$2934` to save; neither is modelled, because this
+  port has no map to draw and no SRAM. Reachability: level 1's exit bell sits at
+  x 4064 and the furthest capture reaches 4026, so nothing in the gate ever
+  completes a level — the whole exit path, hand-off included, is unit-tested only
+  (queued as `exit_tile_arm_capture`).
 - **Autoscroll levels replace that whole horizontal section** (`$0DAF`,
   ported 2026-10-13; the levels are 20, 26 and 31 by file name, i.e.
   `--level 19/25/30`). With `sAutoScroll != 0` the `$0B2A` dispatcher calls

@@ -1170,9 +1170,15 @@ fn run_replay(
         // cell (and the console's stale $FF98) is unchanged.
         let cam_edge_before = if own_edges { cam.edge_byte() } else { f.edge };
         let fade_at_entry = sim.dead_fade || sim.exit_phase;
+        // `$FF9B = $14` is set by the exit fade's *last* frame, so the hand-off
+        // body runs on the frame after it — keyed on the state at entry.
+        let exit_done_at_entry = sim.exit_completed;
         if sim.dead_fade || sim.exit_phase {
             if sim.exit_phase {
                 sim.exit_fade_step();
+            }
+            if exit_done_at_entry {
+                sim.map_handoff();
             }
         } else if was_dead {
             sim.death_arc(cam.y);
@@ -1886,9 +1892,15 @@ fn run_play(
         // pass (the ROM's `$273E` sits at the frame tail) before the freeze
         // takes effect on the next one.
         let frozen = sim.paused || sim.dead_fade || sim.exit_phase;
+        let exit_done_at_entry = sim.exit_completed;
         if frozen {
             if sim.exit_phase {
                 sim.exit_fade_step();
+            }
+            // See the replay loop: `$FF9B = $14` comes from the fade's last
+            // frame, so the hand-off body runs one frame later.
+            if exit_done_at_entry {
+                sim.map_handoff();
             }
         } else if was_dead {
             sim.death_arc(cam.y);
