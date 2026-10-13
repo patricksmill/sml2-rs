@@ -68,7 +68,7 @@ Regenerate everything with `cargo run -p sml2-extract` from this repo root
 
 ## Standing goals (design constraints, not wishlist)
 
-Three user-facing features must stay cheap to add at any point. All are
+Four user-facing features must stay cheap to add at any point. All are
 satisfied by keeping the seams below intact — do not bake these away:
 
 ### 1. Texture packs (replaceable art)
@@ -135,6 +135,21 @@ satisfied by keeping the seams below intact — do not bake these away:
   changes.
 - The display pipeline stays independent of the 60 Hz simulation (goal 2):
   resizing or scaling never feeds back into game state.
+
+### 4. SML2 DX compatibility (clean-room BYOR)
+
+- **Never redistribute patch code or modified assets.** Compatibility follows a
+  Bring Your Own ROM (BYOR) model: the user supplies their own patched `sml2dx.gbc`.
+- **Launcher identification:** The launcher/CLI identifies a DX ROM via Game Boy
+  header flags (CGB flag `$80`/`$C0` at `$0143`, expanded size `≥1MB` at `$0148`)
+  and exact version SHA-1/CRC32 matches (v1.5, v1.8, etc.).
+- **Dynamic extraction seam:** An ingestion module parses the known table offsets
+  in Toruzz's expanded banks locally, extracting GBC BGR555 palettes, VRAM
+  bank 1 attribute maps, and Luigi sprite/physics tables into a local cache
+  conforming to the core asset schema.
+- **Runtime integration:** Palettes and attributes hook into the texture pack /
+  palette resolver (Goal 1), while Luigi mechanics plug into `player_sim` via an
+  alternate character physics profile (`--character luigi`).
 
 ## Current milestone state
 
