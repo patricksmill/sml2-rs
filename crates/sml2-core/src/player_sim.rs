@@ -171,6 +171,24 @@ fn bcd_inc(v: u8) -> u8 {
     (hi << 4) | lo
 }
 
+/// `sub c / daa` on a BCD byte — `$27AF`'s golden-coin tally penalty. The ROM
+/// subtracts the *count* of set golden coins (0-6, never a BCD digit above 9)
+/// from `sLevelTally` and then `daa`s the result, so this is plain BCD
+/// subtraction with a borrow that wraps, exactly as `daa` leaves it: 12 - 3 = 09,
+/// and 05 - 6 = 99 rather than a negative.
+fn bcd_sub(tally: u8, n: u8) -> u8 {
+    let mut lo = (tally & 0x0F) as i16 - n as i16;
+    let mut hi = (tally >> 4) as i16;
+    if lo < 0 {
+        lo += 10;
+        hi -= 1;
+    }
+    if hi < 0 {
+        hi += 10;
+    }
+    (((hi as u8) & 0x0F) << 4) | ((lo as u8) & 0x0F)
+}
+
 /// `add $50 / daa` on a BCD byte (`$350A`'s coin add). `$50`'s low nibble is
 /// zero, so no half-carry correction is ever needed; the `+6` fires exactly
 /// when the high nibble lands above 9, and that case also carries into the
@@ -313,6 +331,12 @@ pub struct PlayerSim {
     /// and the `$2756` SELECT abandon read. 42 bytes covers the highest slot in
     /// the ROM's `$650E` table ($29).
     pub level_progress: [u8; 42],
+    /// `sGoldenCoinFlags` (`$A2B5`): `$27AF`'s fold of the six golden-coin bytes,
+    /// one bit each — bit 5 = coin 1, bit 4 = coin 2, bit 3 = coin 6, bit 2 =
+    /// coin 5, bit 1 = coin 4, bit 0 = coin 3. The `$30884` icon draw (state
+    /// `$07`, and the castle screen) tests bit 5 alone, which is why the fold
+    /// happens *before* `$27AF` clears the six bytes.
+    pub golden_coin_flags: u8,
     /// The port's marker that the `$FF9B = $14` body has run. The ROM needs no
     /// flag: the body ends by setting `$FF9B = 12` (the map), so it runs on
     /// exactly one frame. Without an overworld to enter, the port records it
@@ -489,6 +513,7 @@ impl PlayerSim {
             exit_completed: false,
             map_node: 0,
             level_progress: [0; 42],
+            golden_coin_flags: 0,
             map_handoff_done: false,
             game_over: false,
             paused: false,
@@ -1595,6 +1620,39 @@ impl PlayerSim {
         }
     }
 
+    /// `sGoldenCoin1-6` (`$A84D`, `$A851`, `$A856`, `$A859`, `$A85F`, `$A865`) as
+    /// offsets into [`PlayerSim::level_progress`] (`$A848`), which the save record
+    /// carries as its `+$0D/+$11/+$16/+$19/+$1F/+$25`. **In `$27AF`'s fold order**:
+    /// coins 1, 2, 6, 5, 4, 3 — so element 0 lands in the flags byte's bit 5 and
+    /// element 5 in bit 0. That order is the order the castle screen draws them
+    /// in, left to right.
+    const GOLDEN_COINS: [usize; 6] = [5, 9, 29, 23, 17, 14];
+
+    /// `$27AF`'s fold: `and $80 / sla a / rl b` per coin, in
+    /// [`Self::GOLDEN_COINS`] order, giving `sGoldenCoinFlags`.
+    ///
+    /// The six bytes are the *persisted* ones (the `sLevelProgress` block at
+    /// `$A848`), and no in-level code ever sets their bit 7 — the ROM has no
+    /// writer for them at all. So in a game played from the start this folds to 0
+    /// every time; the mechanism matters because a *loaded save* can carry the
+    /// bits, and every consumer tests nothing but bit 7.
+    pub fn golden_coin_flags(&self) -> u8 {
+        let mut b = 0u8;
+        for off in Self::GOLDEN_COINS {
+            let bit = (self.level_progress.get(off).copied().unwrap_or(0) & 0x80) >> 7;
+            b = (b << 1) | bit;
+        }
+        b
+    }
+
+    /// The collected golden-coin count. `$307BC` (the castle screen) resets
+    /// `sGoldenCoinCount` and increments it once per coin with bit 7 set, and
+    /// `$27AF` recomputes the same number as the popcount of the flags byte
+    /// (`srl a / jr nc / inc c`, six times). Both give this.
+    pub fn golden_coin_count(&self) -> u8 {
+        self.golden_coin_flags().count_ones() as u8
+    }
+
     /// `$27AF` (state `$05`) — the GAME OVER screen's entry, run by the caller
     /// on the frame after the fade raised [`PlayerSim::game_over`]. Not
     /// modelled: the bank-12 body (the `$4C92` graphics → `$8000`, the `$6492`
@@ -1603,13 +1661,24 @@ impl PlayerSim {
     /// is: `sLives` back to 5, the coin/money counters cleared, the 255-frame
     /// fade armed, and `sMusicRequest = 7` before the hand-off to `$07`.
     ///
-    /// The tally penalty is `sub c / daa` with c = the set high bits of the six
-    /// `sGoldenCoin1-6` bytes ($A84D-$A865) — map-side save bytes with no
-    /// in-level writer, so c is always 0 here and the tally is left alone.
+    /// Its tail is more than a reset, and is modelled here: it folds the six
+    /// golden-coin bytes into `sGoldenCoinFlags`, subtracts that popcount from
+    /// the BCD `sLevelTally` (`sub c / daa`), **clears all six bytes**, and calls
+    /// `$2934` — the same save the level-clear hand-off makes. So a game over
+    /// wipes golden-coin progress and charges the tally for every coin collected.
     pub fn game_over_enter(&mut self) {
         self.lives = 5;
         self.coins_low = 0;
         self.coins_high = 0;
+        // The fold has to happen before the clear: `$30884` reads the flags byte
+        // on every `$07` frame to stage the first coin's icon.
+        self.golden_coin_flags = self.golden_coin_flags();
+        self.level_tally = bcd_sub(self.level_tally, self.golden_coin_count());
+        for off in Self::GOLDEN_COINS {
+            if let Some(b) = self.level_progress.get_mut(off) {
+                *b = 0;
+            }
+        }
         self.fade_timer = 255; // sFadeTimerLow (the high byte is already 0)
         self.music_request = 7;
     }
@@ -3451,6 +3520,118 @@ mod tests {
         assert_eq!((sim.coins_high, sim.coins_low), (0, 0));
         assert_eq!(sim.fade_timer, 255);
         assert_eq!(sim.music_request, 7);
+    }
+
+    /// `$27AF`'s fold order — coins 1, 2, 6, 5, 4, 3 into bits 5..0 — is *not* the
+    /// order the bytes sit in memory, and getting it wrong would silently
+    /// shuffle the castle screen's icons.
+    #[test]
+    fn golden_coin_flags_fold_in_the_roms_order() {
+        for (idx, want) in [
+            (0usize, 0x20u8),
+            (1, 0x10),
+            (2, 0x08),
+            (3, 0x04),
+            (4, 0x02),
+            (5, 0x01),
+        ] {
+            let mut sim = small_sim();
+            sim.level_progress[PlayerSim::GOLDEN_COINS[idx]] = 0x80;
+            assert_eq!(sim.golden_coin_flags(), want, "fold slot {idx}");
+            assert_eq!(sim.golden_coin_count(), 1);
+        }
+
+        let mut all = small_sim();
+        for off in PlayerSim::GOLDEN_COINS {
+            all.level_progress[off] = 0x80;
+        }
+        assert_eq!(all.golden_coin_flags(), 0x3F, "all six");
+        assert_eq!(all.golden_coin_count(), 6);
+
+        // Every consumer tests bit 7 alone: a byte with the rest set is not a
+        // collected coin.
+        let mut other = small_sim();
+        other.level_progress[PlayerSim::GOLDEN_COINS[0]] = 0x7F;
+        assert_eq!(other.golden_coin_flags(), 0);
+        assert_eq!(other.golden_coin_count(), 0);
+    }
+
+    /// `$27AF`'s tail is not just a reset: it folds the coins, charges the BCD
+    /// tally for each one, wipes the six bytes, and keeps the flags for the
+    /// `$30884` icon draw.
+    #[test]
+    fn game_over_charges_the_tally_and_wipes_the_golden_coins() {
+        let mut sim = small_sim();
+        sim.level_tally = 0x12;
+        sim.level_progress[PlayerSim::GOLDEN_COINS[0]] = 0x80; // coin 1
+        sim.level_progress[PlayerSim::GOLDEN_COINS[1]] = 0x80; // coin 2
+        sim.game_over_enter();
+        assert_eq!(sim.level_tally, 0x10, "12 - 2, in BCD");
+        assert_eq!(sim.golden_coin_flags, 0x30, "folded before the wipe");
+        assert_eq!(
+            sim.golden_coin_flags.count_ones(),
+            2,
+            "$27AF recomputes the count from the flags byte"
+        );
+        assert_eq!(
+            sim.golden_coin_count(),
+            0,
+            "while $307BC's byte-derived count is 0 once the bytes are wiped — \
+             the two derivations agree before the clear, which is when $27AF uses it"
+        );
+        assert!(
+            PlayerSim::GOLDEN_COINS
+                .iter()
+                .all(|o| sim.level_progress[*o] == 0),
+            "all six cleared"
+        );
+
+        // `daa` wraps rather than going negative: 05 - 6 = $99.
+        let mut wrap = small_sim();
+        wrap.level_tally = 0x05;
+        for off in PlayerSim::GOLDEN_COINS {
+            wrap.level_progress[off] = 0x80;
+        }
+        wrap.game_over_enter();
+        assert_eq!(wrap.level_tally, 0x99);
+
+        // With no coins — the only case a game started from scratch can reach,
+        // since nothing in the ROM sets the bits — nothing changes.
+        let mut none = small_sim();
+        none.level_tally = 0x07;
+        none.game_over_enter();
+        assert_eq!(none.level_tally, 0x07);
+        assert_eq!(none.golden_coin_flags, 0);
+    }
+
+    /// The six bytes live inside the block `$2934` saves, so a collected coin
+    /// shows up in the record at the offsets the save layout documents. This pins
+    /// [`PlayerSim::GOLDEN_COINS`] to the save layout as well as to `$27AF`.
+    #[test]
+    fn the_golden_coin_bytes_are_the_save_records_offsets() {
+        let mut sim = small_sim();
+        for (off, rec) in [
+            (5usize, 0x0Dusize),
+            (9, 0x11),
+            (14, 0x16),
+            (17, 0x19),
+            (23, 0x1F),
+            (29, 0x25),
+        ] {
+            assert_eq!(sim.save_record(0)[rec], 0);
+            sim.level_progress[off] = 0x80;
+            assert_eq!(
+                sim.save_record(0)[rec],
+                0x80,
+                "level_progress[{off}] -> record ${rec:02X}"
+            );
+            sim.level_progress[off] = 0;
+        }
+        assert_eq!(
+            PlayerSim::GOLDEN_COINS,
+            [5, 9, 29, 23, 17, 14],
+            "fold order: coins 1, 2, 6, 5, 4, 3"
+        );
     }
 
     /// `$287E`: the fade ticks down for 255 frames, then the screen waits for
