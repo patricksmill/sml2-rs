@@ -354,14 +354,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         &baserom[script_rom..script_rom + 192],
     )?;
 
-    // The overworld's two parallel 130-byte node tables (bank 15, `$4218` and
-    // `$650E`), kept in one blob as `map/nodes.bin` — level index first, then
-    // the progress slot — because every consumer indexes them by the same node
-    // id. `$4218[node]` is the level index the map stores into `sCurLevel` on
-    // entry (`$FE` = a pure path node), and `$650E[node]` is the offset the
-    // hand-off's `$3EEF0` adds to `sLevelProgress` (`$A848`) to find that node's
-    // cleared/secret flags, as well as the index into the key-mask table at
-    // `$6591`. Node 0 — a plain level, level 1 — is 0 in both.
+    // The overworld's parallel node tables (bank 15): `$4218` (level index) and
+    // `$650E` (progress slot) are indexed by node id, 130 bytes each; `$6591`
+    // (the key/direction mask `$3E1D7` tests) is indexed by *progress slot*, and
+    // the slot range the extraction found runs `$00`-`$29`, so 42 bytes are
+    // taken. Note the disassembly gives no label between `$650E` and `$67BE` —
+    // the whole region is one 16-byte-`db`-split blob — so the mask table's
+    // exact length is inferred from the values (they stop looking like direction
+    // masks after index 40) and from the slot range. The 42nd byte is whatever
+    // data follows the table, which is what the ROM reads for a slot of `$29`
+    // too; the port takes the same byte rather than pretending to know better.
     let nodes_rom = parse::label_rom(&main_facts, "UnknownData_0x3C218")
         .ok_or("UnknownData_0x3C218: no ROM address")? as usize;
     let slots_rom = parse::label_rom(&main_facts, "UnknownData_0x3E50E")
@@ -370,6 +372,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut nodes = Vec::with_capacity(2 * 130);
     nodes.extend_from_slice(&baserom[nodes_rom..nodes_rom + 130]);
     nodes.extend_from_slice(&baserom[slots_rom..slots_rom + 130]);
+    // `$650E`'s slot region runs 131 bytes — the 130 node slots plus a trailing
+    // `$FE` at `$6590` — so `$6591` is `slots_rom + 131`, which the ROM's own
+    // 130-byte node arrays do not reach.
+    nodes.extend_from_slice(&baserom[slots_rom + 131..slots_rom + 131 + 42]);
     fs::write(extracted.join("map/nodes.bin"), &nodes)?;
 
     // Per-level GFX config (UnknownData_0x360A -> sLevelGfxConfig): the high

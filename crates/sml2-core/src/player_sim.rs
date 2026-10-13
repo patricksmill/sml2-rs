@@ -1931,6 +1931,57 @@ impl PlayerSim {
         }
     }
 
+    /// `$3E1D7`: whether the held direction opens a level at the current node.
+    ///
+    /// The caller is bank 15's `$3C4D3` — `call $3E1D7 / or a / jp z, $3C5DA` —
+    /// so **0 means yes**, and the fall-through is the cursor's walking path.
+    /// That polarity is why the hub returns "no": on `sMapScreenId == 0` the
+    /// cursor only ever walks, and a level is entered from a zone screen.
+    ///
+    /// The ROM's four tests, in the order it applies them: `sMapScreenId != 0`;
+    /// `$4218[node] != $FE` (a pure path node — note `$FF` is *not* excluded
+    /// here); `$6591[slot] & (hKeysHeld & $F0) != 0`, i.e. the held direction
+    /// must be one this node offers; and `sLevelProgress[slot]` bit 7 **clear**,
+    /// so a stage already cleared is not re-entered through this gate. Entering
+    /// then also needs A or START *pressed* (`$3C5F4`'s `hKeysPressed & $09`) —
+    /// [`PlayerSim::map_confirm`].
+    ///
+    /// Two places where the port refuses to imitate the ROM: a node whose
+    /// progress slot is `$FE`/`$FF` would make `$6591` read past its table, and
+    /// such nodes are `$FE` in `$4218` as well, so the second test normally
+    /// returns first — the port returns false rather than modelling the
+    /// out-of-bounds read. And with no table loaded everything is false.
+    pub fn map_can_enter(
+        &self,
+        nodes: &crate::map::MapNodes,
+        screen_id: u8,
+        keys_held: u8,
+    ) -> bool {
+        if screen_id == 0 {
+            return false;
+        }
+        if nodes.level_byte(self.map_node) == Some(0xFE) {
+            return false;
+        }
+        let Some(slot) = nodes.progress_slot(self.map_node) else {
+            return false;
+        };
+        if nodes.key_mask(slot).unwrap_or(0) & (keys_held & 0xF0) == 0 {
+            return false;
+        }
+        self.level_progress.get(slot as usize).copied().unwrap_or(0) & 0x80 == 0
+    }
+
+    /// `$3C5F4`: the A/START confirmation that turns an entry-ready node into
+    /// an actual entry — `hKeysPressed & $09` (A is bit 0, START bit 3). The ROM
+    /// then dispatches on `sMapNode` to a per-node action, and those handlers are
+    /// where the level really loads; they are map-specific (node `$02`/`$19` is
+    /// the castle, whose `$3D0D7` is an animation — cursor to 48/158, node 35,
+    /// `sMarioDead = 255`, a gfx reload — not a level load) and are not modelled.
+    pub fn map_confirm(keys_pressed: u8) -> bool {
+        keys_pressed & 0x09 != 0
+    }
+
     /// `$2934`: the 0x50-byte save image. The ROM writes it to
     /// `sSaveSlot0` (`$A000`) + `sSaveFileIndex` * `$50`, so the record itself is
     /// slot-independent; a caller decides where it goes.
@@ -2606,13 +2657,62 @@ mod tests {
     // -----------------------------------------------------------------
 
     /// A node table with just what these tests need: node 0 is level 1 with
-    /// progress slot 0, node `$05` has slot `$1F`, everything else is "none".
+    /// progress slot 0, node 1 has a slot but no level (`$4218 = $FE`, the
+    /// entry gate's path-node case), node `$05` has slot `$1F`, and everything
+    /// else is "none". Slot 0's key mask offers every direction and slot `$1F`'s
+    /// only Right, so the gate's mask test can be told apart from its others.
     fn handoff_nodes() -> crate::map::MapNodes {
-        let mut b = vec![0xFEu8; crate::map::MapNodes::BLOB_LEN];
+        use crate::map::MapNodes;
+        let mut b = vec![0xFEu8; MapNodes::BLOB_LEN];
         b[0] = 0x00;
-        b[crate::map::MapNodes::NODES] = 0x00;
-        b[crate::map::MapNodes::NODES + 0x05] = 0x1F;
-        crate::map::MapNodes::from_bytes(&b).expect("260-byte blob")
+        b[0x05] = 0x11; // the real $4218[$05], so $05 is a level node not a path
+        b[MapNodes::NODES] = 0x00;
+        b[MapNodes::NODES + 1] = 0x00;
+        b[MapNodes::NODES + 0x05] = 0x1F;
+        b[2 * MapNodes::NODES] = 0xF0;
+        b[2 * MapNodes::NODES + 0x1F] = 0x10;
+        MapNodes::from_bytes(&b).expect("302-byte blob")
+    }
+
+    /// `$3E1D7`: the entry gate's four conditions in the ROM's order, plus the
+    /// A/START confirmation `$3C5F4` applies on top of them.
+    #[test]
+    fn the_map_entry_gate_needs_the_screen_the_direction_and_an_uncleared_stage() {
+        let nodes = handoff_nodes();
+        let mut sim = small_sim();
+        assert!(sim.map_can_enter(&nodes, 1, 0x40), "screen 1, Up held");
+        assert!(!sim.map_can_enter(&nodes, 0, 0x40), "the hub only walks");
+        assert!(!sim.map_can_enter(&nodes, 1, 0x00), "nothing held");
+        assert!(
+            !sim.map_can_enter(&nodes, 1, 0x0F),
+            "the low bits are not directions"
+        );
+
+        // A stage already cleared is not re-entered through this gate.
+        sim.level_progress[0] = 0x80;
+        assert!(!sim.map_can_enter(&nodes, 1, 0x40));
+        sim.level_progress[0] = 0;
+
+        // `$4218[node] == $FE` is the pure-path-node case, and it is checked
+        // before the slot lookup.
+        sim.map_node = 1;
+        assert!(!sim.map_can_enter(&nodes, 1, 0x40));
+
+        // The mask must offer the direction held (node $05's slot $1F: Right).
+        sim.map_node = 0x05;
+        assert!(!sim.map_can_enter(&nodes, 1, 0x40), "Up is not offered");
+        assert!(sim.map_can_enter(&nodes, 1, 0x10), "Right is");
+
+        // A node with no progress slot at all, and no table loaded.
+        sim.map_node = 0x07;
+        assert!(!sim.map_can_enter(&nodes, 1, 0x40));
+        assert!(!sim.map_can_enter(&crate::map::MapNodes::default(), 1, 0x40));
+
+        // `$3C5F4`: A (bit 0) or START (bit 3), pressed, not held.
+        assert!(!PlayerSim::map_confirm(0x00));
+        assert!(PlayerSim::map_confirm(0x01), "A");
+        assert!(PlayerSim::map_confirm(0x08), "START");
+        assert!(!PlayerSim::map_confirm(0x06), "B and Select are not it");
     }
 
     /// Level 1's own case: the `$4A` exit bell sets neither `sGoalBell` nor

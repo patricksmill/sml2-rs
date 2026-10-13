@@ -16,6 +16,15 @@
 //!   cleared/secret flags, and the index into the key-mask table at `$6591`.
 //!   34 of the 130 nodes carry one, and the six castle slots (`$05`/`$03`/
 //!   `$02`/`$01`/`$04`) sit at nodes `$20`-`$24`.
+//! * `$6591[slot]` — the key/direction mask. `$3E1D7` (the map's entry gate)
+//!   reads it by *progress slot* and tests it against `hKeysHeld & $F0`, so a
+//!   node only accepts the directions its mask offers. Bank 15's `$3C33B` indexes
+//!   the same table by *level index* instead; that discrepancy is recorded here,
+//!   not resolved — the second site only feeds the zone screens' arrow drawing.
+//!   The disassembly labels nothing between `$650E` and `$67BE`, so this table
+//!   has no declared length: it sits immediately after the slot table (`$650E` +
+//!   130 = `$6591`) and the port takes the 42 bytes the ROM's own slot range
+//!   (`$00`-`$29`) addresses.
 //!
 //! Node 0 — the level this port's captures all play, level 1 — is `0` in both,
 //! which is exactly the case the `$14` hand-off's tail keys on.
@@ -40,8 +49,13 @@ pub struct MapNodes {
 impl MapNodes {
     /// Node ids run `$00`-`$81`.
     pub const NODES: usize = 130;
-    /// The extracted blob: the level table then the progress-slot table.
-    pub const BLOB_LEN: usize = 2 * Self::NODES;
+    /// The key-mask table's length: the slot range the ROM's own table uses
+    /// runs `$00`-`$29`. See the extractor and the module docs for why this is
+    /// inferred rather than labelled.
+    pub const MASKS: usize = 42;
+    /// The extracted blob: the level table, the progress-slot table (both 130
+    /// bytes, node-indexed), then the key masks (42 bytes, slot-indexed).
+    pub const BLOB_LEN: usize = 2 * Self::NODES + Self::MASKS;
 
     /// `None` unless the blob is exactly the extracted size.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
@@ -63,11 +77,26 @@ impl MapNodes {
         (v < 0xFE).then_some(v)
     }
 
+    /// `$4218[node]` **raw**. The map's entry gate (`$3E1D7`) tests the byte for
+    /// `$FE` alone and lets `$FF` through, so [`Self::level_for`] — which folds
+    /// both into `None` — cannot express it.
+    pub fn level_byte(&self, node: u8) -> Option<u8> {
+        self.blob.get(node as usize).copied()
+    }
+
     /// `$650E[node]` — the `sLevelProgress` offset (and `$6591` index), or
     /// `None` when the node has neither.
     pub fn progress_slot(&self, node: u8) -> Option<u8> {
         let v = *self.blob.get(Self::NODES + node as usize)?;
         (v < 0xFE).then_some(v)
+    }
+
+    /// `$6591[slot]` — the key/direction mask `$3E1D7` ANDs with
+    /// `hKeysHeld & $F0`. `None` for a slot outside the table, or when no blob
+    /// is loaded; the ROM reads past the table instead, which the port refuses
+    /// to reproduce (see [`crate::player_sim::PlayerSim::map_can_enter`]).
+    pub fn key_mask(&self, slot: u8) -> Option<u8> {
+        self.blob.get(2 * Self::NODES + slot as usize).copied()
     }
 }
 
@@ -106,14 +135,18 @@ mod tests {
         0B 0C 0D 0E FE FE FE FE FE FE 10 11 FE 13 FE FE FE FE 29 FE \
         15 FE 16 17 FE FE FE FE FE FE 1A 1B 1C 1D FE FE FE FE FE FE \
         20 FE FE FE FE FE FE FE FE FE FE FE 25 FE FE FE 23 FE FE FE \
-        FE FE FE FE FE FE FE FE FE FE 26 FE 27 FE FE FE FE FE FE FE";
+        FE FE FE FE FE FE FE FE FE FE 26 FE 27 FE FE FE FE FE FE FE \
+        00 10 40 40 40 00 40 20 40 00 00 10 10 10 00 00 \
+        40 00 00 10 00 80 80 00 00 00 40 40 40 00 00 10 \
+        00 00 00 00 00 00 00 00 00 44";
 
     fn nodes() -> MapNodes {
         let bytes: Vec<u8> = BLOB_HEX
             .split_whitespace()
             .map(|h| u8::from_str_radix(h, 16).unwrap())
             .collect();
-        MapNodes::from_bytes(&bytes).expect("260-byte blob")
+        assert_eq!(bytes.len(), MapNodes::BLOB_LEN, "302 bytes");
+        MapNodes::from_bytes(&bytes).expect("302-byte blob")
     }
 
     /// Node 0 is level 1 and a plain level — the case the `$14` hand-off's tail
@@ -123,6 +156,29 @@ mod tests {
         let n = nodes();
         assert_eq!(n.level_for(0), Some(0), "$4218[0] = 0 = level 1");
         assert_eq!(n.progress_slot(0), Some(0), "$650E[0] = 0");
+    }
+
+    /// `$6591` as the ROM has it. Note slot 0's mask is `$00`: no direction opens
+    /// node 0 through `$3E1D7`, which is a real property of the game, not a bug
+    /// in the extraction — level 1 is entered by the story path, not by walking a
+    /// zone screen's arrow.
+    #[test]
+    fn the_key_masks_are_the_roms_table() {
+        let n = nodes();
+        assert_eq!(n.key_mask(0), Some(0x00), "slot 0: no direction opens it");
+        assert_eq!(n.key_mask(1), Some(0x10), "slot 1: Right");
+        assert_eq!(n.key_mask(2), Some(0x40), "slot 2: Up");
+        assert_eq!(n.key_mask(40), Some(0x00));
+        // The ROM's slot range reaches `$29`, and `$6591[$29]` is the byte past
+        // the table's last plausible mask — the port hands back exactly what the
+        // ROM would read there rather than inventing a value or refusing.
+        assert_eq!(n.key_mask(41), Some(0x44), "$6591[$29]");
+        assert_eq!(n.key_mask(42), None, "and nothing beyond the table");
+        // Every entry up to the last one the slot range addresses is a legal
+        // direction mask; index 41 is the only one that is not.
+        for slot in 0..=40u8 {
+            assert_eq!(n.key_mask(slot).unwrap() & !0xF0, 0, "slot {slot}");
+        }
     }
 
     /// The tables' shape, as the ROM's own data has it.
