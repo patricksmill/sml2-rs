@@ -344,6 +344,24 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    // The scene scripts, written once for the whole ROM rather than per level:
+    // the 32-entry `dw` table at bank 5 `$4125` followed by its payload at
+    // `$4165`. The scene VM (`$20A4`) looks a script up as
+    // `$4125 + sSceneId * 2` and then executes the pointed-at bytes in bank 5,
+    // so the port keeps the table and its payload in one blob and treats the
+    // pointers as bank-5 addresses. `$41E5` is where the title-screen gfx
+    // begin, so the region is exactly `$4125..$41E5` = 192 bytes (64 table +
+    // 128 payload). The only label in the region is the 4 title-screen bytes
+    // at `$4121`, hence the +4.
+    let script_rom = parse::label_rom(&main_facts, "UnknownData_0x14121")
+        .ok_or("UnknownData_0x14121: no ROM address")? as usize
+        + 4;
+    fs::create_dir_all(extracted.join("scenes"))?;
+    fs::write(
+        extracted.join("scenes/script_table.bin"),
+        &baserom[script_rom..script_rom + 192],
+    )?;
+
     // Per-level GFX config (UnknownData_0x360A -> sLevelGfxConfig): the high
     // nibble selects the two "extra" tile blocks loaded by LoadMarioGFX
     // ($06C0): $8800 <- bank $1B [$7000 + n*$300], $8E80 <- bank $07

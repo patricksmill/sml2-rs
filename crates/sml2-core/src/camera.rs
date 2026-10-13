@@ -63,6 +63,14 @@ pub struct CameraSim {
     pub scene_id: u8,
     pub map_event_flag: u8,
     pub palette_fade_step: u8,
+    /// `sSceneTransitionFlag` / `sSceneTransitionLatch` / `sSceneDoneFlag`
+    /// (`$A24A` / `$A249` / `$A2A8`) — the scene VM's bookkeeping. `$4x` sets
+    /// the flag, `$21EE` latches it into the latch and zeroes the rest. Nothing
+    /// else in this ROM reads them, so they are modelled for fidelity (and for
+    /// the VM's tests), not for behaviour.
+    pub scene_transition_flag: u8,
+    pub scene_transition_latch: u8,
+    pub scene_done_flag: u8,
     /// `sSfxRequest0` set by the transition finish (fidelity only).
     pub sfx0: u8,
 }
@@ -87,6 +95,9 @@ impl CameraSim {
             scene_id: 0,
             map_event_flag: 0,
             palette_fade_step: 0,
+            scene_transition_flag: 0,
+            scene_transition_latch: 0,
+            scene_done_flag: 0,
             sfx0: 0,
         }
     }
@@ -508,6 +519,19 @@ impl CameraSim {
         let idx = (((sim.y >> 8) as usize & 0x0F) << 4) | ((sim.x >> 8) as usize & 0x0F);
         self.scene_id = self.scene_map.get(idx).copied().unwrap_or(0);
         self.palette_fade_step = 0;
+    }
+
+    /// `$21EE` — the script END epilogue, which `$20A4`'s no-scene path also
+    /// jumps to, so it runs on every pass with no script latched (idempotently).
+    /// It latches `sSceneTransitionFlag` into `sSceneTransitionLatch` and zeroes
+    /// `sSceneId`, `sSceneIdHi`, the flag and `sSceneDoneFlag`. `sSceneIdHi`
+    /// (`$A28F`) is never written by any code path in this ROM, so it has no
+    /// field here.
+    pub fn end_scene(&mut self) {
+        self.scene_transition_latch = self.scene_transition_flag;
+        self.scene_id = 0;
+        self.scene_transition_flag = 0;
+        self.scene_done_flag = 0;
     }
 }
 

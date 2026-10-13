@@ -28,6 +28,7 @@ use serde::Deserialize;
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest, LAYOUT_HEIGHT, LAYOUT_WIDTH};
 use sml2_core::object::ObjectTables;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
+use sml2_core::scene::{SceneScripts, SceneVm};
 use sml2_core::video;
 
 /// Native GB screen; the HUD strip and the parity checks are anchored to it.
@@ -355,6 +356,24 @@ fn extracted_dir() -> PathBuf {
         }
     }
     PathBuf::from("extracted")
+}
+
+/// The bank-5 scene script table (`extracted/scenes/script_table.bin`). It is
+/// one ROM-wide blob rather than per level, and the missing-file flag matches
+/// the two level maps: with no table the scene VM is inert, and the run says so
+/// instead of quietly never running a script.
+fn load_scene_scripts() -> SceneScripts {
+    match fs::read(extracted_dir().join("scenes/script_table.bin"))
+        .ok()
+        .as_deref()
+        .and_then(SceneScripts::from_bytes)
+    {
+        Some(s) => s,
+        None => {
+            println!("note: scene script table missing — no scene script can run");
+            SceneScripts::default()
+        }
+    }
 }
 
 /// Everything the window viewer needs per frame.
@@ -1022,6 +1041,11 @@ fn run_replay(
     if !matches!(scene_map.as_ref(), Some(m) if m.len() == 48) {
         println!("note: level scene map missing — sSceneId will stay 0");
     }
+    // The scene scripts (bank 5 `$4125`): one ROM-wide blob, so it is loaded
+    // here rather than threaded through `main`. Level 1's scene map is all
+    // zeros, so its `sSceneId` never latches and the VM never runs a byte.
+    let scripts = load_scene_scripts();
+    let mut scene_vm = SceneVm::new();
     let mut sim = PlayerSim::new();
     sim.powerup = 0; // level-0 spawn starts small
     let f0 = &frames[0];
@@ -1254,6 +1278,11 @@ fn run_replay(
                 sim.vvel = 49;
             }
         }
+        // $20A4: the scene VM. The main loop calls it once per pass *after* the
+        // in-level frame pass (home.asm:274), so a latched scene advances
+        // exactly one script byte per frame and a `$4x` teleport lands after
+        // this frame's physics rather than before it.
+        scene_vm.step(&mut sim, &mut cam, &scripts);
         // The full-death-cycle gap: after the fade-trigger frame the game
         // leaves the level (fade 192 frames → `$14` lives/save/map setup →
         // the overworld map, which waits for input → re-entry reloads the
@@ -1709,6 +1738,21 @@ fn run_replay(
                 .join(", ")
         );
     }
+    // A scene script opcode the port has no implementation for. The VM steps
+    // over it with its real operand length, so the script still ends properly,
+    // but the behaviour it was supposed to cause did not happen — and this line
+    // is what fails the gate if a scene level is ever added to it.
+    if !scene_vm.unported().is_empty() {
+        println!(
+            "note: scene script opcode(s) with no port implementation: {}",
+            scene_vm
+                .unported()
+                .iter()
+                .map(|o| format!("${o:02X}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
     Ok(())
 }
 
@@ -1773,6 +1817,8 @@ fn run_play(
     } else {
         println!("note: level scene map missing — sSceneId will stay 0");
     }
+    let scripts = load_scene_scripts();
+    let mut scene_vm = SceneVm::new();
     use minifb::{Key, Window, WindowOptions};
     let mut window = Window::new(
         &format!(
@@ -1899,6 +1945,9 @@ fn run_play(
                 }
             }
         }
+        // $20A4: the scene VM, once per frame after the whole in-level pass —
+        // the same placement as the replay loop (home.asm:274).
+        scene_vm.step(&mut sim, &mut cam, &scripts);
         let f = if was_dead {
             107
         } else {

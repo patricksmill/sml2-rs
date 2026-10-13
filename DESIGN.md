@@ -232,6 +232,40 @@ level header's +18 high nibble (`$0609`); measured, every level in this ROM has
 `0` there, so no level starts inside a scene. Level 1's scene map is all zeros,
 which is why no level-1 capture can reach any of this.
 
+**A nonzero `sSceneId` makes the level run a script, one byte per frame**
+(2026-10-14). The main loop calls `$20A4` once per pass, *after* the in-level
+frame pass (`home.asm:274`), and every opcode in it ends at `$21E8` — a `$2728`
+VBlank wait — before the next fetch. The table at bank 5 `$4125` is 32 `dw`
+entries pointing into the 128 bytes just above it; `sml2-extract` writes the
+whole 192-byte region as `extracted/scenes/script_table.bin` and
+`crate::scene` resolves the pointers against it. `$FF` ends the script through
+the `$21EE` epilogue, which latches `sSceneTransitionFlag` into
+`sSceneTransitionLatch` and zeroes `sSceneId`, `sSceneIdHi`, the flag and
+`sSceneDoneFlag` — this is also where `$20A4`'s no-scene guard jumps, so the
+epilogue runs on every scene-less pass, idempotently.
+
+The port implements `$4x` and `$8x`. `$4x` — "transition to screen (Y,X)" — is a
+**teleport of Mario *and* the camera**: the operand's high nibble becomes their
+Y page (`$FFC9`/`$FFC1`), its low nibble their X page (`$FFCB`/`$FFC3`), and
+only those high bytes are written, so the pair lands on a 256-px cell boundary
+with the low bytes untouched. `$8x` arms `sBossDefeated = $F0 | nibble`. Every
+other class is stepped over *with its real operand length* and reported, so a
+script still reaches its `$FF`; a class with no handler at all (`$7x`, `$9x`,
+`$Cx`-`$Fx`) makes the ROM re-read the same byte forever, reproduced as a
+no-advance stall. The operand lengths are validated by the data: all 32 retail
+scripts parse into whole instructions landing exactly on their `$FF`. Two are
+easy to get wrong and both were, when this was first researched: **`$6x` takes
+no operand** (its `$25AF` does `ld a,[hli]` with HL on the opcode, so the nibble
+*is* the tileset index) and `$Bx` takes three.
+
+The `$4x` handler's direction streamers (`$2359`/`$23E4`/`$2524`/`$246F`, run
+only while a transition is in progress) write `$FFCC`-`$FFCF` and call
+`$0969`/`$0A35`, which fill the BG window at `$9800` with the incoming screen's
+strips. They are deliberately not modelled and not flagged: this port renders
+from the resident decompressed layout, so they have no observable effect here.
+The transition scroll itself (`$0DED`) uses hardcoded targets (`cp $50` etc.)
+and never reads those bytes.
+
 Fixed the same day: the extractor writes `levelNN.edge.bin` (bank = header +13
 `sLevelDataBank`; base = the little-endian pointer at `[bank:$4000]`; source =
 `base + (layout_index & $0F) * 48`, 48 bytes — `$03F1`, home.asm 539-571); the
