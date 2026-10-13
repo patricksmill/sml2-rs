@@ -400,11 +400,26 @@ them: they resolve to walkers, fallwalkers, hoppers, crawler, bobber, the item
 poses, poses 86/87, `marker85` and the anim-16 pickup (`$586F5`, ported
 2026-10-13 — see the item-pickup bullet below).
 
-Open: the game-over path (a lives borrow → `$99` + the game-over screen;
-the decrement is modelled, the screen is not), the scene system proper (levels
-whose `sSceneMap` is nonzero load a scene at the transition finish — state
-240 + bank-1 `$3C94` + the template-object loader `$8E6C`), and the
+Open: the scene system proper (levels
+whose `sSceneMap` is nonzero load a scene at the transition finish), and the
 carry/item type-`$06` paths. Display goals above ride on top unchanged.
+
+On the scene system, the ROM's chain — because an earlier revision of this note
+got it wrong twice. **240 is written to `sSceneState` (`= $F0`), not `$FF9B`**:
+the `$FF9B` jump table ends at `$23` (home.asm:330), so 240 could never index
+it. And `$3C94` is a **bank-0 trampoline to bank 2** `$8D9C`, not "bank-1".
+The real sequence: a hard-edge trigger in `$0B2A` sets `sScreenTransition` and
+calls `$0F0B` to latch `sSceneId` from `sSceneMap`; when the scroll completes,
+`$0EB0` (home.asm:2009-2050) tests `sSceneState & $0F` and, if nonzero, sets
+`sSceneState = $F0`, then calls `$3C94` → bank 2 `$8D9C` — the boss/template
+object set, with `$8E6C` as the template loader (which writes complete 18-byte
+slot images into `$AD00`, bypassing the spawn stream `objects.rs` models).
+What is missing is therefore not a "state 240" but the bank-5 **script VM**
+(`$20A4`, one byte per frame, opcode table at home.asm:4311-4429), the `$0EB0`
+`sSceneState & $0F` branch, and the `$8D9C` path. `sSceneMap` is extracted the
+same way as the edge map but from the pointer at `[bank:$4002]` (home.asm:572-604);
+**14 of 32 levels are nonzero, and level 1 is all zeros**, which is why nothing
+in the captures touches it.
 
 Next in line, in measured order: the item ids with no capture
 yet (1-4/6/8/9 — the `$3451` writes are ported but unverified; the anim-16

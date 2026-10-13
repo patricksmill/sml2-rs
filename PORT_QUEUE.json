@@ -106,15 +106,359 @@
     },
     {
       "id": "game_over_scene",
-      "title": "Zero lives game-over transition to state $1E",
+      "title": "Zero lives game over: $311A borrow -> $05 ($27AF state writes) -> $07 ($287E fade + START) -> $00",
       "asm_refs": [
-        "home.asm:$319F"
+        "home.asm:$311A",
+        "home.asm:$314B",
+        "home.asm:$27AF",
+        "home.asm:$2874",
+        "home.asm:$287E"
       ],
+      "note": "Premise corrected 2026-10-13: the game-over state is $05, NOT $1E. $1E ($2AE9 -> bank12 $3041D) is the map level-clear tally; nothing in the ROM writes $1E to $FF9B (only $1D/29 is written, then inc'd). Implemented 2026-10-13: PlayerSim::game_over + game_over_enter/game_over_step, the borrow in fade_step; the bank-12 art, the $2874 string draw and the $2934 save are not modelled. Unit-pinned (no capture reaches zero lives).",
       "dependencies": [
         "powerup_transitions_3451"
       ],
       "verification_gate": "cargo test",
+      "status": "done"
+    },
+    {
+      "id": "camera_crouch_look_pan",
+      "title": "Crouch-look camera pan ($307D: B+Down / B+Up, 1 px/frame, edge-gated)",
+      "asm_refs": [
+        "home.asm:$307D",
+        "home.asm:$3098",
+        "home.asm:$30D9",
+        "home.asm:$0F71"
+      ],
+      "dependencies": [],
+      "verification_gate": "captures/crouch_pan1.json replay all-zero + cargo test",
+      "status": "done",
+      "note": "Verified missing 2026-10-13: $0F71's FIRST call, and the port neither implements it nor flags it. Gated on sSceneState == 0 and (sMarioOnGround | sMarioOnObject); hKeysHeld $82 (B+Down) pans camY +1/frame while sMarioScreenY >= $20 and not (edge bit3 and camY_lo >= $C0); $42 (B+Up) pans camY -1/frame while sMarioScreenY < $70 and not (edge bit2 and camY_lo < $49). Uses the same sScreenEdgeMap as the follow, so it needs the extracted table too. The capture field named `pan` is sCameraPanTimer ($A2B3), which $307D never writes - it is NOT this feature's flag. The real evidence that the gate was blind: across the original 16 captures (~49k frames) no frame holds B+Down or B+Up while grounded. KEY LAYOUT (ReadJoypad $1FD2, verified 2026-10-13): hKeysHeld = directions in bits 4-7 (bit7 Down, bit6 Up, bit5 Left, bit4 Right) and actions in bits 0-3 (bit1 B, bit0 A, bit2 Select, bit3 Start) - so $82 is exactly Down+B, $42 exactly Up+B, and $08 (the $287E START wait) is Start. Because `cp` is exact, Select or Start held CANCELS the pan; the port cannot express those bits yet, so this becomes a live dependency of the pause item (pause_and_palette_flash) - when a START bit lands, the pan gate must include it. DONE 2026-10-13: CameraSim::crouch_pan (13 unit tests, cargo test 84) plus captures/crouch_pan1.json (508 records, $05E4-hook-sampled). That capture holds B+Down for 79 grounded frames and B+Up for 80, with 41 camy +1 steps, 41 -1 steps and 75 guard-blocked frames (camy 406-448); the port replays it ALL-ZERO on all 507 compared frames, so both pan arms and both guards match the console. Added to the README gate list."
+    },
+    {
+      "id": "camera_screen_transitions_capture",
+      "title": "Screen-transition paths: VERTICAL tr=4/8 now verified; horizontal tr=1/2 unreachable in level 1",
+      "asm_refs": [
+        "home.asm:$0DED",
+        "home.asm:$0EB0",
+        "home.asm:$0B5E",
+        "home.asm:$0BE5",
+        "home.asm:$0C7D"
+      ],
+      "dependencies": [],
+      "verification_gate": "captures/screen_transition1.json replay all-zero",
+      "status": "done",
+      "note": "DONE 2026-10-13 for the vertical crossings: captures/screen_transition1.json (6840 records, $05E4-hook-sampled) carries tr=8 at recs 2128-2161 (camy 448 -> 580 at +4/frame, Mario descends the pipe) and tr=4 at recs 2685-2720 (camy 584 -> 444 at -4/frame, the ascent); the port replays it ALL-ZERO on 6839 compared frames including `tr` and `camy`, so $0DED's scroll, the $C0/$48 lock rows and the transition state are console-verified for the first time. Added to the README gate. STILL UNCOVERED: the horizontal tr=1/2 triggers, which a 2026-10-13 reachability study found unreachable in level 1 - tr=1 needs marioX >= 4081 at camx=$FB0 but the $4A exit bell fires at x=4056 and the col-255 wall blocks x >= 4068 (airborne the wall clears only at y <= 247 and the pillar is ~90 px past the last launch block, beyond the engine's ~50-55 px airborne reach); tr=2 needs marioX_lo=254 with camx=80 while $0FBF clamps screen X to >= 16. A capture in another level (or a synthetic one) is needed; see horizontal_transitions_other_level."
+    },
+    {
+      "id": "camera_sMarioScreenY_stale_register",
+      "title": "sy98 model vs the real stale sMarioScreenY ($A23B) register",
+      "asm_refs": [
+        "home.asm:$0C7D",
+        "home.asm:$54A7"
+      ],
+      "dependencies": [
+        "camera_screen_transitions_capture"
+      ],
+      "verification_gate": "cargo test",
+      "status": "pending",
+      "note": "ANSWERED from the ROM 2026-10-13: REFUTED as 'exactly equivalent', but no level-1 decision flips. The port's prev_mario_y_lo is one variable standing in for TWO ROM bytes written at different points - sMarioScreenY ($A23B, written by the draw at main.asm:461-467 per frame) and sPrevMarioY ($A20C, written by the camera body at home.asm:1861-1862). It equals the register on every steady-state free-scroll frame (which is why all 17 captures and the gate pass). It differs in: (a) the first frame after $0F2A, where the register holds the constant $40 (home.asm:2095) while the port computes sy98 (for level 1: $76 vs $40 - both below the $90 down-lock read, so same decision, but a level whose spawn arithmetic lands >= $90 would arm a down transition the console would not); (b) every frame while sScreenTransition != 0 (the ROM's draw keeps refreshing the register from the walked Mario position; the port returns before its latch, so its proxy freezes and ends the transition stale by tens of px); (c) parked frames (scene/boss). None of the stale values is CONSULTED in level 1: the register is read only at the $C0 down-lock (home.asm:1722) and the $48 up-lock (home.asm:1782), which the transition ends never straddle with a stale latch. The genuinely reachable hit is on the OTHER half of the same conflation: after an UP transition the ROM rewrites $FFC0 = 0 and latches sPrevMarioY = 0, while the port keeps prev_mario_y_lo = the pre-warp Y, so dv can land on opposite sides of $80 - i.e. the up/down BRANCH itself can differ after an up transition via the y_lo=$48 + bit2 + sMarioScreenY < $1B arm, which level 1's table enables (bit2 in cells 16/17/31/46) and the new screen_transition1 capture now exercises. Recommendation: keep the sy98 model (right on every consulted frame) and test the up-transition dv case against screen_transition1 before changing anything."
+    },
+    {
+      "id": "camera_map_scroll_limit_play_default",
+      "title": "sMapScrollLimit: --play leaves it false while run_replay seeds it from the capture",
+      "asm_refs": [
+        "home.asm:$0D4F",
+        "home.asm:$0D05"
+      ],
+      "dependencies": [],
+      "verification_gate": "cargo test",
+      "status": "pending",
+      "note": "ANSWERED from the ROM 2026-10-13: --play should seed it from the manifest's per-level property table, not from the header. sMapScrollLimit ($A2D9) has exactly ONE writer in the whole ROM - the state-$03 level-load handler $04F1 at home.asm:741-747, 'ld hl, LevelPropertiesUNK / ld a,[sCurLevel] / ... / ld [sMapScrollLimit],a' - so it is a per-level constant from LevelPropertiesUNK (home.asm:4087-4091, 32 bytes). Its siblings do the same for the other two flags: LevelPropertiesScroll (home.asm:4093-4097) -> sAutoScroll at home.asm:633-639, LevelPropertiesSpace (home.asm:4099-4103) -> sMoonPhysics at home.asm:655-661. Level 1 is index 0 and is $00 in all three, which is why all 16 captures record limit=false/autoscroll=0. The port's manifest already carries exactly these bytes: manifest.properties.unknown (= LevelPropertiesUNK), properties.auto_scroll, properties.space_physics (level.rs:200-209; level01.manifest.json has all three 0). So the fix is two lines in the play-mode setup at main.rs:~206: 'cam.map_scroll_limit = manifest.properties.unknown != 0;' and 'cam.auto_scroll = manifest.properties.auto_scroll != 0;' - use != 0 because the ROM only tests nonzero (home.asm:1808-1810) while the table stores $00/$08. The 12 levels with a nonzero limit byte are 0-based indices 2,3,4,5,6,10,15,18,19,24,28,31 (all $08); the autoscroll levels are 19, 25, 30."
+    },
+    {
+      "id": "camera_autoscroll_path",
+      "title": "Autoscroll camera path ($0DAF) is unmodelled",
+      "asm_refs": [
+        "home.asm:$0DAF",
+        "home.asm:$0B2A"
+      ],
+      "dependencies": [],
+      "verification_gate": "cargo test",
+      "status": "pending",
+      "note": "DESCRIBED from the ROM 2026-10-13, and it is small - the port already has every piece. $0B2A's dispatcher (home.asm:1533-1537) sends sAutoScroll != 0 to $0DAF instead of the whole horizontal block; the vertical follow ($0C7D) and the transition machinery are shared unchanged. $0DAF (home.asm:1869-1903) does three things: (1) the right-edge transition trigger, same shape as $0B5E but with >= instead of == (cell edge bit0, cam X lo >= $B0, sMarioScreenX >= $A1 -> sScreenTransition = 1 + the $0F0B scene latch); (2) otherwise return unless $FF97 is EVEN ('ldh a,[$FF97] / and $01 / ret nz') - so the scroll is 1 px per TWO frames; (3) on even frames clear sScrollLeftEnabled and add 1 to cam X lo (carry into $FFCB, masked $0F), setting sMapScrollFlags bit4. It never applies the player-speed latches, ignores the draw's enables, has no +-1 park correction, no $FF99 pull-back, no left edge lock and no left transition; and because it jumps straight to $0C7D it skips $0C76, so the scroll deltas are not cleared on autoscroll frames. Mario's position is NOT driven by it - he keeps normal physics and drifts toward the left of the screen. Porting: in CameraSim::step, before the vertical block, branch 'if self.auto_scroll != 0 { run_autoscroll(sim) } else { <existing horizontal block> }'; the frame parity is already available (PlayerSim::phase mirrors $FF97 and camera.rs uses it for the down-transition dither). Seed cam.auto_scroll from manifest.properties.auto_scroll in the play-mode setup (run_replay already seeds it at main.rs:965 and prints the not-modelled note at 989-991). No level-1 behaviour changes."
+    },
+    {
+      "id": "items_powerup_capture",
+      "title": "Item ids 1-4/6/8/9: $3451 writes ported but capture-less",
+      "asm_refs": [
+        "home.asm:$3451",
+        "home.asm:$3534",
+        "home.asm:$2DC6"
+      ],
+      "dependencies": [
+        "powerup_transitions_3451"
+      ],
+      "verification_gate": "new capture that collects a mushroom / carrot / star / fire flower / moon",
+      "status": "pending",
+      "note": "The gate captures only ever reach id 7 (secret route) and the bell id 6; every transition is unit-pinned, none replay-verified. The mushroom also moves the hazard/ceiling/wall probes, so a capture would exercise those too."
+    },
+    {
+      "id": "bonk_single_slot_draw",
+      "title": "Single-slot $00/$03 bonk: the frame-66 draw traj15's two-slot $01 bump cannot show",
+      "asm_refs": [
+        "home.asm:$1993",
+        "main.asm:$5960",
+        "main.asm:$5997"
+      ],
+      "dependencies": [
+        "bounce_block_powerup_spawn"
+      ],
+      "verification_gate": "new capture (level 1 has $00 cells at x >= 576 and $03 cells only at the tower)",
+      "status": "pending",
+      "note": "The type-4 coin slot draws after the type-3 bonk slot, so only a single-slot bonk leaves 66 in $FFC6."
+    },
+    {
+      "id": "bonk_big_mario_types_1_5",
+      "title": "Big-Mario bounce-block types 1/5 (powerup emergence) have no capture",
+      "asm_refs": [
+        "home.asm:$1993",
+        "main.asm:$591F"
+      ],
+      "dependencies": [
+        "bonk_single_slot_draw"
+      ],
+      "verification_gate": "new capture as big Mario",
       "status": "pending"
+    },
+    {
+      "id": "fireball_type06_break",
+      "title": "Fireball $06 tile break ($3415, a type-1 bump from the projectile)",
+      "asm_refs": [
+        "home.asm:$3415",
+        "home.asm:$2FED"
+      ],
+      "dependencies": [
+        "items_powerup_capture"
+      ],
+      "verification_gate": "new capture with a fire flower",
+      "status": "pending"
+    },
+    {
+      "id": "pushout_1413_capture",
+      "title": "$1413 wall push-out: ported, no capture (unreachable in level 1)",
+      "asm_refs": [
+        "home.asm:$1413"
+      ],
+      "dependencies": [],
+      "verification_gate": "new capture in a level with $0C-$0F / $04 / $05 tiles",
+      "status": "pending",
+      "note": "Level 1 has none of those tiles, so no level-1 capture can reach it."
+    },
+    {
+      "id": "exit_tile_arm_capture",
+      "title": "$1BFF exit-bell arm: ported and unit-pinned, past every capture's east end",
+      "asm_refs": [
+        "home.asm:$1BFF",
+        "home.asm:$1CBA"
+      ],
+      "dependencies": [
+        "exit_bell_sequence"
+      ],
+      "verification_gate": "new capture reaching x >= 4044 (the $4A bell at col 254 / row 30)",
+      "status": "pending",
+      "note": "Level 1's only bell is at world x 4064; traj12 stops at 4026."
+    },
+    {
+      "id": "spin_jump_pose_532D",
+      "title": "$532D spin-jump pose: its $FF97 & $0C table index needs bit 3, which captures do not record",
+      "asm_refs": [
+        "main.asm:$532D",
+        "home.asm:$126F"
+      ],
+      "dependencies": [],
+      "verification_gate": "cargo test + a capture that records $FF97 bit 3",
+      "status": "pending"
+    },
+    {
+      "id": "goal_bell_ring_anim",
+      "title": "Goal bell ring animation (the $34EC strike is ported; the animation is not)",
+      "asm_refs": [
+        "home.asm:$34EC",
+        "home.asm:$3451"
+      ],
+      "dependencies": [
+        "midpoint_bell_arm"
+      ],
+      "verification_gate": "cargo test",
+      "status": "pending"
+    },
+    {
+      "id": "fireball_paths",
+      "title": "Fireball projectile paths ($2FED / $324F family)",
+      "asm_refs": [
+        "home.asm:$2FED",
+        "home.asm:$324F"
+      ],
+      "dependencies": [
+        "items_powerup_capture"
+      ],
+      "verification_gate": "new capture with a fire flower",
+      "status": "pending"
+    },
+    {
+      "id": "pause_and_palette_flash",
+      "title": "START pause + the BGP/OBP0 $E7/$93 flash (16 frames each - a 32-frame cycle off $FF97 bit 4)",
+      "asm_refs": [
+        "home.asm:$2756",
+        "home.asm:$273E",
+        "home.asm:$5183"
+      ],
+      "dependencies": [],
+      "verification_gate": "cargo test + --play START wiring",
+      "status": "pending",
+      "note": "PINNED from the ROM 2026-10-13. Pause is game state $FF9B = 8 (NOT a separate handler): entry stub UnknownCall_0x273E at $273E (home.asm:5181-5194), called at the tail of the in-level frame from home.asm:818 and (dead branch) home.asm:827; the state handler is UnknownJump_0x2756 at $2756 (home.asm:5196-5239) via the $08 table entry at home.asm:303. Two corrections to DESIGN.md's note: it says OBP0 alternates too - true, but the handler writes sBGPalette AND sOAMPalette1 with the SAME byte each frame (home.asm:5204-5206) and never touches sOAMPalette2 (OBP1 does not flash); and the cadence is NOT a 16-frame timer but bit 4 of the global frame counter $FF97 read every frame ('ldh a,[$FF97] / bit 4' -> $E7 when clear, $93 when set, home.asm:5197-5201), so it is a 32-frame cycle with no reload value. Entry needs hKeysPressed == $08 EXACTLY (START and nothing else newly pressed) and sScreenTransition == 0 (home.asm:5183-5187); START is ignored during fades (the in-level loop zeroes both key bytes while sFadeTimer != 0). Resume is on any frame with hKeysPressed bit 3, restoring sBGPalette/sOAMPalette1/sOAMPalette2 from the sLevel* copies and setting $FF9B = 4. Extra branch: SELECT ($04) with sLevelProgressFlags bit 7 set quits the level via $FF9B = 20 -> $14. Freezes: the whole state-$04 body, so the player update, the camera, the object engine, the level timer ($2C61) and the HUD patch stop; ReadJoypad, VBlank (palette/scroll shadows, sFadeTimer, OAM DMA), the $FF97 tick, UpdateSound and the scene script interpreter keep running - and the tile animation is NOT gated by $FF9B, so animated tiles keep cycling. Music pauses via sSoundMode = 1/2 (a held-jingle loop), not sMusicRequest. PORting: add PlayerKeys.start (use a start_pressed edge like a_pressed) plus a full frame byte (the port keeps only phase = $FF97 & 7, which cannot see bit 4), pause_enter/pause_step, skip sim.step/cam.step/obj.step while paused like the existing fade freeze, and thread the flash value into the render as a BGP+OBP0 override (BG via video::bgp_shades in render_view, sprites via SpriteCtx.obp0), leaving obp1 = palettes[2]. Also unlocks the game-over $07 START poll (map Enter to start in --play)."
+    },
+    {
+      "id": "scene_system",
+      "title": "Scene system: sSceneMap-nonzero levels run a scene at the transition finish (sSceneState = $F0 + the bank-5 script VM $20A4 + the bank-2 $8D9C boss/template set + $8E6C)",
+      "asm_refs": [
+        "home.asm:$0EB0",
+        "home.asm:$20A4",
+        "home.asm:$0F0B",
+        "home.asm:$3C94",
+        "main.asm:$8D9C",
+        "main.asm:$8E6C"
+      ],
+      "dependencies": [
+        "camera_screen_transitions_capture"
+      ],
+      "verification_gate": "cargo test + a scene-level capture",
+      "status": "pending",
+      "note": "PREMISE CORRECTED 2026-10-13 (this item, and DESIGN.md, claimed 'state 240' and 'bank-1 $3C94'). 240 is stored into sSceneState (= $F0), NOT $FF9B: the $FF9B jump table ends at $23 (home.asm:330) so 240 could never index it. $3C94 is a bank-0 trampoline to bank 2 $8D9C. Real chain: a hard-edge trigger in $0B2A sets sScreenTransition and calls $0F0B, which latches sSceneId from sSceneMap; when the scroll completes $0EB0 (home.asm:2009-2050) tests sSceneState & $0F and, if nonzero, sets sSceneState = $F0 then calls $3C94 -> $8D9C. Missing from the port: (1) the bank-5 script VM $20A4 (one byte per frame, halt between bytes, 32-entry dw table at $4125 indexed by sSceneId, opcode operand lengths 7/1/0/2/1/0/1/0/0/3 for $0x/$1x/$2x/$3x/$4x/$5x/$6x/$8x/$Ax/$Bx, $FF = END at $21EE); (2) the $0EB0 sSceneState & $0F branch in camera.rs's finish_transition (whose comment says 'bank-1', also wrong); (3) the bank-2 $8D9C path (it does not load VRAM: it clears $AF00-$AFFF and sObjectTable $AD00, then $8DFD builds sObjectDefIndex/sObjectDefCount/sObjectDefSprite, then $8E6C writes 18-byte slot images at a literal $10 stride into $AD25+ - consecutive images OVERLAP by 2 bytes, which is what the ROM arithmetic does, so reproduce it literally); (4) the alternate per-frame driver $8DA9 that REPLACES the normal $8000 engine while sSceneState & $F0 != 0 (selected at home.asm:830-842), with its $92DF anim table, $9048/$505B extents and $3A14 -> bank 19 $6000. sSceneMap extraction mirrors the edge map but from the pointer at [bank:$4002] (home.asm:572-604) -> levelNN.scene.bin; the port's camera.rs scene_lookup already implements the $0F0B index ((MarioYhi & $0F)*16 + (MarioXhi & $0F)) but scene_map is never filled by the runtime, so scene_id is always 0 today. 14 of 32 levels have a nonzero scene map; level 1 is all zeros (re-verified from baserom.gb), which is why no capture touches this. Cleanest first slice: level 3 (level_id 2), whose two scenes are $06 = 40 03 FF and $07 = 40 16 FF - pure 'transition to screen (Y,X)' with no tileset/VRAM/boss/fade work; then level 8 (scenes $01/$02). Full detail in the delegation transcript deleg_52e18705 task-4."
+    },
+    {
+      "id": "map_handoff_14_body",
+      "title": "The $14 level-clear/map hand-off's banked body ($3EF2B: palette swap, map-node advance, save)",
+      "asm_refs": [
+        "main.asm:$3EF2B",
+        "home.asm:$3547"
+      ],
+      "dependencies": [
+        "stage_clear_time_tally"
+      ],
+      "verification_gate": "cargo test",
+      "status": "pending",
+      "note": "The port marks the hand-off reach (exit_completed) and keeps freezing; the map-node rewrite and the save are not modelled."
+    },
+    {
+      "id": "game_over_art_and_save",
+      "title": "GAME OVER screen art + save ($27AF's banked body: $4C92 gfx, $6492 tilemap, $2874 string via $30884, $2934 save)",
+      "asm_refs": [
+        "home.asm:$27AF",
+        "main.asm:$30884",
+        "home.asm:$2934"
+      ],
+      "dependencies": [
+        "game_over_scene"
+      ],
+      "verification_gate": "cargo test",
+      "status": "pending",
+      "note": "The state writes and the $07 fade/START poll are ported and unit-pinned; the art and the save are not. Needs the START bit too (see pause_and_palette_flash)."
+    },
+    {
+      "id": "overworld_map_state_0C",
+      "title": "Overworld map ($0C): waits for input, unmodelled",
+      "asm_refs": [
+        "home.asm:$2C2E"
+      ],
+      "dependencies": [
+        "map_handoff_14_body"
+      ],
+      "verification_gate": "cargo test",
+      "status": "pending",
+      "note": "The death cycle skips the map's tick gap (death2: 136 of the 329-tick gap); the cursor, node selection and the level re-entry are not modelled."
+    },
+    {
+      "id": "golden_coin_tally",
+      "title": "Golden coins (sGoldenCoin1-6 $A84D-$A865) and the map-side tally ($307BC / $30884)",
+      "asm_refs": [
+        "main.asm:$307BC",
+        "main.asm:$30884",
+        "ram.asm:$A84D"
+      ],
+      "dependencies": [
+        "map_handoff_14_body"
+      ],
+      "verification_gate": "cargo test",
+      "status": "pending",
+      "note": "CONFIRMED with one caveat, 2026-10-13. An exhaustive scan of baserom.gb (every ld [$A84x],a / ld hl,$A84x / ld a,[$A84x] / 16-bit pointer pair / set 7,(hl) site for the six addresses) finds NO in-level writer: the six bytes are written only by (a) $27AF at home.asm:5321-5327 (game over, zeroes all six), (b) the level-clear chain at main.asm:16661-16672 with $304F1 giving levels 5/9/13/16/19/23 the offsets 5/9/$1D/$17/$11/$0E, (c) the map hand-off $3EEF0 (main.asm:24089-24124) via $650E for the six coin nodes, and (d) the SRAM load. So the port's 'no in-level writer' note holds. CAVEAT: the corollary 'c is always 0' is NOT a general invariant - it holds only for a save with no coin-level progress; once any of the six coin levels is completed the corresponding byte is set and $27AF's BCD subtract is nonzero. Also: sGoldenCoinCount never feeds the level-clear tally (that is +1 BCD per newly cleared level, coin-independent); the only tally/coin interaction is the game-over subtraction."
+    },
+    {
+      "id": "per_anim_handlers",
+      "title": "Object handlers with no ported body (mode-A anims 0/3/4/7/13/14/26/30-34/40-48/51-58/61-69/77-90/92-95 + mode-B)",
+      "asm_refs": [
+        "main.asm:$58040",
+        "main.asm:$59C07"
+      ],
+      "dependencies": [
+        "item_pickup_anim16"
+      ],
+      "verification_gate": "cargo test",
+      "status": "pending",
+      "note": "Level 1's 23 spawn records need none of them. $58100 is a bare ret — a real no-op to dispatch explicitly rather than flag."
+    },
+    {
+      "id": "carry_item_type06",
+      "title": "Carry / item type-$06 paths",
+      "asm_refs": [
+        "home.asm:$2DC6",
+        "main.asm:$58040"
+      ],
+      "dependencies": [
+        "per_anim_handlers"
+      ],
+      "verification_gate": "cargo test",
+      "status": "pending",
+      "note": "Named as open in DESIGN.md; the $2DC6 response's type-$06 arm is the entry point."
+    },
+    {
+      "id": "infra_play_parity_harness",
+      "title": "No gate covers --play: the mode with no capture is where the edge-map bug lived",
+      "asm_refs": [
+        "crates/sml2-runtime/src/main.rs"
+      ],
+      "dependencies": [],
+      "verification_gate": "design + implementation",
+      "status": "pending",
+      "note": "The 2026-10-13 camera bug was invisible because the replay path injected the console's $FF98 and only --play had to derive it. The edge check now covers the derivation, but the class remains: any field the harness seeds from a capture's frame 0 (limit, autoscroll, easy, ff0, uphase, pcx) is unverified in play mode. Options: drive --play from a capture's inputs headlessly, or seed both modes from the level header and check the header against the captures' frame 0."
+    },
+    {
+      "id": "obj_on_ground_obj_never_set",
+      "title": "PlayerSim::on_ground_obj is never set true, so every gate that reads sMarioOnObject is inert",
+      "asm_refs": [
+        "home.asm:$307D",
+        "home.asm:$13FE"
+      ],
+      "dependencies": [],
+      "verification_gate": "cargo test",
+      "status": "pending",
+      "note": "Found 2026-10-13 while porting the crouch pan. objects.rs computes the on-object/on-ground-cleared result but sml2-runtime only writes on_ground back to PlayerSim, so on_ground_obj stays false forever. Consequences: $307D's '(sMarioOnGround | sMarioOnObject)' gate degenerates to on_ground, and any other reader of sMarioOnObject is equally dead. The $13FE/$134F landing arm in player_sim.rs reads on_ground_obj too. Fixing it means threading the object engine's on-object result into the sim the way on_ground already is, then re-running the gate: a capture where Mario stands on a walker would exercise it."
+    },
+    {
+      "id": "horizontal_transitions_other_level",
+      "title": "Horizontal screen transitions (tr=1/2) have no capture - unreachable in level 1",
+      "asm_refs": [
+        "home.asm:$0B5E",
+        "home.asm:$0BE5",
+        "home.asm:$0B39"
+      ],
+      "dependencies": [
+        "camera_screen_transitions_capture"
+      ],
+      "verification_gate": "a capture in a level whose edge map has bit0/bit1 reachable, or a synthetic unit-level test",
+      "status": "pending",
+      "note": "The 2026-10-13 reachability study: tr=1 needs marioX >= 4081 with camx=$FB0 (cell (1,15) = $0D) but in level 1 the $4A exit bell fires at x=4056 and the col-255 wall blocks x >= 4068; airborne the wall clears only at y <= 247 and the pillar is ~90 px past the last launch block while the engine's airborne reach is ~50-55 px. tr=2 needs marioX_lo=254 with camx=80 while the camera follows Mario east and $0FBF clamps screen X to [16,160]. So neither is producible from level 1; the port's horizontal trigger code ($0B5E/$0BE5) therefore remains unit-pinned only. A different level (whose edge map has bit0/bit1 in a reachable cell) or a synthetic replay is needed."
     }
   ]
 }
