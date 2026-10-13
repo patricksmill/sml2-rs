@@ -26,6 +26,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest, LAYOUT_HEIGHT, LAYOUT_WIDTH};
+use sml2_core::map::MapNodes;
 use sml2_core::object::ObjectTables;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
 use sml2_core::scene::{SceneScripts, SceneVm};
@@ -356,6 +357,24 @@ fn extracted_dir() -> PathBuf {
         }
     }
     PathBuf::from("extracted")
+}
+
+/// The overworld's node tables (`extracted/map/nodes.bin`). One ROM-wide blob,
+/// loaded like the scene scripts, and flagged when absent for the same reason:
+/// with no table the hand-off cannot index `sLevelProgress`, so it would silently
+/// stop marking progress.
+fn load_map_nodes() -> MapNodes {
+    match fs::read(extracted_dir().join("map/nodes.bin"))
+        .ok()
+        .as_deref()
+        .and_then(MapNodes::from_bytes)
+    {
+        Some(n) => n,
+        None => {
+            println!("note: map node tables missing — the hand-off cannot mark progress");
+            MapNodes::default()
+        }
+    }
 }
 
 /// The bank-5 scene script table (`extracted/scenes/script_table.bin`). It is
@@ -1046,6 +1065,7 @@ fn run_replay(
     // zeros, so its `sSceneId` never latches and the VM never runs a byte.
     let scripts = load_scene_scripts();
     let mut scene_vm = SceneVm::new();
+    let nodes = load_map_nodes();
     let mut sim = PlayerSim::new();
     sim.powerup = 0; // level-0 spawn starts small
     let f0 = &frames[0];
@@ -1178,7 +1198,7 @@ fn run_replay(
                 sim.exit_fade_step();
             }
             if exit_done_at_entry {
-                sim.map_handoff();
+                sim.map_handoff(&nodes);
             }
         } else if was_dead {
             sim.death_arc(cam.y);
@@ -1825,6 +1845,7 @@ fn run_play(
     }
     let scripts = load_scene_scripts();
     let mut scene_vm = SceneVm::new();
+    let nodes = load_map_nodes();
     use minifb::{Key, Window, WindowOptions};
     let mut window = Window::new(
         &format!(
@@ -1900,7 +1921,7 @@ fn run_play(
             // See the replay loop: `$FF9B = $14` comes from the fade's last
             // frame, so the hand-off body runs one frame later.
             if exit_done_at_entry {
-                sim.map_handoff();
+                sim.map_handoff(&nodes);
             }
         } else if was_dead {
             sim.death_arc(cam.y);

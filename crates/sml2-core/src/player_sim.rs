@@ -193,6 +193,20 @@ pub fn sdelta(b: u8) -> i16 {
     }
 }
 
+/// What one `$FF9B = $14` hand-off run did — see [`PlayerSim::map_handoff`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MapHandoffOutcome {
+    /// Pass 1 ran: the post-clear walk cutscene's setup (`$3F4B1`/`$3F5A4`),
+    /// modelled only as the `sGoalBell` clear it performs.
+    pub cutscene: bool,
+    /// `$2934` save calls the body made. The ROM calls it from `$3EEF0` (once,
+    /// when the node has a progress slot) and again from `$3F03D` (once, for
+    /// every node below `$1E`), so a plain level clear makes two.
+    pub saves: u8,
+    /// The node the hand-off ended on.
+    pub node: u8,
+}
+
 /// Buttons held for one frame (plus a separate press edge for A/Mario).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PlayerKeys {
@@ -289,6 +303,15 @@ pub struct PlayerSim {
     /// map selected; a plain level's node is 0, which is exactly the case the
     /// hand-off's tail keys on.
     pub map_node: u8,
+    /// `sLevelProgress` (`$A848`) — the **persisted** per-level flags, indexed
+    /// by a node's `$650E` progress slot (`crate::map::MapNodes`): bit 7 = the
+    /// level has been cleared, bit 3 = it was entered by the secret route. The
+    /// hand-off writes these; the map copies the entry into
+    /// `sLevelProgressFlags` (`$A27D`, [`PlayerSim::level_progress_flags`]) when
+    /// a level is entered, and that working copy is what the `$3547` tally guard
+    /// and the `$2756` SELECT abandon read. 42 bytes covers the highest slot in
+    /// the ROM's `$650E` table ($29).
+    pub level_progress: [u8; 42],
     /// The port's marker that the `$FF9B = $14` body has run. The ROM needs no
     /// flag: the body ends by setting `$FF9B = 12` (the map), so it runs on
     /// exactly one frame. Without an overworld to enter, the port records it
@@ -464,6 +487,7 @@ impl PlayerSim {
             exit_phase: false,
             exit_completed: false,
             map_node: 0,
+            level_progress: [0; 42],
             map_handoff_done: false,
             game_over: false,
             paused: false,
@@ -1690,40 +1714,55 @@ impl PlayerSim {
     }
 
     /// The `$FF9B = $14` level-clear hand-off. `$2C23` maps bank 15 in and jumps
-    /// to its `$6F2B` (file offset `$3EF2B`) body, which the ROM runs for exactly
-    /// one frame because it ends by setting `$FF9B = 12` (the overworld map) —
-    /// hence [`PlayerSim::map_handoff_done`] here.
+    /// to its `$6F2B` (file offset `$3EF2B`) body, which the ROM runs **twice**
+    /// on a bell clear — hence [`PlayerSim::map_handoff_done`] here and the
+    /// `cutscene`/`saves` fields of the outcome.
     ///
-    /// What the body does, and what of it this port can observe:
+    /// * **Pass 1**, only when `sGoalBell` is set (item id 6, `$34EC`): the body
+    ///   jumps to `$3F4B1` (even node) or `$3F5A4` (odd) — the post-clear walk
+    ///   cutscene: bank-25 gfx, the castle RAM block, `sMapScreenId` 13/14 and
+    ///   the item-slot arrays at `$A7D0`. None of that is modelled, because it
+    ///   exists to draw the overworld. Two of its effects are: it **clears
+    ///   `sGoalBell`**, which is what makes the re-entry at its end take the
+    ///   map-return half rather than looping, and the state moves to `$0C`. The
+    ///   port has no cutscene, so it collapses those few hundred frames into
+    ///   this call.
+    /// * **Pass 2**, `$3EF56` → `$3EFB2` → `$3F003` → `$3F03D`: the
+    ///   secret-exit node rewrite (the `$4B` tile, live Mario only —
+    ///   `$48→$47`, `$05`/`$12`/`$1A→$69`, `$29→$2C`, `$2A→$2F`, `$3C→$40`);
+    ///   then `$3EEF0`, which marks the node's `sLevelProgress` entry — bit 7 +
+    ///   bit 3 clear on a plain clear, bit 3 set for a dead Mario on the secret
+    ///   route, bit 3 cleared for the `$4B` exit — and saves; then the node tail,
+    ///   whose `or a / jr nz` keys on the node being **0** (a plain level): it
+    ///   sets `sLevelProgress[0]` bit 7 and moves the node to `$14`. The
+    ///   `$05`/`$1A` nodes move to the castle node `$3F` instead, and nodes of
+    ///   `$1E` and up take map screens this port does not model. Finally `$3F03D`
+    ///   saves again and sets `$FF9B = $0C`.
     ///
-    /// * It swaps in the overworld's palettes — `sBGPalette = $E4`,
-    ///   `sOAMPalette1 = $D0`, `sOAMPalette2 = $39`. Unobservable here: those
-    ///   bytes belong to the map, and this port renders the level from the
-    ///   extracted manifest rather than from `sBGPalette`.
-    /// * With `sGoalBell` set (item id 6, `$34EC`) it calls `$3F4B1` or
-    ///   `$3F5A4` — the castle walk/ending sequences (bank-25 gfx, the castle
-    ///   RAM block, `sMapScreenId = 14`) — and then hands to the map. Also the
-    ///   map's; only the state move is modelled.
-    /// * Otherwise, and only for the `$4B` exit tile on a live Mario, it rewrites
-    ///   `sMapNode`, because that exit opens a different node than the level it
-    ///   was entered from: `$48 -> $47`, `$05`/`$12`/`$1A -> $69`,
-    ///   `$29 -> $2C`, `$2A -> $2F`, `$3C -> $40`.
-    /// * The common tail then handles a *plain* level, whose node is 0: it sets
-    ///   `sLevelProgressFlags` bit 7 — the "already cleared" bit the tally path
-    ///   and the SELECT abandon both read — and moves the node to 20 (`$14`).
-    ///   The `$05`/`$1A` nodes instead move to the castle node `$3F`, and nodes
-    ///   of `$1E` and up take map-screen branches this port does not model.
-    /// * `$2934` is the save. The port has no SRAM, so it is not modelled.
-    ///
-    /// Returns true the first time it runs.
-    pub fn map_handoff(&mut self) -> bool {
+    /// The overworld this hands off *to* is not ported, so the port keeps
+    /// freezing on `exit_phase` afterwards. Its own unmodellable work: the
+    /// palette swap (`sBGPalette`/`sOAMPalette1`/`sOAMPalette2` =
+    /// `$E4`/`$D0`/`$39` — the map's colours; this port renders the level from
+    /// the extracted manifest), the hub/GFX setup at `$3F156`, and the SRAM
+    /// writes themselves ([`PlayerSim::save_record`] builds what they would
+    /// contain).
+    pub fn map_handoff(&mut self, nodes: &crate::map::MapNodes) -> MapHandoffOutcome {
+        let mut out = MapHandoffOutcome {
+            node: self.map_node,
+            ..Default::default()
+        };
         if self.map_handoff_done {
-            return false;
+            return out;
         }
         self.map_handoff_done = true;
+
+        // Pass 1 — the bell path.
         if self.goal_bell {
-            return true;
+            out.cutscene = true;
+            self.goal_bell = false;
         }
+
+        // Pass 2 — the secret-exit node rewrite.
         if self.exit_tile_flag != 0 && self.dead == 0 {
             self.map_node = match self.map_node {
                 0x48 => 0x47,
@@ -1734,17 +1773,76 @@ impl PlayerSim {
                 node => node,
             };
         }
+
+        // $3EEF0: the node's progress entry, then the save. A node with no
+        // progress slot (`$650E >= $FE`) skips both.
+        if let Some(slot) = nodes.progress_slot(self.map_node) {
+            if let Some(p) = self.level_progress.get_mut(slot as usize) {
+                if self.dead != 0 {
+                    if self.secret_route == 0xFF {
+                        *p |= 0x08;
+                        out.saves += 1;
+                    }
+                } else if self.exit_tile_flag != 0 {
+                    *p &= !0x08;
+                    out.saves += 1;
+                } else {
+                    *p |= 0x80;
+                    *p &= !0x08;
+                    out.saves += 1;
+                }
+            }
+        }
+
+        // $3F003/$3F014/$3F024 — the node tail.
         match self.map_node {
             // $3F014: a live Mario on the $05/$1A nodes moves to the castle.
             0x05 | 0x1A if self.dead == 0 => self.map_node = 0x3F,
             // $3F024: a plain level — mark the stage cleared, move to node $14.
             0 if self.dead == 0 => {
-                self.level_progress_flags |= 0x80;
+                self.level_progress[0] |= 0x80;
                 self.map_node = 0x14;
             }
             _ => {}
         }
-        true
+        // $3F03D: the common end for every node below $1E — the hub setup, the
+        // second save, and the move to the map state.
+        if self.map_node < 0x1E {
+            out.saves += 1;
+        }
+        out.node = self.map_node;
+        out
+    }
+
+    /// `$2934`: the 0x50-byte save image. The ROM writes it to
+    /// `sSaveSlot0` (`$A000`) + `sSaveFileIndex` * `$50`, so the record itself is
+    /// slot-independent; a caller decides where it goes.
+    ///
+    /// The first 64 bytes are the image at `$A840`, assembled here from what the
+    /// port models — `sMapNode` at +0 and `sLevelProgress` at +8. The bytes it
+    /// does not model (the cursor at +2..+4, the map's gate bytes, and the six
+    /// golden-coin flags at +$0D/+$11/+$16/+$19/+$1F/+$25) stay 0, which for the
+    /// golden coins is also what the ROM produces: nothing in it ever sets their
+    /// bit 7. Then `sCoinLow`, `sCoinHigh`, `sLevelTally`, `sLives`,
+    /// `sMoneyBagCount`, and the running sum of all 69 as the checksum. The five
+    /// signature bytes are the fresh-file init's, not `$2934`'s, but a record
+    /// without them fails `$28EC`, so they are written here.
+    ///
+    /// `money_bag` is `sMoneyBagCount` (`$A28D`), which this port keeps on the
+    /// object engine (`ObjectSim::money_bag`), so the caller supplies it.
+    pub fn save_record(&self, money_bag: u8) -> [u8; 0x50] {
+        let mut rec = [0u8; 0x50];
+        rec[0] = self.map_node;
+        let n = self.level_progress.len().min(0x40 - 0x08);
+        rec[0x08..0x08 + n].copy_from_slice(&self.level_progress[..n]);
+        rec[0x40] = self.coins_low;
+        rec[0x41] = self.coins_high;
+        rec[0x42] = self.level_tally;
+        rec[0x43] = self.lives;
+        rec[0x44] = money_bag;
+        rec[0x45] = rec[..0x45].iter().fold(0u8, |c, b| c.wrapping_add(*b));
+        rec[0x46..0x4B].copy_from_slice(&crate::map::SAVE_SIGNATURE);
+        rec
     }
 
     /// `$0F2A` (level restart) + the fade tail's `$04F1` clears: Mario is put
@@ -2281,29 +2379,84 @@ mod tests {
     // (`$FF9B = $14` freezes the port), so every branch is pinned here.
     // -----------------------------------------------------------------
 
+    /// A node table with just what these tests need: node 0 is level 1 with
+    /// progress slot 0, node `$05` has slot `$1F`, everything else is "none".
+    fn handoff_nodes() -> crate::map::MapNodes {
+        let mut b = vec![0xFEu8; crate::map::MapNodes::BLOB_LEN];
+        b[0] = 0x00;
+        b[crate::map::MapNodes::NODES] = 0x00;
+        b[crate::map::MapNodes::NODES + 0x05] = 0x1F;
+        crate::map::MapNodes::from_bytes(&b).expect("260-byte blob")
+    }
+
     /// Level 1's own case: the `$4A` exit bell sets neither `sGoalBell` nor
     /// `sExitTileFlag`, and a level entered from the map has node 0 — which is
     /// exactly the branch that marks the stage cleared and moves the node on.
+    /// The `$3EEF0` save and the `$3F03D` save both fire.
     #[test]
     fn map_handoff_marks_a_plain_level_cleared() {
+        let nodes = handoff_nodes();
         let mut sim = small_sim();
         assert_eq!(sim.map_node, 0, "a fresh sim is on node 0");
         assert!(!sim.goal_bell && sim.exit_tile_flag == 0 && sim.dead == 0);
 
-        assert!(sim.map_handoff(), "the body runs once");
-        assert_eq!(sim.level_progress_flags & 0x80, 0x80, "$3F024 sets bit 7");
-        assert_eq!(sim.map_node, 0x14, "and moves the node to 20");
-        assert!(
-            !sim.map_handoff(),
-            "the ROM sets $FF9B = 12, so it runs once"
+        let out = sim.map_handoff(&nodes);
+        assert!(!out.cutscene, "no bell: pass 1 does not run");
+        assert_eq!(out.saves, 2, "$3EEF0 then $3F03D");
+        assert_eq!(out.node, 0x14);
+        assert_eq!(
+            sim.level_progress[0] & 0x80,
+            0x80,
+            "sLevelProgress[0] bit 7 — the persisted byte, not sLevelProgressFlags"
+        );
+        assert_eq!(sim.map_node, 0x14, "and the node moves to 20");
+
+        let again = sim.map_handoff(&nodes);
+        assert_eq!(again.saves, 0, "the ROM sets $FF9B = 12, so it runs once");
+        assert_eq!(sim.map_node, 0x14);
+    }
+
+    /// The bell path is *two* passes: the cutscene setup (`$3F4B1`) clears
+    /// `sGoalBell`, and the re-entry at its end then does the map-return half.
+    /// The port has no cutscene, so it collapses them into one call — but pass 2
+    /// must still happen, or a bell clear would never mark progress.
+    #[test]
+    fn map_handoff_bell_path_clears_the_bell_then_runs_the_map_return() {
+        let nodes = handoff_nodes();
+
+        // Level 1's own clear: the bell rings, so pass 1 runs and clears
+        // sGoalBell, and pass 2 then does the map-return half for node 0.
+        let mut sim = small_sim();
+        sim.goal_bell = true;
+        let out = sim.map_handoff(&nodes);
+        assert!(out.cutscene, "pass 1 ran");
+        assert!(!sim.goal_bell, "$3F4B1/$3F5A4 clear sGoalBell");
+        assert_eq!(out.saves, 2, "the map-return half still saves twice");
+        assert_eq!(
+            sim.level_progress[0] & 0x80,
+            0x80,
+            "and marks the stage cleared"
         );
         assert_eq!(sim.map_node, 0x14);
+
+        // A node of $1E and up takes the map-screen branches instead, which this
+        // port does not model — so it reports no saves for those, while pass 1
+        // and the sGoalBell clear still happen.
+        let mut high = small_sim();
+        high.goal_bell = true;
+        high.map_node = 0x48;
+        let out_high = high.map_handoff(&nodes);
+        assert!(out_high.cutscene);
+        assert!(!high.goal_bell);
+        assert_eq!(out_high.saves, 0, "$1E-and-up branches are unmodelled");
+        assert_eq!(high.map_node, 0x48, "the rewrite needs sExitTileFlag");
     }
 
     /// The `$4B` secret exit rewrites the node: that exit opens a different
     /// node than the one the level was entered from.
     #[test]
     fn map_handoff_rewrites_the_node_for_the_secret_exit() {
+        let nodes = handoff_nodes();
         for (from, want) in [
             (0x48u8, 0x47u8),
             (0x05, 0x69),
@@ -2316,78 +2469,117 @@ mod tests {
             let mut sim = small_sim();
             sim.map_node = from;
             sim.exit_tile_flag = 0xFF;
-            assert!(sim.map_handoff());
+            let out = sim.map_handoff(&nodes);
             assert_eq!(sim.map_node, want, "node ${from:02X}");
+            assert_eq!(out.node, want);
         }
-        // A node the chain does not know is left alone, and — being neither 0
-        // nor $05/$1A — takes none of the tail's branches either.
+        // A node the chain does not know is left alone; being neither 0 nor
+        // $05/$1A it takes none of the tail's branches either.
         let mut sim = small_sim();
         sim.map_node = 0x07;
         sim.exit_tile_flag = 0xFF;
-        sim.map_handoff();
+        let out = sim.map_handoff(&nodes);
         assert_eq!(sim.map_node, 0x07);
-        assert_eq!(sim.level_progress_flags & 0x80, 0);
+        assert_eq!(sim.level_progress[0] & 0x80, 0);
+        assert_eq!(out.saves, 1, "the $4B arm still saves");
     }
 
-    /// The bell path (item id 6 set `sGoalBell`) hands to the map through the
-    /// castle sequences and never touches the node or the progress bit.
+    /// `$3EEF0`'s three arms, all gated on a live Mario except the first: the
+    /// `$4B` exit clears bit 3, a plain clear sets bit 7 and clears bit 3, and a
+    /// dead Mario on the secret route sets bit 3.
     #[test]
-    fn map_handoff_bell_path_skips_the_node_work() {
-        let mut sim = small_sim();
-        sim.goal_bell = true;
-        sim.exit_tile_flag = 0xFF; // would otherwise rewrite the node
-        sim.map_node = 0x48;
-        assert!(sim.map_handoff());
-        assert_eq!(sim.map_node, 0x48);
-        assert_eq!(sim.level_progress_flags & 0x80, 0);
-    }
+    fn map_handoff_marks_the_nodes_progress_entry() {
+        let nodes = handoff_nodes();
 
-    /// Every branch of the body is gated on a live Mario (`sMarioDead`).
-    #[test]
-    fn map_handoff_needs_a_live_mario() {
+        // The $4B exit: bit 3 cleared.
         let mut sim = small_sim();
-        sim.dead = 0x0F;
         sim.exit_tile_flag = 0xFF;
-        sim.map_node = 0x48;
-        sim.map_handoff();
-        assert_eq!(sim.map_node, 0x48, "the rewrite is skipped");
-        assert_eq!(sim.level_progress_flags & 0x80, 0, "and so is the tail");
+        sim.level_progress[0] = 0x88;
+        sim.map_handoff(&nodes);
+        assert_eq!(sim.level_progress[0], 0x80, "bit 3 cleared, bit 7 kept");
 
-        // Node 0 with a dead Mario: still nothing.
+        // A plain clear: `set 7` then `res 3`, so 0x08 becomes 0x80.
+        let mut plain = small_sim();
+        plain.level_progress[0] = 0x08;
+        plain.map_handoff(&nodes);
+        assert_eq!(plain.level_progress[0], 0x80);
+
+        // Dead on the secret route: bit 3 set, and nothing else.
+        let mut dead = small_sim();
+        dead.dead = 0x0F;
+        dead.secret_route = 0xFF;
+        dead.map_handoff(&nodes);
+        assert_eq!(dead.level_progress[0], 0x08);
+        assert_eq!(dead.map_node, 0, "a dead Mario's node does not move");
+
+        // Dead, but not on the secret route: no progress entry at all.
         let mut dead_plain = small_sim();
         dead_plain.dead = 0x80;
-        dead_plain.map_handoff();
+        dead_plain.map_handoff(&nodes);
+        assert_eq!(dead_plain.level_progress[0], 0);
         assert_eq!(dead_plain.map_node, 0);
-        assert_eq!(dead_plain.level_progress_flags & 0x80, 0);
     }
 
     /// The `$05`/`$1A` nodes move to the castle node `$3F` — but only when the
     /// secret-exit rewrite has not already sent them to `$69`.
     #[test]
     fn map_handoff_moves_the_castle_nodes() {
+        let nodes = handoff_nodes();
         for from in [0x05u8, 0x1A] {
             let mut sim = small_sim();
             sim.map_node = from;
-            sim.map_handoff();
+            sim.map_handoff(&nodes);
             assert_eq!(sim.map_node, 0x3F, "node ${from:02X} -> the castle");
         }
         let mut secret = small_sim();
         secret.map_node = 0x05;
         secret.exit_tile_flag = 0xFF;
-        secret.map_handoff();
+        secret.map_handoff(&nodes);
         assert_eq!(secret.map_node, 0x69, "the $4B rewrite wins");
     }
 
-    /// A level reload clears the port's own marker but leaves `sMapNode` alone:
-    /// the node is progress, not level state.
+    /// `$2934`'s record: the node at +0, `sLevelProgress` at +8, the five
+    /// counters, and a checksum that `$28EC` accepts.
     #[test]
-    fn a_level_reload_keeps_the_map_node() {
+    fn the_save_record_is_the_roms_image() {
         let mut sim = small_sim();
-        sim.map_handoff();
+        sim.map_node = 0x14;
+        sim.level_progress[0] = 0x80;
+        sim.level_progress[1] = 0x08;
+        sim.coins_low = 0x23;
+        sim.coins_high = 0x01;
+        sim.level_tally = 0x07;
+        sim.lives = 0x04;
+
+        let rec = sim.save_record(0x02);
+        assert_eq!(rec.len(), 0x50);
+        assert_eq!(rec[0x00], 0x14, "sMapNode");
+        assert_eq!(rec[0x08], 0x80, "sLevelProgress[0]");
+        assert_eq!(rec[0x09], 0x08);
+        assert_eq!(rec[0x40], 0x23, "sCoinLow");
+        assert_eq!(rec[0x41], 0x01, "sCoinHigh");
+        assert_eq!(rec[0x42], 0x07, "sLevelTally");
+        assert_eq!(rec[0x43], 0x04, "sLives");
+        assert_eq!(rec[0x44], 0x02, "sMoneyBagCount, passed in");
+        assert!(crate::map::save_record_valid(&rec), "$28EC accepts it");
+        // The bytes the port does not model stay zero, golden coins included —
+        // which is also what the ROM produces, since nothing sets their bit 7.
+        assert!(rec[0x0D..0x26].iter().all(|b| *b == 0));
+    }
+
+    /// A level reload clears the port's own marker but leaves the node and the
+    /// persisted progress alone: both are progress, not level state.
+    #[test]
+    fn a_level_reload_keeps_the_map_progress() {
+        let nodes = handoff_nodes();
+        let mut sim = small_sim();
+        sim.map_handoff(&nodes);
         assert_eq!(sim.map_node, 0x14);
+        assert_eq!(sim.level_progress[0] & 0x80, 0x80);
         sim.respawn(112, 240);
         assert!(!sim.map_handoff_done, "the marker is a phase flag");
         assert_eq!(sim.map_node, 0x14, "the node survives the reload");
+        assert_eq!(sim.level_progress[0] & 0x80, 0x80, "so does the progress");
     }
 
     // -----------------------------------------------------------------

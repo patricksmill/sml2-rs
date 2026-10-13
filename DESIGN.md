@@ -932,25 +932,52 @@ Verified engine semantics to preserve in the port:
   the two lock rows the transition ends never straddle with a stale value — so
   the proxy is right on every frame it is read.
 - **The `$14` level-clear hand-off** (ported 2026-10-14). `$2C23` maps bank 15
-  in and jumps to its `$6F2B` (file offset `$3EF2B`); the body runs for exactly
-  one frame because it ends by setting `$FF9B = 12` — the overworld map state
-  (`$0C` → bank 15 `$4000`), which this port does not have. Its port-relevant
-  work is progress bookkeeping. With `sGoalBell` set (item id 6, `$34EC`) it
-  goes through the castle walk/ending sequences (`$3F4B1`/`$3F5A4`: bank-25 gfx,
-  the castle RAM block, `sMapScreenId = 14`). Otherwise, and only for the `$4B`
-  exit tile on a live Mario, it rewrites `sMapNode` (`$A840`) — `$48→$47`,
-  `$05`/`$12`/`$1A→$69`, `$29→$2C`, `$2A→$2F`, `$3C→$40` — and then the common
-  tail keys on the node being **0**, which is what a plain level's node is: it
-  sets `sLevelProgressFlags` bit 7 (the "already cleared" bit the `$3547` tally
-  guard and the `$2756` SELECT abandon both read) and moves the node to `$14`.
-  The `$05`/`$1A` nodes move to the castle node `$3F` instead, and nodes of
-  `$1E` and up take map-screen branches. The hand-off also swaps in the
-  overworld's palettes (`sBGPalette`/`sOAMPalette1`/`sOAMPalette2` =
-  `$E4`/`$D0`/`$39`) and calls `$2934` to save; neither is modelled, because this
-  port has no map to draw and no SRAM. Reachability: level 1's exit bell sits at
-  x 4064 and the furthest capture reaches 4026, so nothing in the gate ever
-  completes a level — the whole exit path, hand-off included, is unit-tested only
-  (queued as `exit_tile_arm_capture`).
+  in and jumps to its `$6F2B` (file offset `$3EF2B`), and the body runs **twice**
+  on a bell clear. Pass 1, only when `sGoalBell` is set (item id 6, `$34EC`),
+  jumps to `$3F4B1` (even node) or `$3F5A4` (odd) — the post-clear walk cutscene
+  (bank-25 gfx, the castle RAM block, `sMapScreenId` 13/14) — which **clears
+  `sGoalBell`** and hands to state `$0C`; the cutscene's own end calls `$3EF2B`
+  again for pass 2. Pass 2 is the map return: the `$4B` secret-exit node rewrite
+  (live Mario only — `$48→$47`, `$05`/`$12`/`$1A→$69`, `$29→$2C`, `$2A→$2F`,
+  `$3C→$40`), then `$3EEF0` marking the node's **`sLevelProgress`** entry, then
+  the node tail and the hub setup, ending at `$FF9B = $0C` with `sMapScreenId` 0.
+  The port has no cutscene, so it collapses the two passes into one call, which
+  it must: skipping pass 2 would mean a bell clear never marks progress.
+- **`sLevelProgress` (`$A848`) is not `sLevelProgressFlags` (`$A27D`).** The
+  hand-off writes the *persisted* per-level array, indexed by the node's
+  `$650E` progress slot: `set 7` + `res 3` on a plain clear, `set 3` for a dead
+  Mario on the secret route, `res 3` for the `$4B` exit. Bit 7 is "this level has
+  been cleared" and bit 3 "entered by the secret route". `$A27D` is the *working
+  copy* the map takes from that array when a level is entered, and it is what the
+  `$3547` tally guard and the `$2756` SELECT abandon read — which is why the port
+  keeps both fields. The node tail's `or a / jr nz` keys on the node being **0**
+  (a plain level, level 1 included), and that is the branch that marks the stage
+  cleared and moves `sMapNode` to `$14`; the `$05`/`$1A` nodes move to the castle
+  node `$3F`, and nodes of `$1E` and up take map screens this port does not
+  model.
+- **The `$2934` save record** (modelled and validated, not persisted). 0x50 bytes
+  to `sSaveSlot0` (`$A000`) + `sSaveFileIndex` * `$50`: the 64-byte image at
+  `$A840` (`sMapNode`, the cursor, `sLevelProgress`, the golden-coin flags, the
+  map's gates), then `sCoinLow`, `sCoinHigh`, `sLevelTally`, `sLives`,
+  `sMoneyBagCount`, and the sum of those 69 bytes as a checksum. `$28EC` accepts a
+  slot only if that sum matches *and* the five signature bytes (`$12 $34 $56 $78
+  $78`, written by the fresh-file init rather than by `$2934`) are intact. The
+  port builds and checks the record ([`PlayerSim::save_record`],
+  `map::save_record_valid`) but stores nothing — it has no SRAM.
+- **What the hand-off's unmodelled remainder is:** the palette swap to the
+  overworld's `$E4`/`$D0`/`$39` (this port renders the level from the extracted
+  manifest and has no map to draw), the cutscene and the hub/GFX setup at
+  `$3F156`, and the `$1E`-and-up map-screen branches. Reachability: level 1's exit
+  bell sits at x 4064 and the furthest capture reaches 4026, so nothing in the
+  gate ever completes a level — the whole exit path, hand-off included, is
+  unit-tested only (queued as `exit_tile_arm_capture`).
+- **The overworld's node tables** are extracted as `map/nodes.bin`: two parallel
+  130-byte arrays, `$4218[node]` = the level index the map stores into
+  `sCurLevel` (`$FE`/`$FF` = a pure path node; 32 nodes carry a level) and
+  `$650E[node]` = the `sLevelProgress` offset (and the `$6591` key-mask index; 34
+  nodes carry one, with the six castle slots at nodes `$20`-`$24`). Node 0 — level
+  1 — is `0` in both. A node is a map *position*, not a level: the same level can
+  be reachable from several nodes. (`crate::map::MapNodes`.)
 - **Autoscroll levels replace that whole horizontal section** (`$0DAF`,
   ported 2026-10-13; the levels are 20, 26 and 31 by file name, i.e.
   `--level 19/25/30`). With `sAutoScroll != 0` the `$0B2A` dispatcher calls

@@ -17,8 +17,9 @@ cargo run -p sml2-extract                      # writes ./extracted/
 
 From this repo root, after extract (`cargo run --release -p sml2-extract` — it
 also writes the per-level `levels/levelNN.edge.bin` camera edge maps, the
-parallel `levels/levelNN.scene.bin` scene maps and the ROM-wide
-`scenes/script_table.bin` scene scripts):
+parallel `levels/levelNN.scene.bin` scene maps, the ROM-wide
+`scenes/script_table.bin` scene scripts and the `map/nodes.bin` overworld node
+tables):
 
 ```sh
 for f in traj4_ff0 traj5 traj6 traj7 traj8 traj9 traj10 traj11 traj12 traj13 \
