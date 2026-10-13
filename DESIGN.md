@@ -309,6 +309,28 @@ frame-loop gate is `dead_fade` *at entry*, not after the step. Verified: the
 of the 329-tick gap skipped) and the respawn: the walker re-spawns from the
 reloaded stream (standby f807 → active f823) with every slot byte matching.
 
+The game-over continuation of that tail landed 2026-10-13. `$311A` sets
+`$FF9B = $14` and *then* does `sub 1 / daa` on `sLives`, branching to `$314B`
+(`ld a, 5 / ldh [$FF9B], a`) when the subtraction carries. That carry is the
+`sub 1`'s borrow out of bit 8 — `daa`'s low-nibble correction (`0x06`, taken
+whenever H is set) never touches C — so **the branch fires on `sLives == 0`
+exactly**, and a ten like `$10` decrements to `$09` with the game continuing.
+(The `$05` write is what survives the `$14` that preceded it.) State `$05`
+(`$27AF`) is the GAME OVER screen: the `$4C92` graphics and `$6492` tilemap
+loads, `sBGPalette = $E4`, `sSavedLCDC = $C3`, **`sLives` back to 5**, the
+coin/money counters cleared, the `sLevelTally` penalty (`sub c / daa`, c = the
+set high bits of the six `sGoldenCoin1-6` bytes at `$A84D-$A865` — map-side save
+bytes with no in-level writer, so 0 here), `sFadeTimerLow = 255`,
+`sMusicRequest = 7`, then `$FF9B = 7`. State `$07` (`$287E`) calls the bank-12
+`$30884` (which draws the `$2874` "GAME OVER" string), polls `sFadeTimer` to 0,
+then waits for START (`hKeysPressed == $08`) and hands back to `$FF9B = 0`
+(`Init`) with `sMusicRequest = $FF`. Modelled as `PlayerSim::game_over` +
+`game_over_enter`/`game_over_step`; the art, the bank-12 `$2934` save and the
+string draw are not (see the omissions list above). No capture reaches zero
+lives — every gate capture survives — so the whole path is unit-pinned
+(`death_fade_*`, `game_over_*`), and the replay harness's death-cycle gap takes
+the `$05` branch instead of the level reload when the flag is set.
+
 `traj10` closed 2026-10-12 (5130 records, x 472 → 3094, 30 checks zero).
 Three divergences, each pinned against the ROM rather than guessed: the
 `$129F` running ledge-launch (the "no floor" arm is not a plain fall — with
@@ -363,7 +385,7 @@ single-slot `$00`/`$03` bonk (whose `66` draw is the one `traj15`'s two-slot
 has `$00` cells at x ≥ 576 behind the first walker and `$03` cells only at the
 tower), the big-Mario types 1/5 (a powerup), the fireball's `$06` break
 (`$3415` — a type-1 bump from the projectile), the `$1413` push-out with no
-capture yet (see below), the game-over screen, the scene system, and the
+capture yet (see below), the scene system, and the
 per-anim handlers with no
 ported body (list above). Bounce blocks themselves are no longer in this list —
 the model landed 2026-10-13 (wp7g) and `traj15` verifies it end to end. Nor is

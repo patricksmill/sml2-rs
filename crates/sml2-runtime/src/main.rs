@@ -1147,15 +1147,24 @@ fn run_replay(
             while sim.fade_timer > 0 {
                 sim.fade_step();
             }
-            // $0F2A + $04F1 + $EBBB: the reload puts Mario back at the
-            // header spawn and clears the object scratch (fff0 persists).
-            sim.respawn(manifest.header.mario_spawn_x, manifest.header.mario_spawn_y);
-            cam.reset_level_start(
-                manifest.header.camera_start_x,
-                manifest.header.camera_start_y,
-                sim.y as u8,
-            );
-            obj.reset_level_start();
+            if sim.game_over {
+                // $314B → $05: the borrow means the game overruns to the GAME
+                // OVER screen instead of reloading the level. No capture
+                // reaches zero lives, so this is the modelled-only branch:
+                // $27AF's state writes, then $07's fade + START poll (which
+                // the caller drives via `game_over_step`).
+                sim.game_over_enter();
+            } else {
+                // $0F2A + $04F1 + $EBBB: the reload puts Mario back at the
+                // header spawn and clears the object scratch (fff0 persists).
+                sim.respawn(manifest.header.mario_spawn_x, manifest.header.mario_spawn_y);
+                cam.reset_level_start(
+                    manifest.header.camera_start_x,
+                    manifest.header.camera_start_y,
+                    sim.y as u8,
+                );
+                obj.reset_level_start();
+            }
             let skipped = g.total.saturating_sub(1 + modeled);
             let ok = fade_ok && acct == g.total;
             println!(

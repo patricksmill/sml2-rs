@@ -24,6 +24,9 @@
 //! - `$134F`/`$1189`/`$10EC` pipe arming, entry and travel (the
 //!   `$0F71`/`$0FBB` branch replaces the whole update while travelling)
 //! - `$315C`/`$3186`/`$0F2A` death arc, fade and respawn
+//! - the zero-lives game over: `$311A`'s `sub 1 / daa` borrow → `$27AF`
+//!   (state `$05`, [`PlayerSim::game_over_enter`]) → `$287E` (state `$07`,
+//!   [`PlayerSim::game_over_step`]: 255-frame fade, then START → `$00`)
 //!
 //! The engine's `ld b; add 16; ld b; add b; sub 16` position trick is a
 //! signed add: values $F0..$FF subtract 16..1 (`sdelta` below).
@@ -33,8 +36,12 @@
 //! bell's ring animation, fireball paths, and the `$14` level-clear/map
 //! hand-off's banked body (`$3EF2B`: the palette swap, the map-node advance
 //! and the save) — the port marks the hand-off reach
-//! ([`PlayerSim::exit_completed`]) but keeps freezing. Ported since the first
-//! cut (this list used to claim otherwise): pipe arming/entry/travel, water
+//! ([`PlayerSim::exit_completed`]) but keeps freezing. The same applies to the
+//! game-over screen's banked body (`$27AF`: the `$4C92` graphics and `$6492`
+//! tilemap loads, the `$2874` "GAME OVER" string, the `$2934` save) — the port
+//! models its state writes and the `$07` START poll, not the art. Ported
+//! since the first cut (this list used to claim otherwise): pipe
+//! arming/entry/travel, water
 //! detection (`$1BFF`), the `$129F` ledge launch, the death arc/fade/respawn
 //! and the camera scroll deltas (in `camera.rs`, driven by the loop rather
 //! than by this module); since wp7g the brick-bump system
@@ -264,6 +271,14 @@ pub struct PlayerSim {
     /// body (`$3EF2B`: the map-node advance and save) is not modelled, so the
     /// port keeps freezing on `exit_phase`; this flag marks that the tail ran.
     pub exit_completed: bool,
+    /// `$FF9B = 5` — the GAME OVER screen (`$27AF`), entered from the death
+    /// fade's borrow (`$311A`'s `sub 1 / daa` on `sLives` with carry set,
+    /// i.e. `sLives == 0`). The bank-12 body is not modelled (the `$4C92`
+    /// graphics load, the `$6492` tilemap, the `$2874` "GAME OVER" string);
+    /// the port keeps the state fields `$27AF` writes
+    /// ([`PlayerSim::game_over_enter`]) and the `$07` poll
+    /// ([`PlayerSim::game_over_step`]).
+    pub game_over: bool,
     /// `sLevelProgressFlags` ($A27D): bit 7 = the stage was already cleared
     /// (the map sets it when the node completes), so `$3547` skips the tally
     /// on a replay. Nothing in-level writes it.
@@ -415,6 +430,7 @@ impl PlayerSim {
             dead_fade: false,
             exit_phase: false,
             exit_completed: false,
+            game_over: false,
             level_progress_flags: 0,
             lives: 5,
             fade_timer: 0,
@@ -1489,23 +1505,72 @@ impl PlayerSim {
     }
 
     /// One frame of the death fade (`$FF9B = 9`, 192 frames). The call that
-    /// reaches 0 is the level-end tail (`$311A`): `sLives` is decremented
-    /// (BCD; a borrow → $99 = the game-over path, not modelled) and the game
+    /// reaches 0 is the level-end tail (`$311A`): `$FF9B` moves to `$14`, then
+    /// `sLives` is decremented (`sub 1 / daa`) — a borrow means the game runs
+    /// state `$05` instead ([`PlayerSim::game_over`]), otherwise the game
     /// leaves for the overworld map.
+    ///
+    /// The borrow is the `sub 1`'s carry into `daa`, i.e. **`sLives == 0`
+    /// exactly**: `daa`'s low-nibble correction (`0x06`, taken whenever H is
+    /// set) never touches C, so a ten like `$10` decrements to `$09` without
+    /// ending the game. `$311A` writes `$FF9B = $14` *before* the branch, so on
+    /// a borrow the `$05` write is what survives — the port keeps only that.
     pub fn fade_step(&mut self) {
         if self.fade_timer == 0 {
             return;
         }
         self.fade_timer -= 1;
         if self.fade_timer == 0 {
-            self.lives = if self.lives == 0 {
-                0x99
+            if self.lives == 0 {
+                // `sub 1 / daa` on BCD 00 → $99, carry set → `$314B`.
+                self.lives = 0x99;
+                self.game_over = true;
             } else if self.lives & 0x0F == 0 {
-                ((self.lives >> 4) - 1) << 4 | 0x09
+                self.lives = ((self.lives >> 4) - 1) << 4 | 0x09;
             } else {
-                self.lives - 1
-            };
+                self.lives -= 1;
+            }
         }
+    }
+
+    /// `$27AF` (state `$05`) — the GAME OVER screen's entry, run by the caller
+    /// on the frame after the fade raised [`PlayerSim::game_over`]. Not
+    /// modelled: the bank-12 body (the `$4C92` graphics → `$8000`, the `$6492`
+    /// tilemap → `$9800`, `sBGPalette = $E4`, `sSavedLCDC = $C3`, and the
+    /// `$2874` "GAME OVER" string that `$30884` draws from state `$07`). What
+    /// is: `sLives` back to 5, the coin/money counters cleared, the 255-frame
+    /// fade armed, and `sMusicRequest = 7` before the hand-off to `$07`.
+    ///
+    /// The tally penalty is `sub c / daa` with c = the set high bits of the six
+    /// `sGoldenCoin1-6` bytes ($A84D-$A865) — map-side save bytes with no
+    /// in-level writer, so c is always 0 here and the tally is left alone.
+    pub fn game_over_enter(&mut self) {
+        self.lives = 5;
+        self.coins_low = 0;
+        self.coins_high = 0;
+        self.fade_timer = 255; // sFadeTimerLow (the high byte is already 0)
+        self.music_request = 7;
+    }
+
+    /// `$287E` (state `$07`) — one frame of the GAME OVER screen's poll: the
+    /// `$27AF` 255-frame fade ticks down (VBlank keeps decrementing
+    /// `sFadeTimer`), and once it reads 0 the screen waits for START
+    /// (`hKeysPressed == $08`). Returns true on the frame that hands back to
+    /// state `$00` (`Init`), which also requests `sMusicRequest = $FF`.
+    pub fn game_over_step(&mut self, start_pressed: bool) -> bool {
+        if !self.game_over {
+            return false;
+        }
+        if self.fade_timer > 0 {
+            self.fade_timer -= 1;
+            return false;
+        }
+        if !start_pressed {
+            return false;
+        }
+        self.game_over = false;
+        self.music_request = 0xFF;
+        true
     }
 
     /// One frame of the exit fade (`$FF9B = 24`, 192 frames): VBlank's
@@ -1545,6 +1610,7 @@ impl PlayerSim {
         self.dead_fade = false;
         self.exit_phase = false;
         self.exit_completed = false;
+        self.game_over = false;
         self.fade_timer = 0;
         self.powerup = 0;
         self.invincibility = 0;
@@ -2641,5 +2707,103 @@ mod tests {
         assert!(sim.in_air);
         assert!(!sim.on_ground, "$134F must not run on the bounce");
         assert_eq!(sim.vvel, 74, "the 75 bounce minus gravity's decrement");
+    }
+
+    // -----------------------------------------------------------------
+    // $311A / $27AF / $287E — the zero-lives game over.
+    //
+    // No capture reaches zero lives (every gate capture survives), so the
+    // whole path is pinned here: the `sub 1 / daa` borrow that selects state
+    // `$05` (and the tens that must *not* select it), `$27AF`'s state writes,
+    // and `$287E`'s 255-frame fade + START wait.
+    // -----------------------------------------------------------------
+
+    /// The borrow is `sLives == 0`: `sub 1 / daa` on BCD 00 gives $99 with
+    /// carry, which is `$314B`'s `ld a, 5 / ldh [$FF9B], a`.
+    #[test]
+    fn death_fade_borrow_on_zero_lives_raises_the_game_over_flag() {
+        let mut sim = PlayerSim::new();
+        sim.lives = 0;
+        sim.fade_timer = 1;
+        sim.fade_step();
+        assert_eq!(sim.lives, 0x99);
+        assert!(sim.game_over, "the borrow selects state $05");
+    }
+
+    /// `daa`'s low-nibble correction (0x06, taken when H is set) does not
+    /// touch C, so a ten decrements to $09 and the game continues.
+    #[test]
+    fn death_fade_on_a_ten_lives_decrements_without_ending_the_game() {
+        let mut sim = PlayerSim::new();
+        sim.lives = 0x10;
+        sim.fade_timer = 1;
+        sim.fade_step();
+        assert_eq!(sim.lives, 0x09);
+        assert!(!sim.game_over, "$10 -> $09 carries nothing into the branch");
+    }
+
+    #[test]
+    fn death_fade_on_a_plain_life_still_decrements_by_one() {
+        let mut sim = PlayerSim::new();
+        sim.lives = 0x05;
+        sim.fade_timer = 1;
+        sim.fade_step();
+        assert_eq!(sim.lives, 0x04);
+        assert!(!sim.game_over);
+    }
+
+    /// `$27AF`: lives back to 5, the coin counters cleared, the 255-frame
+    /// fade armed, the music request set before the `$07` hand-off.
+    #[test]
+    fn game_over_enter_writes_the_05_fields() {
+        let mut sim = PlayerSim::new();
+        sim.lives = 0x99;
+        sim.coins_low = 0x42;
+        sim.coins_high = 0x01;
+        sim.fade_timer = 0;
+        sim.game_over_enter();
+        assert_eq!(sim.lives, 5);
+        assert_eq!((sim.coins_high, sim.coins_low), (0, 0));
+        assert_eq!(sim.fade_timer, 255);
+        assert_eq!(sim.music_request, 7);
+    }
+
+    /// `$287E`: the fade ticks down for 255 frames, then the screen waits for
+    /// START, which hands back to state `$00` with `sMusicRequest = $FF`.
+    #[test]
+    fn game_over_step_ticks_the_fade_then_waits_for_start() {
+        let mut sim = PlayerSim::new();
+        sim.lives = 0;
+        sim.fade_timer = 1;
+        sim.fade_step();
+        sim.game_over_enter();
+        // The fade runs out over 255 frames; START during it does nothing.
+        assert!(
+            !sim.game_over_step(true),
+            "START on the fade's first frame is ignored"
+        );
+        for _ in 0..254 {
+            assert!(!sim.game_over_step(false));
+        }
+        assert_eq!(sim.fade_timer, 0);
+        assert!(!sim.game_over_step(false), "no START, no hand-off");
+        assert_eq!(sim.fade_timer, 0);
+        assert!(sim.game_over_step(true), "the $00 hand-off frame");
+        assert!(!sim.game_over);
+        assert_eq!(sim.music_request, 0xFF);
+        // The hand-off is one-shot: the phase is over.
+        assert!(!sim.game_over_step(true));
+    }
+
+    /// Outside the game-over phase the poll is inert (the flag gates it), and
+    /// a level reload clears the flag like the other phase flags.
+    #[test]
+    fn game_over_step_needs_the_phase_and_respawn_clears_it() {
+        let mut sim = PlayerSim::new();
+        sim.fade_timer = 0;
+        assert!(!sim.game_over_step(true));
+        sim.game_over = true;
+        sim.respawn(112, 240);
+        assert!(!sim.game_over);
     }
 }
