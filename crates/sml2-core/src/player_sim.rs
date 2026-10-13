@@ -362,6 +362,8 @@ pub struct PlayerSim {
     pub level_progress_flags: u8,
     /// `sLives` ($A22C, BCD) — `$311A` decrements it when the fade ends.
     pub lives: u8,
+    /// `sLevelGfxIndex` (`$A20B`): the tileset index the last `$6x` selected.
+    pub level_gfx_index: u8,
     /// `sFadeTimer` ($A266/$A267) — `$3186` sets it to 192 when the fade
     /// starts; VBlank decrements it every frame (saturating), and the fade's
     /// last frame runs the level-end tail.
@@ -514,6 +516,7 @@ impl PlayerSim {
             map_node: 0,
             level_progress: [0; 42],
             golden_coin_flags: 0,
+            level_gfx_index: 0,
             map_handoff_done: false,
             game_over: false,
             paused: false,

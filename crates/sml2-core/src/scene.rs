@@ -55,14 +55,32 @@
 //!
 //! ## What is not ported
 //!
-//! `$2x` (arms `sSceneState = 15` plus a 96-frame fade — the boss-arena arm, the
-//! only thing that reaches `$3C94`/`$8D9C`), `$3x` (camera/Mario Y add-or-set),
-//! `$6x` (tileset swap), `$Bx`/`$0x` (VRAM block transfers) and the palette
-//! writers `$1x`/`$5x`/`$Ax`. The `$4x` direction streamers
-//! (`$2359`/`$23E4`/`$2524`/`$246F`) are deliberately not modelled either, and
-//! not flagged: they fill the BG window at `$9800` with the incoming screen's
-//! strip data, which this port never needs — it renders from the fully resident
-//! decompressed layout instead, so they have no observable effect here.
+//! `$Bx`/`$0x` (VRAM block transfers, recorded as unported) and the palette
+//! writers `$1x`/`$5x`/`$Ax`. `$2x`, `$3x` and `$6x` are ported (see below). The
+//! `$4x` direction streamers (`$2359`/`$23E4`/`$2524`/`$246F`) are deliberately
+//! not modelled, and not flagged: they fill the BG window at `$9800` with the
+//! incoming screen's strip data, which this port never needs — it renders from
+//! the fully resident decompressed layout instead, so they have no observable
+//! effect here.
+//!
+//! ## The arena arm (`$2x`) and what it still does not reach
+//!
+//! `$2x` is more than a state write: `sSceneState = 15` is the only thing that
+//! makes `$0EB0`'s `sSceneState & $0F` test pass, and that test is the only
+//! caller of `$3C94` — the bank-2 boss load (`$8D9C`: clearing `$AD00-$AF00`,
+//! building `sObjectDefIndex` from `sBossFightPhase` and a per-level base,
+//! `sTimerReload = 80`, and copying an 18-byte slot image per boss part to
+//! `$AD05` at a `+$20` stride) plus the `$8DA9` per-frame driver. The port
+//! records the arm ([`SceneVm::boss_arena`]) and the state it writes, but does
+//! not spawn the boss: that load needs the `$4E3F` pointer table and the
+//! per-phase object records, and no capture has ever reached it (the arena
+//! scripts live in levels 8/10/13/16/17/20 and the castle). Queued as
+//! `scene_boss_scripts`.
+//!
+//! `$6x`'s payload is recorded as `sLevelGfxIndex` and the reload it triggers is
+//! a rendering-layer refresh: `$25AF` re-enters the level loader (bank 19, then
+//! bank 7 at layout index 3), and this port already draws the level from its
+//! extracted manifest, which carries that level's tileset.
 
 use crate::camera::CameraSim;
 use crate::player_sim::PlayerSim;
@@ -190,6 +208,10 @@ pub struct SceneVm {
     entering: bool,
     /// Opcode classes with no port implementation, deduped in hit order.
     unported: Vec<u8>,
+    /// `$2x` has armed the boss arena. The ROM's `$0EB0` gate now calls
+    /// `$3C94` → bank 2 `$8D9C`, which spawns the boss; this port has no boss
+    /// to spawn, so it records the arm instead of silently dropping it.
+    pub boss_arena: bool,
 }
 
 impl SceneVm {
@@ -249,15 +271,54 @@ impl SceneVm {
         };
         let operand = scripts.byte_at(self.pc.wrapping_add(1)).unwrap_or(0);
         match class {
+            0x2 => self.op_2x(sim, cam),
+            0x3 => {
+                let second = scripts.byte_at(self.pc.wrapping_add(2)).unwrap_or(0);
+                self.op_3x(op, operand, second, sim, cam);
+            }
             0x4 => self.op_4x(operand, sim, cam),
+            0x6 => sim.level_gfx_index = op & 0x0F,
             0x8 => cam.boss_defeated = 0xF0 | (op & 0x0F),
             _ => self.note_unported(op),
         }
         self.pc = self.pc.wrapping_add(1 + len as u16);
-        if matches!(class, 0x4 | 0x8) {
+        if matches!(class, 0x2 | 0x3 | 0x4 | 0x6 | 0x8) {
             SceneStep::Ran(op)
         } else {
             SceneStep::Unported(op)
+        }
+    }
+
+    /// `$2x` / `$20EB`: arm the boss arena. `sSceneState = 15`, then
+    /// `sFadeTimerHigh = 1` / `sFadeTimerLow = 96` (a 352-frame fade), then
+    /// `sTileAnimConfig`, `sStarTimerHigh` and `sStarTimerLow` cleared. No
+    /// operand — the dispatcher's `inc hl` skips only the opcode.
+    ///
+    /// `sSceneState = 15` is load-bearing: it is what makes `$0EB0`'s
+    /// `sSceneState & $0F` test pass, the test that reaches `$3C94` and through
+    /// it the bank-2 boss load. The port records the arm rather than pretending
+    /// to spawn something ([`SceneVm::boss_arena`]), and it does not model the
+    /// star timer at all (it has no star powerup), so only the fade and the
+    /// state are observable here.
+    fn op_2x(&mut self, sim: &mut PlayerSim, cam: &mut CameraSim) {
+        cam.scene_state = 15;
+        sim.fade_timer = 0x0160;
+        self.boss_arena = true;
+    }
+
+    /// `$3x` / `$211E`: two operands, camera Y first, then Mario Y. A **zero low
+    /// nibble means absolute**: the ROM writes only the low bytes (`$FFC8`,
+    /// `$FFC0`), so the pair lands inside the current 256-px page and the high
+    /// bytes keep whatever the camera had. Any other nibble is a 16-bit **add**
+    /// of each operand to the same pair — the arena entrance's camera slide, and
+    /// the nibble is the direction that slide's sprite selection keys off.
+    fn op_3x(&mut self, op: u8, cam_y: u8, mario_y: u8, sim: &mut PlayerSim, cam: &mut CameraSim) {
+        if op & 0x0F == 0 {
+            cam.y = (cam.y & 0xFF00) | cam_y as u16;
+            sim.y = (sim.y & 0xFF00) | mario_y as u16;
+        } else {
+            cam.y = cam.y.wrapping_add(cam_y as u16);
+            sim.y = sim.y.wrapping_add(mario_y as u16);
         }
     }
 
@@ -398,6 +459,71 @@ mod tests {
         assert_eq!((sim7.y >> 8, sim7.x >> 8), (1, 6));
     }
 
+    /// The arena intro end to end, on scene 11's real script
+    /// (`60 20 30 60 60 40 04 FF` at `$4184`): the tileset swap, the arena arm,
+    /// the camera/Mario Y set, the screen cell, and the terminator — with
+    /// nothing flagged. Before `$2x`/`$3x`/`$6x` were ported this script reached
+    /// its `$4x` having recorded the first three as unported and armed nothing.
+    #[test]
+    fn an_arena_script_runs_its_whole_intro() {
+        let s = scripts();
+        assert_eq!(s.script(11), Some(0x4184));
+        let mut cam = CameraSim::new(0x1200, 0x1300);
+        let mut sim = PlayerSim::new();
+        let mut vm = SceneVm::new();
+        latched(&mut cam, &mut vm, 11);
+
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Entering);
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Ran(0x60));
+        assert_eq!(sim.level_gfx_index, 0, "$6x's nibble is the tileset index");
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Ran(0x20));
+        assert_eq!(cam.scene_state, 15, "$20EB's arm");
+        assert_eq!(sim.fade_timer, 0x0160, "sFadeTimerHigh=1, sFadeTimerLow=96");
+        assert!(
+            vm.boss_arena,
+            "the arm is recorded; the boss itself is not spawned"
+        );
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Ran(0x30));
+        assert_eq!(cam.y, 0x1360, "camera Y low byte, page kept");
+        assert_eq!(sim.y, 0x0060, "and Mario's");
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Ran(0x40));
+        assert_eq!(
+            (cam.y, cam.x),
+            (0x0060, 0x0400),
+            "operand $04: Y page 0, X 4"
+        );
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::End);
+        assert!(vm.unported().is_empty(), "every byte of it is honoured");
+    }
+
+    /// `$3x`'s other mode: a non-zero low nibble is a 16-bit **add** of each
+    /// operand to the camera and Mario Y pairs, so the carry moves between
+    /// pages. No retail script uses it (all seven arena intros write `30`), which
+    /// is why this is driven from a synthetic script.
+    #[test]
+    fn the_3x_add_mode_carries_between_pages() {
+        let mut bytes: Vec<u8> = BLOB_HEX
+            .split_whitespace()
+            .map(|h| u8::from_str_radix(h, 16).unwrap())
+            .collect();
+        // Scene 15's script ($41A4, payload index $7F) becomes `3D 10 20 FF`.
+        assert_eq!(0x41A4 - 0x4125, 0x7F);
+        bytes[0x7F..0x83].copy_from_slice(&[0x3D, 0x10, 0x20, 0xFF]);
+        let s = SceneScripts::from_bytes(&bytes).expect("192-byte blob");
+        assert_eq!(s.script(15), Some(0x41A4));
+
+        let mut cam = CameraSim::new(0, 0x00F8);
+        let mut sim = PlayerSim::new();
+        sim.y = 0x01F0;
+        let mut vm = SceneVm::new();
+        latched(&mut cam, &mut vm, 15);
+        vm.step(&mut sim, &mut cam, &s); // prologue
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Ran(0x3D));
+        assert_eq!(cam.y, 0x0108, "F8 + 10 carries into the next page");
+        assert_eq!(sim.y, 0x0210, "F0 + 20 likewise");
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::End);
+    }
+
     /// `$FF` ends the script and runs the `$21EE` epilogue: the transition flag
     /// is latched and every scene byte is zeroed, so the next pass takes the
     /// no-scene path.
@@ -465,14 +591,16 @@ mod tests {
 
     /// An unimplemented *but handled* class is stepped over with its real
     /// operand length, so the script still reaches its `$FF` — and the opcode is
-    /// reported rather than silently ignored.
+    /// reported rather than silently ignored. `$Bx` is the case now that `$2x`,
+    /// `$3x` and `$6x` are ported: it is a VRAM block transfer, and its whole
+    /// effect lands in the BG window this port never draws.
     #[test]
     fn an_unported_class_is_stepped_over_by_its_real_length() {
-        // Scene 1's script `3D 11 22 FF`: a $3x (two operands) the port lacks.
+        // Scene 1's script `B3 11 22 33 FF`: a $Bx (three operands).
         let mut blob = vec![0u8; SceneScripts::BLOB_LEN];
         blob[2] = 0x65;
         blob[3] = 0x41;
-        blob[0x40..0x44].copy_from_slice(&[0x3D, 0x11, 0x22, 0xFF]);
+        blob[0x40..0x45].copy_from_slice(&[0xB3, 0x11, 0x22, 0x33, 0xFF]);
         let s = SceneScripts::from_bytes(&blob).unwrap();
 
         let mut vm = SceneVm::new();
@@ -480,9 +608,9 @@ mod tests {
         let mut sim = PlayerSim::new();
         latched(&mut cam, &mut vm, 1);
         vm.step(&mut sim, &mut cam, &s);
-        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Unported(0x3D));
-        assert_eq!(vm.pc, 0x4168, "one opcode + two operands");
-        assert_eq!(vm.unported(), &[0x3D]);
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Unported(0xB3));
+        assert_eq!(vm.pc, 0x4169, "one opcode + three operands");
+        assert_eq!(vm.unported(), &[0xB3]);
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::End);
     }
 
