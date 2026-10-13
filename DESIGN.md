@@ -217,6 +217,21 @@ it is set, so each descent scrolled 8 px early and the ratchet walked the view
 below the level floor — "Mario centred in the frame, seeing under the map". The
 `$B0`/`$50` column locks were dead in play mode for the same reason.
 
+**The parallel `sSceneMap` is extracted too, as of 2026-10-14.** `ram.asm:716`
+calls `sSceneMap`/`sScreenEdgeMap` "two parallel 48-byte 3×16 maps of the level
+cells", and the `$03F1` loader copies both — the edge map from the header
+pointer `[$4000]`, the scene map from `[$4002]`, each at
+`+ (sLevelLayoutIndex & $0F) * 48`. `sml2-extract` writes them through one code
+path (`levelNN.edge.bin`, `levelNN.scene.bin`) so they cannot drift, and both
+were re-derived from `baserom.gb` for all 32 levels with zero mismatches; 14
+levels have a nonzero scene map. `sSceneMap` is the input to `$0F0B`, which
+latches `sSceneId` — the cell under Mario, index `(Yhi & $0F) * 16 + (Xhi & $0F)`
+— and `sSceneId` indexes the bank-5 scene script table at `$4125`. The port now
+fills `CameraSim::scene_map` in both loops and seeds `sSceneState` from the
+level header's +18 high nibble (`$0609`); measured, every level in this ROM has
+`0` there, so no level starts inside a scene. Level 1's scene map is all zeros,
+which is why no level-1 capture can reach any of this.
+
 Fixed the same day: the extractor writes `levelNN.edge.bin` (bank = header +13
 `sLevelDataBank`; base = the little-endian pointer at `[bank:$4000]`; source =
 `base + (layout_index & $0F) * 48`, 48 bytes — `$03F1`, home.asm 539-571); the

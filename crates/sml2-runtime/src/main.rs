@@ -180,6 +180,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // runs with every edge bit clear, so the vertical follow takes the
     // no-hard-edge branches and drifts downward over a jump.
     let edge_map = fs::read(levels_dir.join(format!("level{nn:02}.edge.bin"))).ok();
+    // The parallel 48-byte `sSceneMap` (`$03F1`, from the level header's
+    // `[$4002]`), which `$0F0B` reads to latch `sSceneId` from the cell under
+    // Mario. Unlike the edge map there is no capture field to fall back on —
+    // no capture records scene data — so this is the only source; a missing
+    // file leaves `scene_id` 0, which is what level 1's all-zero map gives
+    // anyway.
+    let scene_map = fs::read(levels_dir.join(format!("level{nn:02}.scene.bin"))).ok();
     if let Some(rf) = replay_file {
         return run_replay(
             &rf,
@@ -192,6 +199,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             spr,
             filmstrip.as_deref(),
             edge_map,
+            scene_map,
         );
     }
     if play_mode {
@@ -212,6 +220,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // map had. Level 1 is $00 in both, so its play and replay agree.
         cam.map_scroll_limit = manifest.properties.unknown != 0;
         cam.auto_scroll = manifest.properties.auto_scroll;
+        // `$0609`: sSceneState is initialized from the level header's +18 high
+        // nibble (ram.asm:665). All 32 levels carry 0 there, so nothing starts
+        // mid-scene — but the byte is a real input: a nonzero high nibble makes
+        // `$0B2A` park the camera and the frame loop run the alternate driver.
+        cam.scene_state = manifest.header.scene_state;
+        if let Some(m) = scene_map.as_ref() {
+            if m.len() == 48 {
+                cam.scene_map.clone_from(m);
+            }
+        }
         if cam.auto_scroll != 0 {
             println!("note: autoscroll level: $0DAF ported, but no capture covers it");
         }
@@ -230,6 +248,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             cam,
             obj,
             edge_map,
+            scene_map,
         );
     }
     if window_mode {
@@ -982,6 +1001,7 @@ fn run_replay(
     mut spr: Option<SpriteCtx>,
     filmstrip: Option<&Path>,
     edge_map: Option<Vec<u8>>,
+    scene_map: Option<Vec<u8>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let frames: Vec<Frame> = serde_json::from_str(&fs::read_to_string(path)?)?;
     if frames.len() < 2 {
@@ -994,6 +1014,13 @@ fn run_replay(
     let own_edges = matches!(edge_map.as_ref(), Some(e) if e.len() == 48);
     if !own_edges {
         println!("note: level edge table missing — replaying with the captured $FF98");
+    }
+    // Same rule for `sSceneMap`: nothing in a capture records scene data, so a
+    // missing file means `scene_id` stays 0 and no transition can ever start a
+    // scene. The extractor writes one file per level, so this never fires in
+    // the gate — it is the flag for the case where it should have.
+    if !matches!(scene_map.as_ref(), Some(m) if m.len() == 48) {
+        println!("note: level scene map missing — sSceneId will stay 0");
     }
     let mut sim = PlayerSim::new();
     sim.powerup = 0; // level-0 spawn starts small
@@ -1016,6 +1043,16 @@ fn run_replay(
     cam.auto_scroll = f0.autoscroll;
     if let Some(e) = edge_map.as_ref() {
         cam.edge_map.copy_from_slice(e);
+    }
+    // `$0609`: the header's +18 high nibble is the initial `sSceneState`, and
+    // the 48-byte scene map is what `$0F0B` latches `sSceneId` from. Level 1's
+    // map is all zeros, so this cannot move the gate — it is wired for the
+    // scene levels, where a transition under a nonzero cell starts a scene.
+    cam.scene_state = manifest.header.scene_state;
+    if let Some(m) = scene_map.as_ref() {
+        if m.len() == 48 {
+            cam.scene_map.clone_from(m);
+        }
     }
     let mut obj = sml2_core::objects::ObjectSim::new(manifest.spawns.records.clone(), cam.x);
     obj.easy_mode = f0.easy != 0;
@@ -1716,6 +1753,7 @@ fn run_play(
     mut cam: sml2_core::camera::CameraSim,
     mut obj: sml2_core::objects::ObjectSim,
     edge_map: Option<Vec<u8>>,
+    scene_map: Option<Vec<u8>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (vw, vh) = view;
     if let Some(e) = edge_map.as_ref() {
@@ -1727,6 +1765,13 @@ fn run_play(
         // bit reads clear, so the vertical follow takes the no-hard-edge
         // branches and drifts downward over a jump.
         println!("note: level edge table missing — the camera will scroll with no edge bits");
+    }
+    if let Some(m) = scene_map.as_ref() {
+        if m.len() == 48 {
+            cam.scene_map.clone_from(m);
+        }
+    } else {
+        println!("note: level scene map missing — sSceneId will stay 0");
     }
     use minifb::{Key, Window, WindowOptions};
     let mut window = Window::new(

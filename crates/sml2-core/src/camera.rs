@@ -1031,4 +1031,58 @@ mod tests {
         c.step(&mut sim);
         assert!(c.y > 0x140, "the $0C7D follow ran (y {} )", c.y);
     }
+
+    // ---- $0F0B: the scene latch, and the map that feeds it --------------
+
+    /// Level 3's real `sSceneMap` (`extracted/levels/level03.scene.bin`): id 7
+    /// at cell (row 0, Xhi 4) and id 6 at (row 1, Xhi 5) — the two scenes of
+    /// the first scene-system slice. The index is
+    /// `(Yhi & $0F) * 16 + (Xhi & $0F)`, so those are entries 4 and 21.
+    fn level3_scene_map() -> Vec<u8> {
+        let mut m = vec![0u8; 48];
+        m[4] = 7;
+        m[21] = 6;
+        m
+    }
+
+    /// `$0F0B` latches `sSceneId` from the cell under Mario, and does its two
+    /// side writes: `sMapEventFlag = 255` and `sPaletteFadeStep = 0`. Until now
+    /// nothing filled `scene_map`, so this always latched 0.
+    #[test]
+    fn scene_lookup_latches_the_id_from_the_cell_under_mario() {
+        let mut c = CameraSim::new(0, 0x140);
+        c.scene_map = level3_scene_map();
+        let mut sim = PlayerSim::new();
+        sim.x = 0x0400; // Xhi 4
+        sim.y = 0x0030; // Yhi 0 -> index 4 -> id 7
+        c.scene_lookup(&sim);
+        assert_eq!(c.scene_id, 7);
+        assert_eq!(c.map_event_flag, 0xFF, "$0F0B sets sMapEventFlag = 255");
+        assert_eq!(c.palette_fade_step, 0, "and clears sPaletteFadeStep");
+
+        sim.x = 0x0500; // Xhi 5
+        sim.y = 0x0100; // Yhi 1 -> index 21 -> id 6
+        c.scene_lookup(&sim);
+        assert_eq!(c.scene_id, 6);
+    }
+
+    /// The cell nibble is masked (`$FFC3 & $0F`), so a high byte above $0F
+    /// wraps within its row; and a cell past the 48-byte map latches 0 instead
+    /// of reading out of range — which is also what an absent map does.
+    #[test]
+    fn scene_lookup_masks_the_cell_and_tolerates_a_short_map() {
+        let mut c = CameraSim::new(0, 0x140);
+        c.scene_map = level3_scene_map();
+        let mut sim = PlayerSim::new();
+        sim.x = 0x1400; // Xhi $14 -> & $0F = 4: the same cell as above
+        sim.y = 0x0030;
+        c.scene_lookup(&sim);
+        assert_eq!(c.scene_id, 7, "$FFC3 is masked with $0F");
+
+        let mut none = CameraSim::new(0, 0x140);
+        none.scene_id = 0xEE;
+        sim.y = 0x0300; // Yhi 3 -> index 52, past the 3-row map
+        none.scene_lookup(&sim);
+        assert_eq!(none.scene_id, 0, "outside the map there is no scene");
+    }
 }

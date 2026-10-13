@@ -484,26 +484,39 @@ fn main() -> Result<(), Box<dyn Error>> {
         fs::write(out_dir.join(&layout_file), &decompressed)?;
         let layout = LevelLayout::from_bytes(&decompressed)?;
 
-        // The level's 48-byte `sScreenEdgeMap` record — the camera's per-cell
-        // edge bits (bit0 right, bit1 left, bit2 up, bit3 down) that `$0B39`
-        // reads into `$FF98` and the vertical follow's hard-edge branches test.
-        // `$03F1` copies it from the pointer at `[sLevelDataBank:$4000]` plus
+        // The level's two 48-byte 3×16 cell maps — `sScreenEdgeMap` and the
+        // parallel `sSceneMap` (`$0F0B` latches `sSceneId` from the cell under
+        // Mario). `$03F1` copies both from the level data bank, at the header
+        // pointers `[$4000]` and `[$4002]` respectively, plus
         // `(sLevelLayoutIndex & $0F) * 48` (the ROM builds that offset as
-        // `idx*3` split across the nibbles — `idx * 3 * 16`).
-        let edge_bank = header.level_data_bank as usize;
-        let edge_base = baserom[edge_bank * 0x4000] as usize
-            | ((baserom[edge_bank * 0x4000 + 1] as usize) << 8);
-        if !(0x4000..0x8000).contains(&edge_base) {
-            return Err(format!(
-                "{}: sScreenEdgeMap pointer ${edge_base:04X} is outside bank {edge_bank}",
-                raw.label
-            )
-            .into());
+        // `idx*3` with its nibbles swapped — `idx * 3 * 16`). They are handled
+        // together so the two files can never drift apart.
+        //
+        // Edge bits: bit0 right, bit1 left, bit2 up, bit3 down — `$0B39` reads
+        // them into `$FF98` and the vertical follow's hard-edge branches test
+        // them. Scene map: the id `$0F0B` stores into `sSceneId`, which indexes
+        // the bank-5 script table at `$4125`; 14 of the 32 levels are nonzero,
+        // and level 1's is all zeros (which is why no level-1 capture can
+        // reach a scene).
+        let map_bank = header.level_data_bank as usize;
+        for (ptr_at, suffix, what) in [
+            (0usize, "edge", "sScreenEdgeMap"),
+            (2, "scene", "sSceneMap"),
+        ] {
+            let base = baserom[map_bank * 0x4000 + ptr_at] as usize
+                | ((baserom[map_bank * 0x4000 + ptr_at + 1] as usize) << 8);
+            if !(0x4000..0x8000).contains(&base) {
+                return Err(format!(
+                    "{}: {what} pointer ${base:04X} (header +{ptr_at}) is outside bank {map_bank}",
+                    raw.label
+                )
+                .into());
+            }
+            let off =
+                map_bank * 0x4000 + (base - 0x4000) + (header.layout_index & 0x0F) as usize * 48;
+            let file = format!("level{nn:02}.{suffix}.bin");
+            fs::write(out_dir.join(&file), &baserom[off..off + 48])?;
         }
-        let edge_off =
-            edge_bank * 0x4000 + (edge_base - 0x4000) + (header.layout_index & 0x0F) as usize * 48;
-        let edge_file = format!("level{nn:02}.edge.bin");
-        fs::write(out_dir.join(&edge_file), &baserom[edge_off..edge_off + 48])?;
 
         // graphics
         let ts = &tilesets[i];
