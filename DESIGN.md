@@ -913,6 +913,24 @@ Verified engine semantics to preserve in the port:
   `$50` column creeps back +1/frame (observed live and required for
   parity). Vertical: follows the player's Y change only outside the
   [`$28`(`$40` with `sMapScrollLimit`), `$50`] dead zone.
+- **`sPrevMarioY` is latched from the *live* `$FFC0`** (2026-10-14). The `$0C7D`
+  body ends at `$0D97` with `ldh a,[$FFC0] / ld [sPrevMarioY],a`, so on the one
+  frame the body itself moves Mario — the up-lock warp writes `$FFC0 = 0`
+  (`home.asm:1786`) and falls into that same tail — the latch picks up the
+  *warped* value, and the next frame's `dv = $FFC0 − sPrevMarioY` is measured
+  from it. The port latched the value the body entered with, leaving `dv` short
+  by the pre-warp low byte on every frame after an up transition. Measured
+  before changing it: body-warps fire in 8 of the 18 captures, the `dv` *branch*
+  never flips in any of them, and the gate is byte-identical with the live latch
+  — so this is a fidelity fix with no level-1 decision behind it.
+  One conflation remains, deliberately: `prev_mario_y_lo` is still one field for
+  two ROM bytes. The movement wants `$A20C` (this latch, now correct); the
+  `$C0`/`$48` hard-edge reads want the draw's `sMarioScreenY` (`$A23B`), which
+  the port models as `sy98 = prev_mario_y_lo − cam_y_lo + $62`. Those two bytes
+  differ only on the frames the register is not consulted (the first frame after
+  `$0F2A`, transition frames, parked frames), and the register's own readers are
+  the two lock rows the transition ends never straddle with a stale value — so
+  the proxy is right on every frame it is read.
 - **Autoscroll levels replace that whole horizontal section** (`$0DAF`,
   ported 2026-10-13; the levels are 20, 26 and 31 by file name, i.e.
   `--level 19/25/30`). With `sAutoScroll != 0` the `$0B2A` dispatcher calls

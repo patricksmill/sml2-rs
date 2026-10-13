@@ -455,7 +455,14 @@ impl CameraSim {
             }
         }
         self.y &= 0x0FFF;
-        self.prev_mario_y_lo = my_lo;
+        // `$0D97`: `ldh a,[$FFC0] / ld [sPrevMarioY],a` — the latch reads the
+        // **live** Mario Y, not the value this body entered with. That matters
+        // on the one frame the body itself moves Mario: the up-lock arm warps
+        // `$FFC0 = 0` (`home.asm:1786`) before falling into this tail, so the
+        // ROM latches 0 and the next frame's `dv` is measured from the warped
+        // position. Latching the entry snapshot instead leaves `dv` short by the
+        // pre-warp low byte for every frame after an up transition.
+        self.prev_mario_y_lo = sim.y as u8;
     }
 
     /// `$0DED`: the screen-transition scroll. While `sScreenTransition != 0`
@@ -1108,5 +1115,33 @@ mod tests {
         sim.y = 0x0300; // Yhi 3 -> index 52, past the 3-row map
         none.scene_lookup(&sim);
         assert_eq!(none.scene_id, 0, "outside the map there is no scene");
+    }
+
+    // ---- the up-lock warp and the `$0D97` previous-Y latch --------------
+
+    /// The up-lock arm warps Mario (`$FFC0 = 0`, `home.asm:1786`) and then falls
+    /// into the `$0D97` tail, which latches **the live** `$FFC0` into
+    /// `sPrevMarioY` (`home.asm:1860-1861`). So the frame the warp happens on is
+    /// also the frame the latch picks up the warped value — the port used to
+    /// keep the value the body entered with, leaving the next frame's `dv` short
+    /// by the pre-warp low byte.
+    #[test]
+    fn the_up_lock_warp_latches_the_warped_y_not_the_entry_value() {
+        // Camera on the $48 lock row; Mario high up the screen (his Y low byte
+        // $C0 against a latch of 0 is `dv = $C0`, the "moved up" branch) and
+        // `sy98 = 0 - $48 + $62 = $1A < $1B`, the warp's own gate.
+        let mut c = cam_at(0x0100, 0x0048);
+        c.edge_map[1] = 0x04; // camera row 0, Xhi 1: bit2 (the up lock)
+        c.prev_mario_y_lo = 0x00;
+        let mut sim = PlayerSim::new();
+        sim.y = 0x00C0;
+        c.step(&mut sim);
+
+        assert_eq!(c.transition, 4, "the up transition arms");
+        assert_eq!(sim.y, 0x0000, "and Mario warps to Y=0 with the camera's hi");
+        assert_eq!(
+            c.prev_mario_y_lo, 0x00,
+            "$0D97 latches the live $FFC0, i.e. the warped 0 — not the $C0 the body entered with"
+        );
     }
 }
