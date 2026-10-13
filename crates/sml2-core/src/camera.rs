@@ -1063,6 +1063,94 @@ mod tests {
         assert!(c.y > 0x140, "the $0C7D follow ran (y {} )", c.y);
     }
 
+    // ---- $0DED: the horizontal transitions (tr=1 / tr=2) ----------------
+
+    /// A right-edge transition. `$0B5E`'s bit0 arm fires at the `$B0` column
+    /// once Mario's screen X reaches `$A1`; the scroll then moves the camera
+    /// 4 px and Mario 1 px per frame until the camera reaches the `$50` column
+    /// (one full 160-px screen, wrapping the low byte), and the `$0EB0` tail
+    /// ends it with `sfx0 = 5`.
+    ///
+    /// No capture has ever run this: level 1's `$4A` exit bell fires at x 4056
+    /// and the col-255 wall blocks x >= 4068, so both horizontal transitions are
+    /// unreachable there. The port has carried this path since the transition
+    /// work, exercised only by `screen_transition1`'s *vertical* pair.
+    #[test]
+    fn a_right_edge_transition_scrolls_to_the_50_column() {
+        // Camera on the $B0 column, row 1 (cell index 16); Mario's screen X
+        // $A5 ($F5 - $B0 + $60).
+        let mut c = cam_at(0x00B0, 0x0140);
+        c.edge_map[16] = 0x01; // bit0: the right edge
+        let mut sim = PlayerSim::new();
+        sim.x = 0x00F5;
+        sim.y = 0x0140;
+        c.step(&mut sim);
+        assert_eq!(c.transition, 1, "$0B5E's bit0 arm fires");
+        let (mario_at_arm, cam_at_arm) = (sim.x, c.x);
+
+        let mut frames = 0u16;
+        while c.transition != 0 && frames < 64 {
+            c.step(&mut sim);
+            frames += 1;
+        }
+        assert_eq!(c.transition, 0, "the scroll finishes");
+        assert_eq!(c.x as u8, 0x50, "at the $50 column");
+        assert_eq!(
+            c.x,
+            (cam_at_arm + 4 * frames) & 0x0FFF,
+            "4 px of camera per frame, {} of them",
+            frames
+        );
+        assert_eq!(sim.x, mario_at_arm + frames, "and 1 px of Mario");
+        assert_eq!(c.sfx0, 5, "$0EB0's tail");
+        assert_eq!(c.map_scroll_flags, 0x10, "$0DED's right-scroll flag");
+    }
+
+    /// The left transition is the mirror image *plus a warp*: `$0BE5` fires at
+    /// the `$50` column once Mario's screen X drops below `$0F`, and it rewrites
+    /// Mario x to 0 with the camera's high byte + 1 (`$FFC2/$FFC3`) before the
+    /// scroll walks the camera back to the `$B0` column at 4 px/frame.
+    #[test]
+    fn a_left_edge_transition_warps_mario_then_scrolls_to_the_b0_column() {
+        let mut c = cam_at(0x0050, 0x0140);
+        c.edge_map[16] = 0x02; // bit1: the left edge
+        let mut sim = PlayerSim::new();
+        sim.x = 0x02F5; // screen X $05, and Xhi 2 for the warp
+        sim.y = 0x0140;
+        c.step(&mut sim);
+        assert_eq!(c.transition, 2, "$0BE5's bit1 arm fires");
+        assert_eq!(sim.x, 0x0300, "Mario warps to x=0 with the camera's hi+1");
+        let mario_at_warp = sim.x;
+        let cam_at_warp = c.x;
+
+        let mut frames = 0u16;
+        while c.transition != 0 && frames < 64 {
+            c.step(&mut sim);
+            frames += 1;
+        }
+        assert_eq!(c.transition, 0, "the scroll finishes");
+        assert_eq!(c.x as u8, 0xB0, "at the $B0 column");
+        assert_eq!(c.x, cam_at_warp.wrapping_sub(4 * frames) & 0x0FFF);
+        assert_eq!(sim.x, mario_at_warp.wrapping_sub(frames as u16));
+        assert_eq!(c.sfx0, 5, "$0EB0's tail");
+        assert_eq!(c.map_scroll_flags, 0x20, "$0DED's left-scroll flag");
+    }
+
+    /// The two arms need their own edge bit: with bit1 (and not bit0) at the
+    /// `$B0` column — the column bit0 is the right arm's — nothing fires, and
+    /// the frame falls through to the normal scroll.
+    #[test]
+    fn the_transition_arms_need_their_own_edge_bit() {
+        let mut c = cam_at(0x00B0, 0x0140);
+        c.edge_map[16] = 0x02; // the left edge's bit at the right arm's column
+        let mut sim = PlayerSim::new();
+        sim.x = 0x00F5; // screen X $A5, past the right arm's $A1 gate
+        sim.y = 0x0140;
+        c.step(&mut sim);
+        assert_eq!(c.transition, 0, "no transition without bit0");
+        assert_eq!(c.x, 0x00B0, "and no scroll either: Mario is at the $B0 arm");
+    }
+
     // ---- $0F0B: the scene latch, and the map that feeds it --------------
 
     /// Level 3's real `sSceneMap` (`extracted/levels/level03.scene.bin`): id 7

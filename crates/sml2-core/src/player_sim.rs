@@ -1814,6 +1814,50 @@ impl PlayerSim {
         out
     }
 
+    /// Everything the object engine writes back into Mario's state after its
+    /// pass, in the ROM's order.
+    ///
+    /// Both frame loops call this immediately after [`crate::objects::ObjectSim::step`].
+    /// They used to carry their own copies of this list, and the play loop's copy
+    /// was missing `on_ground_cleared` and `on_ground_obj` outright — a
+    /// divergence no capture could show, because only `--play` had it. Keeping it
+    /// in one place is what stops that recurring; `keys_a` is `hKeysHeld` bit 0,
+    /// because `$2E5C`'s stomp jump is 75 with A held and 48 without.
+    pub fn apply_object_result(&mut self, obj: &mut crate::objects::ObjectSim, keys_a: bool) {
+        // The `$8000` dispatcher gate reads `sMarioDead`, and the interaction
+        // pass writes it back (15 on a harmful hit).
+        if self.dead == 0 && obj.mario_dead != 0 {
+            self.dead = obj.mario_dead;
+        }
+        // `$2DC6`'s item branch stages `sPendingItemId`; the *next* frame's
+        // `$3451` (inside `$0F71`) consumes it.
+        if obj.pending_item != 0 {
+            self.pending_item = obj.pending_item;
+            obj.pending_item = 0;
+        }
+        if let Some(y) = obj.mario_y_adjust {
+            self.y = y;
+        }
+        if obj.on_ground_cleared {
+            self.on_ground = false;
+        }
+        // `$2D7D` clears `sMarioOnObject` at the top of the pass and `$2DF7`
+        // raises it to 255 when Mario stands on a bit5 object; a pass the frame
+        // loop skips (pipe travel) leaves the byte alone, which is what
+        // `objects::step`'s own `!travelling` guard reproduces. Three readers
+        // consume it: `$129F`'s landing arm (via `$1378`), the `$5375`/`$53FE`
+        // frame test and `$307D`'s pan gate.
+        self.on_ground_obj = obj.on_object;
+        if obj.stomp_jump {
+            self.in_air = true;
+            self.vvel = if keys_a { 75 } else { 48 };
+        }
+        if obj.stomp_bounce {
+            self.in_air = true;
+            self.vvel = 49;
+        }
+    }
+
     /// `$2934`: the 0x50-byte save image. The ROM writes it to
     /// `sSaveSlot0` (`$A000`) + `sSaveFileIndex` * `$50`, so the record itself is
     /// slot-independent; a caller decides where it goes.
@@ -2370,6 +2414,53 @@ mod tests {
         assert_eq!(sim.fade_timer, 5);
         assert_eq!(sim.level_tally, 0);
         assert!(!sim.exit_completed);
+    }
+
+    /// The write-back list both frame loops call. The play loop's own copy of it
+    /// was once missing `on_ground_cleared` and `on_ground_obj` outright — a
+    /// divergence no capture could show, because only `--play` had it. One
+    /// function is what stops the two drifting apart again.
+    #[test]
+    fn the_object_write_back_covers_every_field() {
+        let mut sim = small_sim();
+        sim.on_ground = true;
+        let mut obj = crate::objects::ObjectSim::new(Vec::new(), 0);
+        obj.mario_dead = 15;
+        obj.pending_item = 9;
+        obj.mario_y_adjust = Some(0x1234);
+        obj.on_ground_cleared = true;
+        obj.on_object = true;
+        obj.stomp_jump = true;
+
+        sim.apply_object_result(&mut obj, true);
+        assert_eq!(sim.dead, 15, "a harmful hit");
+        assert_eq!(sim.pending_item, 9, "$2DC6's staged item");
+        assert_eq!(obj.pending_item, 0, "and it is consumed from the engine");
+        assert_eq!(sim.y, 0x1234, "the interaction pass moved him");
+        assert!(!sim.on_ground, "$2D7D's landing arm cleared it");
+        assert!(sim.on_ground_obj, "and the bit5 object raised this");
+        assert!(sim.in_air && sim.vvel == 75, "A held: the high stomp jump");
+
+        // Without A held the stomp jump is 48; a bounce is 49 either way.
+        let mut sim2 = small_sim();
+        let mut obj2 = crate::objects::ObjectSim::new(Vec::new(), 0);
+        obj2.stomp_jump = true;
+        sim2.apply_object_result(&mut obj2, false);
+        assert_eq!(sim2.vvel, 48, "$2E5C without A");
+        let mut sim3 = small_sim();
+        let mut obj3 = crate::objects::ObjectSim::new(Vec::new(), 0);
+        obj3.stomp_bounce = true;
+        sim3.apply_object_result(&mut obj3, false);
+        assert_eq!(sim3.vvel, 49, "the brick/bounce arm's fixed 49");
+
+        // An already-dead Mario keeps his byte: `$8000`'s dispatcher gate read it
+        // on this pass, and the write-back does not re-raise it.
+        let mut sim4 = small_sim();
+        sim4.dead = 1;
+        let mut obj4 = crate::objects::ObjectSim::new(Vec::new(), 0);
+        obj4.mario_dead = 15;
+        sim4.apply_object_result(&mut obj4, false);
+        assert_eq!(sim4.dead, 1);
     }
 
     // -----------------------------------------------------------------

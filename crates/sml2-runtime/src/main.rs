@@ -1268,41 +1268,12 @@ fn run_replay(
         };
         if !fade_at_entry {
             // $8000's dispatcher gate reads sMarioDead; the interaction pass
-            // then writes it back (15 on a harmful hit).
+            // then writes it back.
             obj.mario_dead = sim.dead;
             obj.step(cam.x, cam.y, layout, &tables, &mario);
-            if sim.dead == 0 && obj.mario_dead != 0 {
-                sim.dead = obj.mario_dead;
-            }
-            // `$2DC6`'s item branch stages `sPendingItemId`; the *next* frame's
-            // `$3451` (inside `$0F71`) consumes it.
-            if obj.pending_item != 0 {
-                sim.pending_item = obj.pending_item;
-                obj.pending_item = 0;
-            }
-            // The interaction pass writes back into Mario's state.
-            if let Some(y) = obj.mario_y_adjust {
-                sim.y = y;
-            }
-            if obj.on_ground_cleared {
-                sim.on_ground = false;
-            }
-            // $2D7D clears `sMarioOnObject` at the top of the pass and $2DF7
-            // raises it to 255 when Mario stands on a bit5 object; a pass the
-            // frame loop skips (pipe travel) leaves the byte alone, which is
-            // what `step`'s own `!travelling` guard reproduces. Three readers
-            // consume it — `$129F`'s landing arm (via `$1378`), the
-            // `$5375`/`$53FE` frame test and `$307D`'s pan gate — and every one
-            // of them was inert while this stayed false.
-            sim.on_ground_obj = obj.on_object;
-            if obj.stomp_jump {
-                sim.in_air = true;
-                sim.vvel = if keys.a { 75 } else { 48 };
-            }
-            if obj.stomp_bounce {
-                sim.in_air = true;
-                sim.vvel = 49;
-            }
+            // The write-back list lives in the sim so this loop and the play
+            // loop cannot drift apart again (`infra_play_parity_harness`).
+            sim.apply_object_result(&mut obj, keys.a);
         }
         // $20A4: the scene VM. The main loop calls it once per pass *after* the
         // in-level frame pass (home.asm:274), so a latched scene advances
@@ -1951,31 +1922,10 @@ fn run_play(
                 let mario = build_contact(&sim, &keys, 0);
                 obj.mario_dead = sim.dead;
                 obj.step(cam.x, cam.y, layout, tables, &mario);
-                if sim.dead == 0 && obj.mario_dead != 0 {
-                    sim.dead = obj.mario_dead;
-                }
-                if obj.pending_item != 0 {
-                    sim.pending_item = obj.pending_item;
-                    obj.pending_item = 0;
-                }
-                if let Some(y) = obj.mario_y_adjust {
-                    sim.y = y;
-                }
-                // The replay path's write-back list, kept identical: this one
-                // was missing `on_ground_cleared` and `on_ground_obj` outright,
-                // so play mode disagreed with every capture on both.
-                if obj.on_ground_cleared {
-                    sim.on_ground = false;
-                }
-                sim.on_ground_obj = obj.on_object;
-                if obj.stomp_jump {
-                    sim.in_air = true;
-                    sim.vvel = if keys.a { 75 } else { 48 };
-                }
-                if obj.stomp_bounce {
-                    sim.in_air = true;
-                    sim.vvel = 49;
-                }
+                // Same call the replay loop makes. The copy that used to live
+                // here was missing `on_ground_cleared` and `on_ground_obj`, so
+                // play mode disagreed with every capture on both.
+                sim.apply_object_result(&mut obj, keys.a);
             }
         }
         // $20A4: the scene VM, once per frame after the whole in-level pass —

@@ -171,7 +171,6 @@ fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-
 /// Workspace root (`sml2-rs/`), via this crate's manifest dir.
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -188,11 +187,7 @@ fn decomp_root() -> Result<PathBuf, Box<dyn Error>> {
     if let Ok(p) = env::var("SML2_DECOMP_ROOT") {
         let pb = PathBuf::from(p);
         if !pb.join("baserom.gb").is_file() {
-            return Err(format!(
-                "SML2_DECOMP_ROOT={} has no baserom.gb",
-                pb.display()
-            )
-            .into());
+            return Err(format!("SML2_DECOMP_ROOT={} has no baserom.gb", pb.display()).into());
         }
         return Ok(pb);
     }
@@ -201,10 +196,7 @@ fn decomp_root() -> Result<PathBuf, Box<dyn Error>> {
     if sibling.join("baserom.gb").is_file() {
         return Ok(sibling);
     }
-    Err(
-        "sml2decomp not found — set SML2_DECOMP_ROOT to the decomp repo root"
-            .into(),
-    )
+    Err("sml2decomp not found — set SML2_DECOMP_ROOT to the decomp repo root".into())
 }
 
 /// Find the active section bank at a `INCLUDE "..."` site in main.asm.
@@ -396,7 +388,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     // ROM address -> INCBIN'd file resolver (for slicing the extra blocks).
     let mut incbin_ranges: Vec<(u32, String, u64)> = Vec::new();
     for (label, file) in &main_facts.incbin {
-        if let (Some(rom), Ok(md)) = (parse::label_rom(&main_facts, label), fs::metadata(decomp.join(file))) {
+        if let (Some(rom), Ok(md)) = (
+            parse::label_rom(&main_facts, label),
+            fs::metadata(decomp.join(file)),
+        ) {
             incbin_ranges.push((rom, file.clone(), md.len()));
         }
     }
