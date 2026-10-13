@@ -1,0 +1,10 @@
+[package]
+name = "sml2-extract"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+png = "0.17"
+serde = "1.0.229"
+serde_json = "1.0.154"
+sml2-core = { path = "../sml2-core" }

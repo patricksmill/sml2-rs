@@ -1,0 +1,120 @@
+{
+  "active_milestone": "level_1_completion",
+  "queue": [
+    {
+      "id": "coin_collection_3451",
+      "title": "Item collection & coin credit ($3451 / $5B31D consumer)",
+      "asm_refs": [
+        "main.asm:$3451",
+        "main.asm:$5B31D"
+      ],
+      "dependencies": [],
+      "verification_gate": "cargo run -p sml2-runtime -- --level 0 --replay captures/traj6.json",
+      "status": "done"
+    },
+    {
+      "id": "exit_bell_sequence",
+      "title": "Level-exit bell rung arm & camera freeze",
+      "asm_refs": [
+        "main.asm:$1BFF",
+        "main.asm:$1CBA"
+      ],
+      "dependencies": [
+        "coin_collection_3451"
+      ],
+      "verification_gate": "cargo test",
+      "status": "done"
+    },
+    {
+      "id": "item_pickup_anim16",
+      "title": "Object item pickup collision & despawn (mode-A anim 16 / $59C07)",
+      "asm_refs": [
+        "main.asm:$58040",
+        "main.asm:$59C07",
+        "home.asm:$2DC6"
+      ],
+      "dependencies": [
+        "exit_bell_sequence"
+      ],
+      "verification_gate": "cargo test",
+      "status": "done"
+    },
+    {
+      "id": "powerup_transitions_3451",
+      "title": "Mushroom / Carrot / Star powerup execution effects ($3451)",
+      "asm_refs": [
+        "home.asm:$3451",
+        "home.asm:$3534"
+      ],
+      "dependencies": [
+        "item_pickup_anim16"
+      ],
+      "verification_gate": "cargo test",
+      "status": "done"
+    },
+    {
+      "id": "midpoint_bell_arm",
+      "title": "Mid-stage checkpoint bell strike & respawn coordinates save ($A210)",
+      "asm_refs": [
+        "home.asm:$34EC",
+        "home.asm:$3451"
+      ],
+      "dependencies": [
+        "powerup_transitions_3451"
+      ],
+      "verification_gate": "cargo test",
+      "status": "done"
+    },
+    {
+      "id": "bounce_block_powerup_spawn",
+      "title": "Question & brick block powerup item emergence ($591F / $58040)",
+      "asm_refs": [
+        "main.asm:$591F",
+        "main.asm:$58040"
+      ],
+      "dependencies": [
+        "powerup_transitions_3451"
+      ],
+      "verification_gate": "cargo test",
+      "status": "done"
+    },
+    {
+      "id": "spinjump_block_destroy",
+      "title": "Spin-jump downward brick tile destruction ($1327 / $1993)",
+      "asm_refs": [
+        "home.asm:$1327",
+        "home.asm:$1993"
+      ],
+      "dependencies": [
+        "powerup_transitions_3451"
+      ],
+      "verification_gate": "cargo test",
+      "status": "done"
+    },
+    {
+      "id": "stage_clear_time_tally",
+      "title": "Post-bell score tally & timer countdown hand-off ($3547 / $3C94)",
+      "asm_refs": [
+        "home.asm:$3547",
+        "home.asm:$3C94"
+      ],
+      "dependencies": [
+        "exit_bell_sequence"
+      ],
+      "verification_gate": "cargo test",
+      "status": "done"
+    },
+    {
+      "id": "game_over_scene",
+      "title": "Zero lives game-over transition to state $1E",
+      "asm_refs": [
+        "home.asm:$319F"
+      ],
+      "dependencies": [
+        "powerup_transitions_3451"
+      ],
+      "verification_gate": "cargo test",
+      "status": "pending"
+    }
+  ]
+}
