@@ -1344,8 +1344,19 @@ impl PlayerSim {
                 }
             }
         }
-        // $1701 horizontal acceleration
-        if !self.goal_bell && !self.ducking && !self.x_pushed {
+        // $1701 horizontal acceleration. The ROM's first instruction here is
+        // `ld a,[sGoalBell] / and a / jp nz,$17C5`: while the bell is ringing the
+        // input is not merely ignored, it is *replaced*. `$17C5` faces Mario
+        // right and re-arms his horizontal velocity every frame — `$B8` grounded,
+        // `$80` airborne, so he coasts rather than accelerating — and `$16CC`'s
+        // friction below then takes 4 off, which is what makes the coast
+        // ~1.4 px/frame: the speed that carries him from the bell into the exit
+        // door 56 px away. Skipping the block instead — what this port did — left
+        // him frozen where the bell was struck and never reaching it.
+        if self.goal_bell {
+            self.dir_right = true;
+            self.hvel = if self.on_ground { 0xB8 } else { 0x80 };
+        } else if !self.ducking && !self.x_pushed {
             if keys.right {
                 self.dir_right = true;
                 self.hvel = self.hvel.wrapping_add(8);
@@ -3705,6 +3716,61 @@ mod tests {
         none.game_over_enter();
         assert_eq!(none.level_tally, 0x07);
         assert_eq!(none.golden_coin_flags, 0);
+    }
+
+    /// `$17C5`: while the bell rings, the input block is *replaced*, not skipped.
+    /// Mario faces right and his horizontal velocity is re-armed every frame, so
+    /// `$16CC`'s friction leaves him coasting into the exit door; airborne it is
+    /// `$80` — no drift — so the coast is grounded-only.
+    ///
+    /// No capture can see this: level 1's bell sits at anchor y 360 and the
+    /// measured jump apex on that floor is y 399, 44 px short of the touch window
+    /// (`marioY - objectY` in `[-43, -13)`) — so no shipped capture ever rings a
+    /// bell, and this test is the only coverage the behaviour has.
+    #[test]
+    fn the_goal_bell_replaces_the_input_with_a_rightward_coast() {
+        let keys = PlayerKeys::default();
+        let layout = blank_layout();
+
+        let mut sim = small_sim();
+        sim.hvel = 0x80;
+        // `on_ground_obj` is what makes `$129F` skip the floor probe, so he stays
+        // grounded on this floor-less layout; otherwise he is airborne and the
+        // bell takes the *other* arm.
+        sim.on_ground = true;
+        sim.on_ground_obj = true;
+        sim.step(&keys, false, &layout);
+        assert!(sim.on_ground, "still grounded");
+        assert_eq!(sim.hvel, 0x80, "no bell, no input: he stands");
+
+        sim.goal_bell = true;
+        sim.hvel = 0x80;
+        sim.step(&keys, false, &layout);
+        assert!(sim.dir_right, "$17C5 faces him right");
+        assert_eq!(
+            sim.hvel, 0xB4,
+            "$B8 re-armed, then $16CC's friction takes 4"
+        );
+
+        // Airborne: `$80`, and friction does not run, so there is no drift.
+        sim.on_ground_obj = false; // else `$129F` re-grounds him on the next probe
+        sim.on_ground = false;
+        sim.in_air = true;
+        sim.step(&keys, false, &layout);
+        assert_eq!(sim.hvel, 0x80, "$17C5's airborne arm");
+
+        // The bell arm is the first branch, so it also ignores the duck and
+        // push gates the normal arm has (`$17C5` is reached before either).
+        sim.on_ground_obj = true;
+        sim.on_ground = true;
+        sim.in_air = false;
+        sim.ducking = true;
+        sim.step(&keys, false, &layout);
+        assert_eq!(
+            sim.hvel, 0xB4,
+            "still walking: the bell arm has no duck gate"
+        );
+        assert!(sim.dir_right, "and no direction change");
     }
 
     /// The six bytes live inside the block `$2934` saves, so a collected coin
