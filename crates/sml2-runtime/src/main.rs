@@ -174,6 +174,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map(|c| c.1)
             .unwrap_or(manifest.header.camera_start_y),
     );
+    // The level's 48-byte `sScreenEdgeMap` (`$03F1`). Both modes need it: the
+    // replay harness derives `$FF98` from it and checks the captured byte, and
+    // play mode has no capture to fall back on — without the table its camera
+    // runs with every edge bit clear, so the vertical follow takes the
+    // no-hard-edge branches and drifts downward over a jump.
+    let edge_map = fs::read(levels_dir.join(format!("level{nn:02}.edge.bin"))).ok();
     if let Some(rf) = replay_file {
         return run_replay(
             &rf,
@@ -185,6 +191,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             hud.window_y,
             spr,
             filmstrip.as_deref(),
+            edge_map,
         );
     }
     if play_mode {
@@ -197,7 +204,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             manifest.header.camera_start_y,
         );
         cam.prev_mario_y_lo = sim.y as u8;
-        let edge = fs::read(levels_dir.join(format!("level{nn:02}.edge.bin"))).ok();
         let obj = sml2_core::objects::ObjectSim::new(manifest.spawns.records.clone(), cam.x);
         return run_play(
             &manifest,
@@ -212,7 +218,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             sim,
             cam,
             obj,
-            edge,
+            edge_map,
         );
     }
     if window_mode {
@@ -924,10 +930,19 @@ fn run_replay(
     hud_y: u8,
     mut spr: Option<SpriteCtx>,
     filmstrip: Option<&Path>,
+    edge_map: Option<Vec<u8>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let frames: Vec<Frame> = serde_json::from_str(&fs::read_to_string(path)?)?;
     if frames.len() < 2 {
         return Err("replay: need at least 2 frames".into());
+    }
+    // The level's 48-byte sScreenEdgeMap: with it the port derives `$FF98`
+    // itself and the capture's byte becomes a check. Without it the captured
+    // byte is injected as before (and the run says so, so the gate cannot
+    // quietly pass with the port's own edge map never exercised).
+    let own_edges = matches!(edge_map.as_ref(), Some(e) if e.len() == 48);
+    if !own_edges {
+        println!("note: level edge table missing — replaying with the captured $FF98");
     }
     let mut sim = PlayerSim::new();
     sim.powerup = 0; // level-0 spawn starts small
@@ -948,6 +963,9 @@ fn run_replay(
     cam.prev_mario_y_lo = f0.y as u8;
     cam.map_scroll_limit = f0.limit;
     cam.auto_scroll = f0.autoscroll;
+    if let Some(e) = edge_map.as_ref() {
+        cam.edge_map.copy_from_slice(e);
+    }
     let mut obj = sml2_core::objects::ObjectSim::new(manifest.spawns.records.clone(), cam.x);
     obj.easy_mode = f0.easy != 0;
     obj.configure(manifest.level_id);
@@ -1023,6 +1041,14 @@ fn run_replay(
         // poll, and its last call credits the BCD tally and marks the `$14`
         // hand-off. (The death fade's decrement stays with the gap handler
         // below, whose duration check owns that cycle.)
+        //
+        // $FF98 is read from the level's edge table at the camera's *current*
+        // cell, before the camera moves ($0B39) — and the console's sampled
+        // byte still holds that pre-move value on the frame a crossing
+        // happens, so it is read here and checked after the step. Recomputing
+        // it on a dead/fade frame is right: the camera has not moved, so the
+        // cell (and the console's stale $FF98) is unchanged.
+        let cam_edge_before = if own_edges { cam.edge_byte() } else { f.edge };
         let fade_at_entry = sim.dead_fade || sim.exit_phase;
         if sim.dead_fade || sim.exit_phase {
             if sim.exit_phase {
@@ -1059,10 +1085,15 @@ fn run_replay(
                 let special = obj.below_bonk(by, bx, scroll_y, scroll_x);
                 sim.resolve_bump_coin(special);
             }
-            cam.edge_now = Some(f.edge);
+            cam.edge_now = if own_edges { None } else { Some(f.edge) };
             cam.step(&mut sim);
             cam.update_enables(sim.x);
         }
+        // $FF98 for this frame. `own_edges` makes it the port's own derivation
+        // from the level's 48-byte table (checked below); otherwise the
+        // captured byte is what the camera ran with, so the check is a
+        // tautology — the missing-table note above is what fails the gate.
+        let edge_derived = if own_edges { cam_edge_before } else { f.edge };
         let mario = sml2_core::objects::MarioContact {
             x: sim.x,
             y: sim.y,
@@ -1296,6 +1327,11 @@ fn run_replay(
                     f.camyh & 0x0F,
                     f.camy
                 ),
+            );
+            push(
+                "edge",
+                edge_derived == f.edge,
+                format!("edge sim=${:02X} exp=${:02X}", edge_derived, f.edge),
             );
             push(
                 "en_r",
@@ -1630,6 +1666,11 @@ fn run_play(
         if e.len() == 48 {
             cam.edge_map.copy_from_slice(e);
         }
+    } else {
+        // Play mode has no capture to fall back on: with no table every edge
+        // bit reads clear, so the vertical follow takes the no-hard-edge
+        // branches and drifts downward over a jump.
+        println!("note: level edge table missing — the camera will scroll with no edge bits");
     }
     use minifb::{Key, Window, WindowOptions};
     let mut window = Window::new(

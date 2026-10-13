@@ -12,11 +12,17 @@
 //!   park Mario at screen X `$3F`/`$40` when scrolling right, `$70`/`$71`
 //!   when scrolling left.
 //! - Vertical: delta = the player's Y change this frame (8-bit, against
-//!   `sPrevMarioY`). Moving down scrolls only when Mario's screen Y ≥ `$50`;
-//!   moving up only when < `$28` (`$40` when `sMapScrollLimit` is set). No
-//!   lead correction. The edge-lock/transition paths (`$C0`/`$48` rows,
-//!   flip-screen animations) are omitted — flagged, used only by levels
-//!   whose `sScreenEdgeMap` bits are set.
+//!   `sPrevMarioY`). Moving down scrolls only when Mario's screen Y ≥ `$50`
+//!   (`$58` where the cell's `sScreenEdgeMap` bit3 — the hard down edge — is
+//!   set); moving up only when < `$28` (`$40` when `sMapScrollLimit` is set,
+//!   `$38` with bit2). No lead correction. The `$C0`/`$48` lock rows arm the
+//!   screen transitions (`$0DED` scroll, flip-screen animation), which the
+//!   `transition` field models.
+//! - `$FF98` (`$0B39`): the cell's edge bits come from the level's 48-byte
+//!   `sScreenEdgeMap` at `(Yhi & $0F) * 16 + (Xhi & $0F)`, read *before* the
+//!   camera moves. Both follow axes test those bits, so a level whose table
+//!   is not loaded scrolls with every edge clear — down 8 px early on each
+//!   descent, which ratchets the camera below the level.
 //! - All arithmetic on the low bytes like the engine; the hi byte is masked
 //!   to `$0F` (12-bit world).
 
@@ -99,14 +105,27 @@ impl CameraSim {
         self.sfx0 = 0;
     }
 
+    /// `$0B39`: `sScreenEdgeMap[(sCameraY_hi << 4) | sCameraX_hi]` → `$FF98`.
+    /// The ROM builds the index with `swap a` on the camera Y *high* byte
+    /// (`$FFC9`) and `or`s the camera X high byte (`$FFCB`) — i.e.
+    /// `(Yhi & $0F) * 16 + (Xhi & $0F)`, so the low nibble is the X cell, not
+    /// the X low byte. The table is 48 bytes (3 rows of 16 cells), so a row
+    /// above 2 reads 0; no level is taller than that.
     fn edge_bits(&self) -> u8 {
         if let Some(e) = self.edge_now {
             return e;
         }
         let xi = ((self.x >> 8) & 0x0F) as usize;
         let yi = ((self.y >> 8) & 0x0F) as usize;
-        let idx = (yi & 0x03) * 16 + xi;
-        self.edge_map.get(idx).copied().unwrap_or(0)
+        self.edge_map.get(yi * 16 + xi).copied().unwrap_or(0)
+    }
+
+    /// The `$FF98` this camera position derives — what the next camera update
+    /// reads. The replay harness checks it against the capture's sampled byte
+    /// (the console's `$FF98` still holds the *pre-move* cell's value when the
+    /// camera crosses a screen boundary, so the check runs before the step).
+    pub fn edge_byte(&self) -> u8 {
+        self.edge_bits()
     }
 
     /// The draw-step half (`$54A7`): Mario's screen X sets the enable for
@@ -333,4 +352,80 @@ impl CameraSim {
         self.scene_id = self.scene_map.get(idx).copied().unwrap_or(0);
         self.palette_fade_step = 0;
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The shape of level 1's real `sScreenEdgeMap` record (bank 9, pointer
+    /// `$4004`, `layout_index` 0): row 1 carries the up/down lock bits, the
+    /// right column `$0D`, the last cell `$0F`.
+    fn level1_table() -> [u8; 48] {
+        let mut t = [0u8; 48];
+        t[16] = 0x0E;
+        t[17] = 0x0C;
+        t[31] = 0x0D;
+        t[46] = 0x0F;
+        t
+    }
+
+    fn cam_at(x: u16, y: u16) -> CameraSim {
+        let mut c = CameraSim::new(x, y);
+        c.edge_map = level1_table();
+        c
+    }
+
+    /// `$0B39`: the index is `(Yhi & $0F) * 16 + (Xhi & $0F)` — the X *cell*
+    /// in the low nibble (the ROM `or`s the X high byte, not the low one).
+    #[test]
+    fn edge_byte_indexes_by_the_camera_cell() {
+        assert_eq!(cam_at(80, 448).edge_byte(), 0x0E); // x cell 0, row 1
+        assert_eq!(cam_at(257, 448).edge_byte(), 0x0C); // x cell 1
+        assert_eq!(cam_at(3840, 448).edge_byte(), 0x0D); // x cell 15
+        assert_eq!(cam_at(80, 720).edge_byte(), 0x00); // row 2, unset
+    }
+
+    /// The table is 48 bytes (3 rows of 16 cells): a row above 2 reads 0
+    /// instead of wrapping into the next row.
+    #[test]
+    fn edge_byte_is_zero_past_the_third_row() {
+        assert_eq!(cam_at(257, 448 + 4 * 256).edge_byte(), 0x00);
+        assert_eq!(cam_at(257, 448 + 15 * 256).edge_byte(), 0x00);
+    }
+
+    /// The replay fallback: `edge_now` still overrides the lookup, which is
+    /// what a level with no extracted table falls back to.
+    #[test]
+    fn edge_now_overrides_the_table() {
+        let mut c = cam_at(257, 448);
+        c.edge_now = Some(0xAB);
+        assert_eq!(c.edge_byte(), 0xAB);
+    }
+
+    /// The drift bug: `$0C7D`'s down-follow waits for screen Y `$58` when the
+    /// cell's hard down edge (bit3) is set, and only `$50` when it is clear.
+    /// An all-zero table therefore scrolls the camera down 8 px early on every
+    /// descent — and because each jump re-arms it, the camera ratchets below
+    /// the level and the floor scrolls up into view.
+    #[test]
+    fn the_down_follow_waits_for_the_hard_edge_threshold() {
+        // Camera at row 1, Mario 84 px down the screen: between $50 and $58.
+        let mut sim = PlayerSim::new();
+        sim.x = 100;
+        sim.x_sub = 0;
+        sim.y = 0x34;
+
+        let mut with_edge = cam_at(80, 0x140);
+        with_edge.prev_mario_y_lo = 0x30; // descended 4 px this frame
+        with_edge.step(&mut sim);
+        assert_eq!(with_edge.y, 0x140, "bit3 set: 84 < $58, the camera holds");
+
+        let mut without_edge = cam_at(80, 0x140);
+        without_edge.edge_map[16] = 0x04; // same cell, bit3 clear
+        without_edge.prev_mario_y_lo = 0x30;
+        without_edge.step(&mut sim);
+        assert_eq!(without_edge.y, 0x144, "bit3 clear: 84 >= $50, it follows");
+    }
+
 }

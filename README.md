@@ -15,7 +15,8 @@ cargo run -p sml2-extract                      # writes ./extracted/
 
 ## Replay gate
 
-From this repo root, after extract:
+From this repo root, after extract (`cargo run --release -p sml2-extract` — it
+also writes the per-level `levels/levelNN.edge.bin` camera edge maps):
 
 ```sh
 for f in traj4_ff0 traj5 traj6 traj7 traj8 traj9 traj10 traj11 traj12 traj13 \
@@ -24,6 +25,12 @@ for f in traj4_ff0 traj5 traj6 traj7 traj8 traj9 traj10 traj11 traj12 traj13 \
 done
 ```
 
+Every field on that line must read `0` (`traj4_ff0` keeps its documented legacy
+`$FFF0` divergence) and no `note:` line may appear. A `note: level edge table
+missing` means the extract step was skipped or stale — the replay then falls
+back to injecting the capture's `$FF98` and the run no longer proves the port's
+own edge map. The `edge` field is that proof: it derives `$FF98` from
+`levelNN.edge.bin` at the camera's cell and compares it with the captured byte.
 (`traj4.json` is legacy; prefer `traj4_ff0`. `traj13_full` is retired and not tracked.)
 
 ## Captures

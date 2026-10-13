@@ -180,13 +180,43 @@ enable for that side is on (Mario past screen X `$60`), with the ±1
 lead-correction parking him at screen X `$3F/$40` (right) / `$70/$71`
 (left), the `$B0`/`$50` column locks + pull-backs from the per-sector
 `sScreenEdgeMap` (extracted from the ROM for all 32 levels as
-`levels/*.edge.bin`), and the vertical follow with the `$50`/`$28($40)`
+`levels/*.edge.bin` — as of 2026-10-13; see the correction below), and the
+vertical follow with the `$50`/`$28($40)`
 thresholds and `$C0`/`$48` row locks. The `$FFC6` frame selection is ported
 as `player_sim::frame_index`. Both verified: the same 882-frame replay now
 also matches camx, camy and both scroll enables exactly (12 fields, zero
 divergence) — including the frame where the camera unlocks at screen X `$60`
 and the `$50`-column pull-back. `--play` wires sim + camera + renderer into
 the interactive window; `--filmstrip` renders replayed sim states to PNGs.
+
+**Correction (2026-10-13): the `levels/*.edge.bin` claim above was false when
+written.** This file asserted the 48-byte table was "extracted from the ROM for
+all 32 levels" while `sml2-extract` never wrote it, and the replay harness hid
+the gap by *injecting* the console's sampled `$FF98`
+(`cam.edge_now = Some(f.edge)`) rather than deriving it — so the gate exercised
+the edge branches with the console's own bytes, and `--play`, the only mode that
+had to derive them, ran with `edge_map = [0; 48]`, i.e. every edge bit clear.
+The visible effect is a camera that creeps **down**: `$0C7D`'s down-follow uses
+`sy >= $50` when the cell's bit3 (hard down edge) is clear and `sy >= $58` when
+it is set, so each descent scrolled 8 px early and the ratchet walked the view
+below the level floor — "Mario centred in the frame, seeing under the map". The
+`$B0`/`$50` column locks were dead in play mode for the same reason.
+
+Fixed the same day: the extractor writes `levelNN.edge.bin` (bank = header +13
+`sLevelDataBank`; base = the little-endian pointer at `[bank:$4000]`; source =
+`base + (layout_index & $0F) * 48`, 48 bytes — `$03F1`, home.asm 539-571); the
+replay path loads it, *derives* `$FF98` and checks the captured byte (`edge`),
+and play mode loads the same file, printing a `note:` if it is missing so
+neither mode can run edge-less silently. The lookup index is the ROM's
+`(Yhi & $0F) * 16 + (Xhi & $0F)` (the `swap a`/`or` at home.asm 1522-1532) —
+the port had `& $03` on the Y nibble, which only differs for a row above 3.
+Verified: the extracted record reproduces the captured `$FF98` on **49,288 of
+49,288** gate-capture frames, with a one-frame lag — the console samples `$FF98`
+after its camera update, so on a crossing frame it still holds the *pre-move*
+cell's value, which is why the check reads the port's camera before `cam.step`.
+The gate is all-zero on all 16 captures including the new `edge` field, and
+`camera::tests::the_down_follow_waits_for_the_hard_edge_threshold` pins the
+8 px branch difference directly.
 
 Object spawner shipped 2026-10-11: `sml2_core::objects` — the bank-2 `$8000`
 object engine's spawn half: camera windows (act ±`$60`, scan ±`$70`, alive
@@ -749,7 +779,9 @@ Verified engine semantics to preserve in the port:
   Mario at screen X `$3F/$40` (right) or `$70/$71` (left) — the dead zones
   the replays key on. Column locks (`$B0`-row bit0, `$50`-column bit1) and
   row locks (`$48` up / `$C0` down) come from the per-sector
-  `sScreenEdgeMap` (`levels/*.edge.bin`); with bit1 set, a camera below the
+  `sScreenEdgeMap` (`levels/*.edge.bin`, extracted only as of 2026-10-13 — the
+  correction above; the replay check `edge` now derives `$FF98` from it and
+  compares the capture); with bit1 set, a camera below the
   `$50` column creeps back +1/frame (observed live and required for
   parity). Vertical: follows the player's Y change only outside the
   [`$28`(`$40` with `sMapScrollLimit`), `$50`] dead zone.

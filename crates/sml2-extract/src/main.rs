@@ -484,6 +484,27 @@ fn main() -> Result<(), Box<dyn Error>> {
         fs::write(out_dir.join(&layout_file), &decompressed)?;
         let layout = LevelLayout::from_bytes(&decompressed)?;
 
+        // The level's 48-byte `sScreenEdgeMap` record — the camera's per-cell
+        // edge bits (bit0 right, bit1 left, bit2 up, bit3 down) that `$0B39`
+        // reads into `$FF98` and the vertical follow's hard-edge branches test.
+        // `$03F1` copies it from the pointer at `[sLevelDataBank:$4000]` plus
+        // `(sLevelLayoutIndex & $0F) * 48` (the ROM builds that offset as
+        // `idx*3` split across the nibbles — `idx * 3 * 16`).
+        let edge_bank = header.level_data_bank as usize;
+        let edge_base = baserom[edge_bank * 0x4000] as usize
+            | ((baserom[edge_bank * 0x4000 + 1] as usize) << 8);
+        if !(0x4000..0x8000).contains(&edge_base) {
+            return Err(format!(
+                "{}: sScreenEdgeMap pointer ${edge_base:04X} is outside bank {edge_bank}",
+                raw.label
+            )
+            .into());
+        }
+        let edge_off =
+            edge_bank * 0x4000 + (edge_base - 0x4000) + (header.layout_index & 0x0F) as usize * 48;
+        let edge_file = format!("level{nn:02}.edge.bin");
+        fs::write(out_dir.join(&edge_file), &baserom[edge_off..edge_off + 48])?;
+
         // graphics
         let ts = &tilesets[i];
         let gfx_bank = *main_facts
