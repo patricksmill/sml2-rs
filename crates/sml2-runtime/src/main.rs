@@ -204,6 +204,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             manifest.header.camera_start_y,
         );
         cam.prev_mario_y_lo = sim.y as u8;
+        // The two per-level property bytes the ROM loads at $04F1: sMapScrollLimit
+        // from `LevelPropertiesUNK` and sAutoScroll from `LevelPropertiesScroll`
+        // (home.asm:741-747 / 633-639). Both are already in the manifest, and the
+        // replay path takes them from its capture's frame 0 — play mode had no
+        // source at all and ran on the defaults, the same shape of gap the edge
+        // map had. Level 1 is $00 in both, so its play and replay agree.
+        cam.map_scroll_limit = manifest.properties.unknown != 0;
+        cam.auto_scroll = manifest.properties.auto_scroll;
+        if cam.auto_scroll != 0 {
+            println!("note: level is autoscroll; that path is not modelled");
+        }
         let obj = sml2_core::objects::ObjectSim::new(manifest.spawns.records.clone(), cam.x);
         return run_play(
             &manifest,
@@ -251,6 +262,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             view.1,
             Some((&hud_row, hud.window_y)),
             spr.as_ref(),
+            None,
         )?;
         write_png_scaled(&out, view.0, view.1, scale, &frame)?;
         println!(
@@ -445,6 +457,7 @@ fn run_window(
             vh,
             Some((hud_row, hud_y)),
             spr,
+            None,
         )?;
         // Integer-scale + letterbox into the current window size.
         let (win_w, win_h) = window.get_size();
@@ -515,6 +528,11 @@ fn render_view(
     vh: usize,
     hud: Option<(&[u8], u8)>,
     spr: Option<&SpriteCtx>,
+    // `$2756`'s pause flash: the byte the ROM writes to `sBGPalette` (and to
+    // `sOAMPalette1`, which the caller applies to `spr.obp0`) while paused,
+    // standing in for the level's BG palette. `None` on every other frame —
+    // which is every frame any replay sees, so the gate is unaffected.
+    pal_override: Option<u8>,
 ) -> Result<Vec<u8>, String> {
     // Decode every tile in the composed block once.
     let tiles: Vec<[u8; 64]> = (0..256u16)
@@ -524,7 +542,7 @@ fn render_view(
             video::tile_colors(&bytes)
         })
         .collect();
-    let shades = video::bgp_shades(manifest.header.palettes[0]);
+    let shades = video::bgp_shades(pal_override.unwrap_or(manifest.header.palettes[0]));
     let world_w = (LAYOUT_WIDTH * 16) as i32;
     let world_h = (LAYOUT_HEIGHT * 16) as i32;
     let sx = clamp_axis(cam_x as i32 - vw as i32 / 2, vw as i32, world_w);
@@ -1005,6 +1023,10 @@ fn run_replay(
             down: f.down,
             a: f.a,
             b: f.b,
+            // The replay `Frame` carries no START/SELECT: no capture records
+            // them, and the pause state is only reachable interactively.
+            start: false,
+            select: false,
         };
         let a_pressed = f.a && !prev_a;
         prev_a = f.a;
@@ -1239,6 +1261,7 @@ fn run_replay(
                     SCREEN_H,
                     Some((&hud_live, hud_y)),
                     spr.as_ref(),
+                    None,
                 )?;
                 let out = dir.join(format!("frame_{i:04}.png"));
                 write_png_scaled(&out, SCREEN_W, SCREEN_H, 2, &frame)?;
@@ -1682,7 +1705,7 @@ fn run_play(
     use minifb::{Key, Window, WindowOptions};
     let mut window = Window::new(
         &format!(
-            "sml2 level {} — play (arrows move, Z jump, X run, Q quits)",
+            "sml2 level {} — play (arrows move, Z jump, X run, ENTER pause, Q quits)",
             manifest.level_id
         ),
         vw * scale,
@@ -1698,10 +1721,14 @@ fn run_play(
     let mut anim_timer: u32 = 0;
     let mut anim_phase: u8 = 0;
     let mut prev_a = false;
+    let mut prev_start = false;
+    let mut prev_select = false;
     obj.configure(manifest.level_id);
     let obj_tables = spr.as_ref().map(|s| s.tables.clone());
     while window.is_open() && !window.is_key_down(Key::Escape) && !window.is_key_down(Key::Q) {
         let a_down = window.is_key_down(Key::Z) || window.is_key_down(Key::Space);
+        let start_down = window.is_key_down(Key::Enter);
+        let select_down = window.is_key_down(Key::Backspace);
         let keys = PlayerKeys {
             right: window.is_key_down(Key::Right),
             left: window.is_key_down(Key::Left),
@@ -1709,13 +1736,24 @@ fn run_play(
             down: window.is_key_down(Key::Down),
             a: a_down,
             b: window.is_key_down(Key::X) || window.is_key_down(Key::LeftShift),
+            start: start_down,
+            select: select_down,
         };
         let a_pressed = a_down && !prev_a;
         prev_a = a_down;
+        // START and SELECT are read as press edges, like `hKeysPressed` — the
+        // ROM's pause entry and resume both test the press, not the hold.
+        let start_pressed = start_down && !prev_start;
+        prev_start = start_down;
+        let select_pressed = select_down && !prev_select;
+        prev_select = select_down;
         sim.camx = cam.x;
         sim.camy = cam.y;
-        // $FF97: the engine's frame counter ticks once per game frame.
+        // $FF97: the engine's frame counter ticks once per game frame. The
+        // full byte is kept because the pause flash reads bit 4 of it; `phase`
+        // is its low three bits.
         sim.phase = (sim.phase + 1) & 7;
+        sim.frame_counter = sim.frame_counter.wrapping_add(1);
         // $05E4/$0640: dead → the arc only; the death fade freezes everything.
         let was_dead = sim.dead == 0xFF;
         // The fade-trigger frame still runs the object engine ($0640
@@ -1724,8 +1762,14 @@ fn run_play(
         // the in-level loop, so everything freezes while either is set.
         // VBlank still ticks `sFadeTimer`; the exit fade's last step is
         // `$3547`'s BCD tally + the `$14` hand-off.
-        let fade_at_entry = sim.dead_fade || sim.exit_phase;
-        if sim.dead_fade || sim.exit_phase {
+        //
+        // `$2756` (the pause) replaces the whole state-`$04` body, so a paused
+        // frame freezes exactly like a fade — and like the fades the flag is
+        // read at entry, so the frame START lands on still runs its object
+        // pass (the ROM's `$273E` sits at the frame tail) before the freeze
+        // takes effect on the next one.
+        let frozen = sim.paused || sim.dead_fade || sim.exit_phase;
+        if frozen {
             if sim.exit_phase {
                 sim.exit_fade_step();
             }
@@ -1753,7 +1797,7 @@ fn run_play(
             cam.update_enables(sim.x);
         }
         if let Some(tables) = &obj_tables {
-            if !fade_at_entry {
+            if !frozen {
                 let mario = sml2_core::objects::MarioContact {
                     x: sim.x,
                     y: sim.y,
@@ -1826,6 +1870,35 @@ fn run_play(
                 })
                 .collect();
         }
+        // $273E: the START check at the tail of the in-level frame — the ROM
+        // calls it from the alive and the dead branch alike. START toggles the
+        // pause; the ROM requires `sScreenTransition == 0` and blanks both key
+        // bytes while `sFadeTimer != 0`, so those two gates are applied here.
+        // While paused, SELECT abandons the level instead when
+        // `sLevelProgressFlags` bit 7 says it was already cleared.
+        if sim.fade_timer == 0 && cam.transition == 0 {
+            if start_pressed {
+                if sim.paused {
+                    sim.pause_exit();
+                } else {
+                    sim.pause_enter();
+                }
+            } else if sim.paused && select_pressed {
+                sim.pause_select_exit();
+            }
+        }
+        // $2756: a paused frame writes the flash byte to `sBGPalette` *and*
+        // `sOAMPalette1`, so BG and OBJ0 flash together; `sOAMPalette2` (OBP1)
+        // is never touched. Unpaused frames restore the level's OBJ0 value, so
+        // this stays idempotent per frame.
+        let flash = if sim.paused {
+            Some(sim.pause_flash())
+        } else {
+            None
+        };
+        if let Some(s) = spr.as_mut() {
+            s.obp0 = flash.unwrap_or(manifest.header.palettes[1]);
+        }
         anim_timer += 1;
         if manifest.tile_anim.enabled && anim_timer >= manifest.tile_anim.speed as u32 * 2 {
             anim_timer = 0;
@@ -1847,6 +1920,7 @@ fn run_play(
             vh,
             Some((&hud_live, hud_y)),
             spr.as_ref(),
+            flash,
         )?;
         // Integer-scale + letterbox into the current window size.
         let (win_w, win_h) = window.get_size();

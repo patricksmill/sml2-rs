@@ -182,12 +182,15 @@ impl CameraSim {
         // packs directions in bits 4-7 (bit7 Down, bit6 Up, bit5 Left,
         // bit4 Right) and actions in bits 0-3 (bit1 B, bit0 A, bit2 Select,
         // bit3 Start), so $82 is exactly Down+B and $42 exactly Up+B.
-        // Select and Start are the two bits `cp` also tests that PlayerKeys
-        // cannot express today: holding either must CANCEL the pan. That is
-        // latent until START is modelled (see the `pause_and_palette_flash`
-        // queue item), at which point this gate has to include it.
-        let b_down = keys.b && keys.down && !(keys.a || keys.up || keys.left || keys.right);
-        let b_up = keys.b && keys.up && !(keys.a || keys.down || keys.left || keys.right);
+        // Select and Start are the two other bits `cp` tests, and PlayerKeys
+        // now carries both (the pause work added them): holding either must
+        // CANCEL the pan, so they are part of the exact-match test.
+        let b_down = keys.b
+            && keys.down
+            && !(keys.a || keys.up || keys.left || keys.right || keys.start || keys.select);
+        let b_up = keys.b
+            && keys.up
+            && !(keys.a || keys.down || keys.left || keys.right || keys.start || keys.select);
         if b_down {
             self.pan_down();
         } else if b_up {
@@ -694,11 +697,11 @@ mod tests {
     /// any extra held button — A, the opposite direction, left/right — makes
     /// the byte unequal and cancels the pan. (`$82` = B+Down, `$42` = B+Up in
     /// the `$1FD2` layout: bit0 A, bit1 B, bit2 Select, bit3 Start, bit4
-    /// Right, bit5 Left, bit6 Up, bit7 Down.) `PlayerKeys` has no
-    /// Select/Start, so those can never be the extra button here.
+    /// Right, bit5 Left, bit6 Up, bit7 Down.) Select and Start are part of the
+    /// test now that `PlayerKeys` carries them: holding either cancels a pan.
     #[test]
     fn crouch_pan_requires_exactly_b_plus_the_direction() {
-        let not_b_down: [(&str, PlayerKeys); 6] = [
+        let not_b_down: [(&str, PlayerKeys); 8] = [
             (
                 "B+Down+A ($83)",
                 PlayerKeys {
@@ -746,6 +749,24 @@ mod tests {
                 "Down alone ($80)",
                 PlayerKeys {
                     down: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "B+Down+Start ($8A) — cp $82 tests the whole byte",
+                PlayerKeys {
+                    down: true,
+                    b: true,
+                    start: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "B+Down+Select ($86)",
+                PlayerKeys {
+                    down: true,
+                    b: true,
+                    select: true,
                     ..Default::default()
                 },
             ),

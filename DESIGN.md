@@ -760,10 +760,36 @@ Verified engine semantics to preserve in the port:
   (x ∈ (objX−24, objX−19)), wait for state 0, then walk through — the contact
   takes the `$80` branch, writing `sPendingItemId = 0`, which the `$3451`
   consumer drops.
-- **Pause flashes the palettes**: pressing START in-level alternates
-  `BGP`/`OBP0` between `$E7` and `$93` every 16 frames (two inverted remaps)
-  and restores the level values on resume. Port this faithfully (it is not a
-  bug); `OBP1` is unaffected.
+- **Pause flashes the palettes** — ported 2026-10-13. It is game state
+  `$FF9B = 8` (`$273E` entry at the frame tail of `$05D5`/`$0640`, handler
+  `$2756`), not a separate mode: the whole state-`$04` body is replaced, so the
+  player, camera and object engine stop while VBlank, `$FF97`, the sound
+  update and the scene script interpreter keep running. The flash is **bit 4 of
+  the `$FF97` counter read every frame** — `$E7` when clear, `$93` when set,
+  i.e. 16 frames of each, a 32-frame cycle with no timer and no reload — and
+  the *same* byte is written to `sBGPalette` **and** `sOAMPalette1`
+  (`home.asm:5204-5206`), so BG and OBJ0 flash together while `sOAMPalette2`
+  (i.e. `OBP1`) is never touched. Entry needs `hKeysPressed == $08` exactly
+  plus `sScreenTransition == 0`; the in-level loop blanks both key bytes while
+  `sFadeTimer != 0`, so START is ignored during a fade. Resume is any frame
+  with the START press bit, restoring `sBGPalette`/`sOAMPalette1`/
+  `sOAMPalette2` from the `sLevel*` copies at `$A80F-$A811`. SELECT with
+  `sLevelProgressFlags` bit 7 set abandons the level through `$FF9B = 20` →
+  `$14` instead. Ported as `PlayerSim::paused` + `pause_enter`/`pause_exit`/
+  `pause_flash`/`pause_select_exit`, with `frame_counter` kept as the full
+  `$FF97` byte (the port used to keep only `phase`, its low three bits, which
+  cannot see bit 4); `--play` maps ENTER/BACKSPACE and freezes the frame the
+  same way a fade does. `sSoundMode = 1/2`, `sPauseState` (`$A23D`, write-only
+  in the ROM), `sMarioDead = 2` and `sFastMusic` are flagged as unmodelled.
+- **`--play` seeds its per-level camera flags from the manifest** (2026-10-13):
+  `sMapScrollLimit` is a per-level byte from `LevelPropertiesUNK` (written only
+  at `$04F1`, `home.asm:741-747`) and `sAutoScroll` from
+  `LevelPropertiesScroll`, both already in the manifest as
+  `properties.unknown` / `properties.auto_scroll`. The play path used to leave
+  them at their defaults while `run_replay` took them from a capture's frame 0
+  — the same shape of gap the missing edge map had. Level 1 is `$00` in both;
+  the three autoscroll levels still print the not-modelled note, since `$0DAF`
+  is unported.
 - **Sprites**: mapping offsets land in the RAW OAM byte (screen =
   `obj + offset - (8,16)`); OAM attr bit5 = X flip, bit6 = Y flip, bit4 =
   OBP 0/1 select; OBP select also comes through `sSpriteFlipFlags` bit 4.

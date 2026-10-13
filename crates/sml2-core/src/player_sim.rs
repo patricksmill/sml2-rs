@@ -203,6 +203,14 @@ pub struct PlayerKeys {
     /// Held state — bunny jumps use the hold, everything else the press.
     pub a: bool,
     pub b: bool,
+    /// START / SELECT held. Neither is a gameplay input: the in-level code
+    /// reads them only through `hKeysPressed` in `$273E`/`$2756` (START enters
+    /// and leaves the pause state; SELECT with `sLevelProgressFlags` bit 7
+    /// set abandons the level). They matter to the `$307D` crouch pan too,
+    /// whose `cp $82`/`cp $42` are whole-byte tests — holding either cancels
+    /// a pan.
+    pub start: bool,
+    pub select: bool,
 }
 
 /// One frame of simulated player state (the `$FFC0`-family + speed indexes).
@@ -279,6 +287,12 @@ pub struct PlayerSim {
     /// ([`PlayerSim::game_over_enter`]) and the `$07` poll
     /// ([`PlayerSim::game_over_step`]).
     pub game_over: bool,
+    /// `$FF9B = 8` — the pause state (`$2756`). The ROM replaces the whole
+    /// state-`$04` body with this handler, so the port freezes the frame the
+    /// same way it does on a fade (player, camera and object engine all stop)
+    /// while the frame counter keeps ticking for
+    /// [`PlayerSim::pause_flash`].
+    pub paused: bool,
     /// `sLevelProgressFlags` ($A27D): bit 7 = the stage was already cleared
     /// (the map sets it when the node completes), so `$3547` skips the tally
     /// on a replay. Nothing in-level writes it.
@@ -292,6 +306,10 @@ pub struct PlayerSim {
     pub walk_timer: u8,
     /// `$FF97 & 7` — the global sub-frame phase (drives the speed dither).
     pub phase: u8,
+    /// `$FF97` — the once-per-frame global counter itself. The pause flash
+    /// reads bit 4 of it every frame, so it is a 32-frame cycle off the
+    /// counter rather than a timer with a reload value.
+    pub frame_counter: u8,
     pub camx: u16,
     /// `sCameraY` low byte — `$1BFF`'s hazard arm reads `sMarioScreenY`.
     pub camy: u16,
@@ -431,11 +449,13 @@ impl PlayerSim {
             exit_phase: false,
             exit_completed: false,
             game_over: false,
+            paused: false,
             level_progress_flags: 0,
             lives: 5,
             fade_timer: 0,
             walk_timer: 0,
             phase: 0,
+            frame_counter: 0,
             camx: 0,
             camy: 0,
             collision_tile: 0,
@@ -1573,6 +1593,63 @@ impl PlayerSim {
         true
     }
 
+    /// `$273E` — the START check at the tail of the in-level frame: START
+    /// enters the pause state (`$FF9B = 8`). The ROM stores `sPauseState = 0`
+    /// and requests the pause jingle through `sSoundMode = 1`; the port has no
+    /// sound-mode state, so that write is flagged rather than invented.
+    ///
+    /// The ROM's own gate is `hKeysPressed == $08` — START and *nothing else*
+    /// newly pressed that frame — plus `sScreenTransition == 0`, and the
+    /// in-level loop blanks both key bytes while `sFadeTimer != 0`, so START
+    /// is ignored during fades and transitions. The caller supplies the START
+    /// edge and the transition/fade state; the "nothing else newly pressed"
+    /// half is not modelled, because ENTER is not a gameplay key (flagged).
+    pub fn pause_enter(&mut self) {
+        self.paused = true;
+    }
+
+    /// The palette byte a paused frame shows (`$2756`): the handler tests bit 4
+    /// of the `$FF97` counter every frame and writes `$E7` when it is clear
+    /// and `$93` when it is set — to *both* `sBGPalette` and `sOAMPalette1`,
+    /// so BG and OBJ0 flash together and `sOAMPalette2` (OBP1) is untouched.
+    /// There is no timer and no reload value: 16 frames of each value.
+    pub fn pause_flash(&self) -> u8 {
+        if self.frame_counter & 0x10 == 0 {
+            0xE7
+        } else {
+            0x93
+        }
+    }
+
+    /// The resume half of `$2756`: any frame with the START press bit set
+    /// leaves the pause state and restores `sBGPalette`/`sOAMPalette1`/
+    /// `sOAMPalette2` from the `sLevel*` copies (`$A80F-$A811`). The port's
+    /// renderer already reads the level palettes from the manifest, so
+    /// clearing the flag is the whole restore; `sSoundMode = 2` is flagged.
+    pub fn pause_exit(&mut self) {
+        self.paused = false;
+    }
+
+    /// `$2756`'s SELECT branch: with `sLevelProgressFlags` bit 7 set (the stage
+    /// was already cleared) SELECT abandons the level through the `$14`
+    /// hand-off instead of resuming — the same entry the level-clear tail
+    /// takes. The ROM also writes `sSoundMode = 2`, `sMarioDead = 2` and
+    /// clears `sAutoScroll`/`sTileAnimConfig`/`sExitTileFlag`/`sFastMusic`;
+    /// the port has no sound-mode or fast-music state and its `dead` field
+    /// carries different values ($0F/$80/$FF), so those are flagged. The flag
+    /// it does set is [`PlayerSim::exit_completed`], which is this port's
+    /// marker that `$FF9B` reached `$14`. Returns whether the branch fired.
+    pub fn pause_select_exit(&mut self) -> bool {
+        if self.level_progress_flags & 0x80 == 0 {
+            return false;
+        }
+        self.paused = false;
+        self.tile_anim_config = 0;
+        self.exit_tile_flag = 0;
+        self.exit_completed = true;
+        true
+    }
+
     /// One frame of the exit fade (`$FF9B = 24`, 192 frames): VBlank's
     /// `sFadeTimer` decrement, which keeps ticking while state `$18`'s
     /// `$3547` poll loop runs. The call that reaches 0 is the `$3547` tail:
@@ -1611,6 +1688,7 @@ impl PlayerSim {
         self.exit_phase = false;
         self.exit_completed = false;
         self.game_over = false;
+        self.paused = false;
         self.fade_timer = 0;
         self.powerup = 0;
         self.invincibility = 0;
@@ -2805,5 +2883,77 @@ mod tests {
         sim.game_over = true;
         sim.respawn(112, 240);
         assert!(!sim.game_over);
+    }
+
+    // -----------------------------------------------------------------
+    // $273E / $2756 — the START pause and its palette flash.
+    //
+    // No capture carries START (the replay `Frame` has no field for it), so
+    // the handler is pinned here; what the gate cannot cover is flagged in the
+    // docs rather than assumed.
+    // -----------------------------------------------------------------
+
+    /// The flash is bit 4 of the `$FF97` counter read every frame, not a timer
+    /// with a reload: 16 frames of `$E7`, then 16 of `$93`, repeating.
+    #[test]
+    fn pause_flash_comes_off_bit_4_of_the_frame_counter() {
+        let mut sim = PlayerSim::new();
+        let seen: Vec<u8> = (0..32u8)
+            .map(|i| {
+                sim.frame_counter = i;
+                sim.pause_flash()
+            })
+            .collect();
+        assert_eq!(seen[..16], [0xE7; 16], "bit 4 clear -> $E7");
+        assert_eq!(seen[16..], [0x93; 16], "bit 4 set -> $93");
+        // It is the counter, not a toggle: the same value is back 16 later.
+        sim.frame_counter = 32;
+        assert_eq!(sim.pause_flash(), 0xE7);
+        sim.frame_counter = 0x30;
+        assert_eq!(sim.pause_flash(), 0x93);
+    }
+
+    /// `$273E` enters and `$2756` leaves; the flag *is* the port's model of
+    /// `$FF9B = 8`.
+    #[test]
+    fn pause_enters_and_exits() {
+        let mut sim = PlayerSim::new();
+        assert!(!sim.paused);
+        sim.pause_enter();
+        assert!(sim.paused);
+        sim.pause_exit();
+        assert!(!sim.paused);
+    }
+
+    /// The SELECT branch needs `sLevelProgressFlags` bit 7 — the ROM's
+    /// `and a / ret z` shape — and with it the level is abandoned through the
+    /// `$14` hand-off rather than resumed.
+    #[test]
+    fn pause_select_exit_needs_the_cleared_level_flag() {
+        let mut sim = PlayerSim::new();
+        sim.pause_enter();
+        sim.exit_tile_flag = 0xFF;
+        sim.tile_anim_config = 0x11;
+        assert!(
+            !sim.pause_select_exit(),
+            "bit 7 clear: SELECT leaves the handler alone"
+        );
+        assert!(sim.paused, "and the pause stands");
+
+        sim.level_progress_flags = 0x80;
+        assert!(sim.pause_select_exit(), "bit 7 set: the level is abandoned");
+        assert!(!sim.paused);
+        assert_eq!(sim.exit_tile_flag, 0);
+        assert_eq!(sim.tile_anim_config, 0);
+        assert!(sim.exit_completed, "the $14 hand-off is marked reached");
+    }
+
+    /// A level reload clears the pause like the other phase flags.
+    #[test]
+    fn respawn_clears_the_pause() {
+        let mut sim = PlayerSim::new();
+        sim.pause_enter();
+        sim.respawn(112, 240);
+        assert!(!sim.paused);
     }
 }
