@@ -161,3 +161,22 @@ of walking — `$34EC` never writes them, and `$0F2A` only reads them on the
 death reload. `$A800-$A807`'s other writer is the secret-route overlay
 (`$55C0`, the per-level records at `UnknownData_0x377B`), not the bell. It
 writes `$OUT/probe_bell_checkpoint.json`, never a capture for the suite.
+
+`probe_level_select.py` is the **route every non-level-1 capture needs**, and a
+diagnostic in its own right — no other script here can reach a level other than
+level 1. On the overworld map (state `$0C`) it pokes `sMapScreenId` (`$A68B`) to
+any nonzero value (the `$3E1D7` entry gate needs screen != 0) and `sMapNode`
+(`$A840`) to the target node, then taps A. The console then runs its own entry
+path — state `$0C` → `$0B` → `$2` → `$3` → `$4` — setting
+`sCurLevel = $4218[sMapNode]` at `$3C1A2` (main.asm:18544; not `$3D0D7`, which
+is a castle node's animation) and loading the real level header. Measured on two
+targets, first state-4 frame: node 0 → level 1 with Mario (34, 468) / camera
+(80, 448), and node 61 → level 20 with Mario (63, 212) / camera (96, 192) — the
+`level01`/`level20` manifest headers exactly; 60 frames later on level 20 the
+camera has moved +30 px, i.e. the `$0DAF` autoscroll rate is live. `node_for_level(idx)`
+reads the node index out of `extracted/map/nodes.bin` (`$4218[node]` = level
+index, `$FE` = a pure path node); `enter_level(p, tick, tap, rd, node)` does the
+pokes and waits for state 4. Level 25 (Wario's Castle) has **no** map node and
+needs the castle path. The map state is *poked*, not driven, so record from
+state 4 on, exactly as the other capture scripts do — the pokes only choose which
+level, they do not touch it. Run it with no arguments to re-verify both targets.
