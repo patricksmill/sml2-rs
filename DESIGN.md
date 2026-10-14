@@ -1322,4 +1322,53 @@ correction came out of writing them: type 6's used tile is 3 (`$5BC8`: `3E 03 / 
 Whole tree after both: 197 core + 3 runtime tests, `cargo build --release` clean, `bash
 captures/sweep.sh` → `gate done` with traj4_ff0 byte-identical and no `REGRESSION`, and no `note:`.
 
+## The projectile family: spawn, arc, break — 2026-10-14
+
+**`fireball_paths` + `fireball_type06_break` (`crates/sml2-core/src/player_sim.rs`,
+`crates/sml2-core/src/objects.rs`).** The queue had recorded `$2FED` as the fireball *spawn*;
+it is the object pass. The family is four consecutive tail calls of `$0F71` — `$0FAB` is
+`CD 9F 31 / CD 51 34 / CD C1 32 / CD 1C 33 / CD 4F 32 / C9`, i.e. `$319F` → `$3451` → `$32C1`
+(spawn) → `$331C` (move) → `$324F` (pass) — so a ball created on the press frame also moves and
+collides on that frame, and an item consumed on frame N (`$3451`) satisfies the spawn's tier gate
+on frame N.
+
+Ported, mirroring the branch structure: **`fire_spawn`** (`$32C1` — the B new-press edge,
+`sCurPowerup == 3`, no ducking, no goal bell, first of the two `$A880`/`$A890` slots free, and a
+press with both live eaten silently; the ball at `$FFC0` + 28 / `$FFC2` + 16 with carry, facing
+`sMarioDirection` — or `($FF97 & 2) - 1` mid spin jump — phase 0, throw timer 8, sfx0 11);
+**`fire_move`** (`$331C`/`$332E` — ±3 px on X from the facing byte's `sla`, Y by `$3439[phase]`,
+rising at `phase >= $0C`; probe 1 at `$1EFA`'s `(Y-16, X-8)` is terminal, `$06` breaks and any
+other tile below `$38` dies; probe 2 pops a *descending* ball to phase `$18` — `$33F1` then
+decrements it — on any tile below `$48` that is not `$06`; write-back is `+1..+4` and `+6`,
+never `+5`); **`fire_break_or_die`** (`$3415`/`$341C`/`$3430` — sfx2 1, sfx0 2, the *hardcoded*
+type-1 bump at the ball's own cell, `sSpinJumpBounce = $FF`, then `+0` cleared, and no write-back
+of the move on either kill path); **`fire_pass`** (`$324F`/`$3261` — the pair is
+`(X - camX + 80, Y - camY + 70)`, a `$C0`-high-nibble cull kills silently, otherwise the pair is
+staged for the object pass); and **`ObjectSim::fire_hit`** (`$2FED`/`$3007`, the object half —
+gate `B_FLAGS == 0` with bit 3 *included*, unlike `$2D7D`'s `and $F7`; type 0 and bit-7 types are
+transparent; the ±6-expanded `B_HB_*` box is tested byte-wise against the staged pair; a bit-2
+type gets `B_FLAGS` bit 1, which `$85AA`'s dispatch turns into `defeat()`, and every other type
+takes the sfx arm; both leave `sObjectHitResult` non-zero, which is what kills the ball).
+
+Two corrections to `notes/deleg_B_fireball_spec.md`, re-read from the ROM bytes here: the defeat
+test is `bit 2, a` — a type needs `$04` set, so the spec's section-7 example (type `$20`) is
+wrong and takes the sfx arm instead; and `$3261` computes the pair as
+`ldh a,[$FFCA] / ld b,a / ld a,[sFireballX] / sub b / add 80`, exactly the `+80`/`+70` its prose
+gives (hex `$50`/`$46`). The phase table is byte-verified as the 24 bytes in its appendix.
+
+Split at the object seam, in the ROM's order (`$0F71` runs the player's `$2F72`, then the ball's,
+then the pass): the frame loops run `ObjectSim::below_bonk` for `sim.below_bonk` (the ceiling
+bonk) and for `sim.fire_below_bonk` (a break — only the player's arm reaches `resolve_bump_coin`,
+since only the `$19D2` bump owes the coin), then `fire_hit` per staged `sim.fire_scan` pair and
+`sim.resolve_fire_hit`. The ball's own sprite (`$2CF4`, mapping `$B0`/`$B4` + `($FF97 & 6) >> 1`)
+and Mario's throw pose are draw-side and unmodelled, so a live ball latches
+`sim.fire_draw_unported` and the replay summary prints it as a `note:` — `$A880` is not among the
+fields a capture compares, so without that line a capture that fires would replay green.
+
+Sixteen new unit tests (thirteen `player_sim`, three `objects`), each constructing the slot/state in
+memory and asserting the resulting bytes, and eleven one-line mutations of the ported logic were
+each shown to fail a named one of them before being restored. Whole tree: 213 core + 3 runtime
+tests, `cargo test` green, and `bash captures/sweep.sh` → `gate done` with traj4_ff0
+byte-identical, no `REGRESSION` and no `note:`.
+
 

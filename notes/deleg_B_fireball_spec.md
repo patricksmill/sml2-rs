@@ -497,3 +497,30 @@ shot must be taken west of col 211 with the fireball rolling east along row 29.
    `$2C6C` b=1). Verified by reading, not by a capture.
 8. **sObjectHitResult cross-talk**: `$3261` clears `$A246` before `$2FED`, so the
    `$2D7D`/`$2EDD` use of the same byte cannot interfere. Read-verified only.
+
+---
+
+## Supervisor pass, 2026-10-14 — the spec is now implemented and two numbers in it corrected
+
+The whole family is ported (`player_sim.rs`: `fire_spawn`/`fire_move`/`fire_slot`/
+`fire_break_or_die`/`fire_pass`; `objects.rs`: `FireHit` + `ObjectSim::fire_hit`; the two frame
+loops carry the B press edge and the two split seams). Sixteen unit tests in the project's
+in-memory style, eleven one-line mutations shown to fail a named test, `cargo test` 213 core + 3
+runtime green, `bash captures/sweep.sh` → `gate done` with traj4_ff0 byte-identical and no note.
+The details are in `DESIGN.md`'s "The projectile family" section. Two corrections to this
+document, re-read from the ROM bytes:
+
+* **The defeat test is bit 2 (`$04`), not "any type with the flag" as section 7's example
+  (`type $20`) implies.** `$3007` is `ldh a,[$FF98] / bit 2,a / jr nz,$3071`, so only a type with
+  `$04` set is defeated; a `$20` type takes the sfx arm and just kills the ball. The tests pin
+  `$24` (defeat) against `$20` (die).
+* **Section 3.2's pair expressions are correct and the prose's `$50`/`$46` are just hex for
+  `+80`/`+70`** — `$3261` is `ldh a,[$FFCA] / ld b,a / ld a,[sFireballX] / sub b / add 80`, and the
+  same shape on Y. Nothing to change in the port, but the two notes read as if they might be two
+  different formulas.
+
+Still unverified here, as section 9 says: the `$C0` cull's screen meaning, the object-frame
+relation in the `$2FED` test, `$FFC7` at the draw, and the `($FF97 & 6) >> 1` anim phase. The
+ball's own sprite staging and Mario's throw pose are deliberately out of scope (draw-side/art) —
+a live ball latches `PlayerSim::fire_draw_unported`, which the replay summary prints as a `note:`,
+because `$A880` is not among the fields a capture compares.
