@@ -1092,3 +1092,63 @@ array is also the save record's first 64 bytes, so `MapSim::from_player` /
 `to_player` bridge it to `PlayerSim`'s image (which the `$14` hand-off and
 `save_record` need) rather than duplicating it silently.
 
+## The map drives itself: the node chain, the node actions and the node records — 2026-10-14
+
+The second map package ports what the map does *without* the player pressing
+anything, which turns out to be most of how it moves between screens.
+
+**The synthetic-input chain** (`$3C38C`, the forty `cp $XX / call z` comparisons
+at main.asm:18756-18877). Each one **overwrites `hKeysPressed`** with a single key
+— `$3C29A` Right, `$3C2A0` Left, `$3C2A6` Down, `$3C2AC` Up, `$3C2B2` Start — and
+the same frame's `$3C52B` then turns that press into an auto-walk along the node's
+walk-graph entry. Three of the forty *retarget the node* instead: `$3C2B8` (A →
+node `$36` while Macro path 2 bit 7 is set, else B → node `$37` on the Macro gate),
+`$3C2E7` (Select → `$39` on Macro path 0 bit 0) and `$3C2FE` (A → `$6C`). The port
+walks the chain as a table in ROM order and re-reads `sMapNode` at every step,
+because a retarget changes what the later comparisons match.
+
+`$3C32D` (every node `$1E` up) presses the node's own `$6591` mask **once per
+screen**, with `sMarioDead` as the one-shot latch; a cleared stage never
+auto-walks. `$3C316`: node 0 with level 1 cleared hands the cursor to node `$14`,
+whose Up class then walks it off. Two consequences the port now shows and the ROM
+really has: the synthetic press *replaces* the player's, so on the frame an arrival
+walk fires an A press cannot also enter the level (only the next frame can); and
+nodes `$0C`/`$1E` are Start-class, so the secret-route arm is automatic there.
+
+**`$3C60B`, the A/START node actions**, are a table now. Nine zone doors ($02/$19 →
+Tree-A screen 2, $09/$1C → Pumpkin-A 1, $06/$1B → Macro 3, $12 → Space 4, $67/$0D →
+Tree-B 5, $0B/$1D → Mario 6, $11 → Turtle 7, $15 → screen 8) each write the cursor,
+the node, `sMarioDead = $FF`, the music request and the `$3E3BA` walk-out direction.
+Four coin-operated doors (`$71`/`$70`/`$6F`/`$6E` → bonus screens 9/10/11/12) run
+`$3F38F`'s 16-bit **BCD** price check ($0999/$0200/$0050/$0030) and are the only
+doors that can be *refused* — a refusal clicks sfx 19 and drops into `$3C7D9`'s
+idle path with the press intact. The zone loaders clear `hKeysPressed`
+(`xor a / ldh [$FF81]`, verified at `$3D0FF`) so an open door cannot also enter a
+level on the same frame; the zone→hub doors do *not* clear it, so pressing A on the
+untested door nodes (node `$30` → node `$7A`, which *has* a level) can open a door
+and reach a level in one frame.
+
+**`$3EEA4` and the node records.** `map/node_records.bin` is the 1024-byte table at
+`$61EE6` (byte-identical to the ROM; the extractor asserts that bytes 6-7 are `$00`
+in all 128 records and non-zero from node `$80`, which is the table's own
+boundary). A record is X hi/X lo, Y hi/Y lo — the map camera *staging*
+(`$FFBA:B9`/`$FFB8:B7`) — then `sMapCursorX/Y`. `MapSim::load_node` seeds them where
+the ROM does: on a *screen* change (`$3C7CA` on a zone door, `$3C518` when B is
+released), never on a walk arrival.
+
+**The hub pan** (`$3CA31`/`$3CA37`/`$3CA5D`/`$3CA63`/`$3CA84`/`$3CA8A`/`$3CAAB`/
+`$3CAB1`) is mechanical, not decoration: the position gates fire when the cursor
+reaches `$4C` (Right), `$4A` (Left), `$4B` (Up) or `$4D` (Down), the camera takes
+the pixel, and — unless the B-held latch is set — the cursor is pushed back the
+other way, which is what holds it near the screen centre through a walk. Holding B
+on the hub calls the same bodies with no gate, so the camera pans under a still
+cursor.
+
+Verified: 12 more tests (171 total), the door table fail-checked by changing a
+destination and watching it go red; the replay gate green. Filed
+`map_handoff_3EF2B` for the one ROM disagreement found — `$3C32D` alone indexes
+`$3C364` before reading `sLevelProgress`, where the writer (`$3EEF0`) and the gate
+(`$3E1D7`) both use the `$650E` byte directly; the port follows the two that agree
+and the item records why.
+
+

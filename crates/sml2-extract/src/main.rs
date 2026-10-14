@@ -481,6 +481,37 @@ fn main() -> Result<(), Box<dyn Error>> {
         "wrote map/walk.bin: {WALK_NODES} nodes x 8 bytes at ${walk_rom:05X}, streams to ${walk_end:05X}"
     );
 
+    // The per-node camera/cursor records: `$3EEA4` reads the six bytes at
+    // `$5EE6 + node*8` (a bank-24 window address, so flat `$61EE6`) into the map
+    // camera staging and the cursor — X hi, X lo, Y hi, Y lo, cursor X, cursor Y.
+    // Also 128 records: bytes 6-7 are `$00` in every one of them and non-zero from
+    // node $80 on, which is the assertion below.
+    const NODE_RECORD_LEN: usize = 8;
+    let records_rom = 24 * 0x4000 + (0x5EE6 - 0x4000);
+    let records = &baserom[records_rom..records_rom + WALK_NODES * NODE_RECORD_LEN];
+    if records
+        .chunks_exact(NODE_RECORD_LEN)
+        .any(|r| r[6] != 0 || r[7] != 0)
+    {
+        return Err(format!(
+            "map node record at ${records_rom:05X}: bytes 6/7 are not zero inside \
+             the {WALK_NODES}-node table"
+        )
+        .into());
+    }
+    let past = &baserom[records_rom + WALK_NODES * NODE_RECORD_LEN..][..NODE_RECORD_LEN];
+    if past[6] == 0 && past[7] == 0 {
+        return Err(format!(
+            "map node record table: node $80 at ${:05X} still looks like a record",
+            records_rom + WALK_NODES * NODE_RECORD_LEN
+        )
+        .into());
+    }
+    fs::write(extracted.join("map/node_records.bin"), records)?;
+    println!(
+        "wrote map/node_records.bin: {WALK_NODES} records at ${records_rom:05X} (camera + cursor)"
+    );
+
     // Per-level GFX config (UnknownData_0x360A -> sLevelGfxConfig): the high
     // nibble selects the two "extra" tile blocks loaded by LoadMarioGFX
     // ($06C0): $8800 <- bank $1B [$7000 + n*$300], $8E80 <- bank $07

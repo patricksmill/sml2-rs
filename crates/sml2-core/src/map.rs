@@ -40,6 +40,84 @@
 //! a slot by checking that sum and then those bytes (`$12 $34 $56 $78 $78`).
 //! [`PlayerSim::save_record`] builds the image; [`save_record_valid`] checks it.
 
+/// `$3EEA4`: the per-node camera/cursor record — the map camera a node centres on
+/// and where the cursor sits on it.
+///
+/// The record is `$5EE6 + node*8` in bank 24 (flat `$61EE6`): X hi, X lo, Y hi,
+/// Y lo, then `sMapCursorX` and `sMapCursorY`. The ROM latches the two 16-bit
+/// values into the map camera *staging* (`$FFBA:B9`, `$FFB8:B7`), which the pan
+/// helpers move and `$3ED4C` latches into `sMapCamX/Y`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct MapNodeRecord {
+    pub cam_x: u16,
+    pub cam_y: u16,
+    pub cursor_x: u8,
+    pub cursor_y: u8,
+}
+
+/// The node records, as `sml2-extract` writes them.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MapNodeRecords {
+    blob: Vec<u8>,
+}
+
+impl MapNodeRecords {
+    /// Records run to node `$7F`, like the walk table: the bytes 6-7 that are
+    /// `$00` in every real record are non-zero from node `$80` on.
+    pub const NODES: usize = 128;
+    /// Eight bytes per record.
+    pub const LEN: usize = Self::NODES * 8;
+
+    /// `None` unless the blob is exactly the extracted size.
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        (bytes.len() == Self::LEN).then(|| Self {
+            blob: bytes.to_vec(),
+        })
+    }
+
+    /// No records loaded: [`Self::record`] answers `None`, so a node change leaves
+    /// the camera and cursor where they are instead of seeding them from nothing.
+    pub fn is_empty(&self) -> bool {
+        self.blob.is_empty()
+    }
+
+    /// The node's record, or `None` for a node past the table with no data loaded.
+    pub fn record(&self, node: u8) -> Option<MapNodeRecord> {
+        if node as usize >= Self::NODES {
+            return None;
+        }
+        let at = node as usize * 8;
+        let b = self.blob.get(at..at + 6)?;
+        Some(MapNodeRecord {
+            cam_x: (b[0] as u16) << 8 | b[1] as u16,
+            cam_y: (b[2] as u16) << 8 | b[3] as u16,
+            cursor_x: b[4],
+            cursor_y: b[5],
+        })
+    }
+}
+
+/// Offsets into `sLevelProgress` (`$A848`) of everything else the map keeps in
+/// the same 64-byte block as the per-level flags: the zone *paths* and the
+/// gate bytes the cursor helpers test.
+///
+/// These are not level progress at all — they are map state that happens to live
+/// inside the save image's first 64 bytes, which is why they survive a save/load.
+/// `$3C2B8`/`$3C2E7`/`$3C2FE` (`bit 7` of the Macro gate, `bit 0` of Macro path 0,
+/// `bit 7` of Macro path 2) and the per-screen handlers are their readers.
+pub mod progress_offset {
+    /// `$A84D` Tree Zone screen A gold coin (bit 7 = collected).
+    pub const GOLDEN_COIN_1: usize = 5;
+    /// `$A853` Macro Zone path 0 (bit 0 gates the `$3C2E7` cursor move).
+    pub const MACRO_PATH_0: usize = 11;
+    /// `$A855` Macro Zone path 2 (bit 7 gates the `$3C2B8` A-move).
+    pub const MACRO_PATH_2: usize = 13;
+    /// `$A86B` Macro gate — set when node `$6A` completes.
+    pub const GATE_MACRO: usize = 35;
+    /// `$A86D` Mario-Zone gate — set when node `$66` completes.
+    pub const GATE_MARIO: usize = 37;
+}
+
 /// The two parallel node tables, as `sml2-extract` writes them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MapNodes {

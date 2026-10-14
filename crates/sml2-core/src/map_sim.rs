@@ -52,14 +52,196 @@
 //! the hub's 18-entry decoration list (`$3CFC8`) and the cursor's OAM. The port
 //! keeps `sMapCursorPose` because the ROM computes it from the walk; it just has
 //! nothing to draw with. The blocking screen transition `$3E2F7` (40 iterations
-//! of a scroll) is art too, but its *effects* — the new node, the hub screen, the
-//! move byte, state `$0C` — are modelled.
+//! of a scroll) and the loaders' blocking fades (`$3E9FB`, `$3F156`) are art too,
+//! but their *effects* — the new node, the screen id, the move byte, the camera
+//! seed, state `$0C` — are modelled.
 //!
 //! ROM logic that is not ported yet is reported as [`MapEntry::unported`] rather
-//! than silently skipped: the node flag helpers (`$3C2xx`), the A/START node
-//! actions behind `$3C60B`, and the hub's own cursor effects (`$3CA31`-`$3CAB1`).
+//! than silently skipped. As of the node-action package that is only the *screen*
+//! half of `$3C60B`'s loaders (their zone gfx and script pointers) and the
+//! per-screen decoration handlers behind `$3C000`.
 
-use crate::map::{map_enterable, MapNodes, MapWalk, WalkDir};
+use crate::map::{map_enterable, progress_offset, MapNodeRecords, MapNodes, MapWalk, WalkDir};
+
+/// One class of the `$3C38C` node chain — the synthetic key the map presses when
+/// the cursor sits on a node of that class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChainClass {
+    /// `$3C29A` — press Right.
+    Right,
+    /// `$3C2A0` — press Left.
+    Left,
+    /// `$3C2AC` — press Up.
+    Up,
+    /// `$3C2A6` — press Down.
+    Down,
+    /// `$3C2B2` — press Start, which `$3C5F4` turns into the node's action.
+    Start,
+    /// `$3C2B8` — A retargets to node `$36`, else B retargets to node `$37`.
+    MacroA,
+    /// `$3C2E7` — Select retargets to node `$39`.
+    MacroSelect,
+    /// `$3C2FE` — A retargets to node `$6C`.
+    MacroGate,
+}
+
+/// `(node, class)` in the ROM's own comparison order (main.asm:18756-18877). The
+/// chain re-reads `sMapNode` at every step, so the order is load-bearing: the
+/// three retargeting classes sit early, and a retarget changes what the rest of
+/// the chain matches against.
+const NODE_CHAIN: &[(u8, ChainClass)] = &[
+    (0x14, ChainClass::Up),
+    (0x35, ChainClass::MacroA),
+    (0x32, ChainClass::MacroSelect),
+    (0x6A, ChainClass::MacroGate),
+    (0x17, ChainClass::Left),
+    (0x4B, ChainClass::Down),
+    (0x2C, ChainClass::Down),
+    (0x4A, ChainClass::Up),
+    (0x2F, ChainClass::Up),
+    (0x31, ChainClass::Down),
+    (0x38, ChainClass::Down),
+    (0x2E, ChainClass::Up),
+    (0x6B, ChainClass::Up),
+    (0x47, ChainClass::Up),
+    (0x65, ChainClass::Left),
+    (0x45, ChainClass::Left),
+    (0x27, ChainClass::Left),
+    (0x67, ChainClass::Start),
+    (0x5B, ChainClass::Start),
+    (0x5A, ChainClass::Up),
+    (0x68, ChainClass::Right),
+    (0x25, ChainClass::Right),
+    (0x6C, ChainClass::Right),
+    (0x43, ChainClass::Right),
+    (0x79, ChainClass::Right),
+    (0x69, ChainClass::Down),
+    (0x73, ChainClass::Left),
+    (0x72, ChainClass::Right),
+    (0x3F, ChainClass::Right),
+    (0x74, ChainClass::Left),
+    (0x75, ChainClass::Right),
+    (0x11, ChainClass::Start),
+    (0x02, ChainClass::Start),
+    (0x0C, ChainClass::Start),
+    (0x0B, ChainClass::Start),
+    (0x09, ChainClass::Start),
+    (0x06, ChainClass::Start),
+    (0x64, ChainClass::Right),
+];
+
+/// One of `$3C60B`'s A/START node actions: what pressing A or START on a hub node
+/// actually does.
+///
+/// All nine zone doors make the same five mechanical writes — the cursor, the
+/// node, `sMarioDead = $FF`, music `$FF` and the blocking walk-out
+/// `$3E3BA(dir)` — and then load a screen (its gfx and script: art). The four
+/// coin-operated doors are the only ones that can *fail*, and they fail into
+/// `$3C7D9`'s idle path.
+struct NodeDoor {
+    /// `sMapCursorX` after the set-piece.
+    cursor_x: u8,
+    cursor_y: u8,
+    /// `sMapNode` after it.
+    node: u8,
+    /// The screen the handler loads.
+    screen_id: u8,
+    /// `$3E3BA`'s walk-out direction; the coin doors do not run one.
+    dir: Option<u8>,
+    /// `sMapCursorMove`, when the handler sets one ($06/$1B press a fresh move).
+    move_: Option<u8>,
+    /// The handler masks the move byte's low nibble off first ($3D5D0/$3D848 keep
+    /// the bump bit).
+    mask_move_nibble: bool,
+    /// `sMusicRequest`.
+    music: u8,
+    /// The coin doors' BCD price — the only doors that can be refused.
+    price: Option<u16>,
+}
+
+/// `(node, door)`, with the shared destinations spelled out per node: `$23`/`$28`
+/// share their targets with nothing, but `$02`/`$19` and `$09`/`$1C` (and the
+/// `$67`/`$0D` pair) run the same handler.
+const NODE_DOORS: &[(u8, NodeDoor)] = &[
+    // $3D0D7: Tree Zone screen A. Cursor 48/158, node $23, screen 2.
+    (0x02, NodeDoor { cursor_x: 48, cursor_y: 158, node: 0x23, screen_id: 2, dir: Some(4), move_: None, mask_move_nibble: false, music: 255, price: None }),
+    (0x19, NodeDoor { cursor_x: 48, cursor_y: 158, node: 0x23, screen_id: 2, dir: Some(4), move_: None, mask_move_nibble: false, music: 255, price: None }),
+    // $3D1E0: Pumpkin Zone screen A. Cursor 83/137, node $28, screen 1.
+    (0x09, NodeDoor { cursor_x: 83, cursor_y: 137, node: 0x28, screen_id: 1, dir: Some(4), move_: None, mask_move_nibble: false, music: 255, price: None }),
+    (0x1C, NodeDoor { cursor_x: 83, cursor_y: 137, node: 0x28, screen_id: 1, dir: Some(4), move_: None, mask_move_nibble: false, music: 255, price: None }),
+    // $3D33A: Macro Zone. Cursor 226/118, move $21, node $32, screen 3.
+    (0x06, NodeDoor { cursor_x: 226, cursor_y: 118, node: 0x32, screen_id: 3, dir: Some(1), move_: Some(0x21), mask_move_nibble: false, music: 255, price: None }),
+    (0x1B, NodeDoor { cursor_x: 226, cursor_y: 118, node: 0x32, screen_id: 3, dir: Some(1), move_: Some(0x21), mask_move_nibble: false, music: 255, price: None }),
+    // $3D477: Space Zone. Cursor 16/100, node $3C, screen 4.
+    (0x12, NodeDoor { cursor_x: 16, cursor_y: 100, node: 0x3C, screen_id: 4, dir: Some(1), move_: None, mask_move_nibble: false, music: 255, price: None }),
+    // $3D5D0/$3D5EC share the $3D606 tail: move nibble masked, screen 5, music 18.
+    (0x67, NodeDoor { cursor_x: 146, cursor_y: 234, node: 0x4B, screen_id: 5, dir: Some(8), move_: None, mask_move_nibble: true, music: 18, price: None }),
+    (0x0D, NodeDoor { cursor_x: 75, cursor_y: 242, node: 0x46, screen_id: 5, dir: Some(8), move_: None, mask_move_nibble: true, music: 18, price: None }),
+    // $3D6C3: Turtle Zone — hub screen 0 only, which the caller already checked.
+    (0x11, NodeDoor { cursor_x: 129, cursor_y: 137, node: 0x5A, screen_id: 7, dir: Some(2), move_: None, mask_move_nibble: false, music: 255, price: None }),
+    // $3D760: Mario Zone. Cursor 12/112, node $50, screen 6.
+    (0x0B, NodeDoor { cursor_x: 12, cursor_y: 112, node: 0x50, screen_id: 6, dir: Some(1), move_: None, mask_move_nibble: false, music: 255, price: None }),
+    (0x1D, NodeDoor { cursor_x: 12, cursor_y: 112, node: 0x50, screen_id: 6, dir: Some(1), move_: None, mask_move_nibble: false, music: 255, price: None }),
+    // $3D848: screen 8. Cursor 212/131, node $72, move nibble masked.
+    (0x15, NodeDoor { cursor_x: 212, cursor_y: 131, node: 0x72, screen_id: 8, dir: Some(1), move_: None, mask_move_nibble: true, music: 255, price: None }),
+    // The four coin-operated doors ($3F3B9/$3F3F0/$3F427/$3F45E). They do not move
+    // the cursor or the node — $3F307/$3F35A only clear the scroll, the walk state
+    // and the key byte, load the bonus screen and set the window registers — so the
+    // cursor fields here are the loader's own no-ops.
+    (0x71, NodeDoor { cursor_x: 0, cursor_y: 0, node: 0, screen_id: 9, dir: None, move_: None, mask_move_nibble: false, music: 21, price: Some(0x0999) }),
+    (0x70, NodeDoor { cursor_x: 0, cursor_y: 0, node: 0, screen_id: 10, dir: None, move_: None, mask_move_nibble: false, music: 21, price: Some(0x0200) }),
+    (0x6F, NodeDoor { cursor_x: 0, cursor_y: 0, node: 0, screen_id: 11, dir: None, move_: None, mask_move_nibble: false, music: 21, price: Some(0x0050) }),
+    (0x6E, NodeDoor { cursor_x: 0, cursor_y: 0, node: 0, screen_id: 12, dir: None, move_: None, mask_move_nibble: false, music: 21, price: Some(0x0030) }),
+];
+
+/// `$3F38F`: the coin-door price check — a 16-bit **BCD** subtraction of the price
+/// from `sCoinLow`/`sCoinHigh` (`sub l / daa` then `sbc h / daa`).
+///
+/// `None` means the ROM's `jr c` fired: the player cannot pay, the coins are left
+/// alone and the door answers with sfx 19 and the idle path. The port subtracts
+/// digit by digit with a borrow rather than emulating `daa`'s flags, which is the
+/// same arithmetic the ROM's correction produces.
+fn bcd_sub_u16(lo: u8, hi: u8, price: u16) -> Option<(u8, u8)> {
+    let (pl, ph) = (price as u8, (price >> 8) as u8);
+    let mut borrow = 0i16;
+    let mut digits = [0i16; 4];
+    let minuend = [
+        (lo & 0x0F) as i16,
+        ((lo >> 4) & 0x0F) as i16,
+        (hi & 0x0F) as i16,
+        ((hi >> 4) & 0x0F) as i16,
+    ];
+    let subtrahend = [
+        (pl & 0x0F) as i16,
+        ((pl >> 4) & 0x0F) as i16,
+        (ph & 0x0F) as i16,
+        ((ph >> 4) & 0x0F) as i16,
+    ];
+    let mut out_borrow = false;
+    for i in 0..4 {
+        let mut d = minuend[i] - subtrahend[i] - borrow;
+        borrow = 0;
+        if d < 0 {
+            d += 10;
+            borrow = 1;
+        }
+        if i == 3 && borrow == 1 {
+            out_borrow = true;
+        }
+        digits[i] = d;
+    }
+    if out_borrow {
+        return None;
+    }
+    let low = ((digits[1] as u8) << 4) | digits[0] as u8;
+    let high = ((digits[3] as u8) << 4) | digits[2] as u8;
+    Some((low, high))
+}
+
+/// `$3C60B`'s dispatch, in the ROM's own order of comparisons.
+fn node_door(node: u8) -> Option<&'static NodeDoor> {
+    NODE_DOORS.iter().find(|(n, _)| *n == node).map(|(_, d)| d)
+}
 
 /// Input for one map frame: the two joypad bytes and the `$FF04` divider the ROM
 /// XORs into its two pseudo-random latches.
@@ -162,6 +344,20 @@ pub struct MapSim {
     pub tick_timer: u8,
     /// `sMapRandLatch` (`$A696`).
     pub rand_latch: u8,
+    /// The map camera *staging* (`$FFBA:B9` X, `$FFB8:B7` Y). `$3EEA4` seeds it
+    /// from the node's record, the pan helpers move it, and `$3ED4C` latches it
+    /// into `sMapCamX/Y` — which the port does not model, because the port's map
+    /// has nothing to draw. It is still mechanical: the pan helpers gate on it.
+    pub cam_x: u16,
+    pub cam_y: u16,
+    /// `sMarioDead` (`$A224`): 0 means "just arrived on this screen", and `$3C32D`
+    /// uses that to fire each zone node's auto-walk **once** — it sets the byte and
+    /// then blocks itself. The level-entry handlers set it too.
+    pub mario_dead: u8,
+    /// `sCoinLow`/`sCoinHigh` (`$A262`/`$A263`, BCD) — the coin purse the
+    /// coin-operated bonus doors subtract their price from.
+    pub coins_low: u8,
+    pub coins_high: u8,
     /// `$2934` was called: the caller must persist the save image and clear it.
     pub pending_save: bool,
 }
@@ -197,6 +393,11 @@ impl MapSim {
             frame_counter: 0,
             tick_timer: 40,
             rand_latch: 0,
+            cam_x: 0,
+            cam_y: 0,
+            mario_dead: 0,
+            coins_low: 0,
+            coins_high: 0,
             pending_save: false,
         }
     }
@@ -209,16 +410,217 @@ impl MapSim {
     pub fn from_player(sim: &crate::player_sim::PlayerSim) -> Self {
         let mut me = Self::new();
         me.node = sim.map_node;
+        me.coins_low = sim.coins_low;
+        me.coins_high = sim.coins_high;
         let n = me.level_progress.len().min(sim.level_progress.len());
         me.level_progress[..n].copy_from_slice(&sim.level_progress[..n]);
         me
     }
 
-    /// Write the map's node and progress bytes back onto the player's save image.
+    /// Write the map's node, progress bytes and coin purse back onto the player's
+    /// save image.
     pub fn to_player(&self, sim: &mut crate::player_sim::PlayerSim) {
         sim.map_node = self.node;
+        sim.coins_low = self.coins_low;
+        sim.coins_high = self.coins_high;
         let n = self.level_progress.len().min(sim.level_progress.len());
         sim.level_progress[..n].copy_from_slice(&self.level_progress[..n]);
+    }
+
+    /// `$3EEA4`: adopt a node's record — the map camera it centres on and where the
+    /// cursor sits there.
+    ///
+    /// The ROM calls this whenever a *screen* changes node (`$3C7CA` on a zone
+    /// door, `$3C518` when B is released), not on a walk arrival: a walk moves the
+    /// cursor pixel by pixel and leaves the camera alone.
+    pub fn load_node(&mut self, node: u8, records: &MapNodeRecords) {
+        let Some(r) = records.record(node) else {
+            // No records loaded: leave the camera and cursor where they are rather
+            // than seeding them from a table that is not there.
+            return;
+        };
+        self.cam_x = r.cam_x;
+        self.cam_y = r.cam_y;
+        self.cursor_x = r.cursor_x;
+        self.cursor_y = r.cursor_y;
+    }
+
+    /// `$3C38C`: the map presses its own keys.
+    ///
+    /// Forty `cp $XX / call z` comparisons run before the frame's cursor logic, and
+    /// each one **overwrites `hKeysPressed`** with a single direction bit
+    /// (`$3C29A` Right, `$3C2A0` Left, `$3C2A6` Down, `$3C2AC` Up) or with Start
+    /// (`$3C2B2`). The same frame's `$3C52B` then turns that synthetic press into an
+    /// auto-walk along the node's walk-graph entry — which is how the map tours the
+    /// cursor between screens — and a synthetic Start makes `$3C5F4` dispatch the
+    /// node's own action.
+    ///
+    /// Returns the pressed byte for the rest of the frame.
+    ///
+    /// (`$3C316` jumps straight to the gate `$3C4D3` rather than through `$3C4CC`,
+    /// but it only does so with `sMapCursorWalking` clear, and `$3C4CC`'s own test is
+    /// the same one — so the two paths are the same code here.)
+    fn synthetic_press(&mut self, pressed: u8, nodes: &MapNodes) -> u8 {
+        let mut p = pressed;
+        // The chain is sequential and re-reads `sMapNode` at every comparison, so a
+        // helper that *retargets* the node (`$3C2B8`/`$3C2E7`/`$3C2FE`) changes what
+        // the later comparisons see. Mirrored by re-reading `self.node` in the loop.
+        for &(node, class) in NODE_CHAIN {
+            if self.node != node {
+                continue;
+            }
+            match class {
+                ChainClass::Right => p = 0x10,
+                ChainClass::Left => p = 0x20,
+                ChainClass::Up => p = 0x40,
+                ChainClass::Down => p = 0x80,
+                ChainClass::Start => p = 0x08,
+                // `$3C2B8`: A retargets to node $36 if Macro path 2 bit 7 is set;
+                // otherwise B retargets to node $37 if the Macro gate bit 7 is set.
+                ChainClass::MacroA => {
+                    if p & 0x10 != 0 {
+                        if self.block(progress_offset::MACRO_PATH_2) & 0x80 != 0 {
+                            self.node = 0x36;
+                            p = 0x10;
+                        }
+                    } else if p & 0x20 != 0
+                        && self.block(progress_offset::GATE_MACRO) & 0x80 != 0
+                    {
+                        self.node = 0x37;
+                        p = 0x20;
+                    }
+                }
+                // `$3C2E7`: Select (bit 6) retargets to node $39 when Macro path 0's
+                // bit 0 is set.
+                ChainClass::MacroSelect => {
+                    if p & 0x40 != 0 && self.block(progress_offset::MACRO_PATH_0) & 0x01 != 0 {
+                        self.node = 0x39;
+                        p = 0x40;
+                    }
+                }
+                // `$3C2FE`: A retargets to node $6C when the Macro gate bit 7 is set.
+                ChainClass::MacroGate => {
+                    if p & 0x10 != 0 && self.block(progress_offset::GATE_MACRO) & 0x80 != 0 {
+                        self.node = 0x6C;
+                        p = 0x10;
+                    }
+                }
+            }
+        }
+        // `$3C32D` for every node from $1E up: a zone node's arrival auto-walk,
+        // fired once per screen (the `sMarioDead` byte is its latch) and only while
+        // the stage is not already cleared.
+        if self.node >= 0x1E {
+            p = self.zone_arrival_walk(p, nodes);
+        }
+        // `$3C316`: node 0 on the hub. Once level 1 is cleared, the story entry is
+        // done with and the cursor is moved to node $14 — where the chain's Up class
+        // auto-walks it next frame. The node change happens *after* the chain, so
+        // `$14`'s own class does not fire this frame; the ROM jumps straight to the
+        // gate (`$3C4D3`), skipping the walking check.
+        if self.node == 0 {
+            if self.cursor_walking == 0 && self.level_progress[0] & 0x80 != 0 {
+                self.node = 0x14;
+            }
+        }
+        p
+    }
+
+    /// A byte of the map's own block, by `sLevelProgress` offset.
+    fn block(&self, off: usize) -> u8 {
+        self.level_progress.get(off).copied().unwrap_or(0)
+    }
+
+    /// `$3C32D`: a zone node's arrival auto-walk.
+    ///
+    /// Once per screen — the walk has stopped, `sMarioDead` is 0 (the level-entry
+    /// handlers set it to `$FF`) — the map *presses the node's own direction mask*
+    /// (`$6591[slot]`) so the cursor walks off the node by itself, provided the
+    /// stage has not been cleared yet.
+    ///
+    /// The ROM then reads `$3C364[slot]` and uses *that* as the `sLevelProgress`
+    /// offset, where `$3EEF0` (the writer) and `$3E1D7` (the gate) both use the slot
+    /// itself. The port follows the two routines that agree and reads the array
+    /// directly; the discrepancy is filed in the queue, not silently resolved.
+    fn zone_arrival_walk(&mut self, pressed: u8, nodes: &MapNodes) -> u8 {
+        if self.cursor_walking != 0 || self.mario_dead != 0 {
+            return pressed;
+        }
+        self.mario_dead = 0xFF;
+        let Some(slot) = nodes.progress_slot(self.node) else {
+            return pressed;
+        };
+        if self.block(slot as usize) & 0x80 != 0 {
+            return pressed;
+        }
+        // `$6591[slot]`: the mask is a direction byte, so this is the press the node
+        // would accept from the player.
+        nodes.key_mask(slot).unwrap_or(pressed)
+    }
+
+    /// `$3CA31`/`$3CA5D`/`$3CA84`/`$3CAAB` — the position gates.
+    ///
+    /// Called from the walk's own x/y update while the cursor is on the hub: when it
+    /// reaches `$4C` (walking Right), `$4A` (Left), `$4B` (Up) or `$4D` (Down) —
+    /// around the middle of the 160-px screen — the camera takes over.
+    fn pan_gate(&mut self, dir: u8) {
+        let ok = match dir {
+            0x01 => self.cursor_x == 0x4C,
+            0x02 => self.cursor_x == 0x4A,
+            0x04 => self.cursor_y == 0x4B,
+            0x08 => self.cursor_y == 0x4D,
+            _ => false,
+        };
+        if ok {
+            self.pan_body(dir);
+        }
+    }
+
+    /// The four pan bodies (`$3CA37`/`$3CA63`/`$3CA8A`/`$3CAB1`): move the camera
+    /// one pixel, and — unless the player is holding B, which is what
+    /// `sMapScrollOnlyLatch` records — push the cursor back the other way, holding it
+    /// near the centre while the walk continues. The hub's B-pan calls these
+    /// directly, with no position gate.
+    fn pan_body(&mut self, dir: u8) {
+        match dir {
+            0x01 => {
+                if self.cam_x >> 8 != 0 && (self.cam_x & 0xFF) >= 0x60 {
+                    return;
+                }
+                self.cam_x = self.cam_x.wrapping_add(1);
+                if self.scroll_only_latch == 0 {
+                    self.cursor_x = self.cursor_x.wrapping_sub(1);
+                }
+            }
+            0x02 => {
+                if self.cam_x == 0 {
+                    return;
+                }
+                self.cam_x = self.cam_x.wrapping_sub(1);
+                if self.scroll_only_latch == 0 {
+                    self.cursor_x = self.cursor_x.wrapping_add(1);
+                }
+            }
+            0x04 => {
+                if self.cam_y == 0 {
+                    return;
+                }
+                self.cam_y = self.cam_y.wrapping_sub(1);
+                if self.scroll_only_latch == 0 {
+                    self.cursor_y = self.cursor_y.wrapping_add(1);
+                }
+            }
+            0x08 => {
+                if self.cam_y >> 8 != 0 && (self.cam_y & 0xFF) >= 0x70 {
+                    return;
+                }
+                self.cam_y = self.cam_y.wrapping_add(1);
+                if self.scroll_only_latch == 0 {
+                    self.cursor_y = self.cursor_y.wrapping_sub(1);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// `$3E1D7` at the cursor's current node, in the ROM's polarity (see
@@ -257,37 +659,69 @@ impl MapSim {
     }
 
     /// One map frame: `$3C000` for the frame's screen, then `$3C169`.
-    pub fn tick(&mut self, input: MapInput, nodes: &MapNodes, walk: &MapWalk) -> MapEntry {
+    ///
+    /// `records` seeds the camera and the cursor whenever the frame moves the cursor
+    /// to a different *screen* (`$3C7CA` on a zone door, `$3C518` when B is
+    /// released); a plain walk arrival does not re-seed anything.
+    pub fn tick(
+        &mut self,
+        input: MapInput,
+        nodes: &MapNodes,
+        walk: &MapWalk,
+        records: &MapNodeRecords,
+    ) -> MapEntry {
         let mut out = MapEntry::default();
-        if self.screen_id == 0 {
-            self.cursor_chain(input, nodes, walk, &mut out);
+        // `$3C38C` runs *before* the cursor logic and may overwrite the pressed byte
+        // with a synthetic key, so the whole frame sees the map's own press.
+        let pressed = self.synthetic_press(input.keys_pressed, nodes);
+        let input = MapInput {
+            keys_pressed: pressed,
+            ..input
+        };
+        let consumed = if self.screen_id == 0 {
+            let c = self.cursor_chain(input, nodes, walk, records, &mut out);
             self.bookkeeping(input.div);
+            c
         } else {
             self.bookkeeping(input.div);
-            // The screen routine itself ($3D8E6 and friends) is tiles, sprites and
-            // the camera latch: art, see the module docs.
-            self.cursor_chain(input, nodes, walk, &mut out);
-        }
-        self.enter_check(input, nodes, &mut out);
+            // The screen routine itself ($3D8E6 and friends) is tiles, sprites and the
+            // camera latch: art, see the module docs.
+            self.cursor_chain(input, nodes, walk, records, &mut out)
+        };
+        // The zone loaders clear `hKeysPressed` (`xor a / ldh [$FF81]`), so a door that
+        // opens cannot also enter a level on the same frame. The zone→hub doors do
+        // *not* clear it — which is why pressing A on the untested door nodes can open
+        // a door and reach a level in one frame.
+        let entry_input = if consumed {
+            MapInput {
+                keys_pressed: 0,
+                ..input
+            }
+        } else {
+            input
+        };
+        self.enter_check(entry_input, nodes, &mut out);
         out
     }
 
-    /// `$3C38C`'s tail: the cursor, `$3C4CC` onward.
+    /// `$3C38C`'s tail: the cursor, `$3C4CC` onward. Returns whether the frame's
+    /// press was *consumed* — a node action that cleared `hKeysPressed`, which stops
+    /// the same frame from also entering a level.
     fn cursor_chain(
         &mut self,
         input: MapInput,
         nodes: &MapNodes,
         walk: &MapWalk,
+        records: &MapNodeRecords,
         out: &mut MapEntry,
-    ) {
+    ) -> bool {
         if self.cursor_walking != 0 {
             self.walk_step(walk);
-            return;
+            return false;
         }
         // `$3C4D3`: 0 from the gate means the node's own action runs.
         if self.enterable(nodes, input.keys_held) {
-            self.node_action(input, out);
-            return;
+            return self.node_action(input, records, out);
         }
         // `$3C4E7`: the two nodes with a hardcoded secret stream — A pressed with
         // nothing else, on the node, with the gate saying "walk".
@@ -299,29 +733,33 @@ impl MapSim {
             out.music = Some(25);
             // $3C4E7 banks bc = $5BF6 in and jumps into the walk start.
             self.start_walk(0x5BF6, walk);
-            return;
+            return false;
         }
         if self.screen_id == 0 {
-            // `$3C5B2`: B (bit 1 of the held byte) turns the hub into a camera
-            // pan — the cursor stays put and the four direction bits pan.
+            // `$3C5B2`: B (bit 1 of the held byte) turns the hub into a camera pan —
+            // the cursor stays put and each held direction bit pans the camera.
             if input.keys_held & 0x02 != 0 {
                 self.scroll_only_latch = 0xFF;
-                out.unported = Some("map:$3C5B2 hub B pan ($3CA37/$3CA63/$3CA8A/$3CAB1)");
-                return;
+                for (bit, dir) in [(0x10u8, 0x01u8), (0x20, 0x02), (0x40, 0x04), (0x80, 0x08)] {
+                    if input.keys_held & bit != 0 {
+                        self.pan_body(dir);
+                    }
+                }
+                return false;
             }
             // `$3C518`: the frame after B is released, re-centre the screen on the
-            // cursor's node. $3EEA4/$3ED4C/$3F156 are the screen reload (art) and
-            // $3EA9A clears the anim byte and asks for music 6.
+            // cursor's node. $3EEA4 seeds the camera and cursor from the node's
+            // record, and $3EA9A clears the anim byte and asks for music 6.
             if self.scroll_only_latch != 0 {
                 self.cursor_anim = 0;
                 out.music = Some(6);
+                self.load_node(self.node, records);
             }
         }
         self.scroll_only_latch = 0;
         let pressed = input.keys_pressed & 0xF0;
         if pressed == 0 {
-            self.node_action(input, out);
-            return;
+            return self.node_action(input, records, out);
         }
         // `$3C52B`: the direction decides the entry — Left, then Up, then Down,
         // then Right as the fallback — and $FFFF in that slot means "no path", in
@@ -337,8 +775,11 @@ impl MapSim {
             WalkDir::Right
         };
         match walk.pointer(self.node, dir) {
-            Some(ptr) if ptr != MapWalk::NO_PATH => self.start_walk(ptr, walk),
-            _ => self.node_action(input, out),
+            Some(ptr) if ptr != MapWalk::NO_PATH => {
+                self.start_walk(ptr, walk);
+                false
+            }
+            _ => self.node_action(input, records, out),
         }
     }
 
@@ -395,10 +836,16 @@ impl MapSim {
             if self.cursor_y >= 0x08 {
                 self.cursor_y -= 1;
             }
+            if self.screen_id == 0 {
+                self.pan_gate(0x04);
+            }
         } else if m & 0x08 != 0 {
             self.cursor_pose = ((self.walk_frame & 0x0C) >> 2) + 12;
             if self.cursor_y < 0x8A {
                 self.cursor_y += 1;
+            }
+            if self.screen_id == 0 {
+                self.pan_gate(0x08);
             }
         }
         if m & 0x01 != 0 {
@@ -409,6 +856,9 @@ impl MapSim {
             if self.cursor_x < 0x94 {
                 self.cursor_x += 1;
             }
+            if self.screen_id == 0 {
+                self.pan_gate(0x01);
+            }
         } else if m & 0x02 != 0 {
             if self.walk_frame & 0x0C == 0x0C {
                 self.walk_frame = 0;
@@ -417,40 +867,120 @@ impl MapSim {
             if self.cursor_x >= 0x08 {
                 self.cursor_x -= 1;
             }
+            if self.screen_id == 0 {
+                self.pan_gate(0x02);
+            }
         }
     }
 
     /// `$3C5DA` — the node's own action, reached when the cursor is not walking.
+    /// Returns whether it cleared the frame's press (only `$3C60B`'s loaders do).
     ///
     /// `$3C5F4` needs A or START *pressed* to run the node's entry action, and
     /// only on the hub or screen 8; everything else falls to `$3C66C`. On the hub
     /// that is the idle path (`$3C7D9`); on a zone screen it is the door cluster
     /// (`$3C6B0`-`$3C7A3`), which is what turns a zone screen back into the hub.
-    fn node_action(&mut self, input: MapInput, out: &mut MapEntry) {
-        // `$3C5DA`: nodes $15 and $0D run the same flag helper, which the port has
-        // not modelled yet.
-        if self.node == 0x15 || self.node == 0x0D {
-            out.note(Some("map:$3C2B2 node flag helper"));
+    fn node_action(
+        &mut self,
+        input: MapInput,
+        records: &MapNodeRecords,
+        out: &mut MapEntry,
+    ) -> bool {
+        // `$3C5DA`: nodes $15 and $0D *force* a Start press on the map's own behalf
+        // — the synthetic `$3C2B2` — and the gate below then sees it like any other
+        // press. Node $0D only does that while the rock animation is not running, in
+        // which case it goes straight to `$3C60B` with no gate at all.
+        let mut pressed = input.keys_pressed;
+        if self.node == 0x15 {
+            pressed = 0x08;
+        } else if self.node == 0x0D {
+            pressed = 0x08;
+            if self.rock_anim_timer != 0 {
+                return self.dispatch_door(pressed, out);
+            }
         }
-        if self.node == 0x0D && self.rock_anim_timer != 0 {
-            out.note(Some("map:$3C60B rock/gate node action"));
-            return;
+        // `$3C5F4`: A or START, on the hub or screen 8, with a door to open.
+        if pressed & 0x09 != 0
+            && (self.screen_id == 0 || self.screen_id == 8)
+            && node_door(self.node).is_some()
+        {
+            return self.dispatch_door(pressed, out);
         }
-        if input.keys_pressed & 0x09 != 0 && (self.screen_id == 0 || self.screen_id == 8) {
-            // `$3C60B`: the A/START node action table — the castle animation
-            // ($3D0D7), the zone cutscenes, the ending screens.
-            out.note(Some("map:$3C60B A/START node action"));
-            return;
+        // `$3C66C`: on the hub that is the idle path; on a zone screen it is the door
+        // cluster, and everything else falls through to the idle path too.
+        if self.screen_id != 0 && self.door(pressed, records, out) {
+            // The zone→hub doors do not clear the key byte, so the frame's press
+            // survives into `$3C169` — see `tick`.
+            return false;
         }
-        if self.screen_id != 0 && self.door(input.keys_pressed, out) {
-            return;
-        }
-        // `$3C7D9`: idle — the walk state is cleared, the step timer reloads, the
-        // frame keeps counting and the pose goes to the idle block.
+        self.idle(out);
+        false
+    }
+
+    /// `$3C7D9`: the idle tail, shared by the hub's no-input path and by a
+    /// coin-operated door the player cannot pay for.
+    fn idle(&mut self, _out: &mut MapEntry) {
         self.cursor_walking = 0;
         self.walk_step_timer = 8;
         self.walk_frame = self.walk_frame.wrapping_add(1);
         self.cursor_pose = ((self.walk_frame & 0x18) >> 3) + 12;
+    }
+
+    /// `$3C60B`: the node's A/START action.
+    ///
+    /// The loader behind each door is a blocking palette fade, a zone gfx load and a
+    /// script pointer (art, see the module docs); what is modelled is what it leaves
+    /// behind: the cursor, the node, the screen, `sMarioDead`, the music request, the
+    /// walk-out transition, and — for the four coin-operated doors — the BCD price it
+    /// takes out of the purse.
+    ///
+    /// Returns whether the press was consumed. Every door's loader clears
+    /// `hKeysPressed` (`xor a / ldh [$FF81]`) but the *refused* coin doors do not:
+    /// they fall into `$3C7D9` with the press intact.
+    fn dispatch_door(&mut self, _pressed: u8, out: &mut MapEntry) -> bool {
+        let Some(d) = node_door(self.node) else {
+            out.note(Some("map:$3C60B A/START node action"));
+            return false;
+        };
+        if let Some(price) = d.price {
+            // `$3F38F`: the coin check, and the only way a door can refuse.
+            match bcd_sub_u16(self.coins_low, self.coins_high, price) {
+                Some((lo, hi)) => {
+                    self.coins_low = lo;
+                    self.coins_high = hi;
+                    // $3F38F commits the new purse and calls $2934 (the save).
+                    out.saved = true;
+                }
+                None => {
+                    out.sfx = Some(19);
+                    self.idle(out);
+                    return false;
+                }
+            }
+        }
+        if d.mask_move_nibble {
+            self.cursor_move &= 0x0F;
+        }
+        if let Some(m) = d.move_ {
+            self.cursor_move = m;
+        }
+        if d.price.is_none() {
+            self.cursor_x = d.cursor_x;
+            self.cursor_y = d.cursor_y;
+            self.node = d.node;
+            // Every zone door sets sMarioDead = $FF, which is what suppresses the
+            // arrival auto-walk on the screen it lands on until the next load.
+            self.mario_dead = 0xFF;
+        }
+        self.screen_id = d.screen_id;
+        self.scroll_only_latch = 0;
+        self.cursor_anim = 0;
+        // $3E3BA's walk-out (the zone doors); the coin doors load without one.
+        if let Some(dir) = d.dir {
+            out.transition = Some(dir);
+        }
+        out.music = Some(d.music);
+        true
     }
 
     /// The zone screens' door cluster (`$3C66C`-`$3C7A3`): eleven nodes walk the
@@ -467,7 +997,7 @@ impl MapSim {
     /// Left), a mask (`$5C` takes Right or Down), or no test at all (`$2D`, `$30`,
     /// `$40`, `$4A`). Nodes `$46`/`$4A` and `$23`/`$74` share their tails in the
     /// ROM, which is why two nodes can land on the same destination logic.
-    fn door(&mut self, keys_pressed: u8, out: &mut MapEntry) -> bool {
+    fn door(&mut self, keys_pressed: u8, records: &MapNodeRecords, out: &mut MapEntry) -> bool {
         // node -> (destination, move byte, pressed test, transition direction).
         // The direction is `$3E2F7`'s own argument, which is *not* always the move
         // byte's low nibble: node $30 moves Down but transitions Left.
@@ -500,9 +1030,11 @@ impl MapSim {
             self.cursor_walking = 0xFF;
             self.cursor_walking = 0;
         }
-        // `$3C7CA`: the cursor's new node, the hub's screen id; then `$3C7BD`:
-        // `$3F156`, state $0C, `$3EA9A` (anim 0, music 6), return.
+        // `$3C7CA`: the cursor's new node, `$3EEA4` (the new node's camera and
+        // cursor), then the hub's screen id; `$3C7BD` moves the state to $0C and
+        // `$3EA9A` asks for music 6.
         self.node = dest;
+        self.load_node(dest, records);
         self.screen_id = 0;
         self.cursor_move = move_;
         self.cursor_anim = 0;
@@ -586,18 +1118,49 @@ mod tests {
             .collect()
     }
 
+    /// The node records, as `$3EEA4` reads them: node 0 (`00 81 01 42 4b 4c`), the
+    /// story node $14, the hub node $19 a Tree-Zone door lands on, and the zone exit
+    /// node $23 (`00 11 00 f2 30 6e` = camera $0011/$00F2, cursor 48/110). Every other
+    /// record is zeroed: only the nodes these tests move to need real data.
+    fn recs() -> MapNodeRecords {
+        const REAL: &[(usize, &str)] = &[
+            (0x00, "00 81 01 42 4b 4c 00 00"),
+            (0x14, "00 81 01 42 4b 4c 00 00"),
+            (0x19, "00 11 00 f2 4b 4c 00 00"),
+            (0x1A, "00 15 00 32 4b 4c 00 00"),
+            (0x23, "00 11 00 f2 30 6e 00 00"),
+            (0x7A, "01 35 00 3a 13 24 00 00"),
+        ];
+        let mut blob = vec![0u8; MapNodeRecords::LEN];
+        for (node, bytes) in REAL {
+            blob[node * 8..node * 8 + 8].copy_from_slice(&hex(bytes));
+        }
+        MapNodeRecords::from_bytes(&blob).expect("record-sized blob")
+    }
+
     /// A blob holding the real table row and the real stream, at the offsets the
     /// ROM addresses them at. Every other entry is `$FFFF` — no path — the way the
     /// ROM's own empty entries are, which is what sends a direction press into the
-    /// node's own action (`$3C52B`'s `jr z, $3C5DA`).
+    /// node's own action (`$3C52B`'s `jr z, $3C5DA`). Node `$14` is the one the
+    /// `$3C38C` chain auto-walks Up.
     fn walk_blob() -> MapWalk {
         let mut blob = vec![0xFFu8; MapWalk::TABLE_LEN];
         // Node 1 at its real offset in the table.
         blob[8..16].copy_from_slice(&hex(NODE1_ROW_HEX));
-        // The stream, at (its window pointer - the table's own window address).
-        let at = (NODE1_R - 0x563A) as usize;
-        blob.resize(at + 13, 0);
-        blob[at..at + 13].copy_from_slice(&hex(NODE1_R_STREAM_HEX));
+        // Node $14's row (Up = $5A99) — the chain's Up class.
+        blob[0x14 * 8..0x14 * 8 + 8].copy_from_slice(&hex("ff ff ff ff 99 5a ff ff"));
+        // The streams, at (their window pointer - the table's own window address).
+        for (ptr, bytes) in [
+            (NODE1_R, NODE1_R_STREAM_HEX),
+            (0x5A99u16, "14 44 44 44 14 04 00 13"),
+        ] {
+            let at = (ptr - 0x563A) as usize;
+            let b = hex(bytes);
+            if blob.len() < at + b.len() {
+                blob.resize(at + b.len(), 0);
+            }
+            blob[at..at + b.len()].copy_from_slice(&b);
+        }
         MapWalk::from_bytes(&blob).expect("table-sized blob")
     }
 
@@ -619,9 +1182,11 @@ mod tests {
         b[N::NODES + 2] = 0x01;
         b[N::NODES + 0x20] = 0x05;
         b[N::NODES + 0x6E] = 0x00;
+        b[N::NODES + 0x31] = 0x06; // a zone node with a slot, for $3C32D
         b[2 * N::NODES] = 0x00; // slot 0: no direction opens it
         b[2 * N::NODES + 1] = 0x10; // slot 1: Right
         b[2 * N::NODES + 5] = 0x40; // slot 5: Up, the castle
+        b[2 * N::NODES + 6] = 0x10; // slot 6: Right, for the $3C32D test
         N::from_bytes(&b).expect("sized blob")
     }
 
@@ -677,7 +1242,7 @@ mod tests {
             keys_pressed: 0x10, // ...and the walk reads the pressed one
             ..Default::default()
         };
-        let out = map.tick(input, &n, &walk);
+        let out = map.tick(input, &n, &walk, &recs());
         assert_eq!(map.cursor_walking, 0xFF, "the walk started");
         assert_eq!(map.cursor_move, 0x01, "the stream's first move byte");
         // The walk-start frame *is* a move frame ($3C588 jumps into $3C7EC), so
@@ -691,7 +1256,7 @@ mod tests {
         let idle = MapInput::default();
         let mut ticks = 1;
         while map.cursor_walking != 0 && ticks < 1000 {
-            map.tick(idle, &n, &walk);
+            map.tick(idle, &n, &walk, &recs());
             ticks += 1;
         }
         assert_eq!(map.cursor_walking, 0, "the stream ended");
@@ -812,6 +1377,7 @@ mod tests {
             },
             &n,
             &walk,
+            &recs(),
         );
         assert_eq!(map.rock_anim_timer, 1, "$3C4E7's rock counter");
         assert_eq!(out.music, Some(25));
@@ -825,16 +1391,19 @@ mod tests {
         let idle = MapInput::default();
         let mut guard = 0;
         while map.cursor_walking != 0 && guard < 2000 {
-            map.tick(idle, &n, &walk);
+            map.tick(idle, &n, &walk, &recs());
             guard += 1;
         }
         assert_eq!(map.cursor_walking, 0, "the secret stream ended");
         assert_eq!(map.node, 0x0D, "the byte after its $00");
 
-        // Any other pressed bit and the arm does not fire.
+        // Any other pressed bit and the arm does not fire. Node $1E is used here
+        // because node $0C is in the `$3C38C` chain's Start class: the map presses
+        // Start for the player there, so the arm fires with no input at all — the
+        // secret route is automatic once the cursor reaches either node.
         let mut map = MapSim::new();
         map.screen_id = 1;
-        map.node = 0x0C;
+        map.node = 0x1E;
         map.tick(
             MapInput {
                 keys_pressed: 0x19, // A plus a direction
@@ -842,9 +1411,18 @@ mod tests {
             },
             &n,
             &walk,
+            &recs(),
         );
         assert_eq!(map.rock_anim_timer, 0);
         assert_eq!(map.cursor_walking, 0);
+
+        let mut map = MapSim::new();
+        map.screen_id = 1;
+        map.node = 0x0C;
+        let out = map.tick(MapInput::default(), &n, &walk, &recs());
+        assert_eq!(map.rock_anim_timer, 1, "the chain presses Start by itself");
+        assert_eq!(map.cursor_walking, 0xFF);
+        assert_eq!(out.music, Some(25));
     }
 
     /// `$3C169`/`$3C1A2`: A or START on a node with a level hands back the level,
@@ -865,6 +1443,7 @@ mod tests {
             },
             &n,
             &walk,
+            &recs(),
         );
         assert_eq!(out.level, Some(1), "$4218[2] = 1 = level 2");
         assert_eq!(out.progress_flags, 0x08, "the node's own progress byte");
@@ -890,6 +1469,7 @@ mod tests {
             },
             &n,
             &walk,
+            &recs(),
         );
         assert_eq!(map.special_node_latch, 16);
         assert_eq!(out.level, None, "no level was entered");
@@ -908,6 +1488,7 @@ mod tests {
             },
             &n,
             &walk,
+            &recs(),
         );
         assert_eq!(map.special_node_latch, 0, "START is not A");
     }
@@ -926,15 +1507,19 @@ mod tests {
         map.screen_id = 1;
         map.node = 0x20;
         map.level_progress[5] = 0x80;
-        let out = map.tick(press_a, &n, &walk);
+        let out = map.tick(press_a, &n, &walk, &recs());
         assert_eq!(out.level, None, "the castle slot refuses");
         assert!(!out.saved);
 
-        // The same node uncleared enters: $4218[$20] is 4, i.e. level 5.
+        // The same node uncleared enters: $4218[$20] is 4, i.e. level 5. (`mario_dead`
+        // is set so `$3C32D`'s arrival press does not clobber the player's A first —
+        // the ROM's own quirk is that the auto-walk's synthetic direction replaces the
+        // press on the frame it fires.)
         let mut map = MapSim::new();
         map.screen_id = 1;
         map.node = 0x20;
-        let out = map.tick(press_a, &n, &walk);
+        map.mario_dead = 0xFF;
+        let out = map.tick(press_a, &n, &walk, &recs());
         assert_eq!(out.level, Some(4));
         assert_eq!(out.progress_flags, 0);
 
@@ -943,49 +1528,47 @@ mod tests {
         map.screen_id = 1;
         map.node = 2;
         map.level_progress[1] = 0x80;
-        let out = map.tick(press_a, &n, &walk);
+        let out = map.tick(press_a, &n, &walk, &recs());
         assert_eq!(out.level, Some(1), "a cleared level still re-enters");
         assert_eq!(out.progress_flags, 0x80, "and keeps its cleared bit");
     }
 
-    /// `$3C5F4`: on the hub (and screen 8) A runs the node's own action, which is
-    /// what loads a level from a zone screen's entry node — and the port reports
-    /// that path as unported rather than pretending it ran.
+    /// `$3C32D`'s arrival press replaces whatever the player pressed — so A on the
+    /// frame it fires cannot also enter the level, and only the next frame can.
     #[test]
-    fn the_a_start_node_action_is_reported_as_unported() {
+    fn the_arrival_walk_swallows_the_players_press() {
         let (n, walk) = (nodes(), walk_blob());
         let mut map = MapSim::new();
-        map.screen_id = 0;
-        map.node = 0;
+        map.screen_id = 1;
+        map.node = 0x20; // a slot-5 node with an arrival walk
+        map.level_progress[5] = 0x00;
         let out = map.tick(
             MapInput {
-                keys_pressed: 0x01,
-                keys_held: 0x10,
+                keys_pressed: 0x01, // A
                 ..Default::default()
             },
             &n,
             &walk,
+            &recs(),
         );
-        assert_eq!(
-            out.unported,
-            Some("map:$3C60B A/START node action"),
-            "the hub's node action table is not ported"
+        assert_eq!(out.level, None, "the synthetic Up press replaced the A");
+        assert_eq!(map.mario_dead, 0xFF, "and the one-shot is spent");
+        // The next frame the player's A survives the chain and enters.
+        let out = map.tick(
+            MapInput {
+                keys_pressed: 0x01,
+                ..Default::default()
+            },
+            &n,
+            &walk,
+            &recs(),
         );
-
-        // Without A, the hub falls to the idle path instead.
-        let mut map = MapSim::new();
-        map.node = 0;
-        let out = map.tick(MapInput::default(), &n, &walk);
-        assert_eq!(out.unported, None);
-        assert_eq!(map.cursor_walking, 0);
-        assert_eq!(map.walk_step_timer, 8, "$3C7D9 reloads the step timer");
-        assert_eq!(map.walk_frame, 1, "and counts the frame");
-        assert_eq!(map.cursor_pose, 12, "the idle block, 12-15");
+        assert_eq!(out.level, Some(4));
     }
 
     /// The zone screens' door cluster: walk into one and the cursor lands on the
-    /// hub at another node, in state `$0C`. Node `$23` wants Down exactly; node
-    /// `$2D` has no key test at all.
+    /// hub at another node, in state `$0C`, seeded from that node's record. Node
+    /// `$23` wants Down exactly; node `$2D` has no key test at all.
     #[test]
     fn a_zone_door_returns_the_cursor_to_the_hub() {
         let (n, walk) = (nodes(), walk_blob());
@@ -1000,6 +1583,7 @@ mod tests {
             },
             &n,
             &walk,
+            &recs(),
         );
         assert_eq!(map.node, 25, "the door's destination");
         assert_eq!(map.screen_id, 0, "back to the hub");
@@ -1019,6 +1603,7 @@ mod tests {
             },
             &n,
             &walk,
+            &recs(),
         );
         assert_eq!(map.node, 0x23, "Left is not this door's key");
         assert_eq!(map.cursor_pose, 12, "the idle path instead");
@@ -1028,21 +1613,22 @@ mod tests {
         let mut map = MapSim::new();
         map.screen_id = 1;
         map.node = 0x2D;
-        let out = map.tick(MapInput::default(), &n, &walk);
+        let out = map.tick(MapInput::default(), &n, &walk, &recs());
         assert_eq!(map.node, 121);
         assert_eq!(map.screen_id, 0);
         assert_eq!(out.transition, Some(8));
         assert_eq!(map.cursor_move, 8);
     }
 
-    /// The hub's B button: the cursor stays put and the pan latch is set and held
-    /// only while B is down.
+    /// The hub's B button: the cursor stays put, the pan latch is set while B is
+    /// down, and B plus a direction pans the camera by hand.
     #[test]
     fn the_hub_b_button_sets_the_scroll_only_latch() {
         let (n, walk) = (nodes(), walk_blob());
         let mut map = MapSim::new();
         map.screen_id = 0;
         map.node = 0;
+        map.cam_x = 0x40;
         let out = map.tick(
             MapInput {
                 keys_held: 0x02, // B
@@ -1050,18 +1636,49 @@ mod tests {
             },
             &n,
             &walk,
+            &recs(),
         );
         assert_eq!(map.scroll_only_latch, 0xFF);
-        assert!(out.unported.is_some(), "the pan itself is not ported");
+        assert_eq!(out.unported, None, "the pan is ported");
         assert_eq!(map.cursor_walking, 0, "the cursor does not walk");
         assert_eq!(map.node, 0, "and does not move");
+        assert_eq!(map.cam_x, 0x40, "no direction held: no pan");
 
-        // The frame B is released, the screen re-centres and the anim byte is
-        // cleared; the latch goes with it.
-        let out = map.tick(MapInput::default(), &n, &walk);
+        // B plus Right pans the camera, and because the latch is set the cursor is
+        // not pushed back.
+        let mut map = MapSim::new();
+        map.screen_id = 0;
+        map.node = 0;
+        map.cam_x = 0x40;
+        map.cursor_x = 0x40;
+        map.tick(
+            MapInput {
+                keys_held: 0x12, // B + Right
+                keys_pressed: 0x10,
+                ..Default::default()
+            },
+            &n,
+            &walk,
+            &recs(),
+        );
+        assert_eq!(map.cam_x, 0x41, "the camera pans");
+        assert_eq!(map.cursor_x, 0x40, "and the cursor holds still");
+
+        // The frame B is released, the screen re-centres on the node's record and the
+        // anim byte is cleared; the latch goes with it.
+        let mut map = MapSim::new();
+        map.screen_id = 0;
+        map.node = 0x23;
+        map.scroll_only_latch = 0xFF;
+        let out = map.tick(MapInput::default(), &n, &walk, &recs());
         assert_eq!(map.scroll_only_latch, 0);
         assert_eq!(out.music, Some(6), "$3EA9A asks for music 6");
         assert_eq!(map.cursor_anim, 0);
+        assert_eq!(
+            (map.cursor_x, map.cursor_y),
+            (48, 110),
+            "$3EEA4 seeds the cursor from the node's record"
+        );
     }
 
     /// A press that is only A, with the cursor walking, is swallowed: `$3C169`
@@ -1083,6 +1700,7 @@ mod tests {
             },
             &n,
             &walk,
+            &recs(),
         );
         assert_eq!(out.level, None);
         assert_eq!(out.state, 0);
@@ -1121,6 +1739,7 @@ mod tests {
             },
             &n,
             &walk,
+            &recs(),
         );
         assert_eq!(map.cursor_walking, 0, "no stream, no walk");
         assert_eq!(map.cursor_x, 0);
@@ -1144,6 +1763,274 @@ mod tests {
         assert_eq!(sim.level_progress[3], 0x08);
     }
 
+    /// `$3C60B`: a hub node with a door loads its zone screen. Node `$02` is also in
+    /// the `$3C38C` chain's Start class, so the map presses Start *itself* — no input
+    /// at all is enough — and the loader's `xor a / ldh [$FF81]` consumes that press,
+    /// which is what stops the same frame from also entering a level.
+    #[test]
+    fn a_hub_zone_door_loads_its_screen() {
+        let (n, walk) = (nodes(), walk_blob());
+        let mut map = MapSim::new();
+        map.screen_id = 0;
+        map.node = 0x02; // the Tree Zone door
+        map.cursor_move = 0x2F; // a move byte with a bump bit, to be preserved
+        let out = map.tick(MapInput::default(), &n, &walk, &recs());
+        assert_eq!(map.screen_id, 2, "$3D0D7 loads Tree Zone screen A");
+        assert_eq!(map.node, 0x23, "the node the set-piece lands on");
+        assert_eq!((map.cursor_x, map.cursor_y), (48, 158));
+        assert_eq!(map.mario_dead, 0xFF, "which is what blocks the arrival walk");
+        assert_eq!(map.cursor_move, 0x2F, "the door leaves the move byte alone");
+        assert_eq!(out.transition, Some(4), "$3E3BA walks out Up");
+        assert_eq!(out.music, Some(255));
+        assert_eq!(out.level, None, "the press was consumed: no level entry");
+        assert_eq!(out.state, 0, "the map stays in state $0C");
+
+        // A node that is not a door: A there does nothing but idle.
+        let mut map = MapSim::new();
+        map.screen_id = 0;
+        map.node = 3;
+        let out = map.tick(MapInput::default(), &n, &walk, &recs());
+        assert_eq!(out.unported, None);
+        assert_eq!(map.screen_id, 0);
+        assert_eq!(out.state, 0);
+        assert_eq!(map.cursor_pose, 12, "the idle block");
+    }
+
+    /// `$3C38C`'s chain: the map's own synthetic presses, node class by node class,
+    /// and the three helpers that *retarget the node* instead of pressing a key.
+    #[test]
+    fn the_node_chain_presses_the_maps_own_keys() {
+        let n = nodes();
+        let mut map = MapSim::new();
+
+        // The plain classes, one node each.
+        for (node, want) in [
+            (0x68u8, 0x10u8), // Right
+            (0x65, 0x20),     // Left
+            (0x2F, 0x40),     // Up
+            (0x31, 0x80),     // Down
+            (0x67, 0x08),     // Start
+        ] {
+            map.node = node;
+            assert_eq!(map.synthetic_press(0x00, &n), want, "node ${node:02X}");
+        }
+        // A node the chain does not list keeps the player's own press.
+        map.node = 0x40;
+        assert_eq!(map.synthetic_press(0x10, &n), 0x10);
+
+        // $3C2B8: A on node $35 retargets to $36 — but only with Macro path 2's
+        // bit 7 set.
+        map.node = 0x35;
+        assert_eq!(map.synthetic_press(0x10, &n), 0x10, "no flag, no retarget");
+        assert_eq!(map.node, 0x35);
+        map.level_progress[progress_offset::MACRO_PATH_2] = 0x80;
+        assert_eq!(map.synthetic_press(0x10, &n), 0x10, "A retargets");
+        assert_eq!(map.node, 0x36);
+        // ...and with B instead, the Macro gate's bit 7 sends it to $37.
+        map.node = 0x35;
+        map.level_progress[progress_offset::GATE_MACRO] = 0x80;
+        assert_eq!(map.synthetic_press(0x20, &n), 0x20);
+        assert_eq!(map.node, 0x37);
+
+        // $3C2E7: Select on node $32 retargets to $39 on Macro path 0's bit 0.
+        map.node = 0x32;
+        assert_eq!(map.synthetic_press(0x40, &n), 0x40, "no flag, no retarget");
+        assert_eq!(map.node, 0x32);
+        map.level_progress[progress_offset::MACRO_PATH_0] = 0x01;
+        map.synthetic_press(0x40, &n);
+        assert_eq!(map.node, 0x39);
+
+        // $3C2FE: A on node $6A retargets to $6C on the Macro gate.
+        map.node = 0x6A;
+        map.synthetic_press(0x10, &n);
+        assert_eq!(map.node, 0x6C);
+    }
+
+    /// `$3C32D`: a zone node presses its own `$6591` mask once per screen. The mask
+    /// wins over the chain's class press, and `sMarioDead` is the latch that stops it
+    /// firing again.
+    #[test]
+    fn the_zone_arrival_walk_fires_once_per_screen() {
+        let n = nodes();
+        let mut map = MapSim::new();
+        map.node = 0x31; // a Down-class node and a slot-6 node
+        map.screen_id = 1;
+        assert_eq!(map.synthetic_press(0x00, &n), 0x10, "the mask wins");
+        assert_eq!(map.mario_dead, 0xFF, "and the one-shot is spent");
+        // Next frame the chain's own class press runs instead.
+        assert_eq!(map.synthetic_press(0x00, &n), 0x80);
+
+        // A cleared stage does not auto-walk at all — and does not spend the latch.
+        let mut map = MapSim::new();
+        map.node = 0x31;
+        map.screen_id = 1;
+        map.level_progress[6] = 0x80;
+        assert_eq!(map.synthetic_press(0x00, &n), 0x80);
+        assert_eq!(map.mario_dead, 0xFF);
+    }
+
+    /// `$3C316`: node 0 is the story entry. Once level 1 is cleared the cursor is
+    /// moved to node `$14`, whose chain class then walks it Up off the node.
+    #[test]
+    fn node_zero_hands_over_to_the_story_node_once_level_one_is_cleared() {
+        let (n, walk) = (nodes(), walk_blob());
+        let mut map = MapSim::new();
+        map.screen_id = 0;
+        map.node = 0;
+        map.level_progress[0] = 0x00;
+        assert_eq!(map.synthetic_press(0x00, &n), 0x00);
+        assert_eq!(map.node, 0, "level 1 uncleared: node 0 stays");
+
+        map.level_progress[0] = 0x80;
+        assert_eq!(map.synthetic_press(0x00, &n), 0x00);
+        assert_eq!(map.node, 0x14, "$3C316 moved it");
+
+        // And the next frame the chain auto-walks the cursor off node $14 with no
+        // input at all: its Up stream is `14 44 44 44 14 04 00 -> node $13`.
+        let out = map.tick(MapInput::default(), &n, &walk, &recs());
+        assert_eq!(map.cursor_walking, 0xFF, "the map pressed Up for the player");
+        assert_eq!(map.cursor_move, 0x14, "the stream's first byte");
+        assert_eq!(out.level, None);
+        let idle = MapInput::default();
+        let mut guard = 0;
+        while map.cursor_walking != 0 && guard < 2000 {
+            map.tick(idle, &n, &walk, &recs());
+            guard += 1;
+        }
+        assert_eq!(map.cursor_walking, 0);
+        assert_eq!(map.node, 0x13, "the stream's arrival node");
+    }
+
+    /// `$3F38F`: the coin doors' BCD price. Payable takes the coins and loads the
+    /// bonus screen with no walk-out; unpayable clicks away and changes nothing.
+    #[test]
+    fn the_coin_doors_take_their_bcd_price() {
+        let (n, walk) = (nodes(), walk_blob());
+        let mut map = MapSim::new();
+        map.screen_id = 0;
+        map.node = 0x70; // $0200
+        map.coins_low = 0x00;
+        map.coins_high = 0x20; // BCD 2000
+        let out = map.tick(
+            MapInput {
+                keys_pressed: 0x01, // A
+                ..Default::default()
+            },
+            &n,
+            &walk,
+            &recs(),
+        );
+        assert_eq!(map.screen_id, 10, "$3F3F0 loads bonus screen 10");
+        assert_eq!((map.coins_low, map.coins_high), (0x00, 0x18), "2000 - 200");
+        assert_eq!(out.music, Some(21));
+        assert_eq!(out.sfx, None, "the click is for the refused door only");
+        assert!(out.saved, "$3F38F calls $2934");
+        assert_eq!(out.transition, None, "the coin doors run no walk-out");
+        assert_eq!(map.node, 0x70, "and do not move the cursor or the node");
+
+        // Not enough coins: the door answers with sfx 19 and the idle path, and the
+        // press is NOT consumed (the refusal does not run a loader).
+        let mut map = MapSim::new();
+        map.screen_id = 0;
+        map.node = 0x70;
+        map.coins_low = 0x50;
+        map.coins_high = 0x01; // BCD 150
+        let out = map.tick(
+            MapInput {
+                keys_pressed: 0x01,
+                ..Default::default()
+            },
+            &n,
+            &walk,
+            &recs(),
+        );
+        assert_eq!(out.sfx, Some(2), "$3C201's click overwrites the refusal's 19");
+        assert_eq!((map.coins_low, map.coins_high), (0x50, 0x01), "left alone");
+        assert_eq!(map.screen_id, 0);
+        assert_eq!(map.node, 0x70);
+        assert_eq!(map.cursor_pose, 12, "the idle block");
+        assert!(!out.saved);
+    }
+
+    /// `$3F38F`'s arithmetic, checked directly: BCD with a borrow, and a `None` — the
+    /// ROM's `jr c` — whenever the price is above the purse.
+    #[test]
+    fn the_coin_price_check_is_bcd_with_a_borrow() {
+        assert_eq!(bcd_sub_u16(0x00, 0x20, 0x0999), Some((0x01, 0x10)), "2000-999");
+        assert_eq!(bcd_sub_u16(0x50, 0x01, 0x0200), None, "150 < 200");
+        assert_eq!(bcd_sub_u16(0x00, 0x00, 0x0000), Some((0x00, 0x00)));
+        assert_eq!(bcd_sub_u16(0x99, 0x00, 0x0099), Some((0x00, 0x00)), "exact");
+        assert_eq!(bcd_sub_u16(0x00, 0x01, 0x0050), Some((0x50, 0x00)), "100-50");
+        assert_eq!(bcd_sub_u16(0x30, 0x00, 0x0030), Some((0x00, 0x00)));
+        assert_eq!(bcd_sub_u16(0x29, 0x00, 0x0030), None, "29 < 30");
+    }
+
+    /// The hub pan: when the cursor reaches the position gate the camera takes the
+    /// step and pushes the cursor back — unless the player is holding B, in which case
+    /// the cursor keeps the step and just the camera moves.
+    #[test]
+    fn the_hub_pan_holds_the_cursor_at_the_position_gate() {
+        fn step(latch: u8, x: u8, cam: u16) -> MapSim {
+            let mut map = MapSim::new();
+            map.screen_id = 0;
+            map.cursor_move = 0x01; // Right
+            map.cursor_x = x;
+            map.cursor_y = 0x40;
+            map.cam_x = cam;
+            map.scroll_only_latch = latch;
+            map.cursor_walking = 0xFF;
+            map.walk_step_timer = 0xFF;
+            map.cursor_anim = 0;
+            map.walk_step(&walk_blob());
+            map
+        }
+        let m = step(0x00, 0x4B, 0x40);
+        assert_eq!(
+            (m.cursor_x, m.cam_x),
+            (0x4B, 0x41),
+            "the camera takes the pixel and the cursor is held"
+        );
+        let m = step(0xFF, 0x4B, 0x40);
+        assert_eq!(
+            (m.cursor_x, m.cam_x),
+            (0x4C, 0x41),
+            "with B held the cursor keeps the step"
+        );
+        // Away from the gate nothing pans.
+        let m = step(0x00, 0x20, 0x40);
+        assert_eq!((m.cursor_x, m.cam_x), (0x21, 0x40));
+        // And the camera's own ceiling stops the pan: at $60 in a non-zero page.
+        let m = step(0x00, 0x4B, 0x0160);
+        assert_eq!((m.cursor_x, m.cam_x), (0x4C, 0x0160), "no pan past $5F");
+    }
+
+    /// The node records, pinned to the ROM's own bytes at the ROM's own offsets.
+    #[test]
+    fn the_node_records_are_pinned_to_the_roms_bytes() {
+        let r = recs();
+        let n23 = r.record(0x23).expect("node $23");
+        assert_eq!((n23.cam_x, n23.cam_y), (0x0011, 0x00F2));
+        assert_eq!((n23.cursor_x, n23.cursor_y), (48, 110));
+        let n0 = r.record(0).expect("node 0");
+        assert_eq!((n0.cam_x, n0.cam_y), (0x0081, 0x0142));
+        assert_eq!((n0.cursor_x, n0.cursor_y), (75, 76), "the hub's default cursor");
+        assert_eq!(r.record(128), None, "past the table");
+
+        // `$3EEA4` writes all four bytes.
+        let mut map = MapSim::new();
+        map.load_node(0x23, &r);
+        assert_eq!(
+            (map.cam_x, map.cam_y, map.cursor_x, map.cursor_y),
+            (0x0011, 0x00F2, 48, 110)
+        );
+        // With no records loaded, nothing is seeded and nothing panics.
+        let mut map = MapSim::new();
+        map.cursor_x = 9;
+        map.load_node(0x23, &MapNodeRecords::default());
+        assert_eq!(map.cursor_x, 9);
+        assert!(MapNodeRecords::from_bytes(&[0u8; 8]).is_none(), "a short blob");
+    }
+
     /// The graph's shape, from the ROM: the table covers 128 nodes and an entry
     /// that carries a path is a pair of in-bank pointers. (This is the embedded
     /// blob: the row and the stream are the ROM's bytes, at the ROM's offsets.)
@@ -1161,7 +2048,12 @@ mod tests {
         );
         assert_eq!(walk.pointer(128, WalkDir::Right), None, "past the table");
         assert_eq!(walk.byte_at(0x5AA1), Some(0x01));
-        assert_eq!(walk.byte_at(0x5AA0), Some(0x00), "one byte before it is the pad");
+        assert_eq!(walk.byte_at(0x5A99), Some(0x14), "node $14's stream");
+        assert_eq!(
+            walk.byte_at(0x5AA0),
+            Some(0x13),
+            "the arrival node is the byte right before node 1's stream"
+        );
         assert_eq!(walk.byte_at(0x4000), None, "outside the extracted span");
     }
 }
