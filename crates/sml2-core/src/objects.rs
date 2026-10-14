@@ -37,6 +37,13 @@
 //!   left, 2/4 right, wall turns); odd frames rise through `$5B47A`'s curve
 //!   until the top or the 18-px ceiling probe (`$3B7C`) arms the `$5B451`
 //!   fall; the ground probe ends it and four landings re-face Mario.
+//! - Level-3 trio (`$59BC5` anim 88, `$594EB` anim 68, `$58DD1` anim 46): the
+//!   ground walker (the `$7585` bob head + a 3-state walker: state 0 faces
+//!   Mario with flash `$10`/type `$4E`, states 1/2 run a 16-idle + 48-step
+//!   `+28`/`+25` counter machine and flip on the side wall probe through
+//!   `$5D2D`); the `$582D1` body with type `$52`; and the carrying platform
+//!   (type `$20`, waits for `+23` bit 3, then falls the `$7488` curve
+//!   carrying Mario through `$3CDF` and removes itself on ground).
 //! - Item-pose family (anims 18/19/20/25 → `$58755`/`$58758`, 22 → `$587BD`,
 //!   23 → `$587D7`): item pose (`type $80`, done) until touched (`+23`
 //!   bit4) → rise / spin (`$5B545`) / type-from-anim; anim 23 removes via
@@ -724,6 +731,9 @@ impl ObjectSim {
             0x58758 => self.itempose_body(st),
             0x587BD => self.handler_pose86(st),
             0x587D7 => self.handler_pose87(st, tables),
+            0x58DD1 => self.handler_carrier46(st, layout, tables),
+            0x594EB => self.handler_fallwalker52(st, layout),
+            0x59BC5 => self.handler_groundwalker88(st, layout),
             0x5B1C8 => self.handler_grower92(st),
             0x5B241 => self.handler_floater94(st),
             0x5B28C => self.handler_floater95(st),
@@ -1116,10 +1126,25 @@ impl ObjectSim {
     /// `$582D1` (anim 1): fall to the ground, then walk (states 1/2) with
     /// wall + ledge turns; type `$56`.
     fn handler_fallwalker(&mut self, st: &mut Staging, layout: &LevelLayout) {
+        self.fallwalker_body(st, layout, 0x56);
+    }
+
+    /// `$594EB` (anim 68): the same handler with `$54F4`'s `$52` in place of
+    /// `$582D9`'s `$56` — the identical `$7585` bob head, the identical jump
+    /// into the shared `$42F5` state dispatch and the identical `$42DD`
+    /// ground arm (the ROM `jp`s where the original `jr`s; the code is the
+    /// same). Only the type byte differs.
+    fn handler_fallwalker52(&mut self, st: &mut Staging, layout: &LevelLayout) {
+        self.fallwalker_body(st, layout, 0x52);
+    }
+
+    /// The `$42DD`/`$42F5`/`$42FB`/`$431A`/`$4339` bodies both handlers run;
+    /// `ty` is the one immediate that differs between them.
+    fn fallwalker_body(&mut self, st: &mut Staging, layout: &LevelLayout, ty: u8) {
         self.sprite_bob(st); // $5B585
         match st.b[B_FSTATE] {
             0 => {
-                st.b[B_TYPE] = 0x56;
+                st.b[B_TYPE] = ty;
                 // $582DD: fall until grounded, then face Mario ($582EE).
                 self.m_ground_own(st, layout);
                 if self.move_flags & 0x08 != 0 {
@@ -1210,6 +1235,154 @@ impl ObjectSim {
                 st.b[B_T28] = 192;
             }
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Anim 88 — the ground walker ($59BC5)
+    // ---------------------------------------------------------------------
+
+    /// `$59BC5` (anim 88): the `$7585` sprite-bob head, then a 3-state
+    /// walker. State 0 (`$5BD1`) is the one-shot init: flash `$10`, type
+    /// `$4E`, `face_mario` — `$73C6` picks state 1/2 and the flip byte — and
+    /// `+28` = 1 (so the first walking call arms the step budget). States 1/2
+    /// (`$5D05`/`$5D41`) probe the wall on their moving side on *every* call
+    /// (`$3C1C` left / `$3BB8` right, X∓7 at Y−11/Y−5); a hit flips through
+    /// `$5D2D` (`+13 ^= $20`, `+15 ^= 3` — 1 <-> 2) and leaves both counters
+    /// alone. Otherwise they run the shared `$5D0F`/`$5D4B` pause/step
+    /// counter (`$5D22`): 16 calls of `+28` counting down, then 48 one-pixel
+    /// steps on `+25`, then `+28` = `$10` again.
+    fn handler_groundwalker88(&mut self, st: &mut Staging, layout: &LevelLayout) {
+        self.sprite_bob(st); // $5B585
+        match st.b[B_FSTATE] {
+            // $5BD1: the one-shot init. (The state byte itself is written by
+            // `$73C6` inside `face_mario`.)
+            0 => {
+                st.b[B_FLASH] = 0x10;
+                st.b[B_TYPE] = 0x4E;
+                self.face_mario(st); // $73C6
+                st.b[B_T28] = 1;
+            }
+            // $5D05: walk left.
+            1 => {
+                self.m_left_wall(st, layout); // $3C1C
+                if self.move_flags & 0x02 != 0 {
+                    self.walker88_flip(st); // $5D2D
+                    return;
+                }
+                self.walker88_pause_step(st, true); // $5D1D -> $5D22
+            }
+            // $5D41: walk right.
+            2 => {
+                self.m_right_wall(st, layout); // $3BB8
+                if self.move_flags & 0x01 != 0 {
+                    self.walker88_flip(st); // $5D2D
+                    return;
+                }
+                self.walker88_pause_step(st, false); // $5D3A -> $5D22
+            }
+            _ => {}
+        }
+    }
+
+    /// `$5D0F`/`$5D4B` (`$5D22` tail): the walker's two-phase pause/step
+    /// counter, shared by the two walk states. `+28` counts down first —
+    /// none of those 16 calls move; the call that takes it to 0 arms the
+    /// `+25` = `$30` step budget and *still* does not move. Then each call
+    /// takes one 1-px step (`$3D22` X−=1 left, `$3D32` X+=1 right) and
+    /// decrements `+25`; its exhaustion re-arms `+28` = `$10`.
+    fn walker88_pause_step(&mut self, st: &mut Staging, left: bool) {
+        if st.b[B_T28] != 0 {
+            st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
+            if st.b[B_T28] != 0 {
+                return;
+            }
+            st.b[B_T25] = 0x30;
+            return;
+        }
+        if left {
+            self.mv_x_sub(st, 1); // $5D1D: `ld b,1 / call $3D22`
+        } else {
+            self.mv_x_add(st, 1); // $5D3A: `ld b,1 / call $3D32 / jr $5D22`
+        }
+        st.b[B_T25] = st.b[B_T25].wrapping_sub(1);
+        if st.b[B_T25] != 0 {
+            return;
+        }
+        st.b[B_T28] = 0x10;
+    }
+
+    /// `$5D2D`: the shared wall flip — `+13 ^= $20`, then the `$5D33` tail
+    /// `+15 ^= 3` (walk-left 1 <-> walk-right 2).
+    fn walker88_flip(&mut self, st: &mut Staging) {
+        st.b[B_FLIP] ^= 0x20;
+        st.b[B_FSTATE] ^= 3;
+    }
+
+    // ---------------------------------------------------------------------
+    // Anim 46 — the carrying platform ($58DD1)
+    // ---------------------------------------------------------------------
+
+    /// `$58DD1` (anim 46): a carrying platform. State 0 (`$4DD1`, one shot):
+    /// type `$20` — the on-object arm, Mario stands on it — and state 2.
+    /// State 2 (`$4E04`) waits for `+23` bit 3 (`$FFE7` bit 3, raised by the
+    /// `$2DF7` on-object arm the port calls `respond`, cleared by `$818D`)
+    /// and then arms state 1 with `+28` = 28, without moving that call.
+    /// State 1 (`$4DE5`) counts `+28` down — the call that takes it to 0
+    /// falls *through* to the move, as does an already-0 counter — and then,
+    /// every call: step the `$7488` curve (`$7451`), move down (`$3D3D`),
+    /// carry Mario (`$3CDF`), ground-probe (`$3B40`) and, on ground, remove
+    /// itself through `$72D7`.
+    fn handler_carrier46(&mut self, st: &mut Staging, layout: &LevelLayout, tables: &ObjectTables) {
+        match st.b[B_FSTATE] {
+            // $4DE5: the countdown, then the shared move chain at $4DEE.
+            1 => {
+                if st.b[B_T28] != 0 {
+                    st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
+                    if st.b[B_T28] != 0 {
+                        return;
+                    }
+                }
+                let b = self.fall_step(st); // $7451: c = $15 / $7488
+                self.mv_y_add(st, b); // $3D3D
+                self.carry_mario(st, b); // $3CDF
+                self.m_ground_own(st, layout); // $3B40
+                if self.move_flags & 0x08 == 0 {
+                    return;
+                }
+                self.remove_object(st, tables); // $72D7
+            }
+            // $4E04: wait until Mario stands on the platform.
+            2 => {
+                if st.b[B_FLAGS] & 0x08 == 0 {
+                    return;
+                }
+                st.b[B_FSTATE] = 1;
+                st.b[B_T28] = 0x1C;
+            }
+            // $4DD1: the one-shot init.
+            _ => {
+                st.b[B_TYPE] = 0x20;
+                st.b[B_FSTATE] = 2;
+            }
+        }
+    }
+
+    /// `$3CDF` (bank 0, reached by the anim-46 move chain): the carry. While
+    /// `$FFE7` bit 3 is set (the staging copy of `+23` — the port's
+    /// `B_FLAGS`) it adds `b` to Mario's 16-bit Y at `$3CD7` (`[hl] += b`,
+    /// `adc $00` into the high byte — `wrapping_add` here). The
+    /// `sScrollDeltaDown` write before the jump is dead: the camera writes
+    /// `$A238` before reading it and no other path reads it.
+    ///
+    /// The ROM adds onto the *live* `$FFC0`, so a Y already staged this frame
+    /// (`$2DC6`'s bounce / stand-nudge) forms the base — which also keeps two
+    /// carriers in one frame from dropping an add.
+    fn carry_mario(&mut self, st: &mut Staging, b: u8) {
+        if st.b[B_FLAGS] & 0x08 == 0 {
+            return;
+        }
+        let y = self.mario_y_adjust.unwrap_or(self.mario.y);
+        self.mario_y_adjust = Some(y.wrapping_add(b as u16));
     }
 
     /// `$58712` (anims 17/21): a walker variant — state 0 poses as an item
@@ -3320,5 +3493,338 @@ mod tests {
         assert_eq!(s.b[B_PHASE], 1);
         assert_eq!(s.b[B_FSTATE], 1);
         assert!(obj.unported.is_empty());
+    }
+
+    // -----------------------------------------------------------------
+    // Level 3 (index 2) — the three new handler classes
+    // $59BC5 (anim 88) / $594EB (anim 68) / $58DD1 (anim 46)
+    // -----------------------------------------------------------------
+
+    /// A layout of `$60` — no wall (`>= $38`) and no ground (`>= $48`) at any
+    /// probe — with one cell overridden. The entity probes read the cell
+    /// `(x >> 4, y >> 4)`.
+    fn one_tile(x: usize, y: usize, tile: u8) -> LevelLayout {
+        let mut cells = vec![0x60u8; LAYOUT_SIZE];
+        cells[y * crate::level::LAYOUT_WIDTH + x] = tile;
+        LevelLayout::from_bytes(&cells).unwrap()
+    }
+
+    /// `$59BC5` (`$5BD1`): the state-0 one-shot — flash `$10`, type `$4E`,
+    /// `face_mario` (`$73C6` picks state 1/2 and `$FFDD` 0/`$20` from Mario's
+    /// side) and `+28` = 1. The `$7585` bob head runs first on even `$FFF0`:
+    /// `+26` cycles and the sprite takes `[FE, 01, FF, 02]`.
+    #[test]
+    fn groundwalker88_state0_sets_flash_type_faces_mario_and_bobs() {
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        let mut st = Staging::default();
+        set_x(&mut st.b, 100);
+        set_y(&mut st.b, 200);
+        st.b[B_SPRITE] = 73; // anim_to_sprite_a[88]
+        obj.mario_ref_x = 108; // east of the object: $73C6 -> 2 / $20
+        obj.fff0 = 0; // even: the bob head steps
+        obj.handler_groundwalker88(&mut st, &layout);
+        assert_eq!(st.b[B_FLASH], 0x10);
+        assert_eq!(st.b[B_TYPE], 0x4E);
+        assert_eq!((st.b[B_FSTATE], st.b[B_FLIP]), (2, 0x20), "Mario east");
+        assert_eq!(st.b[B_T28], 1, "the walk arm is armed");
+        assert_eq!((st.b[B_ANIMFRAME], st.b[B_SPRITE]), (1, 74), "bob: +1");
+
+        // Mario west on the same slot's next init call.
+        st.b[B_FSTATE] = 0;
+        obj.mario_ref_x = 92;
+        obj.fff0 = 2; // even again
+        obj.handler_groundwalker88(&mut st, &layout);
+        assert_eq!((st.b[B_FSTATE], st.b[B_FLIP]), (1, 0), "Mario west");
+        assert_eq!((st.b[B_FLASH], st.b[B_TYPE], st.b[B_T28]), (0x10, 0x4E, 1));
+        assert_eq!((st.b[B_ANIMFRAME], st.b[B_SPRITE]), (2, 73), "bob: -1");
+        assert!(obj.unported.is_empty());
+    }
+
+    /// `$59BC5` states 1/2 (`$5D0F`/`$5D4B`, the `$5D22` tail): the state-0
+    /// init leaves `+28` = 1, so the very next call arms `+25` = `$30` and
+    /// does not move, the **48** calls after that each take one 1-px step
+    /// (the 48th leaving `+28` = `$10`), the next **16** only count (the 16th
+    /// re-arming `+25`), and the cycle repeats. The blank layout's `$60`
+    /// cells are neither walls nor ground, so nothing interrupts the machine.
+    #[test]
+    fn groundwalker88_counter_cadence_is_16_idle_calls_then_48_steps() {
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.fff0 = 1; // odd: the bob head is a no-op
+        let mut st = Staging::default();
+        set_x(&mut st.b, 100);
+        set_y(&mut st.b, 200);
+        obj.mario_ref_x = 92; // west: state 1, walks left
+        obj.handler_groundwalker88(&mut st, &layout);
+        assert_eq!((st.b[B_FSTATE], st.b[B_T28], st.b[B_T25]), (1, 1, 0));
+
+        obj.handler_groundwalker88(&mut st, &layout); // +28 1 -> 0: arms +25
+        assert_eq!(
+            (x_of(&st.b), st.b[B_T28], st.b[B_T25]),
+            (100, 0, 0x30),
+            "the count-to-zero call arms $30 and does not move"
+        );
+        for _ in 0..47 {
+            obj.handler_groundwalker88(&mut st, &layout);
+        }
+        assert_eq!(
+            (x_of(&st.b), st.b[B_T25]),
+            (53, 1),
+            "47 one-pixel steps, one still budgeted"
+        );
+        obj.handler_groundwalker88(&mut st, &layout); // the 48th step
+        assert_eq!(
+            (x_of(&st.b), st.b[B_T28], st.b[B_T25]),
+            (52, 0x10, 0),
+            "the 48th step exhausts +25 and re-arms the pause"
+        );
+        for _ in 0..15 {
+            obj.handler_groundwalker88(&mut st, &layout);
+        }
+        assert_eq!(
+            (x_of(&st.b), st.b[B_T28], st.b[B_T25]),
+            (52, 1, 0),
+            "16 countdown calls, no motion"
+        );
+        obj.handler_groundwalker88(&mut st, &layout);
+        assert_eq!(
+            (x_of(&st.b), st.b[B_T28], st.b[B_T25]),
+            (52, 0, 0x30),
+            "the 16th count re-arms the step budget"
+        );
+        obj.handler_groundwalker88(&mut st, &layout);
+        assert_eq!(x_of(&st.b), 51, "and the next call steps again");
+    }
+
+    /// `$59BC5` states 1/2: a wall on the moving side flips through `$5D2D`
+    /// (`+13 ^= $20`, `+15 ^= 3` — 1 <-> 2) and touches neither counter nor
+    /// X. The probes sit at X∓7, Y−11 / Y−5 (`$3C1C`/`$3BB8` -> the port's
+    /// `m_left_wall`/`m_right_wall`), so the blocking tile goes in the cell
+    /// at `(x∓7) >> 4`.
+    #[test]
+    fn groundwalker88_side_walls_flip_the_walk_state_in_both_directions() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.fff0 = 1;
+        let mut st = Staging::default();
+        set_x(&mut st.b, 100);
+        set_y(&mut st.b, 200); // the left probes read (5, 11) and (5, 12)
+        st.b[B_FSTATE] = 1;
+        st.b[B_T28] = 5;
+        st.b[B_T25] = 0x30;
+        st.b[B_FLIP] = 0;
+
+        let layout = one_tile(5, 11, 0x00); // a wall left of x = 100
+        obj.handler_groundwalker88(&mut st, &layout);
+        assert_eq!((st.b[B_FSTATE], st.b[B_FLIP]), (2, 0x20), "1 -> 2, flipped");
+        assert_eq!(
+            (x_of(&st.b), st.b[B_T28], st.b[B_T25]),
+            (100, 5, 0x30),
+            "a wall frame touches neither counter nor X"
+        );
+
+        // The right probe reads (107 >> 4, y) = the cell (6, ...).
+        let layout = one_tile(6, 11, 0x00);
+        obj.handler_groundwalker88(&mut st, &layout);
+        assert_eq!((st.b[B_FSTATE], st.b[B_FLIP]), (1, 0), "2 -> 1, unflipped");
+        assert_eq!((x_of(&st.b), st.b[B_T28], st.b[B_T25]), (100, 5, 0x30));
+        assert!(obj.unported.is_empty());
+    }
+
+    /// `$594EB` (anim 68) and `$582D1` (anim 1) are one body: identical init
+    /// calls produce byte-identical stagings except `+18` — `$52` vs `$56`,
+    /// the one immediate `$54F4` differs by.
+    #[test]
+    fn fallwalker68_is_the_shared_body_with_type52() {
+        let layout = blank_layout();
+        let mut a = ObjectSim::new(Vec::new(), 0);
+        let mut b = ObjectSim::new(Vec::new(), 0);
+        a.fff0 = 1; // odd: the shared bob head is a no-op
+        b.fff0 = 1;
+        let mut sa = Staging::default();
+        let mut sb = Staging::default();
+        for st in [&mut sa, &mut sb] {
+            set_x(&mut st.b, 100);
+            set_y(&mut st.b, 200);
+            st.b[B_SPRITE] = 125; // anim_to_sprite_a[68]
+        }
+        a.handler_fallwalker(&mut sa, &layout);
+        b.handler_fallwalker52(&mut sb, &layout);
+        assert_eq!((sa.b[B_TYPE], sb.b[B_TYPE]), (0x56, 0x52));
+        assert_eq!(sa.b[B_PHASE], 1, "no ground: the fall curve stepped");
+        assert_eq!(y_of(&sa.b), 200, "step 0 of the curve is 0 px");
+        let (mut ta, mut tb) = (sa.b, sb.b);
+        ta[B_TYPE] = 0;
+        tb[B_TYPE] = 0;
+        assert_eq!(ta, tb, "the whole body but the type byte");
+    }
+
+    /// The `run_handler` arms: an in-memory level-2 table routes anims
+    /// 46/68/88 to `$58DD1`/`$594EB`/`$59BC5`, each body runs (anim 68's type
+    /// is `$52`, not the `$582D1` arm's `$56`) and none is flagged unported —
+    /// a flagged handler is the gate's `note:` line.
+    #[test]
+    fn level3_anims_dispatch_to_the_new_bodies_unflagged() {
+        let mut t = tables();
+        t.anim_profiles_a[46] = prof(0x58DD1);
+        t.anim_profiles_a[68] = prof(0x594EB);
+        t.anim_profiles_a[88] = prof(0x59BC5);
+        let layout = blank_layout();
+        for (anim, handler, ty) in [
+            (46u8, 0x58DD1u32, 0x20u8),
+            (68, 0x594EB, 0x52),
+            (88, 0x59BC5, 0x4E),
+        ] {
+            let mut obj = ObjectSim::new(Vec::new(), 0);
+            obj.configure(2); // level index 2 -> mode A
+            let mut st = Staging::default();
+            st.b[B_DEF] = anim;
+            obj.run_handler(&mut st, &layout, &t);
+            assert_eq!(st.b[B_TYPE], ty, "anim {anim} -> ${handler:05X}");
+            assert!(obj.unported.is_empty(), "anim {anim} must not be flagged");
+        }
+    }
+
+    /// `$58DD1` state 0 (`$4DD1`): the one-shot — type `$20` (the on-object
+    /// arm: Mario stands on it) and state 2. Nothing else is touched.
+    #[test]
+    fn carrier46_state0_sets_type20_and_enters_the_wait() {
+        let layout = blank_layout();
+        let t = tables();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        let mut st = Staging::default();
+        set_x(&mut st.b, 1712); // level 3's record: (1712, 176)
+        set_y(&mut st.b, 176);
+        st.b[B_SPRITE] = 35; // anim_to_sprite_a[46]
+        obj.handler_carrier46(&mut st, &layout, &t);
+        assert_eq!((st.b[B_TYPE], st.b[B_FSTATE]), (0x20, 2));
+        assert_eq!((y_of(&st.b), st.b[B_T28]), (176, 0), "no move, no timer");
+        assert_eq!(obj.done, 0);
+        assert!(obj.unported.is_empty());
+    }
+
+    /// `$58DD1` state 2 (`$4E04`): `+23` bit 3 — the `$2DF7` on-object flag
+    /// the port's `respond` stages — is the only gate; any other flag bit
+    /// leaves it waiting. The handover call arms state 1 with `+28` = 28 and
+    /// itself neither moves nor carries.
+    #[test]
+    fn carrier46_state2_waits_for_the_stood_on_flag() {
+        let layout = blank_layout();
+        let t = tables();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.mario.y = 500;
+        let mut st = Staging::default();
+        set_y(&mut st.b, 176);
+        st.b[B_FSTATE] = 2;
+        st.b[B_FLAGS] = 0x04; // some other interaction flag
+        obj.handler_carrier46(&mut st, &layout, &t);
+        assert_eq!(
+            (st.b[B_FSTATE], st.b[B_T28], y_of(&st.b)),
+            (2, 0, 176),
+            "bit 3 clear: still waiting"
+        );
+        st.b[B_FLAGS] = 0x08; // stood on this frame
+        obj.handler_carrier46(&mut st, &layout, &t);
+        assert_eq!((st.b[B_FSTATE], st.b[B_T28]), (1, 0x1C));
+        assert_eq!(
+            (y_of(&st.b), obj.mario_y_adjust),
+            (176, None),
+            "the handover call does not move or carry"
+        );
+        assert_eq!(obj.done, 0);
+    }
+
+    /// `$58DD1` state 1 (`$4DE5`/`$4DEE`): `+28` = 28 counts down — those
+    /// calls do nothing and the call that takes it to 0 falls *through* to
+    /// the move — then every call steps the `$7488` curve (`$7451`), moves
+    /// the object down (`$3D3D`), carries Mario by the same `b` (`$3CDF`,
+    /// only while `+23` bit 3 is held) and probes the ground (`$3B40`).
+    #[test]
+    fn carrier46_counts_down_then_falls_and_carries_mario() {
+        let layout = blank_layout(); // $60: no ground anywhere
+        let t = tables();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.mario.y = 500;
+        let mut st = Staging::default();
+        set_y(&mut st.b, 400);
+        st.b[B_FSTATE] = 1;
+        st.b[B_T28] = 3;
+        st.b[B_PHASE] = 2; // $7488[2] = 1 px
+        st.b[B_FLAGS] = 0x08;
+        for _ in 0..2 {
+            obj.handler_carrier46(&mut st, &layout, &t);
+        }
+        assert_eq!(
+            (y_of(&st.b), st.b[B_T28], st.b[B_PHASE]),
+            (400, 1, 2),
+            "the countdown calls do not move"
+        );
+        obj.handler_carrier46(&mut st, &layout, &t); // +28 1 -> 0: the move
+        assert_eq!(
+            (y_of(&st.b), st.b[B_T28], st.b[B_PHASE]),
+            (401, 0, 3),
+            "the count-to-zero call falls through"
+        );
+        assert_eq!(obj.mario_y_adjust, Some(501), "carried by b = 1");
+        // +28 already 0: the next call moves immediately, and the carry adds
+        // onto the Y staged this frame (the ROM reads the live $FFC0).
+        obj.handler_carrier46(&mut st, &layout, &t);
+        assert_eq!((y_of(&st.b), st.b[B_PHASE]), (402, 4));
+        assert_eq!(obj.mario_y_adjust, Some(502));
+        // A fresh frame (the $2D7D pass resets the Option) with Mario off:
+        // the object keeps falling, the carry stays closed.
+        obj.mario_y_adjust = None;
+        st.b[B_FLAGS] = 0;
+        obj.handler_carrier46(&mut st, &layout, &t);
+        assert_eq!((y_of(&st.b), obj.mario_y_adjust), (403, None));
+        assert_eq!(obj.done, 0, "no ground, no removal");
+    }
+
+    /// `$58DD1` state 1's terminal step: with ground under the object the
+    /// `$3B40` probe keeps bit 3 and the `$72D7` removal runs — the staging
+    /// zeroes, the active count drops, `sObjectDone = 2` and (remove-mode 0)
+    /// a stream-backed slot clears its record marker.
+    #[test]
+    fn carrier46_grounded_step_end_removes_itself_and_clears_the_marker() {
+        let t = tables();
+        let mut obj = ObjectSim::new(records(), 0);
+        obj.active = 1;
+        obj.spawned[0] = true;
+        let layout = one_tile(6, 25, 0x00); // ground under (96, 400)
+        let mut st = Staging::default();
+        set_x(&mut st.b, 96);
+        set_y(&mut st.b, 400); // Y & $0C == 0: the probe is taken
+        st.b[B_STATE] = 2;
+        st.b[B_DEF] = 46;
+        st.b[B_FSTATE] = 1;
+        st.b[B_T28] = 0; // the countdown is already spent
+        st.b[B_FLAGS] = 0x08;
+        st.b[B_RECHI] = 0xAB; // record 0 of the stream buffer
+        st.b[B_RECLO] = 0x06;
+        obj.handler_carrier46(&mut st, &layout, &t);
+        assert_eq!(obj.done, 2, "$72D7 sets sObjectDone = 2");
+        assert_eq!(st.b, [0u8; 32], "the removal zeroes the staging");
+        assert_eq!(obj.active, 0);
+        assert!(!obj.spawned[0], "remove-mode 0 clears the record marker");
+        assert_eq!(obj.remove_mode, 0, "$5B2D7 resets the mode");
+    }
+
+    /// `$3CDF`/`$3CD7`: the carry adds `b` to Mario's **16-bit** Y — the high
+    /// byte takes the `adc` — gated on `+23` bit 3; a Y already staged this
+    /// frame is the base, and with the bit clear the byte is untouched.
+    #[test]
+    fn carry_adds_b_to_marios_16bit_y_only_when_stood_on() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.mario.y = 0x20FF;
+        let mut st = Staging::default();
+        st.b[B_FLAGS] = 0x08;
+        obj.carry_mario(&mut st, 3);
+        assert_eq!(obj.mario_y_adjust, Some(0x2102), "carry into the high byte");
+        obj.carry_mario(&mut st, 2);
+        assert_eq!(obj.mario_y_adjust, Some(0x2104), "stacks on the staged Y");
+        st.b[B_FLAGS] = 0x00;
+        obj.mario_y_adjust = None;
+        obj.carry_mario(&mut st, 9);
+        assert_eq!(obj.mario_y_adjust, None, "bit 3 clear: nothing");
     }
 }
