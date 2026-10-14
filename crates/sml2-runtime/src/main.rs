@@ -1937,6 +1937,13 @@ fn run_replay(
                 .join(", ")
         );
     }
+    // A latched scene whose script cursor was never found: the VM stepped
+    // nothing at all. This line is what keeps a scene capture from replaying
+    // all-zero while the scene never ran — the exact failure the missing
+    // `SceneVm::start()` call used to hide in both frame loops.
+    if let Some(id) = scene_vm.bad_cursor_scene() {
+        println!("note: scene ${id:02X} latched but no script cursor was found - no scene byte ran");
+    }
     Ok(())
 }
 

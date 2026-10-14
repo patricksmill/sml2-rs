@@ -485,9 +485,13 @@ calls `$0F0B` to latch `sSceneId` from `sSceneMap`; when the scroll completes,
 `sSceneState = $F0`, then calls `$3C94` → bank 2 `$8D9C` — the boss/template
 object set, with `$8E6C` as the template loader (which writes complete 18-byte
 slot images into `$AD00`, bypassing the spawn stream `objects.rs` models).
-What is missing is therefore not a "state 240" but the bank-5 **script VM**
+What remained missing was not a "state 240" but the bank-5 **script VM**
 (`$20A4`, one byte per frame, opcode table at home.asm:4311-4429), the `$0EB0`
-`sSceneState & $0F` branch, and the `$8D9C` path. `sSceneMap` is extracted the
+`sSceneState & $0F` branch, and the `$8D9C` path. As of 2026-10-14,
+`crate::scene` ports the `$20A4` VM with `$2x`, `$3x`, `$4x`, `$6x`, and `$8x`
+implemented and operand lengths parsed for all 32 scripts, leaving `$0EB0`'s
+`$3C94` → bank 2 `$8D9C`/`$8E6C` boss/template loader, remaining opcode handlers,
+and capture verification (`scene_capture`). `sSceneMap` is extracted the
 same way as the edge map but from the pointer at `[bank:$4002]` (home.asm:572-604);
 **14 of 32 levels are nonzero, and level 1 is all zeros**, which is why nothing
 in the captures touches it.
@@ -829,9 +833,11 @@ Verified engine semantics to preserve in the port:
   `lowtime` record fields; its one `exit arm:` line adds what a per-frame table
   cannot state (the trigger's geometry and the fade's span, measured outside
   the in-level hook because `$05E4` stops firing once the state leaves 4 — see
-  the two-hook note in `captures/README.md`). Still open: the `$14` hand-off's
+  the two-hook note in `captures/README.md`). The `$14` hand-off's
   banked body (`$3EF2B`: the palette swap, the map-node advance and the
-  save) — the port marks the hand-off and keeps freezing.
+  save) was ported 2026-10-14 (`map_handoff_14_body`), unit-tested across
+  `map.rs` and `player_sim.rs`; `traj17` reaches the hand-off frame itself,
+  though post-hand-off frames remain unexercised in captures.
 - **The bobber (anim 12, `$584F3`/`$5850C`) is a harmless item until you leave.**
   State 0 writes type `$80` (`sObjectType`) and then `call $5B4B4 / cp $18 /
   ret c` — it *returns while Mario is within 24 px*, so it cannot arm while he
@@ -874,8 +880,10 @@ Verified engine semantics to preserve in the port:
   `properties.unknown` / `properties.auto_scroll`. The play path used to leave
   them at their defaults while `run_replay` took them from a capture's frame 0
   — the same shape of gap the missing edge map had. Level 1 is `$00` in both;
-  the three autoscroll levels still print the not-modelled note, since `$0DAF`
-  is unported.
+  autoscroll (`$0DAF`) was ported 2026-10-13 (`camera_autoscroll_path`) and is
+  gate-verified as of 2026-10-14: `captures/traj19.json` (level 20, replayed at
+  `--level 19`) reproduces it all-zero across 1308 frames, so the capture-less
+  `note:` line both loops used to print is retired.
 - **Sprites**: mapping offsets land in the RAW OAM byte (screen =
   `obj + offset - (8,16)`); OAM attr bit5 = X flip, bit6 = Y flip, bit4 =
   OBP 0/1 select; OBP select also comes through `sSpriteFlipFlags` bit 4.
@@ -981,10 +989,10 @@ Verified engine semantics to preserve in the port:
 - **What the hand-off's unmodelled remainder is:** the palette swap to the
   overworld's `$E4`/`$D0`/`$39` (this port renders the level from the extracted
   manifest and has no map to draw), the cutscene and the hub/GFX setup at
-  `$3F156`, and the `$1E`-and-up map-screen branches. Reachability: level 1's exit
-  bell sits at x 4064 and the furthest capture reaches 4026, so nothing in the
-  gate ever completes a level — the whole exit path, hand-off included, is
-  unit-tested only (queued as `exit_tile_arm_capture`).
+  `$3F156`, and the `$1E`-and-up map-screen branches. Reachability: `captures/traj17.json`
+  (closing `exit_tile_arm_capture`) reaches the exit bell at x=4057 and completes
+  the fade to land on the `$14` hand-off frame itself, though the post-hand-off
+  frames are unexercised in captures (verified via unit tests).
 - **The overworld's node tables** are extracted as `map/nodes.bin`: two parallel
   130-byte arrays, `$4218[node]` = the level index the map stores into
   `sCurLevel` (`$FE`/`$FF` = a pure path node; 32 nodes carry a level) and

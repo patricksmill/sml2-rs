@@ -206,6 +206,12 @@ pub struct SceneVm {
     pub pc: u16,
     /// The entry prologue's one-frame wait (`$20B7`'s `$2728`).
     entering: bool,
+    /// `$0F0B` latched a scene, so the script table has been claimed and the
+    /// cursor is live. While unarmed the cursor is 0 — see `step`.
+    armed: bool,
+    /// A latched scene whose script cursor was never found, so the VM ran
+    /// nothing: reported through `bad_cursor_scene` and the harness's `note:`.
+    bad_cursor_scene: Option<u8>,
     /// Opcode classes with no port implementation, deduped in hit order.
     unported: Vec<u8>,
     /// `$2x` has armed the boss arena. The ROM's `$0EB0` gate now calls
@@ -225,7 +231,31 @@ impl SceneVm {
     /// frame wait to reproduce.
     pub fn start(&mut self) {
         self.entering = true;
+        self.armed = true;
+        self.bad_cursor_scene = None;
         self.pc = 0;
+    }
+
+    /// Back to the unarmed state. The ROM's cursor (HL) is never zero, so
+    /// `pc == 0` marks an unarmed VM — and an unarmed VM with a latched scene id
+    /// is exactly the state `$0F0B` leaves behind: the latch is written by the
+    /// CAMERA pass and `$20A4` runs later in the same frame, after the state
+    /// dispatch, so the VM arms on its own first pass after a latch instead of
+    /// needing a caller. That caller used to be missing entirely: `start()` had
+    /// no call site anywhere, so a latched scene stepped `byte_at(0)` →
+    /// `BadCursor`, ran NOTHING, and did it silently in BOTH frame loops.
+    fn disarm(&mut self) {
+        self.entering = false;
+        self.armed = false;
+        self.pc = 0;
+    }
+
+    /// A scene id is latched and no script cursor was ever found, so the VM
+    /// stepped nothing. The harness prints this as a `note:`, which is what
+    /// stops a scene capture from passing green on top of a dead VM — the exact
+    /// failure the missing `start()` call would otherwise have hidden.
+    pub fn bad_cursor_scene(&self) -> Option<u8> {
+        self.bad_cursor_scene
     }
 
     /// One main-loop pass of `$20A4`. The ROM calls it once per frame, after
@@ -244,7 +274,14 @@ impl SceneVm {
         // ROM, so the test reduces to the id itself.
         if cam.scene_id == 0 {
             cam.end_scene();
+            self.disarm();
             return SceneStep::NoScene;
+        }
+        // `$0F0B` latched a scene on this frame's camera pass, and `$20A4` runs
+        // after the state dispatch — so the prologue starts here, on the pass
+        // that follows the latch, and the first script byte runs on the next.
+        if !self.armed {
+            self.start();
         }
         if self.entering {
             self.pc = scripts.script(cam.scene_id).unwrap_or(0);
@@ -253,7 +290,10 @@ impl SceneVm {
         }
         let op = match scripts.byte_at(self.pc) {
             Some(b) => b,
-            None => return SceneStep::BadCursor,
+            None => {
+                self.bad_cursor_scene = Some(cam.scene_id);
+                return SceneStep::BadCursor;
+            }
         };
         if op == 0xFF {
             // The fetch loop does `inc hl` before jumping to the epilogue, so
@@ -778,5 +818,55 @@ mod tests {
                 assert_eq!(&subs[j][..], &sub_bytes[..], "entry {i} sub {j}");
             }
         }
+    }
+
+    /// The latch must ARM the VM by itself. `$0F0B` writes `sSceneId` on the
+    /// camera pass and `$20A4` runs later in that same frame, so there is no
+    /// other caller to arm it — and `start()` having no call site anywhere was a
+    /// real, silent bug: a latched scene stepped `byte_at(0)` -> `BadCursor`,
+    /// ran nothing, and both frame loops discarded the return value. This test
+    /// FAILS against that build (it expected `Entering` and got `BadCursor`).
+    #[test]
+    fn a_latched_scene_arms_itself_and_runs_to_its_terminator() {
+        let s = scripts();
+        let mut vm = SceneVm::new();
+        let mut cam = CameraSim::new(0x0320, 0x01C0);
+        let mut sim = PlayerSim::new();
+        sim.x = 0x0311;                     // Mario's X page 3; low byte must survive
+        sim.y = 0x00D4;
+        cam.scene_id = 7;                   // level 3's cell i4 latches scene 7
+
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Entering,
+                   "the prologue claims the cursor on the pass after the latch");
+        assert_ne!(vm.pc, 0, "the cursor comes from the script table, not from zero");
+
+        let mut ran = Vec::new();
+        for _ in 0..6 {
+            match vm.step(&mut sim, &mut cam, &s) {
+                SceneStep::Ran(op) => ran.push(op),
+                SceneStep::End => break,
+                other => panic!("unexpected {other:?} before the terminator"),
+            }
+        }
+        assert_eq!(ran, vec![0x40], "scene 7 is `40 16 FF`: one $4x, then the end");
+        assert_eq!(sim.x >> 8, 6, "$4x $16 -> Mario X page 6");
+        assert_eq!(sim.y >> 8, 1, "$4x $16 -> Mario Y page 1");
+        assert_eq!(sim.x & 0xFF, 0x11, "the low byte is untouched");
+        assert_eq!(vm.bad_cursor_scene(), None);
+    }
+
+    /// A latched id the script table cannot resolve must be REPORTED, not
+    /// silently stepped past: the harness turns this into a `note:`, which is
+    /// what keeps a scene capture from replaying all-zero on top of a dead VM.
+    #[test]
+    fn an_unresolvable_scene_id_is_reported() {
+        let s = scripts();
+        let mut vm = SceneVm::new();
+        let mut cam = CameraSim::new(0, 0);
+        let mut sim = PlayerSim::new();
+        cam.scene_id = 0x20;                // past the 32-entry table
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Entering);
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::BadCursor);
+        assert_eq!(vm.bad_cursor_scene(), Some(0x20));
     }
 }
