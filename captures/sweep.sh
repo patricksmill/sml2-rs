@@ -6,7 +6,7 @@ cd /home/pmill/sml2-rs
 BIN=./target/release/sml2-runtime
 cargo build --release 2>&1 | grep -E "^(error|warning: unused)" || true
 for f in traj4_ff0 traj5 traj6 traj7 traj8 traj9 traj10 traj11 traj12 traj13 \
-         traj14 traj15 traj16 death1 death2 death3 crouch_pan1 screen_transition1; do
+         traj14 traj15 traj16 traj17 death1 death2 death3 crouch_pan1 screen_transition1; do
   out=$($BIN --level 0 --replay "captures/$f.json" 2>&1)
   line=$(printf '%s\n' "$out" | grep -E "^mismatches" | tail -1)
   notes=$(printf '%s\n' "$out" | grep -c "note:")

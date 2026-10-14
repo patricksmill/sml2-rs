@@ -380,8 +380,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut subs = Vec::new();
         if count > 0 {
             let obj1_ptr = rom_bank2(0x4EAC + idx * 2);
-            let obj1_addr =
-                (baserom[obj1_ptr] as usize) | ((baserom[obj1_ptr + 1] as usize) << 8);
+            let obj1_addr = (baserom[obj1_ptr] as usize) | ((baserom[obj1_ptr + 1] as usize) << 8);
             let obj1_off = rom_bank2(obj1_addr);
             for c in 0..(count as usize) {
                 let start = obj1_off + c * 18;

@@ -797,8 +797,9 @@ Verified engine semantics to preserve in the port:
   header's spawn (or the secret route's) and the bell never moves it. The
   bell's *strike* is the touch branch, ported since traj13: `$2DC6`'s bit-7
   arm stages `type & $7F` = 6 and the next frame's `$3451` sets `sGoalBell`.
-- **The `$1BFF` exit bell (`$1CBA`-`$1D01`) is ported and unit-verified**
-  (2026-10-13). The same `(x+16, y+28)` sample the water arm reads also
+- **The `$1BFF` exit bell (`$1CBA`-`$1D01`) is ported and CONSOLE-verified**
+  (2026-10-14, `captures/traj17.json`; unit-verified since 2026-10-13). The same
+  `(x+16, y+28)` sample the water arm reads also
   carries the `$4A/$4B` exit pair (`sCollisionTile & $FE == $4A`): `$4A` is the
   plain exit, `$4B` the "route already cleared" twin that sets
   `sExitTileFlag = $FF`. The arm clears `sLowTimeFlag`, requests the
@@ -811,20 +812,26 @@ Verified engine semantics to preserve in the port:
   frame). The hazard arm wins outright — it `jp`s the tail — so a `$50/$51`
   tile at the big-Mario `y+22` probe blocks the bell even with a `$4A` one
   row below. Level 1's only bell is the `$4A` at col 254 / row 30 (world
-  x 4064), past every capture's east end (traj12 stops at 4026), so the arm
-  is pinned by unit tests (`exit_bell_*`, `water_beats_the_exit_arm_*`)
-  rather than a replay; the hazard-vs-bell interaction and the big-Mario
-  `$1C39` fall-through are pinned the same way. **The fade's tail is ported
-  too** (`PlayerSim::exit_fade_step`, 2026-10-13): VBlank keeps decrementing
-  `sFadeTimer` ($A266/$A267, saturating at 0) while state `$18` polls it, so
-  every post-arm frame ticks the port's timer once; the call that reaches 0
-  is `$3547`'s tail — `sLevelTally` ($A2C5) is incremented in BCD
-  (`add 1 / daa`) unless `sLevelProgressFlags` ($A27D) bit 7 (the stage was
-  already cleared) or `sExitTileFlag` is set, then `$FF9B` moves to 20
-  (`$14`, `PlayerSim::exit_completed`). Still open: the `$14` hand-off's
+  x 4064); `traj17` walks east from the tower onto it (the arm fires with
+  Mario at x=4057, `sCollisionTile = $4A`), so the trigger, the arm's writes
+  and the fade are now replay-verified, and the unit tests
+  (`exit_bell_*`, `water_beats_the_exit_arm_*`) keep the big-Mario
+  `$1C39` fall-through and the `$4B` twin pinned — no capture reaches either.
+  **The fade's tail is ported too** (`PlayerSim::exit_fade_step`, 2026-10-13):
+  VBlank keeps decrementing `sFadeTimer` ($A266/$A267, saturating at 0) while
+  state `$18` polls it, so every post-arm frame ticks the port's timer once;
+  the call that reaches 0 is `$3547`'s tail — `sLevelTally` ($A2C5) is
+  incremented in BCD (`add 1 / daa`) unless `sLevelProgressFlags` ($A27D)
+  bit 7 (the stage was already cleared) or `sExitTileFlag` is set, then
+  `$FF9B` moves to 20 (`$14`, `PlayerSim::exit_completed`). `traj17` carries
+  all 192 fade frames (state `$18` holds for 191 further ticks) and the tally
+  charge `00` → `01`, checked per frame through the new `fade`/`tally`/`exit`/
+  `lowtime` record fields; its one `exit arm:` line adds what a per-frame table
+  cannot state (the trigger's geometry and the fade's span, measured outside
+  the in-level hook because `$05E4` stops firing once the state leaves 4 — see
+  the two-hook note in `captures/README.md`). Still open: the `$14` hand-off's
   banked body (`$3EF2B`: the palette swap, the map-node advance and the
-  save) — the port marks the hand-off and keeps freezing. Unit-pinned
-  (`exit_fade_*`; level 1's bell is past every capture's east end).
+  save) — the port marks the hand-off and keeps freezing.
 - **The bobber (anim 12, `$584F3`/`$5850C`) is a harmless item until you leave.**
   State 0 writes type `$80` (`sObjectType`) and then `call $5B4B4 / cp $18 /
   ret c` — it *returns while Mario is within 24 px*, so it cannot arm while he

@@ -948,10 +948,28 @@ struct Frame {
     /// system's whole state (type, timer, Y, X per slot).
     #[serde(default)]
     bslots: Vec<String>,
+    /// The `$1CBA` exit-tile arm's observables (`captures/traj17.json`):
+    /// `sExitTileFlag` ($A2B4), `sLowTimeFlag` ($A53F), the exit fade's
+    /// `sFadeTimerLow`/`High` ($A266/$A267) and `sLevelTally` ($A2C5, BCD).
+    /// All optional, so every capture recorded before traj17 still replays.
+    #[serde(default)]
+    exit: Option<u8>,
+    #[serde(default)]
+    lowtime: Option<u8>,
+    #[serde(default)]
+    fadelo: Option<u8>,
+    #[serde(default)]
+    fadehi: Option<u8>,
+    #[serde(default)]
+    tally: Option<u8>,
     /// The fade/map/reload gap carried by the first post-respawn record of a
     /// full-death-cycle capture.
     #[serde(default)]
     gap: Option<GapJ>,
+    /// The exit-tile arm's writes, carried on the arm's own record
+    /// (`captures/traj17.json`) — checked once, outside the per-frame table.
+    #[serde(default)]
+    exit_arm: Option<ExitArmJ>,
     /// 16 raw 32-byte slot dumps (64 hex chars each) — the full-byte check.
     #[serde(default)]
     slot_bytes: Vec<String>,
@@ -989,6 +1007,37 @@ struct SlotJ {
 struct GapJ {
     total: u64,
     seq: Vec<[u64; 2]>,
+}
+
+/// The `$1CBA` exit-tile arm's facts that a per-frame table cannot express,
+/// carried on the arm's own record by `captures/trajectory_capture17.py`: the
+/// frame it fired on, the tile the probe read, and the fade span measured from
+/// outside the in-level hook (`$05E4` stops firing once `$FF9B` leaves 4, so
+/// the capture splices the frames after it in from a `$028D` hook).
+#[derive(Deserialize)]
+struct ExitArmJ {
+    /// The in-level record the arm fired on — the LAST `$05E4` record; every
+    /// record after it came from the `$028D` splice.
+    frame: usize,
+    #[allow(dead_code)]
+    tick: u64,
+    x: u16,
+    y: u16,
+    /// `sCollisionTile` at the arm (the `$4A` the probe read).
+    col: u8,
+    music: u8,
+    #[allow(dead_code)]
+    exit: u8,
+    #[allow(dead_code)]
+    lowtime: u8,
+    tally_before: u8,
+    tally_after: u8,
+    #[allow(dead_code)]
+    fade_first: u16,
+    #[allow(dead_code)]
+    fade_last: u16,
+    /// `[[$FF9B, ticks], ...]` polled per tick from the arm onwards.
+    state_seq: Vec<[u64; 2]>,
 }
 
 /// The `MarioContact` both loops hand to the object engine (`$2D7D`'s view of
@@ -1499,6 +1548,37 @@ fn run_replay(
                 obj.active == f.active,
                 format!("active sim={} exp={}", obj.active, f.active),
             );
+            // The exit-tile arm's own state (only when the capture carries
+            // it, so the older captures keep their check count).
+            if let Some(v) = f.exit {
+                push(
+                    "exit",
+                    sim.exit_tile_flag == v,
+                    format!("exit sim=${:02X} exp=${:02X}", sim.exit_tile_flag, v),
+                );
+            }
+            if let Some(v) = f.lowtime {
+                push(
+                    "lowtime",
+                    sim.low_time_flag == v,
+                    format!("lowtime sim=${:02X} exp=${:02X}", sim.low_time_flag, v),
+                );
+            }
+            if let (Some(lo), Some(hi)) = (f.fadelo, f.fadehi) {
+                let exp = ((hi as u16) << 8) | lo as u16;
+                push(
+                    "fade",
+                    sim.fade_timer == exp,
+                    format!("fade sim={} exp={}", sim.fade_timer, exp),
+                );
+            }
+            if let Some(v) = f.tally {
+                push(
+                    "tally",
+                    sim.level_tally == v,
+                    format!("tally sim=${:02X} exp=${:02X}", sim.level_tally, v),
+                );
+            }
             push("objslots", slot_ok, slot_msg);
             push(
                 "odd",
@@ -1723,6 +1803,93 @@ fn run_replay(
             }
         }
     }
+    // The exit-tile arm (`$1CBA`): the one-shot facts the per-frame table
+    // cannot express (`captures/traj17.json`). `$05E4` is the state-$04 body's
+    // entry, so it stops firing the moment `$FF9B` leaves 4 — the capture keeps
+    // that hook for the whole in-level run and splices the frames AFTER the arm
+    // in from a second hook at `$028D` (one fire per frame in *every* state), so
+    // the fade, its `$3547` tally and the exit flag go through the ordinary
+    // per-frame checks. What is left for here: the trigger's own geometry, the
+    // arm record having that tail, the fade's DURATION (a per-frame table can't
+    // count) and the hand-off state the fade's last frame moves to.
+    let mut exit_arm_ok = true;
+    if let Some(arm) = frames.iter().find_map(|f| f.exit_arm.as_ref()) {
+        let mut probs: Vec<String> = Vec::new();
+        if arm.frame + 1 > frames.len() - 1 {
+            probs.push(format!(
+                "arm frame {} has no tail records ({} total)",
+                arm.frame,
+                frames.len()
+            ));
+        }
+        if !sim.exit_phase {
+            probs.push("the port's exit arm did not fire".to_string());
+        }
+        // The poll starts on the tick AFTER the arm frame — the arm frame's own
+        // start is still state 4 (`$05E4` ran and produced the last record),
+        // and the switch to 24 happens inside it — so the measured span is the
+        // frames after it and the arm frame itself makes up the rest.
+        let cap_fade_raw = arm.state_seq.first().map(|s| s[1]).unwrap_or(0);
+        let cap_fade = cap_fade_raw + 1;
+        if arm.state_seq.first().map(|s| s[0]) != Some(24) {
+            probs.push(format!(
+                "state_seq does not start in 24: {:?}",
+                arm.state_seq
+            ));
+        }
+        if arm.state_seq.last().map(|s| s[0]) != Some(20) {
+            probs.push(format!(
+                "state_seq does not end in 20 ($14, the hand-off): {:?}",
+                arm.state_seq
+            ));
+        }
+        let modeled_fade = 192u64;
+        if cap_fade != modeled_fade {
+            probs.push(format!(
+                "fade length captured={cap_fade} modeled={modeled_fade}"
+            ));
+        }
+        // The tail records stop at the fade's LAST decrement, and the frame that
+        // `$3547`'s tail charges the tally on never reaches `$028D` (its
+        // gfx/save work spans the whole tick), so run the port's remaining fade
+        // steps here and check the charge they produce against the capture's.
+        let mut tail_steps = 0u64;
+        while sim.fade_timer > 0 {
+            sim.exit_fade_step();
+            tail_steps += 1;
+        }
+        if !sim.exit_completed {
+            probs.push("the modelled fade never reached its tail ($3547)".to_string());
+        }
+        if sim.level_tally != arm.tally_after {
+            probs.push(format!(
+                "tally sim=${:02X} exp=${:02X}",
+                sim.level_tally, arm.tally_after
+            ));
+        }
+        println!(
+            "  exit arm: record {} of {}, tick {}, x={} y={} col=${:02X}, music={}, \
+             fade {cap_fade} captured vs {modeled_fade} modeled \
+             ({cap_fade_raw} ticks after the arm frame + the arm frame), \
+             tally {:02X}->{:02X}, state_seq {:?}, +{tail_steps} modelled to the tail{}",
+            arm.frame,
+            frames.len() - 1,
+            arm.tick,
+            arm.x,
+            arm.y,
+            arm.col,
+            arm.music,
+            arm.tally_before,
+            arm.tally_after,
+            arm.state_seq,
+            if probs.is_empty() {
+                String::new()
+            } else {
+                format!("  <- MISMATCH: {}", probs.join("; "))
+            }
+        );
+        exit_arm_ok = probs.is_empty();
+    }
     let n = frames.len() - 1;
     println!("replay: {n} frames compared");
     print!("mismatches:");
@@ -1732,6 +1899,9 @@ fn run_replay(
     println!();
     if !gap_ok {
         println!("note: the death-cycle gap check FAILED (fade length / tick accounting)");
+    }
+    if !exit_arm_ok {
+        println!("note: the exit-tile arm check FAILED (see the `exit arm:` line above)");
     }
     if !obj.unported.is_empty() {
         println!(

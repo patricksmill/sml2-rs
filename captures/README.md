@@ -38,9 +38,10 @@ Every capture must replay with **all-zero** mismatches (`mismatches: ... =0`).
 
 | `traj15.json` | 818 | 35 | **Brick bumps ("bounce blocks") — the `$1993`/`$5960`/`$5997` system, and the level-map rewrite a bump performs.** `trajectory_capture15.py` walks east on the row-31 floor to the `$01` block at col 22 (x 352-367; the ceiling probe `(x+16, y+28)` wants Mario at x ∈ [336,351]), jumps three times, then runs into the first walker (a harmful side contact → the death dispatch and arc). The first bonk is the richest case in the level: `$19D2` sets `sSpinJumpBounce` = `$FF`, allocates a **type 3** slot (the `$5B06` bump) and then `$2C77`/`$591F` credits +1 coin and allocates the **type 4** coin slot, whose `$5AF9` cycle (109/110/111) draws last, so it wins `$FFC6`. The bump's `$5CF1` also writes the **level map**: cell (28,22) goes `$01` → `$24` (timer 2) → `$07` (timer 8) — so the second and third jumps bonk `$07`, a `$04`+ tile: a plain bonk that clears the spin flag and credits nothing (the console's `frame` stays 40 and `spin` stays 0). Adds the `spin` ($A220), `coins`/`coinshi` ($A262/$A263 BCD) and `bslots` (the 8 `sBlockAnimSlots` at $AA80, 16 bytes each — including the stale bytes a freed slot keeps) checks. Sampled per LOGIC frame (`$05E4` hook) + `apply_pairing.py traj15_raw.json traj15.json`. |
 | `traj16.json` | 6608 | 33 | **The coin touch (`$1D75`/`$1DA5`), called from the `$1E7C`/`$1E8D` side probes.** `trajectory_capture16.py` runs `trajectory_capture12.py`'s route — its first 6522 per-tick records are field-for-field identical, checked in the probe run — and stops at the tower-climb exit (x ≥ 3800). Climbing the 496/480/464 tower, the side probes read level 1's only `$48` cells — (24,231) and (24,232), in the air at x 3688-3719 / y 384-415 — and the console collects both: `sCoinLow` goes `00` → `01` → `02` at the frames whose state is (3691, 383) / (3700, 365), and the two level-map cells are rewritten `$48` → `$60` (`$1DA5` → `$2C0D` → bank-1 `$5CF2`), which `probe_coin_touch.py` measured tick by tick. Adds the `coins`/`coinshi` checks ($A262/$A263, BCD) — the port's `PlayerSim::coin_touch` fires at exactly those frames and writes exactly those cells. Sampled per LOGIC frame (`$05E4` hook) + `apply_pairing.py traj16_raw.json traj16.json`. |
+| `traj17.json` | 6977 | 38 | **The `$1BFF` exit-tile arm (`$1CBA`) — the level-complete sequence, console-verified for the first time.** `trajectory_capture17.py` runs `trajectory_capture16.py`'s route (the whole level: stomps, pipe room, arena, the 496/480/464 tower) and then `trajectory_capture12.py`'s deliberate WALK east continued past traj12's stop at 4026 to level 1's only `$4A` cell — the bell at col 254 (world x 4064). `$1BFF`'s `(x+16, y+28)` sample reads it as Mario reaches x=4057 and the arm fires at that frame: `sCollisionTile = $4A`, `sMusicRequest = 3`, `sLowTimeFlag = 0`, `sExitTileFlag = 0`, `$FF9B = 24` (state `$18`) and `sFadeTimer = 192`. The records then carry the whole 192-frame fade (state `$18` for 191 further ticks) and the `$3547` tail's BCD tally charge `00` → `01`, ending on the `$14` hand-off frame. **Two hooks**: `$05E4` (state `$04`'s body) stops firing the moment the state leaves 4, so the frames after the arm come from a second hook at `$028D` (the main loop's post-state point, one fire per frame in EVERY state) spliced onto the same record list — the two sample the same frame boundary, so one pairing covers both. Adds the per-frame `exit` (`sExitTileFlag` $A2B4), `lowtime` (`sLowTimeFlag` $A53F), `fade` (`sFadeTimerLow/High` $A266/$A267) and `tally` (`sLevelTally` $A2C5) checks plus the one-shot `exit_arm` block (the trigger's geometry, the fade span measured from outside the hook, the tally) which the harness reports on its `exit arm:` line and fails with a `note:` if it disagrees. Sampled per LOGIC frame (`$05E4` + `$028D`) + `apply_pairing.py traj17_raw.json traj17.json`. |
 | `traj13_full.json` (RETIRED) | 4719 | — | **RETIRED** — not shipped in this repo. Tick-sampled mid-frame artifact; `traj14` supersedes it. |
 
-Capture scripts (`trajectory_capture5.py` … `trajectory_capture16.py`,
+Capture scripts (`trajectory_capture5.py` … `trajectory_capture17.py`,
 `death_capture1.py`…`death_capture3.py`) need a PyBoy venv
 (`pip install pyboy pillow`) and `baserom.gb` from the sibling decomp
 (`SML2_DECOMP_ROOT`, default `../sml2decomp`); they drive the title → file
@@ -64,6 +65,18 @@ twice — the record list stops matching logic frames and no port can replay it.
 fires at the frame START, so run `apply_pairing.py <raw> <out>` afterwards (the
 sim's frame i replays the console's logic frame i-1 with that frame's keys).
 Prefer the hook method for anything new.
+
+**When the feature ENDS the level, `$05E4` stops firing.** It is the state-`$04`
+body's entry, so the first frame whose state is no longer 4 produces no record —
+which is exactly where a level-clear's fade and tally live. `traj17` handles
+that with a SECOND hook at `$028D` (the main loop's post-state point, after the
+state handler returns and before `$02FF`'s VBlank wait): one fire per frame in
+every state. Both hooks sample the same frame boundary — a `$05E4` sample is the
+start of its frame, a `$028D` sample is the end of the frame the same record
+list already treats as "one frame earlier" — so the two lists splice into one
+stream that the ordinary pairing covers unchanged. (The one asymmetry: VBlank
+writes — the fade timer — land between the two instants, so a `$028D` sample
+shows the pre-decrement value the sim's own post-step state also holds.)
 
 The venv used since 2026-10-12 is `/home/pmill/.venvs/sml2-pyboy/bin/python`
 (durable; an earlier one under the scratch dir was pruned). The scripts write
