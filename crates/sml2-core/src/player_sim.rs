@@ -3943,6 +3943,176 @@ mod tests {
         assert!(!sim.bump_coin_pending);
     }
 
+    // -----------------------------------------------------------------
+    // $5960/$5997 — the bump slots' per-type lifecycles (`bonk_*` items)
+    // -----------------------------------------------------------------
+
+    /// The three offset tables against the ROM bytes re-read here (a byte dump of
+    /// `baserom.gb`, not the port's own constants), so a hand-edit of an array
+    /// literal cannot silently move a sprite. `$5A4A` (40 entries, the type-1/5
+    /// item pop) and `$5AE0` (25, the type-4 coin pop) are indexed by the timer —
+    /// the coin's by `timer >> 1` — and `$5BB4` (8) by the timer for the
+    /// type-2/3/6 rattle.
+    #[test]
+    fn the_bump_offset_tables_are_the_rom_bytes() {
+        fn rom_hex(s: &str) -> Vec<i8> {
+            s.split_whitespace()
+                .map(|b| u8::from_str_radix(b, 16).expect("hex byte") as i8)
+                .collect()
+        }
+        let pop = rom_hex(
+            "FC F8 F4 F0 ED EA E7 E5 E3 E2 E0 DF DF DF E0 E2 E3 E5 E7 EA ED F0 F4 F8 \
+             FC 00 08 0C 10 15 1A 1F 25 2B 32 39 3F 46 4E 50",
+        );
+        let coin =
+            rom_hex("F4 F0 EC E8 E5 E2 DF DD DC DA D8 D7 D7 D7 D8 DA DB DD DF E2 E5 E8 EC F0 F4");
+        let bob = rom_hex("00 00 FE FC FA FA FC FE");
+        assert_eq!(ITEM_POP_OFFSETS_5A4A.to_vec(), pop, "$5A4A");
+        assert_eq!(COIN_OFFSETS_5AE0.to_vec(), coin, "$5AE0");
+        assert_eq!(BOB_OFFSETS_5BB4.to_vec(), bob, "$5BB4");
+        assert_eq!(ITEM_POP_OFFSETS_5A4A.len(), 40, "the table's own extent");
+        assert_eq!(COIN_OFFSETS_5AE0.len(), 25);
+    }
+
+    /// `$19B0`'s big arm (`bonk_big_mario_types_1_5`): the `$00` brick is
+    /// DESTROYED — `sSfxRequest2` (the destruction sound) *and* the shared
+    /// rattle sfx — into a type-1 slot whose `$5CF1` write turns the cell into
+    /// the `$60` empty metatile at timer 2 and again when the slot frees at
+    /// `$28`. Between those, the powerup pops out as the `$5A07` pair: 101 first,
+    /// then 102, so 102 is what `$FFC6` holds (`3E 65 E0 C6` then `3E 66 E0 C6`),
+    /// both at `slotY - sScrollY + $5A4A[timer]` and `slotX - sScrollX ∓ timer`
+    /// (the second `[$A23F]` read in that routine is `sBlockAnimTimer`, i.e. the
+    /// X pair is ∓ the TIMER, not ∓ the offset).
+    #[test]
+    fn big_mario_destroys_the_brick_and_pops_the_item_out() {
+        let mut sim = PlayerSim::new();
+        sim.powerup = 1;
+        sim.ceiling_probe = (360, 479);
+        sim.block_bonk(0x00);
+        assert_eq!(sim.sfx2, 1, "$19B0's big arm requests the destruction sound");
+        assert_eq!(sim.sfx0, 2, "the shared tail's rattle sfx still fires");
+        assert_eq!(sim.spin_jump_bounce, 0xFF);
+        assert_eq!(
+            &sim.block_slots[0][..6],
+            &[1, 1, 0xD8, 0x01, 0x70, 0x01],
+            "type 1, timer 1, the probe's cell (479, 360) rounded"
+        );
+        // Timer 2: `$5A72` writes 96 (`$60`) into the CELL; no draw.
+        sim.block_update();
+        assert_eq!(sim.block_slots[0][1], 2);
+        assert_eq!(sim.block_frame, None);
+        assert!(sim.block_draw.is_empty());
+        assert_eq!(sim.layout_writes, vec![(7190, 0x60)], "row 28 / col 22");
+        // Timer 3: the item-pop pair. `$5A4A[3] = -16`; the Y is `slotY + off -
+        // 26` (the port's render anchor absorbs the engine's `- sScrollY`) and
+        // the X is `slotX - 16 ∓ 3`.
+        sim.block_update();
+        assert_eq!(sim.block_frame, Some(102), "the second draw leaves 102");
+        assert_eq!(
+            sim.block_draw,
+            vec![(349, 430, 101), (355, 430, 102)],
+            "368 - 16 ∓ 3, 472 - 16 - 26"
+        );
+        // The write repeats and the slot frees at `$28`.
+        while sim.block_slots[0][0] != 0 {
+            sim.block_update();
+        }
+        assert_eq!(sim.block_slots[0][1], 0x28, "the item pop lasts 40 ticks");
+        assert_eq!(sim.layout_writes, vec![(7190, 0x60)], "one cell, twice");
+    }
+
+    /// `$19C1`: the `$03` bounce block splits on Mario's size exactly like `$00`
+    /// — small → type 6 (cell 24 at timer 2, the `$03` used tile `$07` at 8), big
+    /// → type 5 (destroyed: sfx2, the `$7F` used tile 127 at timer 2 and again at
+    /// `$28`). The `$00` small case (type 2, cell 24 then 0) is the control.
+    #[test]
+    fn the_03_block_splits_into_type_6_for_small_and_type_5_for_big() {
+        let mut small = PlayerSim::new();
+        small.powerup = 0;
+        small.ceiling_probe = (360, 479);
+        small.block_bonk(0x03);
+        assert_eq!(small.sfx2, 0, "small Mario only rattles it");
+        assert_eq!(small.block_slots[0][0], 6);
+        small.block_update();
+        assert_eq!(small.layout_writes, vec![(7190, 24)], "timer 2: $5BFC");
+        for _ in 0..6 {
+            small.block_update();
+        }
+        assert_eq!(small.block_slots[0][1], 8);
+        assert_eq!(small.block_slots[0][0], 0, "freed at 8");
+        assert_eq!(
+            small.layout_writes,
+            vec![(7190, 3)],
+            "$5BC8: the `$03` block's used tile, from its own `3E 03 / call $5CF1`"
+        );
+
+        let mut big = PlayerSim::new();
+        big.powerup = 1;
+        big.ceiling_probe = (360, 479);
+        big.block_bonk(0x03);
+        assert_eq!(big.sfx2, 1, "$19C1's big arm: the destruction sound");
+        assert_eq!(big.block_slots[0][0], 5);
+        big.block_update();
+        assert_eq!(big.layout_writes, vec![(7190, 127)], "$5A7A: the `$7F` used tile");
+        while big.block_slots[0][0] != 0 {
+            big.block_update();
+        }
+        assert_eq!(big.block_slots[0][1], 0x28, "type 5 lives 40 ticks");
+        assert_eq!(big.layout_writes, vec![(7190, 127)], "written at 2 and at $28");
+
+        // The `$00` control: small Mario's brick only rattles (type 2, the brick
+        // tile itself returns at 8).
+        let mut brick = PlayerSim::new();
+        brick.powerup = 0;
+        brick.ceiling_probe = (360, 479);
+        brick.block_bonk(0x00);
+        assert_eq!(brick.block_slots[0][0], 2);
+        assert_eq!(brick.sfx2, 0);
+        for _ in 0..7 {
+            brick.block_update();
+        }
+        assert_eq!(brick.block_slots[0][0], 0);
+        assert_eq!(brick.layout_writes, vec![(7190, 0)], "$5BBC: back to empty");
+    }
+
+    /// The single-slot draw `bonk_single_slot_draw` was filed for. traj15's `$01`
+    /// bonk allocates a type 3 AND a type 4, and the coin cycle (slot 4) draws
+    /// after the bonk slot, so the console never leaves 66 in `$FFC6` there. A
+    /// LONE type-3 slot does: `$5B8A` is `ld a,66 / ldh [$FFC6],a` (bytes
+    /// `3E 42 E0 C6`) at `slotY - sScrollY + $5BB4[timer]`, with no timer term on
+    /// X.
+    #[test]
+    fn a_lone_bump_slot_leaves_frame_66_and_the_coin_slot_overrides_it() {
+        let mut sim = PlayerSim::new();
+        sim.block_slots[0] = [3, 1, 0xD8, 0x01, 0x70, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        sim.block_update(); // timer 2: `$5BFC` writes 24, no draw
+        assert_eq!(sim.block_slots[0][1], 2);
+        assert_eq!(sim.block_frame, None);
+        assert_eq!(sim.layout_writes, vec![(7190, 24)]);
+        sim.block_update(); // timer 3: the 66 draw, `$5BB4[3] = -4`
+        assert_eq!(sim.block_frame, Some(66));
+        assert_eq!(sim.block_draw, vec![(352, 442, 66)], "368 - 16, 472 - 4 - 26");
+        // A later slot's coin cycle draws AFTER it and wins `$FFC6` — which is
+        // why the capture's two-slot bump shows the coin cycle and not 66.
+        sim.block_slots[1] = [4, 1, 0xD8, 0x01, 0x70, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        sim.block_update(); // slot 0 at timer 4 (66), slot 1 at timer 2 ($6D)
+        assert_eq!(sim.block_frame, Some(0x6D), "the last drawing slot wins");
+        assert_eq!(sim.block_draw.len(), 2);
+        assert_eq!(sim.block_draw[0].2, 66, "the bonk slot did draw");
+        assert_eq!(sim.block_draw[1], (352, 430, 0x6D), "$5AE0[1] = -16");
+        // Isolate the type-3 slot again and run it to its removal.
+        sim.block_slots[1][0] = 0;
+        while sim.block_slots[0][0] != 0 {
+            sim.block_update();
+        }
+        assert_eq!(sim.block_slots[0][1], 8, "types 2/3/6 free at 8");
+        assert_eq!(
+            sim.layout_writes,
+            vec![(7190, 7)],
+            "$5B3C: the `$07` used tile"
+        );
+    }
+
     /// The level reload clears the bump scratch — including the pass's arming
     /// and its pending coin.
     #[test]

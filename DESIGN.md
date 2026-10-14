@@ -1287,4 +1287,39 @@ convention, and a test now couples the two consumers: a level cleared through
 `map_handoff` is refused by `map_can_enter` on the same byte, so switching either side to the
 other convention fails instead of silently shifting every flag by one.
 
+## Level 3's three handler classes, and the bump arms' verification — 2026-10-14
+
+**`level03_handler_classes` (delegated writer, `crates/sml2-core/src/objects.rs`).** Level index 2's
+spawn stream reaches eight handler classes, three of which had no body. All three are in now:
+`0x59BC5` (`handler_groundwalker88`, anim 88 — the ground walker: `$7585` bob head, an inline
+`rst $28` over `$5BD1`/`$5D05`/`$5D41`, state 0 writing `B_FLASH = $10` + type `$4E` + facing Mario,
+states 1/2 probing `$3C1C`/`$3BB8` and flipping through `$5D2D`, then the two-phase counter = 16 idle
+calls and 48 one-pixel steps); `0x594EB` (`handler_fallwalker52`, anim 68 — literally the ported
+`$582D1` body with `$54F4`'s type `$52` instead of `$582D9`'s `$56`, so `handler_fallwalker` became a
+wrapper over one `fallwalker_body(ty)`); and `0x58DD1` (`handler_carrier46`, anim 46 — the object that
+carries Mario: state 0 sets type `$20` and state 2, waits on `B_FLAGS` bit 3, then falls with the
+`$7451` picker, adds `b` into Mario's 16-bit Y through the `$3CDF` carry and removes itself with
+`$72D7` on the ground). Verified against the ROM bytes rather than the report: `$594EB` is
+`CD 85 75 / F0 DF / A7 / C2 F5 42 / 3E 52` (the `$7585` head, the shared `$42F5` dispatch, the `$52`
+immediate) where `$582D1` has `20 1C` (a `jr`) and `3E 56`; `$59BC5`'s head is
+`CD 85 75 / F0 DF / EF / D1 5B 05 5D 41 5D` with `3E 10 E0 DE` for state 0, and `$59D05`/`$59D41` are
+the `$3C1C`/`$3BB8` wall probes; `$58DD1` is `F0 DF / A7 / 20 09 / 3E 20 / E0 E2 / 3E 02 / E0`.
+Ten new tests, and one of the child's eleven fail-checks was reproduced here independently
+(`B_TYPE = 0x20 → 0x21` fails `carrier46_state0_sets_type20_and_enters_the_wait` with the reported
+`left: (33, 2) right: (32, 2)`).
+
+**`bonk_single_slot_draw` + `bonk_big_mario_types_1_5` (four new tests, no code change).** Both
+items' gates were already unit tests; the code was there and the verification was not. The tests
+carry the ROM bytes themselves — `$5A4A` (40), `$5AE0` (25), `$5BB4` (8) as hex strings, compared
+against the port's arrays — so a hand-edit cannot drift, and they pin: the `$19B0` big arm
+(`$00` → sfx2 + a type-1 slot, cell 96 at timer 2 and again at `$28`, the `$5A07` pair 101 then 102
+at `slotX - 16 ∓ the timer`, 102 surviving in `$FFC6`); the size split for `$00`/`$03`
+(types 2/1/6/5 with cells 24→0, 96, 24→3, 127); and the single-slot case traj15's two-slot `$01`
+bump cannot show — a lone type-3 slot leaving 66 in `$FFC6` (`$5B8A`'s `3E 42 E0 C6`, `$5BB4[timer]`,
+no timer term on X), with a later type-4 coin slot drawing after it and taking the frame. One
+correction came out of writing them: type 6's used tile is 3 (`$5BC8`: `3E 03 / call $5CF1`), not 7.
+
+Whole tree after both: 197 core + 3 runtime tests, `cargo build --release` clean, `bash
+captures/sweep.sh` → `gate done` with traj4_ff0 byte-identical and no `REGRESSION`, and no `note:`.
+
 
