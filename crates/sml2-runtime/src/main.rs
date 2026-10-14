@@ -222,6 +222,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // map had. Level 1 is $00 in both, so its play and replay agree.
         cam.map_scroll_limit = manifest.properties.unknown != 0;
         cam.auto_scroll = manifest.properties.auto_scroll;
+        // `$04DD`/`home.asm:661`: the THIRD property byte — `LevelPropertiesSpace`
+        // (`$1F91`) into `sMoonPhysics` ($A287) — the same class of gap as the
+        // two above, and level 1 is `$00` in all three so the gate is
+        // structurally blind to it. Seeded through the sim's own method so play
+        // and replay share one construction.
+        sim.seed_moon_physics(manifest.properties.space_physics);
         // `$0609`: sSceneState is initialized from the level header's +18 high
         // nibble (ram.asm:665). All 32 levels carry 0 there, so nothing starts
         // mid-scene — but the byte is a real input: a nonzero high nibble makes
@@ -941,6 +947,11 @@ struct Frame {
     goal: Option<u8>,
     #[serde(default)]
     secret: Option<u8>,
+    /// `sMoonPhysics` ($A287) — the level's `LevelPropertiesSpace` byte. The sim
+    /// derives it from the manifest (`PlayerSim::seed_moon_physics`), so this is
+    /// a CHECK of the derivation, not a source for it (traj19/level 20 → $01).
+    #[serde(default)]
+    moon: Option<u8>,
     /// `sSpinJumpBounce` ($A220) — the ceiling-bonk flag (`$FF` after a bump).
     #[serde(default)]
     spin: Option<u8>,
@@ -1132,6 +1143,12 @@ fn run_replay(
     sim.dir_right = f0.dir_right;
     sim.walk_timer = f0.timer;
     sim.lives = f0.lives.unwrap_or(5);
+    // `$04DD`/`home.asm:661`: `sMoonPhysics` is the level's own property byte,
+    // so the sim DERIVES it from the manifest — never from the record (the
+    // edge-map rule: an injected value leaves the derivation untested in play).
+    // Captures that carry `moon` make it a CHECK instead: traj19 (level 20)
+    // records `$01` on all 1309 frames, which is `LevelPropertiesSpace[19]`.
+    sim.seed_moon_physics(manifest.properties.space_physics);
     let mut cam = sml2_core::camera::CameraSim::new(
         f0.camx as u16 | ((f0.camxh as u16 & 0x0F) << 8),
         f0.camy as u16 | ((f0.camyh as u16 & 0x0F) << 8),
@@ -1607,6 +1624,17 @@ fn run_replay(
                 obj.odd == (f.odd != 0),
                 format!("odd sim={} exp={}", obj.odd, f.odd),
             );
+            // `sMoonPhysics` ($A287) — the level's own property byte, DERIVED
+            // from the manifest. traj19 (level 20, `space_physics` 1) is the one
+            // capture that can see it: without the seed this reads $00 against
+            // the record's $01 on every frame.
+            if let Some(v) = f.moon {
+                push(
+                    "moon",
+                    sim.moon == v,
+                    format!("moon sim=${:02X} exp=${:02X}", sim.moon, v),
+                );
+            }
             // Raw slot bytes: the strongest check (every byte the engine
             // writes, including positions, sprites, frame state, flags).
             if !f.slot_bytes.is_empty() {
@@ -2320,5 +2348,39 @@ mod tests {
         let img = render_view(&manifest, &layout, &[], &bg, 80, 448, 160, 144, None, None, None)
             .unwrap();
         assert_eq!(block_row_top(&img, 160, darkest), 120);
+    }
+
+    /// `$04DD`/`home.asm:661`: `sMoonPhysics` is the level's own
+    /// `LevelPropertiesSpace` byte (`$1F91`, indexed by `sCurLevel`), which both
+    /// frame loops now seed from the manifest. Only three levels are nonzero —
+    /// indices 18, 19 and 28, values `$08`, `$01`, `$08` — and level 1 is `$00`
+    /// in all three property bytes, which is exactly why the replay gate was
+    /// structurally blind to this: every capture ran on `PlayerSim::new()`'s own
+    /// default. traj19 (level 20) records the byte, so the gate checks the
+    /// derivation now; this test checks the three known levels' values.
+    #[test]
+    fn the_moon_physics_byte_comes_from_the_manifest_for_the_three_known_levels() {
+        for (name, id, byte) in [
+            ("level19.manifest.json", 18u8, 0x08u8),
+            ("level20.manifest.json", 19, 0x01),
+            ("level29.manifest.json", 28, 0x08),
+        ] {
+            let (manifest, _, _) = level_files(name, "level01.bgblock.bin");
+            assert_eq!(manifest.level_id, id, "{name}");
+            assert_eq!(
+                manifest.properties.space_physics, byte,
+                "{name}: the ROM's LevelPropertiesSpace entry"
+            );
+            let mut sim = PlayerSim::new();
+            sim.seed_moon_physics(manifest.properties.space_physics);
+            assert_eq!(sim.moon, byte, "{name}: seeded raw, not folded to a bool");
+        }
+        // The default side: level 1's byte is `$00`, so its play and replay are
+        // unchanged by the seed — the reason 19 captures never saw the gap.
+        let (lvl1, _, _) = level_files("level01.manifest.json", "level01.bgblock.bin");
+        assert_eq!(lvl1.properties.space_physics, 0x00);
+        let mut sim = PlayerSim::new();
+        sim.seed_moon_physics(lvl1.properties.space_physics);
+        assert_eq!(sim.moon, 0x00);
     }
 }

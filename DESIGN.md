@@ -1184,4 +1184,57 @@ tests never saw this). Whole-frame diffs against PyBoy at those cameras: 273 px 
 268 px of 23040, all of it animated tiles, the sprite's frame and the status-bar
 digits.
 
+## The space-physics byte is seeded, and `$0FF2` is ported — 2026-10-14
+
+`LevelPropertiesSpace` (`$1F91`, indexed by `sCurLevel`) reaches RAM only through the
+level-init state handler (`$04DD`, `home.asm:661`): `ld a,[hl] / ld [$A287],a`. The port
+extracted the byte into every manifest (`properties.space_physics`) and seeded the other
+two property bytes (`sMapScrollLimit`, `sAutoScroll`) in both frame loops — but never this
+one. Same defect class as the missing edge map and the clamped view: only three levels are
+nonzero (index 18 → `$08`, 19 → `$01`, 28 → `$08`; levels 19, 20, 29) and level 1 is `$00`
+in all three, so no capture could see it.
+
+The byte is a **bitfield**, never a bool: bit 0 = the level-20 hold-A float, bit 1 = inside
+a moon zone (runtime only, written by `$1BFF`), bit 2 = the moon item is held (`$34E2`, which
+the port already sets), bit 3 = the timed float of the two `$08` levels.
+
+Both frame loops now call the ONE construction `PlayerSim::seed_moon_physics(byte)`, fed from
+`manifest.properties.space_physics`. The replay path DERIVES it — it is not taken from the
+record; traj19's `moon` field is checked against the derivation instead (it records `$01` on
+all 1309 frames of level 20, the console's own `sMoonPhysics`).
+
+`$0FF2` (`$0F71`'s first player call, ahead of `$1BFF`, so its bit-1 test reads the zone
+state the previous frame left) is ported whole as `PlayerSim::moon_jump_extension`:
+
+| arm | test | effect |
+|---|---|---|
+| head | `sGoalBell != 0` → out; `moon == 0` → out | a plain level is a no-op |
+| bit 0 (`$106F`) | airborne + A **held** | `vvel += 4` capped `$48`; sfx 18 on the press edge |
+| bit 1 (`$1055`) | A **pressed** | `vvel = 52`, `sMoonJumpPoseTimer = 8`, sfx 3 (the 8 is one-shot) |
+| bit 3 (`$1029`) | `sMoonFloatTimer` armed to 50 on the ground, 0 when A is released | `vvel += 2` capped `$4A`, one budget frame spent per float frame |
+| — (`$1008`) | bit 2 alone: airborne + A held | `vvel += 2` capped `$4A`, sfx 18 on the press, no timer |
+
+Two new sim bytes: `moon_float_timer` (`$A2B2`) and `moon_jump_pose_timer` (`$A285`). Every
+arm returns while grounded (`sMarioOnGround`), except bit 1's.
+
+Verified: 7 new `player_sim` tests (the seed copies the raw byte; the float runs inside
+`step()` and the default byte kills it; one per arm, each with its cap/edge/one-shot case)
+plus a runtime test asserting the three known levels' manifest bytes and the seeded result.
+Every one was shown to fail by reverting the line under test. The replay gate is green with
+traj4_ff0's documented numbers unchanged.
+
+Not in this package (still open, filed as `moon_physics_remaining_arms`): `$1BFF`'s bit-1
+zone machinery, `$14FA`'s `sFlutterTimer` arm (the port has no such field), `$1541`'s
+`$154E` moon arm, `$2E7C` (bit 2 must be cleared and grant 128 frames of invincibility
+instead of today's note-and-survive), the bank-1 pose/draw arms (`$5354`/`$53CF`/`$54FB`)
+and `$181C`'s missing `sGoalBell → normal table` guard.
+
+**The gate could not see a mid-table regression.** `captures/sweep.sh` tested the mismatches
+line with `grep -q "=0$"` — the LAST field only, which is `coinshi=0` for most captures. A
+check that regressed anywhere else printed no `REGRESSION` line. It now fails on ANY nonzero
+field (the documented traj4_ff0 exception is still printed verbatim). Under the stricter test
+every other capture in the suite is all-zero, so nothing was hiding behind the old test — and
+the new `moon` check was proven to go red (`REGRESSION traj19 nonzero: moon=1308`) with the
+seed removed.
+
 

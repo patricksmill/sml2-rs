@@ -269,6 +269,13 @@ pub struct PlayerSim {
     pub ducking: bool,
     pub swim: bool,
     pub moon: u8,
+    /// `sMoonFloatTimer` ($A2B2) — the bit-3 timed float's budget: 50 armed on
+    /// the ground (`$104A`), 0 when A is released (`$1050`), cleared by a
+    /// ceiling bonk (`$15DA`).
+    pub moon_float_timer: u8,
+    /// `sMoonJumpPoseTimer` ($A285) — the bit-1 moon-zone re-launch's pose
+    /// decay: 8 on the launch (`$1066`), read down by bank 1's `$5354`/`$53CF`.
+    pub moon_jump_pose_timer: u8,
     pub powerup: u8,
     pub goal_bell: bool,
     pub on_ground_obj: bool,
@@ -503,6 +510,8 @@ impl PlayerSim {
             ducking: false,
             swim: false,
             moon: 0,
+            moon_float_timer: 0,
+            moon_jump_pose_timer: 0,
             powerup: 1,
             goal_bell: false,
             on_ground_obj: false,
@@ -1209,6 +1218,107 @@ impl PlayerSim {
         }
     }
 
+    /// `home.asm:661` (`$04DD`, the level-init state handler): `sMoonPhysics`
+    /// ($A287) is the level's `LevelPropertiesSpace` byte (`$1F91`, indexed by
+    /// `sCurLevel`), copied WHOLE — `ld a,[hl] / ld [$A287],a`.
+    ///
+    /// The byte is a **bitfield**, so this copies the raw byte and never folds
+    /// it to a bool (the `sAutoScroll` rule): bit 0 = the level-20 hold-A float,
+    /// bit 1 = inside a moon zone (runtime only, `$1BFF`), bit 2 = the moon item
+    /// held (`$34E2`), bit 3 = the timed float of the two `$08` levels. ROM
+    /// values: index 18 → `$08`, 19 → `$01`, 28 → `$08`, everything else `$00`.
+    /// Both frame loops seed through here, so play and replay cannot drift.
+    pub fn seed_moon_physics(&mut self, byte: u8) {
+        self.moon = byte;
+    }
+
+    /// `$0FF2`-`$108F` — the moon jump extension, the FIRST call of the player
+    /// update (`$0F7E`, before `$1BFF`, so its bit-1 test reads the zone state
+    /// the *previous* frame left). Branch structure transliterated from the
+    /// bytes at `baserom.gb` `$0FF2`-`$108F`:
+    ///
+    /// * `$0FF2` — a ringing goal bell returns first.
+    /// * `$0FF7` — `moon == 0` (a plain level) is a no-op.
+    /// * bit 0 (`$0FFC` → `$106F`) — level 20's hold-A float: airborne + A held
+    ///   → `sVVelocityIndex += 4` per frame, capped at `$48`; an A press
+    ///   mid-air requests sfx 18.
+    /// * bit 1 (`$1000` → `$1055`) — inside a moon zone: an A *press* sets
+    ///   vvel = 52 and, one-shot, `sMoonJumpPoseTimer = 8` + sfx 3.
+    /// * bit 3 (`$1004` → `$1029`) — the timed float (levels 19/29): armed to 50
+    ///   frames on the ground, dropped when A is released, `vvel += 2` per
+    ///   remaining frame capped at `$4A`.
+    /// * none of 0/1/3 (`$1008`) — the bit-2-only (moon item) arm: the same
+    ///   `vvel += 2` / cap `$4A` / sfx-18-on-press shape with no timer.
+    ///
+    /// Every arm returns while grounded; only bit 1's arm has no ground test.
+    fn moon_jump_extension(&mut self, keys: &PlayerKeys, a_pressed: bool) {
+        if self.goal_bell {
+            return; // $0FF2: `ld a,[sGoalBell] / and a / ret nz`
+        }
+        if self.moon == 0 {
+            return; // $0FF7: a plain level is a no-op
+        }
+        if self.moon & 0x01 != 0 {
+            // $106F: the level-20 arm.
+            if self.on_ground || !keys.a {
+                return; // `ld a,[sMarioOnGround] / and a / ret nz`, then `bit 0,a / ret z`
+            }
+            if a_pressed {
+                self.sfx0 = 18; // $107F
+            }
+            if self.vvel >= 0x48 {
+                return; // `cp $48 / ret nc`
+            }
+            self.vvel = self.vvel.wrapping_add(4); // $108A
+            return;
+        }
+        if self.moon & 0x02 != 0 {
+            // $1055: the in-zone re-launch (A press edge only).
+            if !a_pressed {
+                return; // `ldh a,[hKeysPressed] / bit 0,a / ret z`
+            }
+            self.vvel = 52; // $105C
+            if self.moon_jump_pose_timer != 0 {
+                return; // `ld a,[sMoonJumpPoseTimer] / and a / ret nz`
+            }
+            self.moon_jump_pose_timer = 8; // $1066
+            self.sfx0 = 3; // $106B
+            return;
+        }
+        if self.moon & 0x08 != 0 {
+            // $1029: the timed float of the two `$08` levels.
+            if self.on_ground {
+                self.moon_float_timer = 50; // $104A
+                return;
+            }
+            if !keys.a {
+                self.moon_float_timer = 0; // $1050
+                return;
+            }
+            if self.moon_float_timer == 0 {
+                return; // `and a / ret z`
+            }
+            self.moon_float_timer -= 1; // $103B
+            if self.vvel >= 0x4A {
+                return; // `cp $4A / ret nc`
+            }
+            self.vvel = self.vvel.wrapping_add(2); // $1046
+            return;
+        }
+        // $1008: bit 2 alone (the moon item is held) — no timer, and it ends
+        // with its own `ret`, so it never falls into the `$1029` arm.
+        if self.on_ground || !keys.a {
+            return;
+        }
+        if a_pressed {
+            self.sfx0 = 18; // $1018
+        }
+        if self.vvel >= 0x4A {
+            return; // `cp $4A / ret nc`
+        }
+        self.vvel = self.vvel.wrapping_add(2); // $1025
+    }
+
     /// One frame of the player update. `a_pressed` is the A new-press edge.
     pub fn step(&mut self, keys: &PlayerKeys, a_pressed: bool, layout: &LevelLayout) {
         // $0F71/$0FBB: travelling replaces the entire player update.
@@ -1227,6 +1337,11 @@ impl PlayerSim {
         if self.pipe_dir < 0x10 {
             self.pipe_dir = 0;
         }
+        // $0F7E: `$0FF2` — the moon jump extension, the FIRST of `$0F71`'s calls
+        // (before `$1BFF`). Its bit-1 test therefore reads the zone state the
+        // previous frame's probe left, and its `vvel` writes sit ahead of the
+        // gravity below, so the bit-0 cap is reached within the same frame.
+        self.moon_jump_extension(keys, a_pressed);
         // $1BFF (water + hazard + exit bell). The probes use the pre-update
         // x/y and last frame's ducking flag, exactly like `$0F71`'s call
         // order; the `sMarioDead` byte the hazard arm returns is applied
@@ -3166,6 +3281,193 @@ mod tests {
         sim.pending_item = 8;
         sim.item_consumer();
         assert_eq!(sim.moon, 0x07);
+    }
+
+    // -----------------------------------------------------------------
+    // $0FF2 — the moon jump extension (`space_physics_seeding`)
+    // -----------------------------------------------------------------
+
+    /// The seed is the raw BITFIELD byte, not a bool: `LevelPropertiesSpace`
+    /// (`$1F91`) → `sMoonPhysics` ($A287), whole. Level 19 is `$08`, which a
+    /// bool fold would turn into `$01` — and the manifest is the port's only
+    /// source for it (the replay path must never take it from the record).
+    #[test]
+    fn the_moon_physics_seed_copies_the_raw_bitfield_byte() {
+        let mut sim = PlayerSim::new();
+        assert_eq!(sim.moon, 0, "the default the suite has been running on");
+        for byte in [0x08u8, 0x01, 0x08, 0x00] {
+            sim.seed_moon_physics(byte);
+            assert_eq!(sim.moon, byte, "byte ${byte:02X} copied whole");
+        }
+    }
+
+    /// `$0FF2` reaches the per-frame entry. Level 20's byte (`$01`, bit 0) makes
+    /// an airborne Mario holding A gain 4 vvel *before* the frame's own −1
+    /// gravity, so the net after `step` is +3, and the press edge asks sfx 18.
+    /// The control is the same frame with the default byte: the arm is dead and
+    /// only the gravity moves vvel — which is how every level but 19/20/29 runs.
+    #[test]
+    fn the_bit0_float_runs_inside_the_frame_and_the_default_byte_kills_it() {
+        let layout = blank_layout();
+        let keys = PlayerKeys {
+            a: true,
+            ..Default::default()
+        };
+        let mut sim = small_sim();
+        sim.seed_moon_physics(0x01);
+        sim.on_ground = false;
+        sim.vvel = 40;
+        sim.step(&keys, true, &layout);
+        assert_eq!(sim.vvel, 43, "$108A's +4 then the frame's own -1");
+        assert_eq!(sim.sfx0, 18, "$107F: the A press edge");
+        let mut plain = small_sim();
+        plain.on_ground = false;
+        plain.vvel = 40;
+        plain.step(&keys, true, &layout);
+        assert_eq!(plain.vvel, 39, "no space physics: gravity alone");
+        assert_eq!(plain.sfx0, 0);
+    }
+
+    /// `$106F` — level 20's hold-A float: airborne + A *held* → `vvel += 4`,
+    /// capped at `$48`; grounded returns first (`ret nz`), A released returns
+    /// (`ret z`), and only the press edge requests sfx 18.
+    #[test]
+    fn the_bit0_float_caps_at_48_and_needs_a_held() {
+        let held = PlayerKeys {
+            a: true,
+            ..Default::default()
+        };
+        let mut sim = PlayerSim::new();
+        sim.moon = 0x01;
+        sim.on_ground = false;
+        sim.vvel = 0x47;
+        sim.moon_jump_extension(&held, false);
+        assert_eq!(sim.vvel, 0x4B, "47 + 4");
+        sim.vvel = 0x48;
+        sim.moon_jump_extension(&held, false);
+        assert_eq!(sim.vvel, 0x48, "the cap: cp $48 / ret nc");
+        sim.vvel = 40;
+        sim.sfx0 = 0;
+        sim.moon_jump_extension(&held, false);
+        assert_eq!(sim.vvel, 44, "40 + 4");
+        assert_eq!(sim.sfx0, 0, "a held is not a press — no sfx");
+        sim.vvel = 40;
+        sim.moon_jump_extension(&PlayerKeys::default(), false);
+        assert_eq!(sim.vvel, 40, "A not held: ret z");
+        sim.on_ground = true;
+        sim.moon_jump_extension(&held, true);
+        assert_eq!(sim.vvel, 40, "grounded: ret nz");
+        assert_eq!(sim.sfx0, 0, "and no sfx on the ground");
+    }
+
+    /// `$1029` — the bit-3 timed float of the two `$08` levels: armed to 50
+    /// frames on the ground (`$104A`), dropped when A is released (`$1050`),
+    /// one frame of budget spent per float frame, `vvel += 2` capped at `$4A`.
+    #[test]
+    fn the_bit3_timed_float_arms_on_the_ground_and_spends_its_budget() {
+        let held = PlayerKeys {
+            a: true,
+            ..Default::default()
+        };
+        let mut sim = PlayerSim::new();
+        sim.moon = 0x08;
+        sim.on_ground = true;
+        sim.moon_jump_extension(&held, false);
+        assert_eq!(sim.moon_float_timer, 50, "$104A");
+        assert_eq!(sim.vvel, 24, "the ground arm never touches vvel");
+        sim.on_ground = false;
+        sim.vvel = 40;
+        sim.moon_jump_extension(&held, false);
+        assert_eq!(sim.moon_float_timer, 49, "one frame spent");
+        assert_eq!(sim.vvel, 42, "$1046's +2");
+        sim.vvel = 0x4A;
+        sim.moon_jump_extension(&held, false);
+        assert_eq!(sim.vvel, 0x4A, "cp $4A / ret nc");
+        assert_eq!(sim.moon_float_timer, 48, "the budget is spent anyway");
+        sim.moon_float_timer = 0;
+        sim.vvel = 40;
+        sim.moon_jump_extension(&held, false);
+        assert_eq!(sim.vvel, 40, "an empty budget: and a / ret z");
+        sim.moon_float_timer = 20;
+        sim.moon_jump_extension(&PlayerKeys::default(), false);
+        assert_eq!(sim.moon_float_timer, 0, "$1050: A released");
+        assert_eq!(sim.vvel, 40);
+    }
+
+    /// `$1055` — inside a moon zone (bit 1) an A *press* sets vvel 52 and arms
+    /// the 8-frame pose timer once; without a press the whole arm returns.
+    #[test]
+    fn the_bit1_zone_relaunch_fires_on_the_press_edge_only() {
+        let held = PlayerKeys {
+            a: true,
+            ..Default::default()
+        };
+        let mut sim = PlayerSim::new();
+        sim.moon = 0x02;
+        sim.on_ground = false;
+        sim.vvel = 10;
+        sim.moon_jump_extension(&held, false);
+        assert_eq!(sim.vvel, 10, "hKeysPressed bit 0 clear: ret z");
+        assert_eq!(sim.moon_jump_pose_timer, 0);
+        sim.moon_jump_extension(&held, true);
+        assert_eq!(sim.vvel, 52, "$105C");
+        assert_eq!(sim.moon_jump_pose_timer, 8, "$1066");
+        assert_eq!(sim.sfx0, 3);
+        sim.vvel = 10;
+        sim.moon_jump_extension(&held, true);
+        assert_eq!(sim.vvel, 52, "a second press re-launches");
+        assert_eq!(sim.moon_jump_pose_timer, 8, "but the pose timer is one-shot");
+    }
+
+    /// `$1008` — the bit-2-only arm (the moon item is held, not in a zone): the
+    /// same +2/cap-$4A/sfx-18 shape with no timer, and its own `ret` means it
+    /// never spends the `$08` arm's float budget.
+    #[test]
+    fn the_bit2_only_arm_adds_2_without_touching_the_float_budget() {
+        let held = PlayerKeys {
+            a: true,
+            ..Default::default()
+        };
+        let mut sim = PlayerSim::new();
+        sim.moon = 0x04;
+        sim.on_ground = false;
+        sim.moon_float_timer = 30;
+        sim.vvel = 40;
+        sim.moon_jump_extension(&held, true);
+        assert_eq!(sim.vvel, 42, "$1025's +2");
+        assert_eq!(sim.moon_float_timer, 30, "the budget belongs to the $08 arm");
+        assert_eq!(sim.sfx0, 18, "$1018");
+        sim.vvel = 0x4A;
+        sim.moon_jump_extension(&held, false);
+        assert_eq!(sim.vvel, 0x4A, "cp $4A / ret nc");
+        sim.on_ground = true;
+        sim.vvel = 40;
+        sim.moon_jump_extension(&held, false);
+        assert_eq!(sim.vvel, 40, "grounded: ret nz");
+    }
+
+    /// `$0FF2`'s two head guards: a ringing goal bell returns before anything,
+    /// and `moon == 0` makes the whole routine a no-op — every level but the
+    /// three whose `LevelPropertiesSpace` byte is nonzero.
+    #[test]
+    fn the_moon_extension_returns_on_a_goal_bell_and_on_a_plain_level() {
+        let held = PlayerKeys {
+            a: true,
+            ..Default::default()
+        };
+        let mut sim = PlayerSim::new();
+        sim.moon = 0x01;
+        sim.on_ground = false;
+        sim.vvel = 40;
+        sim.goal_bell = true;
+        sim.moon_jump_extension(&held, true);
+        assert_eq!(sim.vvel, 40, "sGoalBell: ret nz");
+        assert_eq!(sim.sfx0, 0);
+        sim.goal_bell = false;
+        sim.moon = 0x00;
+        sim.moon_jump_extension(&held, true);
+        assert_eq!(sim.vvel, 40, "moon == 0: ret z");
+        assert_eq!(sim.sfx0, 0);
     }
 
     /// `$350A` (id 9): `add $50`/`daa` — fifty coins in BCD, the decimal

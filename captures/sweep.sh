@@ -20,7 +20,14 @@ for f in traj4_ff0 traj5 traj6 traj7 traj8 traj9 traj10 traj11 traj12 traj13 \
     printf 'REGRESSION %-20s %s  notes=%s\n' "$f" "$line" "$notes"
     printf '%s\n' "$out" | grep -E "note:|mismatch" | head -5
   else
-    printf '%s\n' "$line" | grep -q "=0$" || { printf 'REGRESSION %-20s %s\n' "$f" "$line"; }
+    # EVERY field must be zero, not only the line's last one. The old test
+    # (`grep -q "=0$"`) looked at the tail only, which is `coinshi=0` for most
+    # captures — so a check that regressed mid-table was invisible here.
+    bad=$(printf '%s\n' "$line" | sed 's/^mismatches://' | tr ' ' '\n' | grep -v '^$' | grep -v '=0$' | tr '\n' ' ')
+    if [ -n "$bad" ]; then
+      printf 'REGRESSION %-20s nonzero: %s\n' "$f" "$bad"
+      printf '%-20s %s\n' "" "$line"
+    fi
   fi
 done
 printf 'gate done\n'
