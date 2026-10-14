@@ -6,7 +6,7 @@
 # node-61 route, so it replays at --level 19.
 set -uo pipefail
 cd /home/pmill/sml2-rs
-BIN=./target/release/sml2-runtime
+BIN=${SML2_BIN:-./target/release/sml2-runtime}
 cargo build --release 2>&1 | grep -E "^(error|warning: unused)" || true
 for f in traj4_ff0 traj5 traj6 traj7 traj8 traj9 traj10 traj11 traj12 traj13 \
          traj14 traj15 traj16 traj17 traj19 death1 death2 death3 crouch_pan1 screen_transition1; do
