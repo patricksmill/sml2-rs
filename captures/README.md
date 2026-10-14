@@ -48,6 +48,7 @@ per-capture level override in `sweep.sh` (which lists it, so it is in the gate).
 | `traj13_full.json` (RETIRED) | 4719 | — | **RETIRED** — not shipped in this repo. Tick-sampled mid-frame artifact; `traj14` supersedes it. |
 
 Capture scripts (`trajectory_capture5.py` … `trajectory_capture17.py`,
+`trajectory_capture20.py`, `scene_capture1.py`,
 `death_capture1.py`…`death_capture3.py`) need a PyBoy venv
 (`pip install pyboy pillow`) and `baserom.gb` from the sibling decomp
 (`SML2_DECOMP_ROOT`, default `../sml2decomp`); they drive the title → file
