@@ -28,6 +28,7 @@ use serde::Deserialize;
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest, LAYOUT_HEIGHT, LAYOUT_WIDTH};
 use sml2_core::map::MapNodes;
 use sml2_core::object::ObjectTables;
+use sml2_core::objects::FireHit;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
 use sml2_core::scene::{SceneScripts, SceneVm};
 use sml2_core::video;
@@ -1202,6 +1203,7 @@ fn run_replay(
     let mut shown = 0usize;
     let mut gap_ok = true;
     let mut prev_a = f0.a;
+    let mut prev_b = f0.b;
     for (i, f) in frames.iter().enumerate().skip(1) {
         let keys = PlayerKeys {
             right: f.right,
@@ -1217,6 +1219,10 @@ fn run_replay(
         };
         let a_pressed = f.a && !prev_a;
         prev_a = f.a;
+        // `hKeysPressed` bit 1 — the fire button is B, edge-triggered, so
+        // holding it fires once.
+        let b_pressed = f.b && !prev_b;
+        prev_b = f.b;
         // $FF97 & 7 — the speed-dither phase. The engine increments it once
         // per frame ($0300/$2729 wait for the VBlank flag, then `inc`), so
         // the $181C integration always reads "previous residue + 1". The
@@ -1300,7 +1306,7 @@ fn run_replay(
                 // overwrite them). Still before `cam.step` below, and skipped
                 // whenever `$0F71` is — see `CameraSim::crouch_pan`.
                 cam.crouch_pan(&sim, &keys);
-                sim.step(&keys, a_pressed, layout);
+                sim.step(&keys, a_pressed, b_pressed, layout);
             }
             // `$3451` id 4's conditional `sStompChainCount` reset (star
             // pickup on an expired timer). The counter lives in the object
@@ -1324,6 +1330,29 @@ fn run_replay(
                 let scroll_x = cam.x.wrapping_sub(80) as u8;
                 let special = obj.below_bonk(by, bx, scroll_y, scroll_x);
                 sim.resolve_bump_coin(special);
+            }
+            // A fireball's `$06` break reaches the same `$5960`/`$2F72` pair
+            // from `$0F71`'s tail: the ball's own cell bytes arm the pass, and
+            // only the player's `$19D2` bump owes the coin.
+            if let Some((by, bx)) = sim.fire_below_bonk.take() {
+                let scroll_y =
+                    cam.y
+                        .wrapping_sub(72)
+                        .wrapping_sub((f.pan.unwrap_or(0) & 3) as u16) as u8;
+                let scroll_x = cam.x.wrapping_sub(80) as u8;
+                obj.below_bonk(by, bx, scroll_y, scroll_x);
+            }
+            // `$3261`'s `$2FED`: the ball's staged screen pair against the
+            // object slots, before the object engine reads the flags it sets.
+            for i in 0..sim.fire_scan.len() {
+                let Some((sy, sx)) = sim.fire_scan[i].take() else {
+                    continue;
+                };
+                let hit = obj.fire_hit(sy, sx);
+                if hit == FireHit::Die {
+                    sim.sfx0 = 2; // `$3007`'s sfx arm
+                }
+                sim.resolve_fire_hit(i, hit != FireHit::None);
             }
             cam.edge_now = if own_edges { None } else { Some(f.edge) };
             cam.step(&mut sim);
@@ -1986,6 +2015,15 @@ fn run_replay(
     if let Some(id) = scene_vm.bad_cursor_scene() {
         println!("note: scene ${id:02X} latched but no script cursor was found - no scene byte ran");
     }
+    // A live projectile: the family's mechanics ran, but the ball's sprite
+    // staging (`$2CF4`, mapping `$B0`/`$B4`) and Mario's throw pose are
+    // draw-side and unmodelled, and `$A880` is not a compared field — so this
+    // note is what makes a capture that fires loud instead of green.
+    if sim.fire_draw_unported {
+        println!(
+            "note: a fireball was live - its sprite staging ($2CF4, mapping $B0/$B4) is not modelled"
+        );
+    }
     Ok(())
 }
 
@@ -2088,12 +2126,14 @@ fn run_play(
     let mut anim_timer: u32 = 0;
     let mut anim_phase: u8 = 0;
     let mut prev_a = false;
+    let mut prev_b = false;
     let mut prev_start = false;
     let mut prev_select = false;
     obj.configure(manifest.level_id);
     let obj_tables = spr.as_ref().map(|s| s.tables.clone());
     while window.is_open() && !window.is_key_down(Key::Escape) && !window.is_key_down(Key::Q) {
         let a_down = window.is_key_down(Key::Z) || window.is_key_down(Key::Space);
+        let b_down = window.is_key_down(Key::X) || window.is_key_down(Key::LeftShift);
         let start_down = window.is_key_down(Key::Enter);
         let select_down = window.is_key_down(Key::Backspace);
         let keys = PlayerKeys {
@@ -2102,12 +2142,14 @@ fn run_play(
             up: window.is_key_down(Key::Up),
             down: window.is_key_down(Key::Down),
             a: a_down,
-            b: window.is_key_down(Key::X) || window.is_key_down(Key::LeftShift),
+            b: b_down,
             start: start_down,
             select: select_down,
         };
         let a_pressed = a_down && !prev_a;
         prev_a = a_down;
+        let b_pressed = b_down && !prev_b;
+        prev_b = b_down;
         // START and SELECT are read as press edges, like `hKeysPressed` — the
         // ROM's pause entry and resume both test the press, not the hold.
         let start_pressed = start_down && !prev_start;
@@ -2153,7 +2195,7 @@ fn run_play(
             if cam.transition == 0 {
                 // $307D — `$0F71`'s first call; see the replay loop above.
                 cam.crouch_pan(&sim, &keys);
-                sim.step(&keys, a_pressed, layout);
+                sim.step(&keys, a_pressed, b_pressed, layout);
             }
             // `$3451` id 4's `sStompChainCount` reset — see the replay loop.
             if sim.take_stomp_chain_reset() {
@@ -2166,6 +2208,23 @@ fn run_play(
                 let scroll_x = cam.x.wrapping_sub(80) as u8;
                 let special = obj.below_bonk(by, bx, scroll_y, scroll_x);
                 sim.resolve_bump_coin(special);
+            }
+            // A fireball's `$06` break; see the replay loop above.
+            if let Some((by, bx)) = sim.fire_below_bonk.take() {
+                let scroll_y = cam.y.wrapping_sub(72) as u8;
+                let scroll_x = cam.x.wrapping_sub(80) as u8;
+                obj.below_bonk(by, bx, scroll_y, scroll_x);
+            }
+            // `$3261`'s `$2FED`; see the replay loop above.
+            for i in 0..sim.fire_scan.len() {
+                let Some((sy, sx)) = sim.fire_scan[i].take() else {
+                    continue;
+                };
+                let hit = obj.fire_hit(sy, sx);
+                if hit == FireHit::Die {
+                    sim.sfx0 = 2;
+                }
+                sim.resolve_fire_hit(i, hit != FireHit::None);
             }
             cam.step(&mut sim);
             cam.update_enables(sim.x);

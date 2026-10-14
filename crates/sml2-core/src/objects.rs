@@ -135,6 +135,20 @@ pub const B_HITREACT: usize = 27;
 pub const B_T28: usize = 28;
 pub const B_MASK: usize = 31;
 
+/// The fireball-vs-object pass's verdict (`$3007`): the ROM keeps it in
+/// `sObjectHitResult`, and a non-zero value kills the ball.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FireHit {
+    /// No live object covered the ball's staged point — the ball flies on.
+    None,
+    /// A bit-2 type: the pass set `B_FLAGS` bit 1, which the interaction
+    /// dispatch turns into the object's `defeat()`. No sfx of its own.
+    Defeat,
+    /// Any other live type: `sSfxRequest0 = 2` (the caller writes it) and the
+    /// ball dies.
+    Die,
+}
+
 /// `$5B451` fall-speed curve (ROM `$5B488`, 22 entries; `+16` indexes it).
 const FALL_SPEED: [u8; 22] = [
     0x00, 0x00, 0x01, 0x01, 0x01, 0x02, 0x01, 0x02, 0x02, 0x01, 0x02, 0x03, 0x02, 0x03, 0x03, 0x03,
@@ -2319,6 +2333,62 @@ impl ObjectSim {
         special
     }
 
+    /// `$2FED` → `$3007`: the fireball-vs-object pass, run once per live ball
+    /// before the object engine (the call sits inside `$3261`, i.e. inside
+    /// `$0F71`). `sy`/`sx` are the ball's staged screen pair (`$FFC4`/
+    /// `$FFC5`), the same pair the player's contact math uses.
+    ///
+    /// The scan gate is `B_FLAGS == 0` — bit 3 included, so unlike `$2D7D`
+    /// (`and $F7`) a slot Mario is standing on is not hittable by a ball. Then
+    /// type 0 is an empty slot and a bit-7 type is an item pose: both
+    /// transparent. The box is `B_HB_*` expanded by 6 px against the slot's
+    /// stored screen pair, tested byte-wise as `(pair - origin) < extent`.
+    ///
+    /// A bit-2 type is *defeated* here — `B_FLAGS` bit 1, which `$85AA`'s
+    /// dispatch (`interaction_dispatch`) turns into [`Self::defeat`] next
+    /// frame; everything else takes the sfx arm, which the caller applies
+    /// (`sSfxRequest0 = 2` is a player-sim byte). Both leave the ROM's
+    /// `sObjectHitResult` non-zero, which is what kills the ball. The scan
+    /// keeps walking after a hit, so the last hit's verdict is the one that
+    /// survives, exactly like the shared `sObjectHitResult`.
+    pub fn fire_hit(&mut self, sy: u8, sx: u8) -> FireHit {
+        let mut result = FireHit::None;
+        for s in self.slots.iter_mut() {
+            if s.b[B_FLAGS] != 0 {
+                continue;
+            }
+            let ty = s.b[B_TYPE];
+            if ty == 0 || ty & 0x80 != 0 {
+                continue;
+            }
+            let oy = s.b[B_SCRY];
+            let y0 = s.b[B_HB_TOP].wrapping_sub(6).wrapping_add(oy);
+            let h = s.b[B_HB_BOTTOM]
+                .wrapping_add(6)
+                .wrapping_add(oy)
+                .wrapping_sub(y0);
+            if sy.wrapping_sub(y0) >= h {
+                continue;
+            }
+            let ox = s.b[B_SCRX];
+            let x0 = s.b[B_HB_LEFT].wrapping_sub(6).wrapping_add(ox);
+            let w = s.b[B_HB_RIGHT]
+                .wrapping_add(6)
+                .wrapping_add(ox)
+                .wrapping_sub(x0);
+            if sx.wrapping_sub(x0) >= w {
+                continue;
+            }
+            if ty & 0x04 != 0 {
+                s.b[B_FLAGS] |= 0x02;
+                result = FireHit::Defeat;
+            } else {
+                result = FireHit::Die;
+            }
+        }
+        result
+    }
+
     // ---------------------------------------------------------------------
     // home.asm $2D7D — the Mario interaction pass
     // ---------------------------------------------------------------------
@@ -3826,5 +3896,73 @@ mod tests {
         obj.mario_y_adjust = None;
         obj.carry_mario(&mut st, 9);
         assert_eq!(obj.mario_y_adjust, None, "bit 3 clear: nothing");
+    }
+
+    // -----------------------------------------------------------------
+    // $2FED / $3007 — the fireball-vs-object pass
+    // -----------------------------------------------------------------
+
+    /// Every slot boxed around (0x50, 0x50) with a 0x10 hitbox: `$3007`'s
+    /// expansion is `top - 6`, `bottom + 6` (and the same on X), so the window
+    /// is `(sy, sx)` in `0x4A..0x66`.
+    fn fire_slot(obj: &mut ObjectSim, i: usize, ty: u8, flags: u8) {
+        let s = &mut obj.slots[i];
+        s.b[B_TYPE] = ty;
+        s.b[B_FLAGS] = flags;
+        s.b[B_SCRY] = 0x50;
+        s.b[B_SCRX] = 0x50;
+        s.b[B_HB_TOP] = 0;
+        s.b[B_HB_BOTTOM] = 0x10;
+        s.b[B_HB_LEFT] = 0;
+        s.b[B_HB_RIGHT] = 0x10;
+    }
+
+    /// `$2FED`/`$3007`: a bit-2 type is *defeated* (bit 1 of `+17`, the flag
+    /// `$85AA`'s dispatch turns into `defeat()`), everything else just takes
+    /// the sfx arm — and both leave `sObjectHitResult` non-zero, which is what
+    /// kills the ball. The window test is byte-wise: the far edge misses.
+    #[test]
+    fn fire_hit_defeats_bit2_types_and_dies_on_the_rest() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        fire_slot(&mut obj, 0, 0x24, 0); // bit 2 set: fireball-defeatable
+        assert_eq!(obj.fire_hit(0x4A, 0x4A), FireHit::Defeat);
+        assert_eq!(obj.slots[0].b[B_FLAGS], 0x02);
+        obj.slots[0].b[B_FLAGS] = 0;
+        assert_eq!(obj.fire_hit(0x4A, 0x66), FireHit::None, "one past the right edge");
+        assert_eq!(obj.fire_hit(0x66, 0x4A), FireHit::None, "one past the bottom edge");
+        assert_eq!(obj.fire_hit(0x49, 0x4A), FireHit::None, "one short of the top");
+        assert_eq!(obj.slots[0].b[B_FLAGS], 0, "a miss writes nothing");
+
+        fire_slot(&mut obj, 0, 0x20, 0); // bit 2 clear
+        assert_eq!(obj.fire_hit(0x4A, 0x4A), FireHit::Die);
+        assert_eq!(obj.slots[0].b[B_FLAGS], 0, "no defeat for a bit-2-clear type");
+    }
+
+    /// The scan's own gates: the flags byte must be exactly 0 — bit 3
+    /// included, `$2FED` has no `$2D7D`-style `and $F7` — and a bit-7 type is
+    /// an item pose, transparent to a ball.
+    #[test]
+    fn fire_hit_skips_flagged_slots_items_and_empty_slots() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        fire_slot(&mut obj, 0, 0x24, 0x08); // stood on: not hittable
+        fire_slot(&mut obj, 1, 0x82, 0x00); // the item pose
+        fire_slot(&mut obj, 2, 0x00, 0x00); // empty
+        fire_slot(&mut obj, 3, 0x80, 0x00); // the base item type
+        assert_eq!(obj.fire_hit(0x4A, 0x4A), FireHit::None);
+        for (i, want) in [(0usize, 0x08u8), (1, 0), (2, 0), (3, 0)] {
+            assert_eq!(obj.slots[i].b[B_FLAGS], want, "slot {i}");
+        }
+    }
+
+    /// The scan keeps walking after a hit, exactly like `$2FED`'s loop, so the
+    /// *last* hit is the verdict `sObjectHitResult` holds — and an earlier
+    /// defeat is not undone by it.
+    #[test]
+    fn fire_hit_keeps_the_last_verdict_and_still_defeats() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        fire_slot(&mut obj, 0, 0x24, 0); // defeat
+        fire_slot(&mut obj, 1, 0x20, 0); // die
+        assert_eq!(obj.fire_hit(0x4A, 0x4A), FireHit::Die, "the last hit wins");
+        assert_eq!(obj.slots[0].b[B_FLAGS], 0x02, "the earlier defeat stands");
     }
 }

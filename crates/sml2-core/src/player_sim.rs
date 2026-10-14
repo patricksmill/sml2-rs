@@ -156,6 +156,25 @@ const ITEM_POP_OFFSETS_5A4A: [i8; 40] = [
     -22, -19, -16, -12, -8, -4, 0, 8, 12, 16, 21, 26, 31, 37, 43, 50, 57, 63, 70, 78, 80,
 ];
 
+/// `$3439` — the fireball phase -> vertical step table, 24 entries. The phase
+/// counts the arc down from `$17`: 3 px/frame early, 0 at the top (`$0B`), then
+/// back up. Rising is `phase >= $0C`.
+const FIRE_PHASE_STEP: [u8; 24] = [
+    3, 3, 3, 3, 2, 3, 2, 2, 1, 2, 1, 0, 0, 1, 2, 1, 2, 2, 3, 2, 3, 3, 3, 3,
+];
+
+/// The projectile slots (`$A880`/`$A890`, stride `$10`, exactly 2): a global
+/// array of its own, *not* the object slots the `B_*` constants index.
+pub const F_ACTIVE: usize = 0;
+pub const F_YLO: usize = 1;
+pub const F_YHI: usize = 2;
+pub const F_XLO: usize = 3;
+pub const F_XHI: usize = 4;
+pub const F_DIR: usize = 5;
+pub const F_PHASE: usize = 6;
+/// `$A880` + 2 * `$10` = `$A8A0` — both scans stop here.
+pub const FIRE_SLOTS: usize = 2;
+
 /// `inc a / daa` on a BCD byte (valid BCD in, valid BCD out): 09 -> 10,
 /// 99 -> 00 with the carry out, which `$34AF` treats as the "cap at 99" case.
 fn bcd_inc(v: u8) -> u8 {
@@ -474,6 +493,29 @@ pub struct PlayerSim {
     /// 96/98`, cancelled here so the renderer lands on the engine's `$FFC4`/
     /// `$FFC5`). Types 1/5 push two entries (the `$5A07` pair).
     pub block_draw: Vec<(u16, u16, u8)>,
+    /// The two projectile slots (`$A880`/`$A890`, stride `$10`; see
+    /// [`F_ACTIVE`]): `$32C1` spawns them, `$331C` moves them, `$324F`
+    /// draws/culls/object-passes them, and both scans stop at `$A0`.
+    pub fireballs: [[u8; 16]; FIRE_SLOTS],
+    /// `sMarioThrowTimer` ($A25A) — the spawn sets 8 and only the Mario *draw*
+    /// reads it (the throw pose). It gates no firing: the press edge does.
+    pub throw_timer: u8,
+    /// `$3261`'s staged screen pair `(sy, sx)` per live slot. The pass's
+    /// `$2FED` object scan lives in the object engine, so the frame loop reads
+    /// this pair, runs `ObjectSim::fire_hit` and hands the verdict back
+    /// through [`Self::resolve_fire_hit`].
+    pub fire_scan: [Option<(u8, u8)>; FIRE_SLOTS],
+    /// `$2F72` armed by a fireball's `$06` break instead of by the player's
+    /// ceiling bonk — the frame loop runs the below-hit pass for it too, at
+    /// the ball's own cell bytes.
+    pub fire_below_bonk: Option<(u8, u8)>,
+    /// A live ball's own sprite (`$3261`'s `$2CF4` staging, mapping `$B0`/`$B4`
+    /// + `($FF97 & 6) >> 1`) and Mario's throw pose are draw-side and NOT
+    /// modelled. A run latch (never cleared, like the object engine's
+    /// `unported`) so the replay gate reports the frame instead of silently
+    /// passing one the console drew a projectile in — the ball's own `$A880`
+    /// bytes are not among the fields a capture compares.
+    pub fire_draw_unported: bool,
     /// `sCoinLow`/`sCoinHigh` ($A262/$A263, BCD).
     pub coins_low: u8,
     pub coins_high: u8,
@@ -569,6 +611,11 @@ impl PlayerSim {
             block_slots: [[0; 16]; 8],
             block_frame: None,
             block_draw: Vec::new(),
+            fireballs: [[0; 16]; FIRE_SLOTS],
+            throw_timer: 0,
+            fire_scan: [None; FIRE_SLOTS],
+            fire_below_bonk: None,
+            fire_draw_unported: false,
             coins_low: 0,
             coins_high: 0,
             secret_route: 0,
@@ -893,6 +940,14 @@ impl PlayerSim {
     /// Returns false when no slot was free.
     fn alloc_bump_slot(&mut self, ty: u8) -> bool {
         let (px, py) = self.ceiling_probe;
+        self.alloc_bump_slot_at(ty, px, py)
+    }
+
+    /// The alloc at an explicit bonk point: `$FFB7`/`$FFB9` hold the player's
+    /// ceiling probe for `$1993`'s classes, but a fireball's `$06` break
+    /// (`$341C`) reaches the same `$2C6C` with the *ball's* post-move Y/X, so
+    /// the cell it stores is the ball's own probe cell.
+    fn alloc_bump_slot_at(&mut self, ty: u8, px: u16, py: u16) -> bool {
         let Some(slot) = self.block_slots.iter_mut().find(|s| s[0] == 0) else {
             return false;
         };
@@ -1079,6 +1134,179 @@ impl PlayerSim {
                 },
                 _ => {}
             }
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // $32C1 / $331C / $324F — the fireball (projectile) family
+    // -----------------------------------------------------------------
+    //
+    // Four consecutive tail calls of the player update `$0F71`
+    // (`call $3451 / call $32C1 / call $331C / call $324F / ret` at `$0FAE`),
+    // so a ball created on the press frame also moves and collides on that
+    // frame, and an item consumed this frame (`$3451`) satisfies the spawn's
+    // tier gate on the same frame. `$2FED` — the item's own queue entry named
+    // it as the spawn — is the *object* pass the draw step runs.
+
+    /// `$32C1`: the B-new-press spawn. Gate order is the ROM's — the press
+    /// edge, the fire-flower tier, ducking, the goal bell, then the first free
+    /// slot (a press with both live is eaten silently: no sfx, no pose).
+    ///
+    /// The init reads the player's staged pair (`$FFC0`/`$FFC1` Y,
+    /// `$FFC2`/`$FFC3` X): the ball starts 28 px below and 16 px right of
+    /// Mario's origin, carrying in both bytes. A spin jump replaces the facing
+    /// byte with `($FF97 & 2) - 1` — the same rDiv bit the spin pose reads.
+    fn fire_spawn(&mut self, b_pressed: bool) {
+        if !b_pressed || self.powerup != 3 || self.ducking || self.goal_bell {
+            return;
+        }
+        let Some(i) = self.fireballs.iter().position(|s| s[F_ACTIVE] == 0) else {
+            return;
+        };
+        let dir = if self.spin_jump != 0 {
+            (self.phase & 0x02).wrapping_sub(1)
+        } else if self.dir_right {
+            0x01
+        } else {
+            0xFF
+        };
+        let (ylo, ycarry) = (self.y as u8).overflowing_add(28);
+        let (xlo, xcarry) = (self.x as u8).overflowing_add(16);
+        let slot = &mut self.fireballs[i];
+        slot[F_ACTIVE] = 1;
+        slot[F_YLO] = ylo;
+        slot[F_YHI] = ((self.y >> 8) as u8).wrapping_add(u8::from(ycarry));
+        slot[F_XLO] = xlo;
+        slot[F_XHI] = ((self.x >> 8) as u8).wrapping_add(u8::from(xcarry));
+        slot[F_DIR] = dir;
+        slot[F_PHASE] = 0;
+        self.throw_timer = 8;
+        self.sfx0 = 11;
+    }
+
+    /// `$331C` → `$332E`: the per-slot mover, called after the spawn. X steps
+    /// ±3 px every frame (the facing byte doubled and tested against `$80`);
+    /// Y follows the `$3439` arc — rising while the phase is >= `$0C`,
+    /// descending below it — and two `$1EFA` probes at the ball's own
+    /// `(Y-16, X-8)` point bracket the two steps.
+    ///
+    /// Probe 1 (< `$38`) is terminal: `$06` breaks, every other tile (the `$00`
+    /// brick, the `$01` item block) just kills the ball. Probe 2 (< `$48`) pops
+    /// a *descending* ball back up — phase `$18`, Y -3 — unless it is the
+    /// `$06` break; `$48`-and-up tiles (coins, water, hazards, decor) are
+    /// transparent. Both kill paths clear only `+0`: the ROM's
+    /// `pop hl / xor a / ld [hl],a` never writes the moved Y/X back.
+    fn fire_move(&mut self, layout: &LevelLayout) {
+        for i in 0..self.fireballs.len() {
+            if self.fireballs[i][F_ACTIVE] != 0 {
+                self.fire_slot(i, layout);
+            }
+        }
+    }
+
+    fn fire_slot(&mut self, i: usize, layout: &LevelLayout) {
+        let s = self.fireballs[i];
+        let mut y = (s[F_YHI] as u16) << 8 | s[F_YLO] as u16;
+        let mut x = (s[F_XHI] as u16) << 8 | s[F_XLO] as u16;
+        let mut phase = s[F_PHASE];
+        // `sla a / cp $80`: only $FF (left, -> $FE) takes the negative arm.
+        x = x.wrapping_add(if s[F_DIR].wrapping_shl(1) >= 0x80 { -3i16 } else { 3 } as u16);
+        let t = self.tile(layout, x, y);
+        self.collision_tile = t;
+        if t < 0x38 {
+            self.fire_break_or_die(i, t, x, y);
+            return;
+        }
+        // The arc step. `$3439[phase]` is only ever read with the phase the
+        // slot wrote back, which the popup's own decrement caps at $17.
+        let b = FIRE_PHASE_STEP[phase.min(0x17) as usize];
+        if phase >= 0x0C {
+            y = y.wrapping_sub(b as u16);
+        } else {
+            y = y.wrapping_add(b as u16);
+        }
+        let t = self.tile(layout, x, y);
+        self.collision_tile = t;
+        if t < 0x48 && phase < 0x0C {
+            if t == 0x06 {
+                self.fire_break_or_die(i, t, x, y);
+                return;
+            }
+            phase = 0x18;
+            y = y.wrapping_sub(3);
+        }
+        if phase != 0 {
+            phase -= 1;
+        }
+        // `$33FB`: write back `+1..+4` then `+6` — the facing byte is never
+        // touched again after the spawn.
+        let slot = &mut self.fireballs[i];
+        slot[F_YLO] = y as u8;
+        slot[F_YHI] = (y >> 8) as u8;
+        slot[F_XLO] = x as u8;
+        slot[F_XHI] = (x >> 8) as u8;
+        slot[F_PHASE] = phase;
+    }
+
+    /// `$3415`/`$341C`/`$3430`: the mover's terminal arm. `$06` is the only
+    /// breakable tile and it takes the *hardcoded* type-1 bump (`$2C6C`, not
+    /// `block_bonk`'s classifier — the player can never bump a `$06`), then
+    /// the spin-bounce flag; every other tile below `$38` just dies. Both end
+    /// with sfx0 2 and the slot's `+0` cleared, and neither writes the moved
+    /// Y/X back.
+    fn fire_break_or_die(&mut self, i: usize, tile: u8, x: u16, y: u16) {
+        if tile == 0x06 {
+            self.sfx2 = 1;
+            self.sfx0 = 2;
+            // `$5960` runs on `$FFB7`/`$FFB9` — the ball's post-move Y/X — and
+            // its `$2F72` tail brings the below-hit pass with it.
+            if self.alloc_bump_slot_at(1, x, y) {
+                self.fire_below_bonk = Some((y as u8, x as u8));
+            }
+            self.spin_jump_bounce = 0xFF;
+        }
+        self.fireballs[i][F_ACTIVE] = 0;
+        self.sfx0 = 2;
+    }
+
+    /// `$324F` → `$3261`: the per-frame pass over both slots, after the move.
+    /// The staged screen pair is `(X - camX + 80, Y - camY + 70)`; a pair whose
+    /// high nibble is `$C0` is culled — a silent kill, no sfx, and no object
+    /// pass.
+    ///
+    /// The surviving pair is what `$2FED` tests the object slots against. Those
+    /// slots live in the object engine, so the pass splits at that seam: this
+    /// stages the pair in [`Self::fire_scan`], the frame loop runs
+    /// `ObjectSim::fire_hit` before the object engine and then kills the slot
+    /// through [`Self::resolve_fire_hit`]. Inert with no live slot.
+    ///
+    /// `$3261` also stages the ball's own sprite (mapping `$B0`/`$B4` +
+    /// `($FF97 & 6) >> 1`) — draw-side only, not modelled, like Mario's throw
+    /// pose from [`Self::throw_timer`].
+    fn fire_pass(&mut self) {
+        for i in 0..self.fireballs.len() {
+            self.fire_scan[i] = None;
+            let s = self.fireballs[i];
+            if s[F_ACTIVE] == 0 {
+                continue;
+            }
+            let sx = s[F_XLO].wrapping_sub(self.camx as u8).wrapping_add(80);
+            let sy = s[F_YLO].wrapping_sub(self.camy as u8).wrapping_add(70);
+            if sx & 0xF0 == 0xC0 || sy & 0xF0 == 0xC0 {
+                self.fireballs[i][F_ACTIVE] = 0;
+                continue;
+            }
+            self.fire_scan[i] = Some((sy, sx));
+            self.fire_draw_unported = true;
+        }
+    }
+
+    /// `$3261`'s tail: a non-zero `sObjectHitResult` (raised by the object
+    /// side's `$3007`) kills the ball. `sfx0 = 2` for the non-defeat arm is the
+    /// object pass's write, applied by the caller that ran it.
+    pub fn resolve_fire_hit(&mut self, i: usize, hit: bool) {
+        if hit {
+            self.fireballs[i][F_ACTIVE] = 0;
         }
     }
 
@@ -1330,8 +1558,15 @@ impl PlayerSim {
         self.vvel = self.vvel.wrapping_add(2); // $1025
     }
 
-    /// One frame of the player update. `a_pressed` is the A new-press edge.
-    pub fn step(&mut self, keys: &PlayerKeys, a_pressed: bool, layout: &LevelLayout) {
+    /// One frame of the player update. `a_pressed`/`b_pressed` are the A/B
+    /// new-press edges (`hKeysPressed` bits 0/1).
+    pub fn step(
+        &mut self,
+        keys: &PlayerKeys,
+        a_pressed: bool,
+        b_pressed: bool,
+        layout: &LevelLayout,
+    ) {
         // $0F71/$0FBB: travelling replaces the entire player update.
         if self.pipe_dir >= 0x10 {
             self.pipe_travel(layout);
@@ -1595,8 +1830,14 @@ impl PlayerSim {
             }
         }
         self.death_dispatch();
-        // $3451: the item consumer, last of `$0F71`'s tail calls.
+        // $3451: the item consumer, then the projectile family — the rest of
+        // `$0F71`'s tail (`$0FAE`-`$0FB7`). Spawn -> move -> pass is the ROM's
+        // order, and the pass only stages: the object scan it feeds runs in the
+        // frame loop, before the object engine.
         self.item_consumer();
+        self.fire_spawn(b_pressed);
+        self.fire_move(layout);
+        self.fire_pass();
     }
 
     /// `$319F`: turn `sMarioDead` into the real death (or a powerup loss).
@@ -2274,6 +2515,12 @@ impl PlayerSim {
         self.layout_writes.clear();
         self.below_bonk = None;
         self.bump_coin_pending = false;
+        // The boot-time WRAM clear covers `$A880-$A89F` (no per-level writer
+        // was found), and a ball must not survive a reload.
+        self.fireballs = [[0; 16]; FIRE_SLOTS];
+        self.fire_scan = [None; FIRE_SLOTS];
+        self.fire_below_bonk = None;
+        self.throw_timer = 0;
     }
 
     fn frame_phase(&self) -> u8 {
@@ -2417,7 +2664,7 @@ mod tests {
         sim.on_ground = false;
         sim.on_ground_obj = true;
         sim.collision_tile = 0x99; // a sentinel only the probe would overwrite
-        sim.step(&PlayerKeys::default(), false, &layout);
+        sim.step(&PlayerKeys::default(), false, false, &layout);
         assert!(sim.on_ground, "$1378 sets sMarioOnGround = 255");
         assert_eq!(sim.collision_tile, 0x99, "the probe is skipped entirely");
     }
@@ -2436,7 +2683,7 @@ mod tests {
         fast.on_ground = true;
         fast.on_ground_obj = false;
         fast.hvel = 0xC0;
-        fast.step(&PlayerKeys::default(), false, &layout);
+        fast.step(&PlayerKeys::default(), false, false, &layout);
         assert!(!fast.on_ground, "nothing under him and nothing to stand on");
         assert_eq!(
             fast.vvel, 27,
@@ -2449,7 +2696,7 @@ mod tests {
         slow.on_ground = true;
         slow.on_ground_obj = false;
         slow.hvel = 0x80;
-        slow.step(&PlayerKeys::default(), false, &layout);
+        slow.step(&PlayerKeys::default(), false, false, &layout);
         assert_eq!(slow.vvel, 0, "below $C0 the launch does not fire");
     }
 
@@ -2667,7 +2914,7 @@ mod tests {
         layout.cells[EXIT_CELL] = 0x4A;
         let mut sim = small_sim();
         let keys = PlayerKeys::default();
-        sim.step(&keys, false, &layout);
+        sim.step(&keys, false, false, &layout);
         assert!(sim.exit_phase);
         assert_eq!(sim.fade_timer, 192);
         assert_eq!(sim.music_request, 3);
@@ -3577,13 +3824,13 @@ mod tests {
         sim.seed_moon_physics(0x01);
         sim.on_ground = false;
         sim.vvel = 40;
-        sim.step(&keys, true, &layout);
+        sim.step(&keys, true, false, &layout);
         assert_eq!(sim.vvel, 43, "$108A's +4 then the frame's own -1");
         assert_eq!(sim.sfx0, 18, "$107F: the A press edge");
         let mut plain = small_sim();
         plain.on_ground = false;
         plain.vvel = 40;
-        plain.step(&keys, true, &layout);
+        plain.step(&keys, true, false, &layout);
         assert_eq!(plain.vvel, 39, "no space physics: gravity alone");
         assert_eq!(plain.sfx0, 0);
     }
@@ -3767,7 +4014,7 @@ mod tests {
         let keys = PlayerKeys::default();
         let mut sim = small_sim();
         sim.pending_item = 7;
-        sim.step(&keys, false, &layout);
+        sim.step(&keys, false, false, &layout);
         assert_eq!(sim.secret_route, 0xFF);
         assert_eq!(sim.sfx0, 21);
         assert_eq!(sim.pending_item, 0);
@@ -3783,7 +4030,7 @@ mod tests {
         let mut sim = PlayerSim::new(); // big
         sim.dead = 15; // a harmful contact this frame
         sim.pending_item = 1;
-        sim.step(&keys, false, &layout);
+        sim.step(&keys, false, false, &layout);
         assert_eq!(sim.dead, 0); // $319F consumed the hit...
         assert_eq!(sim.powerup, 1); // ...and $3451's mushroom re-granted tier 1
         assert_eq!(sim.invincibility, 64); // $3534's 64, not the dispatch's 128
@@ -3799,7 +4046,7 @@ mod tests {
         let mut sim = small_sim();
         sim.pipe_dir = 0x10;
         sim.pending_item = 7;
-        sim.step(&keys, false, &layout);
+        sim.step(&keys, false, false, &layout);
         assert_eq!(sim.pending_item, 7);
         assert_eq!(sim.secret_route, 0);
     }
@@ -4174,21 +4421,21 @@ mod tests {
         };
         let mut sim = PlayerSim::new(); // powerup 1 (big): odd
         sim.on_ground = false;
-        sim.step(&down, false, &layout);
+        sim.step(&down, false, false, &layout);
         assert_eq!(sim.spin_jump, 0xFF);
         assert_eq!(sim.sfx0, 14, "the engage-edge spin sfx");
         // Still spinning next frame: the sfx does not re-fire.
         sim.sfx0 = 0;
-        sim.step(&down, false, &layout);
+        sim.step(&down, false, false, &layout);
         assert_eq!(sim.spin_jump, 0xFF);
         assert_eq!(sim.sfx0, 0);
         // DOWN released: $129A clears it.
-        sim.step(&PlayerKeys::default(), false, &layout);
+        sim.step(&PlayerKeys::default(), false, false, &layout);
         assert_eq!(sim.spin_jump, 0);
         // Small Mario (powerup 0, even — the bit-0 test) never engages.
         let mut sim = small_sim();
         sim.on_ground = false;
-        sim.step(&down, false, &layout);
+        sim.step(&down, false, false, &layout);
         assert_eq!(sim.spin_jump, 0);
         assert_eq!(sim.sfx0, 0);
     }
@@ -4306,7 +4553,7 @@ mod tests {
             a: true,
             ..Default::default()
         };
-        sim.step(&keys, false, &layout);
+        sim.step(&keys, false, false, &layout);
         assert_eq!(sim.collision_tile, 0x00);
         assert_eq!(sim.block_slots[0][0], 1, "the brick was destroyed");
         assert_eq!(sim.sfx2, 1);
@@ -4478,13 +4725,13 @@ mod tests {
         // bell takes the *other* arm.
         sim.on_ground = true;
         sim.on_ground_obj = true;
-        sim.step(&keys, false, &layout);
+        sim.step(&keys, false, false, &layout);
         assert!(sim.on_ground, "still grounded");
         assert_eq!(sim.hvel, 0x80, "no bell, no input: he stands");
 
         sim.goal_bell = true;
         sim.hvel = 0x80;
-        sim.step(&keys, false, &layout);
+        sim.step(&keys, false, false, &layout);
         assert!(sim.dir_right, "$17C5 faces him right");
         assert_eq!(
             sim.hvel, 0xB4,
@@ -4495,7 +4742,7 @@ mod tests {
         sim.on_ground_obj = false; // else `$129F` re-grounds him on the next probe
         sim.on_ground = false;
         sim.in_air = true;
-        sim.step(&keys, false, &layout);
+        sim.step(&keys, false, false, &layout);
         assert_eq!(sim.hvel, 0x80, "$17C5's airborne arm");
 
         // The bell arm is the first branch, so it also ignores the duck and
@@ -4504,7 +4751,7 @@ mod tests {
         sim.on_ground = true;
         sim.in_air = false;
         sim.ducking = true;
-        sim.step(&keys, false, &layout);
+        sim.step(&keys, false, false, &layout);
         assert_eq!(
             sim.hvel, 0xB4,
             "still walking: the bell arm has no duck gate"
@@ -4660,5 +4907,340 @@ mod tests {
         sim.pause_enter();
         sim.respawn(112, 240);
         assert!(!sim.paused);
+    }
+
+    // -----------------------------------------------------------------
+    // $32C1 / $331C / $324F — the fireball family
+    // -----------------------------------------------------------------
+
+    /// `$3439` against the ROM's own bytes (re-read here, not the port's
+    /// constant), so a hand-edit of the array cannot quietly change the arc.
+    #[test]
+    fn the_fireball_phase_table_is_the_rom_bytes() {
+        let rom: Vec<u8> =
+            "03 03 03 03 02 03 02 02 01 02 01 00 00 01 02 01 02 02 03 02 03 03 03 03"
+                .split_whitespace()
+                .map(|b| u8::from_str_radix(b, 16).expect("hex byte"))
+                .collect();
+        assert_eq!(FIRE_PHASE_STEP.to_vec(), rom, "$3439");
+        assert_eq!(FIRE_PHASE_STEP.len(), 24, "the table's own extent");
+    }
+
+    /// Slot 0 built by hand: the mover tests set the six bytes the spawn's
+    /// init writes and nothing else.
+    fn fireball(sim: &mut PlayerSim, x: u16, y: u16, dir: u8, phase: u8) {
+        let s = &mut sim.fireballs[0];
+        *s = [0; 16];
+        s[F_ACTIVE] = 1;
+        s[F_YLO] = y as u8;
+        s[F_YHI] = (y >> 8) as u8;
+        s[F_XLO] = x as u8;
+        s[F_XHI] = (x >> 8) as u8;
+        s[F_DIR] = dir;
+        s[F_PHASE] = phase;
+    }
+
+    /// `$32C1`'s init: the ball at Mario's feet (Y + 28) and right edge
+    /// (X + 16), both with carry, facing with him, phase 0, the throw pose
+    /// armed and sfx 0. Only `+0..+6` are written — nothing in this family
+    /// ever reads or writes `+7..+15`.
+    #[test]
+    fn fire_spawn_writes_the_full_slot() {
+        let mut sim = PlayerSim::new();
+        sim.powerup = 3;
+        sim.x = 0x00F8;
+        sim.y = 0x01F8;
+        sim.fire_spawn(true);
+        assert_eq!(sim.fireballs[0][..7], [1, 0x14, 2, 0x08, 1, 0x01, 0]);
+        assert_eq!(sim.fireballs[0][7..], [0; 9], "+7..+15 stay untouched");
+        assert_eq!(sim.fireballs[1], [0; 16], "the scan took the first free slot");
+        assert_eq!(sim.throw_timer, 8);
+        assert_eq!(sim.sfx0, 11);
+    }
+
+    /// The gates, in the ROM's order: no press edge, a non-flower tier,
+    /// ducking, or the reaching goal bell each leave both slots alone. A held
+    /// B is not an edge — the press is the whole rate limit.
+    #[test]
+    fn fire_spawn_gates() {
+        let mut sim = PlayerSim::new();
+        sim.powerup = 3;
+        sim.fire_spawn(false);
+        assert_eq!(sim.fireballs[0][F_ACTIVE], 0, "no edge, no ball");
+        assert_eq!(sim.sfx0, 0);
+        sim.fire_spawn(true);
+        assert_eq!(sim.fireballs[0][F_ACTIVE], 1, "the tier-3 press spawns");
+
+        let mut sim = PlayerSim::new();
+        sim.powerup = 2; // the bunny tier cannot fire
+        sim.fire_spawn(true);
+        assert_eq!(sim.fireballs[0][F_ACTIVE], 0);
+        sim.powerup = 3;
+        sim.ducking = true;
+        sim.fire_spawn(true);
+        assert_eq!(sim.fireballs[0][F_ACTIVE], 0, "ducking");
+        sim.ducking = false;
+        sim.goal_bell = true;
+        sim.fire_spawn(true);
+        assert_eq!(sim.fireballs[0][F_ACTIVE], 0, "the goal bell");
+    }
+
+    /// The facing byte: Mario's own direction — or, mid spin jump, the rDiv
+    /// bit (`$FF97 & 2` clear -> `$FF`, set -> `$01`), which is why a spin jump
+    /// can fire *backwards*.
+    #[test]
+    fn fire_spawn_facing_and_spin_jump() {
+        let mut sim = PlayerSim::new();
+        sim.powerup = 3;
+        sim.dir_right = false;
+        sim.fire_spawn(true);
+        assert_eq!(sim.fireballs[0][F_DIR], 0xFF, "facing left");
+
+        let mut sim = PlayerSim::new();
+        sim.powerup = 3;
+        sim.spin_jump = 0xFF;
+        sim.phase = 2;
+        sim.fire_spawn(true);
+        assert_eq!(sim.fireballs[0][F_DIR], 0x01, "rDiv bit 1 set");
+
+        let mut sim = PlayerSim::new();
+        sim.powerup = 3;
+        sim.spin_jump = 0xFF;
+        sim.phase = 0;
+        sim.fire_spawn(true);
+        assert_eq!(sim.fireballs[0][F_DIR], 0xFF, "rDiv bit 1 clear");
+    }
+
+    /// Two slots, first free wins, and a press with both live is eaten in
+    /// silence: no sfx and no throw pose.
+    #[test]
+    fn fire_spawn_uses_the_first_free_slot_and_eats_the_third() {
+        let mut sim = PlayerSim::new();
+        sim.powerup = 3;
+        sim.x = 100;
+        sim.fire_spawn(true);
+        assert_eq!(sim.fireballs[0][F_XLO], 116);
+        assert_eq!(sim.fireballs[1][F_ACTIVE], 0);
+        sim.x = 200;
+        sim.fire_spawn(true);
+        assert_eq!(sim.fireballs[1][F_XLO], 216, "the second slot");
+        assert_eq!(sim.fireballs[0][F_XLO], 116, "the first is untouched");
+        sim.sfx0 = 0;
+        sim.throw_timer = 0;
+        sim.x = 300;
+        sim.fire_spawn(true);
+        assert_eq!(sim.fireballs[0][F_XLO], 116);
+        assert_eq!(sim.fireballs[1][F_XLO], 216);
+        assert_eq!(sim.sfx0, 0, "silent");
+        assert_eq!(sim.throw_timer, 0);
+    }
+
+    /// `$332E`: X steps ±3 by the facing byte, Y follows `$3439` — 3 px down
+    /// per frame while the phase is 0 (`$33F1` skips the decrement at 0, so a
+    /// falling ball's phase never moves) and *up* by the table once the phase
+    /// is >= `$0C`.
+    #[test]
+    fn fire_move_moves_three_px_and_steps_the_phase_table() {
+        let layout = blank_layout();
+        let mut sim = PlayerSim::new();
+        fireball(&mut sim, 100, 0x0140, 1, 0);
+        sim.fire_move(&layout);
+        let f = &sim.fireballs[0];
+        assert_eq!(f[F_XLO], 103, "right: X + 3");
+        assert_eq!(
+            (f[F_YHI] as u16) << 8 | f[F_YLO] as u16,
+            0x0143,
+            "phase 0 descends by $3439[0] = 3"
+        );
+        assert_eq!(f[F_PHASE], 0, "and stays 0");
+
+        let mut sim = PlayerSim::new();
+        fireball(&mut sim, 100, 0x0140, 0xFF, 0);
+        sim.fire_move(&layout);
+        assert_eq!(sim.fireballs[0][F_XLO], 97, "left: X - 3");
+        assert_eq!(sim.fireballs[0][F_DIR], 0xFF, "the facing byte is never rewritten");
+
+        let mut sim = PlayerSim::new();
+        fireball(&mut sim, 100, 0x0140, 1, 0x0F);
+        sim.fire_move(&layout);
+        let f = &sim.fireballs[0];
+        assert_eq!(
+            (f[F_YHI] as u16) << 8 | f[F_YLO] as u16,
+            0x013F,
+            "phase $0F rises by $3439[$0F] = 1"
+        );
+        assert_eq!(f[F_PHASE], 0x0E);
+    }
+
+    /// Probe 2's pop: a ball that moves *into* a solid (probe 1 still in air,
+    /// probe 2 in the tile) is thrown back up — phase `$18`, Y -3 — and
+    /// `$33F1` decrements it to `$17` in the same frame.
+    #[test]
+    fn fire_move_pops_on_a_solid_cell() {
+        let mut layout = blank_layout();
+        layout.cells[20 * 256 + 5] = 0x27; // solid, but not $06
+        let mut sim = PlayerSim::new();
+        fireball(&mut sim, 100, 334, 1, 0);
+        sim.fire_move(&layout);
+        let f = &sim.fireballs[0];
+        assert_eq!(f[F_ACTIVE], 1, "a pop is not a kill");
+        assert_eq!(f[F_PHASE], 0x17, "$18, then the same frame's decrement");
+        assert_eq!(
+            (f[F_YHI] as u16) << 8 | f[F_YLO] as u16,
+            334,
+            "Y - 3 undoes the step"
+        );
+        assert_eq!(f[F_XLO], 103);
+    }
+
+    /// Probe 1's break: `$06` is the only tile a ball can break and it takes
+    /// the hardcoded type-1 bump at the ball's *own* cell — the same slot the
+    /// big-Mario brick bonk allocates, whose tick empties the cell.
+    #[test]
+    fn fire_move_breaks_the_06_cell() {
+        let mut layout = blank_layout();
+        layout.cells[19 * 256 + 5] = 0x06;
+        let mut sim = PlayerSim::new();
+        fireball(&mut sim, 100, 320, 1, 0);
+        sim.fire_move(&layout);
+        assert_eq!(sim.sfx2, 1, "the smash sfx");
+        assert_eq!(sim.sfx0, 2, "and the bump sfx");
+        assert_eq!(sim.spin_jump_bounce, 0xFF);
+        assert_eq!(
+            sim.block_slots[0][..6],
+            [1, 1, 0x48, 1, 0x60, 0],
+            "type 1, timer 1, the ball's cell"
+        );
+        assert_eq!(sim.fire_below_bonk, Some((0x40, 103)), "the $2F72 pass is armed");
+        assert_eq!(sim.fireballs[0][F_ACTIVE], 0, "the ball dies on the break");
+        assert_eq!(
+            sim.fireballs[0][F_XLO], 100,
+            "the ROM never writes the move back on a kill"
+        );
+        // `$2C82` — the same frame, after the update — turns the cell into the
+        // empty metatile every later probe reads.
+        sim.block_update();
+        assert_eq!(sim.block_slots[0][1], 2);
+        assert_eq!(sim.layout_writes, vec![(cell_index(19, 5), 0x60)]);
+    }
+
+    /// Probe 1 is terminal for every other low tile: the `$00` brick, the `$01`
+    /// item block and the `$03` bridge block all kill the ball outright — no
+    /// bump slot, no smash sfx, no below-hit pass.
+    #[test]
+    fn fire_kills_on_other_special_tiles() {
+        for tile in [0x00u8, 0x01, 0x03] {
+            let mut layout = blank_layout();
+            layout.cells[19 * 256 + 5] = tile;
+            let mut sim = PlayerSim::new();
+            fireball(&mut sim, 100, 320, 1, 0);
+            sim.fire_move(&layout);
+            assert_eq!(sim.fireballs[0][F_ACTIVE], 0, "tile {tile:#04X} kills");
+            assert_eq!(sim.sfx0, 2);
+            assert_eq!(sim.sfx2, 0, "no smash");
+            assert_eq!(sim.spin_jump_bounce, 0);
+            assert_eq!(sim.block_slots[0][0], 0, "no bump slot");
+            assert_eq!(sim.fire_below_bonk, None);
+        }
+    }
+
+    /// `$3261`'s cull: a pair whose high nibble is `$C0` kills the ball before
+    /// the object pass, silently, and nothing is staged. A surviving pair is
+    /// staged for the frame loop's `$2FED` walk.
+    #[test]
+    fn fire_cull_masks() {
+        // sx = Xlo - camX + 80; camX 0 and Xlo $75 give $C5.
+        let mut sim = PlayerSim::new();
+        fireball(&mut sim, 0x75, 0x0140, 1, 0);
+        sim.fire_pass();
+        assert_eq!(sim.fireballs[0][F_ACTIVE], 0, "the X pair culls");
+        assert_eq!(sim.fire_scan[0], None);
+        assert_eq!(sim.sfx0, 0, "silently");
+
+        // sy = Ylo - camY + 70; Ylo $7F gives the same $C5.
+        let mut sim = PlayerSim::new();
+        fireball(&mut sim, 100, 0x007F, 1, 0);
+        sim.fire_pass();
+        assert_eq!(sim.fireballs[0][F_ACTIVE], 0, "the Y pair culls");
+
+        let mut sim = PlayerSim::new();
+        fireball(&mut sim, 100, 0x0140, 1, 0);
+        sim.fire_pass();
+        assert_eq!(sim.fireballs[0][F_ACTIVE], 1);
+        assert_eq!(sim.fire_scan[0], Some((0x86, 0xB4)));
+        assert_eq!(sim.fire_scan[1], None);
+    }
+
+    /// `$3261`'s tail: a non-zero object verdict kills the ball; a `$00` leaves
+    /// it flying.
+    #[test]
+    fn fire_hit_kills_the_ball() {
+        let mut sim = PlayerSim::new();
+        fireball(&mut sim, 100, 0x0140, 1, 0);
+        sim.resolve_fire_hit(0, true);
+        assert_eq!(sim.fireballs[0][F_ACTIVE], 0);
+
+        let mut sim = PlayerSim::new();
+        fireball(&mut sim, 100, 0x0140, 1, 0);
+        sim.resolve_fire_hit(0, false);
+        assert_eq!(sim.fireballs[0][F_ACTIVE], 1);
+    }
+
+    /// The wiring end to end through the frame entry point: one `step` with a B
+    /// edge at the flower tier spawns, moves (X + 3) and stages the pair — the
+    /// ROM's own order inside `$0F71`'s tail.
+    #[test]
+    fn a_b_press_through_step_spawns_moves_and_stages_the_ball() {
+        let layout = blank_layout();
+        let mut sim = PlayerSim::new();
+        sim.powerup = 3;
+        sim.x = 50;
+        sim.y = 320;
+        let keys = PlayerKeys {
+            b: true,
+            ..PlayerKeys::default()
+        };
+        sim.step(&keys, false, true, &layout);
+        let f = &sim.fireballs[0];
+        assert_eq!(f[F_ACTIVE], 1, "the tail spawned");
+        assert_eq!(
+            (f[F_XHI] as u16) << 8 | f[F_XLO] as u16,
+            sim.x.wrapping_add(16).wrapping_add(3),
+            "X + 16 at the spawn, then the move's +3"
+        );
+        assert_eq!(
+            (f[F_YHI] as u16) << 8 | f[F_YLO] as u16,
+            sim.y.wrapping_add(28).wrapping_add(3),
+            "Y + 28, then the arc's first step"
+        );
+        assert_eq!(f[F_PHASE], 0);
+        // The staged pair is the ball's own low bytes, `- camX + 80` / `- camY + 70` with the
+        // cameras still at 0 here — `fire_cull_masks` pins the arithmetic itself.
+        assert_eq!(
+            sim.fire_scan[0],
+            Some((f[F_YLO].wrapping_add(70), f[F_XLO].wrapping_add(80))),
+            "the pair $2FED tests"
+        );
+        assert!(sim.fire_draw_unported, "and the draw gap is loud");
+    }
+
+    /// The replay gate's guarantee: with no live slot and no press edge the
+    /// whole family is inert — a frame touches no fireball byte, stages
+    /// nothing and plays no sfx.
+    #[test]
+    fn the_fireball_calls_are_inert_without_slots() {
+        let layout = blank_layout();
+        let mut sim = PlayerSim::new();
+        sim.powerup = 3; // even a flower, with no press edge, does nothing
+        let before = sim.fireballs;
+        sim.step(&PlayerKeys::default(), false, false, &layout);
+        assert_eq!(sim.fireballs, before);
+        assert_eq!(sim.fire_scan, [None; FIRE_SLOTS]);
+        assert_eq!(sim.fire_below_bonk, None);
+        assert!(!sim.fire_draw_unported, "nothing was drawn either");
+        assert_eq!(sim.throw_timer, 0);
+        assert_eq!(sim.sfx0, 0);
+        assert_eq!(sim.sfx2, 0);
+        assert_eq!(sim.block_slots[0][0], 0);
     }
 }
