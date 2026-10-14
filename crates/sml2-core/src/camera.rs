@@ -509,9 +509,18 @@ impl CameraSim {
     }
 
     /// `$0EB0`: end the transition. The scene-load branch (`sSceneState &
-    /// $0F != 0` → state 240 + bank-1 `$3C94` template loader) is NOT ported
-    /// — it belongs to the scene system; level 1's scene map is all zeros, so
-    /// its pipes keep `sSceneState` 0 and skip it.
+    /// $0F != 0` → `sSceneState = $F0`, LCDC `$C3`, music 32, then bank-0
+    /// `$3C94` → bank 2 `$8D9C`) is NOT ported — it belongs to the
+    /// scene/boss system, and `$8DA9`'s alternate per-frame driver (which
+    /// `$0652` selects *instead of* the `$8000` engine while
+    /// `sSceneState & $F0 != 0`) does not exist here, so arming `$F0`
+    /// without it would park the port with nothing to advance it. Level 1's
+    /// scene map is all zeros, so its pipes keep `sSceneState` 0 and skip
+    /// the branch.
+    ///
+    /// The `sBossDefeated` arm below is a SEPARATE `if` in the ROM
+    /// (`$0EE4`): it runs whether or not the scene branch was taken, so it
+    /// must not become an `else`.
     fn finish_transition(&mut self) {
         self.transition = 0;
         if self.boss_defeated & 0xF0 != 0 {

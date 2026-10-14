@@ -358,6 +358,92 @@ impl SceneVm {
     }
 }
 
+/// Lookup boss spawn definition from the ROM bank 2 tables ($4E3F, $4E9A, $4EAC).
+///
+/// Returns `(count, hits, sprite, obj0_def, Vec<sub_obj_defs>)`.
+///
+/// DATA ONLY, AND NO CALLER YET: this is the `$8DFD`/`$8E6C` read side
+/// (`sObjectDefIndex` -> the 3-byte count/hits/sprite record through the
+/// 9-pointer table at `$4E3F`, `sObject0Def` through `$4E9A`, and
+/// `sObjectDefCount` 18-byte images through `$4EAC`). Nothing spawns a boss
+/// with it: the `$0EB0` scene branch, the `$8DA9` alternate driver and the
+/// slot staging into `$AD05` are still unported (see the `scene_boss_spawn`
+/// queue item). It is here because the table is ROM-verified data, not
+/// because the boss exists.
+///
+/// `$8DFD` computes the index as `sBossFightPhase + b` with `b` per level
+/// (level 5 -> 0, 9 -> 1, $0D -> 2, $10 -> 3, $13 -> 4, $17 -> 5, else 6);
+/// the record table carries a 9th entry at index 8 (count 0, sprite 99 --
+/// the "no boss at this phase" record) and the port clamps everything at or
+/// above it to that entry rather than reading past the pointer table as the
+/// ROM would.
+pub fn lookup_boss_spawn_def(def_index: u8) -> (u8, u8, u8, [u8; 18], Vec<[u8; 18]>) {
+    match def_index {
+        0 => (
+            1, 6, 1,
+            [1, 0, 0, 0, 124, 88, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            vec![[2, 0, 0, 0, 129, 88, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+        ),
+        1 => (
+            3, 6, 18,
+            [6, 0, 0, 0, 112, 152, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            vec![
+                [7, 0, 0, 0, 132, 56, 19, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0],
+                [8, 0, 0, 0, 116, 88, 19, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0],
+                [7, 0, 0, 0, 132, 120, 19, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0],
+            ],
+        ),
+        2 => (
+            2, 6, 42,
+            [12, 0, 0, 0, 64, 88, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            vec![
+                [11, 0, 0, 6, 96, 136, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [10, 0, 0, 6, 96, 40, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            ],
+        ),
+        3 => (
+            2, 6, 48,
+            [14, 0, 0, 0, 144, 88, 44, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            vec![
+                [15, 0, 0, 0, 80, 208, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [15, 0, 0, 0, 80, 208, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            ],
+        ),
+        4 => (
+            2, 6, 54,
+            [16, 0, 0, 0, 48, 144, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            vec![
+                [17, 0, 0, 0, 48, 144, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [18, 0, 0, 0, 64, 152, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            ],
+        ),
+        5 => (
+            1, 6, 72,
+            [19, 0, 0, 0, 64, 176, 66, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            vec![[13, 0, 0, 0, 208, 208, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+        ),
+        6 => (
+            1, 6, 82,
+            [20, 0, 0, 0, 104, 144, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            vec![[21, 0, 0, 0, 56, 160, 96, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+        ),
+        7 => (
+            1, 6, 82,
+            [23, 0, 0, 0, 136, 144, 76, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            vec![[24, 0, 0, 0, 56, 160, 96, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+        ),
+        // Index 8 = the record table's 9th entry ($4E69: count 0, hits 6,
+        // sprite 99) with its own `sObject0Def` image from `$4E9A[8]` =
+        // `$4F4C`; `sObjectDefCount` 0 means `$8E6C` returns before it ever
+        // reads the `$4EAC` table, so there are no sub-objects to return.
+        _ => (
+            0, 6, 99,
+            [26, 0, 0, 0, 136, 144, 83, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            Vec::new(),
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -654,6 +740,43 @@ mod tests {
                 all.iter().all(|(_, b)| b[0] >> 4 != absent),
                 "class ${absent:x}x is unused in retail data"
             );
+        }
+    }
+
+    #[test]
+    fn boss_spawn_definitions_match_extracted_records() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../extracted/scenes/boss_spawns.json");
+        let bytes = match std::fs::read(&path) {
+            Ok(b) => b,
+            Err(_) => return,
+        };
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let arr = json.as_array().unwrap();
+        assert_eq!(arr.len(), 9, "9 records ($4E51..$4E6B) -- see the extractor");
+        for (i, entry) in arr.iter().enumerate() {
+            let (count, hits, spr, obj0, subs) = lookup_boss_spawn_def(i as u8);
+            assert_eq!(entry["count"].as_u64().unwrap() as u8, count, "entry {i} count");
+            assert_eq!(entry["hits"].as_u64().unwrap() as u8, hits, "entry {i} hits");
+            assert_eq!(entry["sprite"].as_u64().unwrap() as u8, spr, "entry {i} sprite");
+            let obj0_json: Vec<u8> = entry["obj0_def"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_u64().unwrap() as u8)
+                .collect();
+            assert_eq!(&obj0[..], &obj0_json[..], "entry {i} obj0");
+            let subs_json = entry["sub_obj_defs"].as_array().unwrap();
+            assert_eq!(subs.len(), subs_json.len(), "entry {i} subs len");
+            for (j, s) in subs_json.iter().enumerate() {
+                let sub_bytes: Vec<u8> = s
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.as_u64().unwrap() as u8)
+                    .collect();
+                assert_eq!(&subs[j][..], &sub_bytes[..], "entry {i} sub {j}");
+            }
         }
     }
 }

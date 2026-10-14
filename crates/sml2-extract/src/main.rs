@@ -354,6 +354,55 @@ fn main() -> Result<(), Box<dyn Error>> {
         &baserom[script_rom..script_rom + 192],
     )?;
 
+    // Bank 2 boss spawn tables ($8D9C / $8DFD / $8E6C):
+    // $4E3F..$4E51: 8 pointers to 3-byte records (count, hits, sprite)
+    // $4E9A..$4EAC: 8 pointers to sObject0Def (18-byte records)
+    // $4EAC..$4EBC: 8 pointers to sObject1Def.. (count * 18-byte records)
+    let mut boss_spawns = Vec::new();
+    for idx in 0..9usize {
+        let rom_bank2 = |addr: usize| -> usize { 2 * 0x4000 + (addr - 0x4000) };
+        let t0_ptr = rom_bank2(0x4E3F + idx * 2);
+        let t0_addr = (baserom[t0_ptr] as usize) | ((baserom[t0_ptr + 1] as usize) << 8);
+        let t0_off = rom_bank2(t0_addr);
+        let count = baserom[t0_off];
+        let hits = baserom[t0_off + 1];
+        let sprite = baserom[t0_off + 2];
+
+        let obj0_ptr = rom_bank2(0x4E9A + idx * 2);
+        let obj0_addr = (baserom[obj0_ptr] as usize) | ((baserom[obj0_ptr + 1] as usize) << 8);
+        let obj0_off = rom_bank2(obj0_addr);
+        let obj0_def = baserom[obj0_off..obj0_off + 18].to_vec();
+
+        // The `$4EAC` table has 8 entries (indices 0..7). The 9th record
+        // (`$4E69`) carries `sObjectDefCount` 0, and `$8E6C` returns on that
+        // before it ever dereferences the table, so entry 8 stages no
+        // sub-objects and no pointer is read for it.
+        let mut subs = Vec::new();
+        if count > 0 {
+            let obj1_ptr = rom_bank2(0x4EAC + idx * 2);
+            let obj1_addr =
+                (baserom[obj1_ptr] as usize) | ((baserom[obj1_ptr + 1] as usize) << 8);
+            let obj1_off = rom_bank2(obj1_addr);
+            for c in 0..(count as usize) {
+                let start = obj1_off + c * 18;
+                subs.push(baserom[start..start + 18].to_vec());
+            }
+        }
+
+        boss_spawns.push(serde_json::json!({
+            "def_index": idx,
+            "count": count,
+            "hits": hits,
+            "sprite": sprite,
+            "obj0_def": obj0_def,
+            "sub_obj_defs": subs,
+        }));
+    }
+    fs::write(
+        extracted.join("scenes/boss_spawns.json"),
+        serde_json::to_string_pretty(&boss_spawns)?,
+    )?;
+
     // The overworld's parallel node tables (bank 15): `$4218` (level index) and
     // `$650E` (progress slot) are indexed by node id, 130 bytes each; `$6591`
     // (the key/direction mask `$3E1D7` tests) is indexed by *progress slot*, and
