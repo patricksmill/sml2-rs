@@ -44,6 +44,22 @@
 //!   The pickup arm (anim 16 → `$586F5`) is where the `$8611`/`$868A` touch
 //!   switch sends a collected item: flash, Y += 2 and `+24` += 2 per call,
 //!   remove-mode-2 despawn when `+24` reaches `$20`.
+//! - Marker (`$586EE`, mode-B anims 27/28/29): type = anim + `$66` and
+//!   return. The stream bytes are `$1B`/`$1C`/`$1D` — *not* `$27`-style
+//!   values — so the types are `$81`/`$82`/`$83`, i.e. bit-7 item poses whose
+//!   `$2DC6` tail stages powerup ids 1/2/3.
+//! - Grower (anim 92 → `$5B1C8`): state 0 arms type `$4C` + counters
+//!   `+24`/`+25`/`+26` = 3; state 1 walks 3 segments of three 1-px steps (up
+//!   while `+16 == 0`), reloading `+24` from `+25` and flipping `+16` per
+//!   segment, then drops the type to 0 into state 2; states 2/3 cycle the
+//!   sprite id 122 → 124 on every 4th `$FFF0` frame, hold `+28` = 32 calls
+//!   and walk it back to 122, jumping to the state-0 body to re-arm.
+//! - Floaters (anims 94/95 → `$5B241`/`$5B28C`): the shared `$724A` state 0
+//!   (type `$48`, state 1) and `$7266` tail; states 1/2 take one step per
+//!   call — Y for 94, X for 95 — through the profile `+24` selects from the
+//!   `$744D`/`$7473` pickers (`$7488`/`$74A1`, sentinel `$12`; 18 calls and
+//!   32 px per leg), and the tail restarts `+16` at the sentinel, flipping
+//!   the direction on every other leg's `+24` 0 → 1 edge (`$5D33`).
 //! - Interaction pass (home.asm `$2D7D`): per slot, box test against the
 //!   slot's `+9/+10` screen pos (set by the previous frame's draw) and the
 //!   Mario screen pos (`x − camx + 96`, `y − camy + 98`); flags at `+23`
@@ -129,6 +145,16 @@ const HOVER_SPEED: [u8; 22] = [
 ];
 /// `$5B545` spin wobble (ROM `$5B57A`, 4 entries; `+26` indexes it).
 const SPIN_WOBBLE: [u8; 4] = [0xFF, 0x01, 0xFF, 0x01];
+/// `$74A1` — the `+24 == 0` step profile of the anim-94/95 floaters (`$7473`,
+/// sentinel `$12`). One leg is 18 picker calls whose steps sum to 32 px; the
+/// 19th byte is never reached (the caller's tail resets `+16` at the
+/// sentinel). The `+24 != 0` side is `$7488`, whose base is `FALL_SPEED`
+/// (its c=`$15` fall consumer reads 22 of the same bytes) — shared, so the
+/// two consumers cannot drift.
+const STEP_74A1: [u8; 19] = [
+    0x03, 0x02, 0x03, 0x03, 0x03, 0x02, 0x03, 0x02, 0x01, 0x02, 0x02, 0x01, 0x02, 0x01, 0x01, 0x01,
+    0x00, 0x00, 0x00,
+];
 
 #[inline]
 pub fn x_of(b: &[u8; 32]) -> u16 {
@@ -691,12 +717,16 @@ impl ObjectSim {
             0x584E0 => self.handler_bobber(st, tables),
             0x5862E => self.handler_crawler(st, layout),
             0x586E1 => self.handler_marker85(st),
+            0x586EE => self.handler_marker66(st),
             0x586F5 => self.handler_pickup16(st, tables),
             0x58712 => self.handler_hopper(st, layout, tables),
             0x58755 => self.handler_itempose20(st),
             0x58758 => self.itempose_body(st),
             0x587BD => self.handler_pose86(st),
             0x587D7 => self.handler_pose87(st, tables),
+            0x5B1C8 => self.handler_grower92(st),
+            0x5B241 => self.handler_floater94(st),
+            0x5B28C => self.handler_floater95(st),
             // $58100 — a bare `ret` (ROM bytes: the single byte `$C9` right after
             // the 192-byte mode-A table at $58040). Nineteen mode-A indices and
             // eleven mode-B ones dispatch here, and it is a *real* target, not a
@@ -1460,6 +1490,19 @@ impl ObjectSim {
         st.b[B_TYPE] = 0x85;
     }
 
+    /// `$586EE` (mode-B anims 27/28/29; the mode-A table shares the address):
+    /// type = anim + `$66` and return — the ROM stream's anim bytes are
+    /// `$1B`/`$1C`/`$1D`, so the types are `$81`/`$82`/`$83`. Being bit-7
+    /// types with a nonzero low 7 bits they pass the `$2EDD` gate and the
+    /// `$2EF5` box test, and `$2DC6`'s tail stages item ids 1/2/3 — the
+    /// object is a collectible-shaped item that the `$3451` powerup arms
+    /// consume, not a dead id. (The anim-30 entry just before it, `$586EB`'s
+    /// `call $7684` — the 4-frame `$FFDE` toggle — is not reached by level 20
+    /// and stays unported.)
+    fn handler_marker66(&mut self, st: &mut Staging) {
+        st.b[B_TYPE] = st.b[B_DEF].wrapping_add(0x66);
+    }
+
     /// `$586F5` (anim 16): the picked-up item's rise-and-vanish arm — the body
     /// the `$8611`/`$868A` touch cluster switches a collectible into. Sets
     /// `+15 = 1` (which arms the slot-parity gate from the *next* frame, so the
@@ -1533,6 +1576,180 @@ impl ObjectSim {
         st.b[B_FSTATE] = 1;
         st.b[B_PHASE] = 32;
         st.b[B_TYPE] = 0;
+    }
+
+    // ---------------------------------------------------------------------
+    // Anims 92/94/95 — the grower ($5B1C8) and the floaters ($5B241/$5B28C)
+    // ---------------------------------------------------------------------
+
+    /// `$5B1C8` (mode-B anim 92): a 4-state grower/bobber. State 0 (`$71D3`,
+    /// also the `jr` target of state 3) arms type `$4C`, state 1 and the
+    /// counters `+24`/`+25`/`+26` = 3 — with no step on its own frame. State 1
+    /// (`$71E4`) takes one 1-px step per call — up while `+16 == 0`, down
+    /// otherwise — and at every exhausted `+24` reloads it from `+25` and
+    /// flips `+16`; on the third segment (`+26` reaching 0) it instead drops
+    /// the type to 0 and enters state 2. State 2 (`$7213`) steps `+11` up to
+    /// `$7C` on every 4th `$FFF0` frame and arms `+28` = 32 into state 3;
+    /// state 3 (`$7229`) counts `+28` down, then walks `+11` back down to
+    /// `$7A` and jumps to the state-0 body.
+    fn handler_grower92(&mut self, st: &mut Staging) {
+        match st.b[B_FSTATE] {
+            1 => {
+                // $71E4: b = 1; `+16` picks the direction.
+                let b = 1;
+                if st.b[B_PHASE] == 0 {
+                    self.mv_y_sub(st, b);
+                } else {
+                    self.mv_y_add(st, b);
+                }
+                st.b[B_T24] = st.b[B_T24].wrapping_sub(b);
+                if st.b[B_T24] != 0 {
+                    return;
+                }
+                // $71F3: a 3-px segment ended.
+                st.b[B_ANIMFRAME] = st.b[B_ANIMFRAME].wrapping_sub(1);
+                if st.b[B_ANIMFRAME] == 0 {
+                    // $720B: the last segment — harmless from here on.
+                    st.b[B_TYPE] = 0;
+                    st.b[B_FSTATE] = 2;
+                    return;
+                }
+                st.b[B_T24] = st.b[B_T25];
+                st.b[B_PHASE] ^= 1;
+            }
+            2 => {
+                // $7213: sprite id 122 -> 124, one step every 4th frame.
+                if self.fff0 & 3 != 0 {
+                    return;
+                }
+                st.b[B_SPRITE] = st.b[B_SPRITE].wrapping_add(1);
+                if st.b[B_SPRITE] != 0x7C {
+                    return;
+                }
+                st.b[B_T28] = 0x20;
+                st.b[B_FSTATE] = 3;
+            }
+            3 => {
+                // $7229: a 32-call hold, then the id walks back to 122.
+                if st.b[B_T28] != 0 {
+                    st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
+                    return;
+                }
+                if self.fff0 & 3 != 0 {
+                    return;
+                }
+                st.b[B_SPRITE] = st.b[B_SPRITE].wrapping_sub(1);
+                if st.b[B_SPRITE] != 0x7A {
+                    return;
+                }
+                self.grower92_init(st); // $18 $92: jr $71D3
+            }
+            _ => self.grower92_init(st),
+        }
+    }
+
+    /// `$71D3`: the grower's state 0 — type `$4C` (harmful: `$4C & $63` =
+    /// `$40`), state 1, and the segment counter `+24` with its reload `+25`
+    /// and count `+26`.
+    fn grower92_init(&mut self, st: &mut Staging) {
+        st.b[B_TYPE] = 0x4C;
+        st.b[B_FSTATE] = 1;
+        st.b[B_T24] = 3;
+        st.b[B_T25] = 3;
+        st.b[B_ANIMFRAME] = 3;
+    }
+
+    /// `$744D` (c = `$12`, profile `$7488`) / `$7473` (c = `$12`, profile
+    /// `$74A1`): the shared `$74xx` step picker. `b` is the profile byte at
+    /// `+16`; `+16` advances unless it already reads the entry's sentinel.
+    /// `c` lives in a register that crosses into the caller's shared tail
+    /// (`cp c`), so the sentinel is returned with the step instead of being
+    /// folded into a caller. The other entries (`$7441`/`$7445`/`$7449`/
+    /// `$7451`/`$7465`/`$746C`/`$747A`/`$7481`, i.e. the fall/hover/bounce
+    /// curves) are reached by handlers outside level 20 and are not modelled
+    /// here.
+    fn step_picker(&self, st: &mut Staging, table: &[u8], c: u8) -> (u8, u8) {
+        // Bound-safe: this consumer's `+16` never exceeds the sentinel, and a
+        // past-the-end read cannot answer from another table's bytes.
+        let b = table.get(st.b[B_PHASE] as usize).copied().unwrap_or(0);
+        if st.b[B_PHASE] != c {
+            st.b[B_PHASE] = st.b[B_PHASE].wrapping_add(1);
+        }
+        (b, c)
+    }
+
+    /// `$7253`/`$7277` (and the anim-95 twins) head: `+24` selects the profile
+    /// — 0 -> `$7473`'s `$74A1`, else `$744D`'s `$7488`; both sentinel `$12`.
+    fn floater_pick(&self, st: &mut Staging) -> (u8, u8) {
+        if st.b[B_T24] == 0 {
+            self.step_picker(st, &STEP_74A1, 0x12)
+        } else {
+            self.step_picker(st, &FALL_SPEED, 0x12)
+        }
+    }
+
+    /// `$7266`: the anim-94/95 shared tail — when `+16` reads the picker's
+    /// sentinel (the picker increments on a leg's last call, so the compare
+    /// sees `c` exactly then), restart the profile and toggle `+24`; the
+    /// 0 -> 1 edge flips the movement direction through `$5D33` (`$FFDF ^=
+    /// $03` maps state 1 <-> 2), the 1 -> 0 edge just returns.
+    fn floater_tail(&mut self, st: &mut Staging, c: u8) {
+        if st.b[B_PHASE] != c {
+            return;
+        }
+        st.b[B_PHASE] = 0;
+        st.b[B_T24] ^= 1;
+        if st.b[B_T24] == 0 {
+            return;
+        }
+        st.b[B_FSTATE] ^= 3; // $5D33
+    }
+
+    /// `$724A`: the anim-94/95 shared state 0 — type `$48` (harmful), state 1;
+    /// no movement on its own frame.
+    fn floater_init(&mut self, st: &mut Staging) {
+        st.b[B_TYPE] = 0x48;
+        st.b[B_FSTATE] = 1;
+    }
+
+    /// `$5B241` (mode-B anim 94): the vertical floater — states 1/2 walk the
+    /// `+24`-selected profile (18 calls per leg, the steps summing to 32 px)
+    /// with Y -= b (`$3D2D`) up / Y += b (`$3D3D`) down, sharing state 0 and
+    /// the `$7266` tail, which flips the direction every other leg.
+    fn handler_floater94(&mut self, st: &mut Staging) {
+        match st.b[B_FSTATE] {
+            1 => {
+                let (b, c) = self.floater_pick(st);
+                self.mv_y_sub(st, b);
+                self.floater_tail(st, c);
+            }
+            2 => {
+                let (b, c) = self.floater_pick(st);
+                self.mv_y_add(st, b);
+                self.floater_tail(st, c);
+            }
+            0 => self.floater_init(st),
+            _ => {}
+        }
+    }
+
+    /// `$5B28C` (mode-B anim 95): the same machine on X (`$3D22` X -= b left /
+    /// `$3D32` X += b right), sharing anim 94's state-0 body and `$7266` tail.
+    fn handler_floater95(&mut self, st: &mut Staging) {
+        match st.b[B_FSTATE] {
+            1 => {
+                let (b, c) = self.floater_pick(st);
+                self.mv_x_sub(st, b);
+                self.floater_tail(st, c);
+            }
+            2 => {
+                let (b, c) = self.floater_pick(st);
+                self.mv_x_add(st, b);
+                self.floater_tail(st, c);
+            }
+            0 => self.floater_init(st),
+            _ => {}
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -2595,6 +2812,253 @@ mod tests {
             assert!(
                 obj.unported.is_empty(),
                 "level {level} anim {anim}: the no-op must not be flagged"
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // $586EE / $5B1C8 / $5B241 / $5B28C — level 19's four new classes
+    // -----------------------------------------------------------------
+
+    /// `$586EE` (mode-B anims 27/28/29): type = anim + `$66` and nothing else.
+    /// The ROM's stream bytes for these records are `$1B`/`$1C`/`$1D` (the
+    /// extractor's `r5` IS the staged anim byte), so the types come out
+    /// `$81`/`$82`/`$83` — the spec's `$8D`-`$8F` reading added `$66` to
+    /// `$27`-style values the stream never contains.
+    #[test]
+    fn marker66_sets_the_type_from_the_anim() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        for (anim, ty) in [(27u8, 0x81u8), (28, 0x82), (29, 0x83)] {
+            let mut st = Staging::default();
+            st.b[B_DEF] = anim;
+            st.b[B_T24] = 0x0A;
+            obj.handler_marker66(&mut st);
+            assert_eq!(st.b[B_TYPE], ty, "anim {anim} -> type ${ty:02X}");
+            assert_eq!(st.b[B_T24], 0x0A, "the marker touches nothing else");
+            assert_eq!(obj.done, 0);
+        }
+        assert!(obj.unported.is_empty());
+    }
+
+    /// The four handlers the level-19 stream's cells reach are the class
+    /// claims: `$586EE`'s anims are the literal record bytes `$1B`-`$1D`, which
+    /// is why its type arithmetic lands on `$81`-`$83`.
+    #[test]
+    fn level19_record_anims_are_the_staged_bytes() {
+        // From the level-19 packed stream (`baserom.gb` file offset $E7C8, 91
+        // bytes): pack `64 61 06` -> anim 27, `75 DB 0E` -> 27, and the anim-92
+        // packs `77 9B 98`/`4D F3 14`... decode to 92.
+        let decode = |c: u8, b2: u8, _b3: u8| ((c >> 5) & 7) * 8 + if c & 0x10 != 0 { 0x40 } else { 0 } + ((b2 >> 5) & 7);
+        assert_eq!(decode(0x64, 0x61, 0x06), 27, "the anim-27 record");
+        assert_eq!(decode(0x77, 0x9B, 0x98), 92, "an anim-92 record");
+        assert_eq!(decode(0x72, 0xC5, 0x96), 94, "the first anim-94 record");
+        assert_eq!(decode(0x72, 0xFB, 0x9E), 95, "the anim-95 record");
+        // anim byte 27 + $66 = $81: the `$3451` powerup arm's id 1.
+        assert_eq!(27u8 + 0x66, 0x81);
+    }
+
+    /// `$5B1C8` states 0/1: the arm frame takes no step; the nine state-1
+    /// calls are three segments of three 1-px steps — up while `+16 == 0`,
+    /// down while `+16 == 1` — with `+24` reloading from `+25` and `+16`
+    /// flipping after the first two segments; the third exhausts `+26` into
+    /// type 0 and state 2.
+    #[test]
+    fn grower92_walks_three_segments_then_goes_harmless() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        let mut st = Staging::default();
+        st.b[B_SPRITE] = 122;
+        set_y(&mut st.b, 100);
+        obj.handler_grower92(&mut st);
+        assert_eq!(
+            (
+                st.b[B_TYPE],
+                st.b[B_FSTATE],
+                st.b[B_T24],
+                st.b[B_T25],
+                st.b[B_ANIMFRAME]
+            ),
+            (0x4C, 1, 3, 3, 3)
+        );
+        assert_eq!(y_of(&st.b), 100, "state 0 takes no step");
+        for expect in [99u16, 98, 97] {
+            obj.handler_grower92(&mut st);
+            assert_eq!(y_of(&st.b), expect, "segment 1 rises");
+        }
+        assert_eq!(
+            (st.b[B_PHASE], st.b[B_T24], st.b[B_ANIMFRAME]),
+            (1, 3, 2),
+            "reload + flip after the first segment"
+        );
+        for expect in [98u16, 99, 100] {
+            obj.handler_grower92(&mut st);
+            assert_eq!(y_of(&st.b), expect, "segment 2 sinks");
+        }
+        assert_eq!((st.b[B_PHASE], st.b[B_ANIMFRAME]), (0, 1));
+        for expect in [99u16, 98, 97] {
+            obj.handler_grower92(&mut st);
+            assert_eq!(y_of(&st.b), expect, "segment 3 rises");
+        }
+        assert_eq!((st.b[B_TYPE], st.b[B_FSTATE], st.b[B_ANIMFRAME]), (0, 2, 0));
+    }
+
+    /// `$5B1C8` states 2/3: the sprite id walks 122 → 124 on every 4th `$FFF0`
+    /// frame, `+28` = 32 is armed with the state change, 32 calls count it down
+    /// without touching the id, and the id walks back to 122 (also on 4th
+    /// frames), which jumps to the state-0 body and re-arms it.
+    #[test]
+    fn grower92_sprite_cycle_holds_32_calls_and_rearms() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        let mut st = Staging::default();
+        st.b[B_FSTATE] = 2;
+        st.b[B_SPRITE] = 122;
+        obj.fff0 = 1;
+        obj.handler_grower92(&mut st);
+        assert_eq!(st.b[B_SPRITE], 122, "only every 4th $FFF0 frame steps");
+        obj.fff0 = 0;
+        obj.handler_grower92(&mut st);
+        assert_eq!(st.b[B_SPRITE], 123);
+        obj.fff0 = 4;
+        obj.handler_grower92(&mut st);
+        assert_eq!((st.b[B_SPRITE], st.b[B_T28], st.b[B_FSTATE]), (124, 0x20, 3));
+        for _ in 0..32 {
+            obj.handler_grower92(&mut st);
+        }
+        assert_eq!(
+            (st.b[B_SPRITE], st.b[B_T28]),
+            (124, 0),
+            "the hold is 32 calls"
+        );
+        obj.fff0 = 5;
+        obj.handler_grower92(&mut st);
+        assert_eq!(st.b[B_SPRITE], 124, "not a 4th frame");
+        obj.fff0 = 8;
+        obj.handler_grower92(&mut st);
+        assert_eq!(st.b[B_SPRITE], 123);
+        obj.fff0 = 12;
+        obj.handler_grower92(&mut st);
+        assert_eq!(st.b[B_SPRITE], 122);
+        assert_eq!(
+            (st.b[B_TYPE], st.b[B_FSTATE], st.b[B_T24], st.b[B_ANIMFRAME]),
+            (0x4C, 1, 3, 3),
+            "the jr $71D3 re-arms state 0"
+        );
+    }
+
+    /// `$5B241` (anim 94) + the `$7266` tail: state 0 arms type `$48` and state
+    /// 1 without stepping; a leg is 18 picker calls summing to 32 px, the last
+    /// of which resets `+16` at the `$12` sentinel and toggles `+24` — the
+    /// 0 → 1 edge flips the state, so the object floats up on `$74A1` and back
+    /// down on `$7488`, and the 1 → 0 edge leaves the state alone. (The capture
+    /// trace of level 19's anim-94 slot is exactly this: 176 → 144 → 176.)
+    #[test]
+    fn floater94_floats_up_then_down_through_the_shared_tail() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        let mut st = Staging::default();
+        set_y(&mut st.b, 200);
+        obj.handler_floater94(&mut st);
+        assert_eq!((st.b[B_TYPE], st.b[B_FSTATE]), (0x48, 1));
+        assert_eq!(y_of(&st.b), 200, "state 0 takes no step");
+        obj.handler_floater94(&mut st);
+        assert_eq!((y_of(&st.b), st.b[B_PHASE]), (197, 1), "$74A1[0] = 3 up");
+        for _ in 0..17 {
+            obj.handler_floater94(&mut st);
+        }
+        assert_eq!(y_of(&st.b), 168, "32 px up over the leg");
+        assert_eq!(
+            (st.b[B_PHASE], st.b[B_T24], st.b[B_FSTATE]),
+            (0, 1, 2),
+            "the sentinel resets the profile, +24 flips the direction"
+        );
+        for _ in 0..18 {
+            obj.handler_floater94(&mut st);
+        }
+        assert_eq!(y_of(&st.b), 200, "32 px back down on $7488");
+        assert_eq!(
+            (st.b[B_PHASE], st.b[B_T24], st.b[B_FSTATE]),
+            (0, 0, 2),
+            "the 1 -> 0 edge does not flip"
+        );
+    }
+
+    /// `$5B28C` (anim 95): the same machine on X — `$74A1` steps left, `$7488`
+    /// steps right — with the shared state-0 body and `$7266` tail.
+    #[test]
+    fn floater95_shuttles_horizontally_with_the_shared_state0() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        let mut st = Staging::default();
+        set_x(&mut st.b, 300);
+        obj.handler_floater95(&mut st);
+        assert_eq!((st.b[B_TYPE], st.b[B_FSTATE]), (0x48, 1));
+        assert_eq!(x_of(&st.b), 300);
+        obj.handler_floater95(&mut st);
+        assert_eq!((x_of(&st.b), st.b[B_PHASE]), (297, 1), "left, 3 px");
+        st.b[B_T24] = 1;
+        st.b[B_PHASE] = 11;
+        obj.handler_floater95(&mut st);
+        assert_eq!((x_of(&st.b), st.b[B_PHASE]), (294, 12), "left on $7488[11]");
+        st.b[B_T24] = 0;
+        st.b[B_PHASE] = 0x11; // a leg's last call: 17 -> the $12 sentinel
+        obj.handler_floater95(&mut st);
+        assert_eq!(
+            (x_of(&st.b), st.b[B_PHASE], st.b[B_T24], st.b[B_FSTATE]),
+            (294, 0, 1, 2),
+            "$74A1[17] = 0: no step, reset + flip to state 2"
+        );
+        st.b[B_PHASE] = 0x11;
+        obj.handler_floater95(&mut st);
+        assert_eq!((x_of(&st.b), st.b[B_PHASE], st.b[B_T24]), (297, 0, 0));
+        assert_eq!(st.b[B_FSTATE], 2, "the 1 -> 0 edge keeps the state");
+    }
+
+    /// The two floater profiles, byte-exact from `baserom.gb`: `$7488` (whose
+    /// base is `FALL_SPEED` — the c=`$15` fall consumer reads 22 of its bytes)
+    /// and `$74A1` (the c=`$12` twin). One leg each is 18 calls and sums to
+    /// 32 px.
+    #[test]
+    fn floater_profiles_are_the_rom_bytes_and_sum_to_32px_each() {
+        assert_eq!(
+            FALL_SPEED,
+            [
+                0x00, 0x00, 0x01, 0x01, 0x01, 0x02, 0x01, 0x02, 0x02, 0x01, 0x02, 0x03, 0x02, 0x03,
+                0x03, 0x03, 0x02, 0x03, 0x03, 0x02, 0x03, 0x03
+            ],
+            "$7488[0..22]"
+        );
+        assert_eq!(
+            STEP_74A1,
+            [
+                0x03, 0x02, 0x03, 0x03, 0x03, 0x02, 0x03, 0x02, 0x01, 0x02, 0x02, 0x01, 0x02, 0x01,
+                0x01, 0x01, 0x00, 0x00, 0x00
+            ],
+            "$74A1[0..19]"
+        );
+        let left: u32 = STEP_74A1[..18].iter().map(|&v| v as u32).sum();
+        let right: u32 = FALL_SPEED[..18].iter().map(|&v| v as u32).sum();
+        assert_eq!((left, right), (32, 32), "one leg each");
+    }
+
+    /// Level 19's mode-B stream names exactly these four classes; all four now
+    /// have a body, so `run_handler` must dispatch them without leaving an
+    /// `unported` entry — which is the replay's `note:` line.
+    #[test]
+    fn level19_anims_dispatch_to_the_new_bodies_unflagged() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../extracted/objects.json");
+        let Ok(txt) = std::fs::read_to_string(path) else {
+            eprintln!("skip: {path} not built");
+            return;
+        };
+        let t: ObjectTables = serde_json::from_str(&txt).expect("objects.json parses");
+        for (anim, handler) in [(27u8, 0x586EEu32), (92, 0x5B1C8), (94, 0x5B241), (95, 0x5B28C)] {
+            assert_eq!(t.behavior_for(19, anim), Some(handler), "level 19 anim {anim}");
+            let mut obj = ObjectSim::new(Vec::new(), 0);
+            obj.configure(19);
+            let mut st = Staging::default();
+            st.b[B_STATE] = 2;
+            st.b[B_DEF] = anim;
+            obj.run_handler(&mut st, &blank_layout(), &t);
+            assert!(
+                obj.unported.is_empty(),
+                "anim {anim} -> ${handler:05X} must not be flagged"
             );
         }
     }

@@ -232,9 +232,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 cam.scene_map.clone_from(m);
             }
         }
-        if cam.auto_scroll != 0 {
-            println!("note: autoscroll level: $0DAF ported, but no capture covers it");
-        }
+        // The autoscroll path is no longer capture-less: traj19 (level 20) is in
+        // the gate now — see the retired-flag note in `run_replay`.
         let obj = sml2_core::objects::ObjectSim::new(manifest.spawns.records.clone(), cam.x);
         return run_play(
             &manifest,
@@ -1167,13 +1166,11 @@ fn run_replay(
         .as_ref()
         .map(|s| s.tables.clone())
         .ok_or("replay requires objects.json (no sprite context)")?;
-    if cam.auto_scroll != 0 {
-        // $0DAF is ported now (`camera.rs::run_autoscroll`), so this is no
-        // longer a "not modelled" flag — it marks the path as *capture-less*:
-        // no level in the suite has `properties.auto_scroll != 0`, so nothing
-        // here is gate-verified. It is what would fail a gate that added one.
-        println!("note: autoscroll level: $0DAF ported, but no capture covers it");
-    }
+    // $0DAF's capture-less flag is RETIRED (2026-10-14): traj19 replays level 20
+    // (`--level 19`, listed in `captures/sweep.sh`) with `camx`/`camy`/`en_r`/
+    // `en_l`/`edge` all-zero across 1308 compared frames, so the autoscroll path
+    // is gate-verified now. The flag's job was to fail a gate that added such a
+    // capture; traj19 is that capture, so it is the check that replaces it.
     if let Some(dir) = filmstrip {
         fs::create_dir_all(dir)?;
     }
@@ -1217,8 +1214,20 @@ fn run_replay(
         // reads bit 3, and no capture spins). The *low* bits still come from the
         // record above, which is what every other reader uses.
         sim.frame_counter = sim.frame_counter.wrapping_add(1);
-        sim.camx = f.camx as u16;
-        sim.camy = f.camy as u16;
+        // The camera bytes the *player* update reads are the ones written by
+        // the previous frame's camera step: the ROM runs `$0F71` before
+        // `$0B2A` (home.asm:799/803), so `$0FBF`'s clamp and `$1BFF`'s hazard
+        // `sMarioScreenY` both see the camera as of the frame's START. Feed
+        // them from the port's own camera object — exactly what `run_play`
+        // does — rather than from `f.camx`/`f.camy`, which are the record's
+        // POST-frame camera. Injecting the post-frame byte put the clamp one
+        // frame ahead of the console and made the sim push Mario +1 early on
+        // every frame the autoscroll camera stepped (traj19,
+        // `autoscroll_clamp_x_divergence`). `cam.x`/`cam.y` here already equal
+        // the record's camera for the PREVIOUS frame — the camx/camy checks
+        // below still verify the derivation against the record.
+        sim.camx = cam.x;
+        sim.camy = cam.y;
         // $05E4/$0640: the frame loop's three branches. Dead (`$FF`) runs only
         // the arc + the object engine (the camera freezes); the death fade
         // (`$FF9B = 9`) leaves the level entirely, freezing everything.

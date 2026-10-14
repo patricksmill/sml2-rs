@@ -375,8 +375,16 @@ pub struct PlayerSim {
     /// reads bit 4 of it every frame, so it is a 32-frame cycle off the
     /// counter rather than a timer with a reload value.
     pub frame_counter: u8,
+    /// `sCameraX` low byte **as of the frame's start** — the `$0FBF` screen
+    /// clamp reads `$FFCA` during `$0F71`, before that frame's `$0B2A` camera
+    /// step, so the caller latches this before stepping the camera (both
+    /// frame loops do). Latching the post-step byte shifts the clamp one
+    /// frame ahead: on an autoscroll level it pushes Mario +1 early on every
+    /// frame the camera steps (traj19, `autoscroll_clamp_x_divergence`).
     pub camx: u16,
-    /// `sCameraY` low byte — `$1BFF`'s hazard arm reads `sMarioScreenY`.
+    /// `sCameraY` low byte, same frame-start timing as [`Self::camx`] —
+    /// `$1BFF`'s hazard arm reads `sMarioScreenY`, which the draw step
+    /// computed from the previous frame's camera.
     pub camy: u16,
     /// Mirror of sCollisionTile (last sampled tile).
     pub collision_tile: u8,

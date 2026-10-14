@@ -1,5 +1,18 @@
 # Level 20 (index 19) unported handler classes + sMoonPhysics ($A287) specification
 
+> **SUPERVISOR CORRECTION 2026-10-14, added after the classes were ported and gated.**
+> One claim below is WRONG, and the shipped code follows the ROM rather than this document:
+> `$586EE` sets its type to **`anim + $66` where `anim` is the DECIMAL anim index** (the staged
+> `$FFD5` byte), so level 19's `$586EE` records (anim 27 = `$1B`) set type **`$81`**, not the
+> `$8D/$8E/$8F` computed below — that arithmetic read `27` as hex (`$27` = 39). Consequence:
+> those objects are handled **bit-7 item poses (powerup ids 1/2/3)**, whose `$2DC6` tail the
+> `$3451` arms DO consume; they are not the inert harmless markers described below. Confirmed by
+> re-decoding level 19's packed stream at `baserom.gb` file `$E7C8` (anim bytes `$1B/$1C/$1D`)
+> and pinned by `objects.rs`'s `level19_record_anims_are_the_staged_bytes` test.
+> Everything else this report supplied checked out where the port used it: `$5B1C8`'s machine,
+> `$5B241`/`$5B28C`'s shared picker and both profile tables matched the ROM byte-exact, and the
+> two floaters are now **console-verified** by traj19's slot traces.
+
 Read-only investigation, 2026-10-14. No file in `/home/pmill/sml2-rs` or `/home/pmill/sml2decomp`
 was modified. Every address below was produced by disassembling `baserom.gb` byte-by-byte with a
 scratch SM83 disassembler (`/home/pmill/.hermes/cache/scratch/gbdis.py`), cross-checked against the
