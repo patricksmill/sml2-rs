@@ -1018,3 +1018,77 @@ Verified engine semantics to preserve in the port:
   `x_sub` every frame, so that has no analogue here. No capture in the suite is
   an autoscroll level, so this path is unit-pinned only (6 tests) plus a
   play-mode smoke run; the capture is queued as `autoscroll_capture`.
+
+## The overworld map (game state `$0C`) — ported 2026-10-14
+
+`sml2_core::map_sim` is the map's own simulation: `MapSim::tick(input, nodes, walk)`
+is one frame of `$3C000` (bank 15), and it hands back the writes the ROM makes
+outside the map's RAM block as `MapEntry` — `sCurLevel`, `sLevelProgressFlags`,
+`sGameState`, the music/sfx requests, the save write and the node transition. It
+is not wired into the replay harness: no capture ever runs state `$0C`, so the
+package is unit-tested (14 tests) against the ROM's own bytes.
+
+**The walk graph.** `map/walk.bin` is the 128-node pointer table at flat `$6163A`
+plus every stream its pointers reach, byte-identical to the ROM. The base is
+`ld hl, $563A` with bank 24 banked in (`$563A` is a bank-24 *window* address, so
+flat `$6163A`; main.asm:18936) and the disassembly's `UnknownData_0x61A40` label
+is what the pointers point *into*, 1024 bytes later — which is what fixes the
+table at 128 entries rather than the 130 the other node tables carry: node
+`$80`/`$81` read past it into the same stream data. 116 of the 128 nodes carry a
+path, and every stream ends on a node below `$80`. A stream is one-byte moves
+(low nibble 1/2/4/8 = R/L/U/D, with combinations; bit 4 halves the step budget),
+`$00`, then the node the walk arrives at.
+
+**The cursor.** One pixel per *move frame*, and the stream decides which frames
+those are: `$3C7EC` rotates `sMapCursorAnim` ($A878) right and skips a frame when
+the rotated-out bit was set. That byte is part of the 64-byte save image, not a
+timer, so the ROM's own value depends on the last transition that wrote it —
+`$3E3BA` (the walk-out) writes `$92`, which gives **five move frames out of every
+eight**; the hub loader and `$3EA9A` write `0`, which moves *every* frame. The
+step timer is 9 frames for the first step and 8 after (4/5 when the move byte's
+bit 4 is set), and the walk-start frame is itself a move frame. Pinning one real
+stream (node 1 right: R,R,D,D,D,R×6 → arrival 19) with the `$92` cadence takes
+142 frames and moves the cursor from (8,8) to (72,32).
+
+The cursor's bounds are the ROM's own comparisons and are **not** symmetric:
+Right and Down stop exactly at `$94`/`$8A` (`cp`/`adc`), while Left and Up
+decrement whenever the coordinate is still `>= $08` (`cp $08`/`ccf`/`sbc 0`), so
+a cursor at `$08` stepping Left or Up lands on `$07` and only then stops. The
+pose blocks are 4 wide (L 0-3, R 4-7, U 8-11, D 12-15) and the idle pose uses
+Down's block — the ROM's own `$3C8F4` computes 12-15 from `(frame & $18) >> 3`.
+
+**The gate and the entry.** `$3E1D7` (now a free function, `map::map_enterable`)
+answers the ROM's 0 for "this node's own action runs": screen != 0, `$4218[node]`
+!= `$FE`, the node's `$6591` key mask ANDs the *held* direction byte (`$FF80` is
+held, `$FF81` pressed — the gate reads held, the walk direction reads pressed),
+and the stage is not yet cleared. The hub short-circuits to "walk" before looking
+at anything. `$3C169` is the A/START entry: it is swallowed while a walk is in
+progress, needs `hKeysPressed & $09`, and then enters `$4218[node]` — passing
+`$FF` through, rejecting only `$FE` — copying the node's progress byte into
+`sLevelProgressFlags` and moving the state straight to `$16` (the game's own
+machine runs the fade and the load). A cleared level re-enters unless its
+progress slot is one of the six castle slots (`$05/$09/$0E/$17/$1D/$11`), and a
+node with no level arms `$3C201`'s `sMapSpecialNodeLatch` instead.
+
+**Also ported:** the zone screens' door cluster ($3C6B0-$3C7A3, eleven nodes
+that put the cursor back on the hub at another node and move the state to `$0C`),
+the `$3C4E7` secret-route arm (nodes `$0C`/`$1E`, A with nothing else held, which
+walks a *hardcoded* stream at `$5BF6` to node `$0D`), the hub's B-button
+scroll-only latch, and `$3C13E`'s frame counter / 40-frame tick / `$FF04`-seeded
+latches.
+
+**Not modelled, and reported rather than skipped:** the A/START node actions
+behind `$3C60B` (the castle animation `$3D0D7`, the zone cutscenes), the node
+flag helpers `$3C2xx`, the hub's own cursor effects `$3CA31`-`$3CAB1`, and the
+whole screen layer — the camera latch `$3ED4C`, tiles, sprites, the hub's
+18-entry decoration list `$3CFC8`, the window raster and the cursor's OAM.
+`MapEntry::unported` carries a stable id for each so a caller can print a `note:`
+line instead of silently doing nothing. The blocking screen transition `$3E2F7`
+is art, but its *effects* (new node, hub screen, move byte, state `$0C`) are
+modelled.
+
+`MapSim` owns the map's live `$A840` block, including `sLevelProgress`; that
+array is also the save record's first 64 bytes, so `MapSim::from_player` /
+`to_player` bridge it to `PlayerSim`'s image (which the `$14` hand-off and
+`save_record` need) rather than duplicating it silently.
+

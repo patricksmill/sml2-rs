@@ -1348,6 +1348,13 @@ fn run_replay(
         // the overworld map, which waits for input → re-entry reloads the
         // level). Only the fade and the reload's final state are modelled;
         // the input-dependent map is skipped over the captured tick gap.
+        //
+        // The map itself IS modelled now — `sml2_core::map_sim` is state `$0C`
+        // (its tick, the cursor's walk graph, the gate and the entry), driven
+        // by its own unit tests — but this harness cannot drive it: the replay
+        // is an in-level ($05E4) record, and a map frame has no in-level state
+        // to compare against. So a state-`$0C` stretch in `g.seq` stays inside
+        // `g.total` here and is *accounted for*, not simulated.
         if let Some(g) = &f.gap {
             let fade_capture = g.seq.first().copied();
             let modeled = 192u64;

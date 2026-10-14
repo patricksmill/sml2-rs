@@ -4,6 +4,7 @@ pub mod camera;
 pub mod collision;
 pub mod level;
 pub mod map;
+pub mod map_sim;
 pub mod object;
 pub mod objects;
 pub mod player;

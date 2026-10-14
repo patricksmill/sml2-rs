@@ -426,6 +426,61 @@ fn main() -> Result<(), Box<dyn Error>> {
     nodes.extend_from_slice(&baserom[slots_rom + 131..slots_rom + 131 + 42]);
     fs::write(extracted.join("map/nodes.bin"), &nodes)?;
 
+    // The overworld's walk graph (bank 24). The base is not a labelled address —
+    // the cursor code loads the table with `ld hl, $563A` (main.asm:18936) while
+    // bank 24 is banked in, and `$563A` is a bank-24 *window* address, i.e. flat
+    // `$6163A`. The disassembly's `UnknownData_0x61A40` label (main.asm:37954,
+    // "object records pointed to by OW_Movement_Pointers") is what the pointers
+    // point into, and it must therefore sit *past* the table: 128 nodes x 8 bytes
+    // ends at `$61A3A`, and the first stream (node $06's Down) starts there.
+    //
+    // 128, not the 130 nodes the other node tables carry: node $80/$81 read past
+    // the table into the following data, so the port stops at $7F and the two
+    // bytes at $6163A + 128*8 are the graph's first stream, not a table row.
+    const WALK_NODES: usize = 128;
+    let walk_rom = 0x6163Ausize;
+    let walk_anchor = parse::label_rom(&main_facts, "UnknownData_0x61A40")
+        .ok_or("UnknownData_0x61A40: no ROM address")? as usize;
+    if walk_anchor < walk_rom + WALK_NODES * 8 {
+        return Err(format!(
+            "walk table base ${walk_rom:05X} + {WALK_NODES} nodes runs past \
+             UnknownData_0x61A40 (${walk_anchor:05X})"
+        )
+        .into());
+    }
+    // The streams all live between the table's end and the end of the tallest one;
+    // follow each stream to its `$00` terminator plus the arrival node byte, so
+    // the blob never truncates a stream (a truncated stream would read as `$00`
+    // and end a walk at the wrong node).
+    let mut walk_end = walk_rom + WALK_NODES * 8;
+    for node in 0..WALK_NODES {
+        for dir in 0..4 {
+            let at = walk_rom + node * 8 + dir * 2;
+            let ptr = baserom[at] as usize | (baserom[at + 1] as usize) << 8;
+            if ptr == 0xFFFF {
+                continue;
+            }
+            // Bank-24 window address -> flat.
+            let mut end = 24 * 0x4000 + (ptr - 0x4000);
+            let mut guard = 0;
+            while baserom[end] != 0 {
+                end += 1;
+                guard += 1;
+                if guard > 0x400 {
+                    return Err(format!("walk stream at ${ptr:04X} has no terminator").into());
+                }
+            }
+            walk_end = walk_end.max(end + 2);
+        }
+    }
+    if walk_end > baserom.len() {
+        return Err(format!("walk stream region ends at ${walk_end:05X}, past the ROM").into());
+    }
+    fs::write(extracted.join("map/walk.bin"), &baserom[walk_rom..walk_end])?;
+    println!(
+        "wrote map/walk.bin: {WALK_NODES} nodes x 8 bytes at ${walk_rom:05X}, streams to ${walk_end:05X}"
+    );
+
     // Per-level GFX config (UnknownData_0x360A -> sLevelGfxConfig): the high
     // nibble selects the two "extra" tile blocks loaded by LoadMarioGFX
     // ($06C0): $8800 <- bank $1B [$7000 + n*$300], $8E80 <- bank $07

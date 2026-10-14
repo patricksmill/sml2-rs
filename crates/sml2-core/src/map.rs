@@ -100,6 +100,123 @@ impl MapNodes {
     }
 }
 
+/// Where the overworld's walk graph starts in the ROM. The cursor code does
+/// `ld hl, $563A` (main.asm:18936) with bank 24 banked in, and `$563A` is a
+/// bank-24 *window* address — so the table is flat `$6163A`.
+pub const MAP_WALK_ROM: u32 = 0x6163A;
+
+/// The four directions a node's walk entry holds, in the ROM's own order: the
+/// entry is `MAP_WALK_ROM + node*8 + dir*2` and `$3C52B` tests the held byte's
+/// bit 1 (Left) first, then bit 2 (Up), bit 3 (Down), and falls back to Right.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum WalkDir {
+    Right = 0,
+    Left = 1,
+    Up = 2,
+    Down = 3,
+}
+
+/// The overworld's walk graph, as `sml2-extract` writes it: the 128-node pointer
+/// table followed by every stream its pointers reach, so a pointer resolves by
+/// *offset from the blob's start*.
+///
+/// The graph is 128 nodes, not the 130 the other node tables carry: node `$80`
+/// and `$81` read past the end of this table (their "pointers" are the data that
+/// follows it), so [`Self::NODES`] stops at `$7F`.
+///
+/// A stream is a list of one-byte moves ended by `$00`, followed by the id of the
+/// node the walk arrives at. Each move byte's low nibble is the direction
+/// (`$01` R, `$02` L, `$04` U, `$08` D — and combinations, which the cursor
+/// applies in the ROM's own order), bit 4 halves the step's frame budget, and
+/// bits 5-7 are read only by the cursor's OAM/pose code.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MapWalk {
+    blob: Vec<u8>,
+}
+
+impl MapWalk {
+    /// Node ids the table covers — see the type docs for why it is not 130.
+    pub const NODES: usize = 128;
+    /// The pointer table's length: 8 bytes (four 16-bit window pointers) per node.
+    pub const TABLE_LEN: usize = Self::NODES * 8;
+    /// No path in this direction.
+    pub const NO_PATH: u16 = 0xFFFF;
+
+    /// `None` unless the blob is big enough for the table; the streams after it
+    /// are read on demand.
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        (bytes.len() >= Self::TABLE_LEN).then(|| Self {
+            blob: bytes.to_vec(),
+        })
+    }
+
+    /// No graph loaded: [`Self::pointer`] and [`Self::byte_at`] answer `None`, so
+    /// no direction starts a walk.
+    pub fn is_empty(&self) -> bool {
+        self.blob.is_empty()
+    }
+
+    /// The node's raw `dir` pointer — a bank-24 window address, or
+    /// [`Self::NO_PATH`]. `None` for a node past the table or with no graph.
+    pub fn pointer(&self, node: u8, dir: WalkDir) -> Option<u16> {
+        if node as usize >= Self::NODES {
+            return None;
+        }
+        let at = node as usize * 8 + dir as usize * 2;
+        let lo = *self.blob.get(at)?;
+        let hi = *self.blob.get(at + 1)?;
+        Some(lo as u16 | (hi as u16) << 8)
+    }
+
+    /// `$3E8F`: the byte a bank-24 window pointer addresses. The port resolves it
+    /// against the blob rather than a bank, so a pointer outside the extracted
+    /// span answers `None` instead of reading whatever the ROM would find there.
+    pub fn byte_at(&self, ptr: u16) -> Option<u8> {
+        // The table's own window address. `MAP_WALK_ROM` is bank 24's flat
+        // address, and a window address resolves as `flat + ($4000 - bank*$4000)`.
+        let base = MAP_WALK_ROM - (24 * 0x4000 - 0x4000);
+        let off = (ptr as u32).checked_sub(base)?;
+        self.blob.get(off as usize).copied()
+    }
+}
+
+/// `$3E1D7` — whether the held direction opens a level at this node. The caller
+/// is `$3C4D3` (`call $3E1D7 / or a / jp z, $3C5DA`), so the ROM's `0` means the
+/// node's own entry action runs instead of the cursor's walking path.
+///
+/// The ROM's four tests, in the order it applies them: `sMapScreenId != 0`;
+/// `$4218[node] != $FE` (a pure path node — `$FF` is *not* excluded here);
+/// `$6591[slot] & (hKeysHeld & $F0) != 0`, i.e. the held direction must be one
+/// this node offers; and `sLevelProgress[slot]` bit 7 **clear**.
+///
+/// Two places where the port refuses to imitate the ROM: a node whose progress
+/// slot is `$FE`/`$FF` would make `$6591` read past its table, and such nodes are
+/// `$FE` in `$4218` as well, so the second test normally returns first — the port
+/// returns false rather than modelling the out-of-bounds read. And with no table
+/// loaded everything is false.
+pub fn map_enterable(
+    screen_id: u8,
+    node: u8,
+    nodes: &MapNodes,
+    level_progress: &[u8],
+    keys_held: u8,
+) -> bool {
+    if screen_id == 0 {
+        return false;
+    }
+    if nodes.level_byte(node) == Some(0xFE) {
+        return false;
+    }
+    let Some(slot) = nodes.progress_slot(node) else {
+        return false;
+    };
+    if nodes.key_mask(slot).unwrap_or(0) & (keys_held & 0xF0) == 0 {
+        return false;
+    }
+    level_progress.get(slot as usize).copied().unwrap_or(0) & 0x80 == 0
+}
+
 /// The four bytes the fresh-file init (`$30226`) and the blank-slot writer
 /// (`$2913`) both put after the checksum, which `$28EC` checks before it will
 /// accept a slot. `$2934` itself never writes them — and never writes the byte

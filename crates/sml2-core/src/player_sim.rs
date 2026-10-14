@@ -1981,19 +1981,13 @@ impl PlayerSim {
         screen_id: u8,
         keys_held: u8,
     ) -> bool {
-        if screen_id == 0 {
-            return false;
-        }
-        if nodes.level_byte(self.map_node) == Some(0xFE) {
-            return false;
-        }
-        let Some(slot) = nodes.progress_slot(self.map_node) else {
-            return false;
-        };
-        if nodes.key_mask(slot).unwrap_or(0) & (keys_held & 0xF0) == 0 {
-            return false;
-        }
-        self.level_progress.get(slot as usize).copied().unwrap_or(0) & 0x80 == 0
+        crate::map::map_enterable(
+            screen_id,
+            self.map_node,
+            nodes,
+            &self.level_progress,
+            keys_held,
+        )
     }
 
     /// `$3C5F4`: the A/START confirmation that turns an entry-ready node into
