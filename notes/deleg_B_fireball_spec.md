@@ -32,7 +32,7 @@ $060F tail: $0879, $0B2A, $2062, $2D0A,
 `$0F71` tail (addresses exact, byte-verified):
 
 ```
-$0FA8 call $319F   ; death dispatch
+$0FAB call $319F   ; death dispatch ($A224 sMarioDead / tier downgrade)
 $0FAE call $3451   ; item consumer        (already ported)
 $0FB1 call $32C1   ; >>> fireball SPAWN   (B press)
 $0FB4 call $331C   ; >>> fireball MOVE    (2 slots)
@@ -57,7 +57,7 @@ Consequences that matter to the port:
 
 | Site | Range | Role | Callers |
 |---|---|---|---|
-| `$2FED` | `$2FED-$3006` | fireball-vs-object pass: walk the 16 object slots (`hl = $AD00`, stride `$20`, stop when `h == $AF`); for each slot with `[slot+$17] == 0` call `$3007` | only `$3261` (at `$32AE`) |
+| `$2FED` | `$2FED-$3006` | fireball-vs-object pass: walk the 16 object slots (`hl = $AD00`, stride `$20`, stop when `h == $AF`); for each slot with `[slot+$17] == 0` call `$3007` | only `$3261` (at `$32B2`) |
 | `$3007` | `$3007-$307C` | one-slot hit test + response (internal labels `$3071`, `$307C`) | only `$2FED` (at `$2FF9`) |
 | `$324F` | `$324F-$3260` | per-frame pass over the 2 projectile slots at `$A880/$A890` (stride `$10`, stop when `l == $A0`); per active slot call `$3261` | `$0F71` tail |
 | `$3261` | `$3261-$32C0` | per-slot body: screen pair, off-window cull, sprite staging, `$2FED` object pass, kill on hit (internals `$329E`, `$32BD`) | only `$324F` loop (`call nz`) |
@@ -379,7 +379,8 @@ level index 0, node 0.**
 
 * Fire-flower source: spawn record 16, anim 18, at x = 3016, y = 440
   (`raw = [11, 200, 0, 1, 184, 18]`). It is a type-`$80` pose sitting over the `$01`
-  block at col 188, row 28 (layout row 28 cols 187-189 = `01 01 01`, air above).
+  block at row 28 (layout row 28 cols 186-189 are four `$01` cells, air above; x=3016 maps
+  to col 188 by /16 or col 189 by (x+8)>>4 - either way it sits above a `$01`).
   Bump the `$01` from below: `$19D2` allocates the type-3 bump, `$2F72` catches the pose
   (withholding the coin - `sObjectBumpSpecial`), and the object emerges via `$8708` as
   `type = 18 + $70 = $82` -> touch -> `$2DC6` stages pending item 2 -> `$3451` on the
@@ -462,6 +463,8 @@ shot must be taken west of col 211 with the fireball rolling east along row 29.
 * phase table `$3439-$3450`: `03 03 03 03 02 03 02 02 01 02 01 00 00 01 02 01 02 02 03 02 03 03 03 03`.
 * `$3261` mapping id: `06 B0 FA 12 A2 FE FF 28 02 06 B4 F0 97 E6 06 CB 3F 80 E0 C6` +
   `3E 01 E0 BB CD F4 2C`.
+* `$0F71` tail re-verified from raw bytes: `CD 9F 31` at `$0FAB`, `CD 51 34` at `$0FAE`,
+  `CD C1 32` at `$0FB1`, `CD 1C 33` at `$0FB4`, `CD 4F 32` at `$0FB7`, `C9` at `$0FBA`.
 
 ## 9. Claims NOT verified (and what would settle each)
 
