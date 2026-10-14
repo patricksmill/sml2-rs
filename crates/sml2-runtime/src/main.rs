@@ -554,14 +554,18 @@ fn run_window(
     Ok(())
 }
 
-/// Keep a viewport span inside `world`: clamp when it fits, centre when the
-/// viewport is larger than the world.
-fn clamp_axis(lo0: i32, span: i32, world: i32) -> i32 {
-    if span >= world {
-        (world - span) / 2
-    } else {
-        lo0.clamp(0, world - span)
-    }
+/// The BG is a 32x32-tile tilemap = 256 px. The engine loads it with the level's rows and
+/// columns around the camera — clamped into the level, because the window has to hold real
+/// level rows — and never clamps the camera or the view.
+fn window_origin(view: i32, world: i32) -> i32 {
+    view.clamp(0, world - 256)
+}
+
+/// A screen row/column seen through that window: itself inside the level, the window's own
+/// rows again outside it. A 256-px window is a whole number of 16-px metatiles and of 8-px
+/// tiles, so the wrap keeps both grids and the fine scroll intact.
+fn window_coord(v: i32, origin: i32) -> i32 {
+    origin + (v - origin).rem_euclid(256)
 }
 
 /// Render a `vw`x`vh` view centred on the camera as an 8-bit grey frame. The
@@ -601,21 +605,23 @@ fn render_view(
     let shades = video::bgp_shades(pal_override.unwrap_or(manifest.header.palettes[0]));
     let world_w = (LAYOUT_WIDTH * 16) as i32;
     let world_h = (LAYOUT_HEIGHT * 16) as i32;
-    let sx = clamp_axis(cam_x as i32 - vw as i32 / 2, vw as i32, world_w);
-    let sy = clamp_axis(cam_y as i32 - vh as i32 / 2, vh as i32, world_h);
+    // The engine never clamps the view to the level: it leaves the camera where it is and
+    // slides a 256-px tilemap window under it, so with the camera near an edge the view
+    // runs past the level and shows the window's rows again. Clamping the view here (which
+    // this used to do) instead shifted the whole background against Mario's OAM — on level
+    // 5, whose start camera sits at the bottom of a 768-px world (cam_y 704, so the view
+    // top 632 is past 768 - 144), every tile drew 8 px low and Mario looked like he floated
+    // above the block row the console puts him on.
+    let sx = cam_x as i32 - vw as i32 / 2;
+    let sy = cam_y as i32 - vh as i32 / 2;
+    let (ox, oy) = (window_origin(sx, world_w), window_origin(sy, world_h));
     let mut img = vec![shades[0]; vw * vh];
     let mut bg_idx = vec![0u8; vw * vh];
     for py in 0..vh {
-        let wy = sy + py as i32;
-        if !(0..world_h).contains(&wy) {
-            continue;
-        }
+        let wy = window_coord(sy + py as i32, oy);
         let (cy, ty) = ((wy as usize) >> 4, (wy as usize) & 15);
         for px in 0..vw {
-            let wx = sx + px as i32;
-            if !(0..world_w).contains(&wx) {
-                continue;
-            }
+            let wx = window_coord(sx + px as i32, ox);
             let (cx, tx) = ((wx as usize) >> 4, (wx as usize) & 15);
             let key = (cy * 256 + cx) as u32;
             let Some(id) = overlay
@@ -2260,4 +2266,59 @@ fn run_play(
         sim.x, sim.y, cam.x, cam.y
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Load one level's extracted manifest, layout and composed tile block.
+    fn level_files(manifest_name: &str, bg_name: &str) -> (LevelManifest, LevelLayout, Vec<u8>) {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../extracted/levels");
+        let manifest: LevelManifest =
+            serde_json::from_str(&fs::read_to_string(dir.join(manifest_name)).unwrap()).unwrap();
+        let layout =
+            LevelLayout::from_bytes(&fs::read(dir.join(&manifest.layout.file)).unwrap()).unwrap();
+        let bg = fs::read(dir.join(bg_name)).unwrap();
+        (manifest, layout, bg)
+    }
+
+    /// Top row of the level's solid block row in a rendered frame — the row carrying the
+    /// widest run of the palette's darkest shade below row 60 (the block row; the cloud
+    /// outlines never cover a whole row).
+    fn block_row_top(img: &[u8], vw: usize, darkest: u8) -> usize {
+        (60..144)
+            .map(|y| (y, (0..vw).filter(|&x| img[y * vw + x] == darkest).count()))
+            .max_by_key(|&(_, n)| n)
+            .expect("a block row in the frame")
+            .0
+    }
+
+    /// The view must not be clamped into the level's own bounds. Level 5's start camera sits
+    /// at the bottom of a 768-px world (cam_y 704), so the view's top row (632) is past
+    /// `768 - 144`: the engine lets the view overhang and the tilemap window's rows come back
+    /// around under the status bar. Clamping the view to the level instead shifted the whole
+    /// background 8 px down against Mario's OAM, and he looked like he floated above the
+    /// block row. The console — PyBoy, entered through the map route in
+    /// `captures/probe_level_select.py` — draws that block row's top on row 118.
+    #[test]
+    fn a_camera_at_the_level_bottom_does_not_shift_the_background() {
+        let (manifest, layout, bg) = level_files("level06.manifest.json", "level06.bgblock.bin");
+        let darkest = video::bgp_shades(manifest.header.palettes[0])[3];
+        let img = render_view(&manifest, &layout, &[], &bg, 80, 704, 160, 144, None, None, None)
+            .unwrap();
+        assert_eq!(block_row_top(&img, 160, darkest), 118);
+    }
+
+    /// The same frame contract mid-level, where nothing is clamped either way: level 1's
+    /// start camera (80, 448) draws its block row's top on row 120 on the console.
+    #[test]
+    fn a_camera_mid_level_lands_where_the_console_draws_it() {
+        let (manifest, layout, bg) = level_files("level01.manifest.json", "level01.bgblock.bin");
+        let darkest = video::bgp_shades(manifest.header.palettes[0])[3];
+        let img = render_view(&manifest, &layout, &[], &bg, 80, 448, 160, 144, None, None, None)
+            .unwrap();
+        assert_eq!(block_row_top(&img, 160, darkest), 120);
+    }
 }

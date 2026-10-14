@@ -37,6 +37,25 @@ status; `PORT_QUEUE.json` = the backlog (the durable record).
    `sweep.sh` enumerates its captures by name — a new capture file is never picked up
    automatically. Do not run it per-iteration.
 
+## Verifying a rendering claim
+
+The replay gate compares state bytes, so it cannot see a background/sprite
+misalignment — a render bug passes it green (that is how this one survived 171
+tests). When the claim is about the picture, take a console frame and diff it:
+
+```bash
+# console: boot to the level through the map route, then grab the screen
+#   PyBoy, window='null'; the API is `p.screen.image` (there is no `screen_image()`)
+#   from probe_level_select import boot_to_map, enter_level, node_for_level
+# port: the same camera and Mario position
+cargo run -q -p sml2-runtime -- --level N --camera CX CY --mario MX MY 0 --out /tmp/port.png
+```
+
+Compare shade indices row by row (map the console's 153 and the port's 170 onto one
+shade), then slide one image against the other over ±16 rows: the best-fit shift names
+the bug. Keep both frames' cameras in the assertion so the finding is a test, not a
+screenshot.
+
 ## Reading large artifacts
 
 `captures/*.json` are 1–20 MB, `extracted/*.json` several hundred KB, `PORT_QUEUE.json`

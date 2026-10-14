@@ -1151,4 +1151,37 @@ destination and watching it go red; the replay gate green. Filed
 (`$3E1D7`) both use the `$650E` byte directly; the port follows the two that agree
 and the item records why.
 
+## The view is not clamped to the level — 2026-10-14
+
+Reported as "when the camera is manually panned, mario floats in the air". The pan
+was innocent: `render_view` clamped the view origin into the level's own bounds
+(`clamp_axis(cam_y - vh/2, vh, world_h)`), which the engine never does. The camera
+stays where it is and a 256-px BG tilemap window (32x32 tiles) slides under it, so a
+camera near an edge lets the view overhang the level and the window's rows come back
+around.
+
+Level 5's start camera sits at the bottom of its 768-px world — the header says
+`(46, 708)` with the camera at `(80, 704)`, and the console agrees (PyBoy through
+`captures/probe_level_select.py`: node 32 -> `sCurLevel` 5, first state-4 frame
+`mario=(46,708) cam=(80,704)`) — so the view's top row is 632, past `768 - 144 = 624`.
+The clamp pinned it to 624 and drew every tile 8 px low, while Mario's OAM kept using
+the raw camera: he stood in mid-air above the block row on every frame, pan or no pan.
+That is why it showed "from the start" on level 5 (its camera starts at the level's
+bottom) and on other levels only once a pan pushed the camera near an edge.
+
+Fixed by leaving the view origin unclamped and mapping each screen row/column through
+the window: `window_origin` = the window's base (clamped into the level, because the
+window has to hold real level rows), `window_coord` = identity inside the level, the
+window's rows again outside it. A 256-px window is a whole number of 16-px metatiles
+and of 8-px tiles, so the wrap keeps both grids and the fine scroll; the overhang
+lands under the status bar, which is what hides it on the console too.
+
+Pinned by two tests in `crates/sml2-runtime/src/main.rs`, each asserting a row the
+console draws: level 5 at `cam (80, 704)` puts its block row's top on row 118 (the old
+clamp gave 126 on the port and 118 on the console), level 1 at `cam (80, 448)` on row
+120 (unchanged — the clamp never fired mid-level, which is why the gate and 171 unit
+tests never saw this). Whole-frame diffs against PyBoy at those cameras: 273 px and
+268 px of 23040, all of it animated tiles, the sprite's frame and the status-bar
+digits.
+
 
