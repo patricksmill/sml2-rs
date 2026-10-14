@@ -116,6 +116,10 @@ pub mod progress_offset {
     pub const GATE_MACRO: usize = 35;
     /// `$A86D` Mario-Zone gate — set when node `$66` completes.
     pub const GATE_MARIO: usize = 37;
+    /// `$A86E` Pumpkin-Zone gate B — set when node `$78` completes.
+    pub const GATE_PUMPKIN_B: usize = 38;
+    /// `$A86F` Pumpkin-Zone gate C — set when node `$7A` completes.
+    pub const GATE_PUMPKIN_C: usize = 39;
 }
 
 /// The two parallel node tables, as `sml2-extract` writes them.

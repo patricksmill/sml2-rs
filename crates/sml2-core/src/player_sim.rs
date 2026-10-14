@@ -224,6 +224,17 @@ pub struct MapHandoffOutcome {
     pub saves: u8,
     /// The node the hand-off ended on.
     pub node: u8,
+    /// The zone screen the tail selected (`sMapScreenId`), when it selected one.
+    ///
+    /// The ROM's `$3F04D` bands and the castle arm both write `sMapScreenId` and
+    /// then call that screen's loader (`$3D0FF`/`$3D208`/`$3D371`/`$3D49F`/
+    /// `$3D61F`/`$3D79A`/`$3D6EB`/`$3D880`) — the zone gfx, the script pointers,
+    /// the entry cursor and the camera. **Those loaders are not ported**, so the
+    /// screen is REPORTED here rather than entered: both frame loops print a
+    /// `note:` when it is set, and the frame that would have loaded it is the
+    /// unported path. `None` means no band matched (the `$3F142` tail) or the
+    /// node was below `$1E`.
+    pub screen: Option<u8>,
 }
 
 /// Buttons held for one frame (plus a separate press edge for A/Mario).
@@ -1968,10 +1979,17 @@ impl PlayerSim {
         }
         self.map_handoff_done = true;
 
-        // Pass 1 — the bell path.
+        // Pass 1 — the bell path. `$3EF2B` tests `sGoalBell` FIRST and RETURNS:
+        // `call $3F4B1` (or `$3F5A4` when `sMapNode` bit 0 is set — the castle
+        // screens), then `ld a,12 / ldh [$FF9B],a / ei / ret`. So none of the
+        // node rewrite, `$3EEF0` or the node tail below runs on this path, and a
+        // bell-rung level end writes no progress byte and makes no `$2934` save.
+        // The port used to fall through here, which the `$1E`-and-up tail being
+        // unmodelled masked: node `$48` reported `saves == 0` for the wrong reason.
         if self.goal_bell {
             out.cutscene = true;
             self.goal_bell = false;
+            return out;
         }
 
         // Pass 2 — the secret-exit node rewrite.
@@ -2006,24 +2024,100 @@ impl PlayerSim {
             }
         }
 
-        // $3F003/$3F014/$3F024 — the node tail.
-        match self.map_node {
-            // $3F014: a live Mario on the $05/$1A nodes moves to the castle.
-            0x05 | 0x1A if self.dead == 0 => self.map_node = 0x3F,
-            // $3F024: a plain level — mark the stage cleared, move to node $14.
-            0 if self.dead == 0 => {
-                self.level_progress[0] |= 0x80;
-                self.map_node = 0x14;
+        // $3F003 — the node tail. The ROM splits on `sMapNode >= $1E` FIRST:
+        // at or above it every zone/castle node takes the band tree, below it
+        // only $05/$1A and node 0 have a branch, and everything else is the
+        // plain `$3F03D` tail.
+        if self.map_node >= 0x1E {
+            self.zone_tail(&mut out);
+        } else if self.map_node == 0x05 || self.map_node == 0x1A {
+            // $3F014 (`cp $05`/`cp $1A` after the `$1E` test fails): a live Mario
+            // moves to the castle node and the cursor jumps to zone screen 4
+            // ($3F07E -> `$3D49F` -> sMapScreenId = 4). A dead Mario goes
+            // straight to `$3F03D`.
+            if self.dead == 0 {
+                self.map_node = 0x3F;
+                out.screen = Some(4);
             }
-            _ => {}
+        } else if self.map_node == 0 && self.dead == 0 {
+            // $3F024: `or a / jr nz,$3F03D` — only node 0 marks the stage cleared
+            // and moves to node $14.
+            self.level_progress[0] |= 0x80;
+            self.map_node = 0x14;
         }
-        // $3F03D: the common end for every node below $1E — the hub setup, the
-        // second save, and the move to the map state.
-        if self.map_node < 0x1E {
-            out.saves += 1;
-        }
+        // `$3F03D` / `$3F147` / `$3F14C`: every tail path above ends in exactly
+        // one `call $2934` — the bands through `$3F147` (or `$3F142`'s `$3F14C`),
+        // the story nodes through `$3F03D`. The port used to save only when the
+        // node was still below `$1E` at this point, which dropped the save for
+        // every zone node and for the castle move.
+        out.saves += 1;
         out.node = self.map_node;
         out
+    }
+
+    /// `$3F04D`-`$3F14C` — the tail for a node at or above `$1E` (every zone and
+    /// castle node). Each band selects a zone screen; four of the nodes rewrite
+    /// the node as they pass (`$5B`, `$66`, `$78`, `$7A`) and three of those also
+    /// set a gate byte, gated on a live Mario.
+    ///
+    /// The node rewrites and the gate bytes are map state the port consumes
+    /// (`$A86B`-`$A86F` live in the save image's first 64 bytes and the map's own
+    /// cursor helpers read them), so they land here. The screens' loaders do not
+    /// — see [`MapHandoffOutcome::screen`].
+    fn zone_tail(&mut self, out: &mut MapHandoffOutcome) {
+        use crate::map::progress_offset;
+        let n = self.map_node;
+        match n {
+            0x1E..=0x27 => out.screen = Some(2), // $3F04D -> $3D0FF
+            0x28..=0x31 => out.screen = Some(1), // $3F05C -> $3D208
+            0x32..=0x3B => out.screen = Some(3), // $3F06B -> $3D371
+            0x3C..=0x45 => out.screen = Some(4), // $3F07A -> $3D49F
+            0x46..=0x4F => out.screen = Some(5), // $3F089 -> $3D61F
+            0x50..=0x59 => out.screen = Some(6), // $3F098 -> $3D79A
+            0x5A..=0x63 => {
+                if n == 0x5B {
+                    self.map_node = 0x5C; // $3F0B1
+                }
+                out.screen = Some(7); // $3F0B7 -> $3D6EB
+            }
+            // $3F0C2's band: `$66` rewrites to $68 and gates, `$6A`/`$6B`/`$6C`
+            // jump back into the screen-3 arm, the rest take `$3F03D`.
+            0x66 => {
+                self.map_node = 0x68; // $3F0C8
+                if self.dead == 0 {
+                    self.set_gate(progress_offset::GATE_MARIO); // $3F0D4: set 7
+                }
+            }
+            0x6A | 0x6B | 0x6C => out.screen = Some(3), // $3F0E4 -> $3F06F
+            0x6E..=0x77 => out.screen = Some(8),        // $3F0F6 -> $3D880
+            // $3F104: `$78` rewrites to $2E and gates, then takes screen 1
+            // whether or not Mario is alive.
+            0x78 => {
+                self.map_node = 0x2E; // $3F10C
+                if self.dead == 0 {
+                    self.set_gate(progress_offset::GATE_PUMPKIN_B); // $3F118
+                }
+                out.screen = Some(1); // $3F060 -> $3D208
+            }
+            0x7A => {
+                self.map_node = 0x31; // $3F12B
+                if self.dead == 0 {
+                    self.set_gate(progress_offset::GATE_PUMPKIN_C); // $3F136
+                }
+                out.screen = Some(1); // $3F060
+            }
+            // $3F142 (`call $3F156 / jr $3F14C`): a node with no band of its own —
+            // no screen, just the tail's save.
+            _ => {}
+        }
+    }
+
+    /// `set 7, [hl]` on one of the map's gate bytes — an OR into the byte at
+    /// `sLevelProgress + off`, which is why it is not a store.
+    fn set_gate(&mut self, off: usize) {
+        if let Some(b) = self.level_progress.get_mut(off) {
+            *b |= 0x80;
+        }
     }
 
     /// Everything the object engine writes back into Mario's state after its
@@ -2875,40 +2969,45 @@ mod tests {
         assert_eq!(sim.map_node, 0x14);
     }
 
-    /// The bell path is *two* passes: the cutscene setup (`$3F4B1`) clears
-    /// `sGoalBell`, and the re-entry at its end then does the map-return half.
-    /// The port has no cutscene, so it collapses them into one call — but pass 2
-    /// must still happen, or a bell clear would never mark progress.
+    /// `$3EF2B`'s bell branch: `call $3F4B1` (or `$3F5A4`) then
+    /// `ld a,12 / ldh [$FF9B],a / ei / ret` — the castle reveal, which CLEARS
+    /// `sGoalBell` and leaves the level through the state byte without running
+    /// the map-return half. The port used to fall through into pass 2 here; the
+    /// ROM returns, and the level's own progress write does not happen on this
+    /// path (the castle branch does its own bookkeeping in `$3F4B1`/`$3F5A4`).
     #[test]
-    fn map_handoff_bell_path_clears_the_bell_then_runs_the_map_return() {
+    fn map_handoff_bell_path_is_the_castle_branch_and_returns() {
         let nodes = handoff_nodes();
 
-        // Level 1's own clear: the bell rings, so pass 1 runs and clears
-        // sGoalBell, and pass 2 then does the map-return half for node 0.
+        // `$3EF2B` tests `sGoalBell` first: a ringing bell takes the castle
+        // branch (`$3F4B1`, or `$3F5A4` when `sMapNode` bit 0 is set) and RETURNS
+        // at `$3EF4F` — no node rewrite, no `$3EEF0`, no tail save, no progress
+        // write. The port used to fall through and run the map return for this
+        // case; that assertion passed `saves == 0` for node `$48` only because the
+        // `$1E`-and-up tail was unmodelled.
         let mut sim = small_sim();
         sim.goal_bell = true;
         let out = sim.map_handoff(&nodes);
-        assert!(out.cutscene, "pass 1 ran");
+        assert!(out.cutscene, "the castle branch ran");
         assert!(!sim.goal_bell, "$3F4B1/$3F5A4 clear sGoalBell");
-        assert_eq!(out.saves, 2, "the map-return half still saves twice");
+        assert_eq!(out.saves, 0, "the bell branch returns before any $2934");
+        assert_eq!(sim.map_node, 0, "and before the node tail");
         assert_eq!(
             sim.level_progress[0] & 0x80,
-            0x80,
-            "and marks the stage cleared"
+            0,
+            "nor does it write a progress byte"
         );
-        assert_eq!(sim.map_node, 0x14);
+        assert_eq!(out.screen, None);
 
-        // A node of $1E and up takes the map-screen branches instead, which this
-        // port does not model — so it reports no saves for those, while pass 1
-        // and the sGoalBell clear still happen.
         let mut high = small_sim();
         high.goal_bell = true;
         high.map_node = 0x48;
         let out_high = high.map_handoff(&nodes);
         assert!(out_high.cutscene);
         assert!(!high.goal_bell);
-        assert_eq!(out_high.saves, 0, "$1E-and-up branches are unmodelled");
-        assert_eq!(high.map_node, 0x48, "the rewrite needs sExitTileFlag");
+        assert_eq!(out_high.saves, 0, "the bell branch returns before any $2934");
+        assert_eq!(high.map_node, 0x48, "the node is left alone");
+        assert_eq!(out_high.screen, None);
     }
 
     /// The `$4B` secret exit rewrites the node: that exit opens a different
@@ -2995,6 +3094,167 @@ mod tests {
         secret.exit_tile_flag = 0xFF;
         secret.map_handoff(&nodes);
         assert_eq!(secret.map_node, 0x69, "the $4B rewrite wins");
+    }
+
+    /// `$3F04D`'s bands: every node at or above `$1E` selects a zone screen on the
+    /// way back to the map, and the ones `$3F142` catches select none. The screens
+    /// themselves (`$3D0FF`/`$3D208`/… — their gfx, scripts, cursor and camera)
+    /// are NOT ported, so the selection is reported in `out.screen` rather than
+    /// entered; the frame loops print a `note:` for it.
+    #[test]
+    fn map_handoff_tail_selects_the_zone_screen_bands() {
+        let nodes = handoff_nodes();
+        for (node, screen) in [
+            (0x1Eu8, 2u8),
+            (0x27, 2),
+            (0x28, 1),
+            (0x31, 1),
+            (0x32, 3),
+            (0x3B, 3),
+            (0x3C, 4),
+            (0x45, 4),
+            (0x46, 5),
+            (0x4F, 5),
+            (0x50, 6),
+            (0x59, 6),
+            (0x5A, 7),
+            (0x63, 7),
+            (0x6A, 3),
+            (0x6E, 8),
+            (0x77, 8),
+            (0x78, 1),
+            (0x7A, 1),
+        ] {
+            let mut sim = small_sim();
+            sim.map_node = node;
+            let out = sim.map_handoff(&nodes);
+            assert_eq!(out.screen, Some(screen), "node ${node:02X}");
+        }
+        // `$3F142`'s tail — a node with no band of its own.
+        for node in [0x64u8, 0x65, 0x67, 0x69, 0x79, 0x7B] {
+            let mut sim = small_sim();
+            sim.map_node = node;
+            let out = sim.map_handoff(&nodes);
+            assert_eq!(out.screen, None, "node ${node:02X} has no band");
+            assert_eq!(out.saves, 1, "but $3F14C still saves once");
+        }
+    }
+
+    /// The four rewriting nodes: `$5B`→`$5C` un-gated, `$66`→`$68` with the
+    /// Mario-Zone gate, `$78`→`$2E` with Pumpkin gate B and `$7A`→`$31` with gate
+    /// C. The gate write is `set 7, [hl]` (an OR) and needs a LIVE Mario — but the
+    /// rewrite and the screen selection happen either way.
+    #[test]
+    fn map_handoff_tail_rewrites_the_gate_nodes() {
+        use crate::map::progress_offset as po;
+        let nodes = handoff_nodes();
+
+        let mut sim = small_sim();
+        sim.map_node = 0x5B;
+        let out = sim.map_handoff(&nodes);
+        assert_eq!(sim.map_node, 0x5C, "ungated rewrite");
+        assert_eq!(out.screen, Some(7));
+
+        for (node, want, gate, screen) in [
+            (0x66u8, 0x68u8, po::GATE_MARIO, None),
+            (0x78, 0x2E, po::GATE_PUMPKIN_B, Some(1u8)),
+            (0x7A, 0x31, po::GATE_PUMPKIN_C, Some(1)),
+        ] {
+            let mut live = small_sim();
+            live.map_node = node;
+            live.level_progress[gate] = 0x01; // `set 7` must OR, not store
+            let live_out = live.map_handoff(&nodes);
+            assert_eq!(live.map_node, want, "node ${node:02X}");
+            assert_eq!(live.level_progress[gate], 0x81, "set 7, [hl]");
+            assert_eq!(live_out.screen, screen, "node ${node:02X}");
+
+            let mut dead = small_sim();
+            dead.map_node = node;
+            dead.dead = 0x80;
+            let dead_out = dead.map_handoff(&nodes);
+            assert_eq!(dead.map_node, want, "the rewrite is not gated on death");
+            assert_eq!(dead.level_progress[gate], 0, "a dead Mario sets no gate");
+            assert_eq!(dead_out.screen, screen, "the screen is selected either way");
+        }
+    }
+
+    /// `$3F014`: a live Mario on the `$05`/`$1A` nodes moves to the castle WITH
+    /// zone screen 4 selected (`$3F07E` → `$3D49F` → `sMapScreenId = 4`); a dead
+    /// Mario goes straight to `$3F03D`, node unchanged and no screen.
+    #[test]
+    fn map_handoff_castle_arm_selects_screen_4_only_for_a_live_mario() {
+        let nodes = handoff_nodes();
+        for from in [0x05u8, 0x1A] {
+            let mut live = small_sim();
+            live.map_node = from;
+            let out = live.map_handoff(&nodes);
+            assert_eq!(live.map_node, 0x3F, "node ${from:02X} -> the castle");
+            assert_eq!(out.screen, Some(4));
+
+            let mut dead = small_sim();
+            dead.map_node = from;
+            dead.dead = 0x80;
+            let dead_out = dead.map_handoff(&nodes);
+            assert_eq!(dead.map_node, from, "a dead Mario's node does not move");
+            assert_eq!(dead_out.screen, None);
+        }
+    }
+
+    /// The tail's own `$2934`: every path through `$3F003` saves exactly once
+    /// (`$3F03D`, `$3F147` and `$3F14C` each end in a `call $2934`), on top of
+    /// whatever `$3EEF0` did. The port used to save only while the node was still
+    /// below `$1E` at that point, which dropped the save for every zone node and
+    /// for the castle move.
+    #[test]
+    fn map_handoff_tail_saves_once_for_every_node_class() {
+        let nodes = handoff_nodes();
+        // Node 0 has slot 0: `$3EEF0` saves once, then `$3F03D` again.
+        let mut zero = small_sim();
+        assert_eq!(zero.map_handoff(&nodes).saves, 2);
+        // A node with no progress slot in this fixture: the tail's save only —
+        // whichever band it takes, including the band-less `$3F142` tail.
+        for node in [0x1Eu8, 0x50, 0x78, 0x64, 0x7B] {
+            let mut zone = small_sim();
+            zone.map_node = node;
+            assert_eq!(zone.map_handoff(&nodes).saves, 1, "node ${node:02X}");
+        }
+        // Node `$05` DOES have a slot here (`$1F`): `$3EEF0` + the tail.
+        let mut castle = small_sim();
+        castle.map_node = 0x05;
+        assert_eq!(castle.map_handoff(&nodes).saves, 2);
+    }
+
+    /// The `$650E`/`$3C364` settlement, as a test rather than a note: the byte
+    /// `map_handoff` writes progress through is the SAME byte the map's entry gate
+    /// reads back, through `MapNodes::progress_slot`. `$3EEF0` (the writer) and
+    /// `$3E1D7` (the gate) both index `sLevelProgress` with `$650E[node]` directly
+    /// — and `$650E` is also the `$6591` key-mask index and the `$3C6xx` node-action
+    /// index, so it is one slot space. The only ROM site that inserts the `$3C364`
+    /// diff-table is `$3C32D`, the map's own auto-walk, whose table is
+    /// non-monotonic (`$3C364[$13] = $10 < $3C364[$12] = $13`) and therefore not a
+    /// re-indexing of the same space. If one of the three consumers is ever
+    /// switched to the other convention, this fails.
+    #[test]
+    fn the_progress_slot_is_one_convention_for_the_writer_and_the_gate() {
+        let nodes = handoff_nodes();
+        assert_eq!(nodes.progress_slot(0), Some(0), "node 0 is slot 0");
+        let mut sim = small_sim();
+        assert!(
+            sim.map_can_enter(&nodes, 1, 0x40),
+            "enterable while the stage is uncleared"
+        );
+        sim.map_handoff(&nodes);
+        assert_eq!(
+            sim.level_progress[0] & 0x80,
+            0x80,
+            "the writer's byte: sLevelProgress[slot]"
+        );
+        sim.map_node = 0;
+        sim.map_handoff_done = false;
+        assert!(
+            !sim.map_can_enter(&nodes, 1, 0x40),
+            "and the gate reads the same byte back"
+        );
     }
 
     /// `$2934`'s record: the node at +0, `sLevelProgress` at +8, the five

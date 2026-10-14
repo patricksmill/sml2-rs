@@ -1284,7 +1284,8 @@ fn run_replay(
                 sim.exit_fade_step();
             }
             if exit_done_at_entry {
-                sim.map_handoff(&nodes);
+                let handoff = sim.map_handoff(&nodes);
+                note_handoff_screen(&handoff);
             }
         } else if was_dead {
             sim.death_arc(cam.y);
@@ -1988,6 +1989,22 @@ fn run_replay(
     Ok(())
 }
 
+/// A hand-off whose tail selected a zone screen is an UNPORTED path: the ROM's
+/// `$3D0FF`/`$3D208`/`$3D371`/`$3D49F`/`$3D61F`/`$3D79A`/`$3D6EB`/`$3D880`
+/// loaders (the screen's gfx, its script pointers, the entry cursor and the
+/// camera) are not in the port, so `PlayerSim::map_handoff` reports the screen
+/// instead of entering it. One printer for both frame loops: a `note:` fails the
+/// sweep, so this is what makes a capture that reaches the path loud rather than
+/// silently leaving the map on a screen nothing loaded.
+fn note_handoff_screen(out: &sml2_core::player_sim::MapHandoffOutcome) {
+    if let Some(s) = out.screen {
+        println!(
+            "note: the map hand-off selected zone screen ${s:02X} \
+             ($3Dxxx loader not ported)"
+        );
+    }
+}
+
 /// Parse a 32-hex-char dump into 16 bytes (a `sBlockAnimSlots` entry).
 fn parse_slot16_hex(s: &str) -> Option<[u8; 16]> {
     if s.len() != 32 {
@@ -2127,7 +2144,8 @@ fn run_play(
             // See the replay loop: `$FF9B = $14` comes from the fade's last
             // frame, so the hand-off body runs one frame later.
             if exit_done_at_entry {
-                sim.map_handoff(&nodes);
+                let handoff = sim.map_handoff(&nodes);
+                note_handoff_screen(&handoff);
             }
         } else if was_dead {
             sim.death_arc(cam.y);

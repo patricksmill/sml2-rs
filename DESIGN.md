@@ -1237,4 +1237,54 @@ every other capture in the suite is all-zero, so nothing was hiding behind the o
 the new `moon` check was proven to go red (`REGRESSION traj19 nonzero: moon=1308`) with the
 seed removed.
 
+## The level→map hand-off is reconciled with `$3EF2B` — 2026-10-14
+
+`PlayerSim::map_handoff` was written before `$3EF2B` was read. Reading it (main.asm:24126)
+found three defects and one non-defect, all now fixed or settled.
+
+**The bell branch RETURNS.** `$3EF2B`'s first test is `sGoalBell`: a ringing bell calls
+`$3F4B1` (or `$3F5A4` when `sMapNode` bit 0 is set — the castle screens) and leaves at
+`$3EF4F` with `ld a,12 / ldh [$FF9B],a / ei / ret`. There is no node rewrite, no `$3EEF0`,
+no tail and no `$2934` save on that path. The port fell through into the map return, and the
+test that covered it passed `saves == 0` for node `$48` **only because the `$1E`-and-up tail
+was unmodelled** — a green test hiding a wrong branch, which is why the branch now has its
+own test asserting `saves == 0` and `map_node == 0` for the right reason.
+
+**The tail is a band tree, not a two-arm match.** `$3F003` splits on `sMapNode >= $1E`
+FIRST: at or above it `$3F04D`-`$3F14C` selects a zone screen per band (and, at four nodes,
+rewrites the node and sets a gate byte), below it only `$05`/`$1A` (→ the castle node `$3F`
++ screen 4) and node 0 (→ `sLevelProgress[0] bit 7` + node `$14`) have a branch. Every one of
+those paths ends in exactly ONE `call $2934`; the port saved only while the node was still
+below `$1E` at that point, so it dropped the save for every zone node and for the castle
+move. Bands: `$1E-$27`→screen 2 (`$3D0FF`), `$28-$31`→1 (`$3D208`), `$32-$3B`→3 (`$3D371`),
+`$3C-$45`→4 (`$3D49F`), `$46-$4F`→5 (`$3D61F`), `$50-$59`→6 (`$3D79A`), `$5A-$63`→7
+(`$3D6EB`, with `$5B`→`$5C`), `$64-$6D` (`$66`→`$68` + `set 7` on `sMapGateMario` `$A86D`;
+`$6A`/`$6B`/`$6C` → screen 3), `$6E-$77`→8 (`$3D880`), `$78`→`$2E` + `set 7` on
+`sMapGatePumpkinB` `$A86E` → screen 1, `$7A`→`$31` + `set 7` on `sMapGatePumpkinC` `$A86F` →
+screen 1, and `$3F142` for everything else (no screen, the tail save). The three gate writes
+and the node rewrites need a LIVE Mario; the screen selection and `$5B`'s rewrite do not.
+
+**The screen loaders are NOT ported, so the selection is reported, not entered.**
+`MapHandoffOutcome::screen` carries the `sMapScreenId` the tail selected, and both frame
+loops print a `note:` for it (one shared printer, so the two loops cannot disagree about
+whether the path is loud). A capture that exits a level on a node `$1E` or above therefore
+FAILS the gate rather than leaving the map parked on a screen nothing loaded — the
+"half-ported state machine fails harder than an unported one" rule, applied. Filed as
+`map_zone_screen_loaders` with the band table and the loader addresses.
+
+**The `$650E`/`$3C364` question is settled: the byte is the `sLevelProgress` index.** Three
+sites read it and two agree: `$3EEF0` (the writer, main.asm:24089) and `$3E1D7` (the entry
+gate, 22451) both `ld hl,$650E / add hl,bc` and then use the byte *directly* as the
+`sLevelProgress` offset — and both also use it as the `$6591` key-mask index, which is what
+makes it one slot space (the port's `MapNodes::progress_slot`). `$3EF2B`'s own node-action
+dispatch compares the same byte against `$05`/`$09`/`$0E`/`$11`/`$17`/`$1D`. The only site
+that inserts the `$3C364` table is `$3C32D` — the map's auto-walk, whose job is to fake the
+node's own direction press (`ldh [$FF81],a`) — and `$3C364` is non-monotonic
+(`$3C364[$13] = $10` while `$3C364[$12] = $13`), so it is not a re-indexing of the same
+space. `$304F1` is a *per-level* table (indexed by `sCurLevel`) and disagrees with `$3C364`
+on 18 of the 25 level nodes, so it is not the same mapping either. The port keeps the direct
+convention, and a test now couples the two consumers: a level cleared through
+`map_handoff` is refused by `map_can_enter` on the same byte, so switching either side to the
+other convention fails instead of silently shifting every flag by one.
+
 
