@@ -2405,6 +2405,28 @@ impl PlayerSim {
     /// in one place is what stops that recurring; `keys_a` is `hKeysHeld` bit 0,
     /// because `$2E5C`'s stomp jump is 75 with A held and 48 without.
     pub fn apply_object_result(&mut self, obj: &mut crate::objects::ObjectSim, keys_a: bool) {
+        // The bank-2 boss helpers write the sound/music bytes and the
+        // boss-clear fade directly (`$9285`'s sfx + `$92C4`'s fade, `$9443`'s
+        // music stop); the player sim owns the live bytes, so hand them over
+        // the same way the item/stomp fields above are handed over.
+        if obj.sfx0 != 0 {
+            self.sfx0 = obj.sfx0;
+            obj.sfx0 = 0;
+        }
+        if obj.sfx1 != 0 {
+            self.sfx1 = obj.sfx1;
+            obj.sfx1 = 0;
+        }
+        if obj.sfx2 != 0 {
+            self.sfx2 = obj.sfx2;
+            obj.sfx2 = 0;
+        }
+        if let Some(track) = obj.music_request.take() {
+            self.music_request = track;
+        }
+        if let Some(t) = obj.fade_timer_set.take() {
+            self.fade_timer = t;
+        }
         // The `$8000` dispatcher gate reads `sMarioDead`, and the interaction
         // pass writes it back (15 on a harmful hit).
         if self.dead == 0 && obj.mario_dead != 0 {

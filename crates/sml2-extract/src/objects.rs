@@ -35,6 +35,14 @@ const MAP_PTR_B_ROM: usize = 0xCF11;
 /// a lone `ret` at `$9322`, the same "inert anim" idiom as the level table's
 /// `$58100`; with `+ $54000` 13 of the 29 entries land mid-instruction.
 const BOSS_ANIM_BEHAVIOR_ROM: usize = 0x92E8;
+/// The boss pickers' shared step profile (bank 2, file `$B1A3`); 38 bytes run
+/// before the next routine's code. All the `$B173`-family pickers read it.
+const BOSS_PICKER_PROFILE_ROM: usize = 0xB1A3;
+const BOSS_PICKER_PROFILE_LEN: usize = 38;
+/// The def-0 boss's sweep profile (bank 2, file `$9595`): a 27-byte ramp then
+/// zeros; the handlers index it through `$B16B`.
+const BOSS_SWEEP_PROFILE_ROM: usize = 0x9595;
+const BOSS_SWEEP_PROFILE_LEN: usize = 112;
 /// anim -> behavior handler `dw`, 96 entries; bank $16 dispatcher `$58000`
 /// (mode A), table begins right after its `rst $28`.
 const ANIM_BEHAVIOR_A_ROM: usize = 0x58040;
@@ -318,6 +326,12 @@ pub fn extract(rom: &[u8]) -> Result<ObjectTables, String> {
         sprite_mappings_a,
         sprite_mappings_b,
         boss_anim_handlers,
+        boss_picker_profile: rom
+            [BOSS_PICKER_PROFILE_ROM..BOSS_PICKER_PROFILE_ROM + BOSS_PICKER_PROFILE_LEN]
+            .to_vec(),
+        boss_sweep_profile: rom
+            [BOSS_SWEEP_PROFILE_ROM..BOSS_SWEEP_PROFILE_ROM + BOSS_SWEEP_PROFILE_LEN]
+            .to_vec(),
         anim_profiles_a,
         anim_profiles_b,
         player_mappings,

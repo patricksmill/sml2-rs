@@ -1111,6 +1111,7 @@ fn build_contact(sim: &PlayerSim, keys: &PlayerKeys, pan: u8) -> sml2_core::obje
         star_high: sim.star_high,
         invincibility: sim.invincibility,
         flutter: 0,
+        fade_timer: sim.fade_timer,
         vvel: sim.vvel,
         on_ground: sim.on_ground,
         on_object: sim.on_ground_obj,

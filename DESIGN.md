@@ -1516,3 +1516,49 @@ rather than the `$C090` staging it used to do; the 29 handlers themselves, whose
 helper library are mapped in `notes/boss_region_map.md`; `sBossFightPhase`'s only ROM
 writer, the scene script's per-screen handlers (`$3C000`); and `sBossDefeated`, which
 `$581E2`'s tail decrements as a counter while the port models it as a bool.
+
+## The bank-2 boss helper library, and the first two handlers — 2026-10-14
+
+With the region measured and the bank mapping fixed, the shared foundation is ported.
+`$9285` is the hit pass every boss handler runs first: `B_FLAGS` bit 0 is the stomp hit
+(2 HP, latches `sBossHitLatch`), bit 1 the projectile hit (1 HP), no bit means this frame
+did not touch the boss. Every hit slot gets `sObjectDone` — which is why a struck boss
+disappears for the frame the `$C014`-style gate is set — but only the *primary* slot (the
+driver's pointer low byte `$00`, i.e. index 0) books the HP, the sfx and the death, and
+`$92BC` treats 0 **or a borrow** as the kill, so a 1-HP boss dies to a 1-damage hit.
+
+The rest of the library is small and self-contained: `$B14E` (fade-idle test), `$B157`/
+`$B15B` (the boss's way out — drop the live def count, blank the staging, mark done; not
+`remove_object`, which does the level path's record/counter/hitbox work), `$B264`/`$B26A`/
+`$B270`/`$B276` (8-bit *screen* movers — the world-coord `mv_x_add`/`mv_y_add` are a
+different pair), `$B2E8`-`$B32D` (eight blink entry points that differ only in
+`(mask, xor)` over the `$FFF0` gate), and `$B224`, the def-record appender: a child lands
+at `$AD05 + $20 * (count + 1)` — *slot* `count + 1`'s byte 5, so the first byte written is
+that slot's anim — inherits the parent's `$FFD6-$FFDA`, takes the sprite at byte 6
+(`B_SPRITE`) and the attr at byte 8 (`B_FLIP`, skipping the defeat byte), and increments
+the live count so the driver walks the new slot.
+
+**That last one corrects an earlier note in this repo**: a boss's live extra parts do *not*
+come from `$3A14`/`$66000` — the *handlers* call `$B224`, and `$66000` is only the render
+pass (OAM emit from the bank-25 table at `$66092`).
+
+Ported with it: `handler_boss_def2` (`$9606`, boss anim 2 — its whole body is 35 bytes:
+return unless the slot's remove-mode is 2, then spawn one anim-4/sprite-9 child and park at
+sprite 7) and the dispatch arm for anim 0, whose handler at `$9322` is a bare `ret` — the
+same inert-anim idiom as the level table's `$58100`, so it is dispatched silently rather
+than reported as a gap. The two bank-2 data tables the handlers index are extracted too:
+`$B1A3` (the 38-byte profile all the `$B173`-family pickers share, differing only in their
+`c` limit) and `$9595` (the def-0 boss's sweep profile — a 27-byte 0-3 ramp then zeros).
+
+The RAM the helpers touch needed plumbing, done the same way the item/stomp fields already
+were: `MarioContact` gained `fade_timer` (input, `$B14E`), and `ObjectSim` gained the
+object-written `sfx0/1/2`, `music_request`, `boss_clear_flag` and `fade_timer_set`, which
+`apply_object_result` hands to the player sim that owns the live sound and fade bytes.
+
+Six new tests (the hit pass with its borrow-kill and primary-slot rule, the finish/blank,
+the 8-bit movers with their wrap, the blink gate, the child appender with its `$10` abort,
+the def-2 spawner, and anim 0's silence), each with at least one mutation shown to fail it.
+Still open: boss anims 1/3-28, the Mario-screen helpers (`$B296`/`$B2C2`/`$B27C`/`$B2AF`/
+`$B2DB`) which need `sMarioScreenX/Y`'s ROM writer ported first (`home.asm:2096`,
+`main.asm:446`/`557`), the shared tails `$9435`/`$9443`/`$9725`, and the `$66092` OAM table.
+

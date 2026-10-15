@@ -95,6 +95,15 @@ pub struct ObjectTables {
     pub sprite_mappings_b: Vec<Vec<MappingEntry>>,
     /// anim -> behavior profile (bank $16 per-anim code), mode A (96) /
     /// mode B (112).
+    /// The boss handlers' shared step profile (file `$B1A3`, 38 bytes): the
+    /// `$B173`-family pickers all read this one table, differing only in the
+    /// `c` limit they pass (8/12/15/18/21/24/27/36). Values are 0-3.
+    #[serde(default)]
+    pub boss_picker_profile: Vec<u8>,
+    /// The def-0 boss's sweep profile (file `$9595`, 112 bytes): a 27-byte
+    /// 0-3 ramp then zeros, indexed by `B_PHASE` through `$B16B`.
+    #[serde(default)]
+    pub boss_sweep_profile: Vec<u8>,
     /// anim -> handler for the *boss* path (`$92DF`'s `rst $28` table, bank 2
     /// `$92E8`). Unlike the level profiles (`$58040`/`$59C07`, bank 22), these
     /// entries are **bank-2** addresses — `rst $28` jumps inside the bank that

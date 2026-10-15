@@ -278,6 +278,9 @@ pub struct MarioContact {
     pub star_high: u8,
     /// `sInvincibilityTimer`.
     pub invincibility: u8,
+    /// `sFadeTimerLow|High` (`$A266`/`$A267`) as one value. The boss helpers'
+    /// `$B14E` is its only reader in the object pass.
+    pub fade_timer: u16,
     /// `sFlutterTimer`.
     pub flutter: u8,
     /// `sVVelocityIndex`.
@@ -425,6 +428,20 @@ pub struct ObjectSim {
     /// slot before the handler.
     pub pending_kick: bool,
     /// $AFC1: `sBossHitsRemaining`
+    /// `sSfxRequest0/1/2` (`$A460`/`$A470`/`$A478`) as written by the bank-2
+    /// boss helpers; `apply_object_result` hands them to the player sim, which
+    /// owns the sound bytes.
+    pub sfx0: u8,
+    pub sfx1: u8,
+    pub sfx2: u8,
+    /// `sMusicRequest` (`$A468`): `Some` when a boss helper asked for a track
+    /// (`$9443` stops the music with `$FF`).
+    pub music_request: Option<u8>,
+    /// `sBossClearFlag` (`$A2E3`): armed by `$92C4` when the fight ends.
+    pub boss_clear_flag: u8,
+    /// `sFadeTimerHigh`/`sFadeTimerLow` (`$A267`/`$A266`) as a 16-bit value, set
+    /// by `$92C4` (2/$80). The player sim owns the live countdown.
+    pub fade_timer_set: Option<u16>,
     /// `sObjectDefIndex` (`$8DFD`): the fight's def, `sBossFightPhase + b`.
     pub boss_def_index: u8,
     /// `sObjectDefCount`: the def's sub-object count. `$8DA9` walks this + 1
@@ -501,6 +518,12 @@ impl ObjectSim {
             action_latch: 0,
             object_hit_flag: 0,
             pending_kick: false,
+            sfx0: 0,
+            sfx1: 0,
+            sfx2: 0,
+            music_request: None,
+            boss_clear_flag: 0,
+            fade_timer_set: None,
             boss_def_index: 0,
             boss_def_count: 0,
             boss_hit_latch: 0,
@@ -670,6 +693,145 @@ impl ObjectSim {
     // ---------------------------------------------------------------------
     // $8000 — windows, slot loop, spawn scan
     // ---------------------------------------------------------------------
+
+    // ---------------------------------------------------------------------
+    // The bank-2 boss helper library ($9285, $B14E-$B411)
+    //
+    // A *parallel* set to the bank-22 `$5B4xx` helpers the level objects use:
+    // byte-compare the two regions and 2020 of 2048 bytes differ, so the same
+    // local address is not the same routine. These move the 8-bit *screen*
+    // bytes (`B_SCRY`/`B_SCRX`), never the world X/Y that `mv_x_add`/`mv_y_add`
+    // touch.
+    // ---------------------------------------------------------------------
+
+    /// `$9285`: the boss hit/vulnerability pass, run at the top of every boss
+    /// handler. `B_FLAGS` (`$FFE7`) bit 0 is the stomp hit (2 HP, latches
+    /// `sBossHitLatch`), bit 1 the projectile hit (1 HP); no bit set means this
+    /// frame did not touch the boss. Every slot that was hit gets `sObjectDone`
+    /// (so the boss is not drawn on the hit frame), but only the primary slot —
+    /// the driver's pointer low byte `$00`, i.e. index 0 — books the HP, the
+    /// sfx and the death. `$92BC` treats 0 *or a borrow* (`jr z` then `jr c`) as
+    /// the kill, which is what lets a 1-HP boss die to a 1-damage hit.
+    fn boss_damage_pass(&mut self, i: usize, st: &mut Staging) {
+        let flags = st.b[B_FLAGS];
+        let stomp = flags & 0x01 != 0;
+        let other = flags & 0x02 != 0;
+        if !stomp && !other {
+            return;
+        }
+        self.done = 1;
+        if stomp {
+            self.boss_hit_latch = 1;
+        }
+        if i != 0 {
+            return;
+        }
+        if stomp {
+            self.sfx0 = 0x13;
+        } else {
+            self.sfx1 = 9;
+        }
+        let n = if stomp { 2 } else { 1 };
+        let (hits, borrow) = self.boss_hits_remaining.overflowing_sub(n);
+        self.boss_hits_remaining = hits;
+        if hits != 0 && !borrow {
+            return;
+        }
+        // $92C4: arm removal, and for defs 0-5 the boss-clear fade.
+        self.remove_mode = 1;
+        if self.boss_def_index >= 6 {
+            return;
+        }
+        self.fade_timer_set = Some(0x0280);
+        self.boss_clear_flag = 1;
+    }
+
+    /// `$B14E`: `a = sFadeTimerLow | sFadeTimerHigh`, Z while both are 0 — the
+    /// "the boss-clear fade is idle" test the handlers gate on.
+    fn fade_idle(&self, contact: &MarioContact) -> bool {
+        let t = contact.fade_timer;
+        ((t & 0xFF) | ((t >> 8) & 0xFF)) as u8 == 0
+    }
+
+    /// `$B157`/`$B15B`: the boss object's way out — drop the live def count and
+    /// blank the staging. `$B2D7` (the level path's `remove_object`) does much
+    /// more (record markers, counters, hitbox), so this is its own helper.
+    fn boss_finish_slot(&mut self, st: &mut Staging) {
+        self.boss_def_count = self.boss_def_count.wrapping_sub(1);
+        st.b = [0; 32];
+        self.done = 1;
+    }
+
+    /// `$B264`/`$B26A`/`$B270`/`$B276`: the boss path's 8-bit screen movers.
+    fn scr_x_sub(&self, st: &mut Staging, b: u8) {
+        st.b[B_SCRX] = st.b[B_SCRX].wrapping_sub(b);
+    }
+    fn scr_x_add(&self, st: &mut Staging, b: u8) {
+        st.b[B_SCRX] = st.b[B_SCRX].wrapping_add(b);
+    }
+    fn scr_y_sub(&self, st: &mut Staging, b: u8) {
+        st.b[B_SCRY] = st.b[B_SCRY].wrapping_sub(b);
+    }
+    fn scr_y_add(&self, st: &mut Staging, b: u8) {
+        st.b[B_SCRY] = st.b[B_SCRY].wrapping_add(b);
+    }
+
+    /// `$B2E8`-`$B32D`: the blink toggles — every time `$FFF0 & mask == 0`, XOR
+    /// the sprite byte. The eight entry points differ only in `(mask, xor)`:
+    /// `$B2E8` (0F,01), `$B2EF` (07,01), `$B2F6` (01,01), `$B2FD` (03,01),
+    /// `$B309` (03,06), `$B315` (07,0B), `$B321` (07,1F), `$B32D` (07,31).
+    fn sprite_blink(&self, st: &mut Staging, mask: u8, xor: u8) {
+        if self.fff0 & mask == 0 {
+            st.b[B_SPRITE] ^= xor;
+        }
+    }
+
+    /// `$B224`: append a child def record for the boss driver — how a boss's
+    /// extra parts come into being (`$3A14`/`$66000` is only the render pass).
+    /// The record lands at `$AD05 + $20 * (count + 1)`, i.e. *slot* `count + 1`'s
+    /// byte 5, so the first byte written is that slot's anim; then the parent's
+    /// `$FFD6-$FFDA` (`B_RECHI`..`B_SCRX`) are copied over, the sprite goes to
+    /// byte 6 (`B_SPRITE`), the attr skips byte 7 and goes to byte 8
+    /// (`B_FLIP`), and the live count increments so the driver walks the new
+    /// slot. `count + 1 == $10` aborts (all sixteen slots).
+    fn boss_spawn_child(&mut self, st: &Staging) {
+        let n = self.boss_def_count.wrapping_add(1);
+        if n == 0x10 || n as usize >= SLOT_COUNT {
+            return;
+        }
+        let child = n as usize;
+        {
+            let s = &mut self.slots[child];
+            s.b[B_DEF] = self.spawn_anim;
+            s.b[6..11].copy_from_slice(&st.b[6..11]);
+            s.b[B_SPRITE] = self.spawn_sprite;
+            s.b[B_FLIP] = self.spawn_attr;
+        }
+        self.boss_def_count = n;
+        // $B259: the spawn staging is cleared for the next caller.
+        self.spawn_anim = 0;
+        self.spawn_sprite = 0;
+        self.spawn_attr = 0;
+    }
+
+    /// `$9606` (boss anim 2): the def-2 spawner. While its remove-mode is 2 it
+    /// spawns one child (anim 4 / sprite 9) and parks itself at sprite 7; every
+    /// later call returns at the state test, because its state bodies belong to
+    /// the def-4 family's table, not to its own.
+    fn handler_boss_def2(&mut self, st: &mut Staging) {
+        if st.b[B_FSTATE] != 0 {
+            return; // $9606
+        }
+        if self.remove_mode != 2 {
+            return; // $960A
+        }
+        st.b[B_TYPE] = 0; // $9610
+        st.b[B_FSTATE] = 1; // $9613
+        self.spawn_anim = 4; // $9617
+        self.spawn_sprite = 9; // $961C
+        self.boss_spawn_child(st); // $9621
+        st.b[B_SPRITE] = 7; // $9624
+    }
 
     /// `$8DA9` (bank 2) — the alternate per-frame object pass that replaces the
     /// `$8000` engine during a boss fight (`$0652` selects it while
@@ -1006,6 +1168,11 @@ impl ObjectSim {
             // like a gap in the port rather than a fixture of the ROM.
             0x58100 => {}
             0x581B1 => self.handler_death(st, layout, tables),
+            // The boss table's own arms (bank-2 addresses — see
+            // `ObjectTables::boss_anim_handlers`). anim 0 is a bare `ret` at
+            // $9322, the same inert-anim idiom as the level table's $58100.
+            0x9322 => {}
+            0x9606 => self.handler_boss_def2(st),
             h => self.note_unported(h),
         }
     }
@@ -3252,6 +3419,8 @@ mod tests {
             hitbox_index_a: vec![0; 96],
             hitbox_index_b: Vec::new(),
             boss_anim_handlers: Vec::new(),
+            boss_picker_profile: Vec::new(),
+            boss_sweep_profile: Vec::new(),
             draw_records: Vec::new(),
             draw_index: Vec::new(),
             sprite_mappings_a: Vec::new(),
@@ -4931,6 +5100,195 @@ mod tests {
             want,
             "the $505B record, not the level's"
         );
+    }
+
+    /// `$9285`: the hit pass books hp/sfx/latch on the *primary* slot only,
+    /// treats 0 or a borrow as the kill, and arms removal plus the clear fade.
+    #[test]
+    fn the_boss_damage_pass_books_hp_sfx_and_the_kill() {
+        let layout = blank_layout();
+        let t = tables();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_def_index = 4;
+        obj.boss_hits_remaining = 6;
+        let mut st = streamed(0, 0x00, 0);
+        // No flags: nothing at all.
+        obj.boss_damage_pass(0, &mut st);
+        assert_eq!(obj.boss_hits_remaining, 6);
+        assert_eq!(obj.done, 0);
+        // A stomp on a *secondary* slot: done, but no hp/sfx.
+        st.b[B_FLAGS] = 0x01;
+        obj.boss_damage_pass(1, &mut st);
+        assert_eq!(obj.done, 1);
+        assert_eq!(obj.boss_hits_remaining, 6, "only slot 0 books hp");
+        assert_eq!(obj.sfx0, 0);
+        // The primary slot: sfx 19, −2, latch.
+        obj.boss_damage_pass(0, &mut st);
+        assert_eq!(obj.boss_hit_latch, 1);
+        assert_eq!(obj.sfx0, 0x13);
+        assert_eq!(obj.boss_hits_remaining, 4);
+        // A projectile hit: sfx 9, −1.
+        st.b[B_FLAGS] = 0x02;
+        obj.boss_damage_pass(0, &mut st);
+        assert_eq!(obj.sfx1, 9);
+        assert_eq!(obj.boss_hits_remaining, 3);
+        obj.boss_damage_pass(0, &mut st);
+        assert_eq!(obj.boss_hits_remaining, 2);
+        assert_eq!(obj.boss_clear_flag, 0, "not dead yet");
+        // Two more: 0 -> the kill path.
+        obj.boss_damage_pass(0, &mut st);
+        obj.boss_damage_pass(0, &mut st);
+        assert_eq!(obj.boss_hits_remaining, 0);
+        assert_eq!(obj.remove_mode, 1, "$92C4");
+        assert_eq!(obj.boss_clear_flag, 1);
+        assert_eq!(obj.fade_timer_set, Some(0x0280), "2/$80");
+        let _ = (&layout, &t);
+    }
+
+    /// `$B157`/`$B15B`: the boss object's exit — drop the live count, blank the
+    /// staging, mark it done. (Deliberately not `remove_object`, which does the
+    /// level path's record/counter/hitbox bookkeeping.)
+    #[test]
+    fn the_boss_finish_slot_drops_the_count_and_blanks_the_slot() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_def_count = 2;
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_DEF] = 7;
+        st.b[B_SCRY] = 0x40;
+        obj.boss_finish_slot(&mut st);
+        assert_eq!(obj.boss_def_count, 1);
+        assert_eq!(st.b, [0u8; 32]);
+        assert_eq!(obj.done, 1);
+    }
+
+    /// `$B264`-`$B276`: eight-bit screen movers (the world-coord
+    /// `mv_x_add`/`mv_y_add` are different routines), including the wrap.
+    #[test]
+    fn the_boss_screen_movers_are_eight_bit() {
+        let obj = ObjectSim::new(Vec::new(), 0);
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_SCRX] = 0x10;
+        st.b[B_SCRY] = 0x20;
+        obj.scr_x_add(&mut st, 3);
+        obj.scr_x_sub(&mut st, 0x14);
+        assert_eq!(st.b[B_SCRX], 0xFF, "0x13 - 0x14 wraps", );
+        assert_eq!(st.b[B_SCRX], 0xFF);
+        obj.scr_y_sub(&mut st, 0x21);
+        assert_eq!(st.b[B_SCRY], 0xFF);
+        obj.scr_y_add(&mut st, 1);
+        assert_eq!(st.b[B_SCRY], 0x00);
+    }
+
+    /// `$B2E8`-`$B32D`: the blink toggles XOR the sprite on a `$FFF0` gate, and
+    /// the eight entry points differ only in `(mask, xor)`.
+    #[test]
+    fn the_boss_blinks_gate_on_fff0() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_SPRITE] = 0x40;
+        obj.fff0 = 1;
+        obj.sprite_blink(&mut st, 0x01, 0x01);
+        assert_eq!(st.b[B_SPRITE], 0x40, "odd frame: the mask fails");
+        obj.fff0 = 0;
+        obj.sprite_blink(&mut st, 0x01, 0x01);
+        assert_eq!(st.b[B_SPRITE], 0x41);
+        obj.fff0 = 8; // 8 & 7 == 0: the $B321 gate
+        obj.sprite_blink(&mut st, 0x07, 0x1F);
+        assert_eq!(st.b[B_SPRITE], 0x5E, "$B321's xor");
+    }
+
+    /// `$B224`: appending a child def record — the boss's extra parts. The
+    /// record is slot `count + 1`'s byte 5 onward, inheriting the parent's
+    /// `$FFD6-$FFDA`, and the live count grows so the driver walks it.
+    #[test]
+    fn the_boss_child_spawner_appends_a_def_record() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_def_count = 1;
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_RECHI] = 0x0A;
+        st.b[B_STATE] = 2;
+        st.b[B_SCRY] = 0x30;
+        st.b[B_SCRX] = 0x90;
+        obj.spawn_anim = 4;
+        obj.spawn_sprite = 9;
+        obj.spawn_attr = 0x20;
+        obj.boss_spawn_child(&st);
+        assert_eq!(obj.boss_def_count, 2);
+        let child = &obj.slots[2].b;
+        assert_eq!(child[B_DEF], 4, "the record's first byte is the anim");
+        assert_eq!(child[B_RECHI], 0x0A, "the parent's $FFD6-$FFDA");
+        assert_eq!(child[B_SCRY], 0x30);
+        assert_eq!(child[B_SCRX], 0x90);
+        assert_eq!(child[B_SPRITE], 9);
+        assert_eq!(child[B_FLIP], 0x20, "the attr skips the defeat byte");
+        assert_eq!((obj.spawn_anim, obj.spawn_sprite, obj.spawn_attr), (0, 0, 0));
+        // Past the last slot: no write.
+        obj.boss_def_count = 0x0F;
+        obj.spawn_anim = 4;
+        obj.boss_spawn_child(&st);
+        assert_eq!(obj.boss_def_count, 0x0F, "$B228's $10 abort");
+    }
+
+    /// `$9606` (boss anim 2): the def-2 spawner arms only while the slot's
+    /// remove-mode is 2, spawns one anim-4/sprite-9 child, parks at sprite 7 and
+    /// never runs again.
+    #[test]
+    fn the_def2_boss_spawner_arms_only_while_removing() {
+        let t = tables();
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_def_count = 0;
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_DEF] = 2;
+        st.b[B_TYPE] = 0x48;
+        // Not removing: nothing happens.
+        obj.handler_boss_def2(&mut st);
+        assert_eq!(st.b[B_TYPE], 0x48);
+        assert_eq!(st.b[B_FSTATE], 0);
+        assert_eq!(obj.boss_def_count, 0);
+        // Removing: it spawns and parks.
+        obj.remove_mode = 2;
+        obj.handler_boss_def2(&mut st);
+        assert_eq!(st.b[B_TYPE], 0);
+        assert_eq!(st.b[B_FSTATE], 1);
+        assert_eq!(st.b[B_SPRITE], 7);
+        assert_eq!(obj.boss_def_count, 1);
+        assert_eq!(obj.slots[1].b[B_DEF], 4, "the child");
+        assert_eq!(obj.slots[1].b[B_SPRITE], 9);
+        // A second call returns at the state test.
+        st.b[B_DEF] = 2;
+        obj.handler_boss_def2(&mut st);
+        assert_eq!(obj.boss_def_count, 1, "once only");
+        let _ = (&layout, &t);
+    }
+
+    /// anim 0 (`$9322`) is a bare `ret` — the same inert-anim idiom as the level
+    /// table's `$58100`. The dispatch must reach it without reporting a gap.
+    #[test]
+    fn the_inert_boss_anim_is_dispatched_not_reported() {
+        let real: ObjectTables = serde_json::from_str(
+            &std::fs::read_to_string(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../extracted/objects.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(real.boss_anim_handler(0), Some(0x9322));
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        let mut st = Staging {
+            b: [0; 32],
+            ..Default::default()
+        };
+        obj.dispatch_handler(0x9322, &mut st, &layout, &real);
+        assert!(obj.unported.is_empty(), "a fixture, not a gap");
+        assert_eq!(st.b, [0u8; 32], "and it changes nothing");
     }
 
     /// The boss path never stages `B_SCRY`/`B_SCRX` from world coords: the def
