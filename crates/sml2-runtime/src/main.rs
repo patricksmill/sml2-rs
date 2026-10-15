@@ -1111,7 +1111,7 @@ fn build_contact(sim: &PlayerSim, keys: &PlayerKeys, pan: u8) -> sml2_core::obje
         star_high: sim.star_high,
         invincibility: sim.invincibility,
         flutter: 0,
-        fade_timer: sim.fade_timer,
+
         vvel: sim.vvel,
         on_ground: sim.on_ground,
         on_object: sim.on_ground_obj,
@@ -1419,6 +1419,7 @@ fn run_replay(
             // $8000's dispatcher gate reads sMarioDead; the interaction pass
             // then writes it back.
             obj.mario_dead = sim.dead;
+            obj.fade_timer = sim.fade_timer; // `$B14E`'s input, like `mario_dead`
             // `$0EB0`'s scene branch is blocked on the unported bank-15
             // `$3C000` handlers (the only writers that clear `sSceneState`), so
             // it is reported rather than taken: taking it would park the camera
@@ -2272,6 +2273,7 @@ fn run_play(
             if !frozen {
                 let mario = build_contact(&sim, &keys, cam.pan_timer);
                 obj.mario_dead = sim.dead;
+                obj.fade_timer = sim.fade_timer;
                 // `$0EB0`'s scene branch: reported, not taken; see the replay
                 // loop and `CameraSim::take_blocked_scene_load`.
                 if cam.take_blocked_scene_load() {

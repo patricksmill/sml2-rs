@@ -278,9 +278,6 @@ pub struct MarioContact {
     pub star_high: u8,
     /// `sInvincibilityTimer`.
     pub invincibility: u8,
-    /// `sFadeTimerLow|High` (`$A266`/`$A267`) as one value. The boss helpers'
-    /// `$B14E` is its only reader in the object pass.
-    pub fade_timer: u16,
     /// `sFlutterTimer`.
     pub flutter: u8,
     /// `sVVelocityIndex`.
@@ -442,6 +439,20 @@ pub struct ObjectSim {
     /// `sFadeTimerHigh`/`sFadeTimerLow` (`$A267`/`$A266`) as a 16-bit value, set
     /// by `$92C4` (2/$80). The player sim owns the live countdown.
     pub fade_timer_set: Option<u16>,
+    /// `sObjectSlotPtrLo` (`$AF29`): the boss driver's slot pointer low byte,
+    /// i.e. `index * $20`. `$9285` reads it to decide which slot is *primary*
+    /// (only `$00` books HP/sfx/death), so it is sim state, not a parameter.
+    pub boss_slot_ptr_lo: u8,
+    /// `sFadeTimerLow|High` (`$A266`/`$A267`) as one 16-bit value. Set by the
+    /// frame loops from the player sim the way `mario_dead` is; `$B14E` is the
+    /// object pass's only reader.
+    pub fade_timer: u16,
+    /// `sSavedFrameState` (`$AFC4`) / `sSavedObjectType` (`$AFCC`): the boss hit
+    /// prologue banks the slot's state and type here, and the hit-stun tails
+    /// restore them. (`sObjectSpawnSprite` `$AF37` is the port's
+    /// `spawn_sprite`.)
+    pub saved_frame_state: u8,
+    pub saved_type: u8,
     /// `sObjectDefIndex` (`$8DFD`): the fight's def, `sBossFightPhase + b`.
     pub boss_def_index: u8,
     /// `sObjectDefCount`: the def's sub-object count. `$8DA9` walks this + 1
@@ -524,6 +535,10 @@ impl ObjectSim {
             music_request: None,
             boss_clear_flag: 0,
             fade_timer_set: None,
+            boss_slot_ptr_lo: 0,
+            fade_timer: 0,
+            saved_frame_state: 0,
+            saved_type: 0,
             boss_def_index: 0,
             boss_def_count: 0,
             boss_hit_latch: 0,
@@ -712,7 +727,7 @@ impl ObjectSim {
     /// the driver's pointer low byte `$00`, i.e. index 0 — books the HP, the
     /// sfx and the death. `$92BC` treats 0 *or a borrow* (`jr z` then `jr c`) as
     /// the kill, which is what lets a 1-HP boss die to a 1-damage hit.
-    fn boss_damage_pass(&mut self, i: usize, st: &mut Staging) {
+    fn boss_damage_pass(&mut self, st: &mut Staging) {
         let flags = st.b[B_FLAGS];
         let stomp = flags & 0x01 != 0;
         let other = flags & 0x02 != 0;
@@ -723,8 +738,8 @@ impl ObjectSim {
         if stomp {
             self.boss_hit_latch = 1;
         }
-        if i != 0 {
-            return;
+        if self.boss_slot_ptr_lo != 0 {
+            return; // not the primary slot
         }
         if stomp {
             self.sfx0 = 0x13;
@@ -748,8 +763,8 @@ impl ObjectSim {
 
     /// `$B14E`: `a = sFadeTimerLow | sFadeTimerHigh`, Z while both are 0 — the
     /// "the boss-clear fade is idle" test the handlers gate on.
-    fn fade_idle(&self, contact: &MarioContact) -> bool {
-        let t = contact.fade_timer;
+    fn fade_idle(&self) -> bool {
+        let t = self.fade_timer;
         ((t & 0xFF) | ((t >> 8) & 0xFF)) as u8 == 0
     }
 
@@ -812,6 +827,91 @@ impl ObjectSim {
         self.spawn_anim = 0;
         self.spawn_sprite = 0;
         self.spawn_attr = 0;
+    }
+
+    /// The shared hit prologue every boss handler opens with (`$93AA`-`$93D4`,
+    /// inlined per handler in the ROM): a hit banks the sprite, state and type
+    /// into the save bytes, and parks the object in state 1 — its hit-stun —
+    /// with `sTimerReload` in `B_T28` when the hit was a stomp. The hit-stun
+    /// bodies then restore from those bytes when the timer runs out.
+    fn boss_hit_save(&mut self, st: &mut Staging) {
+        self.spawn_sprite = st.b[B_SPRITE];
+        self.saved_frame_state = st.b[B_FSTATE];
+        self.saved_type = st.b[B_TYPE];
+        if self.boss_hit_latch != 0 {
+            st.b[B_SPRITE] = 0;
+            st.b[B_T28] = self.boss_timer_reload;
+        }
+        st.b[B_TYPE] = 0;
+        st.b[B_FSTATE] = 1;
+    }
+
+    /// `$9725`: `B_TYPE = 0`, `B_FSTATE = 1` — the tail the hit-saves jump to
+    /// when the slot is not being removed.
+    fn boss_type0_state1(&mut self, st: &mut Staging) {
+        st.b[B_TYPE] = 0;
+        st.b[B_FSTATE] = 1;
+    }
+
+    /// `$9435`: the boss's defeat fall — state 2, a `$20` timer, and the sprite
+    /// from the def (`sObjectDefSprite`, the port's `boss_sprite`). Both the
+    /// hit-stun restore and `$92C4`'s remove-mode arm land here.
+    fn boss_defeat_fall(&mut self, st: &mut Staging) {
+        st.b[B_FSTATE] = 2;
+        st.b[B_T28] = 0x20;
+        st.b[B_SPRITE] = self.boss_sprite;
+    }
+
+    /// `$9443`: the morph/hand-off tail — flash, count `B_T28` down, then clear
+    /// the state, hand the slot to anim 3 (`B_DEF = 3`), drop the anim frame and
+    /// the flash, and stop the music (slot 0 only, `sMusicRequest = $FF`).
+    fn boss_morph_to_anim3(&mut self, st: &mut Staging) {
+        self.sprite_blink(st, 0x03, 0x10); // $9443 -> $B40E
+        // The ROM decrements first and tests the NEW value (`dec a / ldh
+        // [$FFEC],a / ret nz`),
+        // so a 1 falls through to the hand-off on that same call.
+        st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
+        if st.b[B_T28] != 0 {
+            return;
+        }
+        st.b[B_FSTATE] = 0;
+        st.b[B_DEF] = 3;
+        st.b[B_ANIMFRAME] = 0;
+        st.b[B_FLASH] = 0;
+        if self.boss_slot_ptr_lo == 0 {
+            self.music_request = Some(0xFF);
+        }
+    }
+
+    /// `$93A7` (boss anim 1, the def-0 fight): the hit prologue, then the intro
+    /// state, then the sweep states. Only the intro is ported so far — states
+    /// 1-7 (`$93FE`..`$9543`, the two-profile sweep with its `$9595` ramp) are
+    /// reported, so a def-0 boss wakes up and then holds still rather than
+    /// silently doing nothing.
+    fn handler_boss_def0_main(&mut self, st: &mut Staging, layout: &LevelLayout, tables: &ObjectTables) {
+        let _ = (layout, tables);
+        self.boss_damage_pass(st); // $93A7
+        if self.done != 0 {
+            self.boss_hit_save(st); // $93AA
+            return;
+        }
+        if st.b[B_FSTATE] == 0 {
+            // $93D5: the intro. Blink, then wait out the boss-clear fade before
+            // arming the fight.
+            self.sprite_blink(st, 0x03, 0x06); // $7309
+            if !self.fade_idle() {
+                return; // $714E: `ret nz` while a fade runs
+            }
+            st.b[B_TYPE] = 0x45;
+            st.b[B_SPRITE] = 3;
+            st.b[B_FSTATE] = 3;
+            return;
+        }
+        // $93EE: dec + `rst $28` over $93F0's seven targets.
+        match st.b[B_FSTATE] {
+            2 => self.boss_morph_to_anim3(st), // $9443
+            s => self.note_unported(0x93EF + (s as u32) * 2),
+        }
     }
 
     /// `$9606` (boss anim 2): the def-2 spawner. While its remove-mode is 2 it
@@ -892,6 +992,7 @@ impl ObjectSim {
                 b: self.slots[i].b,
                 ..Default::default()
             };
+            self.boss_slot_ptr_lo = (i * 0x20) as u8; // `sObjectSlotPtrLo`
             if st.b[B_DEF] != 0 {
                 // $92DF: `rst $28` through the *boss* table ($92E8) — bank-2
                 // addresses, see `ObjectTables::boss_anim_handlers` — not the
@@ -1181,6 +1282,7 @@ impl ObjectSim {
             // `ObjectTables::boss_anim_handlers`). anim 0 is a bare `ret` at
             // $9322, the same inert-anim idiom as the level table's $58100.
             0x9322 => {}
+            0x93A7 => self.handler_boss_def0_main(st, layout, tables),
             0x9606 => self.handler_boss_def2(st),
             h => self.note_unported(h),
         }
@@ -5123,31 +5225,34 @@ mod tests {
         obj.boss_hits_remaining = 6;
         let mut st = streamed(0, 0x00, 0);
         // No flags: nothing at all.
-        obj.boss_damage_pass(0, &mut st);
+        obj.boss_slot_ptr_lo = 0;
+        obj.boss_damage_pass(&mut st);
         assert_eq!(obj.boss_hits_remaining, 6);
         assert_eq!(obj.done, 0);
         // A stomp on a *secondary* slot: done, but no hp/sfx.
         st.b[B_FLAGS] = 0x01;
-        obj.boss_damage_pass(1, &mut st);
+        obj.boss_slot_ptr_lo = 0x20;
+        obj.boss_damage_pass(&mut st);
         assert_eq!(obj.done, 1);
         assert_eq!(obj.boss_hits_remaining, 6, "only slot 0 books hp");
         assert_eq!(obj.sfx0, 0);
         // The primary slot: sfx 19, −2, latch.
-        obj.boss_damage_pass(0, &mut st);
+        obj.boss_slot_ptr_lo = 0;
+        obj.boss_damage_pass(&mut st);
         assert_eq!(obj.boss_hit_latch, 1);
         assert_eq!(obj.sfx0, 0x13);
         assert_eq!(obj.boss_hits_remaining, 4);
         // A projectile hit: sfx 9, −1.
         st.b[B_FLAGS] = 0x02;
-        obj.boss_damage_pass(0, &mut st);
+        obj.boss_damage_pass(&mut st);
         assert_eq!(obj.sfx1, 9);
         assert_eq!(obj.boss_hits_remaining, 3);
-        obj.boss_damage_pass(0, &mut st);
+        obj.boss_damage_pass(&mut st);
         assert_eq!(obj.boss_hits_remaining, 2);
         assert_eq!(obj.boss_clear_flag, 0, "not dead yet");
         // Two more: 0 -> the kill path.
-        obj.boss_damage_pass(0, &mut st);
-        obj.boss_damage_pass(0, &mut st);
+        obj.boss_damage_pass(&mut st);
+        obj.boss_damage_pass(&mut st);
         assert_eq!(obj.boss_hits_remaining, 0);
         assert_eq!(obj.remove_mode, 1, "$92C4");
         assert_eq!(obj.boss_clear_flag, 1);
@@ -5239,6 +5344,105 @@ mod tests {
         obj.spawn_anim = 4;
         obj.boss_spawn_child(&st);
         assert_eq!(obj.boss_def_count, 0x0F, "$B228's $10 abort");
+    }
+
+    /// The shared boss hit prologue (`$93AA`-`$93D4`): a hit banks sprite,
+    /// state and type, parks the slot in state 1 (its hit-stun) and — only for a
+    /// stomp — clears the sprite and loads `sTimerReload`.
+    #[test]
+    fn the_shared_hit_prologue_banks_and_parks() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_timer_reload = 0x50;
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_SPRITE] = 0x35;
+        st.b[B_FSTATE] = 3;
+        st.b[B_TYPE] = 0x45;
+        // A projectile hit: no latch, so no sprite/timer clobber.
+        obj.boss_hit_save(&mut st);
+        assert_eq!(obj.spawn_sprite, 0x35, "banked");
+        assert_eq!(obj.saved_frame_state, 3);
+        assert_eq!(obj.saved_type, 0x45);
+        assert_eq!(st.b[B_SPRITE], 0x35, "kept: not a stomp");
+        assert_eq!(st.b[B_TYPE], 0);
+        assert_eq!(st.b[B_FSTATE], 1, "parks in the hit-stun");
+        // A stomp: sprite cleared and the reload timer loaded.
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_SPRITE] = 0x35;
+        obj.boss_hit_latch = 1;
+        obj.boss_hit_save(&mut st);
+        assert_eq!(st.b[B_SPRITE], 0);
+        assert_eq!(st.b[B_T28], 0x50);
+    }
+
+    /// `$9443`: the morph tail — flash, count down, then clear the state, hand
+    /// the slot to anim 3 and stop the music on the primary slot only.
+    #[test]
+    fn the_boss_morph_tail_hands_the_slot_to_anim3() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_T28] = 2;
+        obj.boss_slot_ptr_lo = 0;
+        obj.boss_morph_to_anim3(&mut st);
+        assert_eq!(st.b[B_T28], 1, "still counting");
+        assert_eq!(st.b[B_DEF], 0, "not yet handed over");
+        assert_eq!(obj.music_request, None);
+        obj.boss_morph_to_anim3(&mut st);
+        assert_eq!(st.b[B_FSTATE], 0);
+        assert_eq!(st.b[B_DEF], 3, "handed to anim 3");
+        assert_eq!(st.b[B_FLASH], 0);
+        assert_eq!(obj.music_request, Some(0xFF), "the music stops");
+        // A non-primary slot leaves the music alone.
+        obj.music_request = None;
+        obj.boss_slot_ptr_lo = 0x20;
+        st.b[B_T28] = 0;
+        obj.boss_morph_to_anim3(&mut st);
+        assert_eq!(obj.music_request, None);
+    }
+
+    /// `$93A7` (boss anim 1): the intro wakes the fight once the fade is idle,
+    /// and the not-yet-ported sweep states are reported rather than passed over
+    /// silently.
+    #[test]
+    fn the_def0_boss_wakes_up_then_reports_its_sweep_states() {
+        let real: ObjectTables = serde_json::from_str(
+            &std::fs::read_to_string(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../extracted/objects.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        let mut st = streamed(0, 0x00, 0);
+        // A fade in progress: the intro holds.
+        obj.fade_timer = 0x0280;
+        obj.fade_idle();
+        obj.dispatch_handler(0x93A7, &mut st, &layout, &real);
+        assert_eq!(st.b[B_TYPE], 0, "still waiting on the fade");
+        // Idle: the fight arms.
+        obj.fade_timer = 0;
+        obj.dispatch_handler(0x93A7, &mut st, &layout, &real);
+        assert_eq!(st.b[B_TYPE], 0x45);
+        assert_eq!(st.b[B_SPRITE], 3);
+        assert_eq!(st.b[B_FSTATE], 3, "$93E5: into the first sweep state");
+        // The sweep states themselves are the next batch: reported, not silent.
+        obj.dispatch_handler(0x93A7, &mut st, &layout, &real);
+        assert!(
+            obj.unported.iter().any(|a| *a == 0x93EF + 3 * 2),
+            "state 3's body is reported"
+        );
+        // A hit banks the slot and parks it in the hit-stun.
+        obj.done = 0;
+        st.b[B_FLAGS] = 0x02;
+        obj.boss_def_index = 0;
+        obj.boss_hits_remaining = 6;
+        obj.dispatch_handler(0x93A7, &mut st, &layout, &real);
+        assert_eq!(st.b[B_FSTATE], 1, "the hit-stun");
+        assert_eq!(obj.saved_frame_state, 3);
     }
 
     /// `$9606` (boss anim 2): the def-2 spawner arms only while the slot's

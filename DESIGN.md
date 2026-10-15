@@ -1586,9 +1586,46 @@ list the handlers use, so it is visible in play mode and cannot silently regress
 scene VM (`$20A4`, which *is* ported) keeps handling transitions exactly as it did before.
 The music writes and the `$3C94` hand-off stay in the code path they belong to.
 
-**Consequence for the boss work**: the boss *entry* runs through this same branch, so it is
-gated on `map_zone_screen_loaders` — the bank-15 handlers are a prerequisite for a boss
-that can be reached in play, not an optional follow-up. Porting a boss's handlers is still
-worthwhile (they are what the fight does), but a play-test cannot reach a fight until the
-bank-15 side exists.
+**Correction to the first version of this note.** It blamed the bank-15 `$3C000` map
+handlers for being the missing clearers. They are not: the three writers that clear the
+park are **bank-2 boss-fight-end states** (`main.asm` 6735/7149/7477, each
+`call $B15B` → `sBossFightPhase = 1/2/3` → `sSceneState = 0`), i.e. the boss handlers
+themselves. The full `sSceneState` story, measured from its six writers:
+
+- **the level load** (`home.asm:611`) seeds the *high* nibble from the level header's
+  layout byte (`sLevelLayoutIndex & $F0`), and the port's extraction shows **no level seeds
+  a non-zero value** — so every level starts unparked;
+- **the scene VM's `$2x` opcode** (`home.asm:4315`'s `$20EB`) sets `sSceneState = $0F` —
+  the *arming* half, and the port already has it (`scene.rs:344`, with a test);
+- **`$0EB0`** sets `$F0` — the branch that is reported, not taken;
+- **the three boss-fight-end states** clear it back to 0.
+
+So the scene-state slice needed no bank-15 work, and the real dependency behind the reported
+branch is the **boss handlers' end states** — the boss porting itself. That is also why
+"sideways pipes" could only have been affected in a level whose script arms the arena path:
+level 1 seeds `scene_state = 0`, so it was never touched.
+
+## Boss anim 1 (`$93A7`), the shared prologue and the tails — 2026-10-14
+
+The def-0 fight's own handler is in for its entry and intro, on top of the shared pieces
+every boss handler uses. The **hit prologue** (`$93AA`-`$93D4`, inlined per handler in the
+ROM, one helper here) banks the slot's sprite/state/type into `sObjectSpawnSprite`/
+`sSavedFrameState`/`sSavedObjectType` and parks it in state 1 — its hit-stun — loading
+`sTimerReload` into `B_T28` when the hit was a stomp. The hit-stun bodies restore from
+those bytes, so `ObjectSim` gained `saved_frame_state`/`saved_type`, and
+`sObjectSlotPtrLo` became a field the driver sets per slot (`index * $20`) because `$9285`
+reads it to decide which slot is *primary*.
+
+The tails: `$9725` (type 0 / state 1), `$9435` (the defeat fall — state 2, `$20` timer,
+sprite from the def) and `$9443` (the morph/hand-off — flash, count `B_T28` **down then test
+the new value**, clear the state, hand the slot to anim 3, stop the music on the primary
+slot only). Anim 1's own body is then: the damage pass, the hit prologue when hit, and the
+intro state (`$93D5`) — blink, wait out the boss-clear fade, then `B_TYPE = $45`,
+`B_SPRITE = 3`, `B_FSTATE = 3` into the sweep. Its sweep states 1-7 (`$93FE`-`$9543`) are
+**reported**, so a def-0 boss wakes up and then holds still rather than silently doing
+nothing.
+
+Four new tests (the prologue's bank/latch behaviour, the morph tail's decrement-then-test
+and primary-slot music, anim 1's fade gate + wake-up + reported sweep state + hit-save) and
+five mutations, all red.
 
