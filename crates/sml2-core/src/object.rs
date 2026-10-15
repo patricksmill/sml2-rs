@@ -123,6 +123,17 @@ pub struct ObjectTables {
     /// (242 `dw`) resolved to `gfx/spritemappings.asm` blobs; indexed by the
     /// player draw's `$FFC6` value (see [`crate::player`]).
     pub player_mappings: Vec<Vec<MappingEntry>>,
+    /// sprite id -> the boss render pass's OAM record list (`$3A14` -> bank 25
+    /// `$66000`, whose 118-entry `dw` table sits at bank-25 CPU `$6092`).
+    ///
+    /// Kept as **raw record bytes**, terminator and all, because the port's
+    /// render has to walk exactly what the ROM walks: 4-byte cells
+    /// `[dy, dx, tile, attr]`, an `$88 <adj>` origin marker (its operand is
+    /// added to the base Y only while `sSpriteFlipFlags` bit 6 is set — a
+    /// runtime value, so this cannot be parsed away), and a `$80` first-byte
+    /// terminator. See [`crate::objects`] for the walk.
+    #[serde(default)]
+    pub boss_oam_lists: Vec<Vec<u8>>,
 }
 
 impl ObjectTables {
@@ -177,6 +188,14 @@ impl ObjectTables {
     /// anim -> handler for the boss (`$9048`/`$92DF`) path.
     pub fn boss_anim_handler(&self, anim: u8) -> Option<u32> {
         self.boss_anim_handlers.get(anim as usize).copied()
+    }
+
+    /// The boss render pass's OAM record list for a sprite id (`$3A14` ->
+    /// bank 25 `$66000`, table at bank-25 CPU `$6092`). `None` for an id past
+    /// the 118 entries: the ROM would read the following record bytes as a
+    /// pointer, so the port reports it instead of guessing.
+    pub fn boss_oam_list(&self, sprite: u8) -> Option<&[u8]> {
+        self.boss_oam_lists.get(sprite as usize).map(Vec::as_slice)
     }
 
     /// Full behavior profile for an anim in a level's mode.

@@ -63,6 +63,20 @@ const BANK16_CPU_ADD: usize = 0x54000;
 const BANK2_CPU_ADD: usize = 0x4000;
 /// Bank-3 CPU window to ROM offset.
 const BANK3_CPU_ADD: usize = 0x8000;
+/// Bank-25 CPU window ($4000-$7FFF) to ROM offset (`$66000` = bank 25
+/// CPU `$6000`).
+const BANK25_CPU_ADD: usize = 0x60000;
+/// sprite id -> boss-path OAM record list, 118 `dw`; bank 25 CPU `$6092`
+/// (ROM `$66092`) — the table `UnknownCall_0x66000` reads (`ld hl,$6092`).
+///
+/// 118 is not declared anywhere: it is where the pointer table ends. The first
+/// record starts at `$617E`, `($617E - $6092) / 2 = 118`, and the 118th entry's
+/// own pointer is `$7498` — so the table is exactly the gap.
+const BOSS_OAM_PTR_ROM: usize = 0x66092;
+const BOSS_OAM_COUNT: usize = 118;
+/// A boss OAM record list's cap: the longest retail list is 84 bytes of cells
+/// (+ the `$80` terminator), so 120 catches a bogus pointer instead of looping.
+const BOSS_OAM_LIST_MAX: usize = 120;
 
 fn dw(rom: &[u8], off: usize) -> Result<u16, String> {
     let b = rom
@@ -186,6 +200,50 @@ fn player_mappings_table(rom: &[u8]) -> Result<Vec<Vec<MappingEntry>>, String> {
     Ok(out)
 }
 
+/// sprite id -> the boss render pass's OAM record list (`$66000`'s `$6092`
+/// table, bank 25).
+///
+/// The bytes are kept **verbatim**, terminator included, because the port's
+/// render has to walk exactly what the ROM walks: a list is 4-byte cells
+/// `[dy, dx, tile, attr]`, an `$88 <adj>` origin marker whose operand is added
+/// to the base Y *only* while `sSpriteFlipFlags` bit 6 is set (`$6087` feeds
+/// that byte from slot bytes 12/13/14), and a `$80` first-byte terminator.
+/// Parsing them into cells here would lose the marker's runtime dependence.
+fn boss_oam_lists(rom: &[u8]) -> Result<Vec<Vec<u8>>, String> {
+    let mut out = Vec::with_capacity(BOSS_OAM_COUNT);
+    for i in 0..BOSS_OAM_COUNT {
+        let cpu = dw(rom, BOSS_OAM_PTR_ROM + 2 * i)?;
+        if !(0x4000..0x8000).contains(&cpu) {
+            return Err(format!(
+                "boss OAM[{i}]: pointer ${cpu:04X} out of bank-25 window"
+            ));
+        }
+        let start = cpu as usize + BANK25_CPU_ADD;
+        let mut rec = Vec::new();
+        let mut p = start;
+        loop {
+            let first = *rom
+                .get(p)
+                .ok_or_else(|| format!("boss OAM[{i}] at ${start:05X} runs past the ROM"))?;
+            if first == 0x80 {
+                rec.push(first);
+                break;
+            }
+            if rec.len() > BOSS_OAM_LIST_MAX {
+                return Err(format!("boss OAM[{i}] at ${start:05X} never terminates"));
+            }
+            let n = if first == 0x88 { 2 } else { 4 };
+            let b = rom
+                .get(p..p + n)
+                .ok_or_else(|| format!("boss OAM[{i}] at ${start:05X} runs past the ROM"))?;
+            rec.extend_from_slice(b);
+            p += n;
+        }
+        out.push(rec);
+    }
+    Ok(out)
+}
+
 /// anim -> behavior profile (bank $16): the per-anim handler entry plus a
 /// static scan of the handler's code region (up to the next entry) for the
 /// type byte(s) it sets (`$3E NN $E0 $E2`) and the targets of its inline
@@ -282,6 +340,7 @@ pub fn extract(rom: &[u8]) -> Result<ObjectTables, String> {
     let anim_profiles_a = behavior_profiles(rom, ANIM_BEHAVIOR_A_ROM, 96, "behavior A")?;
     let anim_profiles_b = behavior_profiles(rom, ANIM_BEHAVIOR_B_ROM, 112, "behavior B")?;
     let player_mappings = player_mappings_table(rom)?;
+    let boss_oam_lists = boss_oam_lists(rom)?;
 
     Ok(ObjectTables {
         schema: OBJECTS_SCHEMA.to_string(),
@@ -317,6 +376,16 @@ pub fn extract(rom: &[u8]) -> Result<ObjectTables, String> {
              its code region: type_sets (the $FFE2 immediates) and states \
              (sub-state code addresses)."
                 .to_string(),
+            "boss OAM: the boss path's render pass is $3A14 -> bank 25 $66000, \
+             NOT the level's $C000 draw. It reads the staged slot's sprite byte \
+             ($FFDB = slot+11), indexes the 118-entry `dw` table at bank-25 \
+             $6092, and walks the record into the shadow OAM at $A100+[$FF8D] \
+             with the slot's $FFD9/$FFDA (slot+9/+10) as the base position and \
+             $FFDC^$FFDD^$FFDE as sSpriteFlipFlags. Records are kept verbatim \
+             here: 4-byte [dy, dx, tile, attr] cells, an $88 <adj> origin \
+             marker (the operand shifts the base Y only while flip bit 6 is \
+             set), $80-terminated."
+                .to_string(),
         ],
         anim_to_sprite_a,
         anim_to_sprite_b,
@@ -341,5 +410,6 @@ pub fn extract(rom: &[u8]) -> Result<ObjectTables, String> {
         anim_profiles_a,
         anim_profiles_b,
         player_mappings,
+        boss_oam_lists,
     })
 }

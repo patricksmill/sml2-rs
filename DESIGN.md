@@ -1704,3 +1704,233 @@ Three new tests (the flag's divert and its death precedence, the flag crossing f
 object pass, and the branch taken for def 2 with the park + song, plus `boss_def_portable`'s
 gate) and four mutations, all red.
 
+
+
+## The boss render pass (`$3A14`), and what an arena actually needs — 2026-10-15
+
+Three separate things stood between a staged def-2 fight and the boss room the console draws,
+and only the first was the "unported `$3A14`" the queue had been reporting.
+
+### 1. `$3A14` -> bank 25 `$66000`
+
+The boss path does not draw through the level's `$C000`. `$8DA9`'s per-slot body ends in
+`$3A14`, which maps bank 25 and calls `$66000`, a complete OAM emitter:
+
+```
+ld a,[sObjectDone] / and a / ret nz      ; a slot that died this frame is not drawn
+call $66087                             ; sSpriteFlipFlags = $FFDC ^ $FFDD ^ $FFDE
+ld hl,$6092 / ldh a,[$FFDB] / ...       ; sprite byte -> dw table at bank-25 $6092
+ld h,161 / ldh_a_n $8D / ld l,a         ; OAM write cursor = $A100 + [$FF8D]
+ldh a,[$FFD9] / ld b,a                  ; base Y (`B_SCRY`)
+ldh a,[$FFDA] / ld c,a                  ; base X (`B_SCRX`)
+```
+
+then per cell `[dy, dx, tile, attr]`, `attr ^ sSpriteFlipFlags`, `dy`/`dx` mirrored as `~d - 7`
+under flag bits 6/5, the Y byte dropped when `>= $A0` and *zeroed* when the X byte is `>= $A8`.
+
+Measured facts: **118 entries is not declared anywhere** — `($617E - $6092) / 2 = 118`, where
+`$617E` is the first record (`$80`, an empty list) and `$7498` the 118th pointer; the extractor
+keeps the record bytes verbatim (terminator and `$88` origin markers included, because that
+marker's operand shifts the base Y only while flip bit 6 is set — a runtime value), and all 118
+re-derive byte-exact against `baserom.gb` (4974 bytes). The base pair is the object's **OAM**
+position, not a world coordinate: the def image seeds `$FFD9`/`$FFDA` (def 2's controller
+carries `$40`/`$58`) and the `$B264`-family movers change them. Every slot image the nine defs
+install carries a sprite id inside the table, so no retail arena falls off it.
+
+`ObjectSim::boss_render` fills `ObjectSim::boss_oam` (OAM byte space, slot order = the console's
+`$FF8D` cursor order); the runtime blits that list *instead of* the level's instances on boss
+frames — the level draw's `state == 2` filter must not be used there, because a boss slot's state
+byte is its **HP** (the def image seeds 6, and a part at 2 HP would be double-drawn).
+
+### 2. The `$6x` opcode is a graphics *and* room swap (`$25AF`)
+
+Every arena intro script starts with `$6x`, whose own nibble is `sLevelGfxIndex`. `$25AF` then:
+
+```
+bank 7  $7800 -> $8E80   0x50 bytes          (index-independent, and dead in effect:
+                                              the next copy spans $8B00-$8EFF over it)
+bank    $2699[i*4]     -> $9200   0x600 bytes   from bank $268B[i*2]
+bank    $2699[i*4 + 2] -> $8B00   0x400 bytes   from bank $268B[i*2+1]  (64 tiles — 0x20 past
+                                              the 0x380-byte enemy region, on purpose)
+$26B5[i] -> sMetatileMap                     the Level_TileMap_NN (maps 25-28) the index names
+sLevelLayoutIndex = 3 ; sLevelBank = 19 ; $0361
+```
+
+That last line is the one that looked like a decomp mistake and is not: the ROM **reloads the
+level data from bank 19 `$42F0[3]`**, one blob, the same for every arena, so the boss rooms are
+all authored as screens inside that single layout and the per-arena look comes from the tileset
+swap above it. Measured on hardware: with Mario in level `$0D`'s arena the console's
+WRAM `$B000-$DFFF` is byte-identical to the layout of the one level whose header names
+(bank 19, layout index 3), and its VRAM `$9200`/`$8B00` match the extracted tileset byte for
+byte. The port had been rendering the *level's* cells at the arena's coordinates with the
+arena's metatile definitions — which resolve to blank tiles, so a "fixed" arena came out white
+with the boss floating on it.
+
+Landed as `sml2-core/src/tileset.rs` (`Tilesets::apply`, the three pastes + the metatile swap +
+the OBJ block's shared high half) plus `extracted/scenes/tilesets.json` and
+`extracted/scenes/arena_layout.bin` (the extractor cross-checks the latter against the level it
+also extracts). Play mode applies it on the frame the VM runs `$6x`, and it swaps the live
+layout too, so collision, the object engine and the renderer all see the arena room.
+
+### 3. `$8E6C`'s sub-image stride is +$20, not +$10
+
+The queue carried a "correction" that read `e = ((e + 16) & $F0) + 5` as +$10 and concluded a
+count-2 def's second sub-image lands inert. The instruction is right and the conclusion was
+wrong: `ld a, e` reads E **after** `$3CAA` already walked it the 18 bytes it copied, so the step
+is `(18 + 16)` folded into the low byte — `$25 -> $45 -> $65`, i.e. +$20, filling slots 1 and 2.
+The console settles it: in level `$0D`'s arena `$AD05`/`$AD25`/`$AD45` hold anims `0C`/`0B`/`0A`
+with `$60 88` and `$60 28` positions — all three parts live, which is why the room has three
+houses. The port's old +$10 stride cost the fight one of them.
+
+### 4. The fade timer ticks every in-level frame
+
+With the room and the art right, the fight still did not *start*: the parts sat at sprite `$1E`,
+unmoving, forever. `home.asm` ~115 decrements `sFadeTimer` in the frame's VBlank tail on **every**
+frame — `sub 1` on the low byte, `sbc 0` on the high, clamped to zero — and the port only moved
+the timer from the death and exit fades. So the arena intro's 352-frame fade (`$20EB`'s
+`sFadeTimerHigh = 1` / `sFadeTimerLow = 96`) never expired, and both `$9C8B` (the parts' intro
+end: type `$45`, state 3, sprite `$20`) and `$B14E` (the "fade is idle" gate in front of the
+whole sequence) stayed shut. Console, level `$0D`'s arena: slot 2 picks up sprite `$20` and
+starts moving around frame 440; the port does the same once the decrement is in the in-level
+pass. The same gate is what lets the *end* of the fight run at all — `$92C4`'s 640-frame
+boss-clear fade counts down through it, and every handler that waits on `$B14E` waits on it too.
+
+### Verification
+
+- The port's arena frame against the console's (PyBoy, map route into level 13, poke Mario and
+  the camera to the pipe's approach, hold Right 220 / 700 frames): **96.5% of pixels identical**
+  with 0 differing on the background and floor rows; the remaining rows differ only where the
+  moving parts and Mario stand at slightly different fight frames.
+- Slot staging at the park is byte-identical to the console's `$AD00-$AD5F` dump
+  (`anim/state/sprite/scry/scrx` = `0C/00/1E/40/58`, `0B/06/1E/60/88`, `0A/06/1E/60/28`),
+  with `boss_oam = 18` cells; `unported` is empty.
+- The fight runs: after the fade expires the parts leave their intro (sprite `$20`), bob to
+  `SCRY = $90`, and walk (`$9D3D`). **Correction (2026-10-15, frame-by-frame diff):** the
+  "console frame 440 vs the port's 470" gap above is not a one-off — the port's whole arena
+  cascade is **24 frames late**, and "the port's Mario dies to a walking part exactly as the
+  console's does" is **wrong**: the console's Mario dies at f462 and the port's does not die at
+  all on that tape. See "The arena cascade is 24 frames late" below.
+- Tests: six for the render walk (six mutations red), three for the swap (three mutations red: a
+  region offset, the OBJ block's high-half source, the metatile table), one for the fade
+  decrement (mutation red), and the two `$8E6C` staging tests rewritten onto the +$20 stride.
+  270 core + 3 runtime green. The capture gate cannot see any of this — no capture has ever
+  entered a boss arena.
+
+## The arena cascade is 24 frames late, and `$92DF` did not exist — 2026-10-15
+
+Both of these came out of a frame-by-frame diff of the level 13 fight against PyBoy (route via
+`captures/probe_level_select.py`, Mario and camera poked to the pipe approach, Right held), after
+the user reported the boss still behaving unlike the console. The earlier "96.5% of pixels
+identical" check compared **one frame of parked slots** — it could not see either problem.
+
+### The console's own timeline (measured per frame, level 13)
+
+| frame | console | port |
+|---|---|---|
+| f28 | `sPipeTravelDirection = $30` (Mario frozen at 3779, walking stops) | — (Mario keeps walking to 3825) |
+| f52 | `sSceneId = $10` | `scene_id = $10` (same) |
+| f54 | — | the scene VM runs `$2x`: `sSceneState = 0F`, `sFadeTimer = $0160` |
+| f68 | the scene VM runs `$2x` — `sSceneState = 0F`, `sFadeTimer = $0160` → `$015F` | — (fade frozen at `$0160`) |
+| f74 / f57 | `sSceneId` cleared (script `$FF`) | f57 |
+| f75 / f92 | Mario placed at the destination (1523,104) | `cam.transition` ends |
+| f420 / f444 | `sFadeTimer = 0`; the parts leave their intro on f421 | f444 |
+
+So the *whole fight* runs 24 frames late. From f421 onward the port's per-part trajectories are
+**byte-identical** to the console's (verified slot by slot from f440, once the 24-frame shift is
+applied) — the parts do not act like each other; the port's records match the console's exactly,
+including each part's own anim (`$0C`/`$0B`/`$0A` in slots 0/1/2), start position and bob phase.
+
+Two measured causes, both still open (`boss_arena_phase_cascade` in `PORT_QUEUE.json`):
+
+1. **The fade timer is frozen for the travel frames.** `PlayerSim::step` decrements `sFadeTimer`,
+   and the runtime skips `step` while `cam.transition != 0`. The ROM's frame loop ticks it every
+   frame (`home.asm` ~115, unconditionally). 39 travel frames of hold → 24 frames late.
+2. **The scene VM reaches the arena's ops 14 frames early.** Both sides latch `sSceneId` at f52,
+   but the console spends ~16 frames in `$20A4`'s prologue (`$2CFF` → bank 1 `$52E7`, `$2728` =
+   the one-byte wait opcode, `call $FFA0`) before the first script byte; the port runs the first
+   byte two frames after the latch. Fixing (1) alone therefore overshoots (≈15 frames *early*), so
+   the two have to land together.
+
+### `$92DF`'s Mario-dead guard (ported)
+
+```text
+$92DF:  ld a,[sMarioDead] / cp $FF / ret z     ; dead -> the handler is not called at all
+```
+
+The `ret z` returns to the *driver*, which then still renders the slot, clears `$FFE7`, runs
+`$9048` and writes the slot back (`$81BD`) — so a frozen house stays on screen holding its last
+values. Console-verified: on this tape all three records stop changing on f462 (the frame Mario
+dies) and hold through the death animation, while the port's parts kept walking. Pinned by
+`a_dead_mario_freezes_every_boss_slot` (mutation red).
+
+### Evidence (scratch probes, re-runnable)
+
+`arena_fade_probe.py` → `console_fade.log` (per-frame `sFadeTimer`, f20–460: the f68 set / f420
+zero), `arena_transition_probe.py` → `console_trans.log` (per-frame slot-2 record, f395–465: the
+byte-identical state-3 body, 23 frames late), `arena_fight_probe.py` → `console_fight.log` (16
+marks f450–650: the slot-by-slot fight window), `arena_travel_probe.py` → `console_travel.log`
+(f20–100: `sPipeTravelDirection`, `sSceneId`, Mario, scroll — the console's f28/f52/f68/f75
+sequence). The port side of each is a temporary `eprintln!` trace on `frame_n` in
+`crates/sml2-runtime/src/main.rs`, removed after every run.
+
+### Still divergent after all this
+
+- **The port's Mario does not die** where the console's does (f462): something in the fight damages
+  Mario on hardware that the port does not reproduce — most likely the child the parts spawn, which
+  is anim `$0D` (`$9EE3`, still unported), plus its siblings.
+- **The fight cannot be completed.** With anim `$0D` unported the controller's child is inert and
+  cannot be damaged, so `sObjectDefCount` never reaches 0 and the arena never clears — the
+  "you can't beat the boss" report. The anim-3 exit (`$9323`, ported this session) is shared, so a
+  defeated child leaves correctly the moment `$9EE3` takes hits.
+
+## What actually ends the def-2 fight, and the cascade's real root — 2026-10-15
+
+Two corrections to this session's earlier report, both from hardware rather than from reading.
+
+### The child (anim `$0D`) is a teardown gate, not the win — and the win's last step is missing
+
+`$9EE3` is now ported (it was the one unported anim the def-2 fight actually spawns), and its
+body says what it is: `ld a,[sObjectRemoveMode] / cp $02 / ret nz`, then `SCRY = $90`,
+`SCRX = $58`, then `jp $58F8` which rewrites the record to **anim 4 / sprite 9** with state,
+phase and type cleared. So it waits for `sObjectRemoveMode == 2` — a value only a defeat-exit
+leaves behind — and the controller *clears* that byte to 0 before it spawns it. Poking
+`sObjectRemoveMode = 2` on the console tape proves both halves:
+
+```
+f560  (poke remove_mode = 2)  s1[anim=0D fst=00 y=40 x=58 spr=0E]
+f561                          s1[anim=04 fst=00 y=90 x=58 spr=09]   <- the ported writes, exactly
+f562  count 1 -> 2            (anim 4's state 0 spawns anim 5 / sprite $0C)
+f820  (poke the $92C4 boss-clear: remove_mode = 1, fade = $0280)
+      ... $FF9B = $1F, the fade counting down from $0280
+```
+
+So the *player's* win is the other path: `sBossHits` (`$AFC5`, seeded 6, 2 per stomp) reaching 0 →
+`$92C4` sets `sObjectRemoveMode = 1` and `sFadeTimer = $0280` (the 640-frame boss-clear fade, which
+the port models) → **`$FF9B = $1F`** (console-measured above) → the overworld hand-off, which is
+still unported. **That hand-off is why "you can't beat the boss"**, not anim `$0D`: the port's
+boss-clear fade expires and then has nowhere to go.
+
+The `$1D` ending (the boss riding out of the room) is a *different* path — the anim-4 → anim-5
+chain (`$9642`/`$9698`, ending at `$5688`: rise 4 px a frame, and under `SCRY = 8` set
+`$FF9B = $1D`) which is reachable only while `sObjectRemoveMode == 2`. Its bodies are decoded in
+`boss_anim_4_5_chain` in `PORT_QUEUE.json`; not ported yet.
+
+### The cascade: the port's pipe entry is 16 frames long, and a naive VM gate is worse
+
+Console vs port, level 13, Right held, per frame:
+
+| | arm | `sSceneId=$10` | scene ops | Mario placed | fade set | fade 0 | parts act |
+|---|---|---|---|---|---|---|---|
+| console | f28 | f52 | f67–f70 | f75 | f68 | f420 | f421 |
+| port | f29 | f52 | f53–f57 | f92 | f54 | f444 | f444 |
+
+The arm itself is **right** — the port's `$188B` walk-in arm fires at f29 with Mario at world 3779,
+the console's f28 at 3779. What differs is everything after it: the port takes 63 frames from the
+arm to the placement (a 23-frame `pipe_dir = 3` slide plus a 40-frame camera transition) where the
+console takes 47, and the console's scene ops run *inside* the travel — `sPipeTravelDirection` is
+still `$30` at f67–f70, eight frames before Mario is placed. Gating the scene VM on "is Mario
+travelling" (the port's `pipe_dir >= 0x10`) therefore does not fix anything: it moves the `$2x`
+arm past the placement and lands Mario at 1308 instead of 1561. That gate was tried, measured,
+and reverted; the real gap is the ROM's travelling *sub-phase*, which ends before
+`sPipeTravelDirection` clears. `boss_arena_phase_cascade` in `PORT_QUEUE.json` carries the
+numbers.

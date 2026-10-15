@@ -10,6 +10,7 @@ pub mod objects;
 pub mod player;
 pub mod player_sim;
 pub mod scene;
+pub mod tileset;
 pub mod video;
 
 /// Mario powerup state (`sCurPowerup` $A216; the draw offsets in

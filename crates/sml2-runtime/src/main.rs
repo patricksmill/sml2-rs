@@ -30,7 +30,8 @@ use sml2_core::map::MapNodes;
 use sml2_core::object::ObjectTables;
 use sml2_core::objects::FireHit;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
-use sml2_core::scene::{boss_def_index, boss_def_portable, SceneScripts, SceneVm};
+use sml2_core::scene::{boss_def_index, boss_def_portable, SceneScripts, SceneStep, SceneVm};
+use sml2_core::tileset::Tilesets;
 use sml2_core::video;
 
 /// Native GB screen; the HUD strip and the parity checks are anchored to it.
@@ -174,6 +175,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 player: mario,
                 bumpers: Vec::new(),
                 fireballs: Vec::new(),
+                boss_oam: Vec::new(),
             })
         } else {
             None
@@ -424,6 +426,48 @@ fn load_scene_scripts() -> SceneScripts {
     }
 }
 
+/// The `$6x` opcode's tileset swaps (`extracted/scenes/tilesets.json`). Also one
+/// ROM-wide table — `$25AF`'s three sources are indexed only by
+/// `sLevelGfxIndex`. Without it an arena keeps the level's own tiles and
+/// metatile definitions, which draws the right *layout* with the wrong art.
+fn load_tilesets() -> Tilesets {
+    match fs::read_to_string(extracted_dir().join("scenes/tilesets.json"))
+        .ok()
+        .and_then(|t| Tilesets::from_json(&t).ok())
+    {
+        Some(t) => t,
+        None => {
+            println!("note: tileset table missing — a scene's $6x swap cannot run");
+            Tilesets::default()
+        }
+    }
+}
+
+/// The `$6x` reload's level data (`extracted/scenes/arena_layout.bin`).
+///
+/// `$25AF` hardcodes `sLevelLayoutIndex = 3` and `sLevelBank = 19`, so the same
+/// blob loads for **every** arena: the boss rooms are authored as screens of
+/// that one layout and the per-arena look comes from the tileset swap. A level's
+/// own layout at those cells holds that level's tiles, which is why an arena
+/// rendered from it comes out as ordinary level walls.
+fn load_arena_layout() -> Option<LevelLayout> {
+    match fs::read(extracted_dir().join("scenes/arena_layout.bin")) {
+        Ok(b) => match LevelLayout::from_bytes(&b) {
+            Ok(l) => Some(l),
+            Err(e) => {
+                println!("note: scenes/arena_layout.bin unusable — {e}");
+                None
+            }
+        },
+        Err(_) => {
+            println!(
+                "note: scenes/arena_layout.bin missing — a $6x swap cannot reload the arena room"
+            );
+            None
+        }
+    }
+}
+
 /// Everything the window viewer needs per frame.
 struct Viewer<'a> {
     manifest: &'a LevelManifest,
@@ -469,6 +513,14 @@ struct SpriteCtx {
     /// + the rDiv flicker), `(x, y, mapping)` in the same convention as
     /// `bumpers`.
     fireballs: Vec<(u16, u16, u8)>,
+    /// During a boss fight, the boss path's own draw output (`$3A14` -> bank 25
+    /// `$66000`, [`sml2_core::objects::ObjectSim::boss_oam`]): the entries are
+    /// already in OAM byte space, so they are blitted at `(x - 8, y - 16)` and
+    /// their attr byte is used as-is (the pass XORed `sSpriteFlipFlags` in).
+    /// Drawn after Mario, like the level objects — and `insts` is empty on
+    /// these frames, because the boss slots' state byte carries HP, not a slot
+    /// state, and the engine's own draw never runs in the boss path.
+    boss_oam: Vec<sml2_core::objects::BossOamCell>,
 }
 
 /// Interactive viewer: arrow keys scroll the camera, Q/ESC quits; the window
@@ -820,6 +872,28 @@ fn render_view(
                     vh,
                 );
             }
+        }
+        // The boss path's own draw (`$3A14` -> bank 25 `$66000`), which replaces
+        // the level's `$C000` pass while the fight runs: those entries are
+        // already OAM bytes, so the screen pixel is `(x - 8, y - 16)` and the
+        // attr byte stands (the pass XORed the flip flags in itself). Drawn last
+        // so the fight's parts layer over the level's objects, and after Mario,
+        // who keeps OAM's first entries.
+        for c in &s.boss_oam {
+            blit_obj_cell(
+                &mut img,
+                &bg_idx,
+                &mut taken,
+                &s.objblock,
+                &pal0,
+                &pal1,
+                c.x as i32 - 8,
+                c.y as i32 - 16,
+                c.tile,
+                c.attr,
+                vw,
+                vh,
+            );
         }
     }
     Ok(img)
@@ -1474,6 +1548,16 @@ fn run_replay(
         // in-level frame pass (home.asm:274), so a latched scene advances
         // exactly one script byte per frame and a `$4x` teleport lands after
         // this frame's physics rather than before it.
+        //
+        // It is *not* gated on the pipe travel. Console-measured on the level 13
+        // tape: `sPipeTravelDirection` stays `$30` from f28 to f74, yet the
+        // arena's script ops run at f67-f70 — inside the travel, eight frames
+        // before Mario is placed (f75). Gating on "is Mario travelling" (the
+        // port's `pipe_dir >= 0x10`) therefore runs the `$2x` arm *after* the
+        // placement instead of before it, which lands Mario at 1308 rather than
+        // the arena's 1561: the ROM's travelling phase is a sub-phase of the
+        // travel that ends before `sPipeTravelDirection` clears, and it is not
+        // modelled yet (see `boss_arena_phase_cascade` in PORT_QUEUE.json).
         scene_vm.step(&mut sim, &mut cam, &scripts);
         // The full-death-cycle gap: after the fade-trigger frame the game
         // leaves the level (fade 192 frames → `$14` lives/save/map setup →
@@ -2148,7 +2232,7 @@ fn print_play_state(
     obj: &sml2_core::objects::ObjectSim,
 ) {
     println!(
-        "{why} at frame {frame}: mario=({:#06X},{:#06X}) state={:?} dead={} camera=({:#06X},{:#06X}) transition={} scene_state={:#04X} scene_id={:#04X} edge={:#04X} boss_mode={} unported={:?}",
+        "{why} at frame {frame}: mario=({:#06X},{:#06X}) state={:?} dead={} camera=({:#06X},{:#06X}) transition={} scene_state={:#04X} scene_id={:#04X} edge={:#04X} boss_mode={} boss_oam={} first_oam={:?} unported={:?}",
         sim.x,
         sim.y,
         sim.state(),
@@ -2160,6 +2244,8 @@ fn print_play_state(
         cam.scene_id,
         cam.edge_byte(),
         cam.boss_mode(),
+        obj.boss_oam.len(),
+        obj.boss_oam.first(),
         obj.unported,
     );
 }
@@ -2206,6 +2292,15 @@ fn run_play(
     let scripts = load_scene_scripts();
     let mut scene_vm = SceneVm::new();
     let nodes = load_map_nodes();
+    // The `$6x` opcode's tileset swap rewrites the level's own tile data and
+    // metatile definitions mid-level, so play mode owns a mutable copy of the
+    // manifest and a live tile block. The per-frame render copies the live
+    // block instead of the level's extracted one.
+    let mut manifest = manifest.clone();
+    let mut bg_live = bg_base.to_vec();
+    let tilesets = load_tilesets();
+    let arena_layout = load_arena_layout();
+    let mut layout_live = layout.clone();
     use minifb::{Key, Window, WindowOptions};
     let mut window = Window::new(
         &format!(
@@ -2322,7 +2417,7 @@ fn run_play(
             if cam.transition == 0 {
                 // $307D — `$0F71`'s first call; see the replay loop above.
                 cam.crouch_pan(&sim, &keys);
-                sim.step(&keys, a_pressed, b_pressed, layout);
+                sim.step(&keys, a_pressed, b_pressed, &layout_live);
             }
             // `$3451` id 4's `sStompChainCount` reset — see the replay loop.
             if sim.take_stomp_chain_reset() {
@@ -2376,7 +2471,7 @@ fn run_play(
                 obj.step(
                     cam.x,
                     cam.y,
-                    layout,
+                    &layout_live,
                     tables,
                     &mario,
                     cam.boss_mode(), // `$0652`
@@ -2388,8 +2483,39 @@ fn run_play(
             }
         }
         // $20A4: the scene VM, once per frame after the whole in-level pass —
-        // the same placement as the replay loop (home.asm:274).
-        scene_vm.step(&mut sim, &mut cam, &scripts);
+        // the same placement as the replay loop (home.asm:274). Not gated on the
+        // pipe travel; see the replay loop's note.
+        let stepped = scene_vm.step(&mut sim, &mut cam, &scripts);
+        // `$6x` (`$25AF`): the scene's tileset swap. It is a *graphics* change —
+        // VRAM tiles plus the metatile definitions — so it has to reach the
+        // renderer's inputs, not just the sim's `sLevelGfxIndex`. This is what
+        // makes a boss arena look like an arena instead of like the level that
+        // contains it.
+        if let SceneStep::Ran(op) = stepped {
+            if op >> 4 == 0x6 {
+                let index = sim.level_gfx_index;
+                let obj = spr.as_mut().map(|s| &mut s.objblock);
+                let applied = match obj {
+                    Some(o) => tilesets.apply(index, &mut bg_live, o, &mut manifest.metatiles),
+                    None => false,
+                };
+                // The reload's other half: the room itself comes from bank 19
+                // `$42F0[3]`, not from the level the arena sits in.
+                let room = match arena_layout.as_ref() {
+                    Some(a) => {
+                        layout_live = a.clone();
+                        true
+                    }
+                    None => false,
+                };
+                println!(
+                    "$6x: tileset swap {index:#04X} (map {}) — {}; arena room {}",
+                    tilesets.entry(index).map(|e| e.map_index).unwrap_or(0),
+                    if applied { "applied" } else { "NOT APPLIED" },
+                    if room { "reloaded" } else { "NOT RELOADED" }
+                );
+            }
+        }
         // $54E9: decrement sCameraPanTimer if nonzero.
         cam.tick_pan_timer();
         let f = if was_dead {
@@ -2414,25 +2540,37 @@ fn run_play(
                 s.bumpers = sim.block_draw.clone();
             }
             s.fireballs = sim.fire_draw.clone();
-            // Draw ACTIVE objects: positions/flip from the engine's staging.
-            s.insts = obj
-                .slots
-                .iter()
-                .enumerate()
-                .filter(|(i, o)| {
-                    // `$C000`/`$C014`: only state 2 slots draw, and never one
-                    // whose handler set `sObjectDone` this frame (a defeat).
-                    o.state() == sml2_core::objects::SlotState::Active && !obj.slot_done[*i]
-                })
-                .map(|(_, o)| SpriteInst {
-                    sprite: o.sprite(),
-                    x: o.x(),
-                    y: o.y(),
-                    flip: o.b[sml2_core::objects::B_DEFEAT]
-                        ^ o.b[sml2_core::objects::B_FLIP]
-                        ^ o.b[sml2_core::objects::B_FLASH],
-                })
-                .collect();
+            // The boss path draws itself: while `$0652` selects `$8DA9`, the
+            // level's `$8000` engine does not run, so the slots are the fight's
+            // parts — and their state byte is HP (the def image seeds it with
+            // 6), never a slot state, so the level draw's `state == 2` filter
+            // would both miss them and, at 2 HP, double-draw one. So: boss
+            // frames take `$66000`'s own output and no instances at all.
+            if cam.boss_mode() {
+                s.insts.clear();
+                s.boss_oam = obj.boss_oam.clone();
+            } else {
+                s.boss_oam.clear();
+                // Draw ACTIVE objects: positions/flip from the engine's staging.
+                s.insts = obj
+                    .slots
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, o)| {
+                        // `$C000`/`$C014`: only state 2 slots draw, and never one
+                        // whose handler set `sObjectDone` this frame (a defeat).
+                        o.state() == sml2_core::objects::SlotState::Active && !obj.slot_done[*i]
+                    })
+                    .map(|(_, o)| SpriteInst {
+                        sprite: o.sprite(),
+                        x: o.x(),
+                        y: o.y(),
+                        flip: o.b[sml2_core::objects::B_DEFEAT]
+                            ^ o.b[sml2_core::objects::B_FLIP]
+                            ^ o.b[sml2_core::objects::B_FLASH],
+                    })
+                    .collect();
+            }
         }
         // $273E: the START check at the tail of the in-level frame — the ROM
         // calls it from the alive and the dead branch alike. START toggles the
@@ -2468,14 +2606,14 @@ fn run_play(
             anim_timer = 0;
             anim_phase = (anim_phase + 1) & 3;
         }
-        let mut bg = bg_base.to_vec();
+        let mut bg = bg_live.clone();
         apply_tile_anim(&mut bg, &manifest.tile_anim, anim_rows, anim_phase);
         // $076B: the status bar's coin digits follow the sim (the picked-up
         // coin shows up immediately, like the console's per-frame patch).
         let hud_live = hud_row_coins(hud, sim.coins_high, sim.coins_low);
         let frame = render_view(
-            manifest,
-            layout,
+            &manifest,
+            &layout_live,
             &sim.layout_writes,
             &bg,
             cam.x,

@@ -354,6 +354,116 @@ fn main() -> Result<(), Box<dyn Error>> {
         &baserom[script_rom..script_rom + 192],
     )?;
 
+    // The `$6x` opcode's tileset swap (`$25AF`), written once for the whole ROM
+    // because all three of its tables are global and keyed only by
+    // `sLevelGfxIndex`: `$268B` (bank pairs), `$2699` (source `dw` pairs) and
+    // `$26B5` (bank-8 metatile-map pointers). Seven entries — every arena script
+    // in the ROM uses one of them (indices 0..6).
+    let mut tileset_entries = Vec::new();
+    for idx in 0..7usize {
+        let bg_bank = baserom[0x268B + idx * 2] as usize;
+        let obj_bank = baserom[0x268B + idx * 2 + 1] as usize;
+        let word = |off: usize| baserom[off] as usize | ((baserom[off + 1] as usize) << 8);
+        let bg_addr = word(0x2699 + idx * 4);
+        let obj_addr = word(0x2699 + idx * 4 + 2);
+        let map_addr = word(0x26B5 + idx * 2);
+        if !(0x4000..0x8000).contains(&bg_addr)
+            || !(0x4000..0x8000).contains(&obj_addr)
+            || !(0x4000..0x8000).contains(&map_addr)
+        {
+            return Err(format!("$25AF index {idx}: a source address is outside $4000-$7FFF").into());
+        }
+        let bg_rom = bg_bank * 0x4000 + (bg_addr - 0x4000);
+        let obj_rom = obj_bank * 0x4000 + (obj_addr - 0x4000);
+        let map_rom = 8 * 0x4000 + (map_addr - 0x4000);
+        let label = main_facts
+            .rom_to_label
+            .get(&(map_rom as u32))
+            .ok_or_else(|| format!("$26B5[{idx}] = ${map_addr:04X}: no label at ROM ${map_rom:05X}"))?
+            .clone();
+        let map_index: u8 = label
+            .strip_prefix("Level_TileMap_")
+            .ok_or_else(|| format!("$26B5[{idx}] resolves to {label}, not a Level_TileMap_NN"))?
+            .parse()
+            .map_err(|e| format!("bad map index in {label}: {e}"))?;
+        // The metatile table must be the one the disassembly ships for that
+        // index — the same cross-check the usage index does.
+        let file = format!("tilemaps/mappings/{map_index:02}.bin");
+        let known = fs::read(decomp.join(&file))?;
+        if baserom[map_rom..map_rom + 512] != known[..] {
+            return Err(format!("{file} differs from baserom.gb at ${map_rom:05X}").into());
+        }
+        tileset_entries.push(sml2_core::tileset::TilesetEntry {
+            index: idx as u8,
+            bg_bank: bg_bank as u8,
+            bg_addr: bg_addr as u16,
+            obj_bank: obj_bank as u8,
+            obj_addr: obj_addr as u16,
+            map_index,
+            map_label: label,
+            bg_tiles: baserom[bg_rom..bg_rom + 0x600].to_vec(),
+            obj_tiles: baserom[obj_rom..obj_rom + 0x400].to_vec(),
+            metatiles: baserom[map_rom..map_rom + 512].to_vec(),
+        });
+    }
+    let extra_rom = 7 * 0x4000 + (0x7800 - 0x4000);
+    let gfx_tilesets = sml2_core::tileset::Tilesets {
+        schema: sml2_core::tileset::TILESET_SCHEMA.to_string(),
+        notes: vec![
+            "$25AF (the $6x scene opcode's handler) swaps the level's graphics and metatile \
+             definitions in place: bank 7 $7800 -> VRAM $8E80 (0x50, index-independent), \
+             bank $268B[i*2] $2699[i*4] -> $9200 (0x600), bank $268B[i*2+1] $2699[i*4+2] -> \
+             $8B00 (a literal 0x400, which overruns the 0x380-byte enemy region by 0x20 and \
+             lands on the first two tiles of the $8E80 block), and $26B5[i] -> sMetatileMap."
+                .to_string(),
+            "The copies land inside the $8800-$97FF tile block the port holds as \
+             levelNN.bgblock.bin ($8E80 = 0x680, $9200 = 0xA00, $8B00 = 0x300), and the OBJ \
+             space $8000-$8FFF shares that VRAM ($8800-$8FFF = objblock.bin's high half), so \
+             applying a swap repatches both."
+                .to_string(),
+        ],
+        extra_8e80: baserom[extra_rom..extra_rom + 0x50].to_vec(),
+        entries: tileset_entries,
+    };
+    fs::write(
+        extracted.join("scenes/tilesets.json"),
+        serde_json::to_string_pretty(&gfx_tilesets)?,
+    )?;
+    println!(
+        "wrote scenes/tilesets.json: {} gfx-index entries, maps {}",
+        gfx_tilesets.entries.len(),
+        gfx_tilesets
+            .entries
+            .iter()
+            .map(|e| e.map_index.to_string())
+            .collect::<Vec<_>>()
+            .join("/")
+    );
+
+    // The `$6x` reload's LEVEL DATA (`$0361` with the hardcoded
+    // `sLevelLayoutIndex = 3` and `sLevelBank = 19`). This is the piece that
+    // looks like a mistake and is not: the ROM reloads the layout at
+    // bank 19 `$42F0[3]` — one blob, the same for every arena — so every boss
+    // room in the game is authored as a screen inside *that* layout, and the
+    // per-arena look comes from the tileset swap above it. The port renders a
+    // level's own layout at the arena's cell coordinates, which is why a
+    // swapped-tileset arena came out blank.
+    //
+    // Cross-checked the same way the level layouts are: the blob must be the
+    // decompressed layout of whichever level header names (bank 19, index 3).
+    let arena_src = 19 * 0x4000 + (0x42F0 - 0x4000) + 3 * 2;
+    let arena_ptr = (baserom[arena_src] as usize) | ((baserom[arena_src + 1] as usize) << 8);
+    if !(0x4000..0x8000).contains(&arena_ptr) {
+        return Err(format!("$42F0[3] in bank 19 = ${arena_ptr:04X}, outside $4000-$7FFF").into());
+    }
+    let arena_rom = 19 * 0x4000 + (arena_ptr - 0x4000);
+    let arena_layout = decompress_level(&baserom[arena_rom..])?;
+    fs::write(extracted.join("scenes/arena_layout.bin"), &arena_layout)?;
+    println!(
+        "wrote scenes/arena_layout.bin: {} bytes from bank 19 ${arena_ptr:04X}",
+        arena_layout.len()
+    );
+
     // Bank 2 boss spawn tables ($8D9C / $8DFD / $8E6C):
     // $4E3F..$4E51: 8 pointers to 3-byte records (count, hits, sprite)
     // $4E9A..$4EAC: 8 pointers to sObject0Def (18-byte records)
@@ -654,6 +764,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         let layout_file = format!("level{nn:02}.decompressed.bin");
         fs::write(out_dir.join(&layout_file), &decompressed)?;
         let layout = LevelLayout::from_bytes(&decompressed)?;
+        // A header naming (bank 19, layout index 3) is the level whose data the
+        // `$6x` reload puts in every boss arena — so its layout must be the
+        // blob `scenes/arena_layout.bin` carries. This is the cross-check that
+        // keeps the arena's room data honest: if the reload ever picked a
+        // different blob, this fails instead of silently rendering the wrong
+        // room.
+        {
+            let h = LevelHeader::from_bytes(&raw.bytes);
+            if h.level_data_bank == 19 && h.layout_index == 3 && decompressed != arena_layout {
+                return Err(format!(
+                    "{} claims (bank 19, layout 3) but differs from scenes/arena_layout.bin",
+                    raw.label
+                )
+                .into());
+            }
+        }
 
         // The level's two 48-byte 3×16 cell maps — `sScreenEdgeMap` and the
         // parallel `sSceneMap` (`$0F0B` latches `sSceneId` from the cell under

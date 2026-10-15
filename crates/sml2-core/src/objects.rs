@@ -103,6 +103,19 @@ pub const SLOT_COUNT: usize = 16;
 pub const RECORD_LEN: usize = 6;
 pub const STREAM_BASE: u16 = 0xAB06;
 
+/// One OAM entry the boss render pass (`$3A14` -> bank 25 `$66000`) emitted,
+/// in the console's own OAM byte space — the runtime maps it to screen pixels
+/// as `(x - 8, y - 16)`, the same convention the level draw's cells use.
+/// `y == 0` is the ROM's own "hide this entry" (it writes 0 over the Y byte
+/// when the X byte is past the screen), not a real top-of-screen sprite.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct BossOamCell {
+    pub y: u8,
+    pub x: u8,
+    pub tile: u8,
+    pub attr: u8,
+}
+
 // --- slot / staging byte offsets (ram.asm `$FFD0-$FFEF` map) ---
 pub const B_XHI: usize = 0;
 pub const B_XLO: usize = 1;
@@ -473,6 +486,12 @@ pub struct ObjectSim {
     pub boss_defeated: bool,
     /// Raw 512-byte slot staging buffer ($AD00-$AEFF) for boss driver exact staging
     pub boss_slots_raw: [u8; 512],
+    /// The boss render pass's output for the frame ([`Self::boss_render`]):
+    /// every OAM entry `$3A14` emitted, in slot order — which is the console's
+    /// own `$FF8D` cursor order, so the earlier entries win overlaps. Cleared
+    /// once per frame at the top of [`Self::boss_engine`], and empty on any
+    /// frame that is not a boss frame.
+    pub boss_oam: Vec<BossOamCell>,
     /// ROM addresses of bank-16 handlers that are not ported yet.
     pub unported: Vec<u32>,
 }
@@ -548,6 +567,7 @@ impl ObjectSim {
             boss_timer_reload: 0,
             boss_defeated: false,
             boss_slots_raw: [0; 512],
+            boss_oam: Vec::new(),
             unported: Vec::new(),
         }
     }
@@ -581,8 +601,10 @@ impl ObjectSim {
     /// 1. Clears both slot pages ($AD00-$AEFF, 512 bytes) and resets slot array.
     /// 2. Sets `boss_hits_remaining = hits`, `boss_sprite = sprite`, `boss_timer_reload = 80`.
     /// 3. Copies 18-byte `obj0` to `$AD05` (offset 5 in slot 0).
-    /// 4. If `count > 0`, loops over sub-objects starting destination at `$AD25` (offset 0x25)
-    ///    with literal `+$10` stride per sub-object (causing overlap on count >= 2).
+    /// 4. If `count > 0`, loops over sub-objects from destination `$AD25` (slot 1)
+    ///    at the `$8E6C` step — `((e + 16) & $F0) + 5` evaluated on the cursor
+    ///    *after* its 18-byte copy, i.e. +$20 per sub-object, so a count-2 def
+    ///    fills slots 1 and 2.
     /// 5. Reflects raw staged bytes into `slots[0..4]` for slot-level consumers.
     pub fn spawn_boss(&mut self, def_index: u8) {
         if def_index > 8 {
@@ -606,14 +628,23 @@ impl ObjectSim {
         // obj0 at $AD05 (offset 5 in slot 0)
         self.boss_slots_raw[5..5 + 18].copy_from_slice(&obj0);
 
-        // Sub-objects start at $AD25 (offset 0x25 = 37) with literal +$10 (16 bytes) stride
+        // Sub-objects start at $AD25 (sObject1Def); see the stride note below.
         if count > 0 {
+            // `$8E6C`: the first sub-image lands at `sObject1Def` (`$AD25`), and
+            // then the destination advances by `e = ((e + 16) & $F0) + 5` —
+            // where `ld a, e` reads E **after** `$3CAA` already walked it the 18
+            // bytes it copied. So the real step is
+            // `(18 + 16)` folded into the low byte: `$25 -> $45 -> $65`, i.e.
+            // +$20 per sub-image, filling slot 1 then slot 2 of the object page.
+            // The earlier `+$10` reading (which skipped the post-copy E) left a
+            // count-2 def's second part inert — the console stages it at `$AD45`
+            // and the arena is one house short without it.
             let mut offset = 0x25usize;
             for sub in sub_objs.iter().take(count as usize) {
                 if offset + 18 <= self.boss_slots_raw.len() {
                     self.boss_slots_raw[offset..offset + 18].copy_from_slice(sub);
                 }
-                offset += 0x10;
+                offset = ((offset + 18 + 16) & 0xF0) + 5;
             }
         }
 
@@ -771,10 +802,21 @@ impl ObjectSim {
     /// `$B157`/`$B15B`: the boss object's way out — drop the live def count and
     /// blank the staging. `$B2D7` (the level path's `remove_object`) does much
     /// more (record markers, counters, hitbox), so this is its own helper.
-    fn boss_finish_slot(&mut self, st: &mut Staging) {
-        self.boss_def_count = self.boss_def_count.wrapping_sub(1);
+    ///
+    /// The two entry points differ in exactly one thing: `$B157` decrements
+    /// `sObjectDefCount` first and then falls into `$B15B`, which only blanks
+    /// the staged slot (all 32 bytes at `$FFD0`) and sets `sObjectDone`. A
+    /// *non-primary* slot leaves through `$B157` (the controller is waiting for
+    /// the live count to reach 0), the primary one through `$B15B`.
+    fn boss_finish_blank(&mut self, st: &mut Staging) {
         st.b = [0; 32];
         self.done = 1;
+    }
+
+    /// `$B157`: `ld hl,sObjectDefCount / dec [hl]`, then `$B15B}`'s blank.
+    fn boss_finish_counted(&mut self, st: &mut Staging) {
+        self.boss_def_count = self.boss_def_count.wrapping_sub(1);
+        self.boss_finish_blank(st);
     }
 
     /// `$B264`/`$B26A`/`$B270`/`$B276`: the boss path's 8-bit screen movers.
@@ -1197,6 +1239,78 @@ impl ObjectSim {
         }
     }
 
+    /// `$9323` (boss anim 3): a **defeated** part's way out — the body the
+    /// `$9443` morph hands every finishing slot to (`B_DEF = 3`), parts and the
+    /// controller alike.
+    ///
+    /// ```text
+    /// $9323  entry: B_SCxy... `$B270` b=32 — the screen Y goes *up* — plus the
+    ///        Y flip (`$FFDD ^= $40`), type 0, `$FFE0 = 0`, state 1, and sfx 13
+    ///        (23 when this is not the primary slot)
+    /// $5354  state 1: the cap-15 picker (`$B1EB`, the very table the bob uses)
+    ///        keeps `$B270`-ing it up until `$FFE0` reaches 15 -> state 2
+    /// $5366  state 2: the cap-21 picker (`$B18F`) `$B276`-s it *down* until
+    ///        `SCRY >= $D0`, then splits at `$9399`:
+    ///          non-primary -> `$B157` (drop `sObjectDefCount`) + done + remove 2
+    ///          primary     -> state 3, a 208-frame timer, `sMusicRequest = 12`
+    /// $5385  state 3: the timer runs out -> `$B15B` (blank only) + done + remove 2
+    /// ```
+    ///
+    /// This is the piece that was missing: the morph left the slot at anim 3,
+    /// dispatch reported `$9323`, and a defeated house stopped dead wherever the
+    /// morph had frozen it — with `ObjectSim::boss_finish_blank`/`_counted` never
+    /// reached, and the controller therefore waiting for a live count that never
+    /// dropped.
+    fn handler_boss_anim3(&mut self, st: &mut Staging, tables: &ObjectTables) {
+        if st.b[B_FSTATE] == 0 {
+            self.scr_y_sub(st, 32); // $B270
+            st.b[B_FLIP] ^= 0x40; // $FFDD ^= $40
+            st.b[B_PHASE] = 0; // $FFE0
+            st.b[B_TYPE] = 0; // $FFE2
+            st.b[B_FSTATE] = 1;
+            // `sSfxRequest0`: 13, or 23 for a slot that is not the primary one.
+            self.sfx0 = if self.boss_slot_ptr_lo == 0 { 13 } else { 23 };
+            return;
+        }
+        match st.b[B_FSTATE] {
+            // $5354
+            1 => {
+                let (b, c) = self.step_picker(st, &tables.boss_picker_profile_15, 15);
+                self.scr_y_sub(st, b);
+                if st.b[B_PHASE] != c {
+                    return;
+                }
+                st.b[B_FSTATE] = 2;
+                st.b[B_PHASE] = 0;
+            }
+            // $5366
+            2 => {
+                let (b, _) = self.step_picker(st, &tables.boss_picker_profile, 21);
+                self.scr_y_add(st, b);
+                if st.b[B_SCRY] < 0xD0 {
+                    return;
+                }
+                self.remove_mode = 2;
+                if self.boss_slot_ptr_lo != 0 {
+                    self.boss_finish_counted(st); // $9399 -> $B157
+                    return;
+                }
+                st.b[B_FSTATE] = 3;
+                st.b[B_T28] = 208;
+                self.music_request = Some(12);
+            }
+            // $5385
+            3 => {
+                st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
+                if st.b[B_T28] != 0 {
+                    return;
+                }
+                self.boss_finish_blank(st); // $B15B
+            }
+            s => self.note_unported(0x5354 + (s as u32) * 2),
+        }
+    }
+
     /// `$9606` (boss anim 2): the def-2 spawner. While its remove-mode is 2 it
     /// spawns one child (anim 4 / sprite 9) and parks itself at sprite 7; every
     /// later call returns at the state test, because its state bodies belong to
@@ -1239,18 +1353,14 @@ impl ObjectSim {
     /// interaction-flag clear the level path does in `$818D`), fetches the
     /// `$505B` extent record (`$9048`), and copies the slot back (`$81BD`).
     ///
-    /// Deliberate gap, reported once per frame: `$3A14` (bank 25 `$66000`) is
-    /// the boss path's *render* pass — it computes `sSpriteFlipFlags` (`$6087`)
-    /// and emits the sprite's OAM entries from the bank-25 table at file
-    /// `$66092` (118 entries) plus its blobs from `$6617F`, reading
-    /// `B_SCRY`/`B_SCRX` as the position. The flags half is done here; the OAM
-    /// emit is not extracted, so the note stays. Note also that the boss slots'
-    /// screen bytes are NOT derived from world coords (`$C090`): the def images
-    /// and the handlers own them.
+    /// Note the boss slots' *screen* bytes are NOT derived from world coords:
+    /// in this path `B_SCRY`/`B_SCRX` are the object's own OAM position — the
+    /// def image carries it and the handlers' movers change it — and
+    /// [`Self::boss_render`] consumes it as-is.
     pub fn boss_engine(
         &mut self,
-        cam_x: u16,
-        cam_y: u16,
+        _cam_x: u16,
+        _cam_y: u16,
         layout: &LevelLayout,
         tables: &ObjectTables,
     ) {
@@ -1259,6 +1369,9 @@ impl ObjectSim {
         // every frame here).
         self.fff0 = self.fff0.wrapping_add(1);
         self.odd = self.fff0 & 1 == 1;
+        // The frame's OAM output is rebuilt from scratch: `$66000` writes into
+        // the shadow OAM through `$FF8D`, which the frame's own draw reset.
+        self.boss_oam.clear();
 
         let mut remaining = self.boss_def_count.wrapping_add(1);
         let mut page = 0xAD00usize;
@@ -1277,27 +1390,36 @@ impl ObjectSim {
             };
             self.boss_slot_ptr_lo = (i * 0x20) as u8; // `sObjectSlotPtrLo`
             if st.b[B_DEF] != 0 {
-                // $92DF: `rst $28` through the *boss* table ($92E8) — bank-2
-                // addresses, see `ObjectTables::boss_anim_handlers` — not the
-                // level's bank-22 profiles; see `dispatch_handler`.
-                match tables.boss_anim_handler(st.b[B_DEF]) {
-                    Some(h) => self.dispatch_handler(h, &mut st, layout, tables),
-                    // The anim is past the table: the ROM would read the next
-                    // routine's data, so report it rather than guess.
-                    None => self.note_unported(0x92DF),
+                // $92DF: `ld a,[sMarioDead] / cp $FF / ret z` — a dead Mario
+                // freezes *every* boss slot: the handler is not called at all,
+                // so the staged record keeps its last values. The driver still
+                // renders it and writes it back (the `ret z` returns to the
+                // driver, not out of it), which is why a frozen house stays on
+                // screen instead of vanishing. Console-verified: on the level
+                // 13 tape every slot record stops dead on the frame Mario dies
+                // and holds that value for the rest of the death animation.
+                if self.mario.dead != 0xFF {
+                    // $92DF: `rst $28` through the *boss* table ($92E8) — bank-2
+                    // addresses, see `ObjectTables::boss_anim_handlers` — not the
+                    // level's bank-22 profiles; see `dispatch_handler`.
+                    match tables.boss_anim_handler(st.b[B_DEF]) {
+                        Some(h) => self.dispatch_handler(h, &mut st, layout, tables),
+                        // The anim is past the table: the ROM would read the next
+                        // routine's data, so report it rather than guess.
+                        None => self.note_unported(0x92DF),
+                    }
                 }
-                self.note_unported(0x3A14); // $3A14 -> bank 25 $66000
+                self.boss_render(&st, tables); // $3A14 -> bank 25 $66000
                 st.b[B_FLAGS] = 0; // $FFE7 = 0
                 self.refresh_hitbox(&mut st, tables, true); // $9048
-                // `$6087` (reached from $66000): the flip flags the renderer
-                // XORs into the OAM attributes. NO `$C090` screen staging here:
-                // in the boss path `B_SCRY`/`B_SCRX` are the object's *screen*
-                // position, written by the def image itself (def 0's `$AD05`
-                // image carries $7C/$58 = `B_SCRY`/`B_SCRX`) and then moved by
-                // the handlers' `$B264`/`$B26A`/`$B270`/`$B276`; `$66000`
-                // consumes them as-is. Deriving them from world coords here
-                // would clobber every boss that moved.
-                self.sprite_flip_flags = st.b[B_DEFEAT] ^ st.b[B_FLIP] ^ st.b[B_FLASH];
+                // NO `$C090` screen staging here: in the boss path
+                // `B_SCRY`/`B_SCRX` are the object's *screen* position, written
+                // by the def image itself (def 0's `$AD05` image carries
+                // $7C/$58 = `B_SCRY`/`B_SCRX`) and then moved by the handlers'
+                // `$B264`/`$B26A`/`$B270`/`$B276`; `$66000` consumes them as-is.
+                // Deriving them from world coords here would clobber every boss
+                // that moved. `sSpriteFlipFlags` is written *inside* the render
+                // pass (`$6087`), which is also the ROM's order.
                 self.slots[i].b = st.b; // $81BD
             }
             remaining = remaining.wrapping_sub(1);
@@ -1305,6 +1427,97 @@ impl ObjectSim {
                 return;
             }
             page = page.wrapping_add(0x20);
+        }
+    }
+
+    /// `$3A14` -> bank 25 `$66000` — the boss path's render pass.
+    ///
+    /// A *different* draw from the level's `$C000`: it reads the staged slot's
+    /// sprite byte (`$FFDB` = [`B_SPRITE`]) as an index into the 118-entry `dw`
+    /// table at bank-25 `$6092`, and the slot's `$FFD9`/`$FFDA` ([`B_SCRY`] /
+    /// [`B_SCRX`]) as the base *OAM* position — no world-coordinate math, which
+    /// is why `$8DA9` never stages the `$C090` pair.
+    ///
+    /// Each record cell is four bytes `[dy, dx, tile, attr]`, emitted as one
+    /// OAM entry: `y = dy + base`, `x = dx + base`, `tile`, `attr ^ flags`. The
+    /// `$6087` flags byte is `$FFDC ^ $FFDD ^ $FFDE` (slot bytes 12/13/14) and
+    /// does double duty — bit 5 mirrors the X offset (`~dx - 7`) and bit 6 the
+    /// Y offset (`~dy - 7`), and the whole byte is XORed into every emitted
+    /// attr. The bounds are the console's own OAM ones: a Y past `$A0` drops
+    /// the cell (four record bytes consumed, nothing written), an X past `$A8`
+    /// writes a `0` over the Y byte the cell had already stored — the port
+    /// emits that entry with `y = 0`, which draws nothing (OAM Y 0 is 16 px
+    /// above the screen) and keeps the slot count/order identical.
+    ///
+    /// `$88 <adj>` is the big-blob origin marker: one operand byte, and while
+    /// flip bit 6 is set it shifts the base Y for every cell after it (the
+    /// 32x32 blobs' offsets are computed from the flipped origin).
+    fn boss_render(&mut self, st: &Staging, tables: &ObjectTables) {
+        // $66000's head: `ld a,[sObjectDone] / and a / ret nz` — a slot whose
+        // handler marked it done this frame (a hit books `sObjectDone`) is not
+        // drawn on that frame.
+        if self.done != 0 {
+            return;
+        }
+        // $66087/$6087: `sSpriteFlipFlags = $FFDC ^ $FFDD ^ $FFDE`.
+        let flags = st.b[B_DEFEAT] ^ st.b[B_FLIP] ^ st.b[B_FLASH];
+        self.sprite_flip_flags = flags;
+        let Some(rec) = tables.boss_oam_list(st.b[B_SPRITE]) else {
+            // Past the table the ROM reads the following record bytes as a
+            // pointer; report rather than serve garbage.
+            self.note_unported(0x66092);
+            return;
+        };
+        let base_x = st.b[B_SCRX];
+        let mut base_y = st.b[B_SCRY];
+        let mut i = 0usize;
+        while i < rec.len() {
+            let first = rec[i];
+            if first == 0x80 {
+                break; // $66039: `cp $80 / ret z`
+            }
+            if first == 0x88 {
+                if i + 1 >= rec.len() {
+                    break;
+                }
+                if flags & 0x40 != 0 {
+                    base_y = base_y.wrapping_add(rec[i + 1]);
+                }
+                i += 2;
+                continue;
+            }
+            if i + 3 >= rec.len() {
+                break;
+            }
+            let (dy, dx, tile, attr) = (rec[i], rec[i + 1], rec[i + 2], rec[i + 3]);
+            i += 4;
+            let y = if flags & 0x40 != 0 {
+                (!dy).wrapping_sub(7).wrapping_add(base_y)
+            } else {
+                dy.wrapping_add(base_y)
+            };
+            if y >= 0xA0 {
+                continue; // $6605F: off the screen vertically — the cell is skipped
+            }
+            let x = if flags & 0x20 != 0 {
+                (!dx).wrapping_sub(7).wrapping_add(base_x)
+            } else {
+                dx.wrapping_add(base_x)
+            };
+            if x >= 0xA8 {
+                // $66065: `dec l / ld [hl],0` — the Y byte is zeroed and the
+                // other three OAM bytes are left as they were. A fresh entry
+                // draws nothing either way, so the port keeps the record's
+                // remaining bytes rather than inventing stale OAM.
+                self.boss_oam.push(BossOamCell { y: 0, x, tile, attr });
+                continue;
+            }
+            self.boss_oam.push(BossOamCell {
+                y,
+                x,
+                tile,
+                attr: attr ^ flags,
+            });
         }
     }
 
@@ -1565,13 +1778,47 @@ impl ObjectSim {
             // `ObjectTables::boss_anim_handlers`). anim 0 is a bare `ret` at
             // $9322, the same inert-anim idiom as the level table's $58100.
             0x9322 => {}
+            0x9323 => self.handler_boss_anim3(st, tables),
             0x93A7 => self.handler_boss_def0_main(st, layout, tables),
             0x9C36 => self.handler_boss_def2_part(st, layout, tables, false),
             0x9D4F => self.handler_boss_def2_part(st, layout, tables, true),
             0x9E07 => self.handler_boss_def2_controller(st, layout, tables),
             0x9606 => self.handler_boss_def2(st),
+            0x9EE3 => self.handler_boss_anim13(st),
             h => self.note_unported(h),
         }
+    }
+
+    /// `$9EE3` (boss anim 13): the slot the controller's `$B224` spawn hands the
+    /// fight to — a *gate*, not a body. It does nothing at all until
+    /// `sObjectRemoveMode` is exactly 2 (the value a defeat-exit leaves behind),
+    /// and then hands off to anim 4 at `SCRY = $90` / `SCRX = $58`.
+    ///
+    /// ```text
+    /// $9EE3  ld a,[sObjectRemoveMode] / cp $02 / ret nz
+    /// $9EE9  SCRY = $90 ; SCRX = $58
+    /// $9EF1  jp $58F8   ->  $FFD5 = 4 (anim), $FFDB = 9 (sprite), state/PHA/type = 0
+    /// ```
+    ///
+    /// Console-verified on the level 13 arena tape: with `sObjectRemoveMode`
+    /// poked to 2 the controller's spawned child flips from
+    /// `anim=0D fst=00 y=40 x=58 spr=0E` to `anim=04 fst=00 y=90 x=58 spr=09` on
+    /// the very next frame — exactly the writes below, in that order. Without the
+    /// poke it sits at `y=40 x=58` untouched for as long as the fight lasts
+    /// (measured over 200 frames): the controller clears `sObjectRemoveMode` to 0
+    /// before it spawns, so in the normal flow the child stays inert.
+    fn handler_boss_anim13(&mut self, st: &mut Staging) {
+        if self.remove_mode != 2 {
+            return; // $9EE4
+        }
+        st.b[B_SCRY] = 0x90; // $9EE9
+        st.b[B_SCRX] = 0x58; // $9EED
+        // $9EF1 -> $98F8: become anim 4 / sprite 9, state, phase and type cleared.
+        st.b[B_DEF] = 0x04;
+        st.b[B_SPRITE] = 0x09;
+        st.b[B_FSTATE] = 0;
+        st.b[B_PHASE] = 0;
+        st.b[B_TYPE] = 0;
     }
 
     // ---------------------------------------------------------------------
@@ -3826,7 +4073,29 @@ mod tests {
             anim_profiles_a: profiles,
             anim_profiles_b: Vec::new(),
             player_mappings: Vec::new(),
+            // 118 empty lists: the boss render pass must find a list for any
+            // sprite id a def installs, so the synthetic table keeps the shape
+            // of the real one (see `boss_oam_tables` for a populated one).
+            boss_oam_lists: vec![vec![0x80]; 118],
         }
+    }
+
+    /// The synthetic tables with sprite 30's boss OAM list replaced by the
+    /// record under test.
+    fn boss_oam_tables(list: Vec<u8>) -> ObjectTables {
+        let mut t = tables();
+        t.boss_oam_lists[30] = list;
+        t
+    }
+
+    /// A staged boss slot ready for the render pass: sprite 30, the def-2
+    /// controller's own `$FFD9`/`$FFDA` pair ($40/$58).
+    fn boss_staged() -> Staging {
+        let mut st = Staging::default();
+        st.b[B_SPRITE] = 30;
+        st.b[B_SCRY] = 0x40;
+        st.b[B_SCRX] = 0x58;
+        st
     }
 
     fn blank_layout() -> LevelLayout {
@@ -5088,32 +5357,32 @@ mod tests {
         assert_eq!(obj.slots[2].b, [0; 32]);
     }
 
+    /// `$8E6C`'s staging for a count-2 def. The stride is `((e + 16) & $F0) + 5`
+    /// on the cursor *after* its own 18-byte copy, so the images land at
+    /// `$AD05`, `$AD25`, `$AD45` — +$20 each, slots 0/1/2. (Console bytes for
+    /// level `$0D`'s def 2: `ad25: .. 0B .. 60 88 1E`, `ad45: .. 0A .. 60 28
+    /// 1E`, i.e. the second sub-image really does occupy slot 2. Reading the
+    /// arithmetic without the post-copy `E` gave +$10 and left slot 2 inert,
+    /// which cost the arena one of its houses.)
     #[test]
-    fn boss_spawn_def_index_4_stages_literal_slot_bytes_with_10_stride() {
+    fn boss_spawn_def_index_4_fills_slots_0_1_and_2_at_a_20_stride() {
         let mut obj = ObjectSim::new(Vec::new(), 0);
-        obj.spawn_boss(4); // def 4: count 2, stride +$10
+        obj.spawn_boss(4); // def 4: count 2
 
-        // Test literal slot bytes from §4.3 of deleg_C_scene_boss_verdict.md:
+        let (count, _, _, obj0, subs) = crate::scene::lookup_boss_spawn_def(4);
+        assert_eq!(count, 2);
+        assert_eq!(&obj.boss_slots_raw[5..5 + 18], &obj0[..]);
+        assert_eq!(&obj.boss_slots_raw[0x25..0x25 + 18], &subs[0][..]);
         assert_eq!(
-            &obj.slots[0].b,
-            &[
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x30, 0x90, 0x34, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00
-            ]
+            &obj.boss_slots_raw[0x45..0x45 + 18],
+            &subs[1][..],
+            "the $8E6C step is +$20, not +$10"
         );
-        assert_eq!(
-            &obj.slots[1].b,
-            &[
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00, 0x30, 0x90, 0x0E, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x40, 0x98, 0x0E,
-                0x00, 0x00, 0x00, 0x00
-            ]
-        );
-        assert_eq!(
-            &obj.slots[2].b,
-            &[0; 32]
-        );
+        assert_eq!(&obj.slots[0].b[5..23], &obj0[..]);
+        assert_eq!(&obj.slots[1].b[5..23], &subs[0][..]);
+        assert_eq!(&obj.slots[2].b[5..23], &subs[1][..]);
+        assert_eq!(obj.slots[2].b[5], 18, "the second sub-image is live");
+        assert_eq!(obj.slots[3].b, [0; 32]);
     }
 
     #[test]
@@ -5408,17 +5677,14 @@ mod tests {
         obj.spawn_boss(4);
         assert_eq!(obj.boss_def_count, 2);
         assert_eq!(obj.boss_def_index, 4);
-        // def 4's images: anim 16 at $AD05 (slot 0's byte 5) and 17 at $AD25
-        // (slot 1's byte 5). The *second* sub-image sits at $AD35 — a +$10
-        // stride (`sObject0Def $AD05` + `sObject1Def $AD25`, then `add $10`) —
-        // while the driver walks slot pages $20 apart, so sub 2's tail lands in
-        // slot 2's bytes 0-6 and slot 2's anim byte ($AD45) is 0: the ROM leaves
-        // it inert. A faithful port keeps that; the live extra parts must come
-        // from `$3A14` (bank 25 `$66000`), which is the reported gap.
+        // def 4's images: anim 16 at $AD05 (slot 0's byte 5), 17 at $AD25 (slot
+        // 1), 18 at $AD45 (slot 2) — the +$20 `$8E6C` stride, so all three are
+        // live. (Measured on the console for level `$0D`'s def 2; slot 2 being
+        // zero was the port's reading error, not the ROM's behavior.)
         assert_eq!(obj.slots[0].b[B_DEF], 16);
         assert_eq!(obj.slots[1].b[B_DEF], 17);
-        assert_eq!(obj.slots[2].b[B_DEF], 0, "the ROM's stride leaves it inert");
-        assert_eq!(obj.slots[2].b, [0u8; 32], "the whole page stays zero");
+        assert_eq!(obj.slots[2].b[B_DEF], 18, "the second sub-image is live");
+        assert_eq!(obj.slots[3].b, [0u8; 32], "slot 3 stays untouched");
         // Plant markers: an active slot's flags, the last slot the walk must
         // reach (count + 1 = 3), and one beyond it.
         obj.slots[1].b[B_FLAGS] = 0xAA;
@@ -5436,7 +5702,266 @@ mod tests {
         );
         assert_eq!(obj.slots[3].b[B_FLAGS], 0xAA, "slot 3 is never staged");
         assert_eq!(obj.slots[3].b[B_DEF], 0x2A, "and keeps its anim byte");
-        assert!(obj.unported.contains(&0x3A14), "the bank-25 call is reported");
+        // `$3A14` is ported now, so the pass runs: the synthetic table's lists
+        // are empty, so it draws nothing and — importantly — reports nothing.
+        assert!(obj.boss_oam.is_empty(), "no list, no OAM");
+        assert!(!obj.unported.contains(&0x3A14), "$3A14 is no longer a gap");
+        assert!(!obj.unported.contains(&0x66092));
+    }
+
+    /// `$92DF`: `ld a,[sMarioDead] / cp $FF / ret z` — while Mario is dead the
+    /// handler is skipped for **every** slot, so the records hold their last
+    /// values. Console-verified on the level 13 tape: all three slot records
+    /// stop changing on the frame Mario dies (f462) and stay put through the
+    /// death animation, while the frozen houses keep rendering. The driver's
+    /// remaining body still runs (render, `$FFE7 = 0`, `$9048`, `$81BD`), so the
+    /// slot is *written back* unchanged rather than blanked.
+    #[test]
+    fn a_dead_mario_freezes_every_boss_slot() {
+        let mut t = tables();
+        t.boss_anim_handlers = vec![0x9322, 0x93A7, 0x9606, 0x9323];
+        t.boss_picker_profile = vec![0x60; 24];
+        t.boss_picker_profile_15 = vec![1; 18];
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_def_count = 1;
+        // Slot 0 is mid-way through the anim-3 exit: one frame away from the
+        // `SCRY >= $D0` hand-off, so without the guard it moves this frame.
+        obj.slots[0].b[B_DEF] = 3;
+        obj.slots[0].b[B_SCRY] = 0xC0;
+        obj.slots[0].b[B_FSTATE] = 2;
+        // Slot 1 is a live part the walk would advance too.
+        obj.slots[1].b[B_DEF] = 10;
+        obj.slots[1].b[B_SCRY] = 0x40;
+        obj.slots[1].b[B_FSTATE] = 3;
+        let before0 = obj.slots[0].b;
+        let before1 = obj.slots[1].b;
+
+        obj.mario.dead = 0xFF;
+        obj.boss_engine(0, 0, &layout, &t);
+        assert_eq!(obj.slots[0].b, before0, "a dead Mario freezes slot 0");
+        assert_eq!(obj.slots[1].b, before1, "and slot 1");
+        assert!(!obj.unported.contains(&0x92DF), "the guard itself is ported");
+        assert_eq!(obj.boss_def_count, 1, "nothing left the room either");
+
+        // Alive again: the very same frame's work now happens, which is what
+        // makes the guard load-bearing rather than a no-op assertion. (Only slot
+        // 0 is asserted here: slot 1's part needs its def's HP and hitbox to
+        // reach the walk, and that live path is covered by the part tests.)
+        obj.mario.dead = 0;
+        obj.boss_engine(0, 0, &layout, &t);
+        assert_ne!(obj.slots[0].b, before0, "with Mario alive slot 0 moves");
+    }
+
+    /// `$9EE3` (boss anim 13): the child the def-2 controller spawns when the
+    /// parts are gone. It is a gate on `sObjectRemoveMode == 2` — inert with the
+    /// value the controller leaves (0), converting to anim 4 at `SCRY = $90` /
+    /// `SCRX = $58` when it is 2. The console numbers come from poking
+    /// `sObjectRemoveMode = 2` on the arena tape: `anim=0D fst=00 y=40 x=58
+    /// spr=0E` becomes `anim=04 fst=00 y=90 x=58 spr=09` on the next frame.
+    #[test]
+    fn the_controller_child_gates_on_remove_mode() {
+        let t = tables();
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_DEF] = 0x0D;
+        st.b[B_SPRITE] = 0x0E;
+        st.b[B_SCRY] = 0x40;
+        st.b[B_SCRX] = 0x58;
+        st.b[B_FSTATE] = 0x03;
+
+        // What the controller leaves behind: nothing happens, not even the moves.
+        obj.remove_mode = 0;
+        obj.dispatch_handler(0x9EE3, &mut st, &layout, &t);
+        assert_eq!(st.b[B_DEF], 0x0D, "still the gate anim");
+        assert_eq!(st.b[B_SCRY], 0x40, "and still where the spawn put it");
+        assert!(obj.unported.is_empty(), "anim $0D is ported now");
+
+        // The teardown value: SCRY/SCRX move and the slot becomes anim 4.
+        obj.remove_mode = 2;
+        obj.dispatch_handler(0x9EE3, &mut st, &layout, &t);
+        assert_eq!(st.b[B_SCRY], 0x90);
+        assert_eq!(st.b[B_SCRX], 0x58);
+        assert_eq!(st.b[B_DEF], 0x04, "handed to the anim-4 chain");
+        assert_eq!(st.b[B_SPRITE], 0x09);
+        assert_eq!(st.b[B_FSTATE], 0);
+        assert_eq!(st.b[B_PHASE], 0);
+        assert_eq!(st.b[B_TYPE], 0);
+    }
+
+    /// `$66000`: the render pass walks the record into OAM with the slot's own
+    /// `$FFD9`/`$FFDA` as the base position — no world-coordinate math, because
+    /// in the boss path those bytes ARE the object's screen position.
+    #[test]
+    fn the_boss_render_emits_oam_from_the_record() {
+        let t = boss_oam_tables(vec![
+            0x08, 0x08, 0x11, 0x01, // plain cell: y $40+8, x $58+8, its attr
+            0x00, 0xF8, 0x22, 0x00, // dx -8 (the offsets are signed)
+            0x80,
+        ]);
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_render(&boss_staged(), &t);
+        assert_eq!(
+            obj.boss_oam,
+            vec![
+                BossOamCell {
+                    y: 0x48,
+                    x: 0x60,
+                    tile: 0x11,
+                    attr: 0x01
+                },
+                BossOamCell {
+                    y: 0x40,
+                    x: 0x50,
+                    tile: 0x22,
+                    attr: 0x00
+                },
+            ]
+        );
+        assert_eq!(obj.boss_oam.len(), 2, "the $80 terminator ends the walk");
+        assert_eq!(obj.sprite_flip_flags, 0, "$6087 recomputed the flags byte");
+    }
+
+    /// The `$6087` flags byte does double duty: bit 5 mirrors the X offset
+    /// (`~dx - 7`), bit 6 the Y offset (`~dy - 7`), and the whole byte is XORed
+    /// into every emitted attr — which is how a boss flips without a second
+    /// sprite sheet.
+    #[test]
+    fn the_boss_render_mirrors_offsets_and_xors_the_flags_byte() {
+        let t = boss_oam_tables(vec![0x08, 0x08, 0x11, 0x01, 0x80]);
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        let mut st = boss_staged();
+        st.b[B_FLIP] = 0x60; // bit 5 (X) + bit 6 (Y)
+        st.b[B_FLASH] = 0x01; // so the byte is an XOR of three slot bytes
+        obj.boss_render(&st, &t);
+        assert_eq!(obj.sprite_flip_flags, 0x61);
+        // ~8 - 7 = $F0 on both axes; the attrs carry the flags as well.
+        assert_eq!(
+            obj.boss_oam,
+            vec![BossOamCell {
+                y: 0x40u8.wrapping_add(0xF0),
+                x: 0x58u8.wrapping_add(0xF0),
+                tile: 0x11,
+                attr: 0x01 ^ 0x61,
+            }]
+        );
+    }
+
+    /// `$88 <adj>` is the big-blob origin marker: one operand, and it shifts the
+    /// base Y for the cells that follow **only** while flip bit 6 is set (the
+    /// flipped blobs' offsets are measured from the flipped origin).
+    #[test]
+    fn the_boss_render_shifts_the_origin_only_when_y_flipped() {
+        let t = boss_oam_tables(vec![
+            0x88, 0xF0, // origin: -16 to the base Y when Y-flipped
+            0x00, 0x00, 0x44, 0x00, // one cell at the origin
+            0x80,
+        ]);
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_render(&boss_staged(), &t);
+        assert_eq!(
+            obj.boss_oam[0].y, 0x40,
+            "no Y flip: the operand is consumed and ignored"
+        );
+
+        obj.boss_oam.clear();
+        let mut st = boss_staged();
+        st.b[B_FLIP] = 0x40;
+        obj.boss_render(&st, &t);
+        // base Y $40 - $10 = $30, and the cell's own dy 0 flips to ~0-7 = $F8.
+        assert_eq!(obj.boss_oam[0].y, 0x30u8.wrapping_add(0xF8));
+        assert_eq!(obj.boss_oam[0].x, 0x58, "the marker shifts Y only");
+    }
+
+    /// The console's own OAM bounds: a Y at or past `$A0` drops the whole cell
+    /// (nothing is written), and an X at or past `$A8` writes a `0` over the Y
+    /// byte — the port emits that entry hidden, in the same slot order.
+    #[test]
+    fn the_boss_render_applies_the_oam_bounds() {
+        let t = boss_oam_tables(vec![
+            0x60, 0x00, 0x11, 0x00, // y = $40 + $60 = $A0 -> dropped entirely
+            0x00, 0x50, 0x22, 0x00, // x = $58 + $50 = $A8 -> hidden (y 0)
+            0x00, 0x00, 0x33, 0x00, // kept
+            0x80,
+        ]);
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_render(&boss_staged(), &t);
+        assert_eq!(
+            obj.boss_oam,
+            vec![
+                BossOamCell {
+                    y: 0,
+                    x: 0xA8,
+                    tile: 0x22,
+                    attr: 0x00
+                },
+                BossOamCell {
+                    y: 0x40,
+                    x: 0x58,
+                    tile: 0x33,
+                    attr: 0x00
+                },
+            ],
+            "the tall cell is gone, the wide one is hidden, the third survives"
+        );
+    }
+
+    /// `$66000`'s two early outs and its one report: `sObjectDone` (a slot that
+    /// took a hit this frame is not drawn), the `$80` terminator, and a sprite
+    /// id past the 118-entry table — where the ROM would read the following
+    /// record bytes as a pointer, so the port reports instead of serving them.
+    #[test]
+    fn the_boss_render_stops_on_done_the_terminator_and_a_missing_list() {
+        let t = boss_oam_tables(vec![
+            0x00, 0x00, 0x11, 0x00, 0x80, // one cell, then END
+            0x00, 0x00, 0x99, 0x00, // never read
+        ]);
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.done = 1;
+        obj.boss_render(&boss_staged(), &t);
+        assert!(obj.boss_oam.is_empty(), "$66000 returns while sObjectDone is set");
+
+        obj.done = 0;
+        obj.boss_render(&boss_staged(), &t);
+        assert_eq!(obj.boss_oam.len(), 1, "the $80 terminator stops the walk");
+        assert_eq!(obj.boss_oam[0].tile, 0x11);
+
+        obj.boss_oam.clear();
+        let mut st = boss_staged();
+        st.b[B_SPRITE] = 200; // past the table
+        obj.boss_render(&st, &t);
+        assert!(obj.boss_oam.is_empty());
+        assert!(
+            obj.unported.contains(&0x66092),
+            "a sprite id the table cannot serve is reported"
+        );
+    }
+
+    /// Every slot image the nine boss defs install carries a sprite id inside
+    /// the `$6092` table (118 entries), so no retail arena can report `$66092`
+    /// instead of drawing. The `sprite` field of a def record is
+    /// `sBossSprite`, not a slot byte — the slot's own id is image byte 6
+    /// (`B_SPRITE`, since the images land at `$AD05` = slot byte 5).
+    #[test]
+    fn every_boss_def_slot_sprite_is_inside_the_boss_oam_table() {
+        for def in 0..=8u8 {
+            let (_, _, _, obj0, subs) = crate::scene::lookup_boss_spawn_def(def);
+            for (i, img) in std::iter::once(&obj0).chain(subs.iter()).enumerate() {
+                let sprite = img[6];
+                assert!(
+                    (sprite as usize) < 118,
+                    "def {def} image {i}: sprite {sprite} is past the $6092 table"
+                );
+            }
+        }
     }
 
     /// The driver's own gate: a slot whose anim byte is 0 is skipped entirely
@@ -5547,21 +6072,116 @@ mod tests {
         let _ = (&layout, &t);
     }
 
-    /// `$B157`/`$B15B`: the boss object's exit — drop the live count, blank the
-    /// staging, mark it done. (Deliberately not `remove_object`, which does the
-    /// level path's record/counter/hitbox bookkeeping.)
+    /// `$B157`/`$B15B` are the same blank with one difference: the count. The
+    /// primary (last) slot leaves through `$B15B` and must *not* decrement, or
+    /// the controller would wait for a live count that never matches.
     #[test]
-    fn the_boss_finish_slot_drops_the_count_and_blanks_the_slot() {
+    fn the_boss_finish_helpers_split_counted_from_blank() {
         let mut obj = ObjectSim::new(Vec::new(), 0);
         obj.configure(0);
         obj.boss_def_count = 2;
         let mut st = streamed(0, 0x00, 0);
         st.b[B_DEF] = 7;
         st.b[B_SCRY] = 0x40;
-        obj.boss_finish_slot(&mut st);
+        obj.boss_finish_counted(&mut st); // $B157
         assert_eq!(obj.boss_def_count, 1);
         assert_eq!(st.b, [0u8; 32]);
         assert_eq!(obj.done, 1);
+
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_DEF] = 7;
+        obj.done = 0;
+        obj.boss_finish_blank(&mut st); // $B15B
+        assert_eq!(obj.boss_def_count, 1, "the blank half leaves the count alone");
+        assert_eq!(st.b, [0u8; 32]);
+        assert_eq!(obj.done, 1);
+    }
+
+    /// `$9323` (boss anim 3), the body the `$9443` morph hands a defeated part
+    /// to. A non-primary slot rides the two pickers up and back down, then leaves
+    /// through `$B157`: the live count drops and the staging is blanked. Without
+    /// this body the slot froze the moment its `B_DEF` became 3 — reported as
+    /// `$9323` — and the room kept a house that should have fallen away.
+    #[test]
+    fn a_defeated_part_rides_anim3_out_and_drops_the_count() {
+        let mut t = tables();
+        // anim 3 -> $9323, so the driver's dispatch reaches the new body.
+        t.boss_anim_handlers = vec![0x9322, 0x93A7, 0x9606, 0x9323];
+        t.boss_picker_profile = vec![2; 24]; // $71A3, cap 21
+        t.boss_picker_profile_15 = vec![3; 18]; // $7214, cap 15
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_def_count = 2;
+        obj.slots[1].b[B_DEF] = 3;
+        obj.slots[1].b[B_SCRY] = 0x60;
+        obj.slots[1].b[B_SCRX] = 0x40;
+        obj.slots[1].b[B_FLIP] = 0x20;
+        obj.slots[1].b[B_TYPE] = 0x45;
+
+        obj.boss_engine(0, 0, &layout, &t);
+        // Entry: `$B270` with b = 32, the Y flip, type 0, state 1, sfx 23 (this
+        // is slot 1, so `sObjectSlotPtrLo` is $20, not the primary 0).
+        assert_eq!(obj.slots[1].b[B_SCRY], 0x40, "up 32");
+        assert_eq!(obj.slots[1].b[B_FLIP], 0x60, "Y flip toggled");
+        assert_eq!(obj.slots[1].b[B_TYPE], 0);
+        assert_eq!(obj.slots[1].b[B_FSTATE], 1);
+        assert_eq!(obj.sfx0, 23);
+        assert_eq!(obj.boss_def_count, 2, "still in the room");
+
+        let mut frames = 1;
+        while obj.slots[1].b[B_DEF] != 0 && frames < 400 {
+            obj.boss_engine(0, 0, &layout, &t);
+            frames += 1;
+        }
+        assert!(frames < 400, "the part left instead of hanging around");
+        assert_eq!(obj.boss_def_count, 1, "$B157 drops the live count");
+        assert_eq!(obj.slots[1].b, [0u8; 32], "and blanks the slot");
+        assert_eq!(obj.remove_mode, 2);
+        assert_eq!(obj.music_request, None, "no fanfare for a non-primary slot");
+        assert!(!obj.unported.contains(&0x9323), "anim 3 is ported now");
+    }
+
+    /// The primary slot's arm of `$9326`'s state 2 (`$9399`): it is the last one
+    /// out, so it does *not* touch the count — instead it plays the 208-frame
+    /// clear fanfare (`sMusicRequest = 12`) and only then blanks itself through
+    /// `$B15B`.
+    #[test]
+    fn the_primary_boss_slot_plays_the_fanfare_before_it_blanks() {
+        let mut t = tables();
+        t.boss_anim_handlers = vec![0x9322, 0x93A7, 0x9606, 0x9323];
+        t.boss_picker_profile = vec![0x60; 24]; // one big step down
+        t.boss_picker_profile_15 = vec![1; 18];
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_def_count = 0;
+        obj.slots[0].b[B_DEF] = 3;
+        obj.slots[0].b[B_SCRY] = 0xC0;
+        obj.boss_engine(0, 0, &layout, &t);
+        assert_eq!(obj.slots[0].b[B_FSTATE], 1, "entry first, as always");
+        assert_eq!(obj.sfx0, 13, "sfx 13 for the primary slot");
+
+        let mut frames = 1;
+        let mut fanfare_seen = false;
+        let mut prev_state = obj.slots[0].b[B_FSTATE];
+        while obj.slots[0].b[B_DEF] != 0 && frames < 400 {
+            obj.boss_engine(0, 0, &layout, &t);
+            frames += 1;
+            let state = obj.slots[0].b[B_FSTATE];
+            if prev_state == 2 && state == 3 {
+                // The transition frame itself: the timer is set and the track
+                // requested there, and the countdown starts on the frame after.
+                fanfare_seen = true;
+                assert_eq!(obj.slots[0].b[B_T28], 208, "the fanfare is 208 frames");
+                assert_eq!(obj.music_request, Some(12), "and it asks for track 12");
+            }
+            prev_state = state;
+        }
+        assert!(fanfare_seen, "the fanfare ran");
+        assert!(frames < 400, "the primary slot left too");
+        assert_eq!(obj.boss_def_count, 0, "$B15B leaves the count alone");
+        assert_eq!(obj.slots[0].b, [0u8; 32]);
     }
 
     /// `$B264`-`$B276`: eight-bit screen movers (the world-coord

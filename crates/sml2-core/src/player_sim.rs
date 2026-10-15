@@ -1442,18 +1442,21 @@ impl PlayerSim {
                     self.hvel = 0x80;
                 }
             }
-            // $11FE: side pipe, pushed right (`$0C` tile on the left wall).
+            // $11FE/$120E: side pipe, right-hand wall (`$0C`-`$0F` tile on the
+            // right). RIGHT (`hKeysHeld` bit 4) starts the $30 travel — this is
+            // the arm level $0D's Mario Zone pipe needs, and it was testing LEFT
+            // (the two arms were swapped: `keys.left` here, `keys.right` below).
             // (autoscroll + boss guards omitted — unused in non-boss levels)
             3 => {
-                if self.side_push_dir == 1 || (keys.left && self.on_ground) {
+                if self.side_push_dir == 1 || (keys.right && self.on_ground) {
                     self.pipe_dir = 0x30;
                     self.ducking = false;
                     self.hvel = 0x80;
                     self.sfx0 = 5;
                 }
             }
-            // $1244: side pipe, pushed left.
-            4 if self.side_push_dir == 0xFF || (keys.right && self.on_ground) => {
+            // $1244: side pipe, left-hand wall; LEFT (`hKeysHeld` bit 5) travels $40.
+            4 if self.side_push_dir == 0xFF || (keys.left && self.on_ground) => {
                 self.pipe_dir = 0x40;
                 self.sfx0 = 5;
                 self.ducking = false;
@@ -1618,6 +1621,15 @@ impl PlayerSim {
         b_pressed: bool,
         layout: &LevelLayout,
     ) {
+        // The frame's VBlank tail (`home.asm` ~115): `sFadeTimer` is decremented
+        // on **every** in-level frame — `sub 1` on the low byte, `sbc 0` on the
+        // high, clamped to zero on a borrow — and no other part of the level
+        // pass touches it. The port used to move the timer only from the death
+        // and exit fades, so a *scene's* own fade (the arena intro's 352 frames,
+        // `$20EB`) never expired: the boss's parts sat in their intro state
+        // (sprite `$1E`, no walk, no bob) for as long as the fight lasted, and
+        // `$B14E`'s "the fade is idle" gate never opened.
+        self.fade_timer = self.fade_timer.saturating_sub(1);
         // $0F71/$0FBB: travelling replaces the entire player update.
         if self.pipe_dir >= 0x10 {
             self.pipe_travel(layout);
@@ -1853,15 +1865,27 @@ impl PlayerSim {
         self.x_sub = self.x_sub.wrapping_add(b);
         self.x = self.x.wrapping_add(sdelta(self.x_sub) as u16);
         if self.x_sub < 0x80 {
-            if self.right_wall(layout) {
+            // `$188B`: a wall on the right restores x/XSub and zeroes H speed —
+            // and, on the tile that blocked, arms the side pipe when it is a
+            // `$0C`-`$0F` mouth. This is the *walk-in* arm ($1413's push-out is
+            // the second one, and only runs once Mario is already inside the
+            // tile), so without it Mario bounces off level $0D's sideways pipe
+            // forever instead of entering it.
+            if let Some(t) = self.wall_tile(layout, self.x.wrapping_add(20)) {
                 self.x = saved_x;
                 self.x_sub = x_sub_saved;
                 self.hvel = 0x80;
+                if t & 0xFC == 0x0C {
+                    self.pipe_dir = 3;
+                }
             }
-        } else if self.left_wall(layout) {
+        } else if let Some(t) = self.wall_tile(layout, self.x.wrapping_add(11)) {
             self.x = saved_x;
             self.x_sub = x_sub_saved;
             self.hvel = 0x80;
+            if t & 0xFC == 0x0C {
+                self.pipe_dir = 3;
+            }
         }
         // $0FBF screen-edge wrap
         let sx = self.x.wrapping_sub(self.camx).wrapping_add(96) & 0xFF;
@@ -2773,6 +2797,34 @@ mod tests {
         sim.x = 100;
         sim.y = 200;
         sim
+    }
+
+    /// The VBlank tail decrements `sFadeTimer` on **every** in-level frame, and
+    /// that is not a detail: a scene's own fade is what the boss's parts wait
+    /// out before leaving their intro state (`$9C8B`), and `$B14E`'s "the fade
+    /// is idle" test is the gate in front of the whole def-2 sequence. With the
+    /// decrement missing from the in-level path, the arena intro's 352 frames
+    /// never expired and every part sat frozen at sprite `$1E` forever.
+    #[test]
+    fn the_fade_timer_ticks_down_on_every_in_level_frame() {
+        let layout = blank_layout();
+        let keys = PlayerKeys::default();
+        let mut sim = small_sim();
+        sim.fade_timer = 3;
+        sim.step(&keys, false, false, &layout);
+        assert_eq!(sim.fade_timer, 2);
+        sim.step(&keys, false, false, &layout);
+        sim.step(&keys, false, false, &layout);
+        assert_eq!(sim.fade_timer, 0);
+        sim.step(&keys, false, false, &layout);
+        assert_eq!(sim.fade_timer, 0, "clamped at zero, and it stays there");
+
+        // A travelling frame counts too — the decrement is in VBlank, not in
+        // the state body that `$0F71`'s pipe branch replaces mid-frame.
+        sim.fade_timer = 5;
+        sim.pipe_dir = 0x30;
+        sim.step(&keys, false, false, &layout);
+        assert_eq!(sim.fade_timer, 4, "the decrement runs before the early return");
     }
 
     /// `$129F`'s second test is `sMarioOnObject`: when it is set the routine
