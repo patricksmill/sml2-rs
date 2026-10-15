@@ -1629,3 +1629,39 @@ Four new tests (the prologue's bank/latch behaviour, the morph tail's decrement-
 and primary-slot music, anim 1's fade gate + wake-up + reported sweep state + hit-save) and
 five mutations, all red.
 
+## The def-2 fight (Mario Zone, level `$0D`) — anims 10/11/12 — 2026-10-14
+
+The boss the play-test went looking for, and the same level whose script arms the arena
+path (which is why my `$0EB0` change hit its sideways pipe).
+
+The fight is three objects. **anim 12 is a controller with no HP at all** — its hit body
+banks the slot and parks it without ever touching `$FFD8` — and it waits for the parts to
+clear before spawning one child (anim `$0D`, sprite `$0E`). **anims 10 and 11 are the two
+parts**, and they share one hit body (`$9C3F`): a stomp takes 2 HP, a projectile 1, and 0 or
+a borrow sends the part to `$5435` (the defeat fall). Their HP lives in `B_STATE` (`$FFD8`,
+slot byte 8 — normally the *level* engine's slot state) and is seeded straight from the def
+image: **def 2's two sub-objects carry 6 there, its controller 0**, and `$9C72` is the only
+writer of that byte anywhere in bank 2 — so the parts are the boss's health and the
+controller is never damaged. The remaining shared bodies are `$9CAC` (the hit-stun: flash,
+count `B_T28`, then restore the banked sprite/state/type or die), `$9C8B` (the intro's end:
+type `$45`, state 3, sprite `$20`), `$9CDF` (the bob — `B_T24` picks the cap-15 ascent or
+the cap-21 descent, whose end sets state 4 and `B_FLIP ^= $20`), `$9D3D` (a walk reaching
+`$10`/`$A0` flips the state bit, the object, and re-announces the anim id), and the walk
+speed `4 - HP/2`, i.e. the parts accelerate as they take damage.
+
+Also extracted: the pickers' profile tables. Each picker is "`c` + a table" over the same
+`b = table[B_PHASE]; advance unless B_PHASE == c` body the port already has as
+`step_picker`, so the port needed only the data — `$B1A3` (38 bytes, cap 21) and `$B214`
+(16, cap 15) — plus two new helper shapes: `$B402` (every 16th frame, `B_FLIP ^= $20`) and
+`$B3D7` (the 8-step sprite cycle).
+
+**Why the fight still cannot be reached in play**: `$0EB0` parks the camera for good unless
+something clears `sSceneState`'s `$F0`. For def 2 the clearers are not boss handlers at all
+— the fight hands the slot to anim 3, and the run ends through game state 29 (`$FF9B = 29`,
+the boss-clear/level-end path) whose level reload reseeds `sSceneState` from the header. So
+the branch becomes enableable once that ending path is ported; until then it stays reported,
+and a def-2 boss can only be exercised through the object pass directly.
+
+Five new tests (the part's HP/death, the stomp's two points and latch, the controller's
+no-HP rule and its once-only child spawn, and the bob's two profiles).
+

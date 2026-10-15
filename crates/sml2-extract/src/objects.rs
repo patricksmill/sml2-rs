@@ -39,6 +39,9 @@ const BOSS_ANIM_BEHAVIOR_ROM: usize = 0x92E8;
 /// before the next routine's code. All the `$B173`-family pickers read it.
 const BOSS_PICKER_PROFILE_ROM: usize = 0xB1A3;
 const BOSS_PICKER_PROFILE_LEN: usize = 38;
+/// The `$B1EB` picker's profile (bank 2, file `$B214`), 16 bytes, cap 15.
+const BOSS_PICKER_PROFILE_15_ROM: usize = 0xB214;
+const BOSS_PICKER_PROFILE_15_LEN: usize = 16;
 /// The def-0 boss's sweep profile (bank 2, file `$9595`): a 27-byte ramp then
 /// zeros; the handlers index it through `$B16B`.
 const BOSS_SWEEP_PROFILE_ROM: usize = 0x9595;
@@ -328,6 +331,9 @@ pub fn extract(rom: &[u8]) -> Result<ObjectTables, String> {
         boss_anim_handlers,
         boss_picker_profile: rom
             [BOSS_PICKER_PROFILE_ROM..BOSS_PICKER_PROFILE_ROM + BOSS_PICKER_PROFILE_LEN]
+            .to_vec(),
+        boss_picker_profile_15: rom
+            [BOSS_PICKER_PROFILE_15_ROM..BOSS_PICKER_PROFILE_15_ROM + BOSS_PICKER_PROFILE_15_LEN]
             .to_vec(),
         boss_sweep_profile: rom
             [BOSS_SWEEP_PROFILE_ROM..BOSS_SWEEP_PROFILE_ROM + BOSS_SWEEP_PROFILE_LEN]

@@ -100,6 +100,10 @@ pub struct ObjectTables {
     /// `c` limit they pass (8/12/15/18/21/24/27/36). Values are 0-3.
     #[serde(default)]
     pub boss_picker_profile: Vec<u8>,
+    /// The `$B1EB` picker's profile (file `$B214`, 16 bytes, cap 15) — the
+    /// def-2 boss's ascent; `boss_picker_profile` (`$B1A3`) is its descent.
+    #[serde(default)]
+    pub boss_picker_profile_15: Vec<u8>,
     /// The def-0 boss's sweep profile (file `$9595`, 112 bytes): a 27-byte
     /// 0-3 ramp then zeros, indexed by `B_PHASE` through `$B16B`.
     #[serde(default)]

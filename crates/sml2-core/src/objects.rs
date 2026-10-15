@@ -914,6 +914,289 @@ impl ObjectSim {
         }
     }
 
+    /// `$B402`: every 16th frame, flip the object (`B_FLIP ^= $20`).
+    fn flip_blink(&self, st: &mut Staging) {
+        if self.fff0 & 0x0F == 0 {
+            st.b[B_FLIP] ^= 0x20;
+        }
+    }
+
+    /// `$B3D7`: the sprite cycle — every 4th frame advance `B_ANIMFRAME`; on the
+    /// eighth, wrap to 0 and step the sprite back seven, else step it forward.
+    fn sprite_cycle8(&self, st: &mut Staging) {
+        if self.fff0 & 0x03 != 0 {
+            return;
+        }
+        let f = st.b[B_ANIMFRAME].wrapping_add(1);
+        if f == 8 {
+            st.b[B_ANIMFRAME] = 0;
+            st.b[B_SPRITE] = st.b[B_SPRITE].wrapping_sub(7);
+        } else {
+            st.b[B_ANIMFRAME] = f;
+            st.b[B_SPRITE] = st.b[B_SPRITE].wrapping_add(1);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // The def-2 (Mario Zone) fight: anims 10/11/12
+    //
+    // anim 12 is the *controller*: no HP at all (its hit body never touches
+    // `$FFD8`), it waits for the parts to clear and then spawns one child.
+    // anims 10 and 11 are the two *parts*, and `B_STATE` (`$FFD8`, slot byte 8
+    // — normally the level engine's slot state) is this fight's per-part HP,
+    // seeded straight from the def image: def 2's two sub-objects carry 6, its
+    // controller 0. `$9C72` is the only writer of that byte in the whole of
+    // bank 2.
+    // ---------------------------------------------------------------------
+
+    /// `$9C3F`: the hit body anims 10 and 11 share. A stomp takes 2 HP, a
+    /// projectile 1, and 0 *or a borrow* sends the part to `$5435` — the
+    /// defeat fall. The controller never runs this.
+    fn boss_hp_hit(&mut self, st: &mut Staging) {
+        self.spawn_sprite = st.b[B_SPRITE];
+        self.saved_frame_state = st.b[B_FSTATE];
+        self.saved_type = st.b[B_TYPE];
+        let mut b = 1u8;
+        if self.boss_hit_latch != 0 {
+            self.sfx0 = 0x13;
+            b = 2;
+            st.b[B_SPRITE] = 0x1F;
+            st.b[B_T28] = self.boss_timer_reload;
+        } else {
+            self.sfx1 = 9;
+        }
+        st.b[B_TYPE] = 0;
+        let (hp, borrow) = st.b[B_STATE].overflowing_sub(b);
+        st.b[B_STATE] = hp;
+        if hp == 0 || borrow {
+            self.boss_defeat_fall(st);
+            return;
+        }
+        st.b[B_FSTATE] = 1;
+    }
+
+    /// `$9CAC`: the shared hit-stun (state 1). Flash, count `B_T28` down, then
+    /// either the defeat fall (remove-mode set) or restore the banked
+    /// sprite/state/type.
+    fn boss_hit_stun(&mut self, st: &mut Staging) {
+        self.sprite_blink(st, 0x03, 0x10); // $B40E
+        if st.b[B_T28] != 0 {
+            st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
+            if st.b[B_T28] != 0 {
+                return;
+            }
+        }
+        if self.remove_mode != 0 {
+            self.boss_defeat_fall(st);
+            return;
+        }
+        st.b[B_FLASH] = 0;
+        st.b[B_SPRITE] = self.spawn_sprite;
+        st.b[B_FSTATE] = self.saved_frame_state;
+        st.b[B_TYPE] = self.saved_type;
+    }
+
+    /// `$9C8B`: the intro's end — arm the fight (type `$45`, state 3, sprite
+    /// `$20`, a `$2F`-style sfx).
+    fn boss_fade_done(&mut self, st: &mut Staging) {
+        st.b[B_SPRITE] = 0x20;
+        st.b[B_T28] = 0;
+        st.b[B_FSTATE] = 3;
+        st.b[B_TYPE] = 0x45;
+        self.sfx1 = 4;
+    }
+
+    /// `$9CDF`: the bob body the walk states run each frame. `B_T24` picks the
+    /// ascent profile (cap 15) or the descent one (cap 21) — the descent also
+    /// ends the flight at `B_SCRY = $90`.
+    fn boss_bob(&mut self, st: &mut Staging, tables: &ObjectTables) {
+        if st.b[B_T24] == 0 {
+            let (b, c) = self.step_picker(st, &tables.boss_picker_profile_15, 15);
+            self.scr_y_sub(st, b);
+            if st.b[B_PHASE] != c {
+                return;
+            }
+            st.b[B_PHASE] = 0;
+            st.b[B_T24] = 1;
+            return;
+        }
+        let (b, _) = self.step_picker(st, &tables.boss_picker_profile, 21);
+        self.scr_y_add(st, b);
+        if st.b[B_SCRY] < 0x90 {
+            return;
+        }
+        st.b[B_SCRY] = 0x90;
+        st.b[B_PHASE] = 0;
+        st.b[B_T24] = 0;
+        st.b[B_FSTATE] = 4;
+        st.b[B_FLIP] = 0x20;
+    }
+
+    /// `$9D3D`: a walk hit the end of the arena — flip the state bit and the
+    /// object, and re-announce the anim id.
+    fn boss_end_flip(&mut self, st: &mut Staging) {
+        st.b[B_FSTATE] ^= 1;
+        st.b[B_FLIP] ^= 0x20;
+        self.sfx1 = st.b[B_DEF];
+    }
+
+    /// `$9C36` (boss anim 10) and `$9D4F` (anims 11): the two parts of the
+    /// Mario Zone boss. Same hit body, same shared states; the walk states are
+    /// mirrored and anim 11's intro waits for the other part to clear.
+    fn handler_boss_def2_part(
+        &mut self,
+        st: &mut Staging,
+        layout: &LevelLayout,
+        tables: &ObjectTables,
+        left: bool,
+    ) {
+        let _ = (layout, tables);
+        self.boss_damage_pass(st);
+        if self.done != 0 {
+            self.boss_hp_hit(st); // $9C3F
+            return;
+        }
+        if st.b[B_FSTATE] == 0 {
+            self.flip_blink(st); // $B402
+            if !self.fade_idle() {
+                return; // $B14E
+            }
+            if !left {
+                self.boss_fade_done(st); // $9C8B
+                return;
+            }
+            // $9D63: the left part waits until exactly one child is left.
+            if self.boss_def_count != 1 {
+                return;
+            }
+            self.remove_mode = 0;
+            st.b[B_T28] = st.b[B_T28].wrapping_add(1);
+            if st.b[B_T28] != 0x30 {
+                return;
+            }
+            self.boss_fade_done(st);
+            return;
+        }
+        match st.b[B_FSTATE] {
+            1 => self.boss_hit_stun(st),                       // $9CAC
+            2 => {
+                self.sprite_blink(st, 0x01, 0x01); // $B2F6
+                self.boss_morph_to_anim3(st); // $9443
+            }
+            3 => {
+                if left {
+                    self.scr_x_sub(st, 1);
+                    st.b[B_T28] = 8;
+                } else {
+                    self.scr_x_add(st, 1);
+                }
+                self.boss_bob(st, tables); // $9CDF
+            }
+            4 | 5 => {
+                let hp = st.b[B_STATE] >> 1;
+                let b = 4u8.wrapping_sub(hp);
+                // anim 11's state 4 spends a `$28` sprite countdown first.
+                if left && st.b[B_T28] != 0 {
+                    st.b[B_SPRITE] = if st.b[B_T28] == 1 { 0x20 } else { 0x28 };
+                    st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
+                    if st.b[B_T28] != 0 {
+                        return;
+                    }
+                }
+                if st.b[B_FSTATE] == 4 {
+                    self.sprite_cycle8(st); // $B3D7
+                    self.scr_x_add(st, b);
+                    if st.b[B_SCRX] >= 0xA0 {
+                        self.boss_end_flip(st); // $9D3D
+                    }
+                } else {
+                    self.sprite_cycle8(st);
+                    self.scr_x_sub(st, b);
+                    if st.b[B_SCRX] < 0x10 {
+                        self.boss_end_flip(st);
+                    }
+                }
+            }
+            s => self.note_unported(0x9CA1 + (s as u32) * 2),
+        }
+    }
+
+    /// `$9E07` (boss anim 12): the controller. It has no HP — its hit body banks
+    /// the slot and parks it without touching `$FFD8` — waits for the parts to
+    /// clear, then spawns one child (anim `$0D`, sprite `$0E`) and starts the
+    /// fade-done walk, whose speed comes from `sBossHits` (`4 - hits/2`).
+    fn handler_boss_def2_controller(
+        &mut self,
+        st: &mut Staging,
+        layout: &LevelLayout,
+        tables: &ObjectTables,
+    ) {
+        let _ = (layout, tables);
+        self.boss_damage_pass(st);
+        if self.done != 0 {
+            self.spawn_sprite = st.b[B_SPRITE]; // $9E10: no hp decrement here
+            self.saved_frame_state = st.b[B_FSTATE];
+            self.saved_type = st.b[B_TYPE];
+            if self.boss_hit_latch != 0 {
+                st.b[B_SPRITE] = 0x1F;
+                st.b[B_T28] = self.boss_timer_reload;
+            }
+            self.boss_type0_state1(st); // $9725
+            return;
+        }
+        if st.b[B_FSTATE] == 0 {
+            self.flip_blink(st);
+            if self.boss_def_count != 0 {
+                return; // $9E37: wait for the parts
+            }
+            self.remove_mode = 0;
+            st.b[B_T28] = st.b[B_T28].wrapping_add(1);
+            if st.b[B_T28] != 0x30 {
+                return;
+            }
+            self.spawn_anim = 0x0D;
+            self.spawn_sprite = 0x0E;
+            self.boss_spawn_child(st); // $B224
+            self.boss_fade_done(st);
+            return;
+        }
+        match st.b[B_FSTATE] {
+            1 => self.boss_hit_stun(st),
+            2 => {
+                self.sprite_blink(st, 0x01, 0x01);
+                self.boss_morph_to_anim3(st);
+            }
+            3 => {
+                st.b[B_T28] = 8;
+                self.boss_bob(st, tables);
+            }
+            4 | 5 => {
+                let b = 4u8.wrapping_sub(self.boss_hits_remaining >> 1);
+                if st.b[B_FSTATE] == 4 {
+                    if self.fff0 & 1 != 0 {
+                        return;
+                    }
+                    self.scr_x_add(st, b);
+                    if st.b[B_SCRX] >= 0xA0 {
+                        self.boss_end_flip(st);
+                        return;
+                    }
+                } else {
+                    if self.fff0 & 1 != 0 {
+                        return;
+                    }
+                    self.scr_x_sub(st, b);
+                    if st.b[B_SCRX] < 0x10 {
+                        self.boss_end_flip(st);
+                        return;
+                    }
+                }
+                self.boss_bob(st, tables);
+            }
+            s => self.note_unported(0x9E5C + (s as u32) * 2),
+        }
+    }
+
     /// `$9606` (boss anim 2): the def-2 spawner. While its remove-mode is 2 it
     /// spawns one child (anim 4 / sprite 9) and parks itself at sprite 7; every
     /// later call returns at the state test, because its state bodies belong to
@@ -1283,6 +1566,9 @@ impl ObjectSim {
             // $9322, the same inert-anim idiom as the level table's $58100.
             0x9322 => {}
             0x93A7 => self.handler_boss_def0_main(st, layout, tables),
+            0x9C36 => self.handler_boss_def2_part(st, layout, tables, false),
+            0x9D4F => self.handler_boss_def2_part(st, layout, tables, true),
+            0x9E07 => self.handler_boss_def2_controller(st, layout, tables),
             0x9606 => self.handler_boss_def2(st),
             h => self.note_unported(h),
         }
@@ -3531,6 +3817,7 @@ mod tests {
             hitbox_index_b: Vec::new(),
             boss_anim_handlers: Vec::new(),
             boss_picker_profile: Vec::new(),
+            boss_picker_profile_15: Vec::new(),
             boss_sweep_profile: Vec::new(),
             draw_records: Vec::new(),
             draw_index: Vec::new(),
@@ -5443,6 +5730,160 @@ mod tests {
         obj.dispatch_handler(0x93A7, &mut st, &layout, &real);
         assert_eq!(st.b[B_FSTATE], 1, "the hit-stun");
         assert_eq!(obj.saved_frame_state, 3);
+    }
+
+    /// The def-2 parts (boss anims 10/11) carry HP in `B_STATE` — seeded by the
+    /// def image — and 0 or a borrow sends the part to `$5435`, the defeat fall.
+    #[test]
+    fn a_def2_part_takes_hp_and_falls_at_zero() {
+        let t = tables();
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_def_index = 2;
+        obj.boss_sprite = 0x2A;
+        obj.boss_timer_reload = 0x50;
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_DEF] = 0x0A;
+        st.b[B_STATE] = 2; // the def image's 6, shortened for the test
+        st.b[B_SPRITE] = 0x2C;
+        st.b[B_FLAGS] = 0x02; // a projectile
+        obj.dispatch_handler(0x9C36, &mut st, &layout, &t);
+        assert_eq!(st.b[B_STATE], 1, "one point");
+        assert_eq!(obj.sfx1, 9);
+        assert_eq!(obj.spawn_sprite, 0x2C, "banked");
+        assert_eq!(st.b[B_FSTATE], 1, "into the hit-stun");
+        // The next point kills it.
+        st.b[B_FLAGS] = 0x02;
+        obj.dispatch_handler(0x9C36, &mut st, &layout, &t);
+        assert_eq!(st.b[B_STATE], 0);
+        assert_eq!(st.b[B_FSTATE], 2, "$5435: the defeat fall");
+        assert_eq!(st.b[B_T28], 0x20);
+        assert_eq!(st.b[B_SPRITE], 0x2A, "the sprite comes from the def");
+        // And a *borrow* kills too: 1 HP against a stomp's 2 wraps to $FF, which
+        // the ROM's `jp c` catches just like a clean 0.
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_DEF] = 0x0A;
+        st.b[B_STATE] = 1;
+        st.b[B_FLAGS] = 0x01;
+        obj.boss_hits_remaining = 6;
+        obj.boss_slot_ptr_lo = 0;
+        obj.boss_hit_latch = 0;
+        obj.dispatch_handler(0x9C36, &mut st, &layout, &t);
+        assert_eq!(st.b[B_STATE], 0xFF, "the wrap");
+        assert_eq!(st.b[B_FSTATE], 2, "and the borrow is fatal");
+    }
+
+    /// A stomp takes two points, latches, and loads the reload timer.
+    #[test]
+    fn a_def2_stomp_takes_two_points_and_latches() {
+        let t = tables();
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_def_index = 2;
+        obj.boss_timer_reload = 0x50;
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_DEF] = 0x0A;
+        st.b[B_STATE] = 6;
+        st.b[B_FLAGS] = 0x01; // a stomp
+        obj.boss_hits_remaining = 6;
+        obj.boss_slot_ptr_lo = 0;
+        obj.dispatch_handler(0x9C36, &mut st, &layout, &t);
+        assert_eq!(st.b[B_STATE], 4, "two points");
+        assert_eq!(obj.sfx0, 0x13);
+        assert_eq!(st.b[B_SPRITE], 0x1F, "the hit pose");
+        assert_eq!(st.b[B_T28], 0x50, "the reload timer");
+        assert_eq!(obj.boss_hits_remaining, 4, "$9285 booked it too");
+    }
+
+    /// The controller (anim 12) banks the slot but never touches `$FFD8`, and
+    /// its intro waits for the parts to clear before spawning its own child.
+    #[test]
+    fn the_def2_controller_has_no_hp_and_spawns_once() {
+        let t = tables();
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_def_index = 2;
+        obj.boss_def_count = 1; // one part still alive
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_DEF] = 0x0C;
+        st.b[B_STATE] = 0;
+        st.b[B_FLAGS] = 0x02;
+        obj.boss_slot_ptr_lo = 0;
+        obj.boss_hits_remaining = 6;
+        obj.dispatch_handler(0x9E07, &mut st, &layout, &t);
+        assert_eq!(st.b[B_STATE], 0, "no HP on the controller");
+        assert_eq!(st.b[B_FSTATE], 1, "$9725: type 0 / state 1");
+        assert_eq!(obj.spawn_sprite, 0x00, "it banks its own sprite");
+        // The intro holds while a part is alive.
+        st.b[B_FSTATE] = 0;
+        st.b[B_FLAGS] = 0;
+        obj.dispatch_handler(0x9E07, &mut st, &layout, &t);
+        assert_eq!(st.b[B_T28], 0, "no counting yet");
+        // With the parts gone it counts to $30, then spawns.
+        obj.boss_def_count = 0;
+        for _ in 0..0x31 {
+            st.b[B_FSTATE] = 0;
+            obj.done = 0; // the driver clears it per slot per frame
+            obj.dispatch_handler(0x9E07, &mut st, &layout, &t);
+            if obj.boss_def_count != 0 {
+                break; // it spawned: the state it left is the assertion
+            }
+        }
+        assert_eq!(obj.slots[1].b[B_DEF], 0x0D, "the child's anim");
+        assert_eq!(obj.slots[1].b[B_SPRITE], 0x0E, "and its sprite");
+        assert_eq!(st.b[B_FSTATE], 3, "then the walk arms");
+        assert_eq!(st.b[B_TYPE], 0x45);
+        // And the walk's speed is the fight's HP: 4 - hits/2. The hit above
+        // spent one, so 5 hits -> 4 - 2 = 2 px.
+        st.b[B_FSTATE] = 4;
+        st.b[B_SCRX] = 0x40;
+        obj.fff0 = 1; // the odd-frame gate
+        obj.dispatch_handler(0x9E07, &mut st, &layout, &t);
+        assert_eq!(st.b[B_SCRX], 0x40, "odd frames hold");
+        obj.fff0 = 2;
+        obj.dispatch_handler(0x9E07, &mut st, &layout, &t);
+        assert_eq!(st.b[B_SCRX], 0x42, "4 - 5/2 = 2 px");
+    }
+
+    /// `$9CDF`: the bob picks its profile by `B_T24` — the cap-15 ascent, then
+    /// the cap-21 descent, which ends the flight at `B_SCRY = $90`.
+    #[test]
+    fn the_def2_bob_alternates_its_profiles() {
+        let real: ObjectTables = serde_json::from_str(
+            &std::fs::read_to_string(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../extracted/objects.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_SCRY] = 0x70;
+        st.b[B_T24] = 0;
+        let before = st.b[B_SCRY];
+        obj.boss_bob(&mut st, &real);
+        assert!(st.b[B_SCRY] < before, "the ascent climbs");
+        // Walk the cap-15 profile out: it flips B_T24 and resets the phase.
+        for _ in 0..0x10 {
+            obj.boss_bob(&mut st, &real);
+        }
+        assert_eq!(st.b[B_T24], 1, "then the descent takes over");
+        // And the descent ends at $90 with state 4.
+        st.b[B_SCRY] = 0x8E;
+        for _ in 0..0x18 {
+            obj.boss_bob(&mut st, &real);
+            if st.b[B_FSTATE] == 4 {
+                break;
+            }
+        }
+        assert_eq!(st.b[B_SCRY], 0x90);
+        assert_eq!(st.b[B_FSTATE], 4);
+        assert_eq!(st.b[B_FLIP], 0x20);
     }
 
     /// `$9606` (boss anim 2): the def-2 spawner arms only while the slot's
