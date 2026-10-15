@@ -37,6 +37,15 @@ status; `PORT_QUEUE.json` = the backlog (the durable record).
    `sweep.sh` enumerates its captures by name — a new capture file is never picked up
    automatically. Do not run it per-iteration.
 
+## Editing `PORT_QUEUE.json` (and DESIGN.md) from a shell script
+
+Validate before you write, not after: shell heredocs silently turn `$0EB0` into `\$0EB0`,
+and one stray backslash makes `PORT_QUEUE.json` unparseable while `cargo test` stays green
+(the core tests never read it, only the queue tooling does). So a script that rewrites the
+queue must `json.loads` the new text **before** `write_text`, and the write should keep only
+genuinely valid JSON escapes (see the repair commit that fixed this twice). Cheap check:
+`python3 -c "import json;print(len(json.load(open('PORT_QUEUE.json'))['queue']))"`.
+
 ## Verifying a rendering claim
 
 The replay gate compares state bytes, so it cannot see a background/sprite
