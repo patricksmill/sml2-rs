@@ -177,6 +177,10 @@ const STEP_74A1: [u8; 19] = [
     0x00, 0x00, 0x00,
 ];
 
+/// `$74AB` (`$5B465`'s table, c = 8): the defeated enemy's rise curve, 2× per
+/// frame in `$581CE`. `$74A1`/`$74A7` are its neighbours, used by the floaters.
+const DEATH_RISE_74AB: [u8; 8] = [0x02, 0x01, 0x02, 0x01, 0x01, 0x01, 0x00, 0x00];
+
 #[inline]
 pub fn x_of(b: &[u8; 32]) -> u16 {
     ((b[B_XHI] as u16) << 8) | b[B_XLO] as u16
@@ -224,6 +228,9 @@ impl ObjSlot {
             1 => SlotState::Standby,
             _ => SlotState::Active,
         }
+    }
+    pub fn active(&self) -> bool {
+        self.state() == SlotState::Active
     }
     pub fn def(&self) -> u8 {
         self.b[B_DEF]
@@ -279,6 +286,9 @@ pub struct MarioContact {
     pub on_ground: bool,
     /// `sMarioOnObject`.
     pub on_object: bool,
+    /// `sMarioDirection` ($A22B): `$01` right / `$FF` left. The shell
+    /// placement tails (`$864A`/`$584A9`) test it, not the position.
+    pub dir_right: bool,
     /// `hKeysHeld` bit 1 (B).
     pub b_held: bool,
     /// `hKeysHeld` bit 0 (A).
@@ -393,6 +403,37 @@ pub struct ObjectSim {
     pub spawn_attr: u8,
     /// Mario contact for the current frame (read by the handlers).
     pub mario: MarioContact,
+    /// `sObjectDone` ($AF3E) per slot: the ROM keeps the byte in the scratch
+    /// page ($AF00) while both the handler loop and the bank-3 draw (`$C000`)
+    /// read it, and `$C014` returns before drawing when it is set. During a
+    /// slot's frame it is the *dispatch's* own `done`, so a defeated object —
+    /// `$85FC` sets it — is not drawn on the frame it dies. The port's sim only
+    /// needs the per-slot record: [`Self::done`] still carries the byte.
+    pub slot_done: [bool; SLOT_COUNT],
+    /// `sActionLatch` ($AF3A): the `$8611` pickup's one-shot. Set when B-held
+    /// contact turns a shell into the carried anim, and cleared by the
+    /// carried/kicked-state exits; while it is set a second contact cannot
+    /// re-trigger the pickup.
+    pub action_latch: u8,
+    /// `sObjectHitFlag` ($AF2E): `$5B697`'s "the carried shell hit another
+    /// object this frame". Cleared per slot per frame like `$8000` does and
+    /// read by the carried state's exit arm.
+    pub object_hit_flag: u8,
+    /// `$8611`'s B-not-held tail (`$8633` -> `$864A`): the anim bump happens in
+    /// the flag dispatch, but the `±16` placement needs the level layout, so the
+    /// dispatcher raises this and [`Self::engine`] runs the tail on the same
+    /// slot before the handler.
+    pub pending_kick: bool,
+    /// $AFC1: `sBossHitsRemaining`
+    pub boss_hits_remaining: u8,
+    /// $AFC2: `sBossSprite`
+    pub boss_sprite: u8,
+    /// $A2A4: `sTimerReload`
+    pub boss_timer_reload: u8,
+    /// $A255: `sBossDefeated`
+    pub boss_defeated: bool,
+    /// Raw 512-byte slot staging buffer ($AD00-$AEFF) for boss driver exact staging
+    pub boss_slots_raw: [u8; 512],
     /// ROM addresses of bank-16 handlers that are not ported yet.
     pub unported: Vec<u32>,
 }
@@ -445,6 +486,15 @@ impl ObjectSim {
             spawn_sprite: 0,
             spawn_attr: 0,
             mario: MarioContact::default(),
+            slot_done: [false; SLOT_COUNT],
+            action_latch: 0,
+            object_hit_flag: 0,
+            pending_kick: false,
+            boss_hits_remaining: 0,
+            boss_sprite: 0,
+            boss_timer_reload: 0,
+            boss_defeated: false,
+            boss_slots_raw: [0; 512],
             unported: Vec::new(),
         }
     }
@@ -470,6 +520,51 @@ impl ObjectSim {
     /// `$82D5`/`$8306`: `min <= v <= max` (inclusive).
     fn window_hit(v: u16, w: (u16, u16)) -> bool {
         v >= w.0 && v <= w.1
+    }
+
+    /// Bank 2 `$8DFD`/`$8E6C`: stage boss slots and metadata from `lookup_boss_spawn_def`.
+    ///
+    /// Implements byte-for-byte Bank 2 staging:
+    /// 1. Clears both slot pages ($AD00-$AEFF, 512 bytes) and resets slot array.
+    /// 2. Sets `boss_hits_remaining = hits`, `boss_sprite = sprite`, `boss_timer_reload = 80`.
+    /// 3. Copies 18-byte `obj0` to `$AD05` (offset 5 in slot 0).
+    /// 4. If `count > 0`, loops over sub-objects starting destination at `$AD25` (offset 0x25)
+    ///    with literal `+$10` stride per sub-object (causing overlap on count >= 2).
+    /// 5. Reflects raw staged bytes into `slots[0..4]` for slot-level consumers.
+    pub fn spawn_boss(&mut self, def_index: u8) {
+        let (count, hits, sprite, obj0, sub_objs) = crate::scene::lookup_boss_spawn_def(def_index);
+        self.boss_slots_raw = [0; 512];
+        for slot in &mut self.slots {
+            slot.b = [0; 32];
+        }
+        self.boss_hits_remaining = hits;
+        self.boss_sprite = sprite;
+        self.boss_timer_reload = 80;
+
+        // obj0 at $AD05 (offset 5 in slot 0)
+        self.boss_slots_raw[5..5 + 18].copy_from_slice(&obj0);
+
+        // Sub-objects start at $AD25 (offset 0x25 = 37) with literal +$10 (16 bytes) stride
+        if count > 0 {
+            let mut offset = 0x25usize;
+            for sub in sub_objs.iter().take(count as usize) {
+                if offset + 18 <= self.boss_slots_raw.len() {
+                    self.boss_slots_raw[offset..offset + 18].copy_from_slice(sub);
+                }
+                offset += 0x10;
+            }
+        }
+
+        // Copy raw staged slot pages into slots 0..4 (32 bytes each)
+        for i in 0..4 {
+            self.slots[i].b.copy_from_slice(&self.boss_slots_raw[i * 32..(i + 1) * 32]);
+        }
+    }
+
+    /// Helper for testing interaction dispatch directly.
+    pub fn post_touch(&mut self, st: &mut Staging, _layout: &[u8; 48], tables: &ObjectTables, contact: &MarioContact) {
+        self.mario = *contact;
+        self.interaction_dispatch(st, tables);
     }
 
     /// One full frame: Mario interaction pass (`$2D7D`, which the frame loop
@@ -601,6 +696,7 @@ impl ObjectSim {
                     self.standby = self.standby.wrapping_sub(1);
                     self.active = self.active.wrapping_add(1);
                     self.done = 1;
+                    self.slot_done[i] = true; // promoted this frame: not drawn yet
                 }
                 continue;
             }
@@ -659,8 +755,18 @@ impl ObjectSim {
             b: self.slots[i].b,
             ..Default::default()
         };
+        // $8000 clears `sObjectHitFlag` per slot per frame, before the handler.
+        self.object_hit_flag = 0;
+        self.pending_kick = false;
         // $81A7 (slot → staging) + $3A50 (bank 16).
         self.bank16_update(i, &mut st, layout, tables);
+        // `$C014`: the draw is skipped while this slot's `sObjectDone` is set.
+        self.slot_done[i] = self.done != 0;
+        // `$8611`'s B-not-held tail, which needs the layout.
+        if self.pending_kick {
+            self.pending_kick = false;
+            self.kick_placement(&mut st, layout);
+        }
         // $3C80 (bank 3 draw): `$C000` returns immediately unless the staged
         // state is 2, so a removed slot keeps its (zeroed) screen bytes; the
         // `$C090` screen pos + flip flags are computed first otherwise.
@@ -745,6 +851,8 @@ impl ObjectSim {
             0x58758 => self.itempose_body(st),
             0x587BD => self.handler_pose86(st),
             0x587D7 => self.handler_pose87(st, tables),
+            0x5839B => self.handler_kicked(st, layout),
+            0x58444 => self.handler_carried(st, layout, tables),
             0x58DD1 => self.handler_carrier46(st, layout, tables),
             0x594EB => self.handler_fallwalker52(st, layout),
             0x59BC5 => self.handler_groundwalker88(st, layout),
@@ -759,6 +867,7 @@ impl ObjectSim {
             // explicitly keeps it out of `note_unported`, where it would look
             // like a gap in the port rather than a fixture of the ROM.
             0x58100 => {}
+            0x581B1 => self.handler_death(st, layout, tables),
             h => self.note_unported(h),
         }
     }
@@ -2112,6 +2221,264 @@ impl ObjectSim {
     }
 
     // ---------------------------------------------------------------------
+    // Anim 0 — the defeated enemy's death animation ($581B1)
+    // ---------------------------------------------------------------------
+
+    /// `$581B1` (mode-A anim 0): the death animation every defeat runs into.
+    /// `$85FC` leaves the slot as (anim 0, type 0) with `sObjectDone` set, and
+    /// from the next frame this handler plays: state 0 hops it 20 px **up** and
+    /// flips it upside down (`+13` bit 6), state 1 rises on the `$74AB` 8-entry
+    /// curve at 2 b a frame until the curve's sentinel, and state 2 falls on the
+    /// `$5B451` curve (also 2 b) and removes the slot once its staged screen Y
+    /// passes `$A0` — the flip-and-fall-off-the-screen death. This is what a
+    /// fireball or a stomp defeat *looks like*, and without it a defeated enemy
+    /// simply froze on screen.
+    fn handler_death(&mut self, st: &mut Staging, layout: &LevelLayout, tables: &ObjectTables) {
+        let _ = layout;
+        match st.b[B_FSTATE] {
+            // $581CE: rise on 2x the $74AB curve.
+            1 => {
+                let (b, c) = self.step_picker(st, &DEATH_RISE_74AB, 8);
+                self.mv_y_sub(st, b.wrapping_mul(2));
+                if st.b[B_PHASE] != c {
+                    return;
+                }
+                st.b[B_FSTATE] = 2;
+                st.b[B_PHASE] = 0;
+            }
+            // $581E2: fall on 2x the $5B451 curve; off the bottom of the
+            // screen -> `$5B2D7` with remove-mode 2.
+            2 => {
+                let b = self.fall_step(st);
+                self.mv_y_add(st, b.wrapping_mul(2));
+                if st.b[B_SCRY] < 0xA0 {
+                    return;
+                }
+                self.remove_mode = 2;
+                self.remove_object(st, tables);
+                // $581E2's tail also counts `sBossDefeated` down; the port
+                // models that byte as a bool (the boss item), so there is
+                // nothing to decrement here yet.
+            }
+            // $581B9: the hop + the flip.
+            _ => {
+                self.mv_y_sub(st, 20);
+                st.b[B_FLIP] ^= 0x40;
+                st.b[B_PHASE] = 0;
+                st.b[B_TYPE] = 0;
+                st.b[B_FSTATE] = 1;
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Anims 3/4 — the kicked shell and the carried shell ($5839B / $58444)
+    // ---------------------------------------------------------------------
+
+    /// `$5839B` (anim 3): the kicked shell / walker. Type `$5F` on its first
+    /// call, then a four-state walk shared with anim 9's shape: 1/2 walk (3 px
+    /// steps, wall -> turn) and 3/4 are the ledge falls, the `$5B451` curve
+    /// with a landing that subtracts 2 from the state and clears the fall
+    /// index. Every call also runs `$5B607` (the sprite wobble, the same
+    /// routine anim 8's spin uses) and, while the type has bit 6, `$5B697` —
+    /// the KO overlap that defeats other enemies this shell runs into.
+    fn handler_kicked(&mut self, st: &mut Staging, layout: &LevelLayout) {
+        if st.b[B_TYPE] & 0x40 != 0 {
+            self.ko_overlap(st);
+        }
+        self.spin_step(st); // $5B607 - byte-identical to $5B545's wobble
+        match st.b[B_FSTATE] {
+            0 => {
+                // $5B3C6 + type $5F.
+                self.face_mario(st);
+                st.b[B_TYPE] = 0x5F;
+            }
+            // $83BC / $83E6: walk. The probes are the *low* pair ($3BA4/$3C08),
+            // not the anim-9 walker's Y-11 ones.
+            1 => {
+                self.m_right_wall_low(st, layout);
+                if self.move_flags & 0x01 != 0 {
+                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_add(1); // $583DB
+                    return;
+                }
+                self.mv_x_add(st, 3);
+                self.walk_ground_check(st, layout); // $583CB: no ground -> state += 2
+            }
+            2 => {
+                self.m_left_wall_low(st, layout);
+                if self.move_flags & 0x02 != 0 {
+                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_sub(1); // $583F7
+                    return;
+                }
+                self.mv_x_sub(st, 3);
+                self.walk_ground_check(st, layout);
+            }
+            // $8402 / $8433: the falls.
+            3 => {
+                self.m_right_wall_low(st, layout);
+                if self.move_flags & 0x01 != 0 {
+                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_add(1);
+                    return;
+                }
+                self.mv_x_add(st, 3);
+                self.kick_fall(st, layout);
+            }
+            4 => {
+                self.m_left_wall_low(st, layout);
+                if self.move_flags & 0x02 != 0 {
+                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_sub(1);
+                    return;
+                }
+                self.mv_x_sub(st, 3);
+                self.kick_fall(st, layout);
+            }
+            _ => {}
+        }
+    }
+
+    /// `$58411`: one fall step — no ground under the shell → `$5B451` + 1 px,
+    /// ground → `$58423` (land: clear the fall index, state −= 2, snap Y's low
+    /// nibble).
+    fn kick_fall(&mut self, st: &mut Staging, layout: &LevelLayout) {
+        self.m_ground_own(st, layout);
+        if self.move_flags & 0x08 != 0 {
+            st.b[B_PHASE] = 0;
+            st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_sub(2);
+            st.b[B_YLO] &= 0xF0;
+            return;
+        }
+        let b = self.fall_step(st);
+        self.mv_y_add(st, b.wrapping_add(1));
+    }
+
+    /// `$58444` (anim 4): the carried shell. Pipe travel removes it; state 0
+    /// sets the type to 0 and enters state 1 (`$58452`), which every frame
+    /// follows Mario (`$5B4C1`), runs the KO overlap (`$5B697`), and exits
+    /// through `$584C3` (defeat itself via `$3ADC`) when it hit something or
+    /// found a ceiling 8 px above in the `$3B68` probe. While B is held it
+    /// stays carried; on release it drops one anim (4 → 3) and runs the
+    /// placement tail.
+    fn handler_carried(&mut self, st: &mut Staging, layout: &LevelLayout, tables: &ObjectTables) {
+        if self.mario.travelling {
+            // $58444: pipe travel → sActionLatch = 0, `$5B2D7` removal.
+            self.action_latch = 0;
+            self.remove_object(st, tables);
+            return;
+        }
+        if st.b[B_FSTATE] == 0 {
+            // $58452: type 0, state 1.
+            st.b[B_TYPE] = 0;
+            st.b[B_FSTATE] = 1;
+            return;
+        }
+        self.follow_mario(st);
+        self.ko_overlap(st);
+        if self.object_hit_flag != 0 {
+            self.release_and_defeat(st);
+            return;
+        }
+        self.m_ceil_own(st, layout, 8); // $3B68
+        if self.move_flags & 0x04 != 0 {
+            self.release_and_defeat(st);
+            return;
+        }
+        if self.mario.b_held {
+            return;
+        }
+        // B released: `$3AB4` (`$85DC`) drops the anim, then the placement.
+        self.action_latch = 0;
+        st.b[B_DEF] = st.b[B_DEF].wrapping_sub(1);
+        self.kick_placement(st, layout);
+    }
+
+    /// `$584C3`: the carried shell ran into something — clear the latch and
+    /// defeat *itself* (`$3ADC` is `$85FC`).
+    fn release_and_defeat(&mut self, st: &mut Staging) {
+        self.action_latch = 0;
+        self.defeat(st);
+    }
+
+    /// `$5B4C1`: follow Mario — his 16-bit X/Y, `+8` on X, then the Y offset by
+    /// his size and ducking (5 / 14 / 20).
+    fn follow_mario(&mut self, st: &mut Staging) {
+        set_x(&mut st.b, self.mario.x);
+        set_y(&mut st.b, self.mario.y);
+        self.mv_x_add(st, 8);
+        let b = match (self.mario.powerup != 0, self.mario.ducking) {
+            (true, false) => 5,
+            (false, true) => 20,
+            _ => 14,
+        };
+        self.mv_y_add(st, b);
+    }
+
+    /// `$5B697` → `$5B6A9`: the carried/kicked shell's overlap test against
+    /// every slot's own hitbox (`+3`/`+10` on Y, `±5` on X), against the
+    /// shell's *staged* screen pair. Type 0 slots are skipped by the caller's
+    /// scan, and `$5F` (itself, another shell) and anything with bit 7 (item
+    /// poses) or bit 5 (immune) are skipped here. A hit sets the target's
+    /// `+17` bit 1 — the defeat flag the interaction dispatch consumes — and
+    /// raises `sObjectHitFlag`.
+    fn ko_overlap(&mut self, st: &Staging) {
+        let sy = st.b[B_SCRY];
+        let sx = st.b[B_SCRX];
+        for j in 0..SLOT_COUNT {
+            let ty = self.slots[j].b[B_TYPE];
+            if ty == 0 || ty == 0x5F || ty & 0xA0 != 0 {
+                continue;
+            }
+            let b = &self.slots[j].b;
+            let oy = b[B_SCRY];
+            let ox = b[B_SCRX];
+            let d = b[B_HB_TOP].wrapping_add(3).wrapping_add(oy);
+            let e = b[B_HB_BOTTOM]
+                .wrapping_add(10)
+                .wrapping_add(oy)
+                .wrapping_sub(d);
+            if sy.wrapping_sub(d) >= e {
+                continue;
+            }
+            let d = b[B_HB_LEFT].wrapping_sub(5).wrapping_add(ox);
+            let e = b[B_HB_RIGHT]
+                .wrapping_add(5)
+                .wrapping_add(ox)
+                .wrapping_sub(d);
+            if sx.wrapping_sub(d) >= e {
+                continue;
+            }
+            self.slots[j].b[B_FLAGS] |= 0x02;
+            self.object_hit_flag = 1;
+        }
+    }
+
+    /// `$864A` / `$584A9`: the shared placement tail once the anim is 3. The
+    /// shell is nudged 16 px to Mario's facing side and probed there with the
+    /// *low* wall pair: a wall turns it into a live kicked shell (type `$5F`,
+    /// state walking away from the wall); open air leaves it anim 3 with the
+    /// state it already had, i.e. walking away from Mario.
+    fn kick_placement(&mut self, st: &mut Staging, layout: &LevelLayout) {
+        if self.mario.dir_right {
+            self.mv_x_add(st, 16);
+            self.m_right_wall_low(st, layout);
+            if self.move_flags & 0x01 == 0 {
+                return;
+            }
+            self.mv_x_sub(st, 16);
+            st.b[B_TYPE] = 0x5F;
+            st.b[B_FSTATE] = 1;
+        } else {
+            self.mv_x_sub(st, 16);
+            self.m_left_wall_low(st, layout);
+            if self.move_flags & 0x02 == 0 {
+                return;
+            }
+            self.mv_x_add(st, 16);
+            st.b[B_TYPE] = 0x5F;
+            st.b[B_FSTATE] = 2;
+        }
+    }
+
+    // ---------------------------------------------------------------------
     // $85AA — interaction-flag dispatch
     // ---------------------------------------------------------------------
 
@@ -2166,7 +2533,25 @@ impl ObjectSim {
             if ty != 0x06 {
                 return;
             }
-            self.note_unported(0x8611);
+            // `$8611`'s type-`$06` arm — the carry/kick entry.
+            if self.mario.b_held {
+                // B held: the one-shot latch, then anim += 2 (2 -> 4 = carried)
+                // and `$863C`. `$8240` inside it clears `+14..+30`, the type byte
+                // included, so the carried object leaves here as (anim 4, type 0,
+                // state 0) and the anim-4 handler takes it from the next frame.
+                if self.action_latch != 0 {
+                    return;
+                }
+                self.action_latch = 1;
+                st.b[B_DEF] = st.b[B_DEF].wrapping_add(2);
+                self.finish_sprite_swap(st, tables);
+                return;
+            }
+            // B not held: `$8633` (anim += 1 -> the kicked walker) then the
+            // placement tail, which needs the layout the dispatcher does not
+            // carry; the caller runs it (see `pending_kick`).
+            st.b[B_DEF] = st.b[B_DEF].wrapping_add(1);
+            self.pending_kick = true;
             return;
         }
         if f & 0x20 != 0 {
@@ -2529,8 +2914,10 @@ impl ObjectSim {
         if self.slots[i].b[B_TYPE] & 0x40 == 0 {
             return;
         }
+        // $2E7C: moon item shield (bit 2 in sMoonPhysics): consume and grant invincibility
         if self.mario.moon_physics & 0x04 != 0 {
-            self.note_unported(0x2E8E);
+            self.mario.moon_physics &= !0x04;
+            self.mario.invincibility = 0x80;
             return;
         }
         if self.mario.invincibility != 0 {
@@ -2815,8 +3202,8 @@ mod tests {
         let mut obj = ObjectSim::new(Vec::new(), 0);
         let mut st = touched(1, 0x06);
         obj.interaction_dispatch(&mut st, &t);
-        assert_eq!(obj.unported, vec![0x8611]);
-        assert_eq!(st.b[B_DEF], 1);
+        assert!(obj.unported.is_empty(), "type 06 is ported at $8611");
+        assert_eq!(st.b[B_DEF], 2, "kicked without B held: anim += 1");
     }
 
     /// `$586F5` per call: `+15 = 1`, the `$5B68B` flash on even `$FFF0`, Y += 2
@@ -3964,5 +4351,625 @@ mod tests {
         fire_slot(&mut obj, 1, 0x20, 0); // die
         assert_eq!(obj.fire_hit(0x4A, 0x4A), FireHit::Die, "the last hit wins");
         assert_eq!(obj.slots[0].b[B_FLAGS], 0x02, "the earlier defeat stands");
+    }
+
+    // ---- Bank 2 $8DFD / $8E6C boss spawn staging unit tests (U1) -----------
+
+    #[test]
+    fn boss_spawn_clears_pages_and_populates_metadata() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.boss_slots_raw.fill(0xAA);
+        obj.slots[0].b.fill(0xFF);
+        obj.spawn_boss(0);
+
+        assert_eq!(obj.boss_hits_remaining, 6);
+        assert_eq!(obj.boss_sprite, 1);
+        assert_eq!(obj.boss_timer_reload, 80);
+        assert_eq!(obj.boss_slots_raw[0..5], [0, 0, 0, 0, 0]);
+        let (_, _, _, obj0, _) = crate::scene::lookup_boss_spawn_def(0);
+        assert_eq!(&obj.boss_slots_raw[5..23], &obj0);
+        assert_eq!(&obj.slots[0].b[5..23], &obj0);
+    }
+
+    #[test]
+    fn boss_spawn_count_1_stages_one_sub_without_spill() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.spawn_boss(0); // def 0: count 1
+
+        let (_, _, _, _, subs) = crate::scene::lookup_boss_spawn_def(0);
+        assert_eq!(&obj.boss_slots_raw[0x25..0x25 + 18], &subs[0]);
+        assert_eq!(obj.boss_slots_raw[0x25 + 18], 0);
+        assert_eq!(obj.slots[2].b, [0; 32]);
+    }
+
+    #[test]
+    fn boss_spawn_def_index_4_stages_literal_slot_bytes_with_10_stride() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.spawn_boss(4); // def 4: count 2, stride +$10
+
+        // Test literal slot bytes from §4.3 of deleg_C_scene_boss_verdict.md:
+        assert_eq!(
+            &obj.slots[0].b,
+            &[
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x30, 0x90, 0x34, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00
+            ]
+        );
+        assert_eq!(
+            &obj.slots[1].b,
+            &[
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00, 0x30, 0x90, 0x0E, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x40, 0x98, 0x0E,
+                0x00, 0x00, 0x00, 0x00
+            ]
+        );
+        assert_eq!(
+            &obj.slots[2].b,
+            &[0; 32]
+        );
+    }
+
+    #[test]
+    fn boss_spawn_index_8_stages_no_subs_but_keeps_obj0() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.spawn_boss(8); // count 0
+
+        let (count, _, _, obj0, _) = crate::scene::lookup_boss_spawn_def(8);
+        assert_eq!(count, 0);
+        assert_eq!(&obj.slots[0].b[5..23], &obj0);
+        assert_eq!(obj.slots[1].b, [0; 32]);
+        assert_eq!(obj.slots[2].b, [0; 32]);
+    }
+
+    // ---- $8611 / $5839B / $58444 — the carry, the kick and the KO ---------
+
+    /// `$8611` with B held: the one-shot `sActionLatch`, anim += 2 (the stunned
+    /// shell's 2 -> the carried 4) and `$863C`, whose `$8240` clears `+14..+30`
+    /// — the type byte with them, which is what leaves the carried object
+    /// outside the KO scan. A second contact cannot re-trigger it.
+    #[test]
+    fn the_8611_pickup_takes_the_shell_to_the_carried_anim() {
+        let t = tables();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        let mut st = streamed(2, 0x06, 0x10);
+        st.b[B_FSTATE] = 1;
+        let contact = MarioContact {
+            b_held: true,
+            ..Default::default()
+        };
+        obj.post_touch(&mut st, &[0u8; 48], &t, &contact);
+        assert_eq!(st.b[B_DEF], 4, "anim 2 + 2 = the carried state");
+        assert_eq!(obj.action_latch, 1, "the latch arms");
+        assert_eq!(st.b[B_TYPE], 0, "$8240 cleared +14..+30, type included");
+        assert_eq!(st.b[B_FSTATE], 0, "and the state byte");
+        assert_eq!(obj.done, 1, "$863C sets sObjectDone");
+        assert!(obj.unported.is_empty(), "$8611 is ported now");
+
+        // The latch holds: a second B-held contact does nothing.
+        let mut st2 = streamed(4, 0x00, 0x10);
+        obj.post_touch(&mut st2, &[0u8; 48], &t, &contact);
+        assert_eq!(st2.b[B_DEF], 4, "no second bump");
+    }
+
+    /// `$8611` with B *not* held: `$8633` bumps the anim to 3 (the kicked
+    /// walker) and the `$864A` tail nudges the shell 16 px to Mario's facing
+    /// side — open air there means it just walks off, no type change.
+    #[test]
+    fn the_8611_kick_places_the_shell_on_marios_facing_side() {
+        let t = tables();
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.active = 1;
+        obj.spawned = vec![true];
+        let mario = MarioContact {
+            x: 100,
+            y: 100,
+            dir_right: true,
+            ..Default::default()
+        };
+        obj.mario = mario;
+        obj.mario_ref_x = 108;
+        {
+            let s = &mut obj.slots[0];
+            s.b[B_STATE] = 2;
+            s.b[B_DEF] = 2;
+            s.b[B_TYPE] = 0x06;
+            s.b[B_FLAGS] = 0x10;
+            set_x(&mut s.b, 100);
+            set_y(&mut s.b, 100);
+        }
+        // Through the engine, so the $864A tail runs with the layout.
+        obj.engine(0, 0, &layout, &t);
+        let s = &obj.slots[0];
+        assert_eq!(s.b[B_DEF], 3, "$8633: anim += 1");
+        assert_eq!(s.b[B_TYPE], 0x06, "no wall: the type stays");
+        assert_eq!(s.x(), 116, "nudged 16 px to Mario's right");
+    }
+
+    /// The same tail with a wall on Mario's facing side: the shell is put back
+    /// and becomes a *live* kicked shell — type `$5F`, walking into the wall
+    /// (state 1), which the anim-3 handler turns around next frame. The probe
+    /// runs from the *nudged* position, i.e. (x + 16 + 7, y - 8).
+    #[test]
+    fn a_wall_on_marios_facing_side_makes_a_live_kicked_shell() {
+        let mut layout = blank_layout();
+        layout.cells[5 * 256 + 7] = 0x20; // the nudged (x+7, y-8) probe's cell
+        let t = tables();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.active = 1;
+        obj.spawned = vec![true];
+        obj.mario = MarioContact {
+            x: 100,
+            y: 100,
+            dir_right: true,
+            ..Default::default()
+        };
+        obj.mario_ref_x = 108;
+        {
+            let s = &mut obj.slots[0];
+            s.b[B_STATE] = 2;
+            s.b[B_DEF] = 2;
+            s.b[B_TYPE] = 0x06;
+            s.b[B_FLAGS] = 0x10;
+            set_x(&mut s.b, 100);
+            set_y(&mut s.b, 100);
+        }
+        obj.engine(0, 0, &layout, &t);
+        let s = &obj.slots[0];
+        assert_eq!(s.b[B_DEF], 3);
+        assert_eq!(s.b[B_TYPE], 0x5F, "a live kicked shell");
+        assert_eq!(s.b[B_FSTATE], 1, "walking into the wall");
+        assert_eq!(s.x(), 100, "put back where it was");
+    }
+
+    /// `$5839B` (anim 3): the kicked shell walks 3 px a frame *away* from Mario
+    /// (`$5B3C6` puts Mario-to-the-right at state 2 = the left walk), turns at a
+    /// wall, steps off a ledge into the `$5B451` fall and lands back into the
+    /// walk with the fall index cleared and Y snapped to the tile.
+    #[test]
+    fn the_kicked_shell_walks_turns_falls_and_lands() {
+        let mut layout = blank_layout();
+        layout.cells[6 * 256..=6 * 256 + 20].fill(0x20); // ground under it
+        let mut st = streamed(3, 0x00, 0);
+        st.b[B_FSTATE] = 0;
+        set_x(&mut st.b, 100);
+        set_y(&mut st.b, 96); // (y & $0C) == 0: the ground probe is live
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.mario = MarioContact {
+            x: 300,
+            ..Default::default()
+        };
+        obj.mario_ref_x = 308; // Mario to the right
+        obj.handler_kicked(&mut st, &layout);
+        assert_eq!(st.b[B_TYPE], 0x5F, "state 0 arms the shell type");
+        assert_eq!(st.b[B_FSTATE], 2, "$5B3C6: Mario right -> the left walk");
+
+        // State 2 walks left 3 px while the ground probe holds.
+        obj.handler_kicked(&mut st, &layout);
+        assert_eq!(st.x(), 97, "3 px left, away from Mario");
+        assert_eq!(st.b[B_FSTATE], 2);
+
+        // A left wall turns it (state 2 -> 1).
+        layout.cells[5 * 256 + 5] = 0x20; // (x-7=90, y-8=88) -> row 5 col 5
+        obj.handler_kicked(&mut st, &layout);
+        assert_eq!(st.b[B_FSTATE], 1, "turned at the wall");
+        assert_eq!(st.x(), 97, "and it did not step into it");
+
+        // State 1 walks right (away from the wall) before the ledge.
+        layout.cells[5 * 256 + 5] = 0x60;
+        let x_wall = st.x();
+        obj.handler_kicked(&mut st, &layout);
+        assert_eq!(st.x(), x_wall + 3, "state 1 walks right");
+
+        // Walking right with no ground under it -> the fall state (+2 = 3).
+        layout.cells[6 * 256..=6 * 256 + 20].fill(0x60);
+        obj.handler_kicked(&mut st, &layout);
+        assert_eq!(st.b[B_FSTATE], 3, "no ground: state += 2");
+
+        // Falling: Y += the $5B451 curve + 1, and the index steps.
+        let y0 = st.y();
+        obj.handler_kicked(&mut st, &layout);
+        assert!(st.y() > y0, "it falls");
+        assert_eq!(st.b[B_PHASE], 1, "the fall index stepped");
+
+        // Land it: ground back, state -= 2 into the walk.
+        layout.cells[6 * 256..=6 * 256 + 20].fill(0x20);
+        obj.handler_kicked(&mut st, &layout);
+        assert_eq!(st.b[B_FSTATE], 1, "landed back into the right walk");
+        assert_eq!(st.b[B_PHASE], 0, "the fall index clears");
+        assert_eq!(st.b[B_YLO] & 0x0F, 0, "and Y snaps to the tile");
+    }
+
+    fn layout_for_ko() -> LevelLayout {
+        blank_layout()
+    }
+
+    /// `$5B697`: the kicked shell defeats an enemy it overlaps — the target's
+    /// `+17` bit 1 (the flag the interaction dispatch turns into `defeat()`)
+    /// plus `sObjectHitFlag`. Type `$5F` (itself, another shell), bit 7 item
+    /// poses and bit 5 types are all skipped, and the box is the target's own
+    /// hitbox widened by 3/10 on Y and 5 on X.
+    #[test]
+    fn the_kicked_shell_knocks_out_another_enemy() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        let mut st = streamed(3, 0x5F, 0);
+        set_x(&mut st.b, 100);
+        set_y(&mut st.b, 100);
+        st.b[B_SCRY] = 96;
+        st.b[B_SCRX] = 96;
+        for (i, ty) in [(0usize, 0x4Eu8), (1, 0x5F), (2, 0x82), (3, 0x0A)] {
+            let s = &mut obj.slots[i];
+            s.b[B_STATE] = 2;
+            s.b[B_TYPE] = ty;
+            s.b[B_SCRY] = 90;
+            s.b[B_SCRX] = 96;
+            s.b[B_HB_TOP] = 0;
+            s.b[B_HB_BOTTOM] = 0x10;
+            s.b[B_HB_LEFT] = 0;
+            s.b[B_HB_RIGHT] = 0x10;
+        }
+        // Through the handler, so the `bit 6` gate is covered too.
+        obj.handler_kicked(&mut st, &layout_for_ko());
+        assert_eq!(obj.slots[0].b[B_FLAGS], 0x02, "the walker is defeated");
+        assert_eq!(obj.slots[1].b[B_FLAGS], 0, "another shell is not");
+        assert_eq!(obj.slots[2].b[B_FLAGS], 0, "an item pose is not");
+        assert_eq!(obj.slots[3].b[B_FLAGS], 0x02, "a bit-5/7-clear enemy is");
+        assert_eq!(obj.object_hit_flag, 1, "and the hit flag rises");
+
+        // With bit 6 clear (a `$06` shell that never went through state 0) the
+        // KO scan does not even run.
+        for i in 0..4 {
+            obj.slots[i].b[B_FLAGS] = 0;
+        }
+        st.b[B_TYPE] = 0x06;
+        obj.handler_kicked(&mut st, &layout_for_ko());
+        assert_eq!(obj.slots[0].b[B_FLAGS], 0, "bit 6 clear: no KO");
+        st.b[B_TYPE] = 0x5F;
+
+        // Far enough out on X (the box is ~26 px wide): nothing.
+        obj.object_hit_flag = 0;
+        obj.slots[0].b[B_FLAGS] = 0;
+        obj.slots[3].b[B_FLAGS] = 0;
+        for i in 0..4 {
+            obj.slots[i].b[B_SCRX] = 96u8.wrapping_add(0x30);
+        }
+        obj.ko_overlap(&st);
+        assert_eq!(obj.slots[0].b[B_FLAGS], 0, "out of the window");
+        assert_eq!(obj.object_hit_flag, 0);
+    }
+
+    /// `$581B1` (anim 0): the death animation a defeat runs into — the enemy
+    /// hops 20 px up and flips upside down, rises on the `$74AB` curve at 2 b a
+    /// frame, then falls on the `$5B451` curve and is removed once its staged
+    /// screen Y passes `$A0`. The engine now routes anim 0 here, so a defeat
+    /// raises no `unported` note either.
+    #[test]
+    fn a_defeated_enemy_flips_up_and_falls_off_the_screen() {
+        let t = tables();
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        let mut st = streamed(0, 0x00, 0);
+        st.b[B_FSTATE] = 0;
+        st.b[B_SPRITE] = 3;
+        st.b[B_TYPE] = 0x00;
+        set_x(&mut st.b, 100);
+        set_y(&mut st.b, 100);
+        obj.handler_death(&mut st, &layout, &t);
+        assert_eq!(st.y(), 80, "the 20 px hop (Y -= 20)");
+        assert_eq!(st.b[B_FLIP], 0x40, "flipped upside down");
+        assert_eq!(st.b[B_FSTATE], 1, "and rising");
+        assert_eq!(st.b[B_TYPE], 0);
+
+        // $581CE: 2x the $74AB curve, one byte a frame.
+        let y0 = st.y();
+        obj.handler_death(&mut st, &layout, &t);
+        assert_eq!(st.y(), y0 - 4, "$74AB[0] = 2, doubled by the sla");
+        for _ in 0..7 {
+            obj.handler_death(&mut st, &layout, &t);
+        }
+        assert_eq!(st.b[B_FSTATE], 2, "the curve's sentinel ends the rise");
+        assert_eq!(st.b[B_PHASE], 0, "and resets the fall index");
+
+        // $581E2: it falls until the draw's staged screen Y passes $A0.
+        let mut frames = 0;
+        while st.b[B_STATE] != 0 && frames < 80 {
+            st.b[B_SCRY] = st.b[B_SCRY].wrapping_add(6); // the draw step
+            obj.handler_death(&mut st, &layout, &t);
+            frames += 1;
+        }
+        assert_eq!(st.b[B_STATE], 0, "removed once off the bottom");
+        assert_eq!(obj.remove_mode, 0, "$5B2D7 resets the mode");
+    }
+
+    /// `$C014`: the bank-3 draw returns before drawing a slot whose
+    /// `sObjectDone` is set, which is why a defeated enemy disappears instead
+    /// of freezing where it stood — `$85FC` (the defeat) sets that byte.
+    #[test]
+    fn a_defeated_slot_is_not_drawn() {
+        let layout = blank_layout();
+        let t = tables();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.active = 1;
+        obj.spawned = vec![true];
+        obj.mario = MarioContact::default();
+        {
+            let s = &mut obj.slots[0];
+            s.b[B_STATE] = 2;
+            s.b[B_DEF] = 9;
+            s.b[B_TYPE] = 0x4E;
+            s.b[B_FSTATE] = 1;
+            s.b[B_SPRITE] = 3;
+            set_x(&mut s.b, 100);
+            set_y(&mut s.b, 96);
+        }
+        obj.engine(0, 0, &layout, &t);
+        assert!(!obj.slot_done[0], "a live object draws");
+        assert_eq!(obj.slots[0].b[B_TYPE], 0x4E);
+
+        // The fireball's flag (bit 1) -> the dispatch's defeat -> `$85FC` sets
+        // `sObjectDone`, and `$C014` stops the draw on that very frame.
+        obj.slots[0].b[B_FLAGS] = 0x02;
+        obj.engine(0, 0, &layout, &t);
+        assert_eq!(obj.slots[0].b[B_TYPE], 0, "defeated");
+        assert_eq!(obj.slots[0].b[B_DEF], 0);
+        assert!(obj.slot_done[0], "and it is not drawn");
+    }
+
+    /// The same chain through the engine, with the *committed* extraction's
+    /// anim-0 handler ($581B1, the death animation): the frames after a
+    /// fireball defeat flip the enemy, hop it up and draw it again as it falls,
+    /// instead of freezing the sprite and flagging anim 0 as an unported gap.
+    #[test]
+    fn a_fireball_defeat_plays_the_death_animation_through_the_engine() {
+        let real: ObjectTables = serde_json::from_str(
+            &std::fs::read_to_string(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../extracted/objects.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            real.profile_for(0, 0).map(|p| p.handler),
+            Some(0x581B1),
+            "the extraction's anim 0 IS the death handler"
+        );
+        let mut t = tables();
+        t.anim_profiles_a[0] = prof(0x581B1);
+
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.active = 1;
+        obj.spawned = vec![true];
+        obj.mario = MarioContact::default();
+        {
+            let s = &mut obj.slots[0];
+            s.b[B_STATE] = 2;
+            s.b[B_DEF] = 9;
+            s.b[B_TYPE] = 0x4E;
+            s.b[B_FSTATE] = 1;
+            s.b[B_SPRITE] = 3;
+            s.b[B_FLAGS] = 0x02; // the fireball's defeat flag
+            set_x(&mut s.b, 100);
+            set_y(&mut s.b, 96);
+        }
+        obj.engine(0, 0, &layout, &t);
+        assert_eq!(obj.slots[0].b[B_TYPE], 0, "defeated");
+        assert!(obj.slot_done[0], "and not drawn on the defeat frame");
+
+        let y0 = y_of(&obj.slots[0].b);
+        for _ in 0..3 {
+            obj.engine(0, 0, &layout, &t);
+        }
+        assert!(obj.unported.is_empty(), "anim 0 is dispatched, not a gap");
+        assert!(y_of(&obj.slots[0].b) < y0, "it hops up (Y -= 20)");
+        assert_eq!(obj.slots[0].b[B_FLIP] & 0x40, 0x40, "flipped upside down");
+        assert!(!obj.slot_done[0], "and it is drawn again while it falls");
+    }
+
+    /// The whole koopa chain the play test exercised: a stunned shell (anim 2,
+    /// type `$06`) is picked up with B held (`$8611` -> anim 4, carried),
+    /// follows Mario, is released (anim 4 -> 3) and then *walks* as the kicked
+    /// walker instead of hanging where it was thrown.
+    #[test]
+    fn the_shell_chain_pickup_carry_release_walks() {
+        let mut layout = blank_layout();
+        layout.cells[6 * 256..=6 * 256 + 24].fill(0x20); // ground at row 6
+        let t = tables();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        // Mario's Y is 91 so that the carried offset (+5 for big Mario) leaves
+        // the shell at Y = 96 — row 6, the ground row — while its wall probes
+        // (y-8 = 88) read row 5, the air above it.
+        obj.mario = MarioContact {
+            x: 100,
+            y: 91,
+            powerup: 1,
+            b_held: true,
+            dir_right: true,
+            ..Default::default()
+        };
+        obj.mario_ref_x = 108;
+        // The stunned shell beside Mario.
+        {
+            let s = &mut obj.slots[0];
+            s.b[B_STATE] = 2;
+            s.b[B_DEF] = 2;
+            s.b[B_TYPE] = 0x06;
+            s.b[B_FSTATE] = 1;
+            set_x(&mut s.b, 120);
+            set_y(&mut s.b, 96);
+        }
+        // 1. B-held contact: the pickup.
+        let mut st = Staging {
+            b: obj.slots[0].b,
+            ..Default::default()
+        };
+        st.b[B_FLAGS] = 0x10;
+        let contact = obj.mario;
+        obj.post_touch(&mut st, &[0u8; 48], &t, &contact);
+        assert_eq!(st.b[B_DEF], 4, "the shell is carried");
+        assert_eq!(obj.action_latch, 1);
+
+        // 2. Carried: the first frame only initialises the carried state
+        //    ($58452: type 0, state 1), from then on it follows Mario
+        //    (+8 X, +5 Y for big Mario).
+        obj.handler_carried(&mut st, &layout, &t);
+        assert_eq!(st.b[B_FSTATE], 1, "$58452: type 0, state 1");
+        assert_eq!(st.b[B_TYPE], 0);
+        obj.handler_carried(&mut st, &layout, &t);
+        assert_eq!((st.x(), st.y()), (108, 96), "pinned to Mario");
+        obj.handler_carried(&mut st, &layout, &t);
+        assert_eq!((st.x(), st.y()), (108, 96), "and it stays there");
+
+        // 3. B released: anim 3 and the placement nudge.
+        obj.mario.b_held = false;
+        obj.handler_carried(&mut st, &layout, &t);
+        assert_eq!(st.b[B_DEF], 3, "the kicked walker");
+        assert_eq!(st.x(), 124, "nudged 16 px out of Mario");
+
+        // 4. And it *moves* — the bug was that it froze mid-air instead. A
+        //    release in open air keeps type 0 and the state the carried arm
+        //    left (1 = the right walk); the ROM arms the live `$5F` type only
+        //    from the anim-3 state-0 arm or a wall placement.
+        let x0 = st.x();
+        obj.handler_kicked(&mut st, &layout);
+        assert_eq!(st.b[B_TYPE], 0, "open-air release: still inert");
+        assert_eq!(st.x(), x0 + 3, "but it walks 3 px");
+        obj.handler_kicked(&mut st, &layout);
+        assert_eq!(st.x(), x0 + 6, "and keeps walking");
+
+        // 5. Off the ledge: it falls, then lands back into the walk.
+        layout.cells[6 * 256..=6 * 256 + 24].fill(0x60);
+        obj.handler_kicked(&mut st, &layout);
+        assert_eq!(st.b[B_FSTATE], 3, "no ground: state += 2 (falling right)");
+        let y0 = st.y();
+        obj.handler_kicked(&mut st, &layout);
+        assert!(st.y() > y0, "and it falls rather than hanging");
+        layout.cells[6 * 256..=6 * 256 + 24].fill(0x20);
+        obj.handler_kicked(&mut st, &layout);
+        assert_eq!(st.b[B_FSTATE], 1, "landed, walking again");
+        assert_eq!(st.b[B_PHASE], 0, "with the fall index cleared");
+    }
+
+    /// `$58444` (anim 4): while B is held the carried shell is pinned to Mario
+    /// (`$5B4C1`: his X + 8 and Y + 5 big / 14 small / 20 small+ducking), and on
+    /// release it drops to anim 3 (via `$3AB4`) and runs the placement tail.
+    #[test]
+    fn the_carried_shell_follows_mario_and_releases_into_a_kick() {
+        let layout = blank_layout();
+        let t = tables();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.action_latch = 1;
+        obj.mario = MarioContact {
+            x: 200,
+            y: 300,
+            powerup: 1,
+            b_held: true,
+            dir_right: true,
+            ..Default::default()
+        };
+        let mut st = streamed(4, 0x00, 0);
+        st.b[B_FSTATE] = 1;
+        set_x(&mut st.b, 0);
+        set_y(&mut st.b, 0);
+        obj.handler_carried(&mut st, &layout, &t);
+        assert_eq!(st.x(), 208, "Mario's X + 8");
+        assert_eq!(st.y(), 305, "and Y + 5 for big Mario");
+
+        // Small and ducking takes the 20 px offset.
+        obj.mario.powerup = 0;
+        obj.mario.ducking = true;
+        obj.handler_carried(&mut st, &layout, &t);
+        assert_eq!(st.y(), 320, "small ducking: Y + 20");
+
+        // Release: anim 4 -> 3 plus the placement tail (no wall -> the shell
+        // stays anim 3, 16 px further out than the carried position).
+        obj.mario.ducking = false;
+        obj.mario.powerup = 1;
+        obj.mario.b_held = false;
+        obj.handler_carried(&mut st, &layout, &t);
+        assert_eq!(st.b[B_DEF], 3, "the release drops the anim");
+        assert_eq!(obj.action_latch, 0, "the latch clears");
+        assert_eq!(st.x(), 224, "and the placement nudges +16 (no wall)");
+        assert_eq!(st.b[B_TYPE], 0, "open air: no live-shell type");
+    }
+
+    /// The carried shell's exit arms: an object it knocked out
+    /// (`sObjectHitFlag`) and a ceiling inside the `$3B68` probe both defeat the
+    /// shell itself (`$584C3` -> `$3ADC` = `$85FC`), and a pipe ride removes it.
+    #[test]
+    fn the_carried_shell_is_defeated_by_a_hit_or_a_ceiling() {
+        let layout = blank_layout();
+        let t = tables();
+        // An enemy under the carried shell's staged screen pair.
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.mario = MarioContact {
+            x: 200,
+            y: 300,
+            powerup: 1,
+            b_held: true,
+            ..Default::default()
+        };
+        let mut st = streamed(4, 0x00, 0);
+        st.b[B_FSTATE] = 1;
+        st.b[B_SCRY] = 96;
+        st.b[B_SCRX] = 96;
+        {
+            let s = &mut obj.slots[0];
+            s.b[B_STATE] = 2;
+            s.b[B_TYPE] = 0x4E;
+            s.b[B_SCRY] = 90;
+            s.b[B_SCRX] = 96;
+            s.b[B_HB_BOTTOM] = 0x10;
+            s.b[B_HB_RIGHT] = 0x10;
+        }
+        obj.handler_carried(&mut st, &layout, &t);
+        assert_eq!(st.b[B_DEF], 0, "$584C3 defeated the shell");
+        assert_eq!(st.b[B_TYPE], 0);
+        assert_eq!(obj.action_latch, 0, "and cleared the latch");
+
+        // A ceiling above it does the same.
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.mario = MarioContact {
+            x: 200,
+            y: 300,
+            powerup: 1,
+            b_held: true,
+            ..Default::default()
+        };
+        let mut layout2 = blank_layout();
+        layout2.cells[18 * 256 + 13] = 0x20; // the (x, y-8) probe: the followed (208, 297)
+        let mut st = streamed(4, 0x00, 0);
+        st.b[B_FSTATE] = 1;
+        obj.handler_carried(&mut st, &layout2, &t);
+        assert_eq!(st.b[B_DEF], 0, "the $3B68 ceiling defeats it");
+        assert_eq!(obj.action_latch, 0);
+
+        // A pipe ride removes it instead.
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.action_latch = 1;
+        obj.mario = MarioContact {
+            travelling: true,
+            ..Default::default()
+        };
+        let mut st = streamed(4, 0x00, 0);
+        st.b[B_STATE] = 2;
+        obj.handler_carried(&mut st, &layout, &t);
+        assert_eq!(st.b[B_STATE], 0, "$5B2D7 removal");
+        assert_eq!(obj.action_latch, 0);
     }
 }

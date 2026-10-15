@@ -165,6 +165,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 obp1: manifest.header.palettes[2],
                 player: mario,
                 bumpers: Vec::new(),
+                fireballs: Vec::new(),
             })
         } else {
             None
@@ -442,6 +443,10 @@ struct SpriteCtx {
     /// extra OAM sprites drawn at the block — through the same player-sprite
     /// path, after Mario (his entries come first, so he wins overlaps).
     bumpers: Vec<(u16, u16, u8)>,
+    /// The live fireballs' sprites (`$3261`'s `$2CF4` staging, mapping `$B0`/`$B4`
+    /// + the rDiv flicker), `(x, y, mapping)` in the same convention as
+    /// `bumpers`.
+    fireballs: Vec<(u16, u16, u8)>,
 }
 
 /// Interactive viewer: arrow keys scroll the camera, Q/ESC quits; the window
@@ -690,6 +695,33 @@ fn render_view(
                     .ok_or_else(|| format!("player frame {frame} has no mapping"))?;
             // The player base already contains the camera (+96/+98 is world -
             // cam), so these cells are in final screen space: no `sx/sy`.
+            for c in cells {
+                blit_obj_cell(
+                    &mut img,
+                    &bg_idx,
+                    &mut taken,
+                    &s.objblock,
+                    &pal0,
+                    &pal1,
+                    c.x as i32 - 8,
+                    c.y as i32 - 16,
+                    c.tile,
+                    c.attr,
+                    vw,
+                    vh,
+                );
+            }
+        }
+        // The live fireballs ($3261's $2CF4 staging, mapping $B0/$B4 + the rDiv
+        // flicker), drawn with the bumpers. `$3261` stages them inside `$0F71`,
+        // i.e. before the player's own draw call, so their OAM index — and thus
+        // the overlap priority against Mario for the frame or two a fresh ball
+        // sits inside him — may want to precede his cells; not verified against
+        // a console frame yet, and it can only show while they overlap.
+        let fireballs = s.fireballs.clone();
+        for (fx, fy, ff) in fireballs {
+            let cells = sml2_core::player::draw_cells(&s.tables, ff, fx, fy, cam_x, cam_y, false)
+                .ok_or_else(|| format!("fireball mapping {ff} has no entry"))?;
             for c in cells {
                 blit_obj_cell(
                     &mut img,
@@ -1074,6 +1106,7 @@ fn build_contact(sim: &PlayerSim, keys: &PlayerKeys, pan: u8) -> sml2_core::obje
         dead: sim.dead,
         powerup: sim.powerup,
         ducking: keys.down && sim.on_ground,
+        dir_right: sim.dir_right,
         spin_jump: sim.spin_jump != 0,
         star_high: sim.star_high,
         invincibility: sim.invincibility,
@@ -1318,16 +1351,13 @@ fn run_replay(
             // $2F72 — the block-bump alloc's tail. It runs inside the player
             // update ($0F71), before $0B2A/$2062 recompute the scroll, so its
             // screen math reads the *previous* frame's sScroll — the camera
-            // this loop still holds before `cam.step` below. The object engine
-            // ($8000) reads the below-hit flag later this frame, so the pass
-            // has to land before `obj.step`; `resolve_bump_coin` is the
+            // scroll_y/scroll_x latched by $2062 at the end of the previous frame.
+            // The object engine ($8000) reads the below-hit flag later this frame,
+            // so the pass has to land before `obj.step`; `resolve_bump_coin` is the
             // `$19D2` coin half of the split.
             if let Some((by, bx)) = sim.below_bonk.take() {
-                let scroll_y =
-                    cam.y
-                        .wrapping_sub(72)
-                        .wrapping_sub((f.pan.unwrap_or(0) & 3) as u16) as u8;
-                let scroll_x = cam.x.wrapping_sub(80) as u8;
+                let scroll_y = cam.scroll_y;
+                let scroll_x = cam.scroll_x;
                 let special = obj.below_bonk(by, bx, scroll_y, scroll_x);
                 sim.resolve_bump_coin(special);
             }
@@ -1335,11 +1365,8 @@ fn run_replay(
             // from `$0F71`'s tail: the ball's own cell bytes arm the pass, and
             // only the player's `$19D2` bump owes the coin.
             if let Some((by, bx)) = sim.fire_below_bonk.take() {
-                let scroll_y =
-                    cam.y
-                        .wrapping_sub(72)
-                        .wrapping_sub((f.pan.unwrap_or(0) & 3) as u16) as u8;
-                let scroll_x = cam.x.wrapping_sub(80) as u8;
+                let scroll_y = cam.scroll_y;
+                let scroll_x = cam.scroll_x;
                 obj.below_bonk(by, bx, scroll_y, scroll_x);
             }
             // `$3261`'s `$2FED`: the ball's staged screen pair against the
@@ -1461,6 +1488,7 @@ fn run_replay(
                     } else {
                         sim.block_draw.clone()
                     };
+                    s.fireballs = sim.fire_draw.clone();
                 }
                 let mut rbg = bg_base.to_vec();
                 apply_tile_anim(&mut rbg, &manifest.tile_anim, anim_rows, 0);
@@ -2015,15 +2043,6 @@ fn run_replay(
     if let Some(id) = scene_vm.bad_cursor_scene() {
         println!("note: scene ${id:02X} latched but no script cursor was found - no scene byte ran");
     }
-    // A live projectile: the family's mechanics ran, but the ball's sprite
-    // staging (`$2CF4`, mapping `$B0`/`$B4`) and Mario's throw pose are
-    // draw-side and unmodelled, and `$A880` is not a compared field — so this
-    // note is what makes a capture that fires loud instead of green.
-    if sim.fire_draw_unported {
-        println!(
-            "note: a fireball was live - its sprite staging ($2CF4, mapping $B0/$B4) is not modelled"
-        );
-    }
     Ok(())
 }
 
@@ -2201,18 +2220,18 @@ fn run_play(
             if sim.take_stomp_chain_reset() {
                 obj.stomp_chain = 0;
             }
-            // $2F72 — the bump alloc's tail; see the replay loop. Play mode
-            // has no `sCameraPanTimer`, so the pan term is 0.
+            // $2F72 — the bump alloc's tail; see the replay loop. Use the camera's
+            // latched scroll_y and scroll_x.
             if let Some((by, bx)) = sim.below_bonk.take() {
-                let scroll_y = cam.y.wrapping_sub(72) as u8;
-                let scroll_x = cam.x.wrapping_sub(80) as u8;
+                let scroll_y = cam.scroll_y;
+                let scroll_x = cam.scroll_x;
                 let special = obj.below_bonk(by, bx, scroll_y, scroll_x);
                 sim.resolve_bump_coin(special);
             }
             // A fireball's `$06` break; see the replay loop above.
             if let Some((by, bx)) = sim.fire_below_bonk.take() {
-                let scroll_y = cam.y.wrapping_sub(72) as u8;
-                let scroll_x = cam.x.wrapping_sub(80) as u8;
+                let scroll_y = cam.scroll_y;
+                let scroll_x = cam.scroll_x;
                 obj.below_bonk(by, bx, scroll_y, scroll_x);
             }
             // `$3261`'s `$2FED`; see the replay loop above.
@@ -2231,7 +2250,7 @@ fn run_play(
         }
         if let Some(tables) = &obj_tables {
             if !frozen {
-                let mario = build_contact(&sim, &keys, 0);
+                let mario = build_contact(&sim, &keys, cam.pan_timer);
                 obj.mario_dead = sim.dead;
                 obj.step(cam.x, cam.y, layout, tables, &mario);
                 // Same call the replay loop makes. The copy that used to live
@@ -2243,6 +2262,8 @@ fn run_play(
         // $20A4: the scene VM, once per frame after the whole in-level pass —
         // the same placement as the replay loop (home.asm:274).
         scene_vm.step(&mut sim, &mut cam, &scripts);
+        // $54E9: decrement sCameraPanTimer if nonzero.
+        cam.tick_pan_timer();
         let f = if was_dead {
             107
         } else {
@@ -2264,12 +2285,18 @@ fn run_play(
             } else {
                 s.bumpers = sim.block_draw.clone();
             }
+            s.fireballs = sim.fire_draw.clone();
             // Draw ACTIVE objects: positions/flip from the engine's staging.
             s.insts = obj
                 .slots
                 .iter()
-                .filter(|o| o.state() == sml2_core::objects::SlotState::Active)
-                .map(|o| SpriteInst {
+                .enumerate()
+                .filter(|(i, o)| {
+                    // `$C000`/`$C014`: only state 2 slots draw, and never one
+                    // whose handler set `sObjectDone` this frame (a defeat).
+                    o.state() == sml2_core::objects::SlotState::Active && !obj.slot_done[*i]
+                })
+                .map(|(_, o)| SpriteInst {
                     sprite: o.sprite(),
                     x: o.x(),
                     y: o.y(),

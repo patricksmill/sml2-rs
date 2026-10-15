@@ -425,9 +425,15 @@ pub struct PlayerSim {
     pub camy: u16,
     /// Mirror of sCollisionTile (last sampled tile).
     pub collision_tile: u8,
-    /// The last ceiling probe's sample point — `$1DFE` leaves `$FFB7`/`$FFB9`
-    /// at (x+16, y+28|18), and a bump's slot stores that cell's rounded centre.
-    pub ceiling_probe: (u16, u16),
+    /// The ROM's shared probe staging, `$FFB7`/`$FFB9` (+ the high bytes in
+    /// `$FFB8`/`$FFBA`): the point `$1EFA` reads a tile from, written by
+    /// *both* probes and read by `$5960`, which stores a bump slot's cell from
+    /// it. `$1DFE` (the ceiling probe) leaves `(x+16, y+28|18)`, `$1E3B` (the
+    /// floor probe) `(x+12|20, y+44)` — whichever ran last wins, which is what
+    /// makes a spinning Mario's *landing* bonk (`$1327`, the floor point) and
+    /// his *ceiling* bonk (`$15F4`, the ceiling point) both store the block
+    /// they actually hit.
+    pub probe_point: (u16, u16),
     /// `sPendingItemId` ($A26C) — staged by the object pass (`$2DC6`) and
     /// consumed by `$3451` at the next frame's update tail.
     pub pending_item: u8,
@@ -509,13 +515,13 @@ pub struct PlayerSim {
     /// ceiling bonk — the frame loop runs the below-hit pass for it too, at
     /// the ball's own cell bytes.
     pub fire_below_bonk: Option<(u8, u8)>,
-    /// A live ball's own sprite (`$3261`'s `$2CF4` staging, mapping `$B0`/`$B4`
-    /// + `($FF97 & 6) >> 1`) and Mario's throw pose are draw-side and NOT
-    /// modelled. A run latch (never cleared, like the object engine's
-    /// `unported`) so the replay gate reports the frame instead of silently
-    /// passing one the console drew a projectile in — the ball's own `$A880`
-    /// bytes are not among the fields a capture compares.
-    pub fire_draw_unported: bool,
+    /// `$3261`'s own sprite staging, one entry per live ball: `$2CF4` expands
+    /// the mapping `$B0`/`$B4` + `($FF97 & 6) >> 1` (four flicker frames each
+    /// way, rDiv bits 1-2) at the ball's staged pair. `(x, y, mapping)` in the
+    /// same renderer convention as [`Self::block_draw`]: `draw_cells` adds
+    /// `world - cam + 96/98`, while `$3261` stages `X - camX + 80` /
+    /// `Y - camY + 70`, hence the `-16`/`-28` anchors.
+    pub fire_draw: Vec<(u16, u16, u8)>,
     /// `sCoinLow`/`sCoinHigh` ($A262/$A263, BCD).
     pub coins_low: u8,
     pub coins_high: u8,
@@ -599,7 +605,7 @@ impl PlayerSim {
             camx: 0,
             camy: 0,
             collision_tile: 0,
-            ceiling_probe: (0, 0),
+            probe_point: (0, 0),
             pending_item: 0,
             stomp_chain_reset: false,
             spin_jump_bounce: 0,
@@ -615,7 +621,7 @@ impl PlayerSim {
             throw_timer: 0,
             fire_scan: [None; FIRE_SLOTS],
             fire_below_bonk: None,
-            fire_draw_unported: false,
+            fire_draw: Vec::new(),
             coins_low: 0,
             coins_high: 0,
             secret_route: 0,
@@ -648,15 +654,24 @@ impl PlayerSim {
     }
 
     /// `$1E3B` gated floor probe. Returns the standable tile (< $48).
-    fn floor_probe(&self, layout: &LevelLayout) -> Option<u8> {
+    ///
+    /// It stages `$FFB7`/`$FFB9` before each of its two reads — `(x+12, y+44)`
+    /// first, then `(x+20, y+44)` only when the first found no floor — so after
+    /// it returns the staging is the point that last probed, and the `$1993`
+    /// a spinning landing runs straight afterwards (`$1327`) allocates the bump
+    /// slot at the cell that probe looked at. The `(y-4) & $F` early return
+    /// stages nothing, exactly like the ROM's `cp $05 / jr nc`.
+    fn floor_probe(&mut self, layout: &LevelLayout) -> Option<u8> {
         if (self.y.wrapping_sub(4) & 0x0F) >= 5 {
             return None;
         }
-        let t1 = self.tile(layout, self.x.wrapping_add(12), self.y.wrapping_add(44));
+        self.probe_point = (self.x.wrapping_add(12), self.y.wrapping_add(44));
+        let t1 = self.tile(layout, self.probe_point.0, self.probe_point.1);
         if t1 < 0x48 {
             return Some(t1);
         }
-        let t2 = self.tile(layout, self.x.wrapping_add(20), self.y.wrapping_add(44));
+        self.probe_point = (self.x.wrapping_add(20), self.y.wrapping_add(44));
+        let t2 = self.tile(layout, self.probe_point.0, self.probe_point.1);
         if t2 < 0x48 {
             return Some(t2);
         }
@@ -675,7 +690,7 @@ impl PlayerSim {
         let dy = if self.powerup == 0 { 28 } else { 18 };
         let px = self.x.wrapping_add(16);
         let py = self.y.wrapping_add(dy);
-        self.ceiling_probe = (px, py);
+        self.probe_point = (px, py);
         let t = self.tile(layout, px, py);
         if t == 0x7E || t < 0x38 {
             Some(t)
@@ -931,7 +946,7 @@ impl PlayerSim {
         if !self.alloc_bump_slot(ty) {
             return;
         }
-        let (px, py) = self.ceiling_probe;
+        let (px, py) = self.probe_point;
         self.below_bonk = Some((py as u8, px as u8));
     }
 
@@ -939,7 +954,7 @@ impl PlayerSim {
     /// part every alloc (including the `$19D2` coin slot's) runs.
     /// Returns false when no slot was free.
     fn alloc_bump_slot(&mut self, ty: u8) -> bool {
-        let (px, py) = self.ceiling_probe;
+        let (px, py) = self.probe_point;
         self.alloc_bump_slot_at(ty, px, py)
     }
 
@@ -1280,10 +1295,10 @@ impl PlayerSim {
     /// `ObjectSim::fire_hit` before the object engine and then kills the slot
     /// through [`Self::resolve_fire_hit`]. Inert with no live slot.
     ///
-    /// `$3261` also stages the ball's own sprite (mapping `$B0`/`$B4` +
-    /// `($FF97 & 6) >> 1`) — draw-side only, not modelled, like Mario's throw
-    /// pose from [`Self::throw_timer`].
+    /// `$3261` also stages the ball's own sprite (`$2CF4`, mapping `$B0`/`$B4`
+    /// + `($FF97 & 6) >> 1`), which [`Self::fire_draw`] carries to the renderer.
     fn fire_pass(&mut self) {
+        self.fire_draw.clear();
         for i in 0..self.fireballs.len() {
             self.fire_scan[i] = None;
             let s = self.fireballs[i];
@@ -1297,7 +1312,18 @@ impl PlayerSim {
                 continue;
             }
             self.fire_scan[i] = Some((sy, sx));
-            self.fire_draw_unported = true;
+            // `$329E`: $B0 is the left-facing set and $B4 the right; the flicker
+            // is rDiv bits 1-2, i.e. `phase` bits 1-2. The ball's X/Y are still
+            // the 16-bit values, so the renderer's low-byte pair lands on the
+            // staged screen pair exactly.
+            let base = if s[F_DIR] == 0xFF { 0xB0 } else { 0xB4 };
+            let f = base + ((self.phase & 0x06) >> 1);
+            let (fx, fy) = (
+                (s[F_XHI] as u16) << 8 | s[F_XLO] as u16,
+                (s[F_YHI] as u16) << 8 | s[F_YLO] as u16,
+            );
+            self.fire_draw
+                .push((fx.wrapping_sub(16), fy.wrapping_sub(28), f));
         }
     }
 
@@ -1677,8 +1703,16 @@ impl PlayerSim {
             }
             if self.vvel != 0 {
                 self.vvel -= 1;
-                if self.vvel == 0x30 && self.moon == 0 {
-                    self.vvel = 24;
+                if self.vvel == 0x30 {
+                    if self.moon == 0 {
+                        self.vvel = 24;
+                    } else {
+                        // $154E: moon extra decrement and apex parity snap
+                        self.vvel = self.vvel.saturating_sub(1);
+                        if self.vvel < 0x19 {
+                            self.vvel = if (self.frame_counter & 1) != 0 { 24 } else { 23 };
+                        }
+                    }
                 }
             }
             let table: &[u8] = if self.moon != 0 {
@@ -2611,6 +2645,16 @@ impl PlayerSim {
             if self.invincibility & 0x04 != 0 {
                 return f.wrapping_add(32);
             }
+        }
+        // `$5447`/`$548A`: the powerup offset, then the fire tier's throw pose.
+        // While `sMarioThrowTimer` runs the draw decrements it once and adds a
+        // further 32, so a fire Mario shows `+112` normally and `+144` for the
+        // eight frames after a spawn (`$32C1` sets 8). Only the tier-3 arm
+        // touches the timer, and no capture ever spawns a ball, so the
+        // compared `frame` byte is unaffected.
+        if self.powerup == 3 && self.throw_timer != 0 {
+            self.throw_timer -= 1;
+            return f.wrapping_add(112).wrapping_add(32);
         }
         f.wrapping_add(match self.powerup {
             0 => 32,
@@ -4060,12 +4104,12 @@ mod tests {
         layout.cells[12 * 256 + 6] = 0x10; // solid only at the big-Mario sample
         let mut sim = small_sim(); // powerup 0
         assert!(!sim.ceiling_hit(&layout));
-        assert_eq!(sim.ceiling_probe, (116, 228));
+        assert_eq!(sim.probe_point, (116, 228));
         sim.pending_item = 1;
         sim.item_consumer();
         assert_eq!(sim.powerup, 1);
         assert!(sim.ceiling_hit(&layout));
-        assert_eq!(sim.ceiling_probe, (116, 218));
+        assert_eq!(sim.probe_point, (116, 218));
     }
 
     /// `$1E9C`: the y+20 side sample only exists while `sCurPowerup != 0`
@@ -4132,7 +4176,7 @@ mod tests {
     #[test]
     fn the_01_bonk_defers_its_coin_to_the_below_hit_pass() {
         let mut sim = PlayerSim::new();
-        sim.ceiling_probe = (360, 479); // (px, py): the traj15 $01 block
+        sim.probe_point = (360, 479); // (px, py): the traj15 $01 block
         sim.block_bonk(0x01);
         assert_eq!(sim.spin_jump_bounce, 0xFF);
         assert_eq!(sim.sfx0, 2);
@@ -4154,7 +4198,7 @@ mod tests {
     #[test]
     fn a_pose_in_the_bonk_window_withholds_the_coin() {
         let mut sim = PlayerSim::new();
-        sim.ceiling_probe = (360, 479);
+        sim.probe_point = (360, 479);
         sim.block_bonk(0x01);
         sim.resolve_bump_coin(true);
         assert_eq!(sim.coins_low, 0x00, "no credit");
@@ -4171,7 +4215,7 @@ mod tests {
     #[test]
     fn other_bump_classes_owe_no_coin_and_a_full_table_arms_nothing() {
         let mut sim = PlayerSim::new();
-        sim.ceiling_probe = (360, 479);
+        sim.probe_point = (360, 479);
         sim.block_bonk(0x7E); // type 3, no coin
         assert_eq!(sim.below_bonk, Some((0xDF, 0x68)));
         assert!(!sim.bump_coin_pending);
@@ -4181,7 +4225,7 @@ mod tests {
         // The 8-slot table full: the alloc's `cp $00 / ret z` bails before
         // the tail, so nothing is armed.
         let mut sim = PlayerSim::new();
-        sim.ceiling_probe = (360, 479);
+        sim.probe_point = (360, 479);
         for s in sim.block_slots.iter_mut() {
             s[0] = 1;
         }
@@ -4234,7 +4278,7 @@ mod tests {
     fn big_mario_destroys_the_brick_and_pops_the_item_out() {
         let mut sim = PlayerSim::new();
         sim.powerup = 1;
-        sim.ceiling_probe = (360, 479);
+        sim.probe_point = (360, 479);
         sim.block_bonk(0x00);
         assert_eq!(sim.sfx2, 1, "$19B0's big arm requests the destruction sound");
         assert_eq!(sim.sfx0, 2, "the shared tail's rattle sfx still fires");
@@ -4276,7 +4320,7 @@ mod tests {
     fn the_03_block_splits_into_type_6_for_small_and_type_5_for_big() {
         let mut small = PlayerSim::new();
         small.powerup = 0;
-        small.ceiling_probe = (360, 479);
+        small.probe_point = (360, 479);
         small.block_bonk(0x03);
         assert_eq!(small.sfx2, 0, "small Mario only rattles it");
         assert_eq!(small.block_slots[0][0], 6);
@@ -4295,7 +4339,7 @@ mod tests {
 
         let mut big = PlayerSim::new();
         big.powerup = 1;
-        big.ceiling_probe = (360, 479);
+        big.probe_point = (360, 479);
         big.block_bonk(0x03);
         assert_eq!(big.sfx2, 1, "$19C1's big arm: the destruction sound");
         assert_eq!(big.block_slots[0][0], 5);
@@ -4311,7 +4355,7 @@ mod tests {
         // tile itself returns at 8).
         let mut brick = PlayerSim::new();
         brick.powerup = 0;
-        brick.ceiling_probe = (360, 479);
+        brick.probe_point = (360, 479);
         brick.block_bonk(0x00);
         assert_eq!(brick.block_slots[0][0], 2);
         assert_eq!(brick.sfx2, 0);
@@ -4365,7 +4409,7 @@ mod tests {
     #[test]
     fn respawn_clears_the_below_hit_scratch() {
         let mut sim = PlayerSim::new();
-        sim.ceiling_probe = (360, 479);
+        sim.probe_point = (360, 479);
         sim.block_bonk(0x01);
         assert!(sim.below_bonk.is_some() && sim.bump_coin_pending);
         sim.respawn(34, 468);
@@ -4504,7 +4548,7 @@ mod tests {
         sim.y = 200;
         sim.spin_jump = 0xFF;
         sim.vvel = 10;
-        sim.ceiling_probe = (360, 479); // slot Y/X round to cell (28, 22)
+        sim.probe_point = (360, 479); // slot Y/X round to cell (28, 22)
         sim.landing(0x00, &PlayerKeys::default());
         assert_eq!(sim.block_slots[0][0], 1, "the $19B0 destruction bump");
         assert_eq!(sim.sfx2, 1, "the break sound");
@@ -5155,6 +5199,7 @@ mod tests {
         sim.fire_pass();
         assert_eq!(sim.fireballs[0][F_ACTIVE], 0, "the X pair culls");
         assert_eq!(sim.fire_scan[0], None);
+        assert!(sim.fire_draw.is_empty(), "a culled ball draws nothing");
         assert_eq!(sim.sfx0, 0, "silently");
 
         // sy = Ylo - camY + 70; Ylo $7F gives the same $C5.
@@ -5221,7 +5266,118 @@ mod tests {
             Some((f[F_YLO].wrapping_add(70), f[F_XLO].wrapping_add(80))),
             "the pair $2FED tests"
         );
-        assert!(sim.fire_draw_unported, "and the draw gap is loud");
+        // And the sprite: `$B4` (facing right) + the rDiv flicker bits, anchored
+        // so `draw_cells`' `+96/+98` lands it on the staged pair.
+        assert_eq!(
+            sim.fire_draw,
+            vec![(
+                ((f[F_XHI] as u16) << 8 | f[F_XLO] as u16).wrapping_sub(16),
+                ((f[F_YHI] as u16) << 8 | f[F_YLO] as u16).wrapping_sub(28),
+                0xB4 + ((sim.phase & 0x06) >> 1),
+            )]
+        );
+    }
+
+    /// `$1E3B` stages the shared `$FFB7`/`$FFB9` pair to the point it read:
+    /// `(x+12, y+44)`, or `(x+20, y+44)` when the first found no floor — and
+    /// nothing at all when the `(y-4) & $F` gate bails.
+    #[test]
+    fn the_floor_probe_stages_the_pair_it_read() {
+        let mut layout = blank_layout();
+        layout.cells[22 * 256 + 6] = 0x20; // under the x+12 probe only
+        let mut sim = PlayerSim::new();
+        sim.x = 100;
+        sim.y = 324;
+        sim.probe_point = (1, 2);
+        assert_eq!(sim.floor_probe(&layout), Some(0x20));
+        assert_eq!(sim.probe_point, (112, 368), "the first probe's point");
+
+        layout.cells[22 * 256 + 6] = 0x60;
+        layout.cells[22 * 256 + 7] = 0x20; // only the x+20 probe finds one
+        sim.probe_point = (1, 2);
+        assert_eq!(sim.floor_probe(&layout), Some(0x20));
+        assert_eq!(sim.probe_point, (120, 368), "the second probe's point");
+
+        sim.y = 320; // (320-4) & $F = 12: the gate bails before any staging
+        sim.probe_point = (1, 2);
+        assert_eq!(sim.floor_probe(&layout), None);
+        assert_eq!(sim.probe_point, (1, 2), "the gate stages nothing");
+    }
+
+    /// The spin landing (`$1327`): a spinning Mario who lands on a brick runs
+    /// the same `$1993` classifier a ceiling bonk does and BOUNCES (vvel 48, 75
+    /// while A is held, `$134F` skipped) — and the bump it allocates must sit on
+    /// the *floor* probe's cell. This is the play-test bug: the alloc read a
+    /// stale ceiling staging, so the brick under him was never the cell that
+    /// became `$60` (the breakable block "didn't break") and the shard sprites
+    /// drew at the stale point instead.
+    #[test]
+    fn a_spinning_landing_bonks_and_breaks_the_block_under_him() {
+        let mut layout = blank_layout();
+        layout.cells[22 * 256 + 6] = 0x00; // the brick at the floor probe's cell
+        let mut sim = PlayerSim::new();
+        sim.powerup = 1;
+        sim.x = 100;
+        sim.y = 324;
+        sim.spin_jump = 0xFF;
+        sim.probe_point = (360, 479); // a stale ceiling bonk: the play-test case
+        let t = sim.floor_probe(&layout).expect("the brick is under him");
+        assert_eq!(t, 0x00);
+        assert_eq!(sim.probe_point, (112, 368), "$1E3B restages FFB7/FFB9");
+        sim.landing(t, &PlayerKeys::default());
+        assert_eq!(sim.spin_jump_bounce, 0xFF);
+        assert_eq!(sim.sfx2, 1, "the smash");
+        assert_eq!(
+            sim.block_slots[0][..6],
+            [1, 1, 0x78, 1, 0x70, 0],
+            "the BRICK's own cell, not the stale ceiling point"
+        );
+        assert!(sim.in_air, "and the landing bounces");
+        assert_eq!(sim.vvel, 48);
+        assert!(!sim.on_ground, "the $134F arm is skipped");
+        sim.block_update();
+        assert_eq!(
+            sim.layout_writes,
+            vec![(cell_index(22, 6), 0x60)],
+            "the brick is emptied"
+        );
+
+        // The same landing with A held takes the higher bounce ($1335).
+        let mut sim = PlayerSim::new();
+        sim.powerup = 1;
+        sim.x = 100;
+        sim.y = 324;
+        sim.spin_jump = 0xFF;
+        sim.floor_probe(&layout);
+        let keys = PlayerKeys {
+            a: true,
+            ..PlayerKeys::default()
+        };
+        sim.landing(0x00, &keys);
+        assert_eq!(sim.vvel, 75);
+    }
+
+    /// `$548A`: the fire tier's throw pose — base +112, plus a further 32 while
+    /// `sMarioThrowTimer` runs, decremented once per draw. The spawn sets 8, so
+    /// the pose holds eight frames and then the plain fire pose returns. No
+    /// other tier touches the timer.
+    #[test]
+    fn the_throw_pose_runs_for_eight_frames() {
+        let mut sim = PlayerSim::new();
+        sim.powerup = 3;
+        sim.throw_timer = 8;
+        assert_eq!(sim.frame_index(0), 144, "the throw pose on the spawn frame");
+        for _ in 0..7 {
+            assert_eq!(sim.frame_index(0), 144);
+        }
+        assert_eq!(sim.throw_timer, 0);
+        assert_eq!(sim.frame_index(0), 112, "back to the normal fire pose");
+
+        let mut sim = PlayerSim::new();
+        sim.powerup = 1;
+        sim.throw_timer = 8;
+        assert_eq!(sim.frame_index(0), 0);
+        assert_eq!(sim.throw_timer, 8, "tier 1 leaves the timer alone");
     }
 
     /// The replay gate's guarantee: with no live slot and no press edge the
@@ -5237,7 +5393,7 @@ mod tests {
         assert_eq!(sim.fireballs, before);
         assert_eq!(sim.fire_scan, [None; FIRE_SLOTS]);
         assert_eq!(sim.fire_below_bonk, None);
-        assert!(!sim.fire_draw_unported, "nothing was drawn either");
+        assert!(sim.fire_draw.is_empty(), "nothing was drawn either");
         assert_eq!(sim.throw_timer, 0);
         assert_eq!(sim.sfx0, 0);
         assert_eq!(sim.sfx2, 0);

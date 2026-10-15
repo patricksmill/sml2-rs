@@ -1371,4 +1371,62 @@ each shown to fail a named one of them before being restored. Whole tree: 213 co
 tests, `cargo test` green, and `bash captures/sweep.sh` → `gate done` with traj4_ff0
 byte-identical, no `REGRESSION` and no `note:`.
 
+## Play-test fixes: the probe staging, the shell, and the defeat animation — 2026-10-14
 
+Three reports from a `--play` session, and the ROM bytes behind each.
+
+**1. A spinning Mario's landing bonk broke the wrong cell ("spin jumping on breakable
+blocks doesn't break them", plus a stray blank patch above him).** `$FFB7`/`$FFB9` is *one*
+staging pair: `$1DFE` (ceiling) writes it, and so does `$1E3B` (floor — `$1E48` stages
+`Y = $FFC0 + 44`, `X = $FFC2 + 12`, then re-stages `X + 20` for its second read), and `$5960`'s
+alloc stores the bump slot's cell *from that pair*. The port modelled only the ceiling half
+(`ceiling_probe`) and allocated from it, so a spinning landing (`$1327` → `$1993`) allocated the
+bump at a **stale ceiling point**: the brick under him never became `$60` and the shard sprites
+drew at the stale cell. The field is now `probe_point` (the shared staging), the floor probe
+stages it before each read and stages nothing when the `(y-4) & $F` gate bails (the ROM's
+`cp $05 / jr nc`), and the alloc reads it; ceiling bonks still get the ceiling point because
+`$1DFE` runs later in the same frame.
+
+**2. Fireballs were invisible.** The spawn/move/break half had landed; the *sprite* had not.
+Now `fire_pass` stages `$3261`'s `$2CF4` mapping (`$B0` left / `$B4` right + `($FF97 & 6) >> 1`,
+the rDiv flicker) anchored so `draw_cells`' `+96/+98` lands on the engine's staged
+`X - camX + 80` / `Y - camY + 70` pair, and `frame_index` models `$548A`'s throw pose
+(`+112`, plus a further 32 while `sMarioThrowTimer` counts down from the 8 the spawn sets).
+The OAM-order question (a fresh ball *inside* Mario for a frame or two) is left open in the
+code comment — it can only show while they overlap.
+
+**3. "Enemies don't do death animations" / "a fireball hit enemy just stops" — one missing
+handler.** `$85FC` (the defeat, reached from the stomp's `$85F0` and the fireball's bit-1 flag)
+clears anim/state/flags/type and sets `sObjectDone`, and the **anim-0 handler `$581B1` is the
+death animation**: state 0 hops the enemy 20 px up (`$3D2D`) and flips it upside down
+(`+13` bit 6), state 1 rises on the `$74AB` 8-entry curve at 2 b a frame, state 2 falls on the
+`$5B451` curve (also 2 b) and removes the slot through `$5B2D7` with remove-mode 2 once the
+staged screen Y passes `$A0`. Without it the defeated slot kept its stale sprite, so the enemy
+froze. Also ported with it: `$C014`'s draw gate — the bank-3 draw returns before drawing while
+`sObjectDone` is set — which the renderer now mirrors per slot (`ObjectSim::slot_done`), so the
+defeat frame itself draws nothing and the flip-and-fall frames draw again.
+
+**4. The shell: carry, kick and KO (`$8611`, anims 4 and 3).** The dispatch's type-`$06` arm is
+now the ROM's: B held → the `sActionLatch` one-shot, `anim += 2` (2 → 4, carried) and `$863C`
+(whose `$8240` clears `+13..+29`, the type byte with them); B not held → `$8633` (`anim += 1`)
+plus the `$864A` placement tail. `handler_carried` (`$58444`) is `$5B4C1`'s follow (Mario's X + 8,
+Y + 5/14/20 by size and ducking), `$5B697`'s KO overlap, `$3B68`'s ceiling check, the pipe-travel
+removal and the B-release drop to anim 3 + placement; `handler_kicked` (`$5839B`) is the four-state
+walker (3 px steps, wall turns, the `$5B451` ledge falls) with `$5B607`'s sprite wobble — which is
+`$5B545`'s routine with the same `+26` phase and table, so `spin_step` serves both. The KO scan
+skips type 0, `$5F` (itself/another shell), bit 7 poses and bit 5 types, and sets the target's
+`+17` bit 1 — the flag the dispatch turns into `defeat()`.
+
+Corrections to what was in the tree before this pass: the carried follow is *Mario's position*
+plus an offset, and the `$5B607` wobble moves the **sprite**, not the position (the earlier
+`update_carried` added it to X and moved the object outside the animation system, which is why a
+thrown shell hung where it was); a released shell only becomes the live type `$5F` from the
+anim-3 state-0 arm (a shell kicked by a *stomp*) or from a wall placement, which is what the ROM
+does; and `$3D2D`/`$3D3D` are Y −= b / Y += b.
+
+Fourteen new unit tests in this pass (the spin-landing cell, the floor-probe staging, the
+throw pose, the fireball's staged sprite, the pickup/carry/release/kick chain, the four walker
+states, the KO window and its gates, the death animation's three states, the `sObjectDone` draw
+gate, the extraction's anim-0 handler), each with at least one one-line mutation shown to fail it.
+Whole tree: 234 core + 3 runtime tests, release build clean, `bash captures/sweep.sh` → `gate done`
+with traj4_ff0 byte-identical, no `REGRESSION` and no `note:`.

@@ -73,10 +73,19 @@ pub struct CameraSim {
     pub scene_done_flag: u8,
     /// `sSfxRequest0` set by the transition finish (fidelity only).
     pub sfx0: u8,
+    /// `sCameraPanTimer` ($A2B3): boss-transition bob timer.
+    /// Decremented by `$54E9` once per frame.
+    pub pan_timer: u8,
+    /// `sScrollY` ($A2B0): latched scroll Y = `cam.y - 72 - (pan_timer & 3)`.
+    pub scroll_y: u8,
+    /// `sScrollX` ($A2B1): latched scroll X = `cam.x - 80`.
+    pub scroll_x: u8,
 }
 
 impl CameraSim {
     pub fn new(x: u16, y: u16) -> Self {
+        let scroll_y = y.wrapping_sub(72) as u8;
+        let scroll_x = x.wrapping_sub(80) as u8;
         Self {
             x,
             y,
@@ -99,6 +108,9 @@ impl CameraSim {
             scene_transition_latch: 0,
             scene_done_flag: 0,
             sfx0: 0,
+            pan_timer: 0,
+            scroll_y,
+            scroll_x,
         }
     }
 
@@ -118,6 +130,23 @@ impl CameraSim {
         self.map_event_flag = 0;
         self.palette_fade_step = 0;
         self.sfx0 = 0;
+        self.pan_timer = 0;
+        self.update_scroll();
+    }
+
+    /// `$2062`: compute `sScrollY = camY - 72 - (sCameraPanTimer & 3)` and
+    /// `sScrollX = camX - 80`.
+    pub fn update_scroll(&mut self) {
+        let b = (self.pan_timer & 3) as u16;
+        self.scroll_y = self.y.wrapping_sub(72).wrapping_sub(b) as u8;
+        self.scroll_x = self.x.wrapping_sub(80) as u8;
+    }
+
+    /// `$54E9`: decrement `sCameraPanTimer` if nonzero.
+    pub fn tick_pan_timer(&mut self) {
+        if self.pan_timer != 0 {
+            self.pan_timer -= 1;
+        }
     }
 
     /// `$0B39`: `sScreenEdgeMap[(sCameraY_hi << 4) | sCameraX_hi]` → `$FF98`.
@@ -463,6 +492,8 @@ impl CameraSim {
         // position. Latching the entry snapshot instead leaves `dv` short by the
         // pre-warp low byte for every frame after an up transition.
         self.prev_mario_y_lo = sim.y as u8;
+        // $2062: update sScrollY and sScrollX immediately after camera step ($0B2A)
+        self.update_scroll();
     }
 
     /// `$0DED`: the screen-transition scroll. While `sScreenTransition != 0`
@@ -1240,5 +1271,56 @@ mod tests {
             c.prev_mario_y_lo, 0x00,
             "$0D97 latches the live $FFC0, i.e. the warped 0 — not the $C0 the body entered with"
         );
+    }
+
+    // ---- $2062 scroll computation and $54E9 sCameraPanTimer --------------
+
+    #[test]
+    fn scroll_update_matches_2062_rom_math() {
+        let mut c = CameraSim::new(0x0180, 0x0140);
+        // Initially pan_timer is 0; scroll_x = $180 - 80 = $130 = $30; scroll_y = $140 - 72 = $F8
+        assert_eq!(c.scroll_x, (0x0180u16.wrapping_sub(80)) as u8);
+        assert_eq!(c.scroll_y, (0x0140u16.wrapping_sub(72)) as u8);
+
+        // With pan_timer set to 52 ($34): low 2 bits are 0 -> subtracts 0
+        c.pan_timer = 52;
+        c.update_scroll();
+        assert_eq!(c.scroll_y, (0x0140u16.wrapping_sub(72)) as u8);
+
+        // With pan_timer set to 55 ($37): low 2 bits are 3 -> subtracts 3
+        c.pan_timer = 55;
+        c.update_scroll();
+        let expected = 0x0140u16.wrapping_sub(72).wrapping_sub(3) as u8;
+        assert_eq!(c.scroll_y, expected);
+    }
+
+    #[test]
+    fn pan_timer_decrements_once_per_tick_and_stops_at_zero() {
+        let mut c = CameraSim::new(0, 0);
+        c.pan_timer = 2;
+        c.tick_pan_timer();
+        assert_eq!(c.pan_timer, 1);
+        c.tick_pan_timer();
+        assert_eq!(c.pan_timer, 0);
+        c.tick_pan_timer();
+        assert_eq!(c.pan_timer, 0, "does not underflow below zero");
+    }
+
+    #[test]
+    fn pan_scroll_latches_before_tick_modeling_two_frame_timing() {
+        let mut c = CameraSim::new(0x0180, 0x0140);
+        c.pan_timer = 3;
+        c.update_scroll();
+        let latched_scroll = c.scroll_y;
+        assert_eq!(latched_scroll, 0x0140u16.wrapping_sub(72).wrapping_sub(3) as u8);
+
+        // $54E9 ticks pan_timer from 3 -> 2; latched scroll_y remains unchanged until update_scroll
+        c.tick_pan_timer();
+        assert_eq!(c.pan_timer, 2);
+        assert_eq!(c.scroll_y, latched_scroll, "$2F72 reads previous frame latched scroll");
+
+        // Next frame's $2062 update re-latches scroll with pan_timer 2
+        c.update_scroll();
+        assert_eq!(c.scroll_y, 0x0140u16.wrapping_sub(72).wrapping_sub(2) as u8);
     }
 }
