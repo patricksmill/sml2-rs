@@ -422,6 +422,14 @@ impl SceneVm {
 /// `$10` -> 3, `$13` -> 4, `$17` -> 5, and anything else (including `$18`,
 /// the Wario castle) -> 6. That index selects the 3-byte record (count, hits,
 /// sprite) and the two 18-byte def images in [`lookup_boss_spawn_def`].
+/// The boss defs whose handlers are all ported, so `$0EB0`'s scene branch can be
+/// taken for them: the park it sets is cleared by the level clear the fight
+/// ends in. Def 2 (the Mario Zone, level `$0D`) is anims 10/11/12 — all three
+/// ported; the others still report (`CameraSim::take_blocked_scene_load`).
+pub fn boss_def_portable(def_index: u8) -> bool {
+    matches!(def_index, 2)
+}
+
 pub fn boss_def_index(level_id: u8, phase: u8) -> u8 {
     let b = match level_id {
         0x05 => 0,

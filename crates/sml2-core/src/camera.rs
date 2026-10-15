@@ -601,6 +601,30 @@ impl CameraSim {
     /// the scene VM (`$20A4`, which *is* ported) keeps handling the transition
     /// the way it did before. Turn this into the real branch only once the
     /// bank-15 handlers exist.
+    /// `$0EB0`'s scene branch, taken for real: sets the `$F0` park (what `$0652`
+    /// reads to swap the frame's object pass for the boss driver) and returns
+    /// the song `$0EB0` stores in `sMusicRequest`/`sLevelSong` — 32, or
+    /// `sBossFightPhase + 33` on level `$18`. The caller then runs `$3C94`'s
+    /// spawn (`ObjectSim::spawn_boss`).
+    ///
+    /// Only legal for a def whose handlers are all ported
+    /// ([`crate::scene::boss_def_portable`]): the fight ends by arming
+    /// `sBossClearFlag`, the level clear follows, and the level reload reseeds
+    /// `sSceneState` — which is what clears the park. For an unported def the
+    /// park would be permanent, so `take_blocked_scene_load` reports instead.
+    pub fn begin_scene_load(&mut self, level_id: u8) -> Option<u8> {
+        if !self.scene_load_pending {
+            return None;
+        }
+        self.scene_load_pending = false;
+        self.scene_state = 0xF0;
+        Some(if level_id == 0x18 {
+            self.boss_fight_phase.wrapping_add(33)
+        } else {
+            32
+        })
+    }
+
     pub fn take_blocked_scene_load(&mut self) -> bool {
         if !self.scene_load_pending {
             return false;
@@ -651,6 +675,30 @@ mod tests {
         let mut c = CameraSim::new(x, y);
         c.edge_map = level1_table();
         c
+    }
+
+    /// `$0EB0`'s branch is taken only for a def whose handlers are all ported
+    /// (def 2 today, the Mario Zone): the park lands — which is what `$0652`
+    /// reads — and `begin_scene_load` returns the song.
+    #[test]
+    fn the_scene_branch_is_taken_for_a_portable_def() {
+        use crate::scene::boss_def_portable;
+        assert!(boss_def_portable(2), "the Mario Zone fight is ported");
+        assert!(!boss_def_portable(0));
+        assert!(!boss_def_portable(3));
+        let mut c = cam_at(80, 448);
+        c.scene_state = 0x0F;
+        c.finish_transition();
+        assert_eq!(c.begin_scene_load(0x0D), Some(32), "the boss song");
+        assert_eq!(c.scene_state, 0xF0, "the park");
+        assert!(c.boss_mode(), "$0652 now picks the boss driver");
+        assert!(!c.scene_load_pending, "consumed");
+        // Level $18 keeps its fight-phase song.
+        let mut c = cam_at(80, 448);
+        c.scene_state = 0x01;
+        c.boss_fight_phase = 2;
+        c.finish_transition();
+        assert_eq!(c.begin_scene_load(0x18), Some(35));
     }
 
     /// `$0EB0`'s scene branch is reported, never taken: taking it would park

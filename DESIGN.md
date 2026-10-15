@@ -1665,3 +1665,42 @@ and a def-2 boss can only be exercised through the object pass directly.
 Five new tests (the part's HP/death, the stomp's two points and latch, the controller's
 no-HP rule and its once-only child spawn, and the bob's two profiles).
 
+## Closing the loop: the boss-clear ending, and the arena entry enabled — 2026-10-14
+
+The fight needed an end before the arena could be entered, because `$0EB0` parks the camera
+and only a level reload (which reseeds `sSceneState` from the header) clears it.
+
+The ROM hangs the whole thing on one test, `main.asm:1307`:
+
+```
+ld a,[sMarioDead] / ld b,a
+ld a,[sBossClearFlag] / ld c,a
+ld a,[sGoalBell] / or b / or c / jp nz,$5E12
+```
+
+— the in-level pass diverts on *death, boss clear or bell*, into `$5E12`. The port already
+models the bell and death arms; the third is now wired: `$9285`'s `$92C4` sets
+`sBossClearFlag` (`$A2E3`), `apply_object_result` hands it to the player sim, and
+`boss_clear_probe` takes the port's existing level-clear phase (the same one the bell arm
+sets: `exit_phase`, a 192-frame fade, the level-clear music). That phase is what ends the
+level, and the level reload is what clears the park. `$5E12`'s boss-specific tail — game
+states 27/29 -> bank 12 `$45B6`/`$467A`, the castle/statue ending — stays unported and the
+comment says so.
+
+With an ending in place, `$0EB0`'s branch is **taken for real** for a def whose handlers are
+all ported: `scene::boss_def_portable` (def 2 today — the Mario Zone, anims 10/11/12) gates
+it, `CameraSim::begin_scene_load` sets the `$F0` park and returns the song, and the frame
+loops run `$3C94`'s spawn (`ObjectSim::spawn_boss`) right after. Every other def still goes
+through `take_blocked_scene_load`, which reports `$0EB0` instead of parking — the guard that
+keeps an half-ported boss from freezing the camera for good.
+
+So level `$0D`'s sideways pipe now: completes the transition, parks, stages the def-2 fight
+and hands the frame to the boss driver; the parts take 6 HP each, the controller spawns its
+child, the fight's hp reaching zero arms the clear flag, and the level clear ends the run
+(the port then freezes on the unported overworld hand-off, exactly as it does at any other
+level end).
+
+Three new tests (the flag's divert and its death precedence, the flag crossing from the
+object pass, and the branch taken for def 2 with the park + song, plus `boss_def_portable`'s
+gate) and four mutations, all red.
+

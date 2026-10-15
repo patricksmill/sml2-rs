@@ -30,7 +30,7 @@ use sml2_core::map::MapNodes;
 use sml2_core::object::ObjectTables;
 use sml2_core::objects::FireHit;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
-use sml2_core::scene::{SceneScripts, SceneVm};
+use sml2_core::scene::{boss_def_index, boss_def_portable, SceneScripts, SceneVm};
 use sml2_core::video;
 
 /// Native GB screen; the HUD strip and the parity checks are anchored to it.
@@ -1420,12 +1420,21 @@ fn run_replay(
             // then writes it back.
             obj.mario_dead = sim.dead;
             obj.fade_timer = sim.fade_timer; // `$B14E`'s input, like `mario_dead`
-            // `$0EB0`'s scene branch is blocked on the unported bank-15
-            // `$3C000` handlers (the only writers that clear `sSceneState`), so
-            // it is reported rather than taken: taking it would park the camera
-            // and swap the object pass to a boss driver with no boss.
-            if cam.take_blocked_scene_load() {
-                obj.note_blocked_scene_load();
+            // `$0EB0`'s scene branch: taken only for a def whose handlers are
+            // all ported (the fight then ends in the level clear, which reseeds
+            // `sSceneState` and so clears the park); every other def is
+            // reported, because parking with nothing to end the fight would
+            // freeze the camera for good.
+            if cam.scene_load_pending {
+                let def_index = boss_def_index(manifest.level_id, cam.boss_fight_phase);
+                if boss_def_portable(def_index) {
+                    if let Some(music) = cam.begin_scene_load(manifest.level_id) {
+                        sim.music_request = music;
+                        obj.spawn_boss(def_index);
+                    }
+                } else if cam.take_blocked_scene_load() {
+                    obj.note_blocked_scene_load();
+                }
             }
             obj.step(
                 cam.x,
@@ -2274,10 +2283,17 @@ fn run_play(
                 let mario = build_contact(&sim, &keys, cam.pan_timer);
                 obj.mario_dead = sim.dead;
                 obj.fade_timer = sim.fade_timer;
-                // `$0EB0`'s scene branch: reported, not taken; see the replay
-                // loop and `CameraSim::take_blocked_scene_load`.
-                if cam.take_blocked_scene_load() {
-                    obj.note_blocked_scene_load();
+                // `$0EB0`'s scene branch; see the replay loop.
+                if cam.scene_load_pending {
+                    let def_index = boss_def_index(manifest.level_id, cam.boss_fight_phase);
+                    if boss_def_portable(def_index) {
+                        if let Some(music) = cam.begin_scene_load(manifest.level_id) {
+                            sim.music_request = music;
+                            obj.spawn_boss(def_index);
+                        }
+                    } else if cam.take_blocked_scene_load() {
+                        obj.note_blocked_scene_load();
+                    }
                 }
                 obj.step(
                     cam.x,
