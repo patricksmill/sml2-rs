@@ -1276,6 +1276,11 @@ fn run_replay(
         // reads bit 3, and no capture spins). The *low* bits still come from the
         // record above, which is what every other reader uses.
         sim.frame_counter = sim.frame_counter.wrapping_add(1);
+        // `sCameraPanTimer` ($A2B3): the record is its only source here, and the
+        // camera latches `sScrollY` from it at the frame end (`$2062`), which is
+        // what the `$2F72` seam below reads. Play mode has no writer yet (the
+        // boss arms' 52/56 are unported) — see `camera_pan_timer`.
+        cam.pan_timer = f.pan.unwrap_or(0);
         // The camera bytes the *player* update reads are the ones written by
         // the previous frame's camera step: the ROM runs `$0F71` before
         // `$0B2A` (home.asm:799/803), so `$0FBF`'s clamp and `$1BFF`'s hazard
