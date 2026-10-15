@@ -686,8 +686,13 @@ impl ObjectSim {
     /// `$505B` extent record (`$9048`), and copies the slot back (`$81BD`).
     ///
     /// Deliberate gap, reported once per frame: `$3A14` (bank 25 `$66000`) is
-    /// not identified, so the port keeps the `$C090` screen-pair staging the
-    /// level draw uses — the boss sprites then ride the same renderer.
+    /// the boss path's *render* pass — it computes `sSpriteFlipFlags` (`$6087`)
+    /// and emits the sprite's OAM entries from the bank-25 table at file
+    /// `$66092` (118 entries) plus its blobs from `$6617F`, reading
+    /// `B_SCRY`/`B_SCRX` as the position. The flags half is done here; the OAM
+    /// emit is not extracted, so the note stays. Note also that the boss slots'
+    /// screen bytes are NOT derived from world coords (`$C090`): the def images
+    /// and the handlers own them.
     pub fn boss_engine(
         &mut self,
         cam_x: u16,
@@ -717,8 +722,9 @@ impl ObjectSim {
                 ..Default::default()
             };
             if st.b[B_DEF] != 0 {
-                // $92DF: `rst $28` through the *boss* table ($92E8), not the
-                // level's profiles — see `dispatch_handler`.
+                // $92DF: `rst $28` through the *boss* table ($92E8) — bank-2
+                // addresses, see `ObjectTables::boss_anim_handlers` — not the
+                // level's bank-22 profiles; see `dispatch_handler`.
                 match tables.boss_anim_handler(st.b[B_DEF]) {
                     Some(h) => self.dispatch_handler(h, &mut st, layout, tables),
                     // The anim is past the table: the ROM would read the next
@@ -728,16 +734,15 @@ impl ObjectSim {
                 self.note_unported(0x3A14); // $3A14 -> bank 25 $66000
                 st.b[B_FLAGS] = 0; // $FFE7 = 0
                 self.refresh_hitbox(&mut st, tables, true); // $9048
-                if st.b[B_STATE] == 2 {
-                    // The level draw's `$C090` staging (see the note above).
-                    let scroll_x = cam_x.wrapping_sub(80);
-                    let scroll_y = cam_y
-                        .wrapping_sub(72)
-                        .wrapping_sub((self.mario.pan & 3) as u16);
-                    st.b[B_SCRY] = st.y().wrapping_add(16).wrapping_sub(scroll_y) as u8;
-                    st.b[B_SCRX] = st.x().wrapping_add(8).wrapping_sub(scroll_x) as u8;
-                    self.sprite_flip_flags = st.b[B_DEFEAT] ^ st.b[B_FLIP] ^ st.b[B_FLASH];
-                }
+                // `$6087` (reached from $66000): the flip flags the renderer
+                // XORs into the OAM attributes. NO `$C090` screen staging here:
+                // in the boss path `B_SCRY`/`B_SCRX` are the object's *screen*
+                // position, written by the def image itself (def 0's `$AD05`
+                // image carries $7C/$58 = `B_SCRY`/`B_SCRX`) and then moved by
+                // the handlers' `$B264`/`$B26A`/`$B270`/`$B276`; `$66000`
+                // consumes them as-is. Deriving them from world coords here
+                // would clobber every boss that moved.
+                self.sprite_flip_flags = st.b[B_DEFEAT] ^ st.b[B_FLIP] ^ st.b[B_FLASH];
                 self.slots[i].b = st.b; // $81BD
             }
             remaining = remaining.wrapping_sub(1);
@@ -4928,10 +4933,42 @@ mod tests {
         );
     }
 
+    /// The boss path never stages `B_SCRY`/`B_SCRX` from world coords: the def
+    /// image carries them (`$AD05`'s bytes 4/5 are the screen pair) and the
+    /// handlers move them. A driver frame must therefore leave a slot's screen
+    /// bytes exactly as it found them — deriving them from `$C090` would clobber
+    /// every boss that had moved.
+    #[test]
+    fn the_boss_driver_leaves_the_screen_bytes_alone() {
+        let t = tables();
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.spawn_boss(4);
+        // The def's own screen pair, as `$8E6C` staged it at $AD05: the
+        // 18-byte image starts at slot byte 5, so its bytes 4/5 land in
+        // `B_SCRY`/`B_SCRX`. Def 4's image carries $30/$90 (def 0's, for
+        // contrast, carries $7C/$58).
+        let (scy, scx) = (obj.slots[0].b[B_SCRY], obj.slots[0].b[B_SCRX]);
+        assert_eq!((scy, scx), (0x30, 0x90), "$AD09/$AD0A from the def image");
+        // Move the world position far away: if the driver derived the screen
+        // pair from it, the assertion below would fail.
+        obj.slots[0].b[B_XHI] = 0x05;
+        obj.slots[0].b[B_XLO] = 0x00;
+        obj.slots[0].b[B_YHI] = 0x03;
+        obj.slots[0].b[B_YLO] = 0x00;
+        obj.boss_engine(2000, 1500, &layout, &t);
+        assert_eq!(
+            (obj.slots[0].b[B_SCRY], obj.slots[0].b[B_SCRX]),
+            (scy, scx),
+            "the handler/def screen bytes survive"
+        );
+    }
+
     /// `$92DF` dispatches through the *boss* table (`$92E8`) — anim 16's boss
-    /// handler is `$59322`, while the level's profile table gives `$586F5` for
-    /// the same anim. The boss path must report the former as unported, never
-    /// silently run the latter.
+    /// handler is `$A0B9` (bank 2), while the level's profile table gives
+    /// `$586F5` (bank 22) for the same anim. The boss path must report the
+    /// former as unported, never silently run the latter.
     #[test]
     fn the_boss_driver_dispatches_through_the_92e8_table() {
         let real: ObjectTables = serde_json::from_str(
@@ -4942,7 +4979,9 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        assert_eq!(real.boss_anim_handler(16), Some(0x5A0B9), "boss table entry 16");
+        // Bank-2 base: entry 16 ($60B9) is file $A0B9, NOT $5A0B9 — the first
+        // extraction added the bank-22 constant ($54000) to a bank-2 table.
+        assert_eq!(real.boss_anim_handler(16), Some(0xA0B9), "boss table entry 16");
         // The table's length is not declared; the extractor takes the leading
         // run of in-window values (29), so anim 29 is past it and must report
         // rather than serve the next routine's data.
@@ -4957,7 +4996,7 @@ mod tests {
         obj.slots[0].b[B_DEF] = 16;
         obj.boss_engine(0, 0, &layout, &real);
         assert!(
-            obj.unported.contains(&0x5A0B9),
+            obj.unported.contains(&0xA0B9),
             "the boss handler is reported"
         );
         assert!(

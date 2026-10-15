@@ -1483,18 +1483,36 @@ def 7's table-B pointer, which reads *past* the 7-entry table into the records a
 before touching table B.
 
 The anim dispatch is now the ROM's own: `$92DF` jumps through the inline `rst $28` table
-at bank 2 `$92E8`, which the extractor had not read, and whose bank-22 entries are a
-*different* set of handlers from the level profiles' for the same anim id (anim 16 ->
-`$5A0B9` boss vs `$586F5` level). It is extracted as `boss_anim_handlers` (schema
-`sml2-objects/4`) with its length taken as the leading run of in-window values (29 — the
-ROM declares nothing, and the words after it are another routine's data), and the driver
-now reports those handlers as unported rather than silently running the level's, which is
-what "a driver skeleton that reports unported objids" was asking for. `run_handler` split
-into the lookup plus a shared `dispatch_handler` so the two paths cannot drift.
+at bank 2 `$92E8`, a *different* handler set from the level profiles' for the same anim id
+(anim 16 -> `$A0B9` boss vs `$586F5` level). Extracted as `boss_anim_handlers` (schema
+`sml2-objects/4`), length = the leading run of in-window values (29 — the ROM declares
+nothing), and the driver reports those handlers as unported rather than silently running
+the level's. `run_handler` split into the lookup plus a shared `dispatch_handler` so the
+two paths cannot drift.
 
-Still open (each now loud rather than silent): `$3A14` (bank 25 `$66000`), the driver's
-third per-slot call, which is where the *live* extra boss parts must come from, and with
-it the 29 boss handlers themselves (all reported); `sBossFightPhase`'s only ROM writer,
-the scene script's per-screen handlers (`$3C000`), so the def index is always the level's
-base def here; and `sBossDefeated`, which `$581E2`'s tail decrements as a counter while
-the port models it as a bool.
+**Correction (found by a parallel reverse-engineering pass and re-verified here): this
+table's entries are BANK-2 addresses, so file = `value + $4000` — the first extraction
+added `BANK16_CPU_ADD` (`$54000`), which is right for the level tables `$58040`/`$59C07`
+but off by `$50000` here.** `rst $28` jumps inside the bank `$3C94` mapped, which is 2,
+and the whole `$8D9C`/`$8DA9` chain runs there. Checks: entry 0 (`$5322`) is a lone `C9`
+at `$9322`, the same "inert anim" idiom as the level table's `$58100`; anim 16 (`$60B9`)
+is `$A0B9`, a clean `call $5285` / `sObjectDone` / save-state body; with `+ $54000` 13 of
+the 29 entries land mid-instruction. The decomp *does* label this family in `main.asm`'s
+bank-02 section (`UnknownCall_0x9285` at 3802, `UnknownCall_0x92DF` at 3856), so the
+handler port is easier than the earlier note claimed.
+
+Also corrected in the same pass: **the boss path never stages `B_SCRY`/`B_SCRX` from world
+coords.** Those bytes are the object's *screen* position: the def image carries them
+(`$AD05`'s bytes 4/5 become `B_SCRY`/`B_SCRX` — def 0's image holds `$7C`/`$58`, def 4's
+`$30`/`$90`) and the handlers move them with bank-2 `$B264`/`$B26A`/`$B270`/`$B276`
+(8-bit, screen-space). `$66000` consumes them as-is. `boss_engine` was deriving them via
+the level draw's `$C090` math, which would have clobbered every boss that moved; that
+block is gone and a test pins the def's pair surviving a driver frame.
+
+Still open, now measured: `$3A14`/`$66000` is the boss path's *render* pass — it computes
+`sSpriteFlipFlags` (`$6087`, done here) and emits OAM entries from the bank-25 table at
+file `$66092` (118 `dw`) plus blobs from `$6617F`, so the port needs that table extracted
+rather than the `$C090` staging it used to do; the 29 handlers themselves, whose region and
+helper library are mapped in `notes/boss_region_map.md`; `sBossFightPhase`'s only ROM
+writer, the scene script's per-screen handlers (`$3C000`); and `sBossDefeated`, which
+`$581E2`'s tail decrements as a counter while the port models it as a bool.

@@ -25,8 +25,15 @@ const MAP_PTR_A_ROM: usize = 0xC0B1;
 const MAP_PTR_B_ROM: usize = 0xCF11;
 /// anim -> handler `dw` for the boss path: the inline `rst $28` table right
 /// after `$92DF` (bank 2, ROM $92E8). Its length is not declared, so the
-/// extractor keeps the leading run of bank-22 values (29); the next words are a
-/// different routine's data.
+/// extractor keeps the leading run of in-window values (29); the next words are
+/// a different routine's data.
+///
+/// These entries are **bank-2** addresses (`rst $28` jumps inside the mapped
+/// bank, and the whole `$3C94`/`$8D9C`/`$8DA9` chain runs with bank 2 mapped),
+/// so the file offset is `value + $4000` — *not* `+ $54000` like the level
+/// profile tables `$58040`/`$59C07`, which really are bank 22. Entry 0 lands on
+/// a lone `ret` at `$9322`, the same "inert anim" idiom as the level table's
+/// `$58100`; with `+ $54000` 13 of the 29 entries land mid-instruction.
 const BOSS_ANIM_BEHAVIOR_ROM: usize = 0x92E8;
 /// anim -> behavior handler `dw`, 96 entries; bank $16 dispatcher `$58000`
 /// (mode A), table begins right after its `rst $28`.
@@ -259,7 +266,7 @@ pub fn extract(rom: &[u8]) -> Result<ObjectTables, String> {
         if !(0x4000..0x8000).contains(&cpu) {
             break; // past the table: the next routine's data
         }
-        boss_anim_handlers.push((cpu as usize + BANK16_CPU_ADD) as u32);
+        boss_anim_handlers.push((cpu as usize + BANK2_CPU_ADD) as u32);
     }
     let anim_profiles_a = behavior_profiles(rom, ANIM_BEHAVIOR_A_ROM, 96, "behavior A")?;
     let anim_profiles_b = behavior_profiles(rom, ANIM_BEHAVIOR_B_ROM, 112, "behavior B")?;

@@ -96,11 +96,12 @@ pub struct ObjectTables {
     /// anim -> behavior profile (bank $16 per-anim code), mode A (96) /
     /// mode B (112).
     /// anim -> handler for the *boss* path (`$92DF`'s `rst $28` table, bank 2
-    /// `$92E8`): the entries are bank-22 addresses like the level profiles', but
-    /// they are a *different* table, so a boss slot must not run the level's
-    /// handler for the same anim id. The ROM table's length is not declared
-    /// anywhere; the extractor takes the leading run of in-window (bank-22)
-    /// values, which is 29.
+    /// `$92E8`). Unlike the level profiles (`$58040`/`$59C07`, bank 22), these
+    /// entries are **bank-2** addresses — `rst $28` jumps inside the bank that
+    /// `$3C94` mapped, which is 2 — so a boss slot must not run the level's
+    /// handler for the same anim id, and the port's first extraction of this
+    /// table was off by `$50000`. The ROM declares no length; the extractor
+    /// keeps the leading run of in-window values (29).
     #[serde(default)]
     pub boss_anim_handlers: Vec<u32>,
     pub anim_profiles_a: Vec<AnimProfile>,
