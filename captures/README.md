@@ -1,5 +1,7 @@
 # Replay captures
 
+**Agent workflow is [`PORTING.md`](../PORTING.md)** — do not add captures or use this file as a porting spec. This directory is a **frozen** regression corpus only.
+
 Live PyBoy captures used as the regression suite for the port. Run:
 
 ```sh

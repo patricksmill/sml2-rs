@@ -1350,7 +1350,7 @@ transparent; the ±6-expanded `B_HB_*` box is tested byte-wise against the stage
 type gets `B_FLAGS` bit 1, which `$85AA`'s dispatch turns into `defeat()`, and every other type
 takes the sfx arm; both leave `sObjectHitResult` non-zero, which is what kills the ball).
 
-Two corrections to `notes/deleg_B_fireball_spec.md`, re-read from the ROM bytes here: the defeat
+Two ROM corrections (fireball defeat path): the defeat
 test is `bit 2, a` — a type needs `$04` set, so the spec's section-7 example (type `$20`) is
 wrong and takes the sfx arm instead; and `$3261` computes the pair as
 `ldh a,[$FFCA] / ld b,a / ld a,[sFireballX] / sub b / add 80`, exactly the `+80`/`+70` its prose
@@ -1513,7 +1513,7 @@ Still open, now measured: `$3A14`/`$66000` is the boss path's *render* pass — 
 `sSpriteFlipFlags` (`$6087`, done here) and emits OAM entries from the bank-25 table at
 file `$66092` (118 `dw`) plus blobs from `$6617F`, so the port needs that table extracted
 rather than the `$C090` staging it used to do; the 29 handlers themselves, whose region and
-helper library are mapped in `notes/boss_region_map.md`; `sBossFightPhase`'s only ROM
+helper library live in `crates/sml2-core/src/objects.rs` (boss handlers); `sBossFightPhase`'s only ROM
 writer, the scene script's per-screen handlers (`$3C000`); and `sBossDefeated`, which
 `$581E2`'s tail decrements as a counter while the port models it as a bool.
 
