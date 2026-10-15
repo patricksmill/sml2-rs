@@ -30,7 +30,7 @@ use sml2_core::map::MapNodes;
 use sml2_core::object::ObjectTables;
 use sml2_core::objects::FireHit;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
-use sml2_core::scene::{SceneScripts, SceneVm};
+use sml2_core::scene::{boss_def_index, SceneScripts, SceneVm};
 use sml2_core::video;
 
 /// Native GB screen; the HUD strip and the parity checks are anchored to it.
@@ -1418,7 +1418,22 @@ fn run_replay(
             // $8000's dispatcher gate reads sMarioDead; the interaction pass
             // then writes it back.
             obj.mario_dead = sim.dead;
-            obj.step(cam.x, cam.y, layout, &tables, &mario);
+            // `$0EB0`'s scene branch and its `$3C94` spawn hand-off: the park
+            // (which is what `$0652` reads to pick the boss driver) and the
+            // level-$18 song. The captures never take it (level 1's scene map
+            // is all zeros), so this cannot move the gate.
+            if let Some(music) = cam.begin_scene_load(manifest.level_id) {
+                sim.music_request = music;
+                obj.spawn_boss(boss_def_index(manifest.level_id, cam.boss_fight_phase));
+            }
+            obj.step(
+                cam.x,
+                cam.y,
+                layout,
+                &tables,
+                &mario,
+                cam.boss_mode(), // `$0652`
+            );
             // The write-back list lives in the sim so this loop and the play
             // loop cannot drift apart again (`infra_play_parity_harness`).
             sim.apply_object_result(&mut obj, keys.a);
@@ -2257,7 +2272,19 @@ fn run_play(
             if !frozen {
                 let mario = build_contact(&sim, &keys, cam.pan_timer);
                 obj.mario_dead = sim.dead;
-                obj.step(cam.x, cam.y, layout, tables, &mario);
+                // `$0EB0`'s scene branch + `$3C94` spawn; see the replay loop.
+                if let Some(music) = cam.begin_scene_load(manifest.level_id) {
+                    sim.music_request = music;
+                    obj.spawn_boss(boss_def_index(manifest.level_id, cam.boss_fight_phase));
+                }
+                obj.step(
+                    cam.x,
+                    cam.y,
+                    layout,
+                    tables,
+                    &mario,
+                    cam.boss_mode(), // `$0652`
+                );
                 // Same call the replay loop makes. The copy that used to live
                 // here was missing `on_ground_cleared` and `on_ground_obj`, so
                 // play mode disagreed with every capture on both.

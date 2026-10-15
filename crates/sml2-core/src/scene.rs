@@ -417,6 +417,24 @@ impl SceneVm {
 /// the "no boss at this phase" record) and the port clamps everything at or
 /// above it to that entry rather than reading past the pointer table as the
 /// ROM would.
+/// `$8DFD`: `sObjectDefIndex = sBossFightPhase + b`, where the ladder `b`
+/// keys the fight's def by the *level*: `$05` -> 0, `$09` -> 1, `$0D` -> 2,
+/// `$10` -> 3, `$13` -> 4, `$17` -> 5, and anything else (including `$18`,
+/// the Wario castle) -> 6. That index selects the 3-byte record (count, hits,
+/// sprite) and the two 18-byte def images in [`lookup_boss_spawn_def`].
+pub fn boss_def_index(level_id: u8, phase: u8) -> u8 {
+    let b = match level_id {
+        0x05 => 0,
+        0x09 => 1,
+        0x0D => 2,
+        0x10 => 3,
+        0x13 => 4,
+        0x17 => 5,
+        _ => 6,
+    };
+    phase.wrapping_add(b)
+}
+
 pub fn lookup_boss_spawn_def(def_index: u8) -> (u8, u8, u8, [u8; 18], Vec<[u8; 18]>) {
     match def_index {
         0 => (
@@ -483,6 +501,25 @@ pub fn lookup_boss_spawn_def(def_index: u8) -> (u8, u8, u8, [u8; 18], Vec<[u8; 1
         ),
     }
 }
+
+    /// `$8DFD`'s ladder keys the fight def by the level: `$05` -> 0, `$09` -> 1,
+    /// `$0D` -> 2, `$10` -> 3, `$13` -> 4, `$17` -> 5, anything else -> 6
+    /// (including `$18`, the Wario castle), plus `sBossFightPhase`.
+    #[test]
+    fn the_boss_def_index_follows_the_roms_level_ladder() {
+        assert_eq!(boss_def_index(0x05, 0), 0);
+        assert_eq!(boss_def_index(0x09, 0), 1);
+        assert_eq!(boss_def_index(0x0D, 0), 2);
+        assert_eq!(boss_def_index(0x10, 0), 3);
+        assert_eq!(boss_def_index(0x13, 0), 4);
+        assert_eq!(boss_def_index(0x17, 0), 5);
+        assert_eq!(boss_def_index(0x18, 0), 6);
+        assert_eq!(boss_def_index(0x01, 0), 6);
+        // The ladder is checked in ROM order, so $05 stays 0 and the rest step
+        // up by one; a level that is *not* in it lands on 6.
+        assert_eq!(boss_def_index(0x13, 1), 5, "phase adds on top");
+        assert_eq!(boss_def_index(0x18, 2), 8);
+    }
 
 #[cfg(test)]
 mod tests {

@@ -55,6 +55,19 @@ pub struct CameraSim {
     pub transition: u8,
     /// `sSceneState` ($A28B) — nonzero high nibble parks the camera.
     pub scene_state: u8,
+    /// `sBossFightPhase` (`$A2B1`): the fight counter that `$8DFD` adds to the
+    /// level's def base. Its only ROM writer is the scene script (`$3C000`'s
+    /// per-screen handlers), which is unported, so it stays 0 here — which is
+    /// also what every first-arrival fight uses.
+    pub boss_fight_phase: u8,
+    /// Set by `$0EB0`'s scene branch inside [`finish_transition`] and consumed
+    /// by the frame loop in [`begin_scene_load`]: the branch needs `sCurLevel`
+    /// and has to hand the spawn to the object sim, neither of which the camera
+    /// has.
+    ///
+    /// [`finish_transition`]: CameraSim::finish_transition
+    /// [`begin_scene_load`]: CameraSim::begin_scene_load
+    pub scene_load_pending: bool,
     /// `sBossDefeated` — a defeated boss freezes the camera until cleared.
     pub boss_defeated: u8,
     /// `sSceneMap` ($A900, 48 bytes = 3 rows x 16) for the `$0F0B` lookup.
@@ -99,6 +112,8 @@ impl CameraSim {
             auto_scroll: 0,
             transition: 0,
             scene_state: 0,
+            boss_fight_phase: 0,
+            scene_load_pending: false,
             boss_defeated: 0,
             scene_map: Vec::new(),
             scene_id: 0,
@@ -540,24 +555,56 @@ impl CameraSim {
     }
 
     /// `$0EB0`: end the transition. The scene-load branch (`sSceneState &
-    /// $0F != 0` → `sSceneState = $F0`, LCDC `$C3`, music 32, then bank-0
-    /// `$3C94` → bank 2 `$8D9C`) is NOT ported — it belongs to the
-    /// scene/boss system, and `$8DA9`'s alternate per-frame driver (which
-    /// `$0652` selects *instead of* the `$8000` engine while
-    /// `sSceneState & $F0 != 0`) does not exist here, so arming `$F0`
-    /// without it would park the port with nothing to advance it. Level 1's
-    /// scene map is all zeros, so its pipes keep `sSceneState` 0 and skip
-    /// the branch.
+    /// $0F != 0` -> `sSceneState = $F0` -> `$3C94`) is **ported but split**: it
+    /// arms the park here and the frame loop finishes it through
+    /// [`begin_scene_load`], because `$0EB0` also writes `sMusicRequest`/
+    /// `sLevelSong` and reads `sCurLevel` — which live with the player sim and
+    /// the level, not the camera. `$F0` is what `$0652` reads to swap the
+    /// frame's object pass for the boss driver (`$8DA9`), so the park and the
+    /// driver must land in the same frame; see `ObjectSim::step`'s `boss_mode`.
     ///
     /// The `sBossDefeated` arm below is a SEPARATE `if` in the ROM
     /// (`$0EE4`): it runs whether or not the scene branch was taken, so it
     /// must not become an `else`.
     fn finish_transition(&mut self) {
         self.transition = 0;
+        if self.scene_state & 0x0F != 0 {
+            self.scene_load_pending = true;
+        }
         if self.boss_defeated & 0xF0 != 0 {
             self.boss_defeated &= 0x0F;
         }
         self.sfx0 = 5;
+    }
+
+    /// `$0652`'s test: while `sSceneState & $F0 != 0` the frame's object pass is
+    /// the boss driver (`$8DA9`) instead of `$8000`. Exposed as a method so the
+    /// frame loops cannot re-derive it differently.
+    pub fn boss_mode(&self) -> bool {
+        self.scene_state & 0xF0 != 0
+    }
+
+    /// `$0EB0`'s scene branch and its `$3C94` hand-off, performed by the frame
+    /// loop (see [`finish_transition`]): sets the `$F0` park and returns the
+    /// music request `$0EB0` stores in `sMusicRequest`/`sLevelSong` — 32, or
+    /// `sBossFightPhase + 33` on level `$18` (the Wario castle). `None` when no
+    /// scene load is pending. The spawn itself (`$3C94` -> bank 2 `$8D9C`) is
+    /// the caller's `ObjectSim::spawn_boss(def_index)`.
+    ///
+    /// [`finish_transition`]: CameraSim::finish_transition
+    pub fn begin_scene_load(&mut self, level_id: u8) -> Option<u8> {
+        if !self.scene_load_pending {
+            return None;
+        }
+        self.scene_load_pending = false;
+        // `ld a,240 / ld [sSceneState],a`; the ROM's `call DisableVBlank` and
+        // `ld a,195 / ldh [rLCDC],a` have no port counterpart (no VRAM).
+        self.scene_state = 0xF0;
+        Some(if level_id == 0x18 {
+            self.boss_fight_phase.wrapping_add(33)
+        } else {
+            32
+        })
     }
 
     /// `$0F0B`: latch the scene id under Mario from `sSceneMap` ($A900).
@@ -602,6 +649,61 @@ mod tests {
         let mut c = CameraSim::new(x, y);
         c.edge_map = level1_table();
         c
+    }
+
+    /// `$0EB0`'s scene branch: a transition that ends with a non-zero low
+    /// nibble in `sSceneState` arms the `$F0` park, and the frame loop then
+    /// takes the music request and the spawn (`begin_scene_load`).
+    #[test]
+    fn ending_a_transition_on_a_scene_arms_the_f0_park() {
+        let mut c = cam_at(80, 448);
+        c.scene_state = 0x0F; // a pipe on a scene tile
+        c.finish_transition();
+        assert!(c.scene_load_pending, "$0EB0's branch armed");
+        assert_eq!(c.begin_scene_load(1), Some(32), "`sMusicRequest`/`sLevelSong` 32");
+        assert_eq!(c.scene_state, 0xF0, "the park `$0652` reads");
+        assert!(!c.scene_load_pending, "consumed");
+        assert_eq!(c.begin_scene_load(1), None, "and it does not fire twice");
+        assert_eq!(c.sfx0, 5, "$0EB0's own tail still runs");
+        assert!(c.boss_mode(), "$0652 now picks the boss driver");
+        assert!(!cam_at(80, 448).boss_mode(), "and only then");
+    }
+
+    /// Only level `$18` (the Wario castle) overrides the scene song, with
+    /// `sBossFightPhase + 33` — the ROM's `cp $18 / jr nz,$0EE4` tail.
+    #[test]
+    fn the_wario_castle_scene_song_is_the_fight_phase() {
+        let mut c = cam_at(80, 448);
+        c.scene_state = 0x01;
+        c.boss_fight_phase = 2;
+        c.finish_transition();
+        assert_eq!(c.begin_scene_load(0x18), Some(35));
+
+        let mut c = cam_at(80, 448);
+        c.scene_state = 0x01;
+        c.boss_fight_phase = 2;
+        c.finish_transition();
+        assert_eq!(c.begin_scene_load(0x17), Some(32), "other levels keep 32");
+    }
+
+    /// `$0EB0`'s two arms are separate `if`s, not if/else: the `sBossDefeated`
+    /// clear must run whether or not the scene branch was taken.
+    #[test]
+    fn the_boss_defeated_clear_is_not_an_else_of_the_scene_branch() {
+        // Scene branch taken.
+        let mut c = cam_at(80, 448);
+        c.scene_state = 0x03;
+        c.boss_defeated = 0x25;
+        c.finish_transition();
+        assert!(c.scene_load_pending);
+        assert_eq!(c.boss_defeated, 0x05, "cleared anyway");
+        // No scene: the arm must still run.
+        let mut c = cam_at(80, 448);
+        c.scene_state = 0x00;
+        c.boss_defeated = 0x25;
+        c.finish_transition();
+        assert!(!c.scene_load_pending, "no scene load");
+        assert_eq!(c.boss_defeated, 0x05, "and the clear still runs");
     }
 
     /// `$0B39`: the index is `(Yhi & $0F) * 16 + (Xhi & $0F)` — the X *cell*

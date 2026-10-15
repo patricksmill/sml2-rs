@@ -1430,3 +1430,71 @@ states, the KO window and its gates, the death animation's three states, the `sO
 gate, the extraction's anim-0 handler), each with at least one one-line mutation shown to fail it.
 Whole tree: 234 core + 3 runtime tests, release build clean, `bash captures/sweep.sh` → `gate done`
 with traj4_ff0 byte-identical, no `REGRESSION` and no `note:`.
+
+## The boss chain: `$0EB0` -> `$3C94` -> bank 2 `$8D9C`, and `$0652`'s other pass — 2026-10-14
+
+The boss fight is not an object in the level's object list; it is a *second object pass*
+that replaces `$8000` for the duration. Four ROM pieces, all now ported at the frame
+level:
+
+1. **`$0EB0`'s scene branch** (`home.asm`): a screen transition that ends with a
+   non-zero low nibble in `sSceneState` sets `sSceneState = $F0`, LCDC `$C3`,
+   `sMusicRequest = sLevelSong = 32` (or `sBossFightPhase + 33` on level `$18`, the
+   Wario castle), and calls `$3C94`. Its `sBossDefeated` arm is a **separate `if`**
+   (`$0EE4`) and runs either way. The port splits the branch: `finish_transition`
+   arms `scene_load_pending` and the frame loop finishes it through
+   `begin_scene_load(level_id)`, because the tail needs `sCurLevel` (the level) and
+   `sMusicRequest` (the player sim), neither of which the camera owns.
+2. **`$3C94` -> bank 2 `$8D9C`**, four calls: bank 3 `$EC40` (clear `$AF00-$AFFF`),
+   bank 3 `$EC31` (clear `$AD00-$AEFF`), `$8DFD` (build the def), `$8E6C` (stage the
+   def images). `$8DFD` keys the def by level: `$05`->0, `$09`->1, `$0D`->2,
+   `$10`->3, `$13`->4, `$17`->5, else->6, then adds `sBossFightPhase`. `$8E6C` copies
+   the main 18-byte image to `sObject0Def` (`$AD05`, slot 0's byte 5) and `count`
+   sub-images to `sObject1Def` (`$AD25`) with a **`+$10` stride**.
+3. **`$0652`** picks the frame's object pass: `sSceneState & $F0 == 0` -> bank 2
+   `$8000`; otherwise `$3C9F` -> bank 2 **`$8DA9`**, the boss driver.
+4. **`$8DA9`** walks `sObjectDefCount + 1` slots from `$AD00` at a **`$20` stride** —
+   *not* the `+$10` the images use. That mismatch is real and load-bearing: the first
+   sub-image lands on slot 1's byte 5 (`$AD25`), the second starts at `$AD35` (slot 1's
+   byte `$15`), so its tail lands in slot 2's bytes 0-6 and slot 2's anim byte
+   (`$AD45`) stays 0 — the ROM leaves that page **inert**, and a faithful port must not
+   "fix" it. Each walked slot is staged into `$FFD0` (`$81A7`, low byte masked `$F0`),
+   and only when the staged anim byte (`$FFD5`) is non-zero does it dispatch the anim
+   (`$92DF`), clear `$FFE7` (= `B_FLAGS`), fetch the `$505B` extent record (`$9048`,
+   the *scene-state* table — the level tables are `$4737`/`$4935`) and copy the slot
+   back (`$81BD`). `$FFF0` is bumped **unconditionally**, unlike `$8000`'s
+   phase-toggle increment.
+
+Landed with this pass: `scene::boss_def_index` (the ladder, tested per level),
+`ObjectSim::{boss_def_index, boss_def_count, boss_hit_latch, boss_5290}`,
+`spawn_boss` recording index/count and reporting a def index beyond 8 (`$904E` would
+read past the 9-entry pointer tables), `ObjectSim::boss_engine`, `CameraSim::boss_mode`
+(`$0652`'s test, one source of truth for both loops) and `begin_scene_load`; the
+`$505B` table the extractor had already stored as `draw_records`/`draw_index` now has
+its `draw_extent_for` accessor and is what `refresh_hitbox(.., boss = true)` reads.
+`step` gained the `boss_mode` flag, so a parked frame runs the driver *instead of*
+`$8000` — the check that keeps arming `$F0` from parking the port with nothing to
+advance the scene.
+
+Verified against the ROM before building on it: the nine defs' 3-byte records, their
+`$4E9A`/`$4EAC` pointer tables and all 18-byte images are byte-exact — including
+def 7's table-B pointer, which reads *past* the 7-entry table into the records area
+(`$5036`) exactly as the ROM does, and def 8's count-0 case where `$8E6C` returns
+before touching table B.
+
+The anim dispatch is now the ROM's own: `$92DF` jumps through the inline `rst $28` table
+at bank 2 `$92E8`, which the extractor had not read, and whose bank-22 entries are a
+*different* set of handlers from the level profiles' for the same anim id (anim 16 ->
+`$5A0B9` boss vs `$586F5` level). It is extracted as `boss_anim_handlers` (schema
+`sml2-objects/4`) with its length taken as the leading run of in-window values (29 — the
+ROM declares nothing, and the words after it are another routine's data), and the driver
+now reports those handlers as unported rather than silently running the level's, which is
+what "a driver skeleton that reports unported objids" was asking for. `run_handler` split
+into the lookup plus a shared `dispatch_handler` so the two paths cannot drift.
+
+Still open (each now loud rather than silent): `$3A14` (bank 25 `$66000`), the driver's
+third per-slot call, which is where the *live* extra boss parts must come from, and with
+it the 29 boss handlers themselves (all reported); `sBossFightPhase`'s only ROM writer,
+the scene script's per-screen handlers (`$3C000`), so the def index is always the level's
+base def here; and `sBossDefeated`, which `$581E2`'s tail decrements as a counter while
+the port models it as a bool.

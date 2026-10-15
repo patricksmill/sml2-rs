@@ -28,7 +28,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Schema id written into `objects.json`.
-pub const OBJECTS_SCHEMA: &str = "sml2-objects/3";
+pub const OBJECTS_SCHEMA: &str = "sml2-objects/4";
 
 /// The `sSpriteMapIndex` value a level is loaded with (main.asm ~$9050:
 /// `ld a,[sCurLevel] / cp $0A / ret c` — so level ids **`>= $0A`** use the "B"
@@ -95,6 +95,14 @@ pub struct ObjectTables {
     pub sprite_mappings_b: Vec<Vec<MappingEntry>>,
     /// anim -> behavior profile (bank $16 per-anim code), mode A (96) /
     /// mode B (112).
+    /// anim -> handler for the *boss* path (`$92DF`'s `rst $28` table, bank 2
+    /// `$92E8`): the entries are bank-22 addresses like the level profiles', but
+    /// they are a *different* table, so a boss slot must not run the level's
+    /// handler for the same anim id. The ROM table's length is not declared
+    /// anywhere; the extractor takes the leading run of in-window (bank-22)
+    /// values, which is 29.
+    #[serde(default)]
+    pub boss_anim_handlers: Vec<u32>,
     pub anim_profiles_a: Vec<AnimProfile>,
     pub anim_profiles_b: Vec<AnimProfile>,
     /// Player (Mario) draw frames: the bank-1 mapping table at ROM $4000
@@ -125,6 +133,18 @@ impl ObjectTables {
         records.get(i).copied()
     }
 
+    /// `$9048`: the sprite -> extent record lookup for the *scene-state* path.
+    /// `$81CF` picks `$4737`/`$4935` (the level tables, [`hitbox_for`]) but the
+    /// boss driver's `$9048` uses `hl = $505B` unconditionally — the third
+    /// table, extracted as `draw_records`/`draw_index`. Both copy four bytes
+    /// into `$FFE3-$FFE6` (the port's `B_HB_TOP..B_HB_RIGHT`).
+    ///
+    /// [`hitbox_for`]: ObjectTables::hitbox_for
+    pub fn draw_extent_for(&self, sprite: u8) -> Option<Extents> {
+        let i = *self.draw_index.get(sprite as usize)? as usize;
+        self.draw_records.get(i).copied()
+    }
+
     /// OAM mapping for a sprite id in a level's mode.
     pub fn mapping_for(&self, level_id: u8, sprite: u8) -> Option<&[MappingEntry]> {
         let table = if sprite_map_index(level_id) == 0 {
@@ -138,6 +158,11 @@ impl ObjectTables {
     /// Behavior handler ROM offset for an anim in a level's mode.
     pub fn behavior_for(&self, level_id: u8, anim: u8) -> Option<u32> {
         self.profile_for(level_id, anim).map(|p| p.handler)
+    }
+
+    /// anim -> handler for the boss (`$9048`/`$92DF`) path.
+    pub fn boss_anim_handler(&self, anim: u8) -> Option<u32> {
+        self.boss_anim_handlers.get(anim as usize).copied()
     }
 
     /// Full behavior profile for an anim in a level's mode.

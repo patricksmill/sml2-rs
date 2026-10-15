@@ -23,6 +23,11 @@ const DRAW_PTR_ROM: usize = 0x905B;
 const MAP_PTR_A_ROM: usize = 0xC0B1;
 /// sprite id -> OAM mapping pointer, 228 `dw`; bank 3, CPU base `$4F11`.
 const MAP_PTR_B_ROM: usize = 0xCF11;
+/// anim -> handler `dw` for the boss path: the inline `rst $28` table right
+/// after `$92DF` (bank 2, ROM $92E8). Its length is not declared, so the
+/// extractor keeps the leading run of bank-22 values (29); the next words are a
+/// different routine's data.
+const BOSS_ANIM_BEHAVIOR_ROM: usize = 0x92E8;
 /// anim -> behavior handler `dw`, 96 entries; bank $16 dispatcher `$58000`
 /// (mode A), table begins right after its `rst $28`.
 const ANIM_BEHAVIOR_A_ROM: usize = 0x58040;
@@ -248,6 +253,14 @@ pub fn extract(rom: &[u8]) -> Result<ObjectTables, String> {
     let (draw_records, draw_index) = extents_table(rom, DRAW_PTR_ROM, 255, "draw")?;
     let sprite_mappings_a = mappings_table(rom, MAP_PTR_A_ROM, 168, "mapping A")?;
     let sprite_mappings_b = mappings_table(rom, MAP_PTR_B_ROM, 228, "mapping B")?;
+    let mut boss_anim_handlers = Vec::new();
+    for i in 0..32 {
+        let cpu = dw(rom, BOSS_ANIM_BEHAVIOR_ROM + 2 * i)?;
+        if !(0x4000..0x8000).contains(&cpu) {
+            break; // past the table: the next routine's data
+        }
+        boss_anim_handlers.push((cpu as usize + BANK16_CPU_ADD) as u32);
+    }
     let anim_profiles_a = behavior_profiles(rom, ANIM_BEHAVIOR_A_ROM, 96, "behavior A")?;
     let anim_profiles_b = behavior_profiles(rom, ANIM_BEHAVIOR_B_ROM, 112, "behavior B")?;
     let player_mappings = player_mappings_table(rom)?;
@@ -297,6 +310,7 @@ pub fn extract(rom: &[u8]) -> Result<ObjectTables, String> {
         draw_index,
         sprite_mappings_a,
         sprite_mappings_b,
+        boss_anim_handlers,
         anim_profiles_a,
         anim_profiles_b,
         player_mappings,

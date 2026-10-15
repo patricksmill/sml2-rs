@@ -425,6 +425,17 @@ pub struct ObjectSim {
     /// slot before the handler.
     pub pending_kick: bool,
     /// $AFC1: `sBossHitsRemaining`
+    /// `sObjectDefIndex` (`$8DFD`): the fight's def, `sBossFightPhase + b`.
+    pub boss_def_index: u8,
+    /// `sObjectDefCount`: the def's sub-object count. `$8DA9` walks this + 1
+    /// slots.
+    pub boss_def_count: u8,
+    /// `sBossHitLatch`: cleared per slot per frame by the boss driver, so it
+    /// reports only the frame's last slot (the ROM's own shape).
+    pub boss_hit_latch: u8,
+    /// `$5290`: likewise zeroed per slot in `$8DBE`; no reader found in the
+    /// ported code, kept so the write order matches.
+    pub boss_5290: u8,
     pub boss_hits_remaining: u8,
     /// $AFC2: `sBossSprite`
     pub boss_sprite: u8,
@@ -490,6 +501,10 @@ impl ObjectSim {
             action_latch: 0,
             object_hit_flag: 0,
             pending_kick: false,
+            boss_def_index: 0,
+            boss_def_count: 0,
+            boss_hit_latch: 0,
+            boss_5290: 0,
             boss_hits_remaining: 0,
             boss_sprite: 0,
             boss_timer_reload: 0,
@@ -532,11 +547,20 @@ impl ObjectSim {
     ///    with literal `+$10` stride per sub-object (causing overlap on count >= 2).
     /// 5. Reflects raw staged bytes into `slots[0..4]` for slot-level consumers.
     pub fn spawn_boss(&mut self, def_index: u8) {
+        if def_index > 8 {
+            // `$904E` would read past the 9-entry pointer tables. Only
+            // reachable with a non-zero `sBossFightPhase` (whose scene-script
+            // writer is unported), so report it instead of silently serving
+            // def 8's data.
+            self.note_unported(0x8DFD);
+        }
         let (count, hits, sprite, obj0, sub_objs) = crate::scene::lookup_boss_spawn_def(def_index);
         self.boss_slots_raw = [0; 512];
         for slot in &mut self.slots {
             slot.b = [0; 32];
         }
+        self.boss_def_index = def_index;
+        self.boss_def_count = count;
         self.boss_hits_remaining = hits;
         self.boss_sprite = sprite;
         self.boss_timer_reload = 80;
@@ -576,12 +600,21 @@ impl ObjectSim {
         layout: &LevelLayout,
         tables: &ObjectTables,
         mario: &MarioContact,
+        boss_mode: bool,
     ) {
         self.mario = *mario;
         if !mario.travelling {
             self.collide(cam_x, cam_y, layout);
         }
-        self.engine(cam_x, cam_y, layout, tables);
+        // `$0652`: while `sSceneState & $F0 != 0` the frame's object pass is
+        // `$3C9F` -> bank 2 `$8DA9` (the boss driver) *instead of* `$8000`.
+        // Both must switch together: arming `$F0` without this driver parks the
+        // port with nothing to advance the scene.
+        if boss_mode {
+            self.boss_engine(cam_x, cam_y, layout, tables);
+        } else {
+            self.engine(cam_x, cam_y, layout, tables);
+        }
     }
 
     /// The `$EBBB` level-(re)load tail: `$EC40` clears the object scratch
@@ -637,6 +670,83 @@ impl ObjectSim {
     // ---------------------------------------------------------------------
     // $8000 — windows, slot loop, spawn scan
     // ---------------------------------------------------------------------
+
+    /// `$8DA9` (bank 2) — the alternate per-frame object pass that replaces the
+    /// `$8000` engine during a boss fight (`$0652` selects it while
+    /// `sSceneState & $F0 != 0`; `$0EB0` -> `$3C94` -> `$8D9C` filled the def
+    /// page it walks). It walks `sObjectDefCount + 1` slots from `$AD00` with a
+    /// **$20 stride** — note this is *not* the `+$10` the def images use, which
+    /// is why a multi-part def's later images straddle slot pages and the
+    /// slots they leak into come up with a zero anim byte and are skipped — and
+    /// for each: clears `sObjectDone`/`sBossHitLatch`/`$5290`, stages the slot
+    /// into `$FFD0` (`$81A7`, low byte masked to `$F0`), and only when the
+    /// staged anim byte (`$FFD5`) is non-zero dispatches the anim (`$92DF`,
+    /// bank 2's own 32-entry table), clears `$FFE7` (= `B_FLAGS`, the
+    /// interaction-flag clear the level path does in `$818D`), fetches the
+    /// `$505B` extent record (`$9048`), and copies the slot back (`$81BD`).
+    ///
+    /// Deliberate gap, reported once per frame: `$3A14` (bank 25 `$66000`) is
+    /// not identified, so the port keeps the `$C090` screen-pair staging the
+    /// level draw uses — the boss sprites then ride the same renderer.
+    pub fn boss_engine(
+        &mut self,
+        cam_x: u16,
+        cam_y: u16,
+        layout: &LevelLayout,
+        tables: &ObjectTables,
+    ) {
+        // $8DA9's head: `ld hl,$FFF0 / inc [hl]` — unconditional, unlike
+        // `$8000`'s phase-toggle increment (so the odd/even slot parity flips
+        // every frame here).
+        self.fff0 = self.fff0.wrapping_add(1);
+        self.odd = self.fff0 & 1 == 1;
+
+        let mut remaining = self.boss_def_count.wrapping_add(1);
+        let mut page = 0xAD00usize;
+        loop {
+            // $8DBE: `xor a` -> sObjectDone, sBossHitLatch, $5290.
+            self.done = 0;
+            self.boss_hit_latch = 0;
+            self.boss_5290 = 0;
+            let i = (page & 0xFFF0).saturating_sub(0xAD00) / 0x20;
+            if i >= SLOT_COUNT {
+                return;
+            }
+            let mut st = Staging {
+                b: self.slots[i].b,
+                ..Default::default()
+            };
+            if st.b[B_DEF] != 0 {
+                // $92DF: `rst $28` through the *boss* table ($92E8), not the
+                // level's profiles — see `dispatch_handler`.
+                match tables.boss_anim_handler(st.b[B_DEF]) {
+                    Some(h) => self.dispatch_handler(h, &mut st, layout, tables),
+                    // The anim is past the table: the ROM would read the next
+                    // routine's data, so report it rather than guess.
+                    None => self.note_unported(0x92DF),
+                }
+                self.note_unported(0x3A14); // $3A14 -> bank 25 $66000
+                st.b[B_FLAGS] = 0; // $FFE7 = 0
+                self.refresh_hitbox(&mut st, tables, true); // $9048
+                if st.b[B_STATE] == 2 {
+                    // The level draw's `$C090` staging (see the note above).
+                    let scroll_x = cam_x.wrapping_sub(80);
+                    let scroll_y = cam_y
+                        .wrapping_sub(72)
+                        .wrapping_sub((self.mario.pan & 3) as u16);
+                    st.b[B_SCRY] = st.y().wrapping_add(16).wrapping_sub(scroll_y) as u8;
+                    st.b[B_SCRX] = st.x().wrapping_add(8).wrapping_sub(scroll_x) as u8;
+                    self.sprite_flip_flags = st.b[B_DEFEAT] ^ st.b[B_FLIP] ^ st.b[B_FLASH];
+                }
+                self.slots[i].b = st.b; // $81BD
+            }
+            remaining = remaining.wrapping_sub(1);
+            if remaining == 0 {
+                return;
+            }
+            page = page.wrapping_add(0x20);
+        }
+    }
 
     fn engine(&mut self, cam_x: u16, cam_y: u16, layout: &LevelLayout, tables: &ObjectTables) {
         let act_x = Self::window(cam_x, 0x60);
@@ -784,14 +894,21 @@ impl ObjectSim {
             st.b[B_FLAGS] = 0;
             self.clear_stage_flags = false;
         }
-        self.refresh_hitbox(&mut st, tables);
+        self.refresh_hitbox(&mut st, tables, false);
         // $81BD: staging → slot.
         self.slots[i].b = st.b;
     }
 
-    /// `$81CF`: copy the 4-byte hitbox record for the staged sprite id.
-    fn refresh_hitbox(&self, st: &mut Staging, tables: &ObjectTables) {
-        if let Some(hb) = tables.hitbox_for(self.level_id, st.b[B_SPRITE]) {
+    /// `$81CF` (level tables `$4737`/`$4935`) or `$9048` (the scene-state
+    /// table `$505B`): copy the 4-byte extent record for the staged sprite id
+    /// into `$FFE3-$FFE6`.
+    fn refresh_hitbox(&self, st: &mut Staging, tables: &ObjectTables, boss: bool) {
+        let rec = if boss {
+            tables.draw_extent_for(st.b[B_SPRITE])
+        } else {
+            tables.hitbox_for(self.level_id, st.b[B_SPRITE])
+        };
+        if let Some(hb) = rec {
             st.b[B_HB_TOP] = hb[0] as u8;
             st.b[B_HB_BOTTOM] = hb[1] as u8;
             st.b[B_HB_LEFT] = hb[2] as u8;
@@ -836,6 +953,22 @@ impl ObjectSim {
             .profile_for(self.level_id, anim)
             .map(|p| p.handler)
             .unwrap_or(0);
+        self.dispatch_handler(handler, st, layout, tables);
+    }
+
+    /// The `rst $28` body both dispatchers share: run the bank-22 handler for
+    /// this anim, or report it. The level path's table is `$58040`/`$59C07`
+    /// (via [`ObjectTables::profile_for`]); the boss driver's is `$92E8` (via
+    /// [`ObjectTables::boss_anim_handler`]), and the two disagree for the same
+    /// anim id — running the level's handler on a boss slot would be silently
+    /// wrong, which is why the boss path reports instead.
+    fn dispatch_handler(
+        &mut self,
+        handler: u32,
+        st: &mut Staging,
+        layout: &LevelLayout,
+        tables: &ObjectTables,
+    ) {
         match handler {
             0x58201 => self.handler_walker(st, layout),
             0x582A9 => self.handler_squashed(st, tables),
@@ -949,7 +1082,7 @@ impl ObjectSim {
             }
         }
         st.b = [0; 32];
-        self.refresh_hitbox(st, tables);
+        self.refresh_hitbox(st, tables, false);
         self.done = 2;
         self.remove_mode = 0;
     }
@@ -3044,7 +3177,7 @@ impl ObjectSim {
             s.b[B_RECLO] = (a as u8).wrapping_add(2);
             s.b[B_STATE] = 1;
             self.derive_sprite(&mut s, tables);
-            self.refresh_hitbox(&mut s, tables);
+            self.refresh_hitbox(&mut s, tables, false);
             self.slots[slot].b = s.b;
             self.spawned[ri] = true;
             self.standby = self.standby.wrapping_add(1);
@@ -3113,6 +3246,7 @@ mod tests {
             hitbox_records_b: Vec::new(),
             hitbox_index_a: vec![0; 96],
             hitbox_index_b: Vec::new(),
+            boss_anim_handlers: Vec::new(),
             draw_records: Vec::new(),
             draw_index: Vec::new(),
             sprite_mappings_a: Vec::new(),
@@ -3282,19 +3416,19 @@ mod tests {
             y: 0,
             ..Default::default()
         };
-        obj.step(0, 0, &layout, &t, &mario);
+        obj.step(0, 0, &layout, &t, &mario, false);
         assert_eq!(obj.pending_item, 1, "$2DC6 stages type & $7F");
         assert_eq!(obj.slots[0].b[B_FLAGS], 0, "the touch flag was consumed");
         assert_eq!(obj.slots[0].b[B_DEF], 16, "the touch arm switched anim 16");
         assert_eq!(obj.slots[0].b[B_SPRITE], 26);
         // The next frame is the pickup handler's first call.
-        obj.step(0, 0, &layout, &t, &mario);
+        obj.step(0, 0, &layout, &t, &mario, false);
         assert_eq!(obj.slots[0].b[B_T24], 2);
         assert_eq!(y_of(&obj.slots[0].b), 102);
         assert_eq!(obj.slots[0].b[B_FSTATE], 1);
         // The parity gate halves the cadence; by 31 engine frames it is gone.
         for _ in 0..40 {
-            obj.step(0, 0, &layout, &t, &mario);
+            obj.step(0, 0, &layout, &t, &mario, false);
         }
         assert_eq!(obj.slots[0].b[B_STATE], 0, "the item despawned");
         assert_eq!(obj.active, 0);
@@ -3928,7 +4062,7 @@ mod tests {
         let special = obj.below_bonk(0xDF, 0x68, 0x31, 0x70);
         assert!(!special);
         assert_eq!(obj.slots[0].b[B_FLAGS], 0x20, "hit from below");
-        obj.step(448, 377, &layout, &t, &mario);
+        obj.step(448, 377, &layout, &t, &mario, false);
         let s = &obj.slots[0];
         assert_eq!(s.b[B_TYPE], 0x86, "the bell keeps its type");
         assert_eq!(s.b[B_HITREACT], 2);
@@ -3937,14 +4071,14 @@ mod tests {
         assert_eq!(s.b[B_FSTATE], 0, "$8240 cleared +14..+30");
         // The reaction's first arm: face Mario (west → state 1, flip 0) and
         // then the toggle → flip $20.
-        obj.step(448, 377, &layout, &t, &mario);
+        obj.step(448, 377, &layout, &t, &mario, false);
         let s = &obj.slots[0];
         assert_eq!(s.b[B_FSTATE], 1);
         assert_eq!(s.b[B_FLIP], 0x20);
         assert_eq!(s.b[B_HITREACT], 2, "still owed: the revive clears it");
         // The $411A knockback arm — the console's (100,468) → (101,465),
         // i.e. X + 1 and Y − BOUNCE_SPEED[0] = 3 with +16 0 → 1.
-        obj.step(448, 377, &layout, &t, &mario);
+        obj.step(448, 377, &layout, &t, &mario, false);
         let s = &obj.slots[0];
         assert_eq!((s.x(), s.y()), (353, 445));
         assert_eq!(s.b[B_PHASE], 1);
@@ -4686,6 +4820,172 @@ mod tests {
         }
         assert_eq!(st.b[B_STATE], 0, "removed once off the bottom");
         assert_eq!(obj.remove_mode, 0, "$5B2D7 resets the mode");
+    }
+
+    /// `$8DA9`: the boss driver walks `sObjectDefCount + 1` slots from `$AD00`
+    /// at a $20 stride, and each slot runs `$8DBE`'s body only when its staged
+    /// anim byte (`$FFD5`) is non-zero. `spawn_boss(4)` (count 2) therefore
+    /// touches slots 0-2 and leaves slot 3 alone; `$FFF0` is bumped
+    /// unconditionally, unlike `$8000`'s phase-toggle increment.
+    #[test]
+    fn the_boss_driver_walks_count_plus_one_slots_at_a_20_stride() {
+        let t = tables();
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.spawn_boss(4);
+        assert_eq!(obj.boss_def_count, 2);
+        assert_eq!(obj.boss_def_index, 4);
+        // def 4's images: anim 16 at $AD05 (slot 0's byte 5) and 17 at $AD25
+        // (slot 1's byte 5). The *second* sub-image sits at $AD35 — a +$10
+        // stride (`sObject0Def $AD05` + `sObject1Def $AD25`, then `add $10`) —
+        // while the driver walks slot pages $20 apart, so sub 2's tail lands in
+        // slot 2's bytes 0-6 and slot 2's anim byte ($AD45) is 0: the ROM leaves
+        // it inert. A faithful port keeps that; the live extra parts must come
+        // from `$3A14` (bank 25 `$66000`), which is the reported gap.
+        assert_eq!(obj.slots[0].b[B_DEF], 16);
+        assert_eq!(obj.slots[1].b[B_DEF], 17);
+        assert_eq!(obj.slots[2].b[B_DEF], 0, "the ROM's stride leaves it inert");
+        assert_eq!(obj.slots[2].b, [0u8; 32], "the whole page stays zero");
+        // Plant markers: an active slot's flags, the last slot the walk must
+        // reach (count + 1 = 3), and one beyond it.
+        obj.slots[1].b[B_FLAGS] = 0xAA;
+        obj.slots[2].b[B_DEF] = 0x2A;
+        obj.slots[2].b[B_FLAGS] = 0xAA;
+        obj.slots[3].b[B_DEF] = 0x2A;
+        obj.slots[3].b[B_FLAGS] = 0xAA;
+        let fff0 = obj.fff0;
+        obj.boss_engine(0, 0, &layout, &t);
+        assert_eq!(obj.fff0, fff0.wrapping_add(1), "$FFF0 bumps every frame");
+        assert_eq!(obj.slots[1].b[B_FLAGS], 0, "$FFE7 = 0 clears the flags");
+        assert_eq!(
+            obj.slots[2].b[B_FLAGS], 0,
+            "count + 1 slots are walked, so slot 2 is staged"
+        );
+        assert_eq!(obj.slots[3].b[B_FLAGS], 0xAA, "slot 3 is never staged");
+        assert_eq!(obj.slots[3].b[B_DEF], 0x2A, "and keeps its anim byte");
+        assert!(obj.unported.contains(&0x3A14), "the bank-25 call is reported");
+    }
+
+    /// The driver's own gate: a slot whose anim byte is 0 is skipped entirely
+    /// (no handler, no `$9048` extent, no copy-back), which is how the def
+    /// images that straddle slot pages come out inert.
+    #[test]
+    fn the_boss_driver_skips_slots_with_a_zero_anim_byte() {
+        let t = tables();
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.spawn_boss(4);
+        obj.slots[1].b[B_DEF] = 0; // as the +$10 stride can leave it
+        obj.slots[1].b[B_FLAGS] = 0xAA;
+        obj.slots[1].b[B_SPRITE] = 7;
+        obj.boss_engine(0, 0, &layout, &t);
+        assert_eq!(obj.slots[1].b[B_FLAGS], 0xAA, "not even the flag clear runs");
+        assert_eq!(obj.slots[1].b[B_SPRITE], 7, "and the sprite is untouched");
+    }
+
+    /// `$9048` uses the scene-state table `$505B` (`draw_extent_for`), not the
+    /// level's `$4737`/`$4935` (`hitbox_for`) — the two disagree, and the boss
+    /// slots must get the former.
+    #[test]
+    fn the_boss_driver_fetches_the_505b_extent_record() {
+        // The synthetic `tables()` in this module has no `$505B` records, so
+        // this one needs the committed extraction.
+        let t: ObjectTables = serde_json::from_str(
+            &std::fs::read_to_string(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../extracted/objects.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.spawn_boss(4);
+        // A sprite id present in both tables with different records.
+        let sprite = (0u8..=255)
+            .find(|s| {
+                t.draw_extent_for(*s).is_some()
+                    && t.hitbox_for(0, *s).is_some()
+                    && t.draw_extent_for(*s) != t.hitbox_for(0, *s)
+            })
+            .expect("a sprite the two tables disagree on");
+        let want: [u8; 4] = t.draw_extent_for(sprite).unwrap().map(|b| b as u8);
+        obj.slots[1].b[B_SPRITE] = sprite;
+        obj.slots[1].b[B_HB_TOP] = 0xEE;
+        obj.boss_engine(0, 0, &layout, &t);
+        assert_eq!(
+            [
+                obj.slots[1].b[B_HB_TOP] as u8,
+                obj.slots[1].b[B_HB_BOTTOM],
+                obj.slots[1].b[B_HB_LEFT],
+                obj.slots[1].b[B_HB_RIGHT],
+            ],
+            want,
+            "the $505B record, not the level's"
+        );
+    }
+
+    /// `$92DF` dispatches through the *boss* table (`$92E8`) — anim 16's boss
+    /// handler is `$59322`, while the level's profile table gives `$586F5` for
+    /// the same anim. The boss path must report the former as unported, never
+    /// silently run the latter.
+    #[test]
+    fn the_boss_driver_dispatches_through_the_92e8_table() {
+        let real: ObjectTables = serde_json::from_str(
+            &std::fs::read_to_string(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../extracted/objects.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(real.boss_anim_handler(16), Some(0x5A0B9), "boss table entry 16");
+        // The table's length is not declared; the extractor takes the leading
+        // run of in-window values (29), so anim 29 is past it and must report
+        // rather than serve the next routine's data.
+        assert!(real.boss_anim_handler(28).is_some());
+        assert_eq!(real.boss_anim_handler(29), None, "past the table");
+        assert_eq!(real.behavior_for(0, 16), Some(0x586F5), "level table");
+
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_def_count = 0;
+        obj.slots[0].b[B_DEF] = 16;
+        obj.boss_engine(0, 0, &layout, &real);
+        assert!(
+            obj.unported.contains(&0x5A0B9),
+            "the boss handler is reported"
+        );
+        assert!(
+            !obj.unported.contains(&0x586F5),
+            "and the level's handler for the same anim is not run"
+        );
+    }
+
+    /// `$0652`: while `sSceneState & $F0 != 0` the frame's object pass is the
+    /// boss driver *instead of* `$8000` — the level engine's own tail (`$817D`
+    /// latches the camera into `prev_cam_x`, then the spawn scan) must not run.
+    #[test]
+    fn a_parked_frame_runs_the_boss_driver_and_not_the_level_engine() {
+        let t = tables();
+        let layout = blank_layout();
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.configure(0);
+        obj.boss_def_count = 0;
+        obj.slots[0].b[B_DEF] = 1;
+        let mario = MarioContact::default();
+
+        obj.step(0x40, 0x40, &layout, &t, &mario, true);
+        assert_eq!(obj.prev_cam_x, 0, "$8000's tail did not run");
+        assert_eq!(obj.fff0, 1, "the boss driver's $FFF0 bump did");
+
+        obj.step(0x40, 0x40, &layout, &t, &mario, false);
+        assert_eq!(obj.prev_cam_x, 0x40, "unparked, the level engine runs");
+        assert_eq!(obj.fff0, 1, "and does not touch $FFF0 on an even phase");
     }
 
     /// `$C014`: the bank-3 draw returns before drawing a slot whose
