@@ -49,10 +49,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut replay_file: Option<PathBuf> = None;
     let mut filmstrip: Option<PathBuf> = None;
     let mut play_mode = false;
+    let mut keys_tape: Option<String> = None;
     let mut view = (SCREEN_W, SCREEN_H);
     let mut args = env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
+            // A deterministic one-char-per-frame tape: `.` idle, R/L/U/D hold a
+            // direction, A/B the buttons, S start, E select. The run stops when
+            // the tape runs out and prints where it got to, so a play-test
+            // report becomes reproducible instead of a guess.
+            "--keys" => {
+                keys_tape = Some(args.next().ok_or("--keys needs a tape")?);
+            }
             "--level" => {
                 level = Some(args.next().ok_or("--level needs a value")?.parse::<u8>()?);
             }
@@ -235,6 +243,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // mid-scene — but the byte is a real input: a nonzero high nibble makes
         // `$0B2A` park the camera and the frame loop run the alternate driver.
         cam.scene_state = manifest.header.scene_state;
+        // `--mario`/`--camera` place Mario and the viewport directly. Without
+        // them a spot deep in a long level is only reachable by playing there,
+        // and a scripted "hold right" tape just walks into the level's first
+        // step — so a spot-specific report could not be reproduced at all.
+        if let Some((mx, my, _)) = mario {
+            sim.x = mx;
+            sim.y = my;
+            cam.prev_mario_y_lo = my as u8;
+        }
+        if let Some((cx, cy)) = camera {
+            cam.x = cx;
+            cam.y = cy;
+        }
         if let Some(m) = scene_map.as_ref() {
             if m.len() == 48 {
                 cam.scene_map.clone_from(m);
@@ -258,6 +279,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             obj,
             edge_map,
             scene_map,
+            keys_tape.clone(),
         );
     }
     if window_mode {
@@ -2116,8 +2138,35 @@ fn parse_slot_hex(s: &str) -> Option<[u8; 32]> {
     Some(out)
 }
 
+/// Where a `--keys` run got to: enough to tell "never reached the pipe" from
+/// "reached it and nothing happened".
+fn print_play_state(
+    why: &str,
+    frame: u64,
+    sim: &PlayerSim,
+    cam: &sml2_core::camera::CameraSim,
+    obj: &sml2_core::objects::ObjectSim,
+) {
+    println!(
+        "{why} at frame {frame}: mario=({:#06X},{:#06X}) state={:?} dead={} camera=({:#06X},{:#06X}) transition={} scene_state={:#04X} scene_id={:#04X} edge={:#04X} boss_mode={} unported={:?}",
+        sim.x,
+        sim.y,
+        sim.state(),
+        sim.dead,
+        cam.x,
+        cam.y,
+        cam.transition,
+        cam.scene_state,
+        cam.scene_id,
+        cam.edge_byte(),
+        cam.boss_mode(),
+        obj.unported,
+    );
+}
+
 /// Interactive play mode: the ported player physics + camera drive the
-/// viewport (arrows move, Z/Space = A, X/Shift = B, Q/ESC quits).
+/// viewport (arrows move, Z/Space = A, X/Shift = B, Q/ESC quits). With
+/// `--keys` the input comes from the tape instead, so the run is scriptable.
 #[allow(clippy::too_many_arguments)]
 fn run_play(
     manifest: &LevelManifest,
@@ -2134,6 +2183,7 @@ fn run_play(
     mut obj: sml2_core::objects::ObjectSim,
     edge_map: Option<Vec<u8>>,
     scene_map: Option<Vec<u8>>,
+    keys_tape: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (vw, vh) = view;
     if let Some(e) = edge_map.as_ref() {
@@ -2178,14 +2228,16 @@ fn run_play(
     let mut prev_b = false;
     let mut prev_start = false;
     let mut prev_select = false;
+    let mut tape_i = 0usize;
+    let mut frame_n: u64 = 0;
     obj.configure(manifest.level_id);
     let obj_tables = spr.as_ref().map(|s| s.tables.clone());
     while window.is_open() && !window.is_key_down(Key::Escape) && !window.is_key_down(Key::Q) {
-        let a_down = window.is_key_down(Key::Z) || window.is_key_down(Key::Space);
-        let b_down = window.is_key_down(Key::X) || window.is_key_down(Key::LeftShift);
-        let start_down = window.is_key_down(Key::Enter);
-        let select_down = window.is_key_down(Key::Backspace);
-        let keys = PlayerKeys {
+        let mut a_down = window.is_key_down(Key::Z) || window.is_key_down(Key::Space);
+        let mut b_down = window.is_key_down(Key::X) || window.is_key_down(Key::LeftShift);
+        let mut start_down = window.is_key_down(Key::Enter);
+        let mut select_down = window.is_key_down(Key::Backspace);
+        let mut keys = PlayerKeys {
             right: window.is_key_down(Key::Right),
             left: window.is_key_down(Key::Left),
             up: window.is_key_down(Key::Up),
@@ -2195,6 +2247,32 @@ fn run_play(
             start: start_down,
             select: select_down,
         };
+        if let Some(tape) = keys_tape.as_deref() {
+            let k = match tape.as_bytes().get(tape_i) {
+                Some(&k) => k,
+                None => {
+                    print_play_state("tape end", frame_n, &sim, &cam, &obj);
+                    break;
+                }
+            };
+            tape_i += 1;
+            let d = k as char;
+            keys = PlayerKeys {
+                right: d == 'R',
+                left: d == 'L',
+                up: d == 'U',
+                down: d == 'D',
+                a: d == 'A',
+                b: d == 'B',
+                start: d == 'S',
+                select: d == 'E',
+            };
+            a_down = keys.a;
+            b_down = keys.b;
+            start_down = keys.start;
+            select_down = keys.select;
+        }
+        frame_n += 1;
         let a_pressed = a_down && !prev_a;
         prev_a = a_down;
         let b_pressed = b_down && !prev_b;

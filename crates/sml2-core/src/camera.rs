@@ -743,6 +743,37 @@ mod tests {
         assert_eq!(c.boss_defeated, 0x05, "and the clear still runs");
     }
 
+    /// The play-test's pipe, against level `$0D`'s real data: its scene tile
+    /// (`$10`) sits at X-high-nibble 14, Y-high-nibble 0, and that cell's edge
+    /// byte is `$0D` — bit 0, the right-edge arm. So the entry *is* available:
+    /// with the camera in that cell and Mario far enough right of it, `$0B5E`
+    /// must set the transition.
+    #[test]
+    fn level_13_pipe_cell_fires_the_right_edge_arm() {
+        let ed = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../extracted/levels/level14.edge.bin"
+        ))
+        .unwrap();
+        let sc = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../extracted/levels/level14.scene.bin"
+        ))
+        .unwrap();
+        assert_eq!(sc[14], 0x10, "the pipe's scene tile, at (Yhi 0, Xhi 14)");
+        assert_eq!(ed[14] & 1, 1, "and that cell carries the right-edge bit");
+        let mut c = CameraSim::new(0xEB0, 0x0000);
+        c.edge_map.copy_from_slice(&ed[..48]);
+        c.scene_map = sc.to_vec();
+        assert_eq!(c.edge_byte(), 0x0D, "read at the camera's own cell");
+        // Mario's screen X is (marioX - camX) + 96; the arm needs >= $A1.
+        let mut sim = PlayerSim::default();
+        sim.x = 0xEB0 + 0x41;
+        c.step(&mut sim);
+        assert_eq!(c.transition, 1, "$0B5E starts the right transition");
+        assert_eq!(c.scene_id, 0x10, "and $0F0B latches the pipe's scene");
+    }
+
     /// `$0B39`: the index is `(Yhi & $0F) * 16 + (Xhi & $0F)` — the X *cell*
     /// in the low nibble (the ROM `or`s the X high byte, not the low one).
     #[test]
