@@ -30,7 +30,7 @@ use sml2_core::map::MapNodes;
 use sml2_core::object::ObjectTables;
 use sml2_core::objects::FireHit;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
-use sml2_core::scene::{boss_def_index, SceneScripts, SceneVm};
+use sml2_core::scene::{SceneScripts, SceneVm};
 use sml2_core::video;
 
 /// Native GB screen; the HUD strip and the parity checks are anchored to it.
@@ -1419,13 +1419,12 @@ fn run_replay(
             // $8000's dispatcher gate reads sMarioDead; the interaction pass
             // then writes it back.
             obj.mario_dead = sim.dead;
-            // `$0EB0`'s scene branch and its `$3C94` spawn hand-off: the park
-            // (which is what `$0652` reads to pick the boss driver) and the
-            // level-$18 song. The captures never take it (level 1's scene map
-            // is all zeros), so this cannot move the gate.
-            if let Some(music) = cam.begin_scene_load(manifest.level_id) {
-                sim.music_request = music;
-                obj.spawn_boss(boss_def_index(manifest.level_id, cam.boss_fight_phase));
+            // `$0EB0`'s scene branch is blocked on the unported bank-15
+            // `$3C000` handlers (the only writers that clear `sSceneState`), so
+            // it is reported rather than taken: taking it would park the camera
+            // and swap the object pass to a boss driver with no boss.
+            if cam.take_blocked_scene_load() {
+                obj.note_blocked_scene_load();
             }
             obj.step(
                 cam.x,
@@ -2273,10 +2272,10 @@ fn run_play(
             if !frozen {
                 let mario = build_contact(&sim, &keys, cam.pan_timer);
                 obj.mario_dead = sim.dead;
-                // `$0EB0`'s scene branch + `$3C94` spawn; see the replay loop.
-                if let Some(music) = cam.begin_scene_load(manifest.level_id) {
-                    sim.music_request = music;
-                    obj.spawn_boss(boss_def_index(manifest.level_id, cam.boss_fight_phase));
+                // `$0EB0`'s scene branch: reported, not taken; see the replay
+                // loop and `CameraSim::take_blocked_scene_load`.
+                if cam.take_blocked_scene_load() {
+                    obj.note_blocked_scene_load();
                 }
                 obj.step(
                     cam.x,

@@ -61,12 +61,11 @@ pub struct CameraSim {
     /// also what every first-arrival fight uses.
     pub boss_fight_phase: u8,
     /// Set by `$0EB0`'s scene branch inside [`finish_transition`] and consumed
-    /// by the frame loop in [`begin_scene_load`]: the branch needs `sCurLevel`
-    /// and has to hand the spawn to the object sim, neither of which the camera
-    /// has.
+    /// by the frame loop (`take_blocked_scene_load`): the branch is *not*
+    /// taken, because the handlers that would clear `$F0` are unported.
     ///
     /// [`finish_transition`]: CameraSim::finish_transition
-    /// [`begin_scene_load`]: CameraSim::begin_scene_load
+    /// [`take_blocked_scene_load`]: CameraSim::take_blocked_scene_load
     pub scene_load_pending: bool,
     /// `sBossDefeated` — a defeated boss freezes the camera until cleared.
     pub boss_defeated: u8,
@@ -584,27 +583,30 @@ impl CameraSim {
         self.scene_state & 0xF0 != 0
     }
 
-    /// `$0EB0`'s scene branch and its `$3C94` hand-off, performed by the frame
-    /// loop (see [`finish_transition`]): sets the `$F0` park and returns the
-    /// music request `$0EB0` stores in `sMusicRequest`/`sLevelSong` — 32, or
-    /// `sBossFightPhase + 33` on level `$18` (the Wario castle). `None` when no
-    /// scene load is pending. The spawn itself (`$3C94` -> bank 2 `$8D9C`) is
-    /// the caller's `ObjectSim::spawn_boss(def_index)`.
+    /// `$0EB0`'s scene branch, **deliberately not taken** — reported instead.
     ///
-    /// [`finish_transition`]: CameraSim::finish_transition
-    pub fn begin_scene_load(&mut self, level_id: u8) -> Option<u8> {
+    /// The ROM, on a transition whose `sSceneState & $0F != 0`, sets
+    /// `sSceneState = $F0`, raises LCDC, starts the boss song and calls `$3C94`
+    /// (bank 2 `$8D9C`) to stage a boss fight. `$F0` is also what `$0B2A` reads
+    /// to park the camera and `$0652` reads to swap the frame's object pass for
+    /// the boss driver.
+    ///
+    /// Every writer that later *clears* that `$F0` — the six sites that store
+    /// `sSceneState` — is in the bank-15 `$3C000` map/screen handlers, which are
+    /// **unported** (see `map_zone_screen_loaders`). Taking the branch here
+    /// therefore parks the camera for good (`CameraSim::step` returns early
+    /// while `scene_state & $F0 != 0`) and switches the object pass to a boss
+    /// driver with no boss, which is exactly "the pipe does nothing" — a
+    /// play-test caught it. So this consumes the request and reports it, and
+    /// the scene VM (`$20A4`, which *is* ported) keeps handling the transition
+    /// the way it did before. Turn this into the real branch only once the
+    /// bank-15 handlers exist.
+    pub fn take_blocked_scene_load(&mut self) -> bool {
         if !self.scene_load_pending {
-            return None;
+            return false;
         }
         self.scene_load_pending = false;
-        // `ld a,240 / ld [sSceneState],a`; the ROM's `call DisableVBlank` and
-        // `ld a,195 / ldh [rLCDC],a` have no port counterpart (no VRAM).
-        self.scene_state = 0xF0;
-        Some(if level_id == 0x18 {
-            self.boss_fight_phase.wrapping_add(33)
-        } else {
-            32
-        })
+        true
     }
 
     /// `$0F0B`: latch the scene id under Mario from `sSceneMap` ($A900).
@@ -651,39 +653,26 @@ mod tests {
         c
     }
 
-    /// `$0EB0`'s scene branch: a transition that ends with a non-zero low
-    /// nibble in `sSceneState` arms the `$F0` park, and the frame loop then
-    /// takes the music request and the spawn (`begin_scene_load`).
+    /// `$0EB0`'s scene branch is reported, never taken: taking it would park
+    /// `step` (via `scene_state & $F0`) and swap the object pass for the boss
+    /// driver while the handlers that clear `$F0` — the bank-15 `$3C000` ones —
+    /// are still unported. A play-test regression caught exactly that.
     #[test]
-    fn ending_a_transition_on_a_scene_arms_the_f0_park() {
+    fn the_scene_branch_is_reported_and_does_not_park_the_camera() {
         let mut c = cam_at(80, 448);
-        c.scene_state = 0x0F; // a pipe on a scene tile
+        c.scene_state = 0x0F; // a pipe/scene arm
         c.finish_transition();
-        assert!(c.scene_load_pending, "$0EB0's branch armed");
-        assert_eq!(c.begin_scene_load(1), Some(32), "`sMusicRequest`/`sLevelSong` 32");
-        assert_eq!(c.scene_state, 0xF0, "the park `$0652` reads");
-        assert!(!c.scene_load_pending, "consumed");
-        assert_eq!(c.begin_scene_load(1), None, "and it does not fire twice");
+        assert!(c.scene_load_pending, "$0EB0's branch was reached");
+        assert!(c.take_blocked_scene_load(), "and it is reported");
+        assert_eq!(c.scene_state, 0x0F, "but the $F0 park is NOT taken");
+        assert!(!c.boss_mode(), "so the object pass stays the level engine");
+        assert!(!c.scene_load_pending, "consumed once");
+        assert!(!c.take_blocked_scene_load(), "and not twice");
         assert_eq!(c.sfx0, 5, "$0EB0's own tail still runs");
-        assert!(c.boss_mode(), "$0652 now picks the boss driver");
-        assert!(!cam_at(80, 448).boss_mode(), "and only then");
-    }
-
-    /// Only level `$18` (the Wario castle) overrides the scene song, with
-    /// `sBossFightPhase + 33` — the ROM's `cp $18 / jr nz,$0EE4` tail.
-    #[test]
-    fn the_wario_castle_scene_song_is_the_fight_phase() {
-        let mut c = cam_at(80, 448);
-        c.scene_state = 0x01;
-        c.boss_fight_phase = 2;
-        c.finish_transition();
-        assert_eq!(c.begin_scene_load(0x18), Some(35));
-
-        let mut c = cam_at(80, 448);
-        c.scene_state = 0x01;
-        c.boss_fight_phase = 2;
-        c.finish_transition();
-        assert_eq!(c.begin_scene_load(0x17), Some(32), "other levels keep 32");
+        // The camera still steps: a parked one returns immediately.
+        let mut sim = PlayerSim::default();
+        c.step(&mut sim);
+        assert!(c.scene_state == 0x0F, "still not parked after a step");
     }
 
     /// `$0EB0`'s two arms are separate `if`s, not if/else: the `sBossDefeated`

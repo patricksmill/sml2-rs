@@ -1562,3 +1562,33 @@ Still open: boss anims 1/3-28, the Mario-screen helpers (`$B296`/`$B2C2`/`$B27C`
 `$B2DB`) which need `sMarioScreenX/Y`'s ROM writer ported first (`home.asm:2096`,
 `main.asm:446`/`557`), the shared tails `$9435`/`$9443`/`$9725`, and the `$66092` OAM table.
 
+## Regression and fix: the `$0EB0` scene branch parked the camera — 2026-10-14
+
+A play-test reported that sideways (scene) pipes do nothing. It was this session's own
+change. `$0EB0`'s branch — taken when a transition ends with `sSceneState & $0F != 0` —
+sets `sSceneState = $F0`, starts the boss song and calls `$3C94` (bank 2 `$8D9C`) to stage
+a fight. `$F0` is also what `$0B2A` reads to park the camera and `$0652` reads to swap the
+frame's object pass for the boss driver.
+
+Taking it is only safe if something later clears that `$F0`. All six writers of
+`sSceneState` that do so are in the bank-15 `$3C000` map/screen handlers, which are
+**unported** (`map_zone_screen_loaders`) — so the port parked the camera for good
+(`CameraSim::step` early-returns while `scene_state & $F0 != 0`), swapped the object pass
+to a boss driver with no boss, and the pipe appeared to do nothing. The earlier code had
+deliberately kept this a *non*-branch with the reason in its doc comment; this session
+removed that guard while porting the boss chain, and its own tests passed because they
+tested the branch in isolation, not the consequence.
+
+The branch is now **reported, never taken**: `finish_transition` still arms the pending
+flag, and the frame loops consume it through `CameraSim::take_blocked_scene_load` and hand
+it to `ObjectSim::note_blocked_scene_load` (which reports `$0EB0` in the same `unported`
+list the handlers use, so it is visible in play mode and cannot silently regress). The
+scene VM (`$20A4`, which *is* ported) keeps handling transitions exactly as it did before.
+The music writes and the `$3C94` hand-off stay in the code path they belong to.
+
+**Consequence for the boss work**: the boss *entry* runs through this same branch, so it is
+gated on `map_zone_screen_loaders` — the bank-15 handlers are a prerequisite for a boss
+that can be reached in play, not an optional follow-up. Porting a boss's handlers is still
+worthwhile (they are what the fight does), but a play-test cannot reach a fight until the
+bank-15 side exists.
+

@@ -833,6 +833,15 @@ impl ObjectSim {
         st.b[B_SPRITE] = 7; // $9624
     }
 
+    /// `$0EB0`'s scene branch could not be taken: its counterpart (the bank-15
+    /// `$3C000` handlers that clear `sSceneState`) is unported, and taking it
+    /// would park the camera and swap this pass for the boss driver. Reported
+    /// through the same `unported` list the handlers use, so it is visible in
+    /// play mode and cannot silently regress.
+    pub fn note_blocked_scene_load(&mut self) {
+        self.note_unported(0x0EB0);
+    }
+
     /// `$8DA9` (bank 2) — the alternate per-frame object pass that replaces the
     /// `$8000` engine during a boss fight (`$0652` selects it while
     /// `sSceneState & $F0 != 0`; `$0EB0` -> `$3C94` -> `$8D9C` filled the def
