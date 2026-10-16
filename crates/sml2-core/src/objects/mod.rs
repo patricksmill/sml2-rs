@@ -110,6 +110,7 @@ mod boss_flash_paths;
 mod boss_sprite_cycle;
 mod boss_reverse_picker;
 mod dispatch;
+mod handler_0x586eb;
 mod helpers;
 mod interaction;
 mod items;

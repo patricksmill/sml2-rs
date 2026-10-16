@@ -33,6 +33,7 @@ impl ObjectSim {
             0x5B1C8 => self.handler_grower92(st),
             0x5B241 => self.handler_floater94(st),
             0x5B28C => self.handler_floater95(st),
+            0x586EB => self.handler_0x586eb(st),
             // $58100 — a bare `ret` (ROM bytes: the single byte `$C9` right after
             // the 192-byte mode-A table at $58040). Nineteen mode-A indices and
             // eleven mode-B ones dispatch here, and it is a *real* target, not a
