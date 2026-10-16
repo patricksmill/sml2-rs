@@ -2,6 +2,7 @@
 
 pub mod camera;
 pub mod collision;
+pub mod divider;
 pub mod level;
 pub mod level_timer;
 pub mod map;
