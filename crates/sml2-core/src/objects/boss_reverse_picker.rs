@@ -1,23 +1,32 @@
-//! Bank 2 reverse movement profiles, read by `$71D6` and `$71E4`.
+//! Bank 2 reverse movement profiles, read by `$71C8`, `$71D6`, and `$71E4`.
 
 use super::{ObjectSim, Staging};
 
-/// ROM `$B20E..$B223` (CPU `$720E..$7223`).
-const REVERSE_STEPS: [u8; 22] = [
-    3, 2, 3, 3, 2, 3, 3, 3, 2, 3, 2, 1, 2, 2, 1, 2, 1, 1, 1, 0, 0, 0,
+/// ROM `$B1FF..$B223` (CPU `$71FF..$7223`).
+const REVERSE_STEPS: [u8; 37] = [
+    3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 3, 2, 3, 2, 1, 2, 2,
+    1, 2, 1, 1, 1, 0, 0, 0,
 ];
 
 impl ObjectSim {
-    /// `$B1D6`: read the full profile, then advance `B_PHASE` unless it equals 21.
-    /// The caller supplies the ROM's reachable phase range `0..=21`.
-    pub(super) fn boss_reverse_picker_b1d6(&self, st: &mut Staging) -> (u8, u8) {
-        self.step_picker(st, &REVERSE_STEPS, 21)
+    /// `$B1C8`: read the full profile, then advance `B_PHASE` unless it equals 36.
+    /// The caller supplies the ROM's reachable phase range `0..=36`.
+    // Deferred: the only caller is anim 23's handler at `$ACB2`.
+    #[allow(dead_code)]
+    pub(super) fn boss_reverse_picker_b1c8(&self, st: &mut Staging) -> (u8, u8) {
+        self.step_picker(st, &REVERSE_STEPS, 36)
     }
 
-    /// `$B1E4`: start nine bytes into the same profile, with phase cap 12.
+    /// `$B1D6`: start 15 bytes into the profile, with phase cap 21.
+    /// The caller supplies the ROM's reachable phase range `0..=21`.
+    pub(super) fn boss_reverse_picker_b1d6(&self, st: &mut Staging) -> (u8, u8) {
+        self.step_picker(st, &REVERSE_STEPS[15..], 21)
+    }
+
+    /// `$B1E4`: start 24 bytes into the profile, with phase cap 12.
     /// The caller supplies the ROM's reachable phase range `0..=12`.
     pub(super) fn boss_reverse_picker_b1e4(&self, st: &mut Staging) -> (u8, u8) {
-        self.step_picker(st, &REVERSE_STEPS[9..], 12)
+        self.step_picker(st, &REVERSE_STEPS[24..], 12)
     }
 }
 
@@ -25,6 +34,34 @@ impl ObjectSim {
 mod tests {
     use super::*;
     use crate::objects::{B_PHASE, B_SCRY};
+
+    #[test]
+    fn helper_0x0b1c8_full_profile_reads_before_increment_and_caps() {
+        let sim = ObjectSim::new(vec![], 0);
+        let mut st = Staging::default();
+        st.b = [0xA5; 32];
+        st.b[B_PHASE] = 0;
+        // Independently transcribed ROM bytes $B1FF..$B223. The first 15 cells
+        // are reached only through this entry.
+        for (phase, step) in [
+            0x03, 0x02, 0x03, 0x03, 0x02, 0x03, 0x03, 0x02, 0x03, 0x03, 0x02, 0x03, 0x03, 0x02,
+            0x03, 0x03, 0x02, 0x03, 0x03, 0x02, 0x03, 0x03, 0x03, 0x02, 0x03, 0x02, 0x01, 0x02,
+            0x02, 0x01, 0x02, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut expected = st.b;
+            expected[B_PHASE] = (phase as u8 + 1).min(36);
+            assert_eq!(sim.boss_reverse_picker_b1c8(&mut st), (step, 36));
+            assert_eq!(st.b, expected, "phase {phase}");
+        }
+        let capped = st.b;
+        for _ in 0..3 {
+            assert_eq!(sim.boss_reverse_picker_b1c8(&mut st), (0, 36));
+            assert_eq!(st.b, capped);
+        }
+    }
 
     #[test]
     fn helper_0x0b1d6_full_profile_reads_before_increment_and_caps() {
