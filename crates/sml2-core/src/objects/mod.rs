@@ -124,6 +124,7 @@ mod wario_phase1;
 mod wario20;
 #[cfg(test)]
 mod wario20_integration;
+mod wario21;
 
 #[derive(Debug, Clone)]
 pub struct ObjectSim {
@@ -188,6 +189,8 @@ pub struct ObjectSim {
     pub fade_timer: u16,
     /// Entry-frame `$A254` input from the level countdown owner.
     pub timer_low: u8,
+    /// Sampled hardware `$FF04`, supplied by the runtime clock.
+    pub div: u8,
     pub saved_frame_state: u8,
     pub saved_type: u8,
     pub boss_def_index: u8,
@@ -273,6 +276,7 @@ impl ObjectSim {
             boss_slot_ptr_lo: 0,
             fade_timer: 0,
             timer_low: 0,
+            div: 0,
             saved_frame_state: 0,
             saved_type: 0,
             boss_def_index: 0,

@@ -24,6 +24,9 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod divider_clock;
+use divider_clock::{NativeDividerClock, VirtualDividerClock};
+
 use serde::Deserialize;
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest, LAYOUT_HEIGHT, LAYOUT_WIDTH};
 use sml2_core::map::MapNodes;
@@ -1343,7 +1346,11 @@ fn run_replay(
     let mut gap_ok = true;
     let mut prev_a = f0.a;
     let mut prev_b = f0.b;
+    // The first snapshot has explicit virtual DIV phase zero; the corpus has
+    // no initial counter or within-frame sample timing evidence.
+    let mut divider_clock = VirtualDividerClock::new(0);
     for (i, f) in frames.iter().enumerate().skip(1) {
+        divider_clock.advance_tick();
         let keys = PlayerKeys {
             right: f.right,
             left: f.left,
@@ -1522,6 +1529,7 @@ fn run_replay(
             // $8000's dispatcher gate reads sMarioDead; the interaction pass
             // then writes it back.
             obj.sample_player_inputs(&sim);
+            obj.div = divider_clock.sample();
             // `$0EB0`'s scene branch: taken only for a def whose handlers are
             // all ported (the fight then ends in the level clear, which reseeds
             // `sSceneState` and so clears the park); every other def is
@@ -1579,6 +1587,9 @@ fn run_replay(
         // to compare against. So a state-`$0C` stretch in `g.seq` stays inside
         // `g.total` here and is *accounted for*, not simulated.
         if let Some(g) = &f.gap {
+            // The trigger record already counted one tick; the gap includes
+            // its entire fade/map duration, not just the unmodelled map tail.
+            divider_clock.advance_ticks(g.total.saturating_sub(1));
             let fade_capture = g.seq.first().copied();
             let modeled = 192u64;
             let acct: u64 = 1 + g.seq.iter().map(|s| s[1]).sum::<u64>();
@@ -2316,6 +2327,8 @@ fn run_play(
     let arena_layout = load_arena_layout();
     let mut layout_live = layout.clone();
     use minifb::{Key, Window, WindowOptions};
+    // One free-running hardware-input origin spans pauses, fades and reloads.
+    let divider_clock = NativeDividerClock::new(0);
     let mut window = Window::new(
         &format!(
             "sml2 level {} — play (arrows move, Z jump, X run, ENTER pause, Q quits)",
@@ -2472,6 +2485,7 @@ fn run_play(
             if !frozen {
                 let mario = build_contact(&sim, &keys, cam.scroll_pan);
                 obj.sample_player_inputs(&sim);
+                obj.div = divider_clock.sample();
                 // `$0EB0`'s scene branch; see the replay loop.
                 if cam.scene_load_pending {
                     let def_index = boss_def_index(manifest.level_id, cam.boss_fight_phase);

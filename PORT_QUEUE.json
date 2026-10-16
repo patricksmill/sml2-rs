@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "12 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "13 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "remaining_handler_classes",
@@ -138,7 +138,8 @@
     "boss_wario_child22",
     "boss_wario_transition21",
     "level_countdown_timer",
-    "boss_wario_phase1_exit_helper"
+    "boss_wario_phase1_exit_helper",
+    "boss_entry_object_scratch_reset"
    ],
    "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
    "status": "pending"
@@ -166,7 +167,8 @@
     "main.asm:$AACA"
    ],
    "dependencies": [
-    "hardware_divider_input"
+    "hardware_divider_input",
+    "boss_entry_object_scratch_reset"
    ],
    "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
    "status": "pending"
@@ -187,15 +189,28 @@
   },
   {
    "id": "hardware_divider_input",
-   "title": "Provide sampled free-running DIV input to Wario child anim21/24 and existing map consumers",
+   "title": "Finish shared sampled DIV input through normal map and game-state callers; level/Wario input is verified",
    "asm_refs": [
-    "main.asm:$AB1D",
-    "home.asm:$01E5",
-    "home.asm:$0300",
-    "home.asm:$2729"
+    "main.asm:$3C13E",
+    "main.asm:$AB1D"
+   ],
+   "dependencies": [
+    "wario_divider_input"
+   ],
+   "verification_gate": "Source-derived input timing, both sampled parities, and native/replay input integration tests",
+   "status": "pending"
+  },
+  {
+   "id": "boss_entry_object_scratch_reset",
+   "title": "Clear source AF00-AFFF scratch on boss entry without clearing external state or the original level stream",
+   "asm_refs": [
+    "home.asm:$3A28",
+    "main.asm:$8D9C",
+    "main.asm:$EC40",
+    "main.asm:$EC31"
    ],
    "dependencies": [],
-   "verification_gate": "Source-derived input timing, both sampled parities, and native/replay input integration tests",
+   "verification_gate": "Dirty scratch byte reset and external-state preservation, accurate zero stream pointer representation, normal Wario entry and full core/runtime/sweep",
    "status": "pending"
   }
  ],

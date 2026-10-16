@@ -41,3 +41,15 @@ and sampling-time evidence, which the frozen corpus does not currently supply.
   the runtime clock.
 - Runtime/native/replay input wiring is a separate integration step; a tested
   counter alone does not complete queue `hardware_divider_input`.
+
+## Runtime virtual-time policy
+
+Native play samples total monotonic elapsed time from one explicit counter-zero
+origin established before creating its play window; pauses, fades and level
+reloads do not restart it. Replay instead chooses counter zero at its initial
+snapshot and advances virtual time at the repository's nominal 60 Hz, including
+frozen/dead records. A compressed gap advances its entire `total - 1` remaining
+ticks once because its triggering record already advanced one tick. Conversion
+uses total ticks, avoiding accumulated fractional-second rounding. These are
+explicit runtime origins and replay policy, not evidence of original console
+DIV phase; the frozen corpus has no initial phase or sampling-time evidence.
