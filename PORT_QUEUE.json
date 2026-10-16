@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "9 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "12 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "remaining_handler_classes",
@@ -134,7 +134,10 @@
     "main.asm:$A9EA",
     "main.asm:$AA60"
    ],
-   "dependencies": [],
+   "dependencies": [
+    "boss_wario_child22",
+    "boss_wario_transition21"
+   ],
    "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
    "status": "pending"
   },
@@ -150,6 +153,47 @@
     "boss_wario_anim20"
    ],
    "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+   "status": "pending"
+  },
+  {
+   "id": "boss_wario_transition21",
+   "title": "Port Wario child anim21/24 and consume the boss-transition latch",
+   "asm_refs": [
+    "main.asm:$AAA5",
+    "main.asm:$AAA8",
+    "main.asm:$AACA"
+   ],
+   "dependencies": [
+    "hardware_divider_input"
+   ],
+   "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
+   "status": "pending"
+  },
+  {
+   "id": "boss_wario_phase_handoff",
+   "title": "Connect Wario phase exits to scene state and dynamically created object streams",
+   "asm_refs": [
+    "main.asm:$A96D",
+    "main.asm:$AC55"
+   ],
+   "dependencies": [
+    "boss_wario_anim20",
+    "boss_wario_anim23"
+   ],
+   "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
+   "status": "pending"
+  },
+  {
+   "id": "hardware_divider_input",
+   "title": "Provide sampled free-running DIV input to Wario child anim21/24 and existing map consumers",
+   "asm_refs": [
+    "main.asm:$AB1D",
+    "home.asm:$01E5",
+    "home.asm:$0300",
+    "home.asm:$2729"
+   ],
+   "dependencies": [],
+   "verification_gate": "Source-derived input timing, both sampled parities, and native/replay input integration tests",
    "status": "pending"
   }
  ],

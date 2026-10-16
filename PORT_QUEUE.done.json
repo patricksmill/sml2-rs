@@ -579,6 +579,18 @@
    "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
    "status": "done",
    "detail": "ld a,[sMarioDead] / cp $FF / ret z - the guard returns to the driver, so each slot is still rendered and written back unchanged. Console-verified: all three records stop changing on the frame Mario dies (f462 on the level 13 tape) and hold through the death animation."
+  },
+  {
+   "id": "boss_wario_child22",
+   "title": "Port Wario falling-child anim22 and its boss-delay producer",
+   "asm_refs": [
+    "main.asm:$AB30",
+    "main.asm:$AB4D",
+    "main.asm:$B157"
+   ],
+   "dependencies": [],
+   "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
+   "status": "done"
   }
  ]
 }

@@ -115,6 +115,7 @@ mod stream;
 #[cfg(test)]
 mod tests;
 mod walkers;
+mod wario_child22;
 
 #[derive(Debug, Clone)]
 pub struct ObjectSim {
@@ -181,6 +182,8 @@ pub struct ObjectSim {
     pub boss_hits_remaining: u8,
     pub boss_sprite: u8,
     pub boss_timer_reload: u8,
+    /// `$AFD0`: Wario's falling-child completion latch.
+    pub boss_delay: u8,
     pub boss_defeated: bool,
     pub boss_slots_raw: [u8; 512],
     pub boss_oam: Vec<BossOamCell>,
@@ -256,6 +259,7 @@ impl ObjectSim {
             boss_hits_remaining: 0,
             boss_sprite: 0,
             boss_timer_reload: 0,
+            boss_delay: 0,
             boss_defeated: false,
             boss_slots_raw: [0; 512],
             boss_oam: Vec::new(),
