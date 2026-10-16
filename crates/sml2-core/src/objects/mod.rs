@@ -104,6 +104,7 @@ mod staging;
 pub use staging::*;
 use staging::{BOUNCE_SPEED, DEATH_RISE_74AB, FALL_SPEED, HOVER_SPEED, SPIN_WOBBLE, STEP_74A1};
 mod boss;
+mod boss_sprite_cycle;
 mod dispatch;
 mod helpers;
 mod interaction;
