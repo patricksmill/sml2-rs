@@ -3,6 +3,7 @@
 pub mod camera;
 pub mod collision;
 pub mod level;
+pub mod level_timer;
 pub mod map;
 pub mod map_sim;
 pub mod object;

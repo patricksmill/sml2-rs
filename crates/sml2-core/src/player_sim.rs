@@ -301,6 +301,12 @@ pub struct PlayerSim {
     pub moon: u8,
     /// Entry-frame snapshot of `$A2B3`; CameraSim owns the draw-time countdown.
     pub pan_timer: u8,
+    /// `$A254/$A255/$A24B/$A53F`: level countdown and its warning latch.
+    pub level_timer: crate::level_timer::LevelTimer,
+    /// `$A469`: acknowledged playing song, owned by the sound driver.
+    pub current_song: u8,
+    /// `$A292`: the level's music selection.
+    pub level_song: u8,
     /// `sMoonFloatTimer` ($A2B2) — the bit-3 timed float's budget: 50 armed on
     /// the ground (`$104A`), 0 when A is released (`$1050`), cleared by a
     /// ceiling bonk (`$15DA`).
@@ -580,6 +586,9 @@ impl PlayerSim {
             swim: false,
             moon: 0,
             pan_timer: 0,
+            level_timer: crate::level_timer::LevelTimer::new(0),
+            current_song: 0,
+            level_song: 0,
             moon_float_timer: 0,
             moon_jump_pose_timer: 0,
             powerup: 1,

@@ -220,6 +220,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if play_mode {
         let mut sim = PlayerSim::new();
+        seed_level_timer(&mut sim, &manifest);
         sim.powerup = 0;
         sim.x = manifest.header.mario_spawn_x;
         sim.y = manifest.header.mario_spawn_y;
@@ -1269,6 +1270,7 @@ fn run_replay(
     let nodes = load_map_nodes();
     let mut sim = PlayerSim::new();
     sim.powerup = 0; // level-0 spawn starts small
+    seed_level_timer(&mut sim, manifest);
     let f0 = &frames[0];
     sim.x = f0.x;
     sim.y = f0.y;
@@ -1398,6 +1400,7 @@ fn run_replay(
         // $05E4/$0640: the frame loop's three branches. Dead (`$FF`) runs only
         // the arc + the object engine (the camera freezes); the death fade
         // (`$FF9B = 9`) leaves the level entirely, freezing everything.
+        update_level_timer_at_frame_head(&mut sim);
         let was_dead = sim.dead == 0xFF;
         // The fade-trigger frame is the last one to run the object engine
         // (the dead branch continues into `$0652`); the true fade frames do
@@ -1600,6 +1603,7 @@ fn run_replay(
                 // $0F2A + $04F1 + $EBBB: the reload puts Mario back at the
                 // header spawn and clears the object scratch (fff0 persists).
                 sim.respawn(manifest.header.mario_spawn_x, manifest.header.mario_spawn_y);
+                seed_level_timer(&mut sim, manifest);
                 cam.reset_level_start(
                     manifest.header.camera_start_x,
                     manifest.header.camera_start_y,
@@ -2397,6 +2401,7 @@ fn run_play(
         sim.phase = (sim.phase + 1) & 7;
         sim.frame_counter = sim.frame_counter.wrapping_add(1);
         // $05E4/$0640: dead → the arc only; the death fade freezes everything.
+        update_level_timer_at_frame_head(&mut sim);
         let was_dead = sim.dead == 0xFF;
         // The fade-trigger frame still runs the object engine ($0640
         // continues into $0652); the true fade frames do not. `$FF9B`: 9 =
@@ -2678,9 +2683,76 @@ fn run_play(
     Ok(())
 }
 
+/// `$04F1`: the header seeds the countdown and the level's music byte on load.
+fn seed_level_timer(sim: &mut PlayerSim, manifest: &LevelManifest) {
+    sim.level_timer = sml2_core::level_timer::LevelTimer::new(manifest.header.time_limit);
+    sim.level_song = manifest.header.music_track;
+}
+
+/// `$05E4`: countdown precedes death dispatch, player physics, and camera motion.
+fn update_level_timer_at_frame_head(sim: &mut PlayerSim) {
+    if !sim.paused && !sim.dead_fade && !sim.exit_phase {
+        sim.update_level_timer();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn level_timer_load_and_reload_use_header_bytes() {
+        let (mut manifest, _, _) = level_files("level01.manifest.json", "level01.bgblock.bin");
+        manifest.header.time_limit = 0x12;
+        manifest.header.music_track = 0x23;
+        let mut sim = PlayerSim::new();
+        sim.low_time_flag = 1;
+        for _ in 0..2 {
+            seed_level_timer(&mut sim, &manifest);
+            assert_eq!(
+                sim.level_timer,
+                sml2_core::level_timer::LevelTimer::new(0x12)
+            );
+            assert_eq!(sim.level_song, 0x23);
+            assert_eq!(sim.low_time_flag, 1);
+            sim.level_timer.low = 0x19;
+            sim.level_timer.high = 0;
+            sim.level_timer.tick_counter = 1;
+            sim.low_time_flag = 1;
+            sim.level_song = 0xFF;
+        }
+    }
+
+    #[test]
+    fn level_timer_frame_head_freezes_with_pause_and_fades() {
+        let mut sim = PlayerSim::new();
+        sim.level_timer = sml2_core::level_timer::LevelTimer::new(0x03);
+        let initial = sim.level_timer;
+        for flags in [
+            (true, false, false),
+            (false, true, false),
+            (false, false, true),
+        ] {
+            (sim.paused, sim.dead_fade, sim.exit_phase) = flags;
+            update_level_timer_at_frame_head(&mut sim);
+            assert_eq!(sim.level_timer, initial);
+        }
+        (sim.paused, sim.dead_fade, sim.exit_phase) = (false, false, false);
+        update_level_timer_at_frame_head(&mut sim);
+        assert_eq!(sim.level_timer.tick_counter, 0x2F);
+        assert_eq!((sim.level_timer.high, sim.level_timer.low), (3, 0));
+    }
+
+    #[test]
+    fn level_timer_expiry_precedes_the_death_snapshot() {
+        let mut sim = PlayerSim::new();
+        sim.level_timer = sml2_core::level_timer::LevelTimer::new(0);
+        sim.level_timer.tick_counter = 1;
+        update_level_timer_at_frame_head(&mut sim);
+        assert_eq!(sim.dead, 0x80);
+        assert_eq!((sim.level_timer.high, sim.level_timer.low), (0, 0));
+        assert_eq!(sim.sfx0, 0x0F);
+    }
 
     /// Load one level's extracted manifest, layout and composed tile block.
     fn level_files(manifest_name: &str, bg_name: &str) -> (LevelManifest, LevelLayout, Vec<u8>) {

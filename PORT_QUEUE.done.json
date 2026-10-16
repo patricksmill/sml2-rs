@@ -603,6 +603,20 @@
    "dependencies": [],
    "verification_gate": "Five handler and dispatch/reset tests; init mutation fails; full core suite and frozen sweep",
    "status": "done"
+  },
+  {
+   "id": "level_countdown_timer",
+   "title": "Port BCD level countdown and seed it from level headers for Wario attack selection",
+   "asm_refs": [
+    "main.asm:$5D6A",
+    "main.asm:$5D8C",
+    "main.asm:$5E03",
+    "home.asm:$05E4",
+    "main.asm:$AA05"
+   ],
+   "dependencies": [],
+   "verification_gate": "BCD byte and side-effect tests, runtime initialization/frame ordering/reset, core and runtime tests",
+   "status": "done"
   }
  ]
 }
