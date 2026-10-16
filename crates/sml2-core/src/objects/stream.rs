@@ -4,6 +4,9 @@ use super::*;
 
 impl ObjectSim {
     pub(super) fn advance_stream(&mut self) -> bool {
+        if self.stream_cursor_cleared {
+            return false;
+        }
         if self.stream_index + RECORD_LEN < self.records.len() * RECORD_LEN {
             self.stream_index += RECORD_LEN;
             return true;
@@ -12,6 +15,11 @@ impl ObjectSim {
     }
 
     pub(super) fn scan(&mut self, tables: &ObjectTables) {
+        if self.stream_cursor_cleared {
+            // Scanning physical $0000 is outside the supported source paths.
+            self.note_unported(0x8C31);
+            return;
+        }
         let n = self.records.len();
         if self.stream_index >= n * RECORD_LEN {
             return;
@@ -101,7 +109,7 @@ impl ObjectSim {
             s.b[B_DEF] = r.anim_index;
             // The engine stores (streamPtrHi, streamPtrLo + 2) with no carry
             // into the hi byte.
-            let a = self.stream_index + STREAM_BASE as usize;
+            let a = self.stream_ptr();
             s.b[B_RECHI] = (a >> 8) as u8;
             s.b[B_RECLO] = (a as u8).wrapping_add(2);
             s.b[B_STATE] = 1;

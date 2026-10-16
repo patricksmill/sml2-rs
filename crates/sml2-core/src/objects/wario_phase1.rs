@@ -34,7 +34,7 @@ impl ObjectSim {
             hitbox,
             raw: [0x07, 0xC8, 0x00, 0x00, 0xB0, 0x1D],
         }];
-        self.stream_index = 0;
+        self.seed_stream_cursor();
         self.spawned = vec![false];
         self.sprite_map_index = 1;
     }

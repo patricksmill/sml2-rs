@@ -1779,10 +1779,10 @@ fn run_replay(
             );
             push(
                 "sptr",
-                obj.stream_index as u16 + 0xAB06 == f.sptr,
+                obj.stream_ptr() == f.sptr,
                 format!(
                     "sptr sim=${:04X} exp=${:04X}",
-                    obj.stream_index as u16 + 0xAB06,
+                    obj.stream_ptr(),
                     f.sptr
                 ),
             );

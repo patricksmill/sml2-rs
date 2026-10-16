@@ -115,6 +115,7 @@ mod interaction;
 mod items;
 mod shell;
 mod stream;
+mod stream_cursor;
 #[cfg(test)]
 mod tests;
 mod walkers;
@@ -132,6 +133,7 @@ pub struct ObjectSim {
     pub records: Vec<SpawnRecord>,
     initial_records: Vec<SpawnRecord>,
     pub stream_index: usize,
+    stream_cursor_cleared: bool,
     pub spawned: Vec<bool>,
     pub prev_cam_x: u16,
     pub scan_dir: u8,
@@ -220,6 +222,7 @@ impl ObjectSim {
             initial_records: records.clone(),
             records,
             stream_index: 0,
+            stream_cursor_cleared: false,
             spawned: vec![false; n],
             prev_cam_x: cam_x,
             scan_dir: 0,
@@ -429,7 +432,7 @@ impl ObjectSim {
         }
         self.records.clone_from(&self.initial_records);
         self.spawned = vec![false; self.records.len()];
-        self.stream_index = 0;
+        self.seed_stream_cursor();
         self.prev_cam_x = 0;
         self.scan_dir = 0;
         self.spawn_x = 0;
