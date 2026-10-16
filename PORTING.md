@@ -12,6 +12,13 @@
 
 Sibling ROM truth: `../sml2decomp/` + `baserom.gb` under that tree (`SML2_DECOMP_ROOT`).
 
+Native implementation rules: [Idiomatic Rust porting guide](docs/idiomatic-rust-porting.md).
+Handlers use typed actors and reusable domain behavior. Raw slot offsets and
+register plumbing stay out of game logic; slot conversion belongs to
+`Actor::from_raw_slot` / `Actor::to_raw_slot`. Existing byte-oriented handlers
+must migrate in bounded, behavior-preserving steps. ROM byte assertions remain
+the verification boundary, not the implementation style.
+
 Full-game sequencing and milestone acceptance:
 [`Systematic Rust port completion workflow`](docs/plans/2026-10-15-rust-completion-workflow.md).
 The mechanics queue is one milestone within that roadmap. The repaired tools and their exit-status contracts are documented in

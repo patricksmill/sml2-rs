@@ -65,6 +65,10 @@ live queue; an empty spawn list alone does not complete the game.
 ```text
 You are the Porter. Rules: PORTING.md (binding).
 
+Apply docs/idiomatic-rust-porting.md: domain handlers use Actor fields/enums
+and shared methods. Raw slots are converted only at the compatibility boundary;
+do not extend byte-indexed handler logic or recreate HRAM scratch.
+
 Task: Port object handler ROM 0x{ADDR} using ONLY:
   - tasks/handlers/0x{ADDR}.md
   - one named sibling handler module under crates/sml2-core/src/objects/
