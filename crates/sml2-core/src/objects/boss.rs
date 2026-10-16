@@ -118,7 +118,7 @@ impl ObjectSim {
     }
 
     pub(super) fn boss_morph_to_anim3(&mut self, st: &mut Staging) {
-        self.sprite_blink(st, 0x03, 0x10); // $9443 -> $B40E
+        self.boss_flash_b40e(st); // $9443 -> $B40E
                                            // The ROM decrements first and tests the NEW value (`dec a / ldh
                                            // [$FFEC],a / ret nz`),
                                            // so a 1 falls through to the hand-off on that same call.
@@ -210,7 +210,7 @@ impl ObjectSim {
     }
 
     pub(super) fn boss_hit_stun(&mut self, st: &mut Staging) {
-        self.sprite_blink(st, 0x03, 0x10); // $B40E
+        self.boss_flash_b40e(st); // $B40E
         if st.b[B_T28] != 0 {
             st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
             if st.b[B_T28] != 0 {
