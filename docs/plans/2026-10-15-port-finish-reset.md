@@ -1,5 +1,12 @@
 # Port finish — policy reset execution plan
 
+This records the original reset sequence. For current module paths, tool
+contracts, and completion order, use
+[`Systematic Rust port completion workflow`](2026-10-15-rust-completion-workflow.md)
+and [`tools/README.md`](../../tools/README.md). The object split and tooling have
+since landed in the working tree; unchecked historical tasks below are not a
+fresh coverage audit.
+
 > **For agentic workers:** One checkbox = one PR or one focused session. Do not skip Phase 0.
 
 **Goal:** Stop whole-repo handler thrash; finish mechanics via **one handler address + one test** per ticket, with tooling and module boundaries that enforce small context.

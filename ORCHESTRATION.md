@@ -4,6 +4,12 @@
 
 Canonical port rules: [`PORTING.md`](PORTING.md). Execution phases: [`docs/plans/2026-10-15-port-finish-reset.md`](docs/plans/2026-10-15-port-finish-reset.md).
 
+For full-game completion, use the dependency ordering, tooling prerequisites,
+and milestone gates in
+[`Systematic Rust port completion workflow`](docs/plans/2026-10-15-rust-completion-workflow.md).
+Its dependency ordering takes precedence over the handler-first ordering below:
+schedule shared subsystem blockers before handlers that depend on them. Tool commands and failure statuses are documented in [`tools/README.md`](tools/README.md).
+
 ---
 
 ## Roles
@@ -23,7 +29,7 @@ Canonical port rules: [`PORTING.md`](PORTING.md). Execution phases: [`docs/plans
 ## Supervisor loop (handlers — bulk of remaining work)
 
 ```
-1. python3 tools/handler_coverage.py || true   # refresh handler_coverage.json
+1. python3 tools/handler_coverage.py   # refresh report; exit 1 = pending, exit 2 = STOP (invalid inputs)
 2. Pick next ROM address from unported_spawn_reachable (prefer greedy level order in plan Phase 3)
 3. python3 tools/handler_task.py --addr 0x{ADDR}
 4. Dispatch porter with prompt template below
@@ -32,7 +38,10 @@ Canonical port rules: [`PORTING.md`](PORTING.md). Execution phases: [`docs/plans
 7. Repeat from 1; do NOT run sweep every handler — only per work package / Phase 5
 ```
 
-When `unported_spawn_reachable` is empty, switch to the **7 subsystem tickets** in `PORT_QUEUE.json` (one queue id per porter job, files per plan table).
+Track `level_tables.unported` and `boss_table.unported` as well as spawn coverage.
+Close required subsystem dependencies before their handlers, and audit dynamic
+spawn chains per the completion roadmap. Read pending subsystem tickets from the
+live queue; an empty spawn list alone does not complete the game.
 
 ---
 
@@ -56,9 +65,12 @@ When `unported_spawn_reachable` is empty, switch to the **7 subsystem tickets** 
 ```text
 You are the Porter. Rules: PORTING.md (binding).
 
-Task: Port bank-16 handler ROM 0x{ADDR} using ONLY:
+Task: Port object handler ROM 0x{ADDR} using ONLY:
   - tasks/handlers/0x{ADDR}.md
-  - crates/sml2-core/src/objects/ (handlers/, dispatch.rs, staging.rs, helpers.rs, tests/)
+  - one named sibling handler module under crates/sml2-core/src/objects/
+  - objects/staging.rs and objects/helpers.rs
+Touch the named module plus dispatch.rs (one arm) and mod.rs (registration only).
+Require a COMPLETE generated slice; place new tests in the named module.
 
 Do not read objects.rs monolith, DESIGN.md, PORT_QUEUE, or main.asm wholesale.
 
@@ -102,7 +114,7 @@ Refresh `handler_coverage.json` before batch planning; do not paste the full unp
 - [ ] New/changed logic has a unit test with byte assertions
 - [ ] `cargo test -p sml2-core` green
 - [ ] No new files under `captures/` or `notes/`
-- [ ] For handlers: `handler_coverage.py` count of unported decreases by 1 (after refresh)
+- [ ] For handlers: `handler_coverage.py` confirms the selected target is implemented in its applicable level/boss inventory (after refresh); exit 2 rejects the package
 
 Reject and re-dispatch if the worker read the whole object engine or added queue `note` essays.
 
@@ -138,6 +150,6 @@ python3 -c 'import json;print([e["id"] for e in json.load(open("PORT_QUEUE.json"
 Handler progress:
 
 ```bash
-python3 tools/handler_coverage.py || true
+python3 tools/handler_coverage.py  # 1 = pending work; 2 = invalid inputs, stop
 python3 -c 'import json;d=json.load(open("handler_coverage.json"));print(len(d["unported_spawn_reachable"]), "unported")'
 ```

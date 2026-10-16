@@ -12,6 +12,12 @@
 
 Sibling ROM truth: `../sml2decomp/` + `baserom.gb` under that tree (`SML2_DECOMP_ROOT`).
 
+Full-game sequencing and milestone acceptance:
+[`Systematic Rust port completion workflow`](docs/plans/2026-10-15-rust-completion-workflow.md).
+The seven-item mechanics queue is one milestone within that roadmap. The repaired tools and their exit-status contracts are documented in
+[`tools/README.md`](tools/README.md). Handler counts measure declared dispatch,
+not behavior verification or dynamic-spawn closure.
+
 ---
 
 ## What “done” means
@@ -20,6 +26,9 @@ Sibling ROM truth: `../sml2decomp/` + `baserom.gb` under that tree (`SML2_DECOMP
 2. **`cargo test -p sml2-core`** includes at least one test that constructs state in memory, runs the code path, and asserts **bytes** (slot, staging, or documented WRAM fields).
 3. New tests that cover previously unreachable code must **fail** if you revert the line under test.
 4. After a **work package** (not every commit): `bash captures/sweep.sh 2>&1 | tail -n 25` once.
+
+Enable `set -o pipefail` before piping gate output through `tail`; the pipeline
+must preserve the gate's nonzero exit status.
 
 **Forbidden:** new `captures/*.json`, trajectory capture scripts, steering Mario in PyBoy to “get a capture”, VBlank lag-frame debugging, reading whole `PORT_QUEUE.json` or multi-MB JSON into context.
 
@@ -35,15 +44,15 @@ Never assign “port the object engine” or “fix DeepSeek’s mess in `object
 
 | Ticket type | Deliverable | Max context |
 |-------------|-------------|-------------|
-| **Handler** | One bank-16 (or boss) handler address + `#[test]` | Slice in `tasks/handlers/*.md` + `objects/` submodule only |
+| **Handler** | One bank-$16 (or boss) handler ROM address + `#[test]` | Slice in `tasks/handlers/*.md` + `objects/` submodule only |
 | **Subsystem** | One queue item (e.g. `camera_pan_timer`) | Files listed in that item’s plan section |
 | **Tooling** | Script that reduces ASM hunt tokens | No behavior change |
 
 ### Handler ticket checklist
 
-1. Run `python3 tools/handler_task.py --addr 0x58201` (or `--anim 9` mode A) → writes `tasks/handlers/0x58201.md`.
+1. Run `python3 tools/handler_task.py --addr 0x58201` (or `--anim 9` mode A) → writes `tasks/handlers/0x58201.md`. Require exit 0 and `Slice status: COMPLETE`; exit 2 requires source/dependency work. Bank `$16` is decimal 22.
 2. If no test exists: add `objects::tests::handler_0x58201_*` in the same PR as the handler (or `objects/tests/`).
-3. Implement in `crates/sml2-core/src/objects/handlers/<name>.rs`; wire **one line** in `objects/dispatch.rs`.
+3. Implement in a named sibling module under `crates/sml2-core/src/objects/`; wire **one line** in `objects/dispatch.rs`.
 4. `cargo test -p sml2-core handler_0x58201` (or the test name you chose).
 5. Mark progress in `handler_coverage.json` (generated/manifest — see plan), not in a 2 KB `PORT_QUEUE` note.
 
@@ -51,16 +60,21 @@ Never assign “port the object engine” or “fix DeepSeek’s mess in `object
 
 ## Code layout (objects)
 
-Target layout (migrate incrementally; do not big-bang without tests green):
+Current module layout (keep the public facade stable):
 
 ```
 crates/sml2-core/src/objects/
-  mod.rs          # ObjectEngine, slot loop, public API
+  mod.rs          # ObjectSim, slot loop, public API
   staging.rs      # $FFD0 offsets, copy in/out
   dispatch.rs     # match on handler ROM address → fn
   helpers.rs      # $5Bxxx / probes already shared
-  handlers/       # one file per ported handler cluster
-  tests/          # or #[cfg(test)] mod in mod.rs for integration tests
+  walkers.rs      # existing handler family
+  items.rs        # existing item/pose family
+  boss.rs         # existing boss family
+  interaction.rs  # contact and projectile interactions
+  shell.rs        # carried shell behavior
+  stream.rs       # spawn stream
+  tests.rs        # existing cross-module tests; new handler tests stay local
 ```
 
 **Rule:** No new handler bodies in a file over ~400 lines. Split before adding.

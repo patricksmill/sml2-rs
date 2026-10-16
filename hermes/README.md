@@ -17,7 +17,7 @@ Copy these into Hermes agent roles (system + user). Repo truth stays in `ORCHEST
 ## Quick dispatch
 
 ```bash
-python3 tools/handler_coverage.py || true
+python3 tools/handler_coverage.py
 python3 tools/dispatch_prompt.py --addr 0x58201   # paste stdout into Porter user message
 ```
 
@@ -26,3 +26,6 @@ For queue items (non-handler):
 ```bash
 python3 tools/dispatch_prompt.py --queue camera_pan_timer
 ```
+
+Coverage exits 1 for pending work and 2 for invalid inputs (stop and repair).
+Dispatch regenerates the brief and rejects incomplete slices. See `tools/README.md`.

@@ -8,6 +8,7 @@ Native Rust port of Super Mario Land 2, verified against `../sml2decomp/` and `b
 |-----|-----|
 | [`ORCHESTRATION.md`](ORCHESTRATION.md) | **Supervisor loop**, worker prompts, model roles, accept/reject |
 | [`PORTING.md`](PORTING.md) | Verification, one-ticket rules, forbidden moves |
+| [`docs/plans/2026-10-15-rust-completion-workflow.md`](docs/plans/2026-10-15-rust-completion-workflow.md) | Full-game completion order, tooling prerequisites, task loop, milestone gates |
 | [`DESIGN.md`](DESIGN.md) | Architecture, renderer seams, standing goals |
 | [`PORT_QUEUE.json`](PORT_QUEUE.json) | **Pending items only** — `python3 -c 'import json;print(json.load(open("PORT_QUEUE.json"))["queue"])'` |
 | [`PORT_QUEUE.done.json`](PORT_QUEUE.done.json) | Archived completed items (ignore unless auditing history) |
@@ -19,6 +20,7 @@ Native Rust port of Super Mario Land 2, verified against `../sml2decomp/` and `b
 
 ```bash
 cargo test -p sml2-core
+set -o pipefail
 bash captures/sweep.sh 2>&1 | tail -n 25   # once per work package, after tests pass
 ```
 
@@ -35,3 +37,8 @@ python3 -c 'import json;print([e["id"] for e in json.load(open("PORT_QUEUE.json"
 - `status` = verification claim, not “lines written”.
 - Capture-based gates are void; use `PORTING.md` unit tests.
 - Do not append session journals to queue `note` fields — omit them.
+
+## Commits
+
+Create a focused commit after each completed, verified work step. Stage only
+files belonging to that step and preserve unrelated local changes.
