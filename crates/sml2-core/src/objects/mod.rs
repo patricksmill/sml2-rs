@@ -111,6 +111,7 @@ mod boss_sprite_cycle;
 mod boss_reverse_picker;
 mod dispatch;
 mod handler_0x586eb;
+mod handler_0x5b0d5;
 mod helpers;
 mod interaction;
 mod items;
