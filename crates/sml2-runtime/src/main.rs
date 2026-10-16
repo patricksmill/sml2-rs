@@ -1521,8 +1521,7 @@ fn run_replay(
         if !fade_at_entry {
             // $8000's dispatcher gate reads sMarioDead; the interaction pass
             // then writes it back.
-            obj.mario_dead = sim.dead;
-            obj.fade_timer = sim.fade_timer; // `$B14E`'s input, like `mario_dead`
+            obj.sample_player_inputs(&sim);
             // `$0EB0`'s scene branch: taken only for a def whose handlers are
             // all ported (the fight then ends in the level clear, which reseeds
             // `sSceneState` and so clears the park); every other def is
@@ -2472,8 +2471,7 @@ fn run_play(
         if let Some(tables) = &obj_tables {
             if !frozen {
                 let mario = build_contact(&sim, &keys, cam.scroll_pan);
-                obj.mario_dead = sim.dead;
-                obj.fade_timer = sim.fade_timer;
+                obj.sample_player_inputs(&sim);
                 // `$0EB0`'s scene branch; see the replay loop.
                 if cam.scene_load_pending {
                     let def_index = boss_def_index(manifest.level_id, cam.boss_fight_phase);

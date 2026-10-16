@@ -2,6 +2,15 @@
 
 use crate::{camera::CameraSim, objects::ObjectSim};
 
+impl ObjectSim {
+    /// Sample player-owned WRAM immediately before the object pass.
+    pub fn sample_player_inputs(&mut self, player: &crate::player_sim::PlayerSim) {
+        self.mario_dead = player.dead;
+        self.fade_timer = player.fade_timer;
+        self.timer_low = player.level_timer.low;
+    }
+}
+
 impl CameraSim {
     pub fn apply_object_result(&mut self, obj: &mut ObjectSim) {
         if let Some(timer) = obj.camera_pan_set.take() {

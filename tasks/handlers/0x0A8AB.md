@@ -17,80 +17,11 @@ Addresses and edges derive from ROM bytes. Source labels are not assumed to
 mark every entry. Review table bounds and dependency contracts before porting.
 
 ```text
-0x09285  F0 E7    main.asm:3803 ldh a, [$FFE7]
-0x09287  CB 47    main.asm:3804 bit 0, a
-0x09289  20 1A    main.asm:3805 jr nz, UnknownRJump_0x92A5
-0x0928B  CB 4F    main.asm:3806 bit 1, a
-0x0928D  20 01    main.asm:3807 jr nz, UnknownRJump_0x9290
-0x0928F  C9       main.asm:3808 ret
-0x09290  3E 01    main.asm:3811 ld a, 1
-0x09292  EA 3E AF main.asm:3812 ld [sObjectDone], a
-0x09295  FA 29 AF main.asm:3813 ld a, [sObjectSlotPtrLo]
-0x09298  A7       main.asm:3814 and a
-0x09299  C0       main.asm:3815 ret nz
-0x0929A  3E 09    main.asm:3817 ld a, 9
-0x0929C  EA 70 A4 main.asm:3818 ld [sSfxRequest1], a
-0x0929F  FA C5 AF main.asm:3819 ld a, [sBossHits]
-0x092A2  3D       main.asm:3820 dec a
-0x092A3  18 17    main.asm:3821 jr UnknownRJump_0x92BC
-0x092A5  3E 01    main.asm:3825 ld a, 1
-0x092A7  EA 3E AF main.asm:3826 ld [sObjectDone], a
-0x092AA  EA C3 AF main.asm:3827 ld [sBossHitLatch], a
-0x092AD  FA 29 AF main.asm:3828 ld a, [sObjectSlotPtrLo]
-0x092B0  A7       main.asm:3829 and a
-0x092B1  C0       main.asm:3830 ret nz
-0x092B2  3E 13    main.asm:3831 ld a, 19
-0x092B4  EA 60 A4 main.asm:3832 ld [sSfxRequest0], a
-0x092B7  FA C5 AF main.asm:3833 ld a, [sBossHits]
-0x092BA  D6 02    main.asm:3834 sub 2
-0x092BC  EA C5 AF main.asm:3837 ld [sBossHits], a
-0x092BF  28 03    main.asm:3838 jr z, UnknownRJump_0x92C4
-0x092C1  38 01    main.asm:3839 jr c, UnknownRJump_0x92C4
-0x092C3  C9       main.asm:3840 ret
-0x092C4  3E 01    main.asm:3843 ld a, 1
-0x092C6  EA 26 AF main.asm:3844 ld [sObjectRemoveMode], a
-0x092C9  FA C0 AF main.asm:3845 ld a, [sObjectDefIndex]
-0x092CC  FE 06    main.asm:3846 cp $06
-0x092CE  D0       main.asm:3847 ret nc
-0x092CF  3E 02    main.asm:3848 ld a, 2
-0x092D1  EA 67 A2 main.asm:3849 ld [sFadeTimerHigh], a
-0x092D4  3E 80    main.asm:3850 ld a, 128
-0x092D6  EA 66 A2 main.asm:3851 ld [sFadeTimerLow], a
-0x092D9  3E 01    main.asm:3852 ld a, 1
-0x092DB  EA E3 A2 main.asm:3853 ld [sBossClearFlag], a
-0x092DE  C9       main.asm:3854 ret
-0x09435  3E 02    main.asm:4029 ld a, 2
-0x09437  E0 DF    main.asm:4030 ldh [$FFDF], a
-0x09439  3E 20    main.asm:4031 ld a, 32
-0x0943B  E0 EC    main.asm:4032 ldh [$FFEC], a
-0x0943D  FA CA AF main.asm:4033 ld a, [sObjectDefSprite]
-0x09440  E0 DB    main.asm:4034 ldh [$FFDB], a
-0x09442  C9       main.asm:4035 ret
 0x09725  AF       main.asm:4395 xor a
 0x09726  E0 E2    main.asm:4396 ldh [$FFE2], a
 0x09728  3E 01    main.asm:4397 ld a, 1
 0x0972A  E0 DF    main.asm:4398 ldh [$FFDF], a
 0x0972C  C9       main.asm:4399 ret
-0x09CAC  CD 0E 74 main.asm:4967 call UnknownCall_0xB40E
-0x09CAF  F0 EC    main.asm:4968 ldh a, [$FFEC]
-0x09CB1  A7       main.asm:4969 and a
-0x09CB2  28 06    main.asm:4970 jr z, UnknownRJump_0x9CBA
-0x09CB4  F0 EC    main.asm:4971 ldh a, [$FFEC]
-0x09CB6  3D       main.asm:4972 dec a
-0x09CB7  E0 EC    main.asm:4973 ldh [$FFEC], a
-0x09CB9  C0       main.asm:4974 ret nz
-0x09CBA  FA 26 AF main.asm:4977 ld a, [sObjectRemoveMode]
-0x09CBD  A7       main.asm:4978 and a
-0x09CBE  C2 35 54 main.asm:4979 jp nz, UnknownJump_0x9435
-0x09CC1  AF       main.asm:4980 xor a
-0x09CC2  E0 DE    main.asm:4981 ldh [$FFDE], a
-0x09CC4  FA 37 AF main.asm:4982 ld a, [sObjectSpawnSprite]
-0x09CC7  E0 DB    main.asm:4983 ldh [$FFDB], a
-0x09CC9  FA C4 AF main.asm:4984 ld a, [sSavedFrameState]
-0x09CCC  E0 DF    main.asm:4985 ldh [$FFDF], a
-0x09CCE  FA CC AF main.asm:4986 ld a, [sSavedObjectType]
-0x09CD1  E0 E2    main.asm:4987 ldh [$FFE2], a
-0x09CD3  C9       main.asm:4988 ret
 0x0A8AB  CD 85 52 main.asm:6623 call UnknownCall_0x9285
 0x0A8AE  FA 3E AF main.asm:6624 ld a, [sObjectDone]
 0x0A8B1  A7       main.asm:6625 and a
@@ -178,48 +109,6 @@ mark every entry. Review table bounds and dependency contracts before porting.
 0x0A968  AF       main.asm:6719 xor a
 0x0A969  EA D0 AF main.asm:6720 ld [sBossDelay], a
 0x0A96C  C9       main.asm:6721 ret
-0x0A96D  3E 05    main.asm:6722 ld a, 5
-0x0A96F  EA 66 A2 main.asm:6723 ld [sFadeTimerLow], a
-0x0A972  CD 0E 74 main.asm:6724 call UnknownCall_0xB40E
-0x0A975  CD 39 73 main.asm:6725 call UnknownCall_0xB339
-0x0A978  06 02    main.asm:6726 ld b, 2
-0x0A97A  CD 6A 72 main.asm:6727 call UnknownCall_0xB26A
-0x0A97D  F0 DA    main.asm:6728 ldh a, [$FFDA]
-0x0A97F  FE C0    main.asm:6729 cp $C0
-0x0A981  D8       main.asm:6730 ret c
-0x0A982  CD 5B 71 main.asm:6731 call UnknownCall_0xB15B
-0x0A985  3E 01    main.asm:6732 ld a, 1
-0x0A987  EA DC A2 main.asm:6733 ld [sBossFightPhase], a
-0x0A98A  AF       main.asm:6734 xor a
-0x0A98B  EA 8B A2 main.asm:6735 ld [sSceneState], a
-0x0A98E  21 00 AB main.asm:6736 ld hl, sObjectStreamBuf
-0x0A991  3E FF    main.asm:6737 ld a, 255
-0x0A993  22       main.asm:6738 ld [hli], a
-0x0A994  22       main.asm:6739 ld [hli], a
-0x0A995  22       main.asm:6740 ld [hli], a
-0x0A996  22       main.asm:6741 ld [hli], a
-0x0A997  22       main.asm:6742 ld [hli], a
-0x0A998  22       main.asm:6743 ld [hli], a
-0x0A999  3E 07    main.asm:6744 ld a, 7
-0x0A99B  22       main.asm:6745 ld [hli], a
-0x0A99C  3E C8    main.asm:6746 ld a, 200
-0x0A99E  22       main.asm:6747 ld [hli], a
-0x0A99F  3E 00    main.asm:6748 ld a, 0
-0x0A9A1  22       main.asm:6749 ld [hli], a
-0x0A9A2  3E 00    main.asm:6750 ld a, 0
-0x0A9A4  22       main.asm:6751 ld [hli], a
-0x0A9A5  3E B0    main.asm:6752 ld a, 176
-0x0A9A7  22       main.asm:6753 ld [hli], a
-0x0A9A8  3E 1D    main.asm:6754 ld a, 29
-0x0A9AA  22       main.asm:6755 ld [hli], a
-0x0A9AB  36 FF    main.asm:6756 ld [hl], 255
-0x0A9AD  3E AB    main.asm:6757 ld a, 171
-0x0A9AF  EA 1E AF main.asm:6758 ld [sObjectStreamPtrHi], a
-0x0A9B2  3E 06    main.asm:6759 ld a, 6
-0x0A9B4  EA 1F AF main.asm:6760 ld [sObjectStreamPtrLo], a
-0x0A9B7  3E 01    main.asm:6761 ld a, 1
-0x0A9B9  EA 06 AF main.asm:6762 ld [sSpriteMapIndex], a
-0x0A9BC  C9       main.asm:6763 ret
 0x0A9BD  F0 E8    main.asm:6764 ldh a, [$FFE8]
 0x0A9BF  A7       main.asm:6765 and a
 0x0A9C0  20 12    main.asm:6766 jr nz, UnknownRJump_0xA9D4
@@ -339,20 +228,6 @@ mark every entry. Review table bounds and dependency contracts before porting.
 0x0AAA0  3E 04    main.asm:6898 ld a, 4
 0x0AAA2  E0 DF    main.asm:6899 ldh [$FFDF], a
 0x0AAA4  C9       main.asm:6900 ret
-0x0B14E  FA 66 A2 main.asm:7780 ld a, [sFadeTimerLow]
-0x0B151  47       main.asm:7781 ld b, a
-0x0B152  FA 67 A2 main.asm:7782 ld a, [sFadeTimerHigh]
-0x0B155  B0       main.asm:7783 or b
-0x0B156  C9       main.asm:7784 ret
-0x0B15B  21 D0 FF main.asm:7792 ld hl, $FFD0
-0x0B15E  AF       main.asm:7793 xor a
-0x0B15F  06 20    main.asm:7794 ld b, 32
-0x0B161  22       main.asm:7797 ld [hli], a
-0x0B162  05       main.asm:7798 dec b
-0x0B163  20 FC    main.asm:7799 jr nz, UnknownRJump_0xB161
-0x0B165  3E 01    main.asm:7800 ld a, 1
-0x0B167  EA 3E AF main.asm:7801 ld [sObjectDone], a
-0x0B16A  C9       main.asm:7802 ret
 0x0B17F  0E 18    main.asm:7825 ld c, 24
 0x0B181  18 0E    main.asm:7826 jr UnknownRJump_0xB191
 0x0B183  0E 0C    main.asm:7829 ld c, 12
@@ -370,39 +245,6 @@ mark every entry. Review table bounds and dependency contracts before porting.
 0x0B1A0  C8       main.asm:7853 ret z
 0x0B1A1  34       main.asm:7854 inc [hl]
 0x0B1A2  C9       main.asm:7855 ret
-0x0B1D6  0E 15    main.asm:7874 ld c, 21
-0x0B1D8  21 0E 72 main.asm:7875 ld hl, $720E
-0x0B1DB  18 13    main.asm:7876 jr UnknownRJump_0xB1F0
-0x0B1E4  0E 0C    main.asm:7884 ld c, 12
-0x0B1E6  21 17 72 main.asm:7885 ld hl, $7217
-0x0B1E9  18 05    main.asm:7886 jr UnknownRJump_0xB1F0
-0x0B1F0  F0 E0    main.asm:7893 ldh a, [$FFE0]
-0x0B1F2  5F       main.asm:7894 ld e, a
-0x0B1F3  16 00    main.asm:7895 ld d, 0
-0x0B1F5  19       main.asm:7896 add hl, de
-0x0B1F6  46       main.asm:7897 ld b, [hl]
-0x0B1F7  21 E0 FF main.asm:7898 ld hl, $FFE0
-0x0B1FA  7E       main.asm:7899 ld a, [hl]
-0x0B1FB  B9       main.asm:7900 cp c
-0x0B1FC  C8       main.asm:7901 ret z
-0x0B1FD  34       main.asm:7902 inc [hl]
-0x0B1FE  C9       main.asm:7903 ret
-0x0B264  F0 DA    main.asm:7953 ldh a, [$FFDA]
-0x0B266  90       main.asm:7954 sub b
-0x0B267  E0 DA    main.asm:7955 ldh [$FFDA], a
-0x0B269  C9       main.asm:7956 ret
-0x0B26A  F0 DA    main.asm:7959 ldh a, [$FFDA]
-0x0B26C  80       main.asm:7960 add b
-0x0B26D  E0 DA    main.asm:7961 ldh [$FFDA], a
-0x0B26F  C9       main.asm:7962 ret
-0x0B270  F0 D9    main.asm:7965 ldh a, [$FFD9]
-0x0B272  90       main.asm:7966 sub b
-0x0B273  E0 D9    main.asm:7967 ldh [$FFD9], a
-0x0B275  C9       main.asm:7968 ret
-0x0B276  F0 D9    main.asm:7971 ldh a, [$FFD9]
-0x0B278  80       main.asm:7972 add b
-0x0B279  E0 D9    main.asm:7973 ldh [$FFD9], a
-0x0B27B  C9       main.asm:7974 ret
 0x0B2EF  F0 F0    main.asm:8059 ldh a, [$FFF0]
 0x0B2F1  E6 07    main.asm:8060 and $07
 0x0B2F3  C0       main.asm:8061 ret nz
@@ -418,31 +260,6 @@ mark every entry. Review table bounds and dependency contracts before porting.
 0x0B328  EE 1F    main.asm:8104 xor $1F
 0x0B32A  E0 DB    main.asm:8105 ldh [$FFDB], a
 0x0B32C  C9       main.asm:8106 ret
-0x0B339  F0 F0    main.asm:8118 ldh a, [$FFF0]
-0x0B33B  E6 03    main.asm:8119 and $03
-0x0B33D  C0       main.asm:8120 ret nz
-0x0B33E  21 EA FF main.asm:8121 ld hl, $FFEA
-0x0B341  34       main.asm:8122 inc [hl]
-0x0B342  7E       main.asm:8123 ld a, [hl]
-0x0B343  FE 04    main.asm:8124 cp $04
-0x0B345  20 02    main.asm:8125 jr nz, UnknownRJump_0xB349
-0x0B347  AF       main.asm:8126 xor a
-0x0B348  77       main.asm:8127 ld [hl], a
-0x0B349  21 56 73 main.asm:8130 ld hl, $7356
-0x0B34C  5F       main.asm:8131 ld e, a
-0x0B34D  16 00    main.asm:8132 ld d, 0
-0x0B34F  19       main.asm:8133 add hl, de
-0x0B350  F0 DB    main.asm:8134 ldh a, [$FFDB]
-0x0B352  86       main.asm:8135 add [hl]
-0x0B353  E0 DB    main.asm:8136 ldh [$FFDB], a
-0x0B355  C9       main.asm:8137 ret
-0x0B40E  F0 F0    main.asm:8282 ldh a, [$FFF0]
-0x0B410  E6 03    main.asm:8283 and $03
-0x0B412  C0       main.asm:8284 ret nz
-0x0B413  F0 DE    main.asm:8285 ldh a, [$FFDE]
-0x0B415  EE 10    main.asm:8286 xor $10
-0x0B417  E0 DE    main.asm:8287 ldh [$FFDE], a
-0x0B419  C9       main.asm:8288 ret
 ```
 
 ## Recovered rst $28 state tables (CPU targets)
@@ -451,7 +268,18 @@ mark every entry. Review table bounds and dependency contracts before porting.
 
 ## Existing helper dependencies supplied by the supervisor
 
-- None.
+- ROM 0x09285: `crates/sml2-core/src/objects/boss.rs::boss_damage_pass` (reviewed bank-preserving contract)
+- ROM 0x09CAC: `crates/sml2-core/src/objects/boss.rs::boss_hit_stun` (reviewed bank-preserving contract)
+- ROM 0x0A96D: `crates/sml2-core/src/objects/wario_phase1.rs::wario_phase1_exit` (reviewed bank-preserving contract)
+- ROM 0x0B14E: `crates/sml2-core/src/objects/boss.rs::fade_idle` (reviewed bank-preserving contract)
+- ROM 0x0B1D6: `crates/sml2-core/src/objects/boss_reverse_picker.rs::boss_reverse_picker_b1d6` (reviewed bank-preserving contract)
+- ROM 0x0B1E4: `crates/sml2-core/src/objects/boss_reverse_picker.rs::boss_reverse_picker_b1e4` (reviewed bank-preserving contract)
+- ROM 0x0B264: `crates/sml2-core/src/objects/boss.rs::scr_x_sub` (reviewed bank-preserving contract)
+- ROM 0x0B26A: `crates/sml2-core/src/objects/boss.rs::scr_x_add` (reviewed bank-preserving contract)
+- ROM 0x0B270: `crates/sml2-core/src/objects/boss.rs::scr_y_sub` (reviewed bank-preserving contract)
+- ROM 0x0B276: `crates/sml2-core/src/objects/boss.rs::scr_y_add` (reviewed bank-preserving contract)
+- ROM 0x0B339: `crates/sml2-core/src/objects/boss_sprite_cycle.rs::boss_sprite_cycle_b339` (reviewed bank-preserving contract)
+- ROM 0x0B40E: `crates/sml2-core/src/objects/boss_flash.rs::boss_flash_b40e` (reviewed bank-preserving contract)
 
 ## Unresolved work
 

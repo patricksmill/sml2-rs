@@ -55,6 +55,7 @@ impl ObjectSim {
             0x9EE3 => self.handler_boss_anim13(st),
             0xAB30 => self.boss_anim22(st),
             0xAB6E => self.boss_anim25(st),
+            0xA8AB => self.handler_wario20(st, tables),
             h => self.note_unported(h),
         }
     }

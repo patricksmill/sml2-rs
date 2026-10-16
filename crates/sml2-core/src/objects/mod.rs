@@ -121,6 +121,9 @@ mod walkers;
 mod wario_child22;
 mod wario_child25;
 mod wario_phase1;
+mod wario20;
+#[cfg(test)]
+mod wario20_integration;
 
 #[derive(Debug, Clone)]
 pub struct ObjectSim {
@@ -183,6 +186,8 @@ pub struct ObjectSim {
     pub scene_phase_set: Option<u8>,
     pub boss_slot_ptr_lo: u8,
     pub fade_timer: u16,
+    /// Entry-frame `$A254` input from the level countdown owner.
+    pub timer_low: u8,
     pub saved_frame_state: u8,
     pub saved_type: u8,
     pub boss_def_index: u8,
@@ -194,6 +199,10 @@ pub struct ObjectSim {
     pub boss_timer_reload: u8,
     /// `$AFD0`: Wario's falling-child completion latch.
     pub boss_delay: u8,
+    /// `$AFCE`: Wario's transition latch, consumed by anim21/24.
+    pub boss_transition: u8,
+    /// `$AFCF`: Wario intro door-animation latch.
+    pub ending_door_active: u8,
     pub boss_defeated: bool,
     pub boss_slots_raw: [u8; 512],
     pub boss_oam: Vec<BossOamCell>,
@@ -263,6 +272,7 @@ impl ObjectSim {
             scene_phase_set: None,
             boss_slot_ptr_lo: 0,
             fade_timer: 0,
+            timer_low: 0,
             saved_frame_state: 0,
             saved_type: 0,
             boss_def_index: 0,
@@ -273,6 +283,8 @@ impl ObjectSim {
             boss_sprite: 0,
             boss_timer_reload: 0,
             boss_delay: 0,
+            boss_transition: 0,
+            ending_door_active: 0,
             boss_defeated: false,
             boss_slots_raw: [0; 512],
             boss_oam: Vec::new(),
@@ -447,6 +459,8 @@ impl ObjectSim {
         self.spawn_attr = 0;
         self.mario = MarioContact::default();
         self.boss_delay = 0; // $EC40 clears $AFD0 with the object scratch page.
+        self.boss_transition = 0;
+        self.ending_door_active = 0;
         self.camera_pan_set = None;
         self.scene_phase_set = None;
         // $AF06: $EC40 clears it; $EC4B then sets 1 for levels >= $0A.
