@@ -201,16 +201,17 @@
    "status": "pending"
   },
   {
-   "id": "boss_entry_object_scratch_reset",
-   "title": "Clear source AF00-AFFF scratch on boss entry without clearing external state or the original level stream",
+   "id": "wario_arena_entry_enable",
+   "title": "Enable def 6 (Wario, level 0) in boss_def_portable once the fight can finish",
    "asm_refs": [
-    "home.asm:$3A28",
-    "main.asm:$8D9C",
-    "main.asm:$EC40",
-    "main.asm:$EC31"
+    "home.asm:$0EB0",
+    "main.asm:$8D9C"
    ],
-   "dependencies": [],
-   "verification_gate": "Dirty scratch byte reset and external-state preservation, accurate zero stream pointer representation, normal Wario entry and full core/runtime/sweep",
+   "dependencies": [
+    "boss_wario_anim23",
+    "boss_clear_ending_handoff"
+   ],
+   "verification_gate": "Play/replay entry takes the $F0 park, the fight reaches its level clear, and the clear reseeds sSceneState",
    "status": "pending"
   }
  ],

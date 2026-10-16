@@ -1538,8 +1538,10 @@ fn run_replay(
             if cam.scene_load_pending {
                 let def_index = boss_def_index(manifest.level_id, cam.boss_fight_phase);
                 if boss_def_portable(def_index) {
-                    if let Some(music) = cam.begin_scene_load(manifest.level_id) {
+                    if let Some((music, level_song)) = cam.begin_scene_load(manifest.level_id) {
+                        // `$0ECA`: the boss song goes to BOTH bytes.
                         sim.music_request = music;
+                        sim.level_song = level_song;
                         obj.spawn_boss(def_index);
                     }
                 } else if cam.take_blocked_scene_load() {
@@ -2490,8 +2492,10 @@ fn run_play(
                 if cam.scene_load_pending {
                     let def_index = boss_def_index(manifest.level_id, cam.boss_fight_phase);
                     if boss_def_portable(def_index) {
-                        if let Some(music) = cam.begin_scene_load(manifest.level_id) {
+                        if let Some((music, level_song)) = cam.begin_scene_load(manifest.level_id) {
+                            // `$0ECA`: the boss song goes to BOTH bytes.
                             sim.music_request = music;
+                            sim.level_song = level_song;
                             obj.spawn_boss(def_index);
                         }
                     } else if cam.take_blocked_scene_load() {

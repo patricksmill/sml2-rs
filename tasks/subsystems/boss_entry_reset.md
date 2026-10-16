@@ -1,6 +1,7 @@
 # Boss-entry object scratch reset
 
-Queue: `boss_entry_object_scratch_reset` (pending).
+Queue: `boss_entry_object_scratch_reset` — clear and both callers landed
+2026-10-16 (`fdf40ff` cursor prerequisite, this commit's page clear).
 
 Source brief: [ROM $EC40, bank $03 / CPU $6C40](../handlers/0x0EC40.md),
 generated with `python3 tools/handler_task.py --addr 0xEC40`; COMPLETE.
@@ -10,39 +11,44 @@ Caller audit: ROM $8D9C (bank $02 / CPU $4D9C) calls home $3A28,
 which maps bank $03 and calls $EC40, then restores bank $02. It next
 calls home $3A00 -> bank $03 $EC31 (slot-page clear), then $8DFD/$8E6C
 (boss metadata and slot staging). Slot clear and scratch clear are separate.
+The `$EBBB` level-(re)load tail runs the *same* `$EC40`, then `$EC17`
+re-seeds the stream buffer. `reset_level_start` also clears state outside AF;
+the scratch helper is not a substitute for it.
 
-`reset_level_start` also restores the original stream and clears state outside
-AF; it is not an equivalent scratch helper. Preserve the HRAM frame counter,
-player inputs, pending-item/coin/goal state, sound/fade state, and the actual
-stream buffer outside AF. Native pending events are not AF bytes either.
+`objects/scratch.rs::clear_object_scratch` zeroes every represented cell by
+`ram.asm` address (`$AF00/$AF01`, `$AF06`, `$AF08`+`phase`, `$AF09`,
+`$AF1E/$AF1F` via the cleared cursor, `$AF22`, `$AF24/$AF25`, `$AF26`,
+`$AF29`, `$AF2A`, `$AF2B`, `$AF2C`, `$AF2E`, `$AF2F`, `$AF30-$AF33`,
+`$AF36-$AF38`, `$AF3A`, `$AF3E`, `$AF40`, `$AF41`, `$AFC0`, `$AFC1`,
+`$AFC3-$AFC5`, `$AFCA`, `$AFCC-$AFD0`) and leaves everything outside the page
+alone: the HRAM frame counter `$FFF0`, the sampled `$FF04`, the stream buffer
+`$AB00-$ACFF` with its spawn markers, the slot page (cleared separately by
+`$EC31`), and the player/timer/fade/audio bytes in `$A2xx`/`$A468`/`$A53F`.
+Both callers also drop the per-slot draw latch with the slot-page clear.
 
-## First prerequisite: represent the cleared stream pointer
+The `$0EB0` scene-branch caller now writes the boss song to **both**
+`sMusicRequest` and `sLevelSong` (`$0ECA` writes 32 to each; the `$0ED9` arm
+overrides only `sMusicRequest` with `sBossFightPhase + 33` on level `$18`).
 
-AF `$1E/$1F` clear to physical `$0000`; the current `stream_index == 0`
-represents `$AB06`. Preserve the public relative `stream_index: usize` facade
-by adding a private cleared-state bit. In that state the index is inactive;
-the physical accessor returns zero and stream scanning cannot read record zero.
-Construction and real reseeding select the active `$AB06` cursor. The
-[Wario phase-one writer](../handlers/0x0A96D.md) explicitly reseeds `$AB06`.
+## Still gated: def 6
 
-Permitted files: a new `objects/stream_cursor.rs` and its local tests;
-`objects/mod.rs` (registration, field, constructor/reset cursor only);
-`objects/stream.rs` (cleared guard and slot-record pointer accessor only);
-`objects/wario_phase1.rs` (real reseed call only); runtime `main.rs` (two replay
-pointer-report expressions only). Do not implement the AF clear yet.
+`boss_def_portable` still admits only def 2. Enabling Wario's fight (def 6,
+level 0) takes the `$F0` park, and that park is only cleared by the level
+clear the fight ends in — so it stays gated until `boss_wario_anim23`
+(`$AB8B`, whose dispatch arm is the fight's next state) and the fight's
+ending (`boss_clear_ending_handoff`) land. Enabling it earlier parks the
+camera for a fight that cannot finish; the verified entry path itself
+(`spawn_boss(6)` from a dirty, played state) is covered by
+`boss_entry_spawn_boss_clears_the_page_then_stages_the_fight`.
 
-Acceptance: constructor/reload pointer `$AB06`, literal zero after clear,
-cleared scanner does not spawn and reports unsupported pointer use, reseed
-restores actual scanning, wrapping physical accessor, preservation of records,
-and unchanged frozen baseline. No source claim that scanning a cleared pointer
-is an intentional ROM no-op; it is outside required source reachability.
+## Test contract
 
-## Then port the clear and its caller
-
-Zero each represented AF field according to `ram.asm` `$AF00..$AFD0`, including
-the cursor, removal mode and saved boss/Wario latches. Preserve outside-AF
-state. `spawn_boss` calls the clear before staging fresh boss metadata.
-Test dirty scratch, preserved outside state, and the real reentry path before
-enabling def 6 in `boss_def_portable`. The source home $0EB0 writes the returned
-boss song to both `sMusicRequest` and `sLevelSong`; the native caller must do both.
-Keep later Wario forms gated until their own handlers and integration are ready.
+- dirty every represented cell → all zero, the cursor reads physical `$0000`
+  (not `$AB06`), and records/markers are untouched;
+- outside state preserved (fade timer and its deferred write, BCD timer input,
+  sampled DIV, pending item, coin/goal latches, sound bytes, deferred camera
+  and scene writes, the unported report);
+- the real reentry: `spawn_boss(6)` stages defs 20/21 and the driver renders a
+  frame with no reports;
+- the reload path runs the same `$EC40` and then ends on the live `$AB06`
+  cursor ($EC17).

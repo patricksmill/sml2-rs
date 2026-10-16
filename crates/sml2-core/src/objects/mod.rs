@@ -113,6 +113,7 @@ mod dispatch;
 mod helpers;
 mod interaction;
 mod items;
+mod scratch;
 mod shell;
 mod stream;
 mod stream_cursor;
@@ -325,6 +326,8 @@ impl ObjectSim {
     /// Bank 2 `$8DFD`/`$8E6C`: stage boss slots and metadata from `lookup_boss_spawn_def`.
     ///
     /// Implements byte-for-byte Bank 2 staging:
+    /// 0. Runs `$8D9C`'s first call, `$EC40` (`clear_object_scratch`), then the
+    ///    `$EC31` slot clear — in the ROM's order, before any staging.
     /// 1. Clears both slot pages ($AD00-$AEFF, 512 bytes) and resets slot array.
     /// 2. Sets `boss_hits_remaining = hits`, `boss_sprite = sprite`, `boss_timer_reload = 80`.
     /// 3. Copies 18-byte `obj0` to `$AD05` (offset 5 in slot 0).
@@ -342,10 +345,15 @@ impl ObjectSim {
             self.note_unported(0x8DFD);
         }
         let (count, hits, sprite, obj0, sub_objs) = crate::scene::lookup_boss_spawn_def(def_index);
+        // `$8D9C`: `$3A28` ($EC40 scratch clear) then `$3A00` ($EC31 slot
+        // clear) run before `$8DFD`/`$8E6C` stage anything.
+        self.clear_object_scratch();
         self.boss_slots_raw = [0; 512];
         for slot in &mut self.slots {
             slot.b = [0; 32];
         }
+        // The per-slot draw latch is derived from what the cleared page held.
+        self.slot_done = [false; SLOT_COUNT];
         self.boss_def_index = def_index;
         self.boss_def_count = count;
         self.boss_hits_remaining = hits;
@@ -430,24 +438,12 @@ impl ObjectSim {
         for s in self.slots.iter_mut() {
             s.b = [0; 32];
         }
+        self.slot_done = [false; SLOT_COUNT];
+        self.clear_object_scratch();
         self.records.clone_from(&self.initial_records);
         self.spawned = vec![false; self.records.len()];
         self.seed_stream_cursor();
-        self.prev_cam_x = 0;
-        self.scan_dir = 0;
-        self.spawn_x = 0;
-        self.update_phase = 0;
-        self.phase = false;
-        self.standby = 0;
-        self.active = 0;
-        self.done = 0;
         self.pending_item = 0;
-        self.remove_mode = 0;
-        self.clear_stage_flags = false;
-        self.move_flags = 0;
-        self.facing = 0;
-        self.mario_ref_x = 0;
-        self.mario_ref_y = 0;
         self.mario_dead = 0;
         self.bounce = false;
         self.stomp_jump = false;
@@ -458,16 +454,8 @@ impl ObjectSim {
         self.stomp_bounce_timer = 0;
         self.stomp_chain = 0;
         self.money_bag = 0;
-        self.window_hit = false;
-        self.sprite_flip_flags = 0;
         self.goal_bell = 0;
-        self.spawn_anim = 0;
-        self.spawn_sprite = 0;
-        self.spawn_attr = 0;
         self.mario = MarioContact::default();
-        self.boss_delay = 0; // $EC40 clears $AFD0 with the object scratch page.
-        self.boss_transition = 0;
-        self.ending_door_active = 0;
         self.camera_pan_set = None;
         self.scene_phase_set = None;
         // $AF06: $EC40 clears it; $EC4B then sets 1 for levels >= $0A.

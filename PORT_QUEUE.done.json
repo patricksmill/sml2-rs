@@ -642,6 +642,19 @@
    "dependencies": [],
    "verification_gate": "Six counter, eight child, three runtime clock tests; producer/consumer, cycle/rounding/cap sensitivity; full core/runtime and frozen sweep",
    "status": "done"
+  },
+  {
+   "id": "boss_entry_object_scratch_reset",
+   "title": "Clear source AF00-AFFF scratch on boss entry without clearing external state or the original level stream",
+   "asm_refs": [
+    "home.asm:$3A28",
+    "main.asm:$8D9C",
+    "main.asm:$EC40",
+    "main.asm:$EC31"
+   ],
+   "dependencies": [],
+   "verification_gate": "Dirty scratch byte reset and external-state preservation, accurate zero stream pointer representation, normal Wario entry and full core/runtime/sweep",
+   "status": "done"
   }
  ]
 }

@@ -641,17 +641,22 @@ impl CameraSim {
     /// `sBossClearFlag`, the level clear follows, and the level reload reseeds
     /// `sSceneState` — which is what clears the park. For an unported def the
     /// park would be permanent, so `take_blocked_scene_load` reports instead.
-    pub fn begin_scene_load(&mut self, level_id: u8) -> Option<u8> {
+    ///
+    /// Returns `(sMusicRequest, sLevelSong)`: `$0ECA` writes both, and the
+    /// level-`$18` arm (`$0ED9`) then overrides **only** `sMusicRequest`.
+    pub fn begin_scene_load(&mut self, level_id: u8) -> Option<(u8, u8)> {
         if !self.scene_load_pending {
             return None;
         }
         self.scene_load_pending = false;
         self.scene_state = 0xF0;
-        Some(if level_id == 0x18 {
+        let level_song = 32;
+        let music = if level_id == 0x18 {
             self.boss_fight_phase.wrapping_add(33)
         } else {
-            32
-        })
+            level_song
+        };
+        Some((music, level_song))
     }
 
     pub fn take_blocked_scene_load(&mut self) -> bool {
@@ -718,16 +723,21 @@ mod tests {
         let mut c = cam_at(80, 448);
         c.scene_state = 0x0F;
         c.finish_transition();
-        assert_eq!(c.begin_scene_load(0x0D), Some(32), "the boss song");
+        assert_eq!(
+            c.begin_scene_load(0x0D),
+            Some((32, 32)),
+            "(sMusicRequest, sLevelSong)"
+        );
         assert_eq!(c.scene_state, 0xF0, "the park");
         assert!(c.boss_mode(), "$0652 now picks the boss driver");
         assert!(!c.scene_load_pending, "consumed");
-        // Level $18 keeps its fight-phase song.
+        // Level $18 keeps its fight-phase song — but only for sMusicRequest;
+        // `sLevelSong` stays 32 ($0ECA wrote both before the $0ED9 arm).
         let mut c = cam_at(80, 448);
         c.scene_state = 0x01;
         c.boss_fight_phase = 2;
         c.finish_transition();
-        assert_eq!(c.begin_scene_load(0x18), Some(35));
+        assert_eq!(c.begin_scene_load(0x18), Some((35, 32)));
     }
 
     /// `$0EB0`'s scene branch is reported, never taken: taking it would park
