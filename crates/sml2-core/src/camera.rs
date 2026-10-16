@@ -86,8 +86,12 @@ pub struct CameraSim {
     /// `sSfxRequest0` set by the transition finish (fidelity only).
     pub sfx0: u8,
     /// `sCameraPanTimer` ($A2B3): boss-transition bob timer.
-    /// Decremented by `$54E9` once per frame.
+    /// Decremented by `$54E9` during Mario's draw, before the object pass.
     pub pan_timer: u8,
+    /// The pre-decrement phase latched by `$2062` for BG and level objects.
+    pub scroll_pan: u8,
+    /// The post-decrement phase subtracted from Mario's `$FFC4` by `$54E9`.
+    pub player_pan: u8,
     /// `sScrollY` ($A2B0): latched scroll Y = `cam.y - 72 - (pan_timer & 3)`.
     pub scroll_y: u8,
     /// `sScrollX` ($A2B1): latched scroll X = `cam.x - 80`.
@@ -123,6 +127,8 @@ impl CameraSim {
             scene_done_flag: 0,
             sfx0: 0,
             pan_timer: 0,
+            scroll_pan: 0,
+            player_pan: 0,
             scroll_y,
             scroll_x,
         }
@@ -145,6 +151,7 @@ impl CameraSim {
         self.palette_fade_step = 0;
         self.sfx0 = 0;
         self.pan_timer = 0;
+        self.player_pan = 0;
         self.update_scroll();
     }
 
@@ -152,6 +159,7 @@ impl CameraSim {
     /// `sScrollX = camX - 80`.
     pub fn update_scroll(&mut self) {
         let b = (self.pan_timer & 3) as u16;
+        self.scroll_pan = b as u8;
         self.scroll_y = self.y.wrapping_sub(72).wrapping_sub(b) as u8;
         self.scroll_x = self.x.wrapping_sub(80) as u8;
     }
@@ -161,6 +169,27 @@ impl CameraSim {
         if self.pan_timer != 0 {
             self.pan_timer -= 1;
         }
+    }
+
+    /// `$060F` / `$0640`: latch scroll on a live in-level frame, then draw
+    /// Mario (`$54E9`) before objects can write the next shake. Pause/fade
+    /// states skip both calls. The dead draw (`$5550`) skips `$2062` and returns
+    /// before `$54E9` when raw screen Y is in `$E0..=$FF`.
+    pub fn update_player_pan(&mut self, mario_y: u16, dead: bool, in_level: bool) {
+        if !in_level {
+            return;
+        }
+        if !dead {
+            // `$2062` is called even when `$0B2A` parks the camera for a boss.
+            self.update_scroll();
+        }
+        let screen_y = (mario_y as u8).wrapping_sub(self.y as u8).wrapping_add(98);
+        if dead && screen_y & 0xE0 == 0xE0 {
+            self.player_pan = 0;
+            return;
+        }
+        self.tick_pan_timer();
+        self.player_pan = self.pan_timer & 3;
     }
 
     /// `$0B39`: `sScreenEdgeMap[(sCameraY_hi << 4) | sCameraX_hi]` → `$FF98`.
@@ -1492,5 +1521,64 @@ mod tests {
         // Next frame's $2062 update re-latches scroll with pan_timer 2
         c.update_scroll();
         assert_eq!(c.scroll_y, 0x0140u16.wrapping_sub(72).wrapping_sub(2) as u8);
+    }
+
+    #[test]
+    fn pan_draw_preserves_pre_decrement_scroll_and_uses_post_decrement_oam_phase() {
+        let mut c = CameraSim::new(0x180, 0x140);
+        c.pan_timer = 55;
+        c.update_player_pan(0x140, false, true);
+        assert_eq!(c.pan_timer, 54, "$54E9 counter byte");
+        assert_eq!((c.scroll_pan, c.player_pan), (3, 2));
+        assert_eq!(c.scroll_y, 0xF5, "$2062 latched before the decrement");
+        assert_eq!(c.scroll_x, 0x30);
+        // The next player update's $2F72 still reads the previous scroll.
+        assert_eq!(c.scroll_y, 0xF5);
+        c.update_player_pan(0x140, false, true);
+        assert_eq!((c.pan_timer, c.scroll_pan, c.player_pan), (53, 2, 1));
+        assert_eq!(c.scroll_y, 0xF6);
+    }
+
+    #[test]
+    fn pan_draw_handles_both_rom_seed_values_and_zero_without_underflow() {
+        for (seed, counter, scroll, player) in
+            [(52, 51, 0, 3), (56, 55, 0, 3), (1, 0, 1, 0), (0, 0, 0, 0)]
+        {
+            let mut c = CameraSim::new(80, 72);
+            c.pan_timer = seed;
+            c.update_player_pan(72, false, true);
+            assert_eq!(
+                (c.pan_timer, c.scroll_pan, c.player_pan),
+                (counter, scroll, player)
+            );
+            assert_eq!(c.scroll_y, 0u8.wrapping_sub(scroll));
+        }
+    }
+
+    #[test]
+    fn pan_draw_latches_when_the_boss_camera_is_parked_and_freezes_outside_level() {
+        let mut c = CameraSim::new(80, 72);
+        c.scene_state = 0xF0;
+        c.pan_timer = 3;
+        c.update_player_pan(72, false, true);
+        assert_eq!((c.pan_timer, c.scroll_y, c.player_pan), (2, 253, 2));
+        c.update_player_pan(72, false, false); // paused/death fade/exit fade
+        assert_eq!((c.pan_timer, c.scroll_y, c.player_pan), (2, 253, 2));
+    }
+
+    #[test]
+    fn pan_dead_draw_keeps_scroll_latched_and_skips_the_hidden_screen_band() {
+        let mut c = CameraSim::new(80, 72);
+        c.pan_timer = 3;
+        c.update_scroll();
+        c.pan_timer = 2;
+        c.update_player_pan(72, true, true);
+        assert_eq!((c.pan_timer, c.scroll_y, c.player_pan), (1, 253, 1));
+        for screen_y in [0xE0u8, 0xFF] {
+            let y = (screen_y.wrapping_add(72).wrapping_sub(98)) as u16;
+            c.pan_timer = 3;
+            c.update_player_pan(y, true, true);
+            assert_eq!((c.pan_timer, c.scroll_y, c.player_pan), (3, 253, 0));
+        }
     }
 }

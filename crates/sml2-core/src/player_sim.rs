@@ -299,6 +299,8 @@ pub struct PlayerSim {
     pub ducking: bool,
     pub swim: bool,
     pub moon: u8,
+    /// Entry-frame snapshot of `$A2B3`; CameraSim owns the draw-time countdown.
+    pub pan_timer: u8,
     /// `sMoonFloatTimer` ($A2B2) — the bit-3 timed float's budget: 50 armed on
     /// the ground (`$104A`), 0 when A is released (`$1050`), cleared by a
     /// ceiling bonk (`$15DA`).
@@ -577,6 +579,7 @@ impl PlayerSim {
             ducking: false,
             swim: false,
             moon: 0,
+            pan_timer: 0,
             moon_float_timer: 0,
             moon_jump_pose_timer: 0,
             powerup: 1,
@@ -1715,20 +1718,23 @@ impl PlayerSim {
         } else {
             self.spin_jump = 0;
         }
-        // $160A jump
-        if self.on_ground {
-            self.in_air = false;
-        }
-        let wants_jump = if self.powerup == 2 { keys.a } else { a_pressed };
-        if wants_jump && (self.on_ground || self.swim) && !self.goal_bell {
-            self.jump_flag = true;
-            self.in_air = true;
-            self.on_ground = false;
-            self.vvel = 75;
-            if self.powerup != 2 && (0x48..0xC0).contains(&self.hvel) && !keys.up {
-                self.vvel = 48;
-                if self.swim {
-                    self.vvel = 72;
+        // $160A returns immediately while the camera-pan timer is nonzero.
+        if self.pan_timer == 0 {
+            // $160A jump
+            if self.on_ground {
+                self.in_air = false;
+            }
+            let wants_jump = if self.powerup == 2 { keys.a } else { a_pressed };
+            if wants_jump && (self.on_ground || self.swim) && !self.goal_bell {
+                self.jump_flag = true;
+                self.in_air = true;
+                self.on_ground = false;
+                self.vvel = 75;
+                if self.powerup != 2 && (0x48..0xC0).contains(&self.hvel) && !keys.up {
+                    self.vvel = 48;
+                    if self.swim {
+                        self.vvel = 72;
+                    }
                 }
             }
         }
@@ -1796,7 +1802,7 @@ impl PlayerSim {
         if self.goal_bell {
             self.dir_right = true;
             self.hvel = if self.on_ground { 0xB8 } else { 0x80 };
-        } else if !self.ducking && !self.x_pushed {
+        } else if self.pan_timer == 0 && !self.ducking && !self.x_pushed {
             if keys.right {
                 self.dir_right = true;
                 self.hvel = self.hvel.wrapping_add(8);
@@ -2608,6 +2614,7 @@ impl PlayerSim {
         // `sMapNode` is progress, not level state: the reload leaves it alone.
         self.game_over = false;
         self.paused = false;
+        self.pan_timer = 0;
         self.fade_timer = 0;
         self.powerup = 0;
         self.invincibility = 0;
@@ -5532,5 +5539,57 @@ mod tests {
         assert_eq!(sim.sfx0, 0);
         assert_eq!(sim.sfx2, 0);
         assert_eq!(sim.block_slots[0][0], 0);
+    }
+
+    #[test]
+    fn pan_timer_blocks_jump_and_acceleration_but_preserves_coasting_and_goal_priority() {
+        let layout = blank_layout();
+        let keys = PlayerKeys {
+            a: true,
+            right: true,
+            b: true,
+            ..Default::default()
+        };
+        let mut sim = small_sim();
+        sim.on_ground_obj = true;
+        sim.pan_timer = 2;
+        sim.dir_right = false;
+        sim.step(&keys, true, false, &layout);
+        assert_eq!((sim.hvel, sim.vvel, sim.pan_timer), (0x80, 24, 2));
+        assert!(sim.on_ground);
+        assert!(!sim.jump_flag);
+        assert!(!sim.dir_right);
+        assert_ne!(sim.walk_timer, 0, "the rest of the frame still runs");
+
+        let mut coast = small_sim();
+        coast.on_ground_obj = true;
+        coast.camx = 100;
+        coast.phase = 2; // ROM speed table $19FF + $9E = 1 pixel
+        coast.hvel = 0xA0;
+        coast.pan_timer = 1;
+        coast.step(
+            &PlayerKeys {
+                left: true,
+                ..Default::default()
+            },
+            false,
+            false,
+            &layout,
+        );
+        assert_eq!(
+            coast.hvel, 0x9C,
+            "friction still follows the skipped acceleration"
+        );
+        assert_eq!(coast.x, 101, "existing momentum is integrated");
+
+        let mut goal = small_sim();
+        goal.on_ground_obj = true;
+        goal.pan_timer = 2;
+        goal.goal_bell = true;
+        goal.step(&keys, true, false, &layout);
+        assert_eq!(
+            goal.hvel, 0xB4,
+            "$1701 checks the goal bell before the pan timer"
+        );
     }
 }

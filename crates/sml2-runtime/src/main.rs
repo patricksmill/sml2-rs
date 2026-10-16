@@ -173,6 +173,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 obp0: manifest.header.palettes[1],
                 obp1: manifest.header.palettes[2],
                 player: mario,
+                player_pan: 0,
+                scroll_pan: 0,
                 bumpers: Vec::new(),
                 fireballs: Vec::new(),
                 boss_oam: Vec::new(),
@@ -521,6 +523,9 @@ struct SpriteCtx {
     /// these frames, because the boss slots' state byte carries HP, not a slot
     /// state, and the engine's own draw never runs in the boss path.
     boss_oam: Vec<sml2_core::objects::BossOamCell>,
+    /// Distinct phases: Mario subtracts the decremented phase; BG/objects use latched scroll.
+    player_pan: u8,
+    scroll_pan: u8,
 }
 
 /// Interactive viewer: arrow keys scroll the camera, Q/ESC quits; the window
@@ -699,7 +704,7 @@ fn render_view(
     // top 632 is past 768 - 144), every tile drew 8 px low and Mario looked like he floated
     // above the block row the console puts him on.
     let sx = cam_x as i32 - vw as i32 / 2;
-    let sy = cam_y as i32 - vh as i32 / 2;
+    let sy = cam_y as i32 - vh as i32 / 2 - spr.map_or(0, |s| s.scroll_pan as i32);
     let (ox, oy) = (window_origin(sx, world_w), window_origin(sy, world_h));
     let mut img = vec![shades[0]; vw * vh];
     let mut bg_idx = vec![0u8; vw * vh];
@@ -778,7 +783,7 @@ fn render_view(
                     &pal0,
                     &pal1,
                     c.x as i32 - 8,
-                    c.y as i32 - 16,
+                    c.y.wrapping_sub(s.player_pan) as i32 - 16,
                     c.tile,
                     c.attr,
                     vw,
@@ -1284,6 +1289,8 @@ fn run_replay(
         f0.camx as u16 | ((f0.camxh as u16 & 0x0F) << 8),
         f0.camy as u16 | ((f0.camyh as u16 & 0x0F) << 8),
     );
+    cam.pan_timer = f0.pan.unwrap_or(0); // documented initial snapshot only
+    cam.update_scroll();
     cam.prev_mario_y_lo = f0.y as u8;
     cam.map_scroll_limit = f0.limit;
     cam.auto_scroll = f0.autoscroll;
@@ -1373,11 +1380,6 @@ fn run_replay(
         // reads bit 3, and no capture spins). The *low* bits still come from the
         // record above, which is what every other reader uses.
         sim.frame_counter = sim.frame_counter.wrapping_add(1);
-        // `sCameraPanTimer` ($A2B3): the record is its only source here, and the
-        // camera latches `sScrollY` from it at the frame end (`$2062`), which is
-        // what the `$2F72` seam below reads. Play mode has no writer yet (the
-        // boss arms' 52/56 are unported) — see `camera_pan_timer`.
-        cam.pan_timer = f.pan.unwrap_or(0);
         // The camera bytes the *player* update reads are the ones written by
         // the previous frame's camera step: the ROM runs `$0F71` before
         // `$0B2A` (home.asm:799/803), so `$0FBF`'s clamp and `$1BFF`'s hazard
@@ -1392,6 +1394,7 @@ fn run_replay(
         // below still verify the derivation against the record.
         sim.camx = cam.x;
         sim.camy = cam.y;
+        sim.pan_timer = cam.pan_timer;
         // $05E4/$0640: the frame loop's three branches. Dead (`$FF`) runs only
         // the arc + the object engine (the camera freezes); the death fade
         // (`$FF9B = 9`) leaves the level entirely, freezing everything.
@@ -1492,7 +1495,8 @@ fn run_replay(
         // captured byte is what the camera ran with, so the check is a
         // tautology — the missing-table note above is what fails the gate.
         let edge_derived = if own_edges { cam_edge_before } else { f.edge };
-        let mario = build_contact(&sim, &keys, f.pan.unwrap_or(0));
+        cam.update_player_pan(sim.y, was_dead, !fade_at_entry);
+        let mario = build_contact(&sim, &keys, cam.scroll_pan);
         // $2D0A: the frame selection runs *before* the interaction pass, so
         // on the contact frame the sprite still shows the grounded pose.
         let frame_idx = if was_dead {
@@ -1618,6 +1622,8 @@ fn run_replay(
             if i % 30 == 0 {
                 if let Some(s) = spr.as_mut() {
                     s.player = Some((sim.x, sim.y, frame_idx));
+                    s.player_pan = cam.player_pan;
+                    s.scroll_pan = cam.scroll_pan;
                     // The dead path's own draw overwrites the staging pair.
                     s.bumpers = if was_dead {
                         Vec::new()
@@ -1742,6 +1748,10 @@ fn run_replay(
                 edge_derived == f.edge,
                 format!("edge sim=${:02X} exp=${:02X}", edge_derived, f.edge),
             );
+            if let Some(pan) = f.pan {
+                push("pan", cam.pan_timer == pan,
+                     format!("pan sim=${:02X} exp=${:02X}", cam.pan_timer, pan));
+            }
             push(
                 "en_r",
                 cam.right_enabled == f.en_r,
@@ -2380,6 +2390,7 @@ fn run_play(
         prev_select = select_down;
         sim.camx = cam.x;
         sim.camy = cam.y;
+        sim.pan_timer = cam.pan_timer;
         // $FF97: the engine's frame counter ticks once per game frame. The
         // full byte is kept because the pause flash reads bit 4 of it; `phase`
         // is its low three bits.
@@ -2451,9 +2462,10 @@ fn run_play(
             cam.step(&mut sim);
             cam.update_enables(sim.x);
         }
+        cam.update_player_pan(sim.y, was_dead, !frozen);
         if let Some(tables) = &obj_tables {
             if !frozen {
-                let mario = build_contact(&sim, &keys, cam.pan_timer);
+                let mario = build_contact(&sim, &keys, cam.scroll_pan);
                 obj.mario_dead = sim.dead;
                 obj.fade_timer = sim.fade_timer;
                 // `$0EB0`'s scene branch; see the replay loop.
@@ -2516,8 +2528,6 @@ fn run_play(
                 );
             }
         }
-        // $54E9: decrement sCameraPanTimer if nonzero.
-        cam.tick_pan_timer();
         let f = if was_dead {
             107
         } else {
@@ -2531,6 +2541,8 @@ fn run_play(
         }
         if let Some(s) = spr.as_mut() {
             s.player = Some((sim.x, sim.y, f));
+            s.player_pan = cam.player_pan;
+            s.scroll_pan = cam.scroll_pan;
             // $2C82 is skipped while dead, and the dead path's own draw ($5550,
             // frame 107) overwrites the staging pair — so a bump sprite never
             // survives into the arc.
@@ -2752,5 +2764,103 @@ mod tests {
         let mut sim = PlayerSim::new();
         sim.seed_moon_physics(lvl1.properties.space_physics);
         assert_eq!(sim.moon, 0x00);
+    }
+
+    fn pan_sprites(player: Option<(u16, u16, u8)>) -> SpriteCtx {
+        SpriteCtx {
+            tables: serde_json::from_str(
+                &fs::read_to_string(
+                    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../extracted/objects.json"),
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+            level_id: 0,
+            insts: Vec::new(),
+            objblock: vec![255; 0x1000],
+            obp0: 0xE4,
+            obp1: 0xE4,
+            player,
+            bumpers: Vec::new(),
+            fireballs: Vec::new(),
+            boss_oam: Vec::new(),
+            player_pan: 0,
+            scroll_pan: 0,
+        }
+    }
+
+    #[test]
+    fn pan_renderer_moves_bg_by_latched_scroll_phase() {
+        let (manifest, layout, bg) = level_files("level01.manifest.json", "level01.bgblock.bin");
+        let mut s = pan_sprites(None);
+        let baseline = render_view(
+            &manifest,
+            &layout,
+            &[],
+            &bg,
+            80,
+            448,
+            160,
+            144,
+            None,
+            Some(&s),
+            None,
+        )
+        .unwrap();
+        s.scroll_pan = 3;
+        let shifted = render_view(
+            &manifest,
+            &layout,
+            &[],
+            &bg,
+            80,
+            448,
+            160,
+            144,
+            None,
+            Some(&s),
+            None,
+        )
+        .unwrap();
+        assert_ne!(baseline, shifted);
+        assert_eq!(&shifted[3 * 160..144 * 160], &baseline[..141 * 160]);
+    }
+
+    #[test]
+    fn pan_renderer_moves_only_mario_by_post_decrement_phase() {
+        let (manifest, layout, _) = level_files("level01.manifest.json", "level01.bgblock.bin");
+        let bg = vec![0; 0x1000];
+        let mut s = pan_sprites(Some((34, 468, 32)));
+        let baseline = render_view(
+            &manifest,
+            &layout,
+            &[],
+            &bg,
+            80,
+            448,
+            160,
+            144,
+            None,
+            Some(&s),
+            None,
+        )
+        .unwrap();
+        s.player_pan = 2;
+        let shifted = render_view(
+            &manifest,
+            &layout,
+            &[],
+            &bg,
+            80,
+            448,
+            160,
+            144,
+            None,
+            Some(&s),
+            None,
+        )
+        .unwrap();
+        assert_ne!(baseline, shifted, "the mapping must draw visible pixels");
+        assert_eq!(&shifted[..142 * 160], &baseline[2 * 160..144 * 160]);
     }
 }
