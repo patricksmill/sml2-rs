@@ -120,11 +120,13 @@ mod tests;
 mod walkers;
 mod wario_child22;
 mod wario_child25;
+mod wario_phase1;
 
 #[derive(Debug, Clone)]
 pub struct ObjectSim {
     pub slots: [ObjSlot; SLOT_COUNT],
     pub records: Vec<SpawnRecord>,
+    initial_records: Vec<SpawnRecord>,
     pub stream_index: usize,
     pub spawned: Vec<bool>,
     pub prev_cam_x: u16,
@@ -175,6 +177,10 @@ pub struct ObjectSim {
     pub music_request: Option<u8>,
     pub boss_clear_flag: u8,
     pub fade_timer_set: Option<u16>,
+    /// Object-produced camera writes, consumed after the object pass.
+    pub camera_pan_set: Option<u8>,
+    /// Wario exit clears scene state and selects this boss phase.
+    pub scene_phase_set: Option<u8>,
     pub boss_slot_ptr_lo: u8,
     pub fade_timer: u16,
     pub saved_frame_state: u8,
@@ -199,6 +205,7 @@ impl ObjectSim {
         let n = records.len();
         Self {
             slots: Default::default(),
+            initial_records: records.clone(),
             records,
             stream_index: 0,
             spawned: vec![false; n],
@@ -252,6 +259,8 @@ impl ObjectSim {
             music_request: None,
             boss_clear_flag: 0,
             fade_timer_set: None,
+            camera_pan_set: None,
+            scene_phase_set: None,
             boss_slot_ptr_lo: 0,
             fade_timer: 0,
             saved_frame_state: 0,
@@ -402,9 +411,8 @@ impl ObjectSim {
         for s in self.slots.iter_mut() {
             s.b = [0; 32];
         }
-        for m in self.spawned.iter_mut() {
-            *m = false;
-        }
+        self.records.clone_from(&self.initial_records);
+        self.spawned = vec![false; self.records.len()];
         self.stream_index = 0;
         self.prev_cam_x = 0;
         self.scan_dir = 0;
@@ -439,6 +447,8 @@ impl ObjectSim {
         self.spawn_attr = 0;
         self.mario = MarioContact::default();
         self.boss_delay = 0; // $EC40 clears $AFD0 with the object scratch page.
+        self.camera_pan_set = None;
+        self.scene_phase_set = None;
         // $AF06: $EC40 clears it; $EC4B then sets 1 for levels >= $0A.
         self.sprite_map_index = if self.level_id >= 0x0A { 1 } else { 0 };
         self.odd = self.fff0 & 1 == 1; // fff0 kept ($FFF0 is HRAM)

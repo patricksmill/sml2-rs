@@ -617,6 +617,20 @@
    "dependencies": [],
    "verification_gate": "BCD byte and side-effect tests, runtime initialization/frame ordering/reset, core and runtime tests",
    "status": "done"
+  },
+  {
+   "id": "boss_wario_phase1_exit_helper",
+   "title": "Port Wario phase-one exit and object-to-camera scene/pan result seam",
+   "asm_refs": [
+    "main.asm:$A96D",
+    "main.asm:$A987",
+    "main.asm:$A98B",
+    "main.asm:$A99A",
+    "main.asm:$A9B9"
+   ],
+   "dependencies": [],
+   "verification_gate": "Exact stream/slot/fade bytes, consumed scene events, real spawn scanner, original stream reload, sensitivity and core/runtime/sweep",
+   "status": "done"
   }
  ]
 }

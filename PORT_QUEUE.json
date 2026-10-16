@@ -137,7 +137,8 @@
    "dependencies": [
     "boss_wario_child22",
     "boss_wario_transition21",
-    "level_countdown_timer"
+    "level_countdown_timer",
+    "boss_wario_phase1_exit_helper"
    ],
    "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
    "status": "pending"

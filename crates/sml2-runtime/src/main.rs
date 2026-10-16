@@ -1550,6 +1550,7 @@ fn run_replay(
             // The write-back list lives in the sim so this loop and the play
             // loop cannot drift apart again (`infra_play_parity_harness`).
             sim.apply_object_result(&mut obj, keys.a);
+            cam.apply_object_result(&mut obj);
         }
         // $20A4: the scene VM. The main loop calls it once per pass *after* the
         // in-level frame pass (home.asm:274), so a latched scene advances
@@ -2497,6 +2498,7 @@ fn run_play(
                 // here was missing `on_ground_cleared` and `on_ground_obj`, so
                 // play mode disagreed with every capture on both.
                 sim.apply_object_result(&mut obj, keys.a);
+                cam.apply_object_result(&mut obj);
             }
         }
         // $20A4: the scene VM, once per frame after the whole in-level pass —
