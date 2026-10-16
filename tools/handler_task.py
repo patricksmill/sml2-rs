@@ -1,151 +1,135 @@
 #!/usr/bin/env python3
-"""Emit a small handler porting brief for one bank-16 anim handler.
+"""Write one bank-aware handler brief. Exit 2 for incomplete or invalid slices.
 
-Usage:
-  python3 tools/handler_task.py --addr 0x58201
-  python3 tools/handler_task.py --anim 9 --mode a
-
-Writes tasks/handlers/0x{ADDR}.md (ADDR = handler ROM offset from objects.json).
+--dependency ROM=FILE::METHOD names an explicitly reviewed, bank-preserving
+Rust helper contract. Such dependencies are shown in the brief, not silently
+considered translated. --max-states bounds traversal; exhausted budgets produce INCOMPLETE briefs.
 """
-
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import re
 from pathlib import Path
+import re
+import sys
+
+from asm_slice import SourceIndex, bank_cpu, slice_handler
 
 ROOT = Path(__file__).resolve().parents[1]
-DECOMP = Path(os.environ.get("SML2_DECOMP_ROOT", ROOT / ".." / "sml2decomp")).resolve()
-OBJECTS_JSON = ROOT / "extracted" / "objects.json"
-MAIN_ASM = DECOMP / "main.asm"
-BASEROM = DECOMP / "baserom.gb"
-OUT_DIR = ROOT / "tasks" / "handlers"
-
-LABEL_RE = re.compile(
-    r"^(Unknown(?:Jump|Call|RJump|Data)_0x([0-9A-Fa-f]+)):",
-    re.MULTILINE,
-)
-
-
-def load_objects() -> dict:
-    with open(OBJECTS_JSON) as f:
-        return json.load(f)
 
 
 def handler_for_anim(data: dict, anim: int, mode: str) -> int:
-    key = "anim_profiles_a" if mode == "a" else "anim_profiles_b"
-    profiles = data[key]
-    if anim < 0 or anim >= len(profiles):
-        raise SystemExit(f"anim {anim} out of range for mode {mode} ({len(profiles)} entries)")
-    return int(profiles[anim]["handler"])
+    table = data['boss_anim_handlers'] if mode == 'boss' else data[f'anim_profiles_{mode}']
+    if not 0 <= anim < len(table):
+        raise ValueError(f'anim {anim} out of range for mode {mode}')
+    return table[anim] if mode == 'boss' else table[anim]['handler']
 
 
-def anims_for_handler(data: dict, addr: int) -> list[tuple[str, int]]:
-    out: list[tuple[str, int]] = []
-    for mode, key in (("a", "anim_profiles_a"), ("b", "anim_profiles_b")):
-        for i, prof in enumerate(data[key]):
-            if int(prof["handler"]) == addr:
-                out.append((mode, i))
-    return out
+def bindings_for(values: list[str], root: Path) -> dict[int, str]:
+    bindings = {}
+    for value in values:
+        address, contract = value.split('=', 1)
+        file, method = contract.rsplit('::', 1)
+        path = (root / file).resolve()
+        if not path.is_relative_to(root.resolve()):
+            raise ValueError('dependency file must be inside repository')
+        text = path.read_text()
+        if not re.search(rf'\bfn\s+{re.escape(method)}\s*\(', text):
+            raise ValueError(f'missing Rust helper: {contract}')
+        addr = int(address, 0)
+        if addr in bindings:
+            raise ValueError(f'duplicate dependency: {address}')
+        bindings[addr] = contract
+    return bindings
 
 
-def collect_labels(asm_text: str) -> list[tuple[int, int, str]]:
-    """(rom_offset, line_no_1based, label_name) sorted by offset."""
-    labels: list[tuple[int, int, str]] = []
-    for m in LABEL_RE.finditer(asm_text):
-        off = int(m.group(2), 16)
-        line_no = asm_text[: m.start()].count("\n") + 1
-        labels.append((off, line_no, m.group(1)))
-    labels.sort(key=lambda t: t[0])
-    return labels
+def make_brief(root: Path, decomp: Path, addr: int, *, bank=None, budget=800, dependencies=None) -> tuple[str, bool]:
+    data = json.loads((root / 'extracted/objects.json').read_text())
+    rom = (decomp / 'baserom.gb').read_bytes()
+    source = SourceIndex.load(decomp, rom)
+    result = slice_handler(rom, source, addr, bank=bank, budget=budget, bindings=dependencies)
+    bank_id, cpu = bank_cpu(addr)
+    anims = []
+    for mode in ('a', 'b', 'boss'):
+        table = data['boss_anim_handlers'] if mode == 'boss' else data[f'anim_profiles_{mode}']
+        for i in range(len(table)):
+            if handler_for_anim(data, i, mode) == addr:
+                anims.append(f'{mode}:{i}')
+    instructions = '\n'.join(f'0x{pc:05X}  {line}' for pc, line in sorted(result.instructions.items()))
+    tables = '\n'.join(f'- ROM 0x{pc:05X}: ' + ', '.join(f'${p:04X}' for p in targets)
+                       for pc, targets in sorted(result.tables.items())) or '- None.'
+    contracts = '\n'.join(f'- ROM 0x{pc:05X}: `{contract}` (reviewed bank-preserving contract)'
+                          for pc, contract in sorted(result.dependencies.items())) or '- None.'
+    unresolved = '\n'.join(f'- {reason}' for reason in sorted(result.unresolved)) or '- None.'
+    status = 'COMPLETE' if result.complete else 'INCOMPLETE'
+    return f'''# Handler 0x{addr:05X}
+
+**Slice status: {status}** — this describes control-flow coverage, not implementation verification.
+**Address:** ROM `0x{addr:05X}`, bank `${bank_id:02X}` ({bank_id} decimal), CPU `${cpu:04X}`.
+**Selected bank at entry:** `${(bank_id if bank is None else bank):02X}`.
+**Anims:** {', '.join(anims) or '(helper / no table entry)'}.
+**Policy:** [PORTING.md](../../PORTING.md).
+
+Implement in a focused sibling module under `crates/sml2-core/src/objects/`;
+register it in `objects/mod.rs` if new, and wire `objects/dispatch.rs`.
+Reuse `objects/staging.rs` and `objects/helpers.rs`. New tests belong beside the
+implementation; shared integration fixtures are currently in `objects/tests.rs`.
+
+## Exact ROM-addressed instructions and ASM locations
+
+Addresses and edges derive from ROM bytes. Source labels are not assumed to
+mark every entry. Review table bounds and dependency contracts before porting.
+
+```text
+{instructions}
+```
+
+## Recovered rst $28 state tables (CPU targets)
+
+{tables}
+
+## Existing helper dependencies supplied by the supervisor
+
+{contracts}
+
+## Unresolved work
+
+{unresolved}
+
+An INCOMPLETE brief must not be dispatched as a ready implementation task.
+Resolve the listed transfer or split a helper prerequisite and regenerate.
+Byte assertions must cover state transitions, gates, arithmetic boundaries,
+removal/reset, and dispatch. No generated brief constitutes behavioral proof.
+''', result.complete
 
 
-def excerpt_asm(asm_text: str, addr: int, window: int = 90) -> tuple[str, int | None]:
-    labels = collect_labels(asm_text)
-    line_start: int | None = None
-    for off, line_no, name in labels:
-        if off == addr:
-            line_start = line_no
-            break
-    if line_start is None:
-        for off, line_no, name in labels:
-            if off <= addr < off + 0x80:
-                line_start = line_no
-                break
-    if line_start is None:
-        return "(no label near address; see ROM hex below)\n", None
-    lines = asm_text.splitlines()
-    i0 = max(0, line_start - 1)
-    i1 = min(len(lines), i0 + window)
-    chunk = "\n".join(f"{i + 1:6d}| {lines[i]}" for i in range(i0, i1))
-    return chunk, line_start
-
-
-def rom_slice(addr: int, nbytes: int = 96) -> str:
-    if not BASEROM.is_file():
-        return f"(missing {BASEROM})\n"
-    with open(BASEROM, "rb") as f:
-        f.seek(addr)
-        data = f.read(nbytes)
-    return " ".join(f"{b:02X}" for b in data)
-
-
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--addr", type=lambda s: int(s, 0))
-    ap.add_argument("--anim", type=int)
-    ap.add_argument("--mode", choices=("a", "b"), default="a")
-    ap.add_argument("--window", type=int, default=90)
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    which = ap.add_mutually_exclusive_group(required=True)
+    which.add_argument('--addr', type=lambda s: int(s, 0))
+    which.add_argument('--anim', type=int)
+    ap.add_argument('--mode', choices=('a', 'b', 'boss'), default='a')
+    ap.add_argument('--bank', type=lambda s: int(s, 0), help='selected bank for a home-bank entry')
+    ap.add_argument('--max-states', type=int, default=800)
+    ap.add_argument('--dependency', action='append', default=[])
+    ap.add_argument('--out-dir', type=Path, default=ROOT / 'tasks/handlers')
     args = ap.parse_args()
-
-    data = load_objects()
-    if args.addr is not None:
-        addr = args.addr
-    elif args.anim is not None:
-        addr = handler_for_anim(data, args.anim, args.mode)
-    else:
-        raise SystemExit("need --addr or --anim")
-
-    anims = anims_for_handler(data, addr)
-    asm_text = MAIN_ASM.read_text() if MAIN_ASM.is_file() else ""
-    excerpt, line_start = excerpt_asm(asm_text, addr, args.window)
-
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = OUT_DIR / f"0x{addr:05X}.md"
-
-    anim_lines = ", ".join(f"mode-{m} anim {i}" for m, i in anims) or "(no anim profile entry)"
-
-    body = f"""# Handler 0x{addr:05X}
-
-**Anims:** {anim_lines}
-
-**Rust:** add `objects/handlers/` implementation; one arm in `objects/dispatch.rs`.
-
-**Policy:** [`PORTING.md`](../../PORTING.md) — one handler, one test, no whole-file edits.
-
-## ASM excerpt (`main.asm`)
-
-Start line hint: {line_start or "unknown"}
-
-```
-{excerpt}
-```
-
-## ROM bytes @ 0x{addr:05X}
-
-```
-{rom_slice(addr)}
-```
-
-## Calls to chase (grep in ../sml2decomp)
-
-Search `UnknownCall_0x` targets in the excerpt; port via `objects/helpers.rs` when already present.
-"""
-    out_path.write_text(body)
-    print(f"wrote {out_path.relative_to(ROOT)}")
+    try:
+        decomp = Path(os.environ.get('SML2_DECOMP_ROOT', ROOT / '../sml2decomp')).resolve()
+        data = json.loads((ROOT / 'extracted/objects.json').read_text())
+        addr = args.addr if args.addr is not None else handler_for_anim(data, args.anim, args.mode)
+        body, complete = make_brief(ROOT, decomp, addr, bank=args.bank, budget=args.max_states,
+                                    dependencies=bindings_for(args.dependency, ROOT))
+        args.out_dir.mkdir(parents=True, exist_ok=True)
+        out = args.out_dir / f'0x{addr:05X}.md'
+        out.write_text(body)
+        print(f'wrote {out}: {"complete" if complete else "INCOMPLETE"}', file=sys.stderr)
+        return 0 if complete else 2
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f'handler task error: {exc}', file=sys.stderr)
+        return 2
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    raise SystemExit(main())

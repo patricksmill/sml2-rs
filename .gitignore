@@ -4,3 +4,6 @@ handler_coverage.json
 /frame.png
 captures/traj13_full.json
 captures/*_raw.json
+
+# Python tooling caches
+__pycache__/
