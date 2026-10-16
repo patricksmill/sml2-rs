@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "12 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "13 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "remaining_handler_classes",
@@ -136,7 +136,8 @@
    ],
    "dependencies": [
     "boss_wario_child22",
-    "boss_wario_transition21"
+    "boss_wario_transition21",
+    "level_countdown_timer"
    ],
    "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
    "status": "pending"
@@ -194,6 +195,20 @@
    ],
    "dependencies": [],
    "verification_gate": "Source-derived input timing, both sampled parities, and native/replay input integration tests",
+   "status": "pending"
+  },
+  {
+   "id": "level_countdown_timer",
+   "title": "Port BCD level countdown and seed it from level headers for Wario attack selection",
+   "asm_refs": [
+    "main.asm:$5D6A",
+    "main.asm:$5D8C",
+    "main.asm:$5E03",
+    "home.asm:$05E4",
+    "main.asm:$AA05"
+   ],
+   "dependencies": [],
+   "verification_gate": "BCD byte and side-effect tests, runtime initialization/frame ordering/reset, core and runtime tests",
    "status": "pending"
   }
  ],

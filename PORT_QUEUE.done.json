@@ -591,6 +591,18 @@
    "dependencies": [],
    "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
    "status": "done"
+  },
+  {
+   "id": "boss_wario_child25",
+   "title": "Port Wario falling-child anim25 and shared anim22 fall/removal path",
+   "asm_refs": [
+    "main.asm:$AB6E",
+    "main.asm:$AB4D",
+    "main.asm:$B157"
+   ],
+   "dependencies": [],
+   "verification_gate": "Five handler and dispatch/reset tests; init mutation fails; full core suite and frozen sweep",
+   "status": "done"
   }
  ]
 }

@@ -12,18 +12,21 @@ impl ObjectSim {
                 st.b[B_FSTATE] = 1;
                 st.b[B_FLASH] = 0x10;
             }
-            1 => {
-                if self.fff0 & 1 != 0 {
-                    return;
-                }
-                self.scr_y_add(st, 1);
-                let primary_y = self.slots[0].b[B_SCRY] & 0xF0;
-                if (st.b[B_SCRY] & 0xF0).wrapping_add(0x20) == primary_y {
-                    self.boss_delay = 1;
-                    self.boss_finish_counted(st);
-                }
-            }
+            1 => self.wario_child_fall_ab4d(st),
             _ => self.note_unported(0xAB30),
+        }
+    }
+
+    /// Shared state-one target `$AB4D` used by boss animations 22 and 25.
+    pub(super) fn wario_child_fall_ab4d(&mut self, st: &mut Staging) {
+        if self.fff0 & 1 != 0 {
+            return;
+        }
+        self.scr_y_add(st, 1);
+        let primary_y = self.slots[0].b[B_SCRY] & 0xF0;
+        if (st.b[B_SCRY] & 0xF0).wrapping_add(0x20) == primary_y {
+            self.boss_delay = 1;
+            self.boss_finish_counted(st);
         }
     }
 }

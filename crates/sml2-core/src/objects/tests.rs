@@ -115,6 +115,34 @@ fn handler_0x0ab30_boss_dispatch_moves_child_then_delivers_delay_and_removes() {
     assert!(obj.unported.is_empty(), "{:X?}", obj.unported);
 }
 
+#[test]
+fn handler_0x0ab6e_dispatch_and_level_reload_clear_delay() {
+    let mut t = tables();
+    t.boss_anim_handlers = vec![0x9322; 26];
+    t.boss_anim_handlers[25] = 0xAB6E;
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.boss_def_count = 1;
+    obj.slots[0].b[B_DEF] = 1;
+    obj.slots[0].b[B_SCRX] = 0x92;
+    obj.slots[0].b[B_SCRY] = 0x8A;
+    obj.slots[1].b[B_DEF] = 25;
+    let layout = blank_layout();
+    obj.boss_engine(0, 0, &layout, &t);
+    assert_eq!(obj.slots[1].b[B_SPRITE], 0x71);
+    assert_eq!(obj.slots[1].b[B_SCRX], 0x92);
+    assert_eq!(obj.slots[1].b[B_SCRY], 0x10);
+    obj.slots[1].b[B_SCRY] = 0x5F;
+    obj.boss_engine(0, 0, &layout, &t);
+    assert_eq!(obj.slots[1].b, [0; 32]);
+    assert_eq!(obj.boss_delay, 1);
+    assert_eq!(obj.boss_def_count, 0);
+    assert!(obj.unported.is_empty());
+    let frame = obj.fff0;
+    obj.reset_level_start();
+    assert_eq!(obj.boss_delay, 0);
+    assert_eq!(obj.fff0, frame);
+}
+
 /// A staged copy carrying the `$2DC6` touch flag (bit 4) and the given
 /// type/anim.
 fn touched(anim: u8, ty: u8) -> Staging {

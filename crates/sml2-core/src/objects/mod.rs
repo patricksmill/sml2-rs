@@ -116,6 +116,7 @@ mod stream;
 mod tests;
 mod walkers;
 mod wario_child22;
+mod wario_child25;
 
 #[derive(Debug, Clone)]
 pub struct ObjectSim {
@@ -434,6 +435,7 @@ impl ObjectSim {
         self.spawn_sprite = 0;
         self.spawn_attr = 0;
         self.mario = MarioContact::default();
+        self.boss_delay = 0; // $EC40 clears $AFD0 with the object scratch page.
         // $AF06: $EC40 clears it; $EC4B then sets 1 for levels >= $0A.
         self.sprite_map_index = if self.level_id >= 0x0A { 1 } else { 0 };
         self.odd = self.fff0 & 1 == 1; // fff0 kept ($FFF0 is HRAM)
