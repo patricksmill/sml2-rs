@@ -6,7 +6,7 @@
 |-----|------|
 | **PORTING.md** (this file) | How to work — one unit of work, verification, models, forbidden moves |
 | **DESIGN.md** | Architecture and long-term constraints (texture packs, 60 Hz sim, seams) |
-| **PORT_QUEUE.json** | **Pending work only** (7 items). Done history: `PORT_QUEUE.done.json` (do not load) |
+| **PORT_QUEUE.json** | **Pending work only** (query the live count). Done history: `PORT_QUEUE.done.json` (do not load) |
 | **notes/** | Retired (see `notes/README.md`) — do not add files here |
 | **captures/** | Frozen replay regression only — read-only |
 
@@ -14,7 +14,7 @@ Sibling ROM truth: `../sml2decomp/` + `baserom.gb` under that tree (`SML2_DECOMP
 
 Full-game sequencing and milestone acceptance:
 [`Systematic Rust port completion workflow`](docs/plans/2026-10-15-rust-completion-workflow.md).
-The seven-item mechanics queue is one milestone within that roadmap. The repaired tools and their exit-status contracts are documented in
+The mechanics queue is one milestone within that roadmap. The repaired tools and their exit-status contracts are documented in
 [`tools/README.md`](tools/README.md). Handler counts measure declared dispatch,
 not behavior verification or dynamic-spawn closure.
 
@@ -100,7 +100,7 @@ Cheap / flash models are **not** allowed to own logic ports.
 
 ## Remaining work (scope)
 
-Queue milestone **mechanics_all_levels**. Pending items (7): `remaining_handler_classes` (bulk), `moon_physics_remaining_arms`, `map_zone_screen_loaders`, `camera_pan_timer`, `boss_arena_phase_cascade`, `boss_clear_ending_handoff`, `boss_anim_4_5_chain`.
+Queue milestone **mechanics_all_levels**. Pending items: `remaining_handler_classes` (bulk), `moon_physics_remaining_arms`, `map_zone_screen_loaders`, `camera_pan_timer`, `boss_arena_phase_cascade`, `boss_clear_ending_handoff`, `boss_anim_4_5_chain`, `boss_wario_anim20`, `boss_wario_anim23`.
 
 Handler audit: run `python3 tools/handler_coverage.py` → `handler_coverage.json`. Orchestration (supervisor/worker prompts): [`ORCHESTRATION.md`](ORCHESTRATION.md).
 

@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 QUEUE_FILES = {
     "moon_physics_remaining_arms": ["crates/sml2-core/src/player_sim.rs"],
     "map_zone_screen_loaders": ["crates/sml2-core/src/map.rs", "crates/sml2-core/src/map_sim.rs"],
-    "camera_pan_timer": ["crates/sml2-core/src/camera.rs", "crates/sml2-runtime/src/main.rs"],
+    "camera_pan_timer": ["crates/sml2-core/src/camera.rs", "crates/sml2-core/src/player_sim.rs", "crates/sml2-runtime/src/main.rs"],
     "boss_arena_phase_cascade": [
         "crates/sml2-core/src/objects/boss.rs",
         "crates/sml2-core/src/scene.rs",

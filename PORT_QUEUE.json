@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "7 pending items in queue; 44 done items in PORT_QUEUE.done.json. Work per PORTING.md.",
+ "milestone_note": "9 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "remaining_handler_classes",
@@ -58,15 +58,23 @@
   },
   {
    "id": "camera_pan_timer",
-   "title": "`sCameraPanTimer` ($A2B3) is a replay-only injected value and play mode has no source",
+   "title": "Finish camera-pan timer producers and remaining flutter gate after shared draw timing is verified",
    "asm_refs": [
-    "home.asm:$307D",
-    "home.asm:$54E9",
-    "home.asm:$2F72",
-    "main.asm:$C090"
+    "home.asm:$2062",
+    "main.asm:$54E9",
+    "main.asm:$C090",
+    "home.asm:$1090",
+    "home.asm:$160A",
+    "home.asm:$1701",
+    "main.asm:$A9EA",
+    "main.asm:$AA60",
+    "main.asm:$AD4E"
    ],
    "dependencies": [
-    "record_field_timing_audit"
+    "record_field_timing_audit",
+    "boss_wario_anim20",
+    "boss_wario_anim23",
+    "moon_physics_remaining_arms"
    ],
    "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
    "status": "pending"
@@ -116,6 +124,33 @@
    "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
    "status": "pending",
    "detail": "anim 4 state 0: state=1, spawn staging anim $05/sprite $0C/attr $FFDD, call $B224 (the count went 1 -> 2 in the poke). $965E: $B38C sprite helper (FFF0 & 1 gate, B_ANIMFRAME cycle 1..5 with a $FFDD ^= $20 at 3), then the state table $966A = [$5629, $5670, $5688]: states 1/2 = the $71D6 (c=21, table $720E) / $718F (c=21, $71A3) descents with $FFDD ^= $40 at each transition; state 3 = $5688, rise 4 px a frame until SCRY < 8 then $FF9B = $1D. anim 5 state 0: 8 frames, then SCRY += $18 and state 1; its table $96BE = [$56C4, $56E1, $5688] = the two picker descents and the same $5688 win. Needs the $720E table ($B20E, 22 bytes) extracted - it is a window of the same $72xx profile blob as boss_picker_profile."
+  },
+  {
+   "id": "boss_wario_anim20",
+   "title": "Port Wario boss anim 20 (ROM $A8AB), including the $34/$38 camera-pan writes",
+   "asm_refs": [
+    "main.asm:$A8AB",
+    "main.asm:$A90E",
+    "main.asm:$A9EA",
+    "main.asm:$AA60"
+   ],
+   "dependencies": [],
+   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+   "status": "pending"
+  },
+  {
+   "id": "boss_wario_anim23",
+   "title": "Port Wario boss anim 23 (ROM $AB8B), including the $38 camera-pan write",
+   "asm_refs": [
+    "main.asm:$AB8B",
+    "main.asm:$AC04",
+    "main.asm:$AD4E"
+   ],
+   "dependencies": [
+    "boss_wario_anim20"
+   ],
+   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+   "status": "pending"
   }
  ],
  "workflow_rules": {
