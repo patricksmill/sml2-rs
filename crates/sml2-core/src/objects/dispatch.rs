@@ -23,6 +23,7 @@ impl ObjectSim {
             0x586E1 => self.handler_marker85(st),
             0x586EE => self.handler_marker66(st),
             0x586F5 => self.handler_pickup16(st, tables),
+            0x58848 => self.handler_0x58848(st, layout),
             0x58712 => self.handler_hopper(st, layout, tables),
             0x58755 => self.handler_itempose20(st),
             0x58758 => self.itempose_body(st),

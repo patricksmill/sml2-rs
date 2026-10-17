@@ -115,6 +115,8 @@ mod boss_reverse_picker;
 #[cfg(test)]
 mod boss_screen_input_tests;
 mod dispatch;
+mod handler_0x58848;
+mod handler_0x58848_adapter;
 mod handler_0x586eb;
 mod handler_0x591f9;
 mod vertical_bobber;

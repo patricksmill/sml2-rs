@@ -249,6 +249,15 @@ pub struct Actor {
 }
 
 impl Actor {
+    /// ROM `$5B3C6`: face a world X target, overwriting all sprite flip bits.
+    pub fn face_toward(&mut self, target_x: u16) -> std::cmp::Ordering {
+        let ordering = target_x.cmp(&self.position.x);
+        let right = ordering == std::cmp::Ordering::Greater;
+        self.state = if right { 2 } else { 1 };
+        self.sprite_flip = SpriteFlipFlags::from_bits(if right { 0x20 } else { 0 });
+        ordering
+    }
+
     pub fn from_raw_slot(slot: &[u8; 32]) -> Self {
         Self {
             position: Position {
