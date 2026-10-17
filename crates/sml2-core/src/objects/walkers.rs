@@ -563,6 +563,15 @@ impl ObjectSim {
         st.b = actor.to_raw_slot();
     }
 
+    pub(super) fn handler_left_marcher(&mut self, st: &mut Staging) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = left_marcher::LeftMarcherContext {
+            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+        };
+        let _effect = left_marcher::update(&mut actor, context);
+        st.b = actor.to_raw_slot();
+    }
+
     pub(super) fn handler_hopper(
         &mut self,
         st: &mut Staging,

@@ -3892,6 +3892,52 @@ fn handler_edge_walker_0x59baf_dispatch_and_movement() {
     assert_eq!(st.b[B_FSTATE], 1);
 }
 
+#[test]
+fn handler_left_marcher_0x591de_dispatch_and_movement() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(6); // level 6 (Tree Zone 2)
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 200);
+    set_y(&mut st.b, 100);
+    st.b[B_SPRITE] = 104;
+    obj.fff0 = 1; // odd frame: no sprite advance
+
+    // Frame 1: Init frame
+    obj.dispatch_handler(0x591DE, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 1, "state is Marching (1)");
+    assert_eq!(st.b[B_TYPE], 77, "contact kind 77 (0x4D standard stompable)");
+    assert_eq!(st.x(), 200, "init frame does not move");
+    assert_eq!(st.b[B_SPRITE], 104, "sprite untouched on odd frame");
+
+    // Frame 2: Even frame -> moves 1 px left (200 -> 199), sprite cycle advances (104 -> 105)
+    obj.fff0 = 2;
+    obj.dispatch_handler(0x591DE, &mut st, &l, &t);
+    assert_eq!(st.x(), 199, "moved 1 px left");
+    assert_eq!(st.b[B_SPRITE], 105, "three-step cycle step 1: +1");
+
+    // Frame 3: Odd frame -> moves 1 px left (199 -> 198), sprite unchanged
+    obj.fff0 = 3;
+    obj.dispatch_handler(0x591DE, &mut st, &l, &t);
+    assert_eq!(st.x(), 198, "moved 1 px left");
+    assert_eq!(st.b[B_SPRITE], 105, "odd frame: sprite unchanged");
+
+    // Frame 4: Even frame -> moves 1 px left (198 -> 197), sprite cycle advances (105 -> 106)
+    obj.fff0 = 4;
+    obj.dispatch_handler(0x591DE, &mut st, &l, &t);
+    assert_eq!(st.x(), 197, "moved 1 px left");
+    assert_eq!(st.b[B_SPRITE], 106, "three-step cycle step 2: +1");
+
+    // Frame 6: Even frame -> moves 1 px left (197 -> 196), sprite cycle wraps (106 -> 104)
+    obj.fff0 = 6;
+    obj.dispatch_handler(0x591DE, &mut st, &l, &t);
+    assert_eq!(st.x(), 196, "moved 1 px left");
+    assert_eq!(st.b[B_SPRITE], 104, "three-step cycle step 3: -2");
+}
+
+
 
 
 

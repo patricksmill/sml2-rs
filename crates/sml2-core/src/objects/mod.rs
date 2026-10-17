@@ -139,6 +139,7 @@ mod fallwalker;
 mod fire_piranha;
 mod groundwalker;
 mod horizontal_platform;
+mod left_marcher;
 mod paced_walker;
 mod perched_flyer;
 mod pipe_bobber;
