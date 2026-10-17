@@ -166,6 +166,10 @@ mod handler_0x58bcb_adapter;
 mod handler_0x58c41;
 #[path = "handler_0x58C41_adapter.rs"]
 mod handler_0x58c41_adapter;
+#[path = "handler_0x58CE0.rs"]
+mod handler_0x58ce0;
+#[path = "handler_0x58CE0_adapter.rs"]
+mod handler_0x58ce0_adapter;
 #[path = "handler_0x58C52.rs"]
 mod handler_0x58c52;
 #[path = "handler_0x58C52_adapter.rs"]
