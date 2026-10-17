@@ -4,6 +4,7 @@ pub mod actor;
 pub mod audio;
 pub mod camera;
 pub mod collision;
+pub mod credits_text;
 pub mod divider;
 pub mod ending_entry;
 pub mod ending_scene;
