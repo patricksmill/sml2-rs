@@ -34,6 +34,7 @@ impl ObjectSim {
             0x5B241 => self.handler_floater94(st),
             0x5B28C => self.handler_floater95(st),
             0x586EB => self.handler_0x586eb(st),
+            0x591F9 => self.handler_0x591f9(st),
             0x5B0D5 => self.handler_0x5b0d5(st),
             // $58100 — a bare `ret` (ROM bytes: the single byte `$C9` right after
             // the 192-byte mode-A table at $58040). Nineteen mode-A indices and
