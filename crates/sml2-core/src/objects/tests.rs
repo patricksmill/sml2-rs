@@ -3852,6 +3852,47 @@ fn handler_winged_walker_0x58f4c_dispatch_and_movement() {
     assert_eq!(st.b[B_T24], 1);
 }
 
+#[test]
+fn handler_edge_walker_0x59baf_dispatch_and_movement() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 80);
+    st.b[B_SPRITE] = 90;
+    obj.mario_ref_x = 150; // Mario to the right
+    obj.fff0 = 0;
+
+    // Frame 0: Init (Mario right -> WalkRight / 2)
+    obj.dispatch_handler(0x59BAF, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 2, "state is WalkRight (2)");
+    assert_eq!(st.b[B_TYPE], 77, "contact kind 77 (0x4D)");
+    assert_eq!(st.b[B_FLIP] & 0x20, 0x20, "faces right (flip_h)");
+    assert_eq!(obj.facing, 1);
+    assert_eq!(st.b[B_SPRITE], 91, "four-step bob delta (+1) applied to sprite 90 -> 91");
+
+    // Frame 0 (even): steps right 1 px (100 -> 101)
+    obj.dispatch_handler(0x59BAF, &mut st, &l, &t);
+    assert_eq!(st.x(), 101);
+    assert_eq!(st.b[B_FSTATE], 2);
+
+    // Frame 1 (odd): blank_layout has no ground under (101, 80) -> reverses at ledge to WalkLeft (1)!
+    obj.fff0 = 1;
+    obj.dispatch_handler(0x59BAF, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 1, "ledge reverse toggles state to WalkLeft (1)");
+    assert_eq!(st.b[B_FLIP] & 0x20, 0, "faces left (no flip_h)");
+
+    // Frame 2 (even): steps left 1 px (101 -> 100)
+    obj.fff0 = 2;
+    obj.dispatch_handler(0x59BAF, &mut st, &l, &t);
+    assert_eq!(st.x(), 100);
+    assert_eq!(st.b[B_FSTATE], 1);
+}
+
+
 
 
 

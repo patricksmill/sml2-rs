@@ -134,6 +134,7 @@ mod boo;
 mod carrier;
 mod cannon_ant;
 mod charging_enemy;
+mod edge_walker;
 mod fallwalker;
 mod fire_piranha;
 mod groundwalker;
