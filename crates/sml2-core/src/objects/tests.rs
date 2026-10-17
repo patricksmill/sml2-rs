@@ -3268,5 +3268,92 @@ fn handler_bobber_pipe_travel_removes_object() {
     assert_eq!(obj.done, 2, "despawn removal marked done=2");
 }
 
+#[test]
+fn handler_fire_piranha_0x58541_full_lifecycle_and_projectile_spawn() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.mario_ref_x = 100;
+    obj.mario_ref_y = 150; // Mario is above
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 200);
+
+    // Waiting state: Mario dx = 0 < 24 -> stays waiting
+    obj.dispatch_handler(0x58541, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 0);
+    assert_eq!(st.b[B_DEFEAT], 0x80);
+
+    // Mario moves far away (dx = 30 >= 24)
+    obj.mario_ref_x = 130;
+    obj.dispatch_handler(0x58541, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 1);
+    assert_eq!(st.b[B_T24], 32);
+    assert_eq!(st.b[B_T25], 32);
+    assert_eq!(st.b[B_TYPE], 0x44);
+
+    // Step 1 through 31 of emergence (y -= 1, aiming up sprite = 18)
+    for _ in 1..=31 {
+        obj.dispatch_handler(0x58541, &mut st, &l, &t);
+        assert_eq!(st.b[B_FSTATE], 1);
+        assert_eq!(st.b[B_SPRITE], 18);
+    }
+    assert_eq!(st.y(), 169);
+
+    // Step 32: reaches top, opens mouth (sprite 19), spawns projectile (anim 14), transitions to state 2 (timer 48)
+    let standby_before = obj.standby;
+    obj.dispatch_handler(0x58541, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 2);
+    assert_eq!(st.b[B_SPRITE], 19);
+    assert_eq!(st.b[B_T28], 48);
+    assert_eq!(obj.standby, standby_before + 1, "spawned standby projectile slot");
+    // Find the spawned slot
+    let spawned_child = obj.slots.iter().find(|s| s.b[B_DEF] == 14);
+    assert!(spawned_child.is_some(), "child slot with anim 14 exists");
+    let child = spawned_child.unwrap();
+    assert_eq!(child.b[B_STATE], 1, "child is in Standby");
+    assert_eq!(child.b[B_SPRITE], 22, "child sprite is 22");
+
+    // State 2: wait 48 frames
+    for _ in 0..48 {
+        obj.dispatch_handler(0x58541, &mut st, &l, &t);
+    }
+    assert_eq!(st.b[B_FSTATE], 3, "transitions to Retracting");
+    assert_eq!(st.b[B_SPRITE], 18, "closes mouth to sprite 18");
+    assert_eq!(st.b[B_T24], 32);
+
+    // State 3: retract 32 steps
+    for _ in 0..32 {
+        obj.dispatch_handler(0x58541, &mut st, &l, &t);
+    }
+    assert_eq!(st.b[B_FSTATE], 4, "transitions to Resting");
+    assert_eq!(st.y(), 200, "back at starting Y");
+    assert_eq!(st.b[B_T28], 4, "rest timer is 4");
+
+    // State 4: resting ticks down on frames where fff0 % 8 == 0
+    for tick in 1..=4 {
+        obj.fff0 = tick * 8;
+        obj.dispatch_handler(0x58541, &mut st, &l, &t);
+    }
+    assert_eq!(st.b[B_FSTATE], 0, "returned to Waiting state");
+}
+
+#[test]
+fn handler_fire_piranha_pipe_travel_despawn() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.mario.travelling = true;
+
+    let mut st = Staging::default();
+    st.b[B_STATE] = 2; // Active slot
+    obj.dispatch_handler(0x58541, &mut st, &l, &t);
+    assert_eq!(obj.done, 2, "despawn removal marked done=2");
+}
+
+
 
 

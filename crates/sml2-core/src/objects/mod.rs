@@ -132,6 +132,7 @@ mod tests;
 mod mario_zone;
 mod carrier;
 mod fallwalker;
+mod fire_piranha;
 mod groundwalker;
 mod pipe_bobber;
 mod squashed;
