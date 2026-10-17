@@ -180,21 +180,7 @@ impl ObjectSim {
     }
 
     pub(super) fn boss_hit_stun(&mut self, st: &mut Staging) {
-        self.boss_flash_b40e(st); // $B40E
-        if st.b[B_T28] != 0 {
-            st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
-            if st.b[B_T28] != 0 {
-                return;
-            }
-        }
-        if self.remove_mode != 0 {
-            self.boss_defeat_fall(st);
-            return;
-        }
-        st.b[B_FLASH] = 0;
-        st.b[B_SPRITE] = self.spawn_sprite;
-        st.b[B_FSTATE] = self.saved_frame_state;
-        st.b[B_TYPE] = self.saved_type;
+        self.apply_boss_hit_stun(st);
     }
 
     pub(super) fn boss_fade_done(&mut self, st: &mut Staging) {
