@@ -1,9 +1,9 @@
 //! Wario's second falling child, ROM `$0AB6E` (boss animation 25).
 
-use super::*;
+use crate::objects::{ObjectSim, Staging, B_FLASH, B_FSTATE, B_SCRX, B_SCRY, B_SPRITE};
 
 impl ObjectSim {
-    pub(super) fn boss_anim25(&mut self, st: &mut Staging) {
+    pub(in crate::objects) fn boss_anim25(&mut self, st: &mut Staging) {
         match st.b[B_FSTATE] {
             0 => {
                 st.b[B_SPRITE] = 0x71;

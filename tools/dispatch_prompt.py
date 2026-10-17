@@ -42,13 +42,14 @@ def handler_prompt(addr: int, *, module: str | None = None, dependencies=(), bud
     module = module or f"crates/sml2-core/src/objects/handler_0x{addr:05X}.rs"
     path = (ROOT / module).resolve()
     folder = (ROOT / "crates/sml2-core/src/objects").resolve()
-    if path.parent != folder or path.suffix != '.rs' or path.stem in {'mod', 'dispatch', 'staging', 'helpers', 'tests'}:
-        raise ValueError('choose a handler sibling module under crates/sml2-core/src/objects/')
+    if not path.is_relative_to(folder) or path.suffix != '.rs' or path.stem in {'mod', 'dispatch', 'staging', 'helpers', 'tests'}:
+        raise ValueError('choose a handler module within crates/sml2-core/src/objects/')
     if path.exists() and len(path.read_text().splitlines()) >= 400:
         raise ValueError(f'{module} is already at least 400 lines; choose a new focused sibling module')
     adapter = path.with_name(f'{path.stem}_adapter.rs')
     if adapter.exists() and len(adapter.read_text().splitlines()) >= 400:
         raise ValueError(f'{adapter.name} is already at least 400 lines; choose a focused adapter')
+    registration = path.parent / "mod.rs"
     run_handler_task(addr, dependencies=dependencies, budget=budget)
     task = ROOT / "tasks/handlers" / f"0x{addr:05X}.md"
     if '**Slice status: COMPLETE**' not in task.read_text():
@@ -67,7 +68,7 @@ Touch ONLY:
   - {module} (implementation and local tests)
   - {adapter.relative_to(ROOT)} (slot compatibility and world input/effect adapter)
   - crates/sml2-core/src/objects/dispatch.rs (one arm)
-  - crates/sml2-core/src/objects/mod.rs (module registrations only, if new)
+  - {registration.relative_to(ROOT)} (module registrations only, if new)
 
 Read the supplied brief's exact existing helper contracts when listed.
 Do NOT read: DESIGN.md, PORT_QUEUE, captures/, notes/, whole main.asm.

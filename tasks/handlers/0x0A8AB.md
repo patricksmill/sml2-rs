@@ -7,8 +7,12 @@
 **Policy:** [PORTING.md](../../PORTING.md).
 
 Implement in a focused sibling module under `crates/sml2-core/src/objects/`;
-register it in `objects/mod.rs` if new, and wire `objects/dispatch.rs`.
-Reuse `objects/staging.rs` and `objects/helpers.rs`. New tests belong beside the
+register it in its owning `mod.rs` if new, and wire `objects/dispatch.rs`.
+Wario modules belong in `objects/wario/`; shared boss helpers stay in `objects/`.
+Apply `docs/idiomatic-rust-porting.md`: use typed `Actor` state from `actor.rs`.
+Keep slot conversion and legacy world input/effect mapping in an explicit adapter;
+do not put raw offsets, register names or HRAM scratch in domain handler logic.
+Resolve typed shared-helper prerequisites first. New tests belong beside the
 implementation; shared integration fixtures are currently in `objects/tests.rs`.
 
 ## Exact ROM-addressed instructions and ASM locations
@@ -270,7 +274,7 @@ mark every entry. Review table bounds and dependency contracts before porting.
 
 - ROM 0x09285: `crates/sml2-core/src/objects/boss.rs::boss_damage_pass` (reviewed bank-preserving contract)
 - ROM 0x09CAC: `crates/sml2-core/src/objects/boss.rs::boss_hit_stun` (reviewed bank-preserving contract)
-- ROM 0x0A96D: `crates/sml2-core/src/objects/wario_phase1.rs::wario_phase1_exit` (reviewed bank-preserving contract)
+- ROM 0x0A96D: `crates/sml2-core/src/objects/wario/phase1_exit.rs::wario_phase1_exit` (reviewed bank-preserving contract)
 - ROM 0x0B14E: `crates/sml2-core/src/objects/boss.rs::fade_idle` (reviewed bank-preserving contract)
 - ROM 0x0B1D6: `crates/sml2-core/src/objects/boss_reverse_picker.rs::boss_reverse_picker_b1d6` (reviewed bank-preserving contract)
 - ROM 0x0B1E4: `crates/sml2-core/src/objects/boss_reverse_picker.rs::boss_reverse_picker_b1e4` (reviewed bank-preserving contract)

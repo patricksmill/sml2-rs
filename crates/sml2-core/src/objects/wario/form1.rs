@@ -1,9 +1,12 @@
 //! Wario's first form, ROM `$A8AB` (bank 2 CPU `$68AB`).
 
-use super::*;
+use crate::objects::{
+    ObjectSim, ObjectTables, Staging, B_ANIMFRAME, B_FLASH, B_FLIP, B_FSTATE, B_PHASE, B_SCRX,
+    B_SCRY, B_SPRITE, B_T24, B_T25, B_T28, B_TYPE,
+};
 
 impl ObjectSim {
-    pub(super) fn handler_wario20(&mut self, st: &mut Staging, tables: &ObjectTables) {
+    pub(in crate::objects) fn handler_wario20(&mut self, st: &mut Staging, tables: &ObjectTables) {
         self.boss_damage_pass(st);
         if self.done != 0 {
             self.spawn_sprite = st.b[B_SPRITE];
@@ -163,5 +166,5 @@ impl ObjectSim {
 }
 
 #[cfg(test)]
-#[path = "wario20_tests.rs"]
+#[path = "form1_tests.rs"]
 mod tests;

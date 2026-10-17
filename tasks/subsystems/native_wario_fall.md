@@ -3,8 +3,8 @@
 Target one shared helper: ROM `$AB4D` (bank 2), COMPLETE source brief
 [`0x0AB4D.md`](../handlers/0x0AB4D.md), including counted removal `$B157`.
 
-Permitted implementation files: new `objects/wario_child_fall.rs`, optional
-sibling tests/adapter, existing `objects/wario_child22.rs` (replace only the
+Permitted implementation files: new `objects/wario/child_fall.rs`, optional
+sibling tests/adapter, existing `objects/wario/child22.rs` (replace only the
 shared helper facade/body; leave anim22 initialization/tests intact), and
 `objects/mod.rs` module registrations only. Read `actor.rs`, the native guide,
 PORTING, and the named source brief. Keep other handlers and actor API unchanged.

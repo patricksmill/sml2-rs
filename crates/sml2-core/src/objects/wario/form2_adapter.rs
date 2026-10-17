@@ -1,12 +1,10 @@
 //! Compatibility boundary for the native anim23 handler.
-use super::boss_stun::HitStunContext;
-use super::{
-    wario23::{self, Context},
-    ObjectSim, ObjectTables, Staging,
-};
+use super::form2::{self, Context};
 use crate::actor::{Actor, ContactKind, FrameTick, SpriteFlipFlags};
+use crate::objects::boss_stun::HitStunContext;
+use crate::objects::{ObjectSim, ObjectTables, Staging};
 impl ObjectSim {
-    pub(super) fn handler_wario23(&mut self, st: &mut Staging, tables: &ObjectTables) {
+    pub(in crate::objects) fn handler_wario23(&mut self, st: &mut Staging, tables: &ObjectTables) {
         self.boss_damage_pass(st);
         let context = Context {
             spawn_flip: SpriteFlipFlags::from_bits(self.spawn_attr),
@@ -28,7 +26,7 @@ impl ObjectSim {
             player_screen_x: self.player_screen_x,
         };
         let mut actor = Actor::from_raw_slot(&st.b);
-        let result = wario23::update(&mut actor, context, &tables.boss_picker_profile);
+        let result = form2::update(&mut actor, context, &tables.boss_picker_profile);
         st.b = actor.to_raw_slot();
         let Ok(effects) = result else {
             self.note_unported(0xAB8B);

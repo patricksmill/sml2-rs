@@ -72,7 +72,8 @@ def make_brief(root: Path, decomp: Path, addr: int, *, bank=None, budget=800, de
 **Policy:** [PORTING.md](../../PORTING.md).
 
 Implement in a focused sibling module under `crates/sml2-core/src/objects/`;
-register it in `objects/mod.rs` if new, and wire `objects/dispatch.rs`.
+register it in its owning `mod.rs` if new, and wire `objects/dispatch.rs`.
+Wario modules belong in `objects/wario/`; shared boss helpers stay in `objects/`.
 Apply `docs/idiomatic-rust-porting.md`: use typed `Actor` state from `actor.rs`.
 Keep slot conversion and legacy world input/effect mapping in an explicit adapter;
 do not put raw offsets, register names or HRAM scratch in domain handler logic.

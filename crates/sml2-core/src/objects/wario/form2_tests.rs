@@ -1,9 +1,7 @@
 //! Expected byte writes independently transcribed from `$AB8B..$AD90`.
-use super::{
-    boss_stun::HitStunContext,
-    wario23::{update, Context},
-};
+use super::form2::{update, Context};
 use crate::actor::{Actor, ContactKind, FrameTick, SpriteFlipFlags};
+use crate::objects::boss_stun::HitStunContext;
 const FORWARD: [u8; 25] = [
     0, 0, 1, 1, 1, 2, 1, 2, 2, 1, 2, 3, 2, 3, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3,
 ];
@@ -40,7 +38,7 @@ fn slot(state: u8) -> [u8; 32] {
     raw[11] = 86;
     raw
 }
-fn run(raw: [u8; 32], c: Context) -> ([u8; 32], super::wario23::Effects) {
+fn run(raw: [u8; 32], c: Context) -> ([u8; 32], super::form2::Effects) {
     let mut actor = Actor::from_raw_slot(&raw);
     let e = update(&mut actor, c, &FORWARD).unwrap();
     (actor.to_raw_slot(), e)

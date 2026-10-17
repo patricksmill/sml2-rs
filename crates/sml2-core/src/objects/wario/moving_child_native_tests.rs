@@ -167,7 +167,7 @@ fn native_child_invalid_profile_reports_data_instead_of_inventing_movement() {
 
 #[test]
 fn native_child_adapter_reports_missing_profile_and_keeps_probe_scratch() {
-    use super::super::{ObjectSim, ObjectTables, Staging};
+    use crate::objects::{ObjectSim, ObjectTables, Staging};
     let mut tables: ObjectTables = serde_json::from_str(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../extracted/objects.json"

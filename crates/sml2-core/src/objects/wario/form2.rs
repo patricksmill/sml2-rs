@@ -1,7 +1,7 @@
 //! Native second-form Wario, ROM `$AB8B`; slot/world mapping lives in the adapter.
-use super::boss_spawn::BossSpawnRequest;
-use super::boss_stun::{update_hit_stun, HitStunContext};
 use crate::actor::{Actor, ContactKind, Facing, FrameTick, RiseProfile, SpriteFlipFlags};
+use crate::objects::boss_spawn::BossSpawnRequest;
+use crate::objects::boss_stun::{update_hit_stun, HitStunContext};
 
 #[derive(Clone, Copy)]
 pub(super) struct Context {

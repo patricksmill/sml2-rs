@@ -85,7 +85,7 @@ def audit(root: Path, rom: bytes) -> dict:
     if not boss:
         raise ValueError('empty boss table')
     folder = root / 'crates/sml2-core/src/objects'
-    sources = sorted(folder.glob('*.rs'))
+    sources = sorted(folder.rglob('*.rs'))
     if not sources:
         raise ValueError(f'no Rust sources: {folder}')
     methods = set()

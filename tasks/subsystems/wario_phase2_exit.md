@@ -2,11 +2,11 @@
 
 One shared state target: ROM `$AC55` bank 2, COMPLETE
 [`source brief`](../handlers/0x0AC55.md). This precedes the full anim23 handler.
-Read native guide/PORTING, `actor.rs`, `wario_phase1.rs` as consumer reference,
+Read native guide/PORTING, `actor.rs`, `wario/phase1_exit.rs` as consumer reference,
 and the brief. Allowed bounded reads of CameraSim event consumer and existing
 stream-scanner tests if needed. Do not load whole object engine or DESIGN.
 
-Touch ONLY new `objects/wario_phase2.rs`, optional sibling test/adapter files,
+Touch ONLY new `objects/wario/phase2_exit.rs`, optional sibling test/adapter files,
 and `objects/mod.rs` registration. Existing Actor animation helper API:
 `animate_four_step_bob(FrameTick) -> Result<(), AnimationFrameError>` where
 error has `frame: u8`; worker is completing this prerequisite now.

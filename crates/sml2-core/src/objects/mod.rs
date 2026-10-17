@@ -120,7 +120,6 @@ mod handler_0x5b0d5;
 mod helpers;
 mod interaction;
 mod items;
-mod native_actor_adapter;
 mod scratch;
 mod shell;
 mod stream;
@@ -128,21 +127,7 @@ mod stream_cursor;
 #[cfg(test)]
 mod tests;
 mod walkers;
-mod wario_child22;
-mod wario_child25;
-mod wario_child_fall;
-mod wario_phase1;
-mod wario_phase2;
-mod wario20;
-mod wario23;
-mod wario23_adapter;
-#[cfg(test)]
-mod wario23_tests;
-#[cfg(test)]
-mod wario23_integration;
-#[cfg(test)]
-mod wario20_integration;
-mod wario21;
+mod wario;
 
 #[derive(Debug, Clone)]
 pub struct ObjectSim {

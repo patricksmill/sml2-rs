@@ -1,6 +1,9 @@
 //! Wario 23's live timer input and camera-impact producer/consumer paths.
 
-use super::*;
+use crate::objects::{
+    LevelLayout, ObjectSim, ObjectTables, Staging, B_DEF, B_FLAGS, B_FLIP, B_FSTATE, B_PHASE,
+    B_SCRX, B_SCRY, B_SPRITE, B_T28, B_TYPE,
+};
 use crate::{
     camera::CameraSim,
     player_sim::{PlayerKeys, PlayerSim},

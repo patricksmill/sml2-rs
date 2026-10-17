@@ -37,7 +37,7 @@ consumption and unsupported state/data. Slot arrays enter and leave only through
 the actor's two conversion methods. Retain the existing handler entry/dispatch
 facade and all ROM-derived byte tests.
 
-Permitted migration files: `objects/wario21.rs`, a new bounded native context/
+Permitted migration files: `objects/wario/moving_child.rs`, a new bounded native context/
 adapter module if needed, `objects/mod.rs` registration only, and relevant local
 tests. Shared actor helper additions require their own source contract and tests.
 Acceptance: existing handler/dispatch and real Wario producer-consumer tests;

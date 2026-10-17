@@ -31,10 +31,14 @@ fn update_exit(
 }
 
 // Compatibility adapter: owns fade/event writes and the legacy stream boundary.
-use super::{ObjectSim, ObjectTables, SpawnRecord, Staging};
+use crate::objects::{ObjectSim, ObjectTables, SpawnRecord, Staging};
 
 impl ObjectSim {
-    pub(super) fn wario_phase2_exit(&mut self, st: &mut Staging, tables: &ObjectTables) {
+    pub(in crate::objects) fn wario_phase2_exit(
+        &mut self,
+        st: &mut Staging,
+        tables: &ObjectTables,
+    ) {
         self.fade_timer = (self.fade_timer & 0xFF00) | u16::from(FADE_LOW);
         self.fade_timer_set = Some(self.fade_timer);
         let mut actor = Actor::from_raw_slot(&st.b);
@@ -69,5 +73,5 @@ impl ObjectSim {
 }
 
 #[cfg(test)]
-#[path = "wario_phase2_tests.rs"]
+#[path = "phase2_exit_tests.rs"]
 mod tests;

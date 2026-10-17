@@ -59,7 +59,7 @@ Never assign “port the object engine” or “fix DeepSeek’s mess in `object
 
 1. Run `python3 tools/handler_task.py --addr 0x58201` (or `--anim 9` mode A) → writes `tasks/handlers/0x58201.md`. Require exit 0 and `Slice status: COMPLETE`; exit 2 requires source/dependency work. Bank `$16` is decimal 22.
 2. If no test exists: add `objects::tests::handler_0x58201_*` in the same PR as the handler (or `objects/tests/`).
-3. Implement in a named sibling module under `crates/sml2-core/src/objects/`; wire **one line** in `objects/dispatch.rs`.
+3. Implement in a focused module under `crates/sml2-core/src/objects/` (Wario in `objects/wario/`); wire **one line** in `objects/dispatch.rs`.
 4. `cargo test -p sml2-core handler_0x58201` (or the test name you chose).
 5. Mark progress in `handler_coverage.json` (generated/manifest — see plan), not in a 2 KB `PORT_QUEUE` note.
 
@@ -77,7 +77,8 @@ crates/sml2-core/src/objects/
   helpers.rs      # $5Bxxx / probes already shared
   walkers.rs      # existing handler family
   items.rs        # existing item/pose family
-  boss.rs         # existing boss family
+  boss.rs         # shared boss facade and existing other boss families
+  wario/          # Wario forms, children, exits, adapters and local tests
   interaction.rs  # contact and projectile interactions
   shell.rs        # carried shell behavior
   stream.rs       # spawn stream

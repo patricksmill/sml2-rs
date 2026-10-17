@@ -1,9 +1,13 @@
 //! Wario phase exit, ROM `$A96D..$A9BC` (bank 2 CPU `$696D`).
 
-use super::{ObjectSim, ObjectTables, SpawnRecord, Staging, B_SCRX};
+use crate::objects::{ObjectSim, ObjectTables, SpawnRecord, Staging, B_SCRX};
 
 impl ObjectSim {
-    pub(super) fn wario_phase1_exit(&mut self, st: &mut Staging, tables: &ObjectTables) {
+    pub(in crate::objects) fn wario_phase1_exit(
+        &mut self,
+        st: &mut Staging,
+        tables: &ObjectTables,
+    ) {
         // $A96F writes only the low byte; expose the write to subsequent slots
         // immediately as well as to the owner's deferred fade write consumer.
         self.fade_timer = (self.fade_timer & 0xFF00) | 5;

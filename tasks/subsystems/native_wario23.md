@@ -6,12 +6,12 @@ add exactly one boss dispatch arm. Normal def6 entry stays gated until final fig
 ending is ready. Do not claim normal fight completion from handler dispatch.
 
 Read PORTING/native guide and exact brief; bounded production API sections of
-actor.rs, boss_damage.rs, boss_stun.rs, boss_spawn.rs, wario_phase2.rs (skip their
-tests), and existing wario20_integration.rs for real camera input test pattern.
+actor.rs, boss_damage.rs, boss_stun.rs, boss_spawn.rs, wario/phase2_exit.rs (skip their
+tests), and existing wario/form1_integration.rs for real camera input test pattern.
 Avoid whole boss.rs/mod.rs/objects tests/main.asm. Compiler-directed bounded
 field/caller excerpts allowed. Target read budget15k; these APIs/source suffice.
 
-Touch ONLY new objects/wario23.rs (native domain), wario23_adapter.rs, bounded
+Touch ONLY new objects/wario/form2.rs (native domain), wario/form2_adapter.rs, bounded
 sibling tests/integration files; dispatch.rs one arm; mod.rs registrations.
 Existing public ObjectSim facade remains stable. Do not edit shared helpers.
 If a missing native contract blocks you, report it before reimplementing logic.

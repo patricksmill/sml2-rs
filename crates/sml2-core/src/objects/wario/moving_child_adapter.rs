@@ -1,11 +1,11 @@
 //! Compatibility boundary between legacy object staging and native actors.
 
-use super::wario21::{update_child, ChildContext, RespawnEdge};
-use super::{ObjectSim, ObjectTables, Staging};
+use super::moving_child::{update_child, ChildContext, RespawnEdge};
 use crate::actor::{Actor, FrameTick};
+use crate::objects::{ObjectSim, ObjectTables, Staging};
 
 impl ObjectSim {
-    pub(super) fn handler_wario21(&mut self, st: &mut Staging, tables: &ObjectTables) {
+    pub(in crate::objects) fn handler_wario21(&mut self, st: &mut Staging, tables: &ObjectTables) {
         let context = ChildContext {
             frame: FrameTick(u64::from(self.fff0)),
             transition_pending: self.boss_transition != 0,

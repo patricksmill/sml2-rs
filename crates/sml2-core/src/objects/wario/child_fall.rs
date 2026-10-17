@@ -26,7 +26,7 @@ fn update(actor: &mut Actor, frame: FrameTick, primary_screen_y: u8) -> FallEffe
 }
 
 /// Slot compatibility and legacy world effects stay at this boundary.
-pub(super) fn update_legacy(sim: &mut super::ObjectSim, st: &mut super::Staging) {
+pub(super) fn update_legacy(sim: &mut crate::objects::ObjectSim, st: &mut crate::objects::Staging) {
     let mut child = Actor::from_raw_slot(&st.b);
     let primary = Actor::from_raw_slot(&sim.slots[0].b);
     let effect = update(&mut child, FrameTick(u64::from(sim.fff0)), primary.screen.y);

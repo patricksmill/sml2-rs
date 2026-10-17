@@ -106,10 +106,8 @@ pub(super) fn update_child(
 
 // Preserve the existing byte-oriented fixtures at the compatibility boundary.
 #[cfg(test)]
-use super::*;
-#[cfg(test)]
-#[path = "wario21_native_tests.rs"]
+#[path = "moving_child_native_tests.rs"]
 mod native_tests;
 #[cfg(test)]
-#[path = "wario21_tests.rs"]
+#[path = "moving_child_tests.rs"]
 mod tests;

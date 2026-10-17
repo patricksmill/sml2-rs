@@ -62,6 +62,14 @@ h => self.note_unported(h),
         self.assertEqual(report['level_tables']['rom_no_ops'], [0x200])
         self.assertEqual(report['ported_match_arms'], 3)
 
+    def test_family_subfolder_methods_count_as_implemented(self):
+        family = self.source / 'wario'
+        family.mkdir()
+        (self.source / 'family.rs').replace(family / 'form2.rs')
+        report = coverage.audit(self.root, self.rom)
+        self.assertEqual(report['ported_spawn_reachable'], [0x100, 0x200])
+        self.assertEqual(report['boss_table']['implemented_bodies'], [0x300])
+
     def test_bad_profile_and_negative_index_fail(self):
         for anim in (-1, 1):
             with self.subTest(anim=anim):
@@ -277,6 +285,22 @@ class PromptTests(unittest.TestCase):
             self.assertIn('No slot offsets, register names or HRAM scratch', prompt)
             self.assertIn('Actor::from_raw_slot / Actor::to_raw_slot', prompt)
             self.assertNotIn('objects/helpers.rs', prompt)
+
+    def test_family_prompt_registers_owning_module_and_rejects_escape(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'tasks/handlers').mkdir(parents=True)
+            (root / 'tasks/handlers/0x0AD93.md').write_text('**Slice status: COMPLETE**')
+            with patch.object(dispatch_prompt, 'ROOT', root), patch.object(dispatch_prompt, 'run_handler_task'):
+                prompt = dispatch_prompt.handler_prompt(
+                    0xAD93, module='crates/sml2-core/src/objects/wario/form3.rs')
+                self.assertIn('objects/wario/form3_adapter.rs', prompt)
+                self.assertIn('objects/wario/mod.rs (module registrations only', prompt)
+                self.assertNotIn('objects/mod.rs (module registrations only', prompt)
+                for module in ['crates/sml2-core/src/objects/../escape.rs',
+                               'crates/sml2-core/src/objects/wario/mod.rs']:
+                    with self.assertRaises(ValueError):
+                        dispatch_prompt.handler_prompt(0xAD93, module=module)
 
     def test_current_queue_files_exist(self):
         for files in dispatch_prompt.QUEUE_FILES.values():
