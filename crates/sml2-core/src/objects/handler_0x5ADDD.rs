@@ -4,6 +4,7 @@
 //! faces Mario, and sets flash 16. States 1 and 2 follow `$6E62` horizontally
 //! and `$6EAC` upward. States 3 and 4 follow `$6E87` horizontally and `$6ED0`
 //! downward. A `$80` sample ends the leg, clears the span, and switches state.
+//! `$5AEF4` is the same machine with the `$6F55` curves.
 use crate::actor::{Actor, ContactKind, FlashFlags, FrameTick};
 use std::cmp::Ordering;
 
@@ -35,10 +36,27 @@ pub(super) enum Effect {
     Continue,
 }
 
+pub(super) struct Curves {
+    pub climb_x: &'static [u8],
+    pub climb_y: &'static [u8],
+    pub dive_x: &'static [u8],
+    pub dive_y: &'static [u8],
+}
+
+pub(super) fn anim110() -> Curves {
+    Curves {
+        climb_x: H_CLIMB,
+        climb_y: V_CLIMB,
+        dive_x: H_DIVE,
+        dive_y: V_DIVE,
+    }
+}
+
 pub(super) fn update(
     actor: &mut Actor,
     frame: FrameTick,
     player_x: u16,
+    curves: Curves,
 ) -> Result<Effect, Error> {
     let _ = actor.animate_four_step_bob_cadence(frame, 4);
     match actor.state {
@@ -49,19 +67,19 @@ pub(super) fn update(
             Ok(Effect::Initialized { facing })
         }
         1 => {
-            leg(actor, H_CLIMB, V_CLIMB, -1, -1, 3);
+            leg(actor, curves.climb_x, curves.climb_y, -1, -1, 3);
             Ok(Effect::Continue)
         }
         2 => {
-            leg(actor, H_CLIMB, V_CLIMB, 1, -1, 4);
+            leg(actor, curves.climb_x, curves.climb_y, 1, -1, 4);
             Ok(Effect::Continue)
         }
         3 => {
-            leg(actor, H_DIVE, V_DIVE, 1, 1, 2);
+            leg(actor, curves.dive_x, curves.dive_y, 1, 1, 2);
             Ok(Effect::Continue)
         }
         4 => {
-            leg(actor, H_DIVE, V_DIVE, -1, 1, 1);
+            leg(actor, curves.dive_x, curves.dive_y, -1, 1, 1);
             Ok(Effect::Continue)
         }
         state => Err(Error::InvalidState(state)),
