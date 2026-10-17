@@ -106,6 +106,8 @@ use staging::{BOUNCE_SPEED, DEATH_RISE_74AB, FALL_SPEED, HOVER_SPEED, SPIN_WOBBL
 mod boss;
 #[path = "handler_0x96FE.rs"]
 mod handler_0x96fe;
+#[path = "handler_0x9824.rs"]
+mod handler_0x9824;
 mod boss_flash;
 mod boss_stun;
 #[cfg(test)]
@@ -493,8 +495,9 @@ pub struct ObjectSim {
     pub boss_hits_remaining: u8,
     pub boss_sprite: u8,
     pub boss_timer_reload: u8,
-    /// `$AFC7` / `$AFC9`: the door boss's phase sample and side latch.
+    /// `$AFC7` / `$AFC8` / `$AFC9`: the door boss phase, sequence latch, and side.
     pub door_phase: u8,
+    pub door_sequence_active: u8,
     pub door_parity: u8,
     /// `$AFD0`: Wario's falling-child completion latch.
     pub boss_delay: u8,
@@ -590,6 +593,7 @@ impl ObjectSim {
             boss_sprite: 0,
             boss_timer_reload: 0,
             door_phase: 0,
+            door_sequence_active: 0,
             door_parity: 0,
             boss_delay: 0,
             saved_power_state: 0,
