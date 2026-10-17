@@ -2542,7 +2542,7 @@ fn the_def2_controller_has_no_hp_and_spawns_once() {
     assert_eq!(st.b[B_FSTATE], 3, "then the walk arms");
     assert_eq!(st.b[B_TYPE], 0x45);
     // And the walk's speed is the fight's HP: 4 - hits/2. The hit above
-    // spent one, so 5 hits -> 4 - 2 = 2 px.
+    // spent one, so 5 hits -> 4 - 2 = 2 px. State 4 moves left ($B264).
     st.b[B_FSTATE] = 4;
     st.b[B_SCRX] = 0x40;
     obj.fff0 = 1; // the odd-frame gate
@@ -2550,7 +2550,7 @@ fn the_def2_controller_has_no_hp_and_spawns_once() {
     assert_eq!(st.b[B_SCRX], 0x40, "odd frames hold");
     obj.fff0 = 2;
     obj.dispatch_handler(0x9E07, &mut st, &layout, &t);
-    assert_eq!(st.b[B_SCRX], 0x42, "4 - 5/2 = 2 px");
+    assert_eq!(st.b[B_SCRX], 0x3E, "4 - 5/2 = 2 px left");
 }
 
 /// `$9CDF`: the bob picks its profile by `B_T24` — the cap-15 ascent, then

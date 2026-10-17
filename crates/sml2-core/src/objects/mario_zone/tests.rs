@@ -292,3 +292,114 @@ fn anim5_waits_8_frames_then_descends() {
     assert_eq!(st.b[B_FSTATE], 1);
 }
 
+#[test]
+fn pig3_crouches_then_leaps_high_and_lands_into_crouch() {
+    let t = tables();
+    let layout = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.boss_def_index = 2;
+    obj.boss_hits_remaining = 6; // full HP: speed = 1
+
+    let mut st = streamed_slot(0, 0, 0x20);
+    st.b[B_DEF] = 12;
+    st.b[B_FSTATE] = 4; // landed into state 4 (moving left)
+    st.b[B_T28] = 8;    // 8-frame crouch
+    st.b[B_SCRX] = 0x60;
+    st.b[B_SCRY] = 0x90;
+
+    // First 7 frames: crouched in pose 0x28
+    for i in (1..=7).rev() {
+        obj.handler_boss_def2_controller(&mut st, &layout, &t);
+        assert_eq!(st.b[B_T28], i as u8);
+        assert_eq!(st.b[B_SPRITE], 0x28, "crouching pose");
+        assert_eq!(st.b[B_SCRY], 0x90, "grounded");
+    }
+    // 8th call: B_T28 reaches 0, swaps to jump sprite 0x29
+    obj.fff0 = 1; // odd frame -> returns without moving
+    obj.handler_boss_def2_controller(&mut st, &layout, &t);
+    assert_eq!(st.b[B_T28], 0);
+    assert_eq!(st.b[B_SPRITE], 0x29, "jump pose armed");
+    assert_eq!(st.b[B_SCRY], 0x90);
+
+    // On even frame: starts high ascent (step + 2)
+    obj.fff0 = 2;
+    let initial_y = st.b[B_SCRY];
+    let initial_x = st.b[B_SCRX];
+    obj.handler_boss_def2_controller(&mut st, &layout, &t);
+    assert_eq!(st.b[B_SCRX], initial_x - 1, "speed 1 leftward");
+    assert!(st.b[B_SCRY] < initial_y, "ascended upward");
+
+    // Step through remaining ascent frames (14 more even frames)
+    for _ in 0..14 {
+        obj.fff0 = 4;
+        obj.handler_boss_def2_controller(&mut st, &layout, &t);
+    }
+    // Reached apex: phase reset to 0, T24 set to 1 (descent)
+    assert_eq!(st.b[B_T24], 1, "toggled to descent");
+    assert_eq!(st.b[B_PHASE], 0, "phase reset for descent");
+
+    // Step through descent (15 even frames)
+    for _ in 0..15 {
+        obj.fff0 = 6;
+        obj.handler_boss_def2_controller(&mut st, &layout, &t);
+    }
+    // Landed!
+    assert_eq!(st.b[B_SCRY], 0x90, "landed at floor 0x90");
+    assert_eq!(st.b[B_T24], 0, "descent complete");
+    assert_eq!(st.b[B_T28], 8, "crouch reload on landing");
+    assert_eq!(obj.sfx1, 12, "landing sfx");
+}
+
+#[test]
+fn pig3_speed_escalates_and_bounces_between_walls() {
+    let t = tables();
+    let layout = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.boss_def_index = 2;
+
+    let mut st = streamed_slot(0, 0, 0x29);
+    st.b[B_DEF] = 12;
+    st.b[B_T28] = 0; // mid-air jump
+
+    // Hit 0 (6 hits left): speed = 4 - 3 = 1
+    obj.boss_hits_remaining = 6;
+    st.b[B_FSTATE] = 4; // left
+    st.b[B_SCRX] = 0x50;
+    obj.fff0 = 2;
+    obj.handler_boss_def2_controller(&mut st, &layout, &t);
+    assert_eq!(st.b[B_SCRX], 0x4F, "speed 1 at 6 hits");
+
+    // Hit 1 (4 hits left): speed = 4 - 2 = 2
+    obj.boss_hits_remaining = 4;
+    st.b[B_SCRX] = 0x50;
+    obj.fff0 = 4;
+    obj.handler_boss_def2_controller(&mut st, &layout, &t);
+    assert_eq!(st.b[B_SCRX], 0x4E, "speed 2 at 4 hits");
+
+    // Hit 2 (2 hits left): speed = 4 - 1 = 3
+    obj.boss_hits_remaining = 2;
+    st.b[B_SCRX] = 0x50;
+    obj.fff0 = 6;
+    obj.handler_boss_def2_controller(&mut st, &layout, &t);
+    assert_eq!(st.b[B_SCRX], 0x4D, "speed 3 at 2 hits");
+
+    // Wall bounce left: hitting < 0x10 flips to State 5 (moving right)
+    st.b[B_FSTATE] = 4;
+    st.b[B_FLIP] = 0x20; // facing left
+    st.b[B_SCRX] = 0x11;
+    obj.fff0 = 8;
+    obj.handler_boss_def2_controller(&mut st, &layout, &t);
+    assert_eq!(st.b[B_FSTATE], 5, "flipped to rightward state");
+    assert_eq!(st.b[B_FLIP], 0, "flipped facing right");
+
+    // Wall bounce right: hitting >= 0xA0 flips to State 4 (moving left)
+    st.b[B_FSTATE] = 5;
+    st.b[B_SCRX] = 0x9F;
+    obj.fff0 = 10;
+    obj.handler_boss_def2_controller(&mut st, &layout, &t);
+    assert_eq!(st.b[B_FSTATE], 4, "flipped to leftward state");
+    assert_eq!(st.b[B_FLIP], 0x20, "flipped facing left");
+}
+
