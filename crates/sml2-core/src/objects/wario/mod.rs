@@ -3,6 +3,10 @@
 mod child22;
 mod child25;
 mod child_fall;
+mod drop_child;
+mod drop_child_adapter;
+#[cfg(test)]
+mod drop_child_tests;
 mod form1;
 #[cfg(test)]
 mod form1_integration;
