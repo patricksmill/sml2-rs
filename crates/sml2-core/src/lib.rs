@@ -17,6 +17,7 @@ pub mod objects;
 pub mod player;
 pub mod player_sim;
 pub mod scene;
+pub mod sprite_batch;
 pub mod tileset;
 pub mod video;
 

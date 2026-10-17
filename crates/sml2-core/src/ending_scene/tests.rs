@@ -1,4 +1,5 @@
 use super::*;
+use crate::player::Cell;
 
 fn assets(seed: u8) -> EndingAssets {
     EndingAssets::new(
@@ -53,12 +54,7 @@ fn helper_029dd_reloads_dirty_scene_and_wraps_only_ending_substate() {
             object0: 2,
             object1: 3,
         }),
-        objects: [Cell {
-            y: 0xff,
-            x: 0xff,
-            tile: 0xff,
-            attr: 0xff,
-        }; 40],
+        objects: SpriteBatch::default(),
         credits_sprite_y: 9,
         display: EndingDisplayMode {
             window_enabled: true,
@@ -68,6 +64,17 @@ fn helper_029dd_reloads_dirty_scene_and_wraps_only_ending_substate() {
             ..Default::default()
         },
     };
+    scene
+        .objects
+        .write_frame(
+            &[Cell {
+                y: 0xff,
+                x: 0xff,
+                tile: 0xff,
+                attr: 0xff,
+            }; 40],
+        )
+        .unwrap();
     // These are separate controller/world fields, not owned by the scene-load helper.
     let unrelated_world = [0xa5, 0x19, 0x77];
     let mut fade = 0xabcd;
@@ -86,10 +93,12 @@ fn helper_029dd_reloads_dirty_scene_and_wraps_only_ending_substate() {
     );
     let oam_bytes: Vec<u8> = scene
         .objects
+        .cells()
         .iter()
         .flat_map(|cell| [cell.y, cell.x, cell.tile, cell.attr])
         .collect();
     assert_eq!(oam_bytes, [0; 0xa0]);
+    assert_eq!(scene.objects.previous_used(), 40);
     assert_eq!(
         scene.display,
         EndingDisplayMode {
@@ -104,7 +113,27 @@ fn helper_029dd_reloads_dirty_scene_and_wraps_only_ending_substate() {
     assert_eq!(scene.credits_sprite_y, 0x2c);
     assert_eq!(state, 5);
     assert_eq!(unrelated_world, [0xa5, 0x19, 0x77]);
+    scene
+        .objects
+        .write_frame(&[Cell {
+            y: 11,
+            x: 22,
+            tile: 33,
+            attr: 44,
+        }])
+        .unwrap();
+    let frame_bytes: Vec<u8> = scene
+        .objects
+        .cells()
+        .iter()
+        .flat_map(|cell| [cell.y, cell.x, cell.tile, cell.attr])
+        .collect();
+    let mut expected = vec![0; 160];
+    expected[..4].copy_from_slice(&[11, 22, 33, 44]);
+    assert_eq!(frame_bytes, expected);
+    assert_eq!(scene.objects.previous_used(), 1);
     state = 255;
     scene.load(assets(1), &mut state, &mut fade);
     assert_eq!(state, 0);
+    assert_eq!(scene.objects.previous_used(), 1);
 }

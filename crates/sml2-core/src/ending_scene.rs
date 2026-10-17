@@ -1,18 +1,11 @@
 //! Native scene load for home ROM $29DD; the ending controller is a separate owner.
 use serde::{Deserialize, Serialize};
 
-use crate::{ending_entry::EndingPalettes, player::Cell, video::bg_tile_offset};
+use crate::{ending_entry::EndingPalettes, sprite_batch::SpriteBatch, video::bg_tile_offset};
 
 pub const ENDING_ASSET_SCHEMA: &str = "sml2-ending/1";
 pub const ENDING_TILES_LEN: usize = 0x1800;
 pub const ENDING_TILEMAP_LEN: usize = 0x400;
-
-const EMPTY_CELL: Cell = Cell {
-    y: 0,
-    x: 0,
-    tile: 0,
-    attr: 0,
-};
 
 /// Original 2bpp data and tile IDs, independent of any output palette or texture pack.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -105,7 +98,7 @@ pub struct EndingScene {
     pub scroll_y: u8,
     pub palettes: Option<EndingPalettes>,
     /// Forty sprite cells in native OAM order.
-    pub objects: [Cell; 40],
+    pub objects: SpriteBatch,
     pub display: EndingDisplayMode,
     pub credits_sprite_y: u8,
 }
@@ -117,7 +110,7 @@ impl Default for EndingScene {
             scroll_x: 0,
             scroll_y: 0,
             palettes: None,
-            objects: [EMPTY_CELL; 40],
+            objects: SpriteBatch::default(),
             display: EndingDisplayMode::default(),
             credits_sprite_y: 0,
         }
@@ -140,7 +133,7 @@ impl EndingScene {
             object0: 0xD2,
             object1: 0x39,
         });
-        self.objects = [EMPTY_CELL; 40];
+        self.objects.clear_cells();
         self.display = EndingDisplayMode {
             display_enabled: true,
             window_enabled: false,
