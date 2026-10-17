@@ -572,6 +572,18 @@ impl ObjectSim {
         st.b = actor.to_raw_slot();
     }
 
+    pub(super) fn handler_falling_dropper(&mut self, st: &mut Staging) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = falling_dropper::FallingDropperContext {
+            mario_ref_x: self.mario_ref_x,
+        };
+        let effect = falling_dropper::update(&mut actor, context);
+        if let falling_dropper::FallingDropperEffect::TriggerDrop { sfx } = effect {
+            self.sfx1 = sfx;
+        }
+        st.b = actor.to_raw_slot();
+    }
+
     pub(super) fn handler_hopper(
         &mut self,
         st: &mut Staging,

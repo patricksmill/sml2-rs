@@ -3937,6 +3937,77 @@ fn handler_left_marcher_0x591de_dispatch_and_movement() {
     assert_eq!(st.b[B_SPRITE], 104, "three-step cycle step 3: -2");
 }
 
+#[test]
+fn handler_falling_dropper_0x595b2_dispatch_and_movement() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(7); // level 7 (Tree Zone 3)
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 200);
+    set_y(&mut st.b, 80);
+    st.b[B_SPRITE] = 37;
+
+    // Mario is far away: x = 260 -> dx = 60 >= 56 -> stays Waiting
+    obj.mario_ref_x = 260;
+    obj.dispatch_handler(0x595B2, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 0, "state is Waiting (0)");
+    assert_eq!(st.b[B_TYPE], 72, "contact kind 72 (0x48)");
+    assert_eq!(obj.sfx1, 0, "no SFX while waiting");
+
+    // Mario enters trigger zone: x = 250 -> dx = 50 < 56 -> triggers drop!
+    obj.mario_ref_x = 250;
+    obj.dispatch_handler(0x595B2, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 1, "state is Wobbling (1)");
+    assert_eq!(st.b[B_T28], 16, "countdown timer is 16");
+    assert_eq!(obj.sfx1, 21, "emitted SFX 21 on trigger");
+
+    // Frame 1 of wobble: timer becomes 15, travel_direction 0 -> 1 (+3 X)
+    obj.dispatch_handler(0x595B2, &mut st, &l, &t);
+    assert_eq!(st.b[B_T28], 15);
+    assert_eq!(st.x(), 203, "wobbled +3 px right");
+
+    // Frame 2 of wobble: timer becomes 14, travel_direction 1 -> 0 (-3 X)
+    obj.dispatch_handler(0x595B2, &mut st, &l, &t);
+    assert_eq!(st.b[B_T28], 14);
+    assert_eq!(st.x(), 200, "wobbled -3 px left");
+
+    // Advance 13 more frames of wobble (frames 3..=15)
+    for _ in 3..=15 {
+        obj.dispatch_handler(0x595B2, &mut st, &l, &t);
+    }
+    assert_eq!(st.b[B_T28], 1);
+    assert_eq!(st.x(), 203);
+    assert_eq!(st.b[B_FSTATE], 1);
+
+    // Frame 16: timer reaches 0 -> transitions to Falling (2)
+    obj.dispatch_handler(0x595B2, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 2, "state is Falling (2)");
+    assert_eq!(st.x(), 203, "no X shift on transition frame");
+
+    // Falling frame 1 (phase 0): FALL_SPEED[0] = 0 -> dy = 0, phase becomes 1
+    obj.dispatch_handler(0x595B2, &mut st, &l, &t);
+    assert_eq!(st.y(), 80);
+    assert_eq!(st.b[B_PHASE], 1);
+
+    // Falling frame 2 (phase 1): FALL_SPEED[1] = 0 -> dy = 0, phase becomes 2
+    obj.dispatch_handler(0x595B2, &mut st, &l, &t);
+    assert_eq!(st.y(), 80);
+    assert_eq!(st.b[B_PHASE], 2);
+
+    // Falling frame 3 (phase 2): FALL_SPEED[2] = 1 -> dy = 2 (80 -> 82), phase becomes 3
+    obj.dispatch_handler(0x595B2, &mut st, &l, &t);
+    assert_eq!(st.y(), 82, "fell 2 px");
+    assert_eq!(st.b[B_PHASE], 3);
+
+    // Falling frame 4 (phase 3): FALL_SPEED[3] = 1 -> dy = 2 (82 -> 84), phase becomes 4
+    obj.dispatch_handler(0x595B2, &mut st, &l, &t);
+    assert_eq!(st.y(), 84, "fell 2 px");
+    assert_eq!(st.b[B_PHASE], 4);
+}
+
+
 
 
 

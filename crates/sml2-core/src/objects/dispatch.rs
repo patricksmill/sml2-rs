@@ -35,6 +35,7 @@ impl ObjectSim {
             0x58F4C => self.handler_winged_walker(st, layout),
             0x594EB => self.handler_fallwalker52(st, layout),
             0x59545 => self.handler_boo(st),
+            0x595B2 => self.handler_falling_dropper(st),
             0x59BAF => self.handler_edge_walker(st, layout),
             0x59BC5 => self.handler_groundwalker88(st, layout),
             0x59CE7 => self.handler_paced_walker(st, layout),
