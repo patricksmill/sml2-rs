@@ -130,6 +130,22 @@ mod handler_0x5902d_adapter;
 mod handler_0x5934a;
 #[path = "handler_0x5934A_adapter.rs"]
 mod handler_0x5934a_adapter;
+#[path = "handler_0x593DA.rs"]
+mod handler_0x593da;
+#[path = "handler_0x593DA_adapter.rs"]
+mod handler_0x593da_adapter;
+#[path = "handler_0x59431.rs"]
+mod handler_0x59431;
+#[path = "handler_0x59431_adapter.rs"]
+mod handler_0x59431_adapter;
+#[path = "handler_0x5945A.rs"]
+mod handler_0x5945a;
+#[path = "handler_0x5945A_adapter.rs"]
+mod handler_0x5945a_adapter;
+#[path = "handler_0x59487.rs"]
+mod handler_0x59487;
+#[path = "handler_0x59487_adapter.rs"]
+mod handler_0x59487_adapter;
 #[path = "handler_0x589A6.rs"]
 mod handler_0x589a6;
 #[path = "handler_0x589A6_adapter.rs"]
