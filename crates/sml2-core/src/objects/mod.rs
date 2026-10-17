@@ -154,6 +154,14 @@ mod handler_0x589a6_adapter;
 mod handler_0x58a6f;
 #[path = "handler_0x58A6F_adapter.rs"]
 mod handler_0x58a6f_adapter;
+#[path = "handler_0x58BBA.rs"]
+mod handler_0x58bba;
+#[path = "handler_0x58BBA_adapter.rs"]
+mod handler_0x58bba_adapter;
+#[path = "handler_0x58BCB.rs"]
+mod handler_0x58bcb;
+#[path = "handler_0x58BCB_adapter.rs"]
+mod handler_0x58bcb_adapter;
 mod handler_0x586eb;
 mod handler_0x591f9;
 mod vertical_bobber;

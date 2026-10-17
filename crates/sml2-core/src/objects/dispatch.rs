@@ -26,6 +26,8 @@ impl ObjectSim {
             0x58848 => self.handler_0x58848(st, layout),
             0x589A6 => self.handler_0x589a6(st, layout),
             0x58B43 => self.handler_0x58b43(st),
+            0x58BBA => self.handler_0x58bba(st),
+            0x58BCB => self.handler_0x58bcb(st),
             0x5902D => self.handler_0x5902d(st, tables),
             0x5934A => self.handler_0x5934a(st, tables),
             0x593DA => self.handler_0x593da(st, layout),
