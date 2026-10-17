@@ -86,6 +86,7 @@ impl ObjectSim {
             0x5A355 => self.handler_0x5a355(st),
             0x5A545 => self.handler_0x5a545(st, layout),
             0x5A5EC => self.handler_0x5a5ec(st, tables),
+            0x5A667 => self.handler_0x5a667(st, layout),
             0x59F5E => self.handler_wave_flyer(st),
             0x5A1F6 => self.handler_perched_flyer(st),
             0x5A773 => self.handler_cannon_ant(st),
