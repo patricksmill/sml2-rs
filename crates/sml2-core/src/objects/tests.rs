@@ -3085,3 +3085,55 @@ fn handler_walker_native_migration_preserves_raw_slot_bytes() {
     assert_eq!(st.b[B_FLIP], 0x20);
     assert_eq!(x_of(&st.b), 100, "did not move X on turn");
 }
+
+#[test]
+fn handler_fallwalker_native_migration_preserves_raw_slot_bytes() {
+    let layout = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.fff0 = 1; // odd frame: bob is no-op
+
+    // 1. In-air fall: increments phase, sets type 0x56 for fallwalker
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 200);
+    st.b[B_FSTATE] = 0;
+    st.b[B_PHASE] = 0;
+    obj.handler_fallwalker(&mut st, &layout);
+    assert_eq!(st.b[B_TYPE], 0x56);
+    assert_eq!(st.b[B_PHASE], 1);
+    assert_eq!(y_of(&st.b), 200);
+
+    // 2. In-air fall: increments phase, sets type 0x52 for fallwalker52
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 200);
+    st.b[B_FSTATE] = 0;
+    st.b[B_PHASE] = 0;
+    obj.handler_fallwalker52(&mut st, &layout);
+    assert_eq!(st.b[B_TYPE], 0x52);
+    assert_eq!(st.b[B_PHASE], 1);
+    assert_eq!(y_of(&st.b), 200);
+
+    // 3. Grounded init: resets phase to 0, faces Mario (mario_ref_x > obj_x -> state 2, flip 0x20, facing 1)
+    let mut ground_layout = blank_layout();
+    let col = (100 / 16) as usize;
+    let row = (192 / 16) as usize;
+    ground_layout.cells[row * 256 + col] = 0x20;
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.fff0 = 1;
+    obj.mario_ref_x = 150;
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 192);
+    st.b[B_FSTATE] = 0;
+    st.b[B_PHASE] = 5;
+    obj.handler_fallwalker(&mut st, &ground_layout);
+    assert_eq!(st.b[B_FSTATE], 2);
+    assert_eq!(st.b[B_FLIP], 0x20);
+    assert_eq!(st.b[B_PHASE], 0);
+    assert_eq!(st.b[B_TYPE], 0x56);
+    assert_eq!(obj.facing, 1);
+}
+

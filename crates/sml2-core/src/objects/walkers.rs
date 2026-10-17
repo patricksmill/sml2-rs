@@ -98,66 +98,65 @@ impl ObjectSim {
     }
 
     pub(super) fn handler_fallwalker(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.fallwalker_body(st, layout, 0x56);
+        self.fallwalker_dispatch(st, layout, crate::actor::ContactKind::from_raw(0x56));
     }
 
     pub(super) fn handler_fallwalker52(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.fallwalker_body(st, layout, 0x52);
+        self.fallwalker_dispatch(st, layout, crate::actor::ContactKind::from_raw(0x52));
     }
 
-    pub(super) fn fallwalker_body(&mut self, st: &mut Staging, layout: &LevelLayout, ty: u8) {
-        self.sprite_bob(st); // $5B585
-        match st.b[B_FSTATE] {
-            0 => {
-                st.b[B_TYPE] = ty;
-                // $582DD: fall until grounded, then face Mario ($582EE).
-                self.m_ground_own(st, layout);
-                if self.move_flags & 0x08 != 0 {
-                    st.b[B_PHASE] = 0;
-                    self.face_mario(st);
-                    return;
-                }
-                let b = self.fall_step(st);
-                self.mv_y_add(st, b);
-            }
-            // $582FB (state 1, walk left): move + wall probe on even $FFF0;
-            // ground check (ledge reverse) on odd.
-            1 => {
-                if self.fff0 & 1 == 0 {
-                    self.mv_x_sub(st, 1);
-                    self.m_left_wall(st, layout);
-                    if self.move_flags & 0x02 != 0 {
-                        st.b[B_FSTATE] = 2;
-                        st.b[B_FLIP] ^= 0x20;
-                    }
-                } else {
-                    self.ledge_reverse(st, layout);
-                }
-            }
-            // $5831A (state 2, walk right).
-            2 => {
-                if self.fff0 & 1 == 0 {
-                    self.mv_x_add(st, 1);
-                    self.m_right_wall(st, layout);
-                    if self.move_flags & 0x01 != 0 {
-                        st.b[B_FSTATE] = 1;
-                        st.b[B_FLIP] ^= 0x20;
-                    }
-                } else {
-                    self.ledge_reverse(st, layout);
-                }
-            }
-            _ => {}
+    pub(super) fn fallwalker_dispatch(
+        &mut self,
+        st: &mut Staging,
+        layout: &LevelLayout,
+        contact_kind: crate::actor::ContactKind,
+    ) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = fallwalker::FallWalkerContext {
+            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            mario_ref_x: self.mario_ref_x,
+            contact_kind,
+        };
+        struct FallWalkerSimWorld<'a> {
+            sim: &'a mut ObjectSim,
+            st: &'a mut Staging,
+            layout: &'a LevelLayout,
         }
-    }
-
-    pub(super) fn ledge_reverse(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.m_ground_own(st, layout);
-        if self.move_flags & 0x08 != 0 {
-            return;
+        impl<'a> fallwalker::FallWalkerWorld for FallWalkerSimWorld<'a> {
+            fn probe_left_wall(&mut self, actor: &crate::actor::Actor) -> bool {
+                set_x(&mut self.st.b, actor.position.x);
+                set_y(&mut self.st.b, actor.position.y);
+                self.sim.m_left_wall(self.st, self.layout);
+                self.sim.move_flags & 0x02 != 0
+            }
+            fn probe_right_wall(&mut self, actor: &crate::actor::Actor) -> bool {
+                set_x(&mut self.st.b, actor.position.x);
+                set_y(&mut self.st.b, actor.position.y);
+                self.sim.m_right_wall(self.st, self.layout);
+                self.sim.move_flags & 0x01 != 0
+            }
+            fn probe_ground(&mut self, actor: &crate::actor::Actor) -> bool {
+                set_x(&mut self.st.b, actor.position.x);
+                set_y(&mut self.st.b, actor.position.y);
+                self.sim.m_ground_own(self.st, self.layout);
+                self.sim.move_flags & 0x08 != 0
+            }
+            fn step_fall(&mut self, actor: &mut crate::actor::Actor) -> u8 {
+                let dy = self.sim.fall_step(self.st);
+                actor.motion_phase = self.st.b[B_PHASE];
+                dy
+            }
         }
-        st.b[B_FSTATE] ^= 3;
-        st.b[B_FLIP] ^= 0x20;
+        let mut world = FallWalkerSimWorld {
+            sim: self,
+            st,
+            layout,
+        };
+        let effect = fallwalker::update(&mut actor, context, &mut world);
+        if let fallwalker::FallWalkerEffect::Initialized { facing } = effect {
+            self.facing = facing;
+        }
+        st.b = actor.to_raw_slot();
     }
 
     pub(super) fn handler_stun(

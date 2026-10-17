@@ -356,7 +356,16 @@ impl Actor {
     /// Only equality with four resets the phase; byte overflow also reaches zero.
     /// An invalid table index leaves the advanced phase and the unchanged sprite.
     pub fn animate_four_step_bob(&mut self, frame: FrameTick) -> Result<(), AnimationFrameError> {
-        if !frame.every(4) {
+        self.animate_four_step_bob_cadence(frame, 4)
+    }
+
+    /// ROM `$5B585` (period 2) / `$B339` (period 4): advance before applying four-step sprite bob.
+    pub fn animate_four_step_bob_cadence(
+        &mut self,
+        frame: FrameTick,
+        period: u64,
+    ) -> Result<(), AnimationFrameError> {
+        if !frame.every(period) {
             return Ok(());
         }
         self.animation_frame = self.animation_frame.wrapping_add(1);
