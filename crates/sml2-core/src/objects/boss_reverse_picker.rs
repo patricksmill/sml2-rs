@@ -1,12 +1,7 @@
 //! Bank 2 reverse movement profiles, read by `$71C8`, `$71D6`, and `$71E4`.
 
 use super::{ObjectSim, Staging};
-
-/// ROM `$B1FF..$B223` (CPU `$71FF..$7223`).
-const REVERSE_STEPS: [u8; 37] = [
-    3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 3, 2, 3, 2, 1, 2, 2,
-    1, 2, 1, 1, 1, 0, 0, 0,
-];
+use crate::actor::{Actor, RiseProfile};
 
 impl ObjectSim {
     /// `$B1C8`: read the full profile, then advance `B_PHASE` unless it equals 36.
@@ -14,19 +9,29 @@ impl ObjectSim {
     // Deferred: the only caller is anim 23's handler at `$ACB2`.
     #[allow(dead_code)]
     pub(super) fn boss_reverse_picker_b1c8(&self, st: &mut Staging) -> (u8, u8) {
-        self.step_picker(st, &REVERSE_STEPS, 36)
+        self.boss_rise_step(st, RiseProfile::Full)
     }
 
     /// `$B1D6`: start 15 bytes into the profile, with phase cap 21.
     /// The caller supplies the ROM's reachable phase range `0..=21`.
     pub(super) fn boss_reverse_picker_b1d6(&self, st: &mut Staging) -> (u8, u8) {
-        self.step_picker(st, &REVERSE_STEPS[15..], 21)
+        self.boss_rise_step(st, RiseProfile::Medium)
     }
 
     /// `$B1E4`: start 24 bytes into the profile, with phase cap 12.
     /// The caller supplies the ROM's reachable phase range `0..=12`.
     pub(super) fn boss_reverse_picker_b1e4(&self, st: &mut Staging) -> (u8, u8) {
-        self.step_picker(st, &REVERSE_STEPS[24..], 12)
+        self.boss_rise_step(st, RiseProfile::Short)
+    }
+
+    fn boss_rise_step(&self, st: &mut Staging, profile: RiseProfile) -> (u8, u8) {
+        let mut actor = Actor::from_raw_slot(&st.b);
+        // Reject invalid source phases instead of the old fabricated zero.
+        let step = actor
+            .rise_step(profile)
+            .expect("boss rise phase outside source profile");
+        st.b = actor.to_raw_slot();
+        (step, profile.cap())
     }
 }
 
@@ -34,6 +39,31 @@ impl ObjectSim {
 mod tests {
     use super::*;
     use crate::objects::{B_PHASE, B_SCRY};
+
+    #[test]
+    fn reverse_facades_reject_invalid_phases_without_changing_slot() {
+        let sim = ObjectSim::new(vec![], 0);
+        for (picker, cap) in [
+            (
+                ObjectSim::boss_reverse_picker_b1c8 as fn(&ObjectSim, &mut Staging) -> (u8, u8),
+                36,
+            ),
+            (ObjectSim::boss_reverse_picker_b1d6, 21),
+            (ObjectSim::boss_reverse_picker_b1e4, 12),
+        ] {
+            for phase in [cap + 1, 255] {
+                let mut st = Staging::default();
+                st.b = [0xA5; 32];
+                st.b[B_PHASE] = phase;
+                let original = st.b;
+                assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    picker(&sim, &mut st)
+                }))
+                .is_err());
+                assert_eq!(st.b, original);
+            }
+        }
+    }
 
     #[test]
     fn helper_0x0b1c8_full_profile_reads_before_increment_and_caps() {

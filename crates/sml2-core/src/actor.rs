@@ -1,5 +1,9 @@
 //! Native actor state. Slot byte layout is confined to the conversion boundary.
 
+#[path = "actor_motion.rs"]
+mod motion;
+pub use motion::RiseProfile;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Position {
     pub x: u16,
