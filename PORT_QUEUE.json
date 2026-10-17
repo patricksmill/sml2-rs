@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "13 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "15 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "remaining_handler_classes",
@@ -212,6 +212,26 @@
     "boss_clear_ending_handoff"
    ],
    "verification_gate": "Play/replay entry takes the $F0 park, the fight reaches its level clear, and the clear reseeds sSceneState",
+   "status": "pending"
+  },
+  {
+   "id": "native_wario_child_migration",
+   "title": "Migrate Wario child21/24 to typed domain behavior through the actor boundary",
+   "asm_refs": [],
+   "dependencies": [
+    "native_actor_boundary"
+   ],
+   "verification_gate": "Existing ROM-derived byte tests and actual boss dispatch/producer-consumer paths; sensitivity; core/runtime and frozen sweep",
+   "status": "pending"
+  },
+  {
+   "id": "native_handler_migration",
+   "title": "Migrate remaining existing byte-oriented game handlers and shared behavior to native Actor/World methods",
+   "asm_refs": [],
+   "dependencies": [
+    "native_actor_boundary"
+   ],
+   "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
    "status": "pending"
   }
  ],

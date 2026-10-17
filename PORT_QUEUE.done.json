@@ -655,6 +655,14 @@
    "dependencies": [],
    "verification_gate": "Dirty scratch byte reset and external-state preservation, accurate zero stream pointer representation, normal Wario entry and full core/runtime/sweep",
    "status": "done"
+  },
+  {
+   "id": "native_actor_boundary",
+   "title": "Introduce typed native Actor state and lossless raw-slot conversion boundary",
+   "asm_refs": [],
+   "dependencies": [],
+   "verification_gate": "Coordinate/flag/unknown-value preservation, native movement and shared motion tests; full core suite",
+   "status": "done"
   }
  ]
 }
