@@ -14,6 +14,9 @@ pub use ending_animation::EndingBobError;
 #[path = "actor_sprite_sequence.rs"]
 mod sprite_sequence;
 
+#[path = "actor_sprite_deltas.rs"]
+mod sprite_deltas;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Position {
     pub x: u16,
