@@ -6,7 +6,15 @@ impl ObjectSim {
     pub(super) fn handler_0x5ace4(&mut self, st: &mut Staging, tables: &ObjectTables) {
         let mut actor = Actor::from_raw_slot(&st.b);
         let frame = FrameTick(u64::from(self.fff0));
-        let result = handler_0x5ace4::update(&mut actor, frame);
+        let result = handler_0x5ace4::update(
+            &mut actor,
+            frame,
+            handler_0x5ace4::Course {
+                dx: -2,
+                screen_limit: 0xB0,
+                face_right: false,
+            },
+        );
         st.b = actor.to_raw_slot();
         match result {
             Ok(handler_0x5ace4::Effect::Continue) => {}
