@@ -360,6 +360,19 @@ impl ObjectSim {
         st.b = actor.to_raw_slot();
     }
 
+    pub(super) fn handler_wave_flyer(&mut self, st: &mut Staging) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = wave_flyer::WaveFlyerContext {
+            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            mario_ref_x: self.mario_ref_x,
+        };
+        let effect = wave_flyer::update(&mut actor, context);
+        if let wave_flyer::WaveFlyerEffect::Initialized { facing } = effect {
+            self.facing = facing;
+        }
+        st.b = actor.to_raw_slot();
+    }
+
     pub(super) fn handler_carrier46(
         &mut self,
         st: &mut Staging,

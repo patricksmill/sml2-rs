@@ -3669,6 +3669,95 @@ fn handler_charging_enemy_0x5a9e8_dispatch_and_movement() {
     assert_eq!(st.x(), 127);
 }
 
+#[test]
+fn handler_wave_flyer_0x59f5e_dispatch_and_movement() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 80);
+    st.b[B_SPRITE] = 140;
+    obj.mario_ref_x = 150; // Mario to the right
+    obj.fff0 = 0;
+
+    // Dispatch frame 0: State 0 init (Mario to right -> FlyRight)
+    obj.dispatch_handler(0x59F5E, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 2, "state is FlyRight (2)");
+    assert_eq!(st.b[B_FLIP] & 0x20, 0x20, "faces right (flip_h)");
+    assert_eq!(st.b[B_FLASH], 0x10, "flash is 0x10");
+    assert_eq!(st.b[B_TYPE], 72, "contact kind 72 (0x48)");
+    assert_eq!(st.b[B_T25], 48, "budget is 48");
+    assert_eq!(st.b[B_T24], 0, "motion leg is Climbing (0)");
+    assert_eq!(obj.facing, 1, "facing recorded as 1 (right)");
+    assert_eq!(st.b[B_SPRITE], 141, "sprite bit 0 toggles on fff0=0");
+
+    // Frames 1..3: fff0 not multiple of 4 -> movement skipped, sprite not toggled
+    for f in 1..=3 {
+        obj.fff0 = f;
+        obj.dispatch_handler(0x59F5E, &mut st, &l, &t);
+        assert_eq!(st.x(), 100);
+        assert_eq!(st.y(), 80);
+        assert_eq!(st.b[B_SPRITE], 141);
+    }
+
+    // Frame 4 (step 1): moves X by +2, Y by -1, budget decrements to 46, sprite toggles back to 140
+    obj.fff0 = 4;
+    obj.dispatch_handler(0x59F5E, &mut st, &l, &t);
+    assert_eq!(st.x(), 102);
+    assert_eq!(st.y(), 79);
+    assert_eq!(st.b[B_T25], 46);
+    assert_eq!(st.b[B_SPRITE], 140);
+
+    // Fast-forward 22 more active steps (steps 2..=23, frames 8..=92)
+    for step in 2..=23 {
+        obj.fff0 = step * 4;
+        obj.dispatch_handler(0x59F5E, &mut st, &l, &t);
+    }
+    assert_eq!(st.x(), 146);
+    assert_eq!(st.y(), 57); // 80 - 23
+    assert_eq!(st.b[B_T25], 2);
+
+    // Step 24 (frame 96): Apex reached!
+    // Moves X by +2 (to 148), budget reloaded to 48, motion_leg becomes Diving (1), Y does not move.
+    obj.fff0 = 96;
+    obj.dispatch_handler(0x59F5E, &mut st, &l, &t);
+    assert_eq!(st.x(), 148);
+    assert_eq!(st.y(), 57);
+    assert_eq!(st.b[B_T25], 48);
+    assert_eq!(st.b[B_T24], 1, "motion leg transitions to Diving (1)");
+
+    // Step 25 (diving step 1, frame 100): moves X by +2, Y by +1, budget decrements to 46
+    obj.fff0 = 100;
+    obj.dispatch_handler(0x59F5E, &mut st, &l, &t);
+    assert_eq!(st.x(), 150);
+    assert_eq!(st.y(), 58);
+    assert_eq!(st.b[B_T25], 46);
+
+    // Fast-forward 22 more diving steps (steps 26..=47, frames 104..=188)
+    for step in 26..=47 {
+        obj.fff0 = step * 4;
+        obj.dispatch_handler(0x59F5E, &mut st, &l, &t);
+    }
+    assert_eq!(st.x(), 194);
+    assert_eq!(st.y(), 80);
+    assert_eq!(st.b[B_T25], 2);
+
+    // Step 48 (frame 192): Trough reached & turnaround!
+    // Moves X by +2 (to 196), budget reloaded to 48, motion_leg flips to Climbing (0),
+    // state flips to FlyLeft (1), flip_h flips to 0, Y does not move.
+    obj.fff0 = 192;
+    obj.dispatch_handler(0x59F5E, &mut st, &l, &t);
+    assert_eq!(st.x(), 196);
+    assert_eq!(st.y(), 80);
+    assert_eq!(st.b[B_T25], 48);
+    assert_eq!(st.b[B_T24], 0, "motion leg transitions to Climbing (0)");
+    assert_eq!(st.b[B_FSTATE], 1, "state toggles to FlyLeft (1)");
+    assert_eq!(st.b[B_FLIP] & 0x20, 0, "faces left (no flip_h)");
+}
+
 
 
 

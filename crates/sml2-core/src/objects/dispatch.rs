@@ -36,6 +36,7 @@ impl ObjectSim {
             0x59BC5 => self.handler_groundwalker88(st, layout),
             0x59CE7 => self.handler_paced_walker(st, layout),
             0x59E06 => self.handler_vertical_pacer(st),
+            0x59F5E => self.handler_wave_flyer(st),
             0x5A1F6 => self.handler_perched_flyer(st),
             0x5A773 => self.handler_cannon_ant(st),
             0x5A9E8 => self.handler_charging_enemy(st, tables),
