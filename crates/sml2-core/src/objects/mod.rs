@@ -133,6 +133,7 @@ mod mario_zone;
 mod carrier;
 mod fallwalker;
 mod groundwalker;
+mod pipe_bobber;
 mod squashed;
 mod walker;
 mod walkers;

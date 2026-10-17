@@ -3168,4 +3168,105 @@ fn handler_squashed_native_migration_preserves_raw_slot_bytes() {
     assert_eq!(obj.remove_mode, 0, "reset after removal");
 }
 
+#[test]
+fn handler_bobber_downward_0x584cb_dispatch_and_state_transitions() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.mario_ref_x = 100;
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100); // Mario is right above (dx = 0 < 24)
+    set_y(&mut st.b, 200);
+
+    // Dispatch 0x584CB: Waiting state, Mario too close -> stays waiting, defeat = 0x80
+    obj.dispatch_handler(0x584CB, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 0);
+    assert_eq!(st.b[B_DEFEAT], 0x80);
+
+    // Move Mario far away (dx = 30 >= 24)
+    obj.mario_ref_x = 130;
+    obj.dispatch_handler(0x584CB, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 1);
+    assert_eq!(st.b[B_T24], 32);
+    assert_eq!(st.b[B_T25], 32);
+    assert_eq!(st.b[B_TYPE], 0x44);
+    assert_eq!(st.y(), 200);
+
+    // Step 1 of downward emergence (moves y + 1)
+    obj.dispatch_handler(0x584CB, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 1);
+    assert_eq!(st.y(), 201);
+    assert_eq!(st.b[B_T24], 31);
+
+    // Finish 31 remaining emergence steps
+    for _ in 0..31 {
+        obj.dispatch_handler(0x584CB, &mut st, &l, &t);
+    }
+    assert_eq!(st.b[B_FSTATE], 2, "transitions to Retracting");
+    assert_eq!(st.y(), 232);
+    assert_eq!(st.b[B_T24], 32);
+    assert_eq!(st.b[B_T28], 24);
+
+    // Step 1 of retraction (moves y - 1 back toward ceiling)
+    obj.dispatch_handler(0x584CB, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 2);
+    assert_eq!(st.y(), 231);
+    assert_eq!(st.b[B_T24], 31);
+
+    // Finish 31 remaining retraction steps
+    for _ in 0..31 {
+        obj.dispatch_handler(0x584CB, &mut st, &l, &t);
+    }
+    assert_eq!(st.b[B_FSTATE], 3, "transitions to Resting");
+    assert_eq!(st.y(), 200, "returned to exact starting position");
+    assert_eq!(st.b[B_T28], 24);
+
+    // Rest 24 frames
+    for _ in 0..24 {
+        obj.dispatch_handler(0x584CB, &mut st, &l, &t);
+    }
+    assert_eq!(st.b[B_FSTATE], 0, "back to Waiting state");
+}
+
+#[test]
+fn handler_bobber_upward_0x584e0_dispatch_and_state_transitions() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.mario_ref_x = 130;
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 200);
+
+    // Emerging trigger
+    obj.dispatch_handler(0x584E0, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 1);
+    assert_eq!(st.y(), 200);
+
+    // Step 1 of upward emergence (moves y - 1)
+    obj.dispatch_handler(0x584E0, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 1);
+    assert_eq!(st.y(), 199);
+    assert_eq!(st.b[B_T24], 31);
+}
+
+#[test]
+fn handler_bobber_pipe_travel_removes_object() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.mario.travelling = true;
+
+    let mut st = Staging::default();
+    st.b[B_STATE] = 2; // Active slot
+    obj.dispatch_handler(0x584CB, &mut st, &l, &t);
+    assert_eq!(obj.done, 2, "despawn removal marked done=2");
+}
+
+
 

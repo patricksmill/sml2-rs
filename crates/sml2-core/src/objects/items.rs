@@ -96,19 +96,6 @@ impl ObjectSim {
         self.remove_object(st, tables);
     }
 
-    pub(super) fn sprite_bob(&mut self, st: &mut Staging) {
-        if self.fff0 & 1 != 0 {
-            return;
-        }
-        st.b[B_ANIMFRAME] = st.b[B_ANIMFRAME].wrapping_add(1);
-        if st.b[B_ANIMFRAME] == 4 {
-            st.b[B_ANIMFRAME] = 0;
-        }
-        const BOB: [u8; 4] = [0xFE, 0x01, 0xFF, 0x02];
-        let d = BOB[st.b[B_ANIMFRAME] as usize];
-        st.b[B_SPRITE] = st.b[B_SPRITE].wrapping_add(d);
-    }
-
     pub(super) fn handler_squashed(&mut self, st: &mut Staging, tables: &ObjectTables) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let effect = squashed::update(&mut actor);

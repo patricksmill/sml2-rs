@@ -323,58 +323,23 @@ impl ObjectSim {
         }
     }
 
-    pub(super) fn handler_bobber(&mut self, st: &mut Staging, tables: &ObjectTables) {
-        if self.mario.travelling {
+    pub(super) fn handler_bobber(
+        &mut self,
+        st: &mut Staging,
+        tables: &ObjectTables,
+        direction: pipe_bobber::EmergenceDirection,
+    ) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = pipe_bobber::PipeBobberContext {
+            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            mario_travelling: self.mario.travelling,
+            mario_ref_x: self.mario_ref_x,
+        };
+        let effect = pipe_bobber::update(&mut actor, context, direction);
+        st.b = actor.to_raw_slot();
+        if effect == pipe_bobber::PipeBobberEffect::Despawn {
             self.remove_object(st, tables);
-            return;
         }
-        match st.b[B_FSTATE] {
-            1 => {
-                // $5850C — rise.
-                self.sprite_toggle(st);
-                self.mv_y_sub(st, 1);
-                st.b[B_T24] = st.b[B_T24].wrapping_sub(1);
-                if st.b[B_T24] != 0 {
-                    return;
-                }
-                self.bobber_reload(st);
-            }
-            2 => {
-                // $5851C — sink.
-                self.sprite_toggle(st);
-                self.mv_y_add(st, 1);
-                st.b[B_T24] = st.b[B_T24].wrapping_sub(1);
-                if st.b[B_T24] != 0 {
-                    return;
-                }
-                self.bobber_reload(st);
-            }
-            3 => {
-                // $58537 — rest, then state 0.
-                st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
-                if st.b[B_T28] != 0 {
-                    return;
-                }
-                st.b[B_FSTATE] = 0;
-            }
-            _ => {
-                // $584F3 — the wait-for-Mario setup.
-                st.b[B_DEFEAT] = 0x80;
-                if self.dist_mario_x(st) < 0x18 {
-                    return;
-                }
-                st.b[B_FSTATE] = 1;
-                st.b[B_T24] = 32;
-                st.b[B_T25] = 32;
-                st.b[B_TYPE] = 0x44;
-            }
-        }
-    }
-
-    pub(super) fn bobber_reload(&self, st: &mut Staging) {
-        st.b[B_T24] = st.b[B_T25];
-        st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_add(1);
-        st.b[B_T28] = 24;
     }
 
     pub(super) fn handler_crawler(&mut self, st: &mut Staging, layout: &LevelLayout) {
