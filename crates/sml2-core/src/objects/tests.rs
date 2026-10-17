@@ -3613,6 +3613,62 @@ fn handler_cannon_ant_0x5a773_dispatch_and_movement() {
     assert_eq!(st.b[B_T28], 32, "recovery timer 32");
 }
 
+#[test]
+fn handler_charging_enemy_0x5a9e8_dispatch_and_movement() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 80);
+    st.b[B_SPRITE] = 175;
+    obj.mario_ref_x = 110; // Mario close (< 40)
+
+    // Dispatch frame 0: State 0 init
+    obj.dispatch_handler(0x5A9E8, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 5, "state is Wait (5)");
+    assert_eq!(st.y(), 82, "moves Y by +2");
+    assert_eq!(st.b[B_DEFEAT], 0x80, "defeat mode armored 0x80");
+    assert_eq!(st.b[B_TYPE], 74, "contact kind 74 (0x4A)");
+    assert_eq!(st.b[B_T25], 24, "creep budget 24");
+    assert_eq!(st.b[B_T28], 24, "pause timer 24");
+
+    // Dispatch frame 1: Mario still close (< 40) -> stays in state 5
+    obj.dispatch_handler(0x5A9E8, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 5);
+
+    // Dispatch frame 2: Mario moves far to the right (160, distance 60 >= 40) -> triggers CreepRight (2)
+    obj.mario_ref_x = 160;
+    obj.dispatch_handler(0x5A9E8, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 2, "state is CreepRight (2)");
+    assert_eq!(st.b[B_FLIP] & 0x20, 0x20, "faces right");
+
+    // Fast-forward 24 frames of pause
+    for _ in 1..=24 {
+        obj.dispatch_handler(0x5A9E8, &mut st, &l, &t);
+    }
+    assert_eq!(st.b[B_T28], 0);
+
+    // Fast-forward 23 creep steps right
+    for _ in 1..=23 {
+        obj.dispatch_handler(0x5A9E8, &mut st, &l, &t);
+    }
+    assert_eq!(st.x(), 123);
+    assert_eq!(st.b[B_T25], 1);
+
+    // 24th creep step finishes: triggers charge (state 4), clears defeat mode, emits sfx 16
+    obj.dispatch_handler(0x5A9E8, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 4, "state is ChargeRight (4)");
+    assert_eq!(st.b[B_DEFEAT], 0, "defeat mode cleared to 0");
+    assert_eq!(obj.sfx1, 16, "emitted sfx 16");
+
+    // Charge step 1: moves X by +3 (124 + 3 = 127)
+    obj.dispatch_handler(0x5A9E8, &mut st, &l, &t);
+    assert_eq!(st.x(), 127);
+}
+
 
 
 

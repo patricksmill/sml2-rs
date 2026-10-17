@@ -133,6 +133,7 @@ mod mario_zone;
 mod boo;
 mod carrier;
 mod cannon_ant;
+mod charging_enemy;
 mod fallwalker;
 mod fire_piranha;
 mod groundwalker;

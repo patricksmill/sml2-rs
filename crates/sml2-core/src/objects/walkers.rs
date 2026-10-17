@@ -323,6 +323,43 @@ impl ObjectSim {
         }
     }
 
+    pub(super) fn respawn_object_5b2bf(&mut self, st: &mut Staging, tables: &ObjectTables) {
+        if let Some(ri) = self.record_index(st) {
+            let rec = &self.records[ri];
+            set_x(&mut st.b, rec.x);
+            set_y(&mut st.b, rec.y);
+            st.b[B_MARKER] = rec.mode_flag;
+            self.derive_sprite(st, tables);
+            st.b[B_STATE] = 1;
+            self.active = self.active.wrapping_sub(1);
+            self.standby = self.standby.wrapping_add(1);
+        } else {
+            st.b[B_STATE] = 1;
+        }
+    }
+
+    pub(super) fn handler_charging_enemy(&mut self, st: &mut Staging, tables: &ObjectTables) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = charging_enemy::ChargingEnemyContext {
+            mario_ref_x: self.mario_ref_x,
+        };
+        let effect = charging_enemy::update(&mut actor, context);
+        match effect {
+            charging_enemy::ChargingEnemyEffect::FacingSelected { facing } => {
+                self.facing = facing;
+            }
+            charging_enemy::ChargingEnemyEffect::ChargeTriggered { sfx, .. } => {
+                self.sfx1 = sfx;
+            }
+            charging_enemy::ChargingEnemyEffect::OffscreenReset => {
+                self.respawn_object_5b2bf(st, tables);
+                return;
+            }
+            _ => {}
+        }
+        st.b = actor.to_raw_slot();
+    }
+
     pub(super) fn handler_carrier46(
         &mut self,
         st: &mut Staging,
