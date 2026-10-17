@@ -109,6 +109,7 @@ mod boss_stun;
 #[cfg(test)]
 mod boss_flash_paths;
 mod boss_damage;
+mod boss_spawn;
 mod boss_sprite_cycle;
 mod boss_reverse_picker;
 mod dispatch;

@@ -45,23 +45,7 @@ impl ObjectSim {
     }
 
     pub(super) fn boss_spawn_child(&mut self, st: &Staging) {
-        let n = self.boss_def_count.wrapping_add(1);
-        if n == 0x10 || n as usize >= SLOT_COUNT {
-            return;
-        }
-        let child = n as usize;
-        {
-            let s = &mut self.slots[child];
-            s.b[B_DEF] = self.spawn_anim;
-            s.b[6..11].copy_from_slice(&st.b[6..11]);
-            s.b[B_SPRITE] = self.spawn_sprite;
-            s.b[B_FLIP] = self.spawn_attr;
-        }
-        self.boss_def_count = n;
-        // $B259: the spawn staging is cleared for the next caller.
-        self.spawn_anim = 0;
-        self.spawn_sprite = 0;
-        self.spawn_attr = 0;
+        self.apply_boss_spawn(st);
     }
 
     pub(super) fn boss_hit_save(&mut self, st: &mut Staging) {
