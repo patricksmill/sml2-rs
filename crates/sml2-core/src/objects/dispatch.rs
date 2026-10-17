@@ -32,6 +32,7 @@ impl ObjectSim {
             0x58BCB => self.handler_0x58bcb(st),
             0x58C41 => self.handler_0x58c41(st),
             0x58CE0 => self.handler_0x58ce0(st),
+            0x58D34 => self.handler_0x58d34(st),
             0x58C52 => self.handler_0x58c52(st),
             0x58E7E => self.handler_0x58e7e(st),
             0x591A3 => self.handler_0x591a3(st),
