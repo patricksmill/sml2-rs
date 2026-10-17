@@ -894,6 +894,21 @@
    "dependencies": [],
    "verification_gate": "Flag-only input never grants coins or exits; explicit reward producer remains verified",
    "status": "done"
+  },
+  {
+   "id": "wario_ending_entry",
+   "title": "Port phase3 input override and ending fade/init states through both runtime loops",
+   "asm_refs": [
+    "main.asm:$5E12",
+    "home.asm:$03AF",
+    "home.asm:$2CAE",
+    "main.asm:$68000"
+   ],
+   "dependencies": [
+    "boss_clear_receiver_semantics"
+   ],
+   "verification_gate": "Exact held/pressed boundaries and palettes; deferred current-frame execution; next-frame state35/18/19 transition",
+   "status": "done"
   }
  ]
 }

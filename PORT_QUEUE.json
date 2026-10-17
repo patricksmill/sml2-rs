@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "5 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "4 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "remaining_handler_classes",
@@ -24,21 +24,6 @@
     "native_actor_boundary"
    ],
    "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
-   "status": "pending"
-  },
-  {
-   "id": "wario_ending_entry",
-   "title": "Port phase3 input override and ending fade/init states through both runtime loops",
-   "asm_refs": [
-    "main.asm:$5E12",
-    "home.asm:$03AF",
-    "home.asm:$2CAE",
-    "main.asm:$68000"
-   ],
-   "dependencies": [
-    "boss_clear_receiver_semantics"
-   ],
-   "verification_gate": "Exact held/pressed boundaries and palettes; deferred current-frame execution; next-frame state35/18/19 transition",
    "status": "pending"
   },
   {

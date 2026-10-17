@@ -33,6 +33,7 @@ use sml2_core::map::MapNodes;
 use sml2_core::object::ObjectTables;
 use sml2_core::objects::FireHit;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
+use sml2_core::ending_entry::{EndingEntry, EndingEntryState, EndingFrame, EndingInput};
 use sml2_core::scene::{boss_def_index, boss_def_portable, SceneScripts, SceneStep, SceneVm};
 use sml2_core::tileset::Tilesets;
 use sml2_core::video;
@@ -1294,6 +1295,7 @@ fn run_replay(
     // zeros, so its `sSceneId` never latches and the VM never runs a byte.
     let scripts = load_scene_scripts();
     let mut scene_vm = SceneVm::new();
+    let mut ending_entry = EndingEntry::default();
     let nodes = load_map_nodes();
     let mut sim = PlayerSim::new();
     sim.powerup = 0; // level-0 spawn starts small
@@ -1431,7 +1433,26 @@ fn run_replay(
         // $05E4/$0640: the frame loop's three branches. Dead (`$FF`) runs only
         // the arc + the object engine (the camera freezes); the death fade
         // (`$FF9B = 9`) leaves the level entirely, freezing everything.
-        update_level_timer_at_frame_head(&mut sim);
+        let ending_frame = ending_frame_head(
+            &mut ending_entry,
+            &mut sim,
+            &mut cam,
+            EndingInput {
+                held: keys,
+                pressed: PlayerKeys {
+                    a: a_pressed,
+                    b: b_pressed,
+                    ..PlayerKeys::default()
+                },
+            },
+        );
+        let gameplay = matches!(ending_frame, EndingFrame::Gameplay(_));
+        let input = match ending_frame {
+            EndingFrame::Gameplay(input) => input,
+            _ => EndingInput::default(),
+        };
+        let keys = input.held;
+        let (a_pressed, b_pressed) = (input.pressed.a, input.pressed.b);
         let was_dead = sim.dead == 0xFF;
         // The fade-trigger frame is the last one to run the object engine
         // (the dead branch continues into `$0652`); the true fade frames do
@@ -1453,11 +1474,13 @@ fn run_replay(
         // it on a dead/fade frame is right: the camera has not moved, so the
         // cell (and the console's stale $FF98) is unchanged.
         let cam_edge_before = if own_edges { cam.edge_byte() } else { f.edge };
-        let fade_at_entry = sim.dead_fade || sim.exit_phase;
+        let fade_at_entry = !gameplay || sim.dead_fade || sim.exit_phase;
         // `$FF9B = $14` is set by the exit fade's *last* frame, so the hand-off
         // body runs on the frame after it — keyed on the state at entry.
         let exit_done_at_entry = sim.exit_completed;
-        if sim.dead_fade || sim.exit_phase {
+        if !gameplay {
+            // The shared frame head dispatched this ending-entry frame.
+        } else if sim.dead_fade || sim.exit_phase {
             if sim.exit_phase {
                 sim.exit_fade_step();
             }
@@ -1603,7 +1626,9 @@ fn run_replay(
         // the arena's 1561: the ROM's travelling phase is a sub-phase of the
         // travel that ends before `sPipeTravelDirection` clears, and it is not
         // modelled yet (see `boss_arena_phase_cascade` in PORT_QUEUE.json).
-        scene_vm.step(&mut sim, &mut cam, &scripts);
+        if gameplay {
+            scene_vm.step(&mut sim, &mut cam, &scripts);
+        }
         // The full-death-cycle gap: after the fade-trigger frame the game
         // leaves the level (fade 192 frames → `$14` lives/save/map setup →
         // the overworld map, which waits for input → re-entry reloads the
@@ -2335,6 +2360,7 @@ fn run_play(
     }
     let scripts = load_scene_scripts();
     let mut scene_vm = SceneVm::new();
+    let mut ending_entry = EndingEntry::default();
     let nodes = load_map_nodes();
     // The `$6x` opcode's tileset swap rewrites the level's own tile data and
     // metatile definitions mid-level, so play mode owns a mutable copy of the
@@ -2433,7 +2459,29 @@ fn run_play(
         sim.phase = (sim.phase + 1) & 7;
         sim.frame_counter = sim.frame_counter.wrapping_add(1);
         // $05E4/$0640: dead → the arc only; the death fade freezes everything.
-        update_level_timer_at_frame_head(&mut sim);
+        let ending_frame = ending_frame_head(
+            &mut ending_entry,
+            &mut sim,
+            &mut cam,
+            EndingInput {
+                held: keys,
+                pressed: PlayerKeys {
+                    a: a_pressed,
+                    b: b_pressed,
+                    start: start_pressed,
+                    select: select_pressed,
+                    ..PlayerKeys::default()
+                },
+            },
+        );
+        let gameplay = matches!(ending_frame, EndingFrame::Gameplay(_));
+        let input = match ending_frame {
+            EndingFrame::Gameplay(input) => input,
+            _ => EndingInput::default(),
+        };
+        let keys = input.held;
+        let (a_pressed, b_pressed) = (input.pressed.a, input.pressed.b);
+        let (start_pressed, select_pressed) = (input.pressed.start, input.pressed.select);
         let was_dead = sim.dead == 0xFF;
         // The fade-trigger frame still runs the object engine ($0640
         // continues into $0652); the true fade frames do not. `$FF9B`: 9 =
@@ -2447,9 +2495,11 @@ fn run_play(
         // read at entry, so the frame START lands on still runs its object
         // pass (the ROM's `$273E` sits at the frame tail) before the freeze
         // takes effect on the next one.
-        let frozen = sim.paused || sim.dead_fade || sim.exit_phase;
+        let frozen = !gameplay || sim.paused || sim.dead_fade || sim.exit_phase;
         let exit_done_at_entry = sim.exit_completed;
-        if frozen {
+        if !gameplay {
+            // The shared frame head dispatched this ending-entry frame.
+        } else if frozen {
             if sim.exit_phase {
                 sim.exit_fade_step();
             }
@@ -2540,7 +2590,11 @@ fn run_play(
         // $20A4: the scene VM, once per frame after the whole in-level pass —
         // the same placement as the replay loop (home.asm:274). Not gated on the
         // pipe travel; see the replay loop's note.
-        let stepped = scene_vm.step(&mut sim, &mut cam, &scripts);
+        let stepped = if gameplay {
+            scene_vm.step(&mut sim, &mut cam, &scripts)
+        } else {
+            SceneStep::Idle
+        };
         // `$6x` (`$25AF`): the scene's tileset swap. It is a *graphics* change —
         // VRAM tiles plus the metatile definitions — so it has to reach the
         // renderer's inputs, not just the sim's `sLevelGfxIndex`. This is what
@@ -2579,7 +2633,7 @@ fn run_play(
         // $2C82: tick the bump slots. The bump stages its own sprite at the
         // block's screen coords (`block_draw`), which the renderer draws as an
         // extra OAM sprite while the player sprite keeps Mario's frame.
-        if !was_dead {
+        if gameplay && !was_dead {
             sim.block_update();
         }
         if let Some(s) = spr.as_mut() {
@@ -2638,7 +2692,7 @@ fn run_play(
         // bytes while `sFadeTimer != 0`, so those two gates are applied here.
         // While paused, SELECT abandons the level instead when
         // `sLevelProgressFlags` bit 7 says it was already cleared.
-        if sim.fade_timer == 0 && cam.transition == 0 {
+        if gameplay && sim.fade_timer == 0 && cam.transition == 0 {
             if start_pressed {
                 if sim.paused {
                     sim.pause_exit();
@@ -2726,6 +2780,29 @@ fn run_play(
     Ok(())
 }
 
+/// Shared live/replay dispatch boundary. Gameplay keeps its existing fade tick
+/// in PlayerSim::step (or the transition arm); ending states tick here instead.
+fn ending_frame_head(
+    ending: &mut EndingEntry,
+    sim: &mut PlayerSim,
+    cam: &mut sml2_core::camera::CameraSim,
+    input: EndingInput,
+) -> EndingFrame {
+    if ending.state() == EndingEntryState::Gameplay {
+        // $5D6A precedes the scripted-input override at $5E12.
+        update_level_timer_at_frame_head(sim);
+    } else {
+        sim.tick_fade_timer();
+    }
+    ending.frame_head(
+        &mut cam.boss_fight_phase,
+        sim.x,
+        sim.y,
+        &mut sim.fade_timer,
+        input,
+    )
+}
+
 /// `$04F1`: the header seeds the countdown and the level's music byte on load.
 fn seed_level_timer(sim: &mut PlayerSim, manifest: &LevelManifest) {
     sim.level_timer = sml2_core::level_timer::LevelTimer::new(manifest.header.time_limit);
@@ -2742,6 +2819,102 @@ fn update_level_timer_at_frame_head(sim: &mut PlayerSim) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ending_entry_frame_head_keeps_trigger_player_and_objects_then_dispatches() {
+        let (_, layout, _) = level_files("level01.manifest.json", "level01.bgblock.bin");
+        let tables = pan_sprites(None).tables;
+        let mut sim = PlayerSim::new();
+        sim.x = 162;
+        sim.y = 224;
+        sim.fade_timer = 2;
+        sim.boss_clear = true;
+        sim.level_timer = sml2_core::level_timer::LevelTimer::new(0x03);
+        let mut cam = sml2_core::camera::CameraSim::new(80, 224);
+        cam.boss_fight_phase = 3;
+        let mut obj = sml2_core::objects::ObjectSim::new(Vec::new(), cam.x);
+        let mut ending = EndingEntry::default();
+        let action = ending_frame_head(
+            &mut ending,
+            &mut sim,
+            &mut cam,
+            EndingInput {
+                held: PlayerKeys {
+                    left: true,
+                    start: true,
+                    select: true,
+                    ..PlayerKeys::default()
+                },
+                pressed: PlayerKeys {
+                    a: true,
+                    b: true,
+                    start: true,
+                    select: true,
+                    ..PlayerKeys::default()
+                },
+            },
+        );
+        assert_eq!(ending.state() as u8, 35);
+        assert_eq!(sim.fade_timer, 2, "player owns trigger-frame fade tick");
+        let EndingFrame::Gameplay(input) = action else {
+            panic!("trigger frame still runs gameplay");
+        };
+        assert!(input.held.right && input.held.a);
+        assert!(!input.held.left && !input.held.start && !input.held.select);
+        assert!(!input.pressed.a && !input.pressed.b && !input.pressed.start && !input.pressed.select);
+        sim.step(&input.held, input.pressed.a, input.pressed.b, &layout);
+        assert_eq!(sim.fade_timer, 1);
+        assert!(
+            sim.hvel != 0,
+            "scripted Right reaches the real player update"
+        );
+        cam.step(&mut sim);
+        let before_object_phase = obj.phase;
+        let contact = build_contact(&sim, &input.held, cam.scroll_pan);
+        obj.sample_player_inputs(&sim);
+        obj.step(cam.x, cam.y, &layout, &tables, &contact, cam.boss_mode());
+        assert_ne!(
+            obj.phase, before_object_phase,
+            "trigger frame runs the actual object engine"
+        );
+        sim.apply_object_result(&mut obj, input.held.a);
+        cam.apply_object_result(&mut obj);
+        assert!(
+            !sim.exit_phase && !sim.exit_completed,
+            "ending entry never rewards an ordinary level clear"
+        );
+        let timer_before_fade = sim.level_timer;
+        assert!(matches!(
+            ending_frame_head(&mut ending, &mut sim, &mut cam, EndingInput::default()),
+            EndingFrame::Fade(_)
+        ));
+        assert_eq!(ending.state() as u8, 18);
+        assert_eq!(
+            sim.fade_timer, 255,
+            "one tick reaches zero, then state35 resets fade"
+        );
+        assert_eq!(sim.level_timer, timer_before_fade);
+        assert_eq!(cam.boss_fight_phase, 3);
+        assert!(matches!(
+            ending_frame_head(&mut ending, &mut sim, &mut cam, EndingInput::default()),
+            EndingFrame::SequenceInitialized
+        ));
+        assert_eq!(
+            (
+                ending.state() as u8,
+                ending.ending_state(),
+                cam.boss_fight_phase,
+                sim.fade_timer
+            ),
+            (19, 0, 0, 254)
+        );
+        assert!(matches!(
+            ending_frame_head(&mut ending, &mut sim, &mut cam, EndingInput::default()),
+            EndingFrame::SequencePending
+        ));
+        assert_eq!(sim.fade_timer, 253);
+        assert!(!sim.exit_phase && !sim.exit_completed);
+    }
 
     #[test]
     fn level_timer_load_and_reload_use_header_bytes() {

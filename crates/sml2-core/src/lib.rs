@@ -4,6 +4,7 @@ pub mod actor;
 pub mod camera;
 pub mod collision;
 pub mod divider;
+pub mod ending_entry;
 pub mod level;
 pub mod level_timer;
 pub mod map;
