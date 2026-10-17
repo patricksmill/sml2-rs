@@ -16,3 +16,7 @@ mod moving_child;
 mod moving_child_adapter;
 mod phase1_exit;
 mod phase2_exit;
+mod trajectory_child;
+mod trajectory_child_adapter;
+#[cfg(test)]
+mod trajectory_child_tests;

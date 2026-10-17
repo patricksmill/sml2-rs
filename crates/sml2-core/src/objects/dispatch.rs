@@ -62,6 +62,7 @@ impl ObjectSim {
             0xA8AB => self.handler_wario20(st, tables),
             0xAB8B => self.handler_wario23(st, tables),
             0xAAA5 => self.handler_wario21(st, tables),
+            0xAFE0 => self.handler_wario27(st),
             h => self.note_unported(h),
         }
     }
