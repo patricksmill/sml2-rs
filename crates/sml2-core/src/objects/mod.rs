@@ -126,6 +126,7 @@ mod stream;
 mod stream_cursor;
 #[cfg(test)]
 mod tests;
+mod mario_zone;
 mod walkers;
 mod wario;
 

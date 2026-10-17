@@ -559,20 +559,6 @@ impl ObjectSim {
 }
 
 impl ObjectSim {
-    pub(super) fn handler_boss_anim13(&mut self, st: &mut Staging) {
-        if self.remove_mode != 2 {
-            return; // $9EE4
-        }
-        st.b[B_SCRY] = 0x90; // $9EE9
-        st.b[B_SCRX] = 0x58; // $9EED
-                             // $9EF1 -> $98F8: become anim 4 / sprite 9, state, phase and type cleared.
-        st.b[B_DEF] = 0x04;
-        st.b[B_SPRITE] = 0x09;
-        st.b[B_FSTATE] = 0;
-        st.b[B_PHASE] = 0;
-        st.b[B_TYPE] = 0;
-    }
-
     pub(super) fn hit_reaction(
         &mut self,
         st: &mut Staging,
