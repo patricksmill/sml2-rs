@@ -717,8 +717,20 @@ impl ObjectSim {
             mario_ref_x: self.mario_ref_x,
             mario_ref_y: self.mario_ref_y,
         };
-        let _effect = boo::update(&mut actor, context);
+        if context.frame.every(4) {
+            let facing_x = boo::object_facing_to_mario(context.mario_ref_x, actor.position.x);
+            let mario_dir = if context.mario_dir_right { 1 } else { 255 };
+            self.facing = if facing_x == mario_dir && matches!(actor.state, 1 | 2) {
+                boo::object_facing_to_mario(context.mario_ref_y, actor.position.y)
+            } else {
+                facing_x
+            };
+        }
+        let result = boo::update(&mut actor, context);
         st.b = actor.to_raw_slot();
+        if result.is_err() {
+            self.note_unported(0x59545);
+        }
     }
 
     pub(super) fn handler_crawler(&mut self, st: &mut Staging, layout: &LevelLayout) {

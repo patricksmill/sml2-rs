@@ -17,6 +17,10 @@ mod sprite_sequence;
 #[path = "actor_sprite_deltas.rs"]
 mod sprite_deltas;
 
+#[path = "actor_vertical_tracking.rs"]
+mod vertical_tracking;
+pub use vertical_tracking::{VerticalTrackingError, VERTICAL_TRACKING_Y_SPEED};
+
 #[path = "actor_direction_allocation.rs"]
 mod direction_allocation;
 

@@ -3,7 +3,7 @@
 //! Follows the idiomatic Rust porting guide: typed actor state, domain methods,
 //! zero raw hex offsets or register plumbing.
 
-use crate::actor::{Actor, ContactKind, Facing, FrameTick};
+use crate::actor::{Actor, ContactKind, Facing, FrameTick, VerticalTrackingError};
 
 /// Boo movement state ($59545).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,15 +42,6 @@ pub struct BooContext {
     pub mario_ref_y: u16,
 }
 
-/// Signed Y-velocity profile from ROM `$59125` (17 entries, index 0..=16).
-///
-/// ROM bytes: `$FD, $FE, $FE, $FF, $FE, $FF, $FF, $00, $00, $00, $01, $01, $02, $01, $02, $02, $03`.
-pub const BOO_Y_SPEED: [i8; 17] = [
-    -3, -2, -2, -1, -2, -1, -1, 0,
-    0,
-    0, 1, 1, 2, 1, 2, 2, 3,
-];
-
 /// Derives the ROM `$5B3E0` facing relation from the object's perspective.
 ///
 /// Returns 1 if Mario is to the right of the object, 255 if to the left, 0 if equal.
@@ -66,13 +57,10 @@ pub fn object_facing_to_mario(mario_ref_x: u16, actor_x: u16) -> u8 {
 }
 
 /// Domain update for Boo (ROM $59545, anim 77).
-pub fn update(
-    actor: &mut Actor,
-    context: BooContext,
-) -> BooEffect {
+pub fn update(actor: &mut Actor, context: BooContext) -> Result<BooEffect, VerticalTrackingError> {
     // $59545: Boo updates only every 4th frame.
     if !context.frame.every(4) {
-        return BooEffect::Idle;
+        return Ok(BooEffect::Idle);
     }
 
     // $5954A: compare Mario's facing direction with Mario's relative position.
@@ -85,12 +73,12 @@ pub fn update(
         // $5957F: sprite 14 (shy / covering face), state 0.
         actor.sprite = 14;
         actor.state = BooState::Shy.to_raw();
-        return BooEffect::Shy;
+        return Ok(BooEffect::Shy);
     }
 
     // Mario has his back turned (mario_dir == obj_facing) -> Boo pursues Mario!
     let state = BooState::from_raw(actor.state);
-    match state {
+    Ok(match state {
         BooState::Shy => {
             // $5955E..$5957E: uncover face, set pursuit state based on Mario's relative side.
             actor.sprite = 13;
@@ -110,48 +98,104 @@ pub fn update(
         }
         BooState::ChasingRight => {
             // $59587: update Y acceleration and step Y.
-            step_y(actor, context.mario_ref_y);
+            actor.track_player_y(context.mario_ref_y)?;
             // Step X right (+1).
             actor.position.move_x(1);
             if actor.travel_direction.raw() < 16 {
-                actor.travel_direction = Facing::from_raw(actor.travel_direction.raw().wrapping_add(1));
+                actor.travel_direction =
+                    Facing::from_raw(actor.travel_direction.raw().wrapping_add(1));
             }
             BooEffect::Chasing
         }
         BooState::ChasingLeft => {
             // $5959D: update Y acceleration and step Y.
-            step_y(actor, context.mario_ref_y);
+            actor.track_player_y(context.mario_ref_y)?;
             // Step X left (-1).
             actor.position.move_x(-1);
             if actor.travel_direction.raw() > 0 {
-                actor.travel_direction = Facing::from_raw(actor.travel_direction.raw().wrapping_sub(1));
+                actor.travel_direction =
+                    Facing::from_raw(actor.travel_direction.raw().wrapping_sub(1));
             }
             BooEffect::Chasing
         }
-    }
-}
-
-/// Helper for ROM `$590E9`: accelerate Y index toward Mario's Y, then step Y by the speed profile.
-fn step_y(actor: &mut Actor, mario_ref_y: u16) {
-    if mario_ref_y > actor.position.y {
-        // Mario is below: accelerate downward (motion_leg increments toward 16)
-        if actor.motion_leg < 16 {
-            actor.motion_leg = actor.motion_leg.wrapping_add(1);
-        }
-    } else if mario_ref_y < actor.position.y {
-        // Mario is above: accelerate upward (motion_leg decrements toward 0)
-        if actor.motion_leg > 0 {
-            actor.motion_leg = actor.motion_leg.wrapping_sub(1);
-        }
-    }
-    let speed_idx = (actor.motion_leg as usize).min(BOO_Y_SPEED.len() - 1);
-    let dy = BOO_Y_SPEED[speed_idx];
-    actor.position.move_y(dy as i16);
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn boo_adapter_projects_source_facing_and_profile_errors() {
+        use super::super::{ObjectSim, Staging};
+        for (frame, state, player_x, player_y, leg, facing, error) in [
+            (1, 1, 150, 50, 9, 42, false),
+            (4, 0, 150, 50, 9, 1, false),
+            (4, 1, 50, 50, 9, 255, false),
+            (4, 1, 150, 50, 9, 255, false),
+            (4, 1, 150, 100, 9, 0, false),
+            (4, 1, 150, 101, 9, 1, false),
+            (4, 1, 150, 100, 17, 0, true),
+        ] {
+            let mut sim = ObjectSim::new(Vec::new(), 0);
+            sim.fff0 = frame;
+            sim.facing = 42;
+            sim.mario.dir_right = true;
+            sim.mario_ref_x = player_x;
+            sim.mario_ref_y = player_y;
+            let mut actor = Actor::default();
+            actor.position.x = 100;
+            actor.position.y = 100;
+            actor.state = state;
+            actor.motion_leg = leg;
+            let mut staging = Staging::default();
+            staging.b = actor.to_raw_slot();
+            sim.handler_boo(&mut staging);
+            assert_eq!(sim.facing, facing);
+            assert_eq!(sim.unported.contains(&0x59545), error);
+            if error {
+                actor.motion_leg = 18;
+                assert_eq!(staging.b, actor.to_raw_slot());
+            }
+        }
+    }
+
+    #[test]
+    fn boo_tracking_uses_shared_rom_equality_and_propagates_profile_error() {
+        assert_eq!(crate::actor::VERTICAL_TRACKING_Y_SPEED[0], -3);
+        for (leg, next, y, result) in [
+            (9, 10, 101u16, Ok(BooEffect::Chasing)),
+            (255, 0, 97, Ok(BooEffect::Chasing)),
+            (17, 18, 100, Err(VerticalTrackingError { leg: 18 })),
+        ] {
+            let mut expected = [0xa5; 32];
+            expected[0..2].copy_from_slice(&100u16.to_be_bytes());
+            expected[3..5].copy_from_slice(&100u16.to_be_bytes());
+            expected[15] = 1;
+            expected[24] = leg;
+            expected[25] = 8;
+            let mut actor = Actor::from_raw_slot(&expected);
+            assert_eq!(
+                update(
+                    &mut actor,
+                    BooContext {
+                        frame: FrameTick(4),
+                        mario_dir_right: true,
+                        mario_ref_x: 150,
+                        mario_ref_y: 100,
+                    }
+                ),
+                result
+            );
+            expected[24] = next;
+            expected[3..5].copy_from_slice(&y.to_be_bytes());
+            if result.is_ok() {
+                expected[1] = 101;
+                expected[25] = 9;
+            }
+            assert_eq!(actor.to_raw_slot(), expected);
+        }
+    }
 
     #[test]
     fn test_object_facing_to_mario() {
@@ -169,7 +213,7 @@ mod tests {
             mario_ref_x: 200,
             mario_ref_y: 100,
         };
-        assert_eq!(update(&mut actor, ctx), BooEffect::Idle);
+        assert_eq!(update(&mut actor, ctx), Ok(BooEffect::Idle));
     }
 
     #[test]
@@ -187,7 +231,7 @@ mod tests {
             mario_ref_y: 100,
         };
         let eff = update(&mut actor, ctx);
-        assert_eq!(eff, BooEffect::Shy);
+        assert_eq!(eff, Ok(BooEffect::Shy));
         assert_eq!(actor.state, BooState::Shy.to_raw());
         assert_eq!(actor.sprite, 14, "shy sprite is 14");
     }
@@ -207,7 +251,7 @@ mod tests {
             mario_ref_y: 100,
         };
         let eff = update(&mut actor, ctx);
-        assert_eq!(eff, BooEffect::Chasing);
+        assert_eq!(eff, Ok(BooEffect::Chasing));
         assert_eq!(actor.state, BooState::ChasingRight.to_raw());
         assert_eq!(actor.sprite, 13);
         assert!(actor.sprite_flip.horizontal());
@@ -223,7 +267,7 @@ mod tests {
             mario_ref_y: 150, // Mario is below -> motion_leg accelerates to 9
         };
         let eff = update(&mut actor, ctx);
-        assert_eq!(eff, BooEffect::Chasing);
+        assert_eq!(eff, Ok(BooEffect::Chasing));
         assert_eq!(actor.position.x, 101);
         assert_eq!(actor.motion_leg, 9);
         assert_eq!(actor.travel_direction.raw(), 9);
@@ -244,7 +288,7 @@ mod tests {
             mario_ref_y: 50, // Mario is above
         };
         let eff = update(&mut actor, ctx);
-        assert_eq!(eff, BooEffect::Chasing);
+        assert_eq!(eff, Ok(BooEffect::Chasing));
         assert_eq!(actor.state, BooState::ChasingLeft.to_raw());
         assert_eq!(actor.sprite, 13);
         assert!(!actor.sprite_flip.horizontal());
@@ -256,7 +300,7 @@ mod tests {
             mario_ref_x: 50,
             mario_ref_y: 50,
         };
-        update(&mut actor, ctx);
+        update(&mut actor, ctx).unwrap();
         assert_eq!(actor.position.x, 99);
         assert_eq!(actor.motion_leg, 7); // accelerated upward toward index 0
         assert_eq!(actor.travel_direction.raw(), 7);
