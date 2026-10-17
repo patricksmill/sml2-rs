@@ -1,124 +1,113 @@
-//! Handler ROM `0x591F9` (bank `$16`, CPU `$51F9`) — anim 58 in both profile tables.
-//!
-//! Vertical bobber / patrol state machine:
-//! - Every frame: `sprite_toggle1` (mask-1 sprite bit 0 toggle on even `fff0`).
-//! - State 0: Initial spawn. Sets `B_TYPE = 0x56 (86)`, `B_FLASH = 0x10 (16)`.
-//!   Compares Mario's Y with the object's Y via `$5B407`: if Mario is below
-//!   (`mario_ref_y > obj_y`), state becomes 2 (move down); otherwise 1 (move up).
-//! - States 1-4: Gated by `fff0 & 3 == 0` (runs every 4th frame).
-//!   - State 1: Moves UP by `BOUNCE_SPEED[B_PHASE]` (`mv_y_sub`).
-//!     When `B_PHASE == 15`: resets `B_PHASE = 0`, state += 2 -> State 3.
-//!   - State 2: Moves DOWN by `BOUNCE_SPEED[B_PHASE]` (`mv_y_add`).
-//!     When `B_PHASE == 15`: resets `B_PHASE = 0`, state += 2 -> State 4.
-//!   - State 3: Pauses while `B_T28 != 0` (decrements `B_T28`).
-//!     Once `B_T28 == 0`: moves DOWN by `FALL_SPEED[B_PHASE]` (cap 15, `mv_y_add`).
-//!     When `B_PHASE == 15`: resets `B_PHASE = 0`, state -= 1 -> State 2.
-//!   - State 4: Pauses while `B_T28 != 0` (decrements `B_T28`).
-//!     Once `B_T28 == 0`: moves UP by `FALL_SPEED[B_PHASE]` (cap 15, `mv_y_sub`).
-//!     When `B_PHASE == 15`: resets `B_PHASE = 0`, state = 1.
+//! Compatibility facade for the native vertical bobber (ROM `0x591F9`).
 
+use super::vertical_bobber::{update, BobberContext, BobberEffect};
 use super::*;
+use crate::actor::{Actor, FrameTick};
+use std::cmp::Ordering;
 
 impl ObjectSim {
     pub(super) fn handler_0x591f9(&mut self, st: &mut Staging) {
-        // $591F9: CD 21 75 call $5B521 — mask-1 sprite toggle on even $FFF0.
-        self.sprite_toggle1(st);
-
-        // State 0: initial setup.
-        if st.b[B_FSTATE] == 0 {
-            // $59201: ld a, 86; ldh [$FFE2], a
-            st.b[B_TYPE] = 0x56;
-            // $59205: ld a, 16; ldh [$FFDE], a
-            st.b[B_FLASH] = 0x10;
-            // $59209: call $5B407 — compare sMarioRefY with object Y.
-            self.face_mario_y(st);
-            return;
-        }
-
-        // $5920D: ldh a, [$FFF0]; and $03; ret nz — 4-frame gate for movement.
-        if self.fff0 & 3 != 0 {
-            return;
-        }
-
-        // rst $28 dispatch over states 1-4.
-        match st.b[B_FSTATE] {
-            // $521E: state 1 (move UP on bounce curve, transition to state 3).
-            1 => {
-                let b = self.bounce_step(st);
-                self.mv_y_sub(st, b);
-                if st.b[B_PHASE] == 15 {
-                    st.b[B_PHASE] = 0;
-                    st.b[B_FSTATE] = 3;
-                }
-            }
-            // $5232: state 2 (move DOWN on bounce curve, transition to state 4).
-            2 => {
-                let b = self.bounce_step(st);
-                self.mv_y_add(st, b);
-                if st.b[B_PHASE] == 15 {
-                    st.b[B_PHASE] = 0;
-                    st.b[B_FSTATE] = 4;
-                }
-            }
-            // $523A: state 3 (delay on B_T28, move DOWN on fall curve, transition to state 2).
-            3 => {
-                if st.b[B_T28] != 0 {
-                    st.b[B_T28] -= 1;
-                    return;
-                }
-                let b = self.curve_step_15(st, &FALL_SPEED);
-                self.mv_y_add(st, b);
-                if st.b[B_PHASE] == 15 {
-                    st.b[B_PHASE] = 0;
-                    st.b[B_FSTATE] = 2;
-                }
-            }
-            // $525F: state 4 (delay on B_T28, move UP on fall curve, transition to state 1).
-            4 => {
-                if st.b[B_T28] != 0 {
-                    st.b[B_T28] -= 1;
-                    return;
-                }
-                let b = self.curve_step_15(st, &FALL_SPEED);
-                self.mv_y_sub(st, b);
-                if st.b[B_PHASE] == 15 {
-                    st.b[B_PHASE] = 0;
-                    st.b[B_FSTATE] = 1;
-                }
-            }
-            _ => self.note_unported(0x591F9),
-        }
-    }
-
-    /// `$5B407`: Compare `sMarioRefY` with object's Y.
-    /// Sets `facing` to 1 if `mario_ref_y > obj_y`, 0xFF if `< obj_y`, 0 if `==`.
-    /// Sets `st.b[B_FSTATE]` to 2 if `facing == 1`, else 1.
-    pub(super) fn face_mario_y(&mut self, st: &mut Staging) {
-        let obj_y = st.y();
-        self.facing = if self.mario_ref_y > obj_y {
-            1
-        } else if self.mario_ref_y < obj_y {
-            0xFF
-        } else {
-            0
+        let context = BobberContext {
+            frame: FrameTick(u64::from(self.fff0)),
+            player_ref_y: self.mario_ref_y,
         };
-        st.b[B_FSTATE] = if self.facing == 1 { 2 } else { 1 };
-    }
-
-    /// `$5B456` with `c = 15`: read speed from curve at `B_PHASE`, increment `B_PHASE` if `< 15`.
-    fn curve_step_15(&self, st: &mut Staging, curve: &[u8]) -> u8 {
-        let idx = (st.b[B_PHASE] as usize).min(15);
-        let b = curve[idx];
-        if st.b[B_PHASE] != 15 {
-            st.b[B_PHASE] = st.b[B_PHASE].wrapping_add(1);
+        let mut actor = Actor::from_raw_slot(&st.b);
+        let result = update(&mut actor, context);
+        st.b = actor.to_raw_slot();
+        match result {
+            Ok(BobberEffect::PlayerRelation(relation)) => {
+                self.facing = match relation {
+                    Ordering::Less => 0xFF,
+                    Ordering::Equal => 0,
+                    Ordering::Greater => 1,
+                };
+            }
+            Ok(BobberEffect::None) => {}
+            Err(_) => self.note_unported(0x591F9),
         }
-        b
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn adapter_preserves_unwritten_slot_and_scratch_bytes() {
+        let mut sim = ObjectSim::new(vec![], 0);
+        sim.fff0 = 4;
+        sim.facing = 0xA3;
+        let mut st = Staging {
+            b: [0xA5; 32],
+            px: 0x1234,
+            py: 0xFEDC,
+        };
+        st.b[B_FSTATE] = 3;
+        st.b[B_T28] = 0;
+        st.b[B_PHASE] = 16;
+        set_y(&mut st.b, 0xFFFF);
+        let mut expected = st.b;
+        expected[B_PHASE] = 17;
+        expected[B_SPRITE] ^= 1;
+        set_y(&mut expected, 1); // source fall sample 16 is 2, not clamped sample 15 (3).
+        sim.handler_0x591f9(&mut st);
+        assert_eq!(st.b, expected);
+        assert_eq!((st.px, st.py, sim.facing), (0x1234, 0xFEDC, 0xA3));
+
+        st.b[B_FSTATE] = 99;
+        expected = st.b;
+        expected[B_SPRITE] ^= 1;
+        sim.handler_0x591f9(&mut st);
+        assert_eq!(st.b, expected);
+        assert_eq!(sim.unported, [0x591F9]);
+    }
+
+    #[test]
+    fn real_step_dispatches_bobber_and_freezes_handler_when_mario_dead() {
+        let layout = LevelLayout::from_bytes(&[0x60; 0x3000]).unwrap();
+        let tables: ObjectTables = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../extracted/objects.json"
+        )))
+        .unwrap();
+        for level in [0, 0x20] {
+            assert_eq!(tables.profile_for(level, 58).unwrap().handler, 0x591F9);
+            for dead in [0, 0xFF] {
+                let mut sim = ObjectSim::new(vec![], 0);
+                sim.level_id = level;
+                sim.phase = false;
+                sim.fff0 = 3;
+                sim.slots[1].b[B_STATE] = 2;
+                sim.slots[1].b[B_DEF] = 58;
+                sim.slots[1].b[B_SPRITE] = 0x10;
+                set_x(&mut sim.slots[1].b, 100);
+                set_y(&mut sim.slots[1].b, 100);
+                sim.mario_dead = dead;
+                let mario = MarioContact {
+                    x: 0,
+                    y: 68,
+                    travelling: true,
+                    ..Default::default()
+                };
+                sim.step(100, 100, &layout, &tables, &mario, false);
+                assert_eq!(sim.fff0, 4);
+                assert_eq!(sim.slots[1].b[B_FSTATE], if dead == 0 { 1 } else { 0 });
+                assert_eq!(sim.slots[1].b[B_TYPE], if dead == 0 { 86 } else { 0 });
+                assert_eq!(sim.slots[1].b[B_FLASH], if dead == 0 { 16 } else { 0 });
+                assert_eq!(
+                    sim.slots[1].b[B_SPRITE],
+                    if dead == 0 { 0x11 } else { 0x10 }
+                );
+                assert_eq!(sim.facing, 0); // equal full Y chooses up but keeps equality relation.
+                sim.phase = false;
+                sim.fff0 = 7;
+                sim.step(100, 100, &layout, &tables, &mario, false);
+                assert_eq!(sim.slots[1].y(), if dead == 0 { 97 } else { 100 });
+                assert_eq!(sim.slots[1].b[B_PHASE], if dead == 0 { 1 } else { 0 });
+                assert!(sim.unported.is_empty());
+            }
+        }
+    }
 
     #[test]
     fn state0_initialization_sets_type_flash_and_faces_mario_y() {

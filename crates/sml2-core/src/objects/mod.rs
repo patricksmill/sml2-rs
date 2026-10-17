@@ -117,6 +117,7 @@ mod boss_screen_input_tests;
 mod dispatch;
 mod handler_0x586eb;
 mod handler_0x591f9;
+mod vertical_bobber;
 mod handler_0x5b0d5;
 mod helpers;
 mod interaction;
