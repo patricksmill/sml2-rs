@@ -3435,4 +3435,193 @@ mod tests {
         assert_ne!(baseline, shifted, "the mapping must draw visible pixels");
         assert_eq!(&shifted[..142 * 160], &baseline[2 * 160..144 * 160]);
     }
+
+    #[test]
+    fn wario_arena_entries_definitions_6_7_8_through_final_ending_integration() {
+        let (_, layout, _) = level_files("level01.manifest.json", "level01.bgblock.bin");
+        let tables = pan_sprites(None).tables;
+        let mut sim = PlayerSim::new();
+        let mut cam = sml2_core::camera::CameraSim::new(80, 72);
+        let mut obj = sml2_core::objects::ObjectSim::new(Vec::new(), cam.x);
+        obj.level_id = 0x18;
+
+        // =================================================================
+        // PHASE 0: Wario Form 1 Entry (Definition 6)
+        // =================================================================
+        cam.scene_load_pending = true;
+
+        let def_index = boss_def_index(0x18, cam.boss_fight_phase);
+        assert_eq!(def_index, 6);
+        assert!(boss_def_portable(def_index));
+
+        let (music, level_song) = cam.begin_scene_load(0x18).unwrap();
+        assert_eq!((music, level_song), (33, 32));
+        sim.music_request = music;
+        sim.level_song = level_song;
+
+        obj.spawn_boss(def_index);
+        assert_eq!(obj.boss_def_index, 6);
+        assert_eq!(obj.slots[0].b[sml2_core::objects::B_DEF], 20); // Wario Form 1
+        assert_eq!(obj.slots[1].b[sml2_core::objects::B_DEF], 21); // Child 21
+        assert!(cam.boss_mode());
+        assert!(!cam.take_blocked_scene_load());
+        assert!(obj.unported.is_empty());
+
+        // Form 1 Defeat and Phase 1 Exit:
+        // Set slot 0 to state 8 (exit walk) at threshold screen X
+        obj.slots[0].b[sml2_core::objects::B_FSTATE] = 8;
+        obj.slots[0].b[sml2_core::objects::B_SCRX] = 191;
+        obj.fff0 = 1;
+        obj.sample_player_inputs(&sim);
+        obj.boss_engine(80, 72, &layout, &tables);
+
+        // Object result processed by player and camera
+        sim.apply_object_result(&mut obj, false);
+        cam.apply_object_result(&mut obj);
+
+        assert_eq!(obj.slots[0].b[sml2_core::objects::B_DEF], 0, "Form 1 slot blanked");
+        assert_eq!(cam.boss_fight_phase, 1, "Phase advanced to 1");
+        assert_eq!(cam.scene_state, 0, "Arena unparked for stream door");
+        assert!(!cam.boss_mode());
+        assert_eq!(obj.records.len(), 1);
+        assert_eq!(obj.records[0].raw, [7, 0xC8, 0, 0, 0xB0, 0x1D]);
+        assert!(!cam.take_blocked_scene_load());
+        assert!(obj.unported.is_empty());
+
+        // =================================================================
+        // PHASE 1: Wario Form 2 Entry (Definition 7)
+        // =================================================================
+        // Mario walks through the streamed door: transition finishes
+        cam.scene_load_pending = true;
+
+        let def_index = boss_def_index(0x18, cam.boss_fight_phase);
+        assert_eq!(def_index, 7);
+        assert!(boss_def_portable(def_index), "Definition 7 must be portable");
+
+        let (music, level_song) = cam.begin_scene_load(0x18).unwrap();
+        assert_eq!((music, level_song), (34, 32));
+        sim.music_request = music;
+        sim.level_song = level_song;
+
+        obj.spawn_boss(def_index);
+        assert_eq!(obj.boss_def_index, 7);
+        assert_eq!(obj.slots[0].b[sml2_core::objects::B_DEF], 23); // Wario Form 2
+        assert_eq!(obj.slots[1].b[sml2_core::objects::B_DEF], 24); // Child 24
+        assert!(cam.boss_mode());
+        assert!(!cam.take_blocked_scene_load());
+        assert!(obj.unported.is_empty());
+
+        // Form 2 Defeat and Phase 2 Exit:
+        // Set slot 0 to state 8 (exit walk) at threshold screen X
+        obj.slots[0].b[sml2_core::objects::B_FSTATE] = 8;
+        obj.slots[0].b[sml2_core::objects::B_SCRX] = 190;
+        obj.sample_player_inputs(&sim);
+        obj.boss_engine(80, 72, &layout, &tables);
+
+        sim.apply_object_result(&mut obj, false);
+        cam.apply_object_result(&mut obj);
+
+        assert_eq!(obj.slots[0].b[sml2_core::objects::B_DEF], 0, "Form 2 slot blanked");
+        assert_eq!(cam.boss_fight_phase, 2, "Phase advanced to 2");
+        assert_eq!(cam.scene_state, 0, "Arena unparked for stream door");
+        assert!(!cam.boss_mode());
+        assert_eq!(obj.records.len(), 1);
+        assert_eq!(obj.records[0].raw, [8, 0xC8, 0, 0, 0xB0, 27]);
+        assert!(!cam.take_blocked_scene_load());
+        assert!(obj.unported.is_empty());
+
+        // =================================================================
+        // PHASE 2: Wario Form 3 Entry (Definition 8)
+        // =================================================================
+        // Mario walks through the streamed door: transition finishes
+        cam.scene_load_pending = true;
+
+        let def_index = boss_def_index(0x18, cam.boss_fight_phase);
+        assert_eq!(def_index, 8);
+        assert!(boss_def_portable(def_index), "Definition 8 must be portable");
+
+        let (music, level_song) = cam.begin_scene_load(0x18).unwrap();
+        assert_eq!((music, level_song), (35, 32));
+        sim.music_request = music;
+        sim.level_song = level_song;
+
+        obj.spawn_boss(def_index);
+        assert_eq!(obj.boss_def_index, 8);
+        assert_eq!(obj.slots[0].b[sml2_core::objects::B_DEF], 26); // Wario Form 3
+        assert!(cam.boss_mode());
+        assert!(!cam.take_blocked_scene_load());
+        assert!(obj.unported.is_empty());
+
+        // Form 3 Defeat and Phase 3 Exit:
+        // Set slot 0 to state 10 (defeat exit) with expired timer at threshold screen X
+        obj.slots[0].b[sml2_core::objects::B_FSTATE] = 10;
+        obj.slots[0].b[sml2_core::objects::B_T28] = 0;
+        obj.slots[0].b[sml2_core::objects::B_SCRX] = 191;
+        obj.fff0 = 1;
+        obj.sample_player_inputs(&sim);
+        obj.boss_engine(80, 72, &layout, &tables);
+
+        sim.apply_object_result(&mut obj, false);
+        cam.apply_object_result(&mut obj);
+
+        assert_eq!(obj.slots[0].b[sml2_core::objects::B_DEF], 0, "Form 3 slot blanked");
+        assert_eq!(cam.boss_fight_phase, 3, "Phase advanced to 3 (Ending Entry)");
+        assert_eq!(cam.scene_state, 0, "Arena unparked");
+        assert!(!cam.boss_mode());
+        assert!(!cam.take_blocked_scene_load());
+        assert!(obj.unported.is_empty());
+
+        // =================================================================
+        // PHASE 3: Ending Entry through Sequence Completion
+        // =================================================================
+        let mut ending = EndingEntry::default();
+        sim.x = 162;
+        sim.y = 224;
+        sim.fade_timer = 2;
+        sim.boss_clear = true;
+
+        // Trigger frame
+        let fp0 = ending_frame_head(&mut ending, &mut sim, &mut cam, EndingInput::default());
+        assert!(matches!(fp0, EndingFrame::Gameplay(_)));
+        assert_eq!(ending.state(), EndingEntryState::Fade);
+
+        // Fade frames
+        let fp1 = ending_frame_head(&mut ending, &mut sim, &mut cam, EndingInput::default());
+        assert!(matches!(fp1, EndingFrame::Fade(_)));
+        let fp2 = ending_frame_head(&mut ending, &mut sim, &mut cam, EndingInput::default());
+        assert!(matches!(fp2, EndingFrame::Fade(_)));
+        assert_eq!(ending.state(), EndingEntryState::Initialize);
+
+        // Initialize frame
+        let fp3 = ending_frame_head(&mut ending, &mut sim, &mut cam, EndingInput::default());
+        assert!(matches!(fp3, EndingFrame::SequenceInitialized));
+        assert_eq!(ending.state(), EndingEntryState::Sequence);
+
+        // Sequence begins
+        let fp4 = ending_frame_head(&mut ending, &mut sim, &mut cam, EndingInput::default());
+        assert!(matches!(fp4, EndingFrame::SequencePending));
+
+        // Step EndingSequenceController to completion
+        let mut seq = sml2_core::ending_sequence::EndingSequenceController::new();
+        let mut scene = sml2_core::ending_scene::EndingScene::default();
+        let dummy_assets =
+            sml2_core::ending_scene::EndingAssets::new(vec![0; 0x1800], vec![0; 0x400]).unwrap();
+        scene.load(dummy_assets, &mut 4, &mut 0x100);
+
+        // Fast-forward substates to terminal completion
+        seq.substate = 19;
+        let final_step = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(final_step.substate, 19);
+        assert!(final_step.terminal);
+
+        // Verify clean diagnostics throughout
+        assert!(!cam.take_blocked_scene_load());
+        assert!(obj.unported.is_empty());
+    }
 }

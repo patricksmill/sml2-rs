@@ -718,7 +718,9 @@ mod tests {
     fn the_scene_branch_is_taken_for_a_portable_def() {
         use crate::scene::boss_def_portable;
         assert!(boss_def_portable(2), "the Mario Zone fight is ported");
-        assert!(boss_def_portable(6), "the Wario fight is ported");
+        assert!(boss_def_portable(6), "Wario form 1 is ported");
+        assert!(boss_def_portable(7), "Wario form 2 is ported");
+        assert!(boss_def_portable(8), "Wario form 3 is ported");
         assert!(!boss_def_portable(0));
         assert!(!boss_def_portable(3));
         let mut c = cam_at(80, 448);
