@@ -1479,6 +1479,10 @@ fn run_replay(
                 // whenever `$0F71` is — see `CameraSim::crouch_pan`.
                 cam.crouch_pan(&sim, &keys);
                 sim.step(&keys, a_pressed, b_pressed, layout);
+            } else {
+                // home.asm ~115: VBlank decrements sFadeTimer unconditionally
+                // on every in-level frame, including during camera transitions.
+                sim.tick_fade_timer();
             }
             // `$3451` id 4's conditional `sStompChainCount` reset (star
             // pickup on an expired timer). The counter lives in the object
@@ -2462,6 +2466,9 @@ fn run_play(
                 // $307D — `$0F71`'s first call; see the replay loop above.
                 cam.crouch_pan(&sim, &keys);
                 sim.step(&keys, a_pressed, b_pressed, &layout_live);
+            } else {
+                // home.asm ~115: VBlank decrements sFadeTimer unconditionally.
+                sim.tick_fade_timer();
             }
             // `$3451` id 4's `sStompChainCount` reset — see the replay loop.
             if sim.take_stomp_chain_reset() {

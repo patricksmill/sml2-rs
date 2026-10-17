@@ -1660,6 +1660,18 @@ impl PlayerSim {
         self.vvel = self.vvel.wrapping_add(2); // $1025
     }
 
+    /// The frame's VBlank tail (`home.asm` ~115): `sFadeTimer` is decremented
+    /// on **every** in-level frame — `sub 1` on the low byte, `sbc 0` on the
+    /// high, clamped to zero on a borrow — and no other part of the level
+    /// pass touches it. The port used to move the timer only from the death
+    /// and exit fades, so a *scene's* own fade (the arena intro's 352 frames,
+    /// `$20EB`) never expired: the boss's parts sat in their intro state
+    /// (sprite `$1E`, no walk, no bob) for as long as the fight lasted, and
+    /// `$B14E`'s "the fade is idle" gate never opened.
+    pub fn tick_fade_timer(&mut self) {
+        self.fade_timer = self.fade_timer.saturating_sub(1);
+    }
+
     /// One frame of the player update. `a_pressed`/`b_pressed` are the A/B
     /// new-press edges (`hKeysPressed` bits 0/1).
     pub fn step(
@@ -1669,15 +1681,7 @@ impl PlayerSim {
         b_pressed: bool,
         layout: &LevelLayout,
     ) {
-        // The frame's VBlank tail (`home.asm` ~115): `sFadeTimer` is decremented
-        // on **every** in-level frame — `sub 1` on the low byte, `sbc 0` on the
-        // high, clamped to zero on a borrow — and no other part of the level
-        // pass touches it. The port used to move the timer only from the death
-        // and exit fades, so a *scene's* own fade (the arena intro's 352 frames,
-        // `$20EB`) never expired: the boss's parts sat in their intro state
-        // (sprite `$1E`, no walk, no bob) for as long as the fight lasted, and
-        // `$B14E`'s "the fade is idle" gate never opened.
-        self.fade_timer = self.fade_timer.saturating_sub(1);
+        self.tick_fade_timer();
         // $0F71/$0FBB: travelling replaces the entire player update.
         if self.pipe_dir >= 0x10 {
             self.pipe_travel(layout);
@@ -3044,6 +3048,13 @@ mod tests {
         sim.pipe_dir = 0x30;
         sim.step(&keys, false, false, &layout);
         assert_eq!(sim.fade_timer, 4, "the decrement runs before the early return");
+
+        // tick_fade_timer decrements independently and clamps to 0
+        sim.tick_fade_timer();
+        assert_eq!(sim.fade_timer, 3);
+        sim.fade_timer = 0;
+        sim.tick_fade_timer();
+        assert_eq!(sim.fade_timer, 0);
     }
 
     /// `$129F`'s second test is `sMarioOnObject`: when it is set the routine

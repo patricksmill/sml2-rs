@@ -841,6 +841,22 @@
       ],
       "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
       "status": "verified"
+    },
+    {
+      "id": "boss_arena_phase_cascade",
+      "title": "Arena cascade is 24 frames late: the port's pipe entry spends 63 frames where the console spends 47",
+      "asm_refs": [
+        "home.asm:$20A4",
+        "home.asm:~115 (VBlank fade tick)",
+        "main.asm:$20EB",
+        "main.asm:$B14E"
+      ],
+      "dependencies": [
+        "boss_fight_def2"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "verified",
+      "detail": "Console (level 13, cam 3760/192, mario 3759/212, Right held): arm f28 (Mario frozen at world 3779, sPipeTravelDirection=$30), sSceneId=$10 at f52, scene ops f67-f70, Mario placed f75, fade set f68, fade 0 f420, parts act f421. Port: arm f29 at the same 3779 (the $188B walk-in arm is right), but sSceneId=$10 at f52, ops f53-f57, placed f92, fade f54 -> 0 at f444, parts f444. So the port's arm-to-placement is 63 frames vs the console's 47: 23 frames of pipe_dir = 3 slide plus a 40-frame camera transition. The console's ops run *inside* the travel (sPipeTravelDirection still $30 at f67-f70, 8 frames before the placement), so the VM is not gated on 'is Mario travelling': that was tried and reverted (it runs the $2x arm after the placement and lands Mario at 1308 instead of 1561). The ROM's travelling sub-phase ends before sPipeTravelDirection clears, and that is the thing to model. Also still true: PlayerSim::step's sFadeTimer decrement is skipped on travel frames, which is only correct while no scene has armed a fade before a travel."
     }
   ]
 }

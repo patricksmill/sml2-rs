@@ -204,8 +204,10 @@ pub enum SceneStep {
 pub struct SceneVm {
     /// The script cursor, a bank-5 address inside the blob (the ROM's HL).
     pub pc: u16,
-    /// The entry prologue's one-frame wait (`$20B7`'s `$2728`).
-    entering: bool,
+    /// Prologue wait countdown: on console ($20A4 prologue $2CFF -> bank 1 $52E7,
+    /// $2728 = the one-byte wait opcode, call $FFA0), sSceneId is latched at f52
+    /// and the first script byte executes 15 frames later at f67.
+    enter_wait: u8,
     /// `$0F0B` latched a scene, so the script table has been claimed and the
     /// cursor is live. While unarmed the cursor is 0 — see `step`.
     armed: bool,
@@ -221,16 +223,20 @@ pub struct SceneVm {
 }
 
 impl SceneVm {
+    /// Prologue wait duration in frames between scene latch and the first script byte execution.
+    /// On console ($20A4 prologue $2CFF -> bank 1 $52E7, $2728 call $FFA0),
+    /// sSceneId is latched at f52 and first script opcode executes at f67 (15 frames).
+    pub const PROLOGUE_FRAMES: u8 = 15;
+
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// `$0F0B` latched a scene id: arm the VM. The ROM's prologue then spends a
-    /// frame (OAM latch, shadow close, VBlank wait, OAM DMA, bank select, table
-    /// lookup) before the first byte runs — of which the port only has the
-    /// frame wait to reproduce.
+    /// `$0F0B` latched a scene id: arm the VM. The ROM's prologue then spends
+    /// 15 frames (OAM latch, shadow close, VBlank wait, OAM DMA, bank select, table
+    /// lookup, $2728 wait opcode) before the first byte runs.
     pub fn start(&mut self) {
-        self.entering = true;
+        self.enter_wait = Self::PROLOGUE_FRAMES;
         self.armed = true;
         self.bad_cursor_scene = None;
         self.pc = 0;
@@ -245,7 +251,7 @@ impl SceneVm {
     /// no call site anywhere, so a latched scene stepped `byte_at(0)` →
     /// `BadCursor`, ran NOTHING, and did it silently in BOTH frame loops.
     fn disarm(&mut self) {
-        self.entering = false;
+        self.enter_wait = 0;
         self.armed = false;
         self.pc = 0;
     }
@@ -283,9 +289,11 @@ impl SceneVm {
         if !self.armed {
             self.start();
         }
-        if self.entering {
-            self.pc = scripts.script(cam.scene_id).unwrap_or(0);
-            self.entering = false;
+        if self.enter_wait > 0 {
+            if self.pc == 0 {
+                self.pc = scripts.script(cam.scene_id).unwrap_or(0);
+            }
+            self.enter_wait -= 1;
             return SceneStep::Entering;
         }
         let op = match scripts.byte_at(self.pc) {
@@ -571,6 +579,12 @@ mod tests {
         vm.start();
     }
 
+    fn step_prologue(vm: &mut SceneVm, sim: &mut PlayerSim, cam: &mut CameraSim, s: &SceneScripts) {
+        for _ in 0..SceneVm::PROLOGUE_FRAMES {
+            assert_eq!(vm.step(sim, cam, s), SceneStep::Entering);
+        }
+    }
+
     /// The operand lengths are validated by the data: every one of the 32
     /// retail scripts must parse into whole instructions that end *exactly* on
     /// its `$FF`. Reading `$6x` as a one-operand class (as the work was
@@ -612,8 +626,8 @@ mod tests {
         sim.y = 0x15CD;
         latched(&mut cam, &mut vm, 6);
 
-        // Frame 1 is the prologue's wait; the byte runs on the next pass.
-        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Entering);
+        // 15 frames of prologue entering; the first opcode runs on the 16th pass.
+        step_prologue(&mut vm, &mut sim, &mut cam, &s);
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Ran(0x40));
 
         // Scene 6 = `40 03`: Y page 0, X page 3.
@@ -628,7 +642,7 @@ mod tests {
         let mut cam7 = CameraSim::new(0, 0);
         let mut sim7 = PlayerSim::new();
         latched(&mut cam7, &mut vm7, 7);
-        vm7.step(&mut sim7, &mut cam7, &s);
+        step_prologue(&mut vm7, &mut sim7, &mut cam7, &s);
         assert_eq!(vm7.step(&mut sim7, &mut cam7, &s), SceneStep::Ran(0x40));
         assert_eq!((cam7.y >> 8, cam7.x >> 8), (1, 6));
         assert_eq!((sim7.y >> 8, sim7.x >> 8), (1, 6));
@@ -648,7 +662,7 @@ mod tests {
         let mut vm = SceneVm::new();
         latched(&mut cam, &mut vm, 11);
 
-        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Entering);
+        step_prologue(&mut vm, &mut sim, &mut cam, &s);
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Ran(0x60));
         assert_eq!(sim.level_gfx_index, 0, "$6x's nibble is the tileset index");
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Ran(0x20));
@@ -692,7 +706,7 @@ mod tests {
         sim.y = 0x01F0;
         let mut vm = SceneVm::new();
         latched(&mut cam, &mut vm, 15);
-        vm.step(&mut sim, &mut cam, &s); // prologue
+        step_prologue(&mut vm, &mut sim, &mut cam, &s);
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Ran(0x3D));
         assert_eq!(cam.y, 0x0108, "F8 + 10 carries into the next page");
         assert_eq!(sim.y, 0x0210, "F0 + 20 likewise");
@@ -709,7 +723,7 @@ mod tests {
         let mut cam = CameraSim::new(0, 0);
         let mut sim = PlayerSim::new();
         latched(&mut cam, &mut vm, 6);
-        vm.step(&mut sim, &mut cam, &s); // prologue
+        step_prologue(&mut vm, &mut sim, &mut cam, &s);
         vm.step(&mut sim, &mut cam, &s); // the $40
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::End);
 
@@ -731,7 +745,7 @@ mod tests {
             let mut cam = CameraSim::new(0, 0);
             let mut sim = PlayerSim::new();
             latched(&mut cam, &mut vm, id);
-            vm.step(&mut sim, &mut cam, &s);
+            step_prologue(&mut vm, &mut sim, &mut cam, &s);
             assert_eq!(
                 vm.step(&mut sim, &mut cam, &s),
                 SceneStep::Ran(want & 0x0F | 0x80)
@@ -757,7 +771,7 @@ mod tests {
         let mut cam = CameraSim::new(0, 0);
         let mut sim = PlayerSim::new();
         latched(&mut cam, &mut vm, 1);
-        vm.step(&mut sim, &mut cam, &s);
+        step_prologue(&mut vm, &mut sim, &mut cam, &s);
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Stalled(0x7F));
         assert_eq!(vm.pc, 0x4165, "HL is unchanged on the halt path");
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Stalled(0x7F));
@@ -782,7 +796,7 @@ mod tests {
         let mut cam = CameraSim::new(0, 0);
         let mut sim = PlayerSim::new();
         latched(&mut cam, &mut vm, 1);
-        vm.step(&mut sim, &mut cam, &s);
+        step_prologue(&mut vm, &mut sim, &mut cam, &s);
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Unported(0xB3));
         assert_eq!(vm.pc, 0x4169, "one opcode + three operands");
         assert_eq!(vm.unported(), &[0xB3]);
@@ -890,8 +904,9 @@ mod tests {
         assert_ne!(vm.pc, 0, "the cursor comes from the script table, not from zero");
 
         let mut ran = Vec::new();
-        for _ in 0..6 {
+        for _ in 0..20 {
             match vm.step(&mut sim, &mut cam, &s) {
+                SceneStep::Entering => {}
                 SceneStep::Ran(op) => ran.push(op),
                 SceneStep::End => break,
                 other => panic!("unexpected {other:?} before the terminator"),
@@ -914,8 +929,30 @@ mod tests {
         let mut cam = CameraSim::new(0, 0);
         let mut sim = PlayerSim::new();
         cam.scene_id = 0x20;                // past the 32-entry table
-        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Entering);
+        step_prologue(&mut vm, &mut sim, &mut cam, &s);
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::BadCursor);
         assert_eq!(vm.bad_cursor_scene(), Some(0x20));
+    }
+
+    /// On console, $20A4's prologue spends exactly 15 frames between the scene
+    /// latch and the execution of the first script opcode ($2CFF -> $52E7, $2728
+    /// wait opcode, call $FFA0).
+    #[test]
+    fn scene_vm_prologue_waits_exact_fifteen_frames_before_first_opcode() {
+        let s = scripts();
+        let mut cam = CameraSim::new(0, 0);
+        let mut sim = PlayerSim::new();
+        let mut vm = SceneVm::new();
+        latched(&mut cam, &mut vm, 6);
+
+        for i in 0..SceneVm::PROLOGUE_FRAMES {
+            assert_eq!(
+                vm.step(&mut sim, &mut cam, &s),
+                SceneStep::Entering,
+                "frame {} must be Entering",
+                i
+            );
+        }
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Ran(0x40));
     }
 }
