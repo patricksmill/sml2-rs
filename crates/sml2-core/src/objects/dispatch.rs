@@ -132,6 +132,7 @@ impl ObjectSim {
             // $9322, the same inert-anim idiom as the level table's $58100.
             0x9322 => {}
             0x9323 => self.handler_boss_anim3(st, tables),
+            0x96FE => self.handler_0x96fe(st),
             0x93A7 => self.handler_boss_def0_main(st, layout, tables),
             0x9C36 => self.handler_boss_def2_part(st, layout, tables, false),
             0x9D4F => self.handler_boss_def2_part(st, layout, tables, true),

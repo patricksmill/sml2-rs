@@ -28,7 +28,14 @@ ILLEGAL = {0xD3, 0xDB, 0xDD, 0xE3, 0xE4, 0xEB, 0xEC, 0xED, 0xF4, 0xFC, 0xFD}
 # A source `dw` declaration still wins when SourceIndex records one.
 REVIEWED_RST28_TABLES = {
     0x58D4E: 0x58D56,  # 0x58D34 anim 45: $4D56, $4D78, $4D9A, $4DBF
+    0x9754: 0x9762,  # 0x96FE boss anim 6: $5762, $5443, $5786, $57BD, $57CF, $57E9, $57F6
 }
+
+# Instruction spans whose source cursor is shifted by a mislisted pointer table.
+# The ROM bytes are the authority; the brief records them without an asm line.
+REVIEWED_RAW_SPANS = (
+    (0x9762, 0x97FA),  # 0x96FE boss anim 6 state bodies
+)
 
 
 def rom_address(bank: int, cpu: int) -> int:
@@ -240,6 +247,8 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
                 raise ValueError('instruction crosses ROM bank boundary')
             raw = rom[pc:pc + size]
             location = source.locations.get(pc)
+            if location is None and any(start <= pc < end for start, end in REVIEWED_RAW_SPANS):
+                location = f'baserom.gb:{pc:05X} reviewed raw span'
             if location is None:
                 raise ValueError('no exact source location; regenerate symbols or isolate an ASM slice')
             result.instructions[pc] = f'{raw.hex(" ").upper():8s} {location}'
