@@ -162,6 +162,22 @@ mod handler_0x58bba_adapter;
 mod handler_0x58bcb;
 #[path = "handler_0x58BCB_adapter.rs"]
 mod handler_0x58bcb_adapter;
+#[path = "handler_0x58C52.rs"]
+mod handler_0x58c52;
+#[path = "handler_0x58C52_adapter.rs"]
+mod handler_0x58c52_adapter;
+#[path = "handler_0x58E7E.rs"]
+mod handler_0x58e7e;
+#[path = "handler_0x58E7E_adapter.rs"]
+mod handler_0x58e7e_adapter;
+#[path = "handler_0x591A3.rs"]
+mod handler_0x591a3;
+#[path = "handler_0x591A3_adapter.rs"]
+mod handler_0x591a3_adapter;
+#[path = "handler_0x59270.rs"]
+mod handler_0x59270;
+#[path = "handler_0x59270_adapter.rs"]
+mod handler_0x59270_adapter;
 mod handler_0x586eb;
 mod handler_0x591f9;
 mod vertical_bobber;
