@@ -1296,6 +1296,8 @@ fn run_replay(
     let scripts = load_scene_scripts();
     let mut scene_vm = SceneVm::new();
     let mut ending_entry = EndingEntry::default();
+    let mut ending_sequence = sml2_core::ending_sequence::EndingSequenceController::new();
+    let mut ending_scene = sml2_core::ending_scene::EndingScene::default();
     let nodes = load_map_nodes();
     let mut sim = PlayerSim::new();
     sim.powerup = 0; // level-0 spawn starts small
@@ -1480,6 +1482,21 @@ fn run_replay(
         let exit_done_at_entry = sim.exit_completed;
         if !gameplay {
             // The shared frame head dispatched this ending-entry frame.
+            if let EndingFrame::SequencePending = ending_frame {
+                let res = ending_sequence.step(&mut sml2_core::ending_sequence::EndingStepContext {
+                    scene: &mut ending_scene,
+                    rom: None,
+                    credits_text: None,
+                    object_tables: Some(&tables),
+                    decrement_fade: true,
+                });
+                if res.sfx_request_0 != 0 {
+                    sim.sfx0 = res.sfx_request_0;
+                }
+                if res.sfx_request_1 != 0 {
+                    sim.sfx1 = res.sfx_request_1;
+                }
+            }
         } else if sim.dead_fade || sim.exit_phase {
             if sim.exit_phase {
                 sim.exit_fade_step();
@@ -2361,6 +2378,8 @@ fn run_play(
     let scripts = load_scene_scripts();
     let mut scene_vm = SceneVm::new();
     let mut ending_entry = EndingEntry::default();
+    let mut ending_sequence = sml2_core::ending_sequence::EndingSequenceController::new();
+    let mut ending_scene = sml2_core::ending_scene::EndingScene::default();
     let nodes = load_map_nodes();
     // The `$6x` opcode's tileset swap rewrites the level's own tile data and
     // metatile definitions mid-level, so play mode owns a mutable copy of the
@@ -2499,6 +2518,21 @@ fn run_play(
         let exit_done_at_entry = sim.exit_completed;
         if !gameplay {
             // The shared frame head dispatched this ending-entry frame.
+            if let EndingFrame::SequencePending = ending_frame {
+                let res = ending_sequence.step(&mut sml2_core::ending_sequence::EndingStepContext {
+                    scene: &mut ending_scene,
+                    rom: None,
+                    credits_text: None,
+                    object_tables: obj_tables.as_ref(),
+                    decrement_fade: true,
+                });
+                if res.sfx_request_0 != 0 {
+                    sim.sfx0 = res.sfx_request_0;
+                }
+                if res.sfx_request_1 != 0 {
+                    sim.sfx1 = res.sfx_request_1;
+                }
+            }
         } else if frozen {
             if sim.exit_phase {
                 sim.exit_fade_step();
@@ -2914,6 +2948,255 @@ mod tests {
         ));
         assert_eq!(sim.fade_timer, 253);
         assert!(!sim.exit_phase && !sim.exit_completed);
+    }
+
+    #[test]
+    fn ending_sequence_runs_from_entry_through_all_substates_to_terminal_completion() {
+        let mut sim = PlayerSim::new();
+        sim.x = 162;
+        sim.y = 224;
+        sim.fade_timer = 2;
+        sim.boss_clear = true;
+        let mut cam = sml2_core::camera::CameraSim::new(80, 224);
+        cam.boss_fight_phase = 3;
+        let mut ending = EndingEntry::default();
+
+        // 1. Scripted trigger frame
+        let f1 = ending_frame_head(&mut ending, &mut sim, &mut cam, EndingInput::default());
+        assert!(matches!(f1, EndingFrame::Gameplay(_)));
+        assert_eq!(ending.state() as u8, 35);
+
+        // 2. Fade frame -> sets state 18 when fade reaches zero
+        sim.fade_timer = 1;
+        let f2 = ending_frame_head(&mut ending, &mut sim, &mut cam, EndingInput::default());
+        assert!(matches!(f2, EndingFrame::Fade(_)));
+        assert_eq!(ending.state() as u8, 18);
+
+        // 3. Initialize frame -> sets state 19
+        let f3 = ending_frame_head(&mut ending, &mut sim, &mut cam, EndingInput::default());
+        assert!(matches!(f3, EndingFrame::SequenceInitialized));
+        assert_eq!(ending.state() as u8, 19);
+
+        // 4. State 19 sequence controller takes over
+        let mut seq = sml2_core::ending_sequence::EndingSequenceController::new();
+        let mut scene = sml2_core::ending_scene::EndingScene::default();
+        let dummy_assets =
+            sml2_core::ending_scene::EndingAssets::new(vec![0; 0x1800], vec![0; 0x400]).unwrap();
+        let mut sound_driver = sml2_core::audio::SoundDriver::new();
+
+        // Substates 0..3: blank frame waits
+        for sub in 0..4 {
+            let fp = ending_frame_head(&mut ending, &mut sim, &mut cam, EndingInput::default());
+            assert!(matches!(fp, EndingFrame::SequencePending));
+            let res = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+                scene: &mut scene,
+                rom: None,
+                credits_text: None,
+                object_tables: None,
+                decrement_fade: false,
+            });
+            assert_eq!(res.substate, sub + 1);
+        }
+
+        // Substate 4: loads ending scene assets
+        scene.load(dummy_assets, &mut 4, &mut 0x100);
+        let res4 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res4.substate, 5);
+
+        // Fast-forward substates 5..19 verifying state targets and audio dispatch
+        // Jump substate 5 -> 6
+        seq.fade_timer = 0;
+        let res5 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res5.substate, 6);
+
+        // Jump substate 6 -> 7
+        seq.fade_timer = 0;
+        let res6 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res6.substate, 7);
+
+        // Jump substate 7 -> 8 (raster_y reached 139)
+        seq.raster_y = 138;
+        seq.frame = 0;
+        let res7 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res7.substate, 8);
+        assert!(seq.vram_transfer.is_some());
+
+        // Substate 8 -> 9 (transfer finishes)
+        seq.vram_transfer.as_mut().unwrap().active = false;
+        let res8 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res8.substate, 9);
+
+        // Substate 9 -> 10 (fade reaches 0)
+        seq.fade_timer = 0;
+        let res9 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res9.substate, 10);
+
+        // Substate 10 -> 11 (raster_y retracts to 13)
+        seq.raster_y = 14;
+        seq.frame = 0;
+        let res10 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res10.substate, 11);
+
+        // Substate 11 -> 12 (ending tile flag set)
+        seq.fade_timer = 0;
+        let res11 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res11.substate, 12);
+        assert_eq!(seq.ending_tile_flag, 0xFF);
+
+        // Substate 12: burst cycle with SFX1=24 on odd frame
+        seq.frame = 0;
+        let res12 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res12.sfx_request_1, 24);
+        sound_driver.sfx_request_1 = res12.sfx_request_1;
+        sound_driver.update_sound();
+        assert_eq!(sound_driver.sfx_request_1, 0, "sound driver consumed request");
+
+        // Substate 12 -> 13 (fade reaches 0 -> SFX0=7 burst sound)
+        seq.fade_timer = 0;
+        let res12_end = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res12_end.substate, 13);
+        assert_eq!(res12_end.sfx_request_0, 7);
+
+        // Substate 13 -> 14
+        seq.fade_timer = 0;
+        let res13 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res13.substate, 14);
+
+        // Substate 14 -> 15 (queues transfer 1)
+        let res14 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res14.substate, 15);
+
+        // Substate 15 -> 16 (transfer finished -> SFX0=6 castle transformation)
+        seq.vram_transfer.as_mut().unwrap().active = false;
+        let res15 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res15.substate, 16);
+        assert_eq!(res15.sfx_request_0, 6);
+
+        // Substate 16 -> 17
+        seq.fade_timer = 0;
+        let res16 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res16.substate, 17);
+
+        // Substate 17 -> 18 (scroll_y reached 24)
+        seq.fade_timer = 0;
+        let res17 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res17.substate, 18);
+        assert_eq!(res17.scroll_y, 24);
+        assert!(res17.scanline_split_enabled);
+
+        // Substate 18 -> 19 (credits text finishes)
+        seq.credits_text.as_mut().unwrap().done = true;
+        let res18 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res18.substate, 19);
+        assert!(res18.terminal);
+        assert!(res18.scanline_split_enabled);
+
+        // Substate 19 is terminal
+        let res19 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        assert_eq!(res19.substate, 19);
+        assert!(res19.terminal);
     }
 
     #[test]
