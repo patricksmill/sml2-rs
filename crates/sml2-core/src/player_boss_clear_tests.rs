@@ -33,7 +33,7 @@ fn boss_clear_freezes_countdown_without_fabricating_a_bell_exit() {
     let timer = sim.level_timer;
     sim.update_level_timer();
     assert_eq!(sim.level_timer, timer);
-    assert_eq!(sim.environment_probe(&layout), None);
+    assert_eq!(sim.environment_probe(&layout, &PlayerKeys::default()), None);
     assert_eq!(
         (sim.music_request, sim.fade_timer, sim.exit_phase),
         (24, 128, false)

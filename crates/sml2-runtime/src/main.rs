@@ -176,6 +176,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 obp0: manifest.header.palettes[1],
                 obp1: manifest.header.palettes[2],
                 player: mario,
+                player_shield: None,
                 player_pan: 0,
                 scroll_pan: 0,
                 bumpers: Vec::new(),
@@ -510,6 +511,8 @@ struct SpriteCtx {
     obp1: u8,
     /// Optional player (Mario): world position + `$FFC6` frame.
     player: Option<(u16, u16, u8)>,
+    /// Optional 3-up moon shield ($54FB): world position + frame 220/221.
+    player_shield: Option<(u16, u16, u8)>,
     /// Brick-bump sprites for this frame (`PlayerSim::block_draw`): the engine
     /// stages `$FFC4`/`$FFC5`/`$FFC6` and enqueues them (`$5297`), so they are
     /// extra OAM sprites drawn at the block — through the same player-sprite
@@ -778,6 +781,27 @@ fn render_view(
                     .ok_or_else(|| format!("player frame {frame} has no mapping"))?;
             // The player base already contains the camera (+96/+98 is world -
             // cam), so these cells are in final screen space: no `sx/sy`.
+            for c in cells {
+                blit_obj_cell(
+                    &mut img,
+                    &bg_idx,
+                    &mut taken,
+                    &s.objblock,
+                    &pal0,
+                    &pal1,
+                    c.x as i32 - 8,
+                    c.y.wrapping_sub(s.player_pan) as i32 - 16,
+                    c.tile,
+                    c.attr,
+                    vw,
+                    vh,
+                );
+            }
+        }
+        if let Some((sx, sy, sframe)) = s.player_shield {
+            let cells =
+                sml2_core::player::draw_cells(&s.tables, sframe, sx, sy, cam_x, cam_y, false)
+                    .ok_or_else(|| format!("player shield frame {sframe} has no mapping"))?;
             for c in cells {
                 blit_obj_cell(
                     &mut img,
@@ -1215,7 +1239,7 @@ fn build_contact(sim: &PlayerSim, keys: &PlayerKeys, pan: u8) -> sml2_core::obje
         spin_jump: sim.spin_jump != 0,
         star_high: sim.star_high,
         invincibility: sim.invincibility,
-        flutter: 0,
+        flutter: sim.flutter,
 
         vvel: sim.vvel,
         on_ground: sim.on_ground,
@@ -2564,6 +2588,11 @@ fn run_play(
         }
         if let Some(s) = spr.as_mut() {
             s.player = Some((sim.x, sim.y, f));
+            s.player_shield = if was_dead {
+                None
+            } else {
+                sim.moon_shield_frame().map(|sf| (sim.x, sim.y, sf))
+            };
             s.player_pan = cam.player_pan;
             s.scroll_pan = cam.scroll_pan;
             // $2C82 is skipped while dead, and the dead path's own draw ($5550,
@@ -2871,6 +2900,7 @@ mod tests {
             obp0: 0xE4,
             obp1: 0xE4,
             player,
+            player_shield: None,
             bumpers: Vec::new(),
             fireballs: Vec::new(),
             boss_oam: Vec::new(),

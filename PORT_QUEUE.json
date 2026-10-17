@@ -17,25 +17,6 @@
       "status": "pending"
     },
     {
-      "id": "moon_physics_remaining_arms",
-      "title": "The remaining sMoonPhysics readers: the bit-1 zone machinery, the flutter-vs-moon arms, the $2E7C shield and the bank-1 poses",
-      "asm_refs": [
-        "home.asm:$1BFF",
-        "home.asm:$14FA",
-        "home.asm:$1541",
-        "home.asm:$181C",
-        "home.asm:$2E7C",
-        "main.asm:$5354",
-        "main.asm:$53CF",
-        "main.asm:$54FB"
-      ],
-      "dependencies": [
-        "space_physics_seeding"
-      ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-      "status": "pending"
-    },
-    {
       "id": "map_zone_screen_loaders",
       "title": "The zone screens the level->map hand-off selects ($3D0FF/$3D208/$3D371/$3D49F/$3D61F/$3D79A/$3D6EB/$3D880)",
       "asm_refs": [

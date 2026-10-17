@@ -314,6 +314,10 @@ pub struct PlayerSim {
     /// `sMoonJumpPoseTimer` ($A285) — the bit-1 moon-zone re-launch's pose
     /// decay: 8 on the launch (`$1066`), read down by bank 1's `$5354`/`$53CF`.
     pub moon_jump_pose_timer: u8,
+    /// `sFlutterTimer` ($A286) — bunny flutter decay timer.
+    pub flutter: u8,
+    /// `sFlutterArmed` ($A287) — bunny flutter armed latch.
+    pub flutter_armed: bool,
     pub powerup: u8,
     pub goal_bell: bool,
     pub on_ground_obj: bool,
@@ -591,6 +595,8 @@ impl PlayerSim {
             level_song: 0,
             moon_float_timer: 0,
             moon_jump_pose_timer: 0,
+            flutter: 0,
+            flutter_armed: false,
             powerup: 1,
             goal_bell: false,
             on_ground_obj: false,
@@ -841,7 +847,7 @@ impl PlayerSim {
     /// (`$1C82`, `& $FC == $4C`) or the exit-bell arm (`$1CBA`, `& $FE ==
     /// $4A`). Returns the hazard byte for the caller to land at the `$319F`
     /// dispatch.
-    fn environment_probe(&mut self, layout: &LevelLayout) -> Option<u8> {
+    fn environment_probe(&mut self, layout: &LevelLayout, keys: &PlayerKeys) -> Option<u8> {
         // $1BFF head: `sPrevSwimming = sSwimming; sSwimming = 0`. The water
         // arm below is the only writer of `$FF` (`sPrevSwimming` feeds its
         // vvel nudge, which the port does not model).
@@ -851,13 +857,58 @@ impl PlayerSim {
             return dead;
         }
         if self.detect_swim(layout) {
-            // $1C9F/$1CAA: the vvel/in_air nudge and the `sMoonPhysics`
-            // bit-1 clear are not modelled.
+            // $1C82 / $1CAA: water arm clears sMoonPhysics bit 1
             self.swim = true;
+            self.moon &= !0x02;
             return None;
         }
-        self.exit_bell_probe(layout);
+        if self.exit_bell_probe(layout) {
+            return None;
+        }
+        self.moon_zone_probe(layout, keys);
         None
+    }
+
+    /// `$1CFB`-`$1D71`: the moon-physics zone probe.
+    ///
+    /// The last sample (`x+16, y+28`) is tested against `$52..=$57`.
+    /// When matched:
+    /// - `sMoonPhysics` bit 1 is set
+    /// - `sFlutterArmed` is cleared
+    /// - `sMoonPhysics` bit 2 (the 3-up moon shield) is cleared
+    /// When not matched:
+    /// - `sMoonPhysics` bit 1 is cleared
+    ///
+    /// If bit 1 changed state (transitioning into or out of a moon zone):
+    /// - horizontal velocity `hvel` is clamped to `[72, 191]` (`$48..=$BF`)
+    /// - if bit 1 transitioned from 1 to 0 (leaving the moon zone):
+    ///   - `vvel` is set to 70 (`$46`)
+    ///   - `in_air` is set to true
+    ///   - if UP (`keys.up`) is held, `no_jump_cut` is set to true (`$1D64`)
+    fn moon_zone_probe(&mut self, layout: &LevelLayout, keys: &PlayerKeys) {
+        let t = self.tile(layout, self.x.wrapping_add(16), self.y.wrapping_add(28));
+        let old_bit1 = self.moon & 0x02;
+        self.moon &= !0x02;
+        if (0x52..=0x57).contains(&t) {
+            self.moon |= 0x02;
+            self.flutter_armed = false;
+            self.moon &= !0x04;
+        }
+        let new_bit1 = self.moon & 0x02;
+        if new_bit1 != old_bit1 {
+            if self.hvel >= 0xC0 {
+                self.hvel = 191;
+            } else if self.hvel < 0x48 {
+                self.hvel = 72;
+            }
+            if new_bit1 == 0 {
+                self.vvel = 70;
+                self.in_air = true;
+                if keys.up {
+                    self.no_jump_cut = true;
+                }
+            }
+        }
     }
 
     /// `$1CBA`-`$1D01`: the level-exit bell. The last sample (`x+16, y+28`)
@@ -1653,7 +1704,7 @@ impl PlayerSim {
         // *after* the tail dispatch below so the hit frame moves normally
         // (the object-contact path gets the same timing from
         // `sml2-runtime`'s post-step write).
-        let hazard_dead = self.environment_probe(layout);
+        let hazard_dead = self.environment_probe(layout, keys);
         // $129F landing
         if self.vvel < 0x19 {
             self.no_jump_cut = false;
@@ -1732,7 +1783,9 @@ impl PlayerSim {
             }
         }
         // $14FA gravity + $156B integrator
-        if !self.on_ground {
+        if self.moon & 0x02 == 0 && self.flutter != 0 {
+            self.flutter -= 1;
+        } else if !self.on_ground {
             let saved_y = self.y;
             if self.vvel >= 0x21 && !self.no_jump_cut && !keys.a {
                 self.vvel = 33;
@@ -1893,8 +1946,15 @@ impl PlayerSim {
         } else if sx >= 0xA0 {
             self.x = self.x.wrapping_sub(sx - 160);
         }
-        // $14BF/$14D5 walk-anim timer (+1, +2 with B; wraps at $0C)
-        let t = self.walk_timer + if keys.b { 2 } else { 1 };
+        // $14BF/$14D5 walk-anim timer (+1, +2 with B; wraps at $0C; moon physics and goal bell fix cadence to +1)
+        let b = if self.moon != 0 || self.goal_bell {
+            1
+        } else if keys.b {
+            2
+        } else {
+            1
+        };
+        let t = self.walk_timer + b;
         self.walk_timer = if t >= 0x0C { 0 } else { t };
         // $1189 pipe entry, then $319F death dispatch (the update's tail).
         self.pipe_entry(keys);
@@ -2518,6 +2578,13 @@ impl PlayerSim {
             self.exit_phase = true;
             self.exit_completed = true;
         }
+        // $2E7C: object interaction can consume moon shield bit 2 and grant invincibility
+        if obj.mario.moon_physics != self.moon {
+            self.moon = obj.mario.moon_physics;
+        }
+        if obj.mario.invincibility != self.invincibility {
+            self.invincibility = obj.mario.invincibility;
+        }
         // The `$8000` dispatcher gate reads `sMarioDead`, and the interaction
         // pass writes it back (15 on a harmful hit).
         if self.dead == 0 && obj.mario_dead != 0 {
@@ -2651,6 +2718,8 @@ impl PlayerSim {
         self.fade_timer = 0;
         self.powerup = 0;
         self.invincibility = 0;
+        self.flutter = 0;
+        self.flutter_armed = false;
         self.goal_bell = false;
         self.pipe_dir = 0;
         self.spin_jump_bounce = 0;
@@ -2718,6 +2787,17 @@ impl PlayerSim {
             // not — see the note on this in the module header.
             let idx = ((self.phase >> 2) & 1) | (((self.frame_counter >> 3) & 1) << 1);
             Self::SPIN_JUMP_FRAMES[idx as usize]
+        } else if self.moon & 0x02 != 0 && !self.on_ground {
+            // $534C / $53CF: bit-1 moon zone airborne poses (18/19 right, 20/21 left)
+            let timer_active = self.moon_jump_pose_timer != 0;
+            if timer_active {
+                self.moon_jump_pose_timer -= 1;
+            }
+            if self.dir_right {
+                if timer_active { 19 } else { 18 }
+            } else {
+                if timer_active { 21 } else { 20 }
+            }
         } else if self.ducking {
             if self.dir_right {
                 14
@@ -2776,6 +2856,18 @@ impl PlayerSim {
             3 => 112,
             _ => 0,
         })
+    }
+
+    /// `$54FB`: while the 3-up moon shield is active (`sMoonPhysics` bit 2),
+    /// the draw enqueues an extra satellite/shield frame at Mario's position,
+    /// alternating between frames 220 and 221 on a 16-frame cycle (`$FF97 & $10`).
+    pub fn moon_shield_frame(&self) -> Option<u8> {
+        if self.moon & 0x04 != 0 {
+            let alt = (self.frame_counter & 0x10) >> 4;
+            Some(220 + alt)
+        } else {
+            None
+        }
     }
 }
 
@@ -3060,7 +3152,7 @@ mod tests {
         let mut layout = blank_layout();
         layout.cells[EXIT_CELL] = 0x4C;
         let mut sim = small_sim();
-        assert_eq!(sim.environment_probe(&layout), None);
+        assert_eq!(sim.environment_probe(&layout, &PlayerKeys::default()), None);
         assert!(sim.swim);
         assert!(!sim.exit_phase);
     }
@@ -3072,7 +3164,7 @@ mod tests {
         let mut layout = blank_layout();
         layout.cells[EXIT_CELL] = 0x49;
         let mut sim = small_sim();
-        assert_eq!(sim.environment_probe(&layout), None);
+        assert_eq!(sim.environment_probe(&layout, &PlayerKeys::default()), None);
         assert_eq!(sim.coins_low, 0);
         assert!(sim.layout_writes.is_empty());
         assert!(!sim.exit_phase);
@@ -3088,7 +3180,7 @@ mod tests {
         let mut sim = PlayerSim::new(); // $0F2A default: big, not ducking
         sim.x = 100;
         sim.y = 200;
-        assert_eq!(sim.environment_probe(&layout), Some(15));
+        assert_eq!(sim.environment_probe(&layout, &PlayerKeys::default()), Some(15));
         assert!(!sim.exit_phase);
         assert_eq!(sim.exit_tile_flag, 0);
     }
@@ -3103,7 +3195,7 @@ mod tests {
         let mut sim = PlayerSim::new();
         sim.x = 100;
         sim.y = 200;
-        assert_eq!(sim.environment_probe(&layout), Some(15));
+        assert_eq!(sim.environment_probe(&layout, &PlayerKeys::default()), Some(15));
         assert!(!sim.exit_phase);
     }
 
@@ -4176,6 +4268,220 @@ mod tests {
         sim.moon_jump_extension(&held, true);
         assert_eq!(sim.vvel, 40, "moon == 0: ret z");
         assert_eq!(sim.sfx0, 0);
+    }
+
+    /// `$1CFB`–`$1D71`: entering the bit-1 moon zone via tiles `$52..=$57`.
+    /// Sets bit 1, clears bit 2 (the 3-up moon shield), clears flutter_armed,
+    /// and clamps horizontal speed to [72, 191] on transition.
+    #[test]
+    fn moon_zone_entry_and_hvel_clamp() {
+        let mut layout = blank_layout();
+        layout.cells[EXIT_CELL] = 0x54; // inside $52..=$57
+        let mut sim = small_sim();
+        sim.moon = 0x04; // moon shield armed
+        sim.flutter_armed = true;
+        sim.hvel = 0xC5; // > 191 -> clamped to 191
+        sim.vvel = 24;
+        sim.in_air = false;
+
+        sim.environment_probe(&layout, &PlayerKeys::default());
+
+        assert_eq!(sim.moon & 0x02, 0x02, "bit 1 set on entering moon zone");
+        assert_eq!(sim.moon & 0x04, 0, "bit 2 moon shield cleared on entering moon zone");
+        assert!(!sim.flutter_armed, "flutter_armed cleared on entering moon zone");
+        assert_eq!(sim.hvel, 191, "hvel clamped from 0xC5 to 191 ($BF)");
+        assert_eq!(sim.vvel, 24, "entry transition does not alter vvel");
+        assert!(!sim.in_air, "entry transition does not set in_air");
+
+        // Entering with low hvel (< 72) clamps to 72:
+        let mut sim_slow = small_sim();
+        sim_slow.hvel = 50;
+        sim_slow.environment_probe(&layout, &PlayerKeys::default());
+        assert_eq!(sim_slow.hvel, 72, "hvel clamped from 50 to 72 ($48)");
+    }
+
+    /// `$1CFB`: remaining inside the moon zone does not re-trigger transition clamps.
+    #[test]
+    fn moon_zone_stay_does_not_retrigger_transition() {
+        let mut layout = blank_layout();
+        layout.cells[EXIT_CELL] = 0x52;
+        let mut sim = small_sim();
+        sim.moon = 0x02; // already in moon zone
+        sim.hvel = 200;
+        sim.environment_probe(&layout, &PlayerKeys::default());
+        assert_eq!(sim.hvel, 200, "no state change on bit 1 means no transition clamp");
+    }
+
+    /// `$1D48`–`$1D71`: exiting the bit-1 moon zone launches Mario with vvel 70 ($46),
+    /// sets in_air = true, and latches no_jump_cut if UP was held.
+    #[test]
+    fn moon_zone_exit_launches_mario_and_handles_up_key() {
+        let layout = blank_layout(); // cell is blank air ($60), not $52..=$57
+        let mut sim = small_sim();
+        sim.moon = 0x02; // leaving moon zone
+        sim.hvel = 0xC8; // 200
+        sim.vvel = 10;
+        sim.in_air = false;
+        let keys_no_up = PlayerKeys::default();
+
+        sim.environment_probe(&layout, &keys_no_up);
+
+        assert_eq!(sim.moon & 0x02, 0, "bit 1 cleared on exit");
+        assert_eq!(sim.hvel, 191, "exit transition clamps hvel");
+        assert_eq!(sim.vvel, 70, "$1D50: vvel set to 70 on exit");
+        assert!(sim.in_air, "in_air set to true on exit");
+        assert!(!sim.no_jump_cut, "no_jump_cut remains false without UP");
+
+        // Exiting with UP held:
+        let mut sim_up = small_sim();
+        sim_up.moon = 0x02;
+        let keys_up = PlayerKeys { up: true, ..Default::default() };
+        sim_up.environment_probe(&layout, &keys_up);
+        assert_eq!(sim_up.vvel, 70);
+        assert!(sim_up.in_air);
+        assert!(sim_up.no_jump_cut, "$1D64: UP sets no_jump_cut on moon zone exit");
+    }
+
+    /// `$1C82`/`$1CAA`: water tile clears moon bit 1 directly and jumps to $1D71
+    /// without running the exit-launch or hvel clamping.
+    #[test]
+    fn water_tile_clears_moon_bit1_and_bypasses_transition() {
+        let mut layout = blank_layout();
+        layout.cells[EXIT_CELL] = 0x4C; // water
+        let mut sim = small_sim();
+        sim.moon = 0x02;
+        sim.hvel = 200;
+        sim.vvel = 10;
+
+        sim.environment_probe(&layout, &PlayerKeys::default());
+
+        assert!(sim.swim);
+        assert_eq!(sim.moon & 0x02, 0, "water clears bit 1");
+        assert_eq!(sim.hvel, 200, "bypassed $1CFB, so hvel was not clamped");
+        assert_eq!(sim.vvel, 10, "bypassed $1CFB, so vvel was not set to 70");
+    }
+
+    /// `$14FA`: flutter timer is bypassed when in a bit-1 moon zone.
+    /// Outside moon zone, flutter timer decrements and returns before gravity runs.
+    #[test]
+    fn flutter_timer_vs_moon_physics() {
+        let layout = blank_layout();
+        // Outside moon zone: flutter timer active decrements and skips gravity
+        let mut sim_flutter = small_sim();
+        sim_flutter.moon = 0;
+        sim_flutter.on_ground = false;
+        sim_flutter.flutter = 5;
+        sim_flutter.vvel = 10;
+        sim_flutter.y = 100;
+        sim_flutter.step(&PlayerKeys::default(), false, false, &layout);
+        assert_eq!(sim_flutter.flutter, 4, "flutter decremented by 1");
+        assert_eq!(sim_flutter.y, 100, "gravity was bypassed");
+
+        // Inside bit-1 moon zone: all tiles $54, flutter timer is ignored and gravity runs
+        let moon_layout = LevelLayout::from_bytes(&[0x54; LAYOUT_SIZE]).unwrap();
+        let mut sim_moon = small_sim();
+        sim_moon.moon = 0x02;
+        sim_moon.on_ground = false;
+        sim_moon.flutter = 5;
+        sim_moon.vvel = 10;
+        sim_moon.y = 100;
+        sim_moon.step(&PlayerKeys::default(), false, false, &moon_layout);
+        assert_eq!(sim_moon.flutter, 5, "flutter timer bypassed under moon physics bit 1");
+        assert_ne!(sim_moon.y, 100, "gravity ran");
+    }
+
+    /// `$14D5`: walk animation cadence.
+    /// Under moon physics (or goal bell), cadence is always +1 even with B held.
+    #[test]
+    fn walk_anim_cadence_under_moon_physics() {
+        let layout = blank_layout();
+        let keys_b = PlayerKeys { b: true, ..Default::default() };
+
+        // Normal Mario with B: advances by 2
+        let mut sim_normal = small_sim();
+        sim_normal.walk_timer = 0;
+        sim_normal.step(&keys_b, false, false, &layout);
+        assert_eq!(sim_normal.walk_timer, 2);
+
+        // Moon Mario with B: advances by 1
+        let mut sim_moon = small_sim();
+        sim_moon.moon = 0x01;
+        sim_moon.walk_timer = 0;
+        sim_moon.step(&keys_b, false, false, &layout);
+        assert_eq!(sim_moon.walk_timer, 1);
+
+        // Goal bell with B: advances by 1
+        let mut sim_bell = small_sim();
+        sim_bell.goal_bell = true;
+        sim_bell.walk_timer = 0;
+        sim_bell.step(&keys_b, false, false, &layout);
+        assert_eq!(sim_bell.walk_timer, 1);
+    }
+
+    /// `$534C` / `$53CF`: airborne poses in bit-1 moon zone.
+    /// Big Mario (powerup = 1):
+    /// Right: 18 normally, 19 while moon_jump_pose_timer is active (and decrements).
+    /// Left: 20 normally, 21 while moon_jump_pose_timer is active (and decrements).
+    /// Small Mario (powerup = 0):
+    /// Adds +32 powerup offset: 50/51 right, 52/53 left.
+    #[test]
+    fn bank1_moon_jump_poses() {
+        let mut sim = small_sim();
+        sim.powerup = 1; // big Mario (offset 0)
+        sim.moon = 0x02;
+        sim.on_ground = false;
+
+        // Facing right
+        sim.dir_right = true;
+        sim.moon_jump_pose_timer = 8;
+        assert_eq!(sim.frame_index(0), 19);
+        assert_eq!(sim.moon_jump_pose_timer, 7);
+        sim.moon_jump_pose_timer = 0;
+        assert_eq!(sim.frame_index(0), 18);
+        assert_eq!(sim.moon_jump_pose_timer, 0);
+
+        // Facing left
+        sim.dir_right = false;
+        sim.moon_jump_pose_timer = 8;
+        assert_eq!(sim.frame_index(0), 21);
+        assert_eq!(sim.moon_jump_pose_timer, 7);
+        sim.moon_jump_pose_timer = 0;
+        assert_eq!(sim.frame_index(0), 20);
+        assert_eq!(sim.moon_jump_pose_timer, 0);
+
+        // Small Mario gets +32 offset
+        sim.powerup = 0;
+        sim.dir_right = true;
+        sim.moon_jump_pose_timer = 8;
+        assert_eq!(sim.frame_index(0), 51); // 19 + 32
+        sim.moon_jump_pose_timer = 0;
+        assert_eq!(sim.frame_index(0), 50); // 18 + 32
+    }
+
+    /// `$54FB`: 3-up moon shield satellite frame alternating 220/221 on a 16-frame cycle.
+    /// `$2E7C`: object hit consumes bit 2 and grants invincibility.
+    #[test]
+    fn moon_shield_frame_and_consumption() {
+        let mut sim = small_sim();
+        sim.moon = 0x04; // bit 2 set
+        sim.frame_counter = 0x00;
+        assert_eq!(sim.moon_shield_frame(), Some(220));
+        sim.frame_counter = 0x10;
+        assert_eq!(sim.moon_shield_frame(), Some(221));
+
+        sim.moon = 0x00;
+        assert_eq!(sim.moon_shield_frame(), None);
+
+        // $2E7C consumption through apply_object_result
+        let mut sim_hit = small_sim();
+        sim_hit.moon = 0x04;
+        let mut obj = crate::objects::ObjectSim::new(Vec::new(), 0);
+        obj.mario.moon_physics = 0; // shield consumed by interaction.rs:366
+        obj.mario.invincibility = 0x80;
+        sim_hit.apply_object_result(&mut obj, false);
+        assert_eq!(sim_hit.moon & 0x04, 0, "shield bit consumed");
+        assert_eq!(sim_hit.invincibility, 0x80, "invincibility granted");
+        assert_eq!(sim_hit.dead, 0, "Mario survives hit");
     }
 
     /// `$350A` (id 9): `add $50`/`daa` — fifty coins in BCD, the decimal

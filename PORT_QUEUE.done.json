@@ -717,6 +717,25 @@
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
       "status": "done",
       "detail": "sBossHits ($AFC5) seeds 6 and drops 2 per stomp; at 0 the hit path's $92C4 sets sObjectRemoveMode = 1 and sFadeTimer = $0280. Poking exactly that on the console (remove_mode = 1, $A267/$A266 = $0280) took $FF9B to $1F with the fade counting down, and the port already models the fade - what is missing is the $1F body's overworld hand-off, so the port's clear fade expires into nothing. This, not anim $0D, is the 'you can't beat the boss' gap."
+    },
+    {
+      "id": "moon_physics_remaining_arms",
+      "title": "The remaining sMoonPhysics readers: the bit-1 zone machinery, the flutter-vs-moon arms, the $2E7C shield and the bank-1 poses",
+      "asm_refs": [
+        "home.asm:$1BFF",
+        "home.asm:$14FA",
+        "home.asm:$1541",
+        "home.asm:$181C",
+        "home.asm:$2E7C",
+        "main.asm:$5354",
+        "main.asm:$53CF",
+        "main.asm:$54FB"
+      ],
+      "dependencies": [
+        "space_physics_seeding"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "verified"
     }
   ]
 }
