@@ -909,6 +909,18 @@
    ],
    "verification_gate": "Exact held/pressed boundaries and palettes; deferred current-frame execution; next-frame state35/18/19 transition",
    "status": "done"
+  },
+  {
+   "id": "native_sound_driver",
+   "title": "Implement original native music and effect sequencing, synthesis and audio output",
+   "asm_refs": [
+    "main.asm:$10030",
+    "main.asm:$111A6",
+    "main.asm:$11638"
+   ],
+   "dependencies": [],
+   "verification_gate": "Source-derived native channel/stream state, ordered audio effects, deterministic output and normal runtime consumption",
+   "status": "done"
   }
  ]
 }

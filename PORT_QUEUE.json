@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "5 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "4 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "remaining_handler_classes",
@@ -52,18 +52,6 @@
     "wario_ending_sequence"
    ],
    "verification_gate": "Real scene/stream reentry across all3 forms with no blocked scene load or unported diagnostics and final ending",
-   "status": "pending"
-  },
-  {
-   "id": "native_sound_driver",
-   "title": "Implement original native music and effect sequencing, synthesis and audio output",
-   "asm_refs": [
-    "main.asm:$10030",
-    "main.asm:$111A6",
-    "main.asm:$11638"
-   ],
-   "dependencies": [],
-   "verification_gate": "Source-derived native channel/stream state, ordered audio effects, deterministic output and normal runtime consumption",
    "status": "pending"
   }
  ],
