@@ -16,6 +16,12 @@ mod form2_adapter;
 mod form2_integration;
 #[cfg(test)]
 mod form2_tests;
+mod form3;
+mod form3_adapter;
+#[cfg(test)]
+mod form3_integration;
+#[cfg(test)]
+mod form3_tests;
 mod moving_child;
 mod moving_child_adapter;
 mod phase1_exit;
