@@ -203,62 +203,40 @@ impl ObjectSim {
     }
 
     pub(super) fn handler_groundwalker88(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.sprite_bob(st); // $5B585
-        match st.b[B_FSTATE] {
-            // $5BD1: the one-shot init. (The state byte itself is written by
-            // `$73C6` inside `face_mario`.)
-            0 => {
-                st.b[B_FLASH] = 0x10;
-                st.b[B_TYPE] = 0x4E;
-                self.face_mario(st); // $73C6
-                st.b[B_T28] = 1;
-            }
-            // $5D05: walk left.
-            1 => {
-                self.m_left_wall(st, layout); // $3C1C
-                if self.move_flags & 0x02 != 0 {
-                    self.walker88_flip(st); // $5D2D
-                    return;
-                }
-                self.walker88_pause_step(st, true); // $5D1D -> $5D22
-            }
-            // $5D41: walk right.
-            2 => {
-                self.m_right_wall(st, layout); // $3BB8
-                if self.move_flags & 0x01 != 0 {
-                    self.walker88_flip(st); // $5D2D
-                    return;
-                }
-                self.walker88_pause_step(st, false); // $5D3A -> $5D22
-            }
-            _ => {}
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = groundwalker::GroundWalkerContext {
+            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            mario_ref_x: self.mario_ref_x,
+        };
+        struct GroundWalkerSimWorld<'a> {
+            sim: &'a mut ObjectSim,
+            st: &'a mut Staging,
+            layout: &'a LevelLayout,
         }
-    }
-
-    pub(super) fn walker88_pause_step(&mut self, st: &mut Staging, left: bool) {
-        if st.b[B_T28] != 0 {
-            st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
-            if st.b[B_T28] != 0 {
-                return;
+        impl<'a> groundwalker::GroundWalkerWorld for GroundWalkerSimWorld<'a> {
+            fn probe_left_wall(&mut self, actor: &crate::actor::Actor) -> bool {
+                set_x(&mut self.st.b, actor.position.x);
+                set_y(&mut self.st.b, actor.position.y);
+                self.sim.m_left_wall(self.st, self.layout);
+                self.sim.move_flags & 0x02 != 0
             }
-            st.b[B_T25] = 0x30;
-            return;
+            fn probe_right_wall(&mut self, actor: &crate::actor::Actor) -> bool {
+                set_x(&mut self.st.b, actor.position.x);
+                set_y(&mut self.st.b, actor.position.y);
+                self.sim.m_right_wall(self.st, self.layout);
+                self.sim.move_flags & 0x01 != 0
+            }
         }
-        if left {
-            self.mv_x_sub(st, 1); // $5D1D: `ld b,1 / call $3D22`
-        } else {
-            self.mv_x_add(st, 1); // $5D3A: `ld b,1 / call $3D32 / jr $5D22`
+        let mut world = GroundWalkerSimWorld {
+            sim: self,
+            st,
+            layout,
+        };
+        let effect = groundwalker::update(&mut actor, context, &mut world);
+        if let groundwalker::GroundWalkerEffect::Initialized { facing } = effect {
+            self.facing = facing;
         }
-        st.b[B_T25] = st.b[B_T25].wrapping_sub(1);
-        if st.b[B_T25] != 0 {
-            return;
-        }
-        st.b[B_T28] = 0x10;
-    }
-
-    pub(super) fn walker88_flip(&mut self, st: &mut Staging) {
-        st.b[B_FLIP] ^= 0x20;
-        st.b[B_FSTATE] ^= 3;
+        st.b = actor.to_raw_slot();
     }
 
     pub(super) fn handler_carrier46(

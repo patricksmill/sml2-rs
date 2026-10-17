@@ -131,6 +131,7 @@ mod stream_cursor;
 mod tests;
 mod mario_zone;
 mod fallwalker;
+mod groundwalker;
 mod walker;
 mod walkers;
 mod wario;
