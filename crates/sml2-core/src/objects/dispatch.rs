@@ -73,6 +73,7 @@ impl ObjectSim {
             0x59D5A => self.handler_dashing_walker(st, layout),
             0x59E06 => self.handler_vertical_pacer(st),
             0x59E5B => self.handler_0x59e5b(st, layout),
+            0x59EFF => self.handler_0x59eff(st),
             0x59F5E => self.handler_wave_flyer(st),
             0x5A1F6 => self.handler_perched_flyer(st),
             0x5A773 => self.handler_cannon_ant(st),
