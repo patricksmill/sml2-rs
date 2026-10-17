@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "3 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "2 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "remaining_handler_classes",
@@ -24,21 +24,6 @@
     "native_actor_boundary"
    ],
    "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
-   "status": "pending"
-  },
-  {
-   "id": "wario_arena_completion",
-   "title": "Close normal Wario arena entries for definitions6/7/8 through final ending",
-   "asm_refs": [
-    "main.asm:$8DFD",
-    "home.asm:$0EB0"
-   ],
-   "dependencies": [
-    "wario_form3_source_corrections",
-    "wario_ending_entry",
-    "wario_ending_sequence"
-   ],
-   "verification_gate": "Real scene/stream reentry across all3 forms with no blocked scene load or unported diagnostics and final ending",
    "status": "pending"
   }
  ],

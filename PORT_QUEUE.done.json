@@ -934,6 +934,21 @@
    ],
    "verification_gate": "All source state targets, display/audio timing, normal runtime entry and final completion scenarios",
    "status": "done"
+  },
+  {
+   "id": "wario_arena_completion",
+   "title": "Close normal Wario arena entries for definitions6/7/8 through final ending",
+   "asm_refs": [
+    "main.asm:$8DFD",
+    "home.asm:$0EB0"
+   ],
+   "dependencies": [
+    "wario_form3_source_corrections",
+    "wario_ending_entry",
+    "wario_ending_sequence"
+   ],
+   "verification_gate": "Real scene/stream reentry across all3 forms with no blocked scene load or unported diagnostics and final ending",
+   "status": "done"
   }
  ]
 }
