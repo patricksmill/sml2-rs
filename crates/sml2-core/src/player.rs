@@ -40,6 +40,7 @@
 //! (1 while the star flash timer bit 2 is set) forces attr bit 4 (OBP1) for
 //! the invincibility flicker.
 
+use crate::actor::ScreenPosition;
 use crate::object::{MappingEntry, ObjectTables};
 
 /// Base frame index before the powerup offset — `main.asm` $5377/$53CF.
@@ -126,12 +127,42 @@ pub struct Cell {
     pub attr: u8,
 }
 
+/// Additive style for a mapping: existing palette and priority bits survive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CellStyle {
+    pub force_palette_one: bool,
+    pub behind_background: bool,
+}
+
 /// The player's OAM mapping for a frame.
 pub fn mapping_for(tables: &ObjectTables, frame: u8) -> Option<&[MappingEntry]> {
     tables
         .player_mappings
         .get(frame as usize)
         .map(Vec::as_slice)
+}
+
+/// Append a frame at a wrapping screen position, preserving mapping order.
+///
+/// A missing frame returns `None` without modifying `cells`; an empty frame
+/// succeeds. The caller owns the capacity policy for the complete sprite batch.
+pub fn append_cells(
+    tables: &ObjectTables,
+    frame: u8,
+    base: ScreenPosition,
+    style: CellStyle,
+    cells: &mut Vec<Cell>,
+) -> Option<()> {
+    let mapping = mapping_for(tables, frame)?;
+    let attr_mask = if style.force_palette_one { 0x10 } else { 0 }
+        | if style.behind_background { 0x80 } else { 0 };
+    cells.extend(mapping.iter().map(|entry| Cell {
+        y: base.y.wrapping_add(entry.y as u8),
+        x: base.x.wrapping_add(entry.x as u8),
+        tile: entry.tile,
+        attr: entry.attr | attr_mask,
+    }));
+    Some(())
 }
 
 /// Expand one player frame like the `$5297` expander. `star_flash` = the
@@ -146,18 +177,24 @@ pub fn draw_cells(
     cam_y: u16,
     star_flash: bool,
 ) -> Option<Vec<Cell>> {
-    let mapping = mapping_for(tables, frame)?;
-    let bx = (mario_x as u8).wrapping_sub(cam_x as u8).wrapping_add(96);
-    let by = (mario_y as u8).wrapping_sub(cam_y as u8).wrapping_add(98);
-    Some(
-        mapping
-            .iter()
-            .map(|e| Cell {
-                y: by.wrapping_add(e.y as u8),
-                x: bx.wrapping_add(e.x as u8),
-                tile: e.tile,
-                attr: e.attr | if star_flash { 0x10 } else { 0 },
-            })
-            .collect(),
-    )
+    let base = ScreenPosition {
+        x: (mario_x as u8).wrapping_sub(cam_x as u8).wrapping_add(96),
+        y: (mario_y as u8).wrapping_sub(cam_y as u8).wrapping_add(98),
+    };
+    let mut cells = Vec::new();
+    append_cells(
+        tables,
+        frame,
+        base,
+        CellStyle {
+            force_palette_one: star_flash,
+            behind_background: false,
+        },
+        &mut cells,
+    )?;
+    Some(cells)
 }
+
+#[cfg(test)]
+#[path = "player_mapping_tests.rs"]
+mod mapping_tests;
