@@ -1,10 +1,10 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "2 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "7 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "remaining_handler_classes",
-   "title": "The 86 unported handler classes behind the 32 levels' object streams",
+   "title": "Remaining source-required level and boss object handlers and dynamic spawn closure",
    "asm_refs": [
     "main.asm:$58040",
     "main.asm:$59C07"
@@ -24,6 +24,71 @@
     "native_actor_boundary"
    ],
    "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
+   "status": "pending"
+  },
+  {
+   "id": "wario_form3_source_corrections",
+   "title": "Correct final Wario saved-power state, wrapped proximity and shared animation contracts",
+   "asm_refs": [
+    "main.asm:$AD93",
+    "main.asm:$AF66",
+    "main.asm:$B35A"
+   ],
+   "dependencies": [],
+   "verification_gate": "Independent ROM regressions, persistent latch reset, real scene handoff and core/runtime/sensitivity gates",
+   "status": "pending"
+  },
+  {
+   "id": "boss_clear_receiver_semantics",
+   "title": "Remove inferred flag-only boss reward handoff; retain explicit terminal event",
+   "asm_refs": [
+    "main.asm:$5D6A",
+    "main.asm:$5E12"
+   ],
+   "dependencies": [],
+   "verification_gate": "Flag-only input never grants coins or exits; explicit reward producer remains verified",
+   "status": "pending"
+  },
+  {
+   "id": "wario_ending_entry",
+   "title": "Port phase3 input override and ending fade/init states through both runtime loops",
+   "asm_refs": [
+    "main.asm:$5E12",
+    "home.asm:$03AF",
+    "home.asm:$2CAE",
+    "main.asm:$68000"
+   ],
+   "dependencies": [
+    "boss_clear_receiver_semantics"
+   ],
+   "verification_gate": "Exact held/pressed boundaries and palettes; deferred current-frame execution; next-frame state35/18/19 transition",
+   "status": "pending"
+  },
+  {
+   "id": "wario_ending_sequence",
+   "title": "Port complete ending sequence and credits from state19 through original completion",
+   "asm_refs": [
+    "main.asm:$6800F"
+   ],
+   "dependencies": [
+    "wario_ending_entry"
+   ],
+   "verification_gate": "All source state targets, display/audio timing, normal runtime entry and final completion scenarios",
+   "status": "pending"
+  },
+  {
+   "id": "wario_arena_completion",
+   "title": "Close normal Wario arena entries for definitions6/7/8 through final ending",
+   "asm_refs": [
+    "main.asm:$8DFD",
+    "home.asm:$0EB0"
+   ],
+   "dependencies": [
+    "wario_form3_source_corrections",
+    "wario_ending_entry",
+    "wario_ending_sequence"
+   ],
+   "verification_gate": "Real scene/stream reentry across all3 forms with no blocked scene load or unported diagnostics and final ending",
    "status": "pending"
   }
  ],
