@@ -11,8 +11,10 @@ import re
 
 try:
     from ending_interrupt_contracts import CONTRACTS
+    from state_table_contracts import STATE_TABLE_CONTRACTS
 except ImportError:
     from tools.ending_interrupt_contracts import CONTRACTS
+    from tools.state_table_contracts import STATE_TABLE_CONTRACTS
 
 THREE = {0x01, 0x08, 0x11, 0x21, 0x31, 0xC2, 0xC3, 0xC4, 0xCA, 0xCC,
          0xCD, 0xD2, 0xD4, 0xDA, 0xDC, 0xEA, 0xFA}
@@ -138,6 +140,8 @@ class Slice:
     unresolved: set[str]
     entry_contract: str | None = None
     contract_evidence: str = ''
+    state_table_contract: str | None = None
+    state_table_evidence: str = ''
     interrupt_exits: set[int] = field(default_factory=set)
 
     @property
@@ -147,13 +151,18 @@ class Slice:
 
 def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | None = None,
                   bindings: dict[int, str] | None = None, budget: int = 800,
-                  entry_contract: str | None = None) -> Slice:
+                  entry_contract: str | None = None, state_table_contract: str | None = None) -> Slice:
     if not 0 <= entry < len(rom) or budget < 1:
         raise ValueError('invalid entry address or instruction budget')
     bindings = bindings or {}
     contract = CONTRACTS[entry_contract] if entry_contract in CONTRACTS else None
     if entry_contract is not None and contract is None:
         raise ValueError(f'unknown entry contract: {entry_contract}')
+    state_contract = STATE_TABLE_CONTRACTS.get(state_table_contract)
+    if state_table_contract is not None and state_contract is None:
+        raise ValueError(f'unknown state-table contract: {state_table_contract}')
+    if contract and state_contract:
+        raise ValueError('entry and state-table contracts cannot be combined')
     initial_bank = (contract.bank if contract else bank_cpu(entry)[0]) if bank is None else bank
     if not 0 <= initial_bank < (len(rom) + 0x3FFF) // 0x4000:
         raise ValueError('selected bank is outside this ROM')
@@ -164,6 +173,15 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
     pending = [(entry, initial_bank, None, None, ())]
     seen = set()
     result = Slice({}, {}, {}, set())
+    allowed_state_code = frozenset()
+    if state_contract:
+        result.state_table_contract = state_contract.name
+        try:
+            allowed_state_code = state_contract.validate(rom, source, entry, initial_bank, bindings, instruction_size)
+            result.state_table_evidence = state_contract.describe(source)
+        except ValueError as exc:
+            result.unresolved.add(str(exc))
+            return result
     if contract:
         result.entry_contract = contract.name
         try:
@@ -181,6 +199,9 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
             break
         seen.add(state)
         pc, selected, a, hl, stack = state
+        if state_contract and (pc not in allowed_state_code or selected != state_contract.bank):
+            result.unresolved.add(f'0x{pc:X}: transfer outside checked state-table closure/bank')
+            continue
         if contract and not contract.contains(pc):
             result.unresolved.add(f'0x{pc:X}: transfer outside checked entry-contract body')
             continue
@@ -280,6 +301,11 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
             elif op == 0xEF:  # rst $28 consumes its return address as a pointer table
                 start = rom_address(selected, next_cpu)
                 end = source.tables.get(start)
+                if state_contract and pc == state_contract.dispatch:
+                    if (start != state_contract.pointers[0] or selected != state_contract.bank
+                            or end != state_contract.declaration[1]):
+                        raise ValueError('checked state-table dispatch mismatch')
+                    end = state_contract.pointers[1]
                 if (end is None or end <= start or end > len(rom)
                         or start // 0x4000 != (end - 1) // 0x4000 or (end - start) % 2):
                     raise ValueError('rst $28 has no complete, even-length source table')

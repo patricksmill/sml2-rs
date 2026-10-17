@@ -75,6 +75,34 @@ preserve the VBlank saved-register frame, and close interrupt control flow at `r
 without following the opaque interrupted PC or inventing native helper bindings.
 Generic traversal without `--entry-contract` continues to report `INCOMPLETE`.
 
+For the reviewed mixed declaration used by anim A:53, opt in explicitly:
+
+```bash
+python3 tools/handler_task.py --addr 0x5902D --state-table-contract anim53-state0-4
+python3 tools/dispatch_prompt.py --addr 0x5902D --state-table-contract anim53-state0-4
+```
+
+This contract scopes COMPLETE to entry FFDF in {0,1,2,3,4}, selected bank $16,
+stable ROM, ordinary calls/returns, and no external staging mutation. It overrides
+only dispatch 0x59079: four pointers occupy [0x5907A,0x59082); the remaining 16
+bytes are two eight-byte displacement arrays. SourceIndex retains the entire
+[0x5907A,0x59092) declaration. Generic slicing remains INCOMPLETE, including when
+trailing offset pairs happen to look like valid pointers. No first-invalid-pointer
+heuristic or Rust dependency binding supplies the bound.
+
+`state_table_contracts.py` records immutable SHA256 witnesses for every byte in
+the audited handler/helper instruction closure (including conservative removal
+reward/spawn branches), home RST body, mixed declaration and movement data.
+Source witnesses hash each exact instruction start, or every data byte, with the
+complete SourceIndex file/line/instruction text; the module documents the stable
+record encoding. Byte/source changes require renewed source review. Validation
+rejects missing source, altered declaration extents, wrong entry/bank, helper
+bindings and changed writers/calls/stores; traversal also rejects transfers
+outside the checked closure. Resource budgets still apply. The packet prints
+witnesses, assumptions and excluded paths: arbitrary FFDF>=5, other entry offsets,
+global initialization, engine selection, interactions and saved-state restoration
+are outside the claim. Native helper parity remains separate work.
+
 ## Dispatch prompts
 
 ```bash

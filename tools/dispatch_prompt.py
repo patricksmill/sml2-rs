@@ -29,16 +29,18 @@ QUEUE_FILES = {
 }
 
 
-def run_handler_task(addr: int, *, dependencies=(), budget=800) -> None:
+def run_handler_task(addr: int, *, dependencies=(), budget=800, state_table_contract=None) -> None:
     command = [sys.executable, str(ROOT / "tools/handler_task.py"),
                "--addr", hex(addr), "--max-states", str(budget)]
+    if state_table_contract:
+        command.extend(["--state-table-contract", state_table_contract])
     for dependency in dependencies:
         command.extend(["--dependency", dependency])
     # Always regenerate: a cached brief may refer to stale source or the old slicer.
     subprocess.run(command, check=True, cwd=ROOT)
 
 
-def handler_prompt(addr: int, *, module: str | None = None, dependencies=(), budget=800) -> str:
+def handler_prompt(addr: int, *, module: str | None = None, dependencies=(), budget=800, state_table_contract=None) -> str:
     module = module or f"crates/sml2-core/src/objects/handler_0x{addr:05X}.rs"
     path = (ROOT / module).resolve()
     folder = (ROOT / "crates/sml2-core/src/objects").resolve()
@@ -50,7 +52,7 @@ def handler_prompt(addr: int, *, module: str | None = None, dependencies=(), bud
     if adapter.exists() and len(adapter.read_text().splitlines()) >= 400:
         raise ValueError(f'{adapter.name} is already at least 400 lines; choose a focused adapter')
     registration = path.parent / "mod.rs"
-    run_handler_task(addr, dependencies=dependencies, budget=budget)
+    run_handler_task(addr, dependencies=dependencies, budget=budget, state_table_contract=state_table_contract)
     task = ROOT / "tasks/handlers" / f"0x{addr:05X}.md"
     if '**Slice status: COMPLETE**' not in task.read_text():
         raise ValueError('incomplete brief; resolve dependencies before dispatch')
@@ -127,9 +129,10 @@ def main() -> None:
     ap.add_argument("--module", help="named handler sibling .rs path")
     ap.add_argument("--max-states", type=int, default=800)
     ap.add_argument("--dependency", action="append", default=[])
+    ap.add_argument("--state-table-contract", help="checked mixed declaration/state predicate passed to handler_task")
     args = ap.parse_args()
     if args.addr is not None:
-        print(handler_prompt(args.addr, module=args.module, dependencies=args.dependency, budget=args.max_states))
+        print(handler_prompt(args.addr, module=args.module, dependencies=args.dependency, budget=args.max_states, state_table_contract=args.state_table_contract))
     elif args.queue:
         print(queue_prompt(args.queue))
     else:
