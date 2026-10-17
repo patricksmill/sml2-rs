@@ -250,6 +250,10 @@ mod handler_0x59fdf_adapter;
 mod handler_0x5a0aa;
 #[path = "handler_0x5A0AA_adapter.rs"]
 mod handler_0x5a0aa_adapter;
+#[path = "handler_0x5A179.rs"]
+mod handler_0x5a179;
+#[path = "handler_0x5A179_adapter.rs"]
+mod handler_0x5a179_adapter;
 #[path = "handler_0x586E6.rs"]
 mod handler_0x586e6;
 #[path = "handler_0x586E6_adapter.rs"]
