@@ -315,6 +315,8 @@ pub struct PlayerSim {
     pub flutter: u8,
     /// `sFlutterArmed` ($A287) — bunny flutter armed latch.
     pub flutter_armed: bool,
+    /// `sFlutterCharge` ($A288) — charge counter for repeated flutter while holding A.
+    pub flutter_charge: u8,
     pub powerup: u8,
     pub goal_bell: bool,
     pub on_ground_obj: bool,
@@ -594,6 +596,7 @@ impl PlayerSim {
             moon_jump_pose_timer: 0,
             flutter: 0,
             flutter_armed: false,
+            flutter_charge: 0,
             powerup: 1,
             goal_bell: false,
             on_ground_obj: false,
@@ -889,6 +892,7 @@ impl PlayerSim {
         if (0x52..=0x57).contains(&t) {
             self.moon |= 0x02;
             self.flutter_armed = false;
+            self.flutter_charge = 0;
             self.moon &= !0x04;
         }
         let new_bit1 = self.moon & 0x02;
@@ -1770,6 +1774,8 @@ impl PlayerSim {
                 self.jump_flag = true;
                 self.in_air = true;
                 self.on_ground = false;
+                self.flutter_armed = false;
+                self.flutter_charge = 0;
                 self.vvel = 75;
                 if self.powerup != 2 && (0x48..0xC0).contains(&self.hvel) && !keys.up {
                     self.vvel = 48;
@@ -1778,6 +1784,33 @@ impl PlayerSim {
                     }
                 }
             }
+        }
+        // $1090 bunny flutter (gated on camera pan timer == 0, powerup == 2, !goal_bell, moon == 0, vvel < 0x48)
+        if !self.goal_bell
+            && self.pan_timer == 0
+            && self.powerup == 2
+            && self.moon == 0
+            && self.vvel < 0x48
+        {
+            if a_pressed {
+                self.flutter_armed = true;
+                self.flutter = 8;
+                self.vvel = 24;
+            } else if self.flutter_armed && !self.on_ground {
+                if keys.a {
+                    self.flutter_charge = self.flutter_charge.wrapping_add(1);
+                    if self.flutter_charge >= 12 {
+                        self.flutter_charge = 0;
+                        self.flutter = 8;
+                        self.vvel = 24;
+                    }
+                } else {
+                    self.flutter_charge = 0;
+                }
+            }
+        }
+        if self.on_ground {
+            self.flutter_charge = 0;
         }
         // $14FA gravity + $156B integrator
         if self.moon & 0x02 == 0 && self.flutter != 0 {
@@ -1996,6 +2029,9 @@ impl PlayerSim {
         // $319F: lose a powerup tier + 128 frames of invincibility.
         self.dead = 0;
         self.powerup = if self.powerup == 1 { 0 } else { 1 };
+        self.flutter = 0;
+        self.flutter_armed = false;
+        self.flutter_charge = 0;
         self.invincibility = 128;
     }
 
@@ -2787,6 +2823,7 @@ impl PlayerSim {
         self.invincibility = 0;
         self.flutter = 0;
         self.flutter_armed = false;
+        self.flutter_charge = 0;
         self.goal_bell = false;
         self.pipe_dir = 0;
         self.spin_jump_bounce = 0;
@@ -6073,5 +6110,219 @@ mod tests {
             goal.hvel, 0xB4,
             "$1701 checks the goal bell before the pan timer"
         );
+    }
+
+    #[test]
+    fn bunny_flutter_airborne_trigger_and_charge_cycle() {
+        let layout = blank_layout();
+        let mut sim = small_sim();
+        sim.powerup = 2; // Bunny Mario
+        sim.on_ground = false;
+        sim.in_air = true;
+        sim.vvel = 24; // apex / below threshold 0x48
+
+        // Frame 0: A newly pressed in midair initiates flutter
+        sim.step(
+            &PlayerKeys {
+                a: true,
+                ..Default::default()
+            },
+            true, // a_pressed
+            false,
+            &layout,
+        );
+        assert_eq!(sim.flutter, 7, "flutter decremented by 1 in gravity step (8 - 1)");
+        assert!(sim.flutter_armed, "flutter armed latch set");
+        assert_eq!(sim.flutter_charge, 0);
+        assert_eq!(sim.y, 200, "gravity bypassed during flutter");
+
+        // Frames 1..=7: flutter timer decays each frame (7 down to 0) while charge accumulates (1 to 7)
+        for (idx, remaining) in (0..=6).rev().enumerate() {
+            sim.step(
+                &PlayerKeys {
+                    a: true,
+                    ..Default::default()
+                },
+                false, // held, not newly pressed
+                false,
+                &layout,
+            );
+            assert_eq!(sim.flutter, remaining);
+            assert_eq!(sim.flutter_charge, (idx + 1) as u8);
+            assert_eq!(sim.y, 200, "gravity still bypassed");
+        }
+
+        // Frame 8: flutter has reached 0. Charge reaches 8, first falling frame
+        sim.step(
+            &PlayerKeys {
+                a: true,
+                ..Default::default()
+            },
+            false,
+            false,
+            &layout,
+        );
+        assert_eq!(sim.flutter, 0);
+        assert_eq!(sim.flutter_charge, 8, "charge counter reaches 8");
+        assert_eq!(sim.vvel, 23, "gravity ticks downward");
+        assert_eq!(sim.y, 201, "mario falls according to SPEED_V[23]");
+
+        // Frames 9..=11: charge increments from 9 up to 11 while falling
+        for expected_charge in 9..=11 {
+            sim.step(
+                &PlayerKeys {
+                    a: true,
+                    ..Default::default()
+                },
+                false,
+                false,
+                &layout,
+            );
+            assert_eq!(sim.flutter_charge, expected_charge);
+            assert_eq!(sim.flutter, 0);
+        }
+
+        // Frame 12: 12th charge frame triggers re-flutter!
+        let y_before = sim.y;
+        sim.step(
+            &PlayerKeys {
+                a: true,
+                ..Default::default()
+            },
+            false,
+            false,
+            &layout,
+        );
+        assert_eq!(sim.flutter_charge, 0, "charge counter resets to 0");
+        assert_eq!(sim.flutter, 7, "flutter resets to 8, decremented to 7 in gravity");
+        assert_eq!(sim.vvel, 24, "vvel resets to 24");
+        assert_eq!(sim.y, y_before, "gravity bypassed on re-flutter frame");
+    }
+
+    #[test]
+    fn pan_timer_blocks_flutter_arming_and_charging() {
+        let layout = blank_layout();
+        let mut sim = small_sim();
+        sim.powerup = 2;
+        sim.on_ground = false;
+        sim.in_air = true;
+        sim.vvel = 24;
+        sim.pan_timer = 2;
+
+        // Try to trigger flutter with pan_timer != 0
+        sim.step(
+            &PlayerKeys {
+                a: true,
+                ..Default::default()
+            },
+            true, // a_pressed
+            false,
+            &layout,
+        );
+        assert_eq!(sim.flutter, 0, "flutter not armed when pan_timer != 0");
+        assert!(!sim.flutter_armed);
+        assert_eq!(sim.flutter_charge, 0);
+        assert_eq!(sim.vvel, 23, "gravity ran normally");
+
+        // Try to charge flutter with pan_timer != 0
+        sim.flutter_armed = true;
+        sim.flutter_charge = 5;
+        sim.pan_timer = 1;
+        sim.step(
+            &PlayerKeys {
+                a: true,
+                ..Default::default()
+            },
+            false,
+            false,
+            &layout,
+        );
+        assert_eq!(sim.flutter_charge, 5, "charge cannot accumulate when pan_timer != 0");
+    }
+
+    #[test]
+    fn flutter_gated_by_goal_bell_moon_and_vvel_threshold() {
+        let layout = blank_layout();
+
+        // 1. Gated by goal bell
+        let mut sim_bell = small_sim();
+        sim_bell.powerup = 2;
+        sim_bell.on_ground = false;
+        sim_bell.in_air = true;
+        sim_bell.vvel = 24;
+        sim_bell.goal_bell = true;
+        sim_bell.step(&PlayerKeys { a: true, ..Default::default() }, true, false, &layout);
+        assert_eq!(sim_bell.flutter, 0, "goal bell blocks flutter");
+
+        // 2. Gated by moon physics
+        let mut sim_moon = small_sim();
+        sim_moon.powerup = 2;
+        sim_moon.on_ground = false;
+        sim_moon.in_air = true;
+        sim_moon.vvel = 24;
+        sim_moon.moon = 1;
+        sim_moon.step(&PlayerKeys { a: true, ..Default::default() }, true, false, &layout);
+        assert_eq!(sim_moon.flutter, 0, "moon physics blocks flutter");
+
+        // 3. Gated by ascending vvel >= 0x48
+        let mut sim_asc = small_sim();
+        sim_asc.powerup = 2;
+        sim_asc.on_ground = false;
+        sim_asc.in_air = true;
+        sim_asc.vvel = 75; // ascending jump
+        sim_asc.step(&PlayerKeys { a: true, ..Default::default() }, true, false, &layout);
+        assert_eq!(sim_asc.flutter, 0, "ascending vvel >= 72 blocks flutter");
+
+        // 4. Non-bunny powerup (e.g. fire/super)
+        let mut sim_fire = small_sim();
+        sim_fire.powerup = 3;
+        sim_fire.on_ground = false;
+        sim_fire.in_air = true;
+        sim_fire.vvel = 24;
+        sim_fire.step(&PlayerKeys { a: true, ..Default::default() }, true, false, &layout);
+        assert_eq!(sim_fire.flutter, 0, "non-bunny cannot flutter");
+    }
+
+    #[test]
+    fn flutter_charge_resets_on_key_release_landing_jump_and_damage() {
+        let layout = blank_layout();
+        let mut sim = small_sim();
+        sim.powerup = 2;
+        sim.on_ground = false;
+        sim.in_air = true;
+        sim.flutter_armed = true;
+        sim.flutter_charge = 5;
+
+        // Key release in air resets charge
+        sim.step(&PlayerKeys::default(), false, false, &layout);
+        assert_eq!(sim.flutter_charge, 0, "releasing A resets charge");
+
+        // Landing on ground resets charge
+        sim.flutter_charge = 7;
+        sim.on_ground = true;
+        sim.on_ground_obj = true;
+        sim.step(&PlayerKeys::default(), false, false, &layout);
+        assert_eq!(sim.flutter_charge, 0, "ground contact resets charge");
+
+        // Jump from ground resets flutter armed and charge
+        sim.flutter_armed = true;
+        sim.flutter_charge = 3;
+        sim.on_ground = true;
+        sim.on_ground_obj = true;
+        sim.step(&PlayerKeys { a: true, ..Default::default() }, true, false, &layout);
+        assert!(!sim.flutter_armed, "ground jump clears flutter_armed");
+        assert_eq!(sim.flutter_charge, 0, "ground jump clears flutter_charge");
+
+        // Taking damage resets flutter state
+        sim.flutter = 5;
+        sim.flutter_armed = true;
+        sim.flutter_charge = 8;
+        sim.dead = 15;
+        sim.death_dispatch();
+        assert_eq!(sim.powerup, 1);
+        assert_eq!(sim.flutter, 0);
+        assert!(!sim.flutter_armed);
+        assert_eq!(sim.flutter_charge, 0);
+        assert_eq!(sim.invincibility, 128);
     }
 }

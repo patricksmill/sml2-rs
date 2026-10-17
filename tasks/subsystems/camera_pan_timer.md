@@ -1,9 +1,8 @@
-# Camera-pan timer: verified shared path and remaining dependencies
+# Camera-pan timer: verified shared path, producers, and flutter consumer
 
-Ticket `camera_pan_timer` stays pending. Shared countdown, scroll/draw phases,
-jump/acceleration guards, replay derivation, and renderer phase consumption are
-covered by local tests. Completion requires the positive producers and remaining
-flutter consumer below to run through normal gameplay.
+Ticket `camera_pan_timer` is verified and complete. Shared countdown, scroll/draw phases,
+jump/acceleration guards, replay derivation, renderer phase consumption, positive Wario
+producers ($A9EA, $AA60, $AD4E), and $1090 bunny flutter arming and charging are verified.
 
 ## Source contract
 

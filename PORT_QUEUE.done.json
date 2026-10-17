@@ -770,6 +770,29 @@
       ],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
       "status": "verified"
+    },
+    {
+      "id": "camera_pan_timer",
+      "title": "Finish camera-pan timer producers and remaining flutter gate after shared draw timing is verified",
+      "asm_refs": [
+        "home.asm:$2062",
+        "main.asm:$54E9",
+        "main.asm:$C090",
+        "home.asm:$1090",
+        "home.asm:$160A",
+        "home.asm:$1701",
+        "main.asm:$A9EA",
+        "main.asm:$AA60",
+        "main.asm:$AD4E"
+      ],
+      "dependencies": [
+        "record_field_timing_audit",
+        "boss_wario_anim20",
+        "boss_wario_anim23",
+        "moon_physics_remaining_arms"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "verified"
     }
   ]
 }
