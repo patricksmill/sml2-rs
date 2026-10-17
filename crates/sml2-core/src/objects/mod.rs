@@ -148,6 +148,7 @@ mod walker;
 mod walkers;
 mod wario;
 mod wave_flyer;
+mod winged_walker;
 
 #[derive(Debug, Clone)]
 pub struct ObjectSim {
