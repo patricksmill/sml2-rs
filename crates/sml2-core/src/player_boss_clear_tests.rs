@@ -120,6 +120,10 @@ fn boss_clear_handoff_transitions_to_exit_completed_and_saves_coin() {
     assert_eq!(sim.level_progress[29] & 0x80, 0x80, "coin 6 bit set at offset 29");
     assert_eq!(sim.golden_coin_count(), 1);
 
+    sim.apply_object_result(&mut obj, false);
+    assert_eq!(sim.level_tally, 0x06, "consumed reward is applied only once");
+    assert_eq!(sim.golden_coin_count(), 1);
+
     let handoff = sim.map_handoff(&nodes);
     assert_eq!(handoff.node, 0x53);
     assert_eq!(handoff.screen, Some(6), "Mario Zone screen 6");
@@ -128,20 +132,49 @@ fn boss_clear_handoff_transitions_to_exit_completed_and_saves_coin() {
 }
 
 #[test]
-fn boss_clear_fade_timer_expiration_also_triggers_boss_handoff() {
+fn boss_clear_flag_with_expired_fade_preserves_wario_ending() {
+    for definition in [6, 7, 8] {
+        assert_flag_only_preserves_player(definition);
+    }
+}
+
+#[test]
+fn boss_clear_flag_with_expired_fade_does_not_award_normal_boss_coin() {
+    for definition in 1..=5 {
+        assert_flag_only_preserves_player(definition);
+    }
+}
+
+/// `$5D6E` suppresses countdown; `$5E12` tests fight phase. Neither creates
+/// the explicit terminal reward event emitted by Mario Zone's reward actor.
+fn assert_flag_only_preserves_player(definition: u8) {
     let mut sim = dirty_player();
-    sim.boss_clear = true;
-    sim.fade_timer = 0; // 640-frame fade expired
+    sim.fade_timer = 0;
     sim.map_node = 0x53;
+    sim.level_tally = 0x05;
+    let progress = sim.level_progress;
+    let timer = sim.level_timer;
 
     let mut obj = ObjectSim::new(Vec::new(), 0);
     obj.configure(13);
-    obj.boss_def_index = 2; // active boss fight
+    obj.boss_def_index = definition;
+    obj.boss_clear_flag = 1;
 
-    sim.apply_object_result(&mut obj, false);
-    assert!(sim.exit_phase);
-    assert!(sim.exit_completed);
-    assert_eq!(sim.level_progress[29] & 0x80, 0x80);
+    for _ in 0..2 {
+        sim.apply_object_result(&mut obj, false);
+        assert!(sim.boss_clear);
+        assert_eq!(sim.music_request, 24, "definition {definition}");
+        assert_eq!(sim.fade_timer, 0);
+        assert!(!sim.exit_phase, "definition {definition}");
+        assert!(!sim.exit_completed);
+        assert_eq!(sim.level_tally, 0x05);
+        assert_eq!(sim.level_progress, progress);
+        assert_eq!(sim.golden_coin_count(), 0);
+        assert_eq!(sim.tile_anim_config, 0x66);
+        assert!(!obj.boss_clear_handoff);
+        sim.update_level_timer();
+        assert_eq!(sim.level_timer, timer);
+    }
 }
 
 #[test]

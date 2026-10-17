@@ -883,6 +883,17 @@
    "dependencies": [],
    "verification_gate": "Independent ROM regressions, persistent latch reset, real scene handoff and core/runtime/sensitivity gates",
    "status": "done"
+  },
+  {
+   "id": "boss_clear_receiver_semantics",
+   "title": "Remove inferred flag-only boss reward handoff; retain explicit terminal event",
+   "asm_refs": [
+    "main.asm:$5D6A",
+    "main.asm:$5E12"
+   ],
+   "dependencies": [],
+   "verification_gate": "Flag-only input never grants coins or exits; explicit reward producer remains verified",
+   "status": "done"
   }
  ]
 }

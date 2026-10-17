@@ -356,12 +356,9 @@ pub struct PlayerSim {
     /// the hand-off to `$14`.
     pub exit_phase: bool,
     /// `sBossClearFlag` (`$A2E3`): armed by the boss hit pass (`$92C4`) when a
-    /// fight's hp reaches zero. The ROM's in-level pass diverts on
-    /// `sMarioDead | sBossClearFlag | sGoalBell` (`main.asm:1307` -> `$5E12`);
-    /// the port takes its existing level-clear phase for it, because `$5E12`'s
-    /// boss-specific tail — game states 27/29 -> bank 12 `$45B6`/`$467A`, the
-    /// castle/statue ending — is unported. That phase is also what ends the
-    /// level, whose reload reseeds `sSceneState` and so clears `$0EB0`'s park.
+    /// fight's hp reaches zero. Its sole ROM read suppresses countdown writes
+    /// (`$5D6E..$5D77`). The `$5E12` continuation checks boss fight phase;
+    /// the clear flag itself does not request a level exit or coin reward.
     pub boss_clear: bool,
     /// `$FF9B = 20` — `$14`, the level-clear/map hand-off the `$3547` tail
     /// enters once the exit fade's last frame has run. The hand-off's banked
@@ -2645,9 +2642,7 @@ impl PlayerSim {
         if obj.boss_clear_flag != 0 {
             self.boss_clear = true;
         }
-        let boss_handoff = obj.boss_clear_handoff
-            || (self.boss_clear && self.fade_timer == 0 && obj.boss_def_index != 0);
-        if boss_handoff && !self.exit_completed {
+        if obj.boss_clear_handoff && !self.exit_completed {
             obj.boss_clear_handoff = false;
             self.music_request = 15;
             if self.level_progress_flags & 0x80 == 0 {
