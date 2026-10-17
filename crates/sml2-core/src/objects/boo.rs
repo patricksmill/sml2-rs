@@ -3,7 +3,7 @@
 //! Follows the idiomatic Rust porting guide: typed actor state, domain methods,
 //! zero raw hex offsets or register plumbing.
 
-use crate::actor::{Actor, ContactKind, Facing, FrameTick, VerticalTrackingError};
+use crate::actor::{Actor, ContactKind, Facing, FrameTick, SpriteFlipFlags, VerticalTrackingError};
 
 /// Boo movement state ($59545).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,11 +84,11 @@ pub fn update(actor: &mut Actor, context: BooContext) -> Result<BooEffect, Verti
             actor.sprite = 13;
             if obj_facing == 1 {
                 // Mario is to the right
-                actor.sprite_flip.set_horizontal(true);
+                actor.sprite_flip = SpriteFlipFlags::from_bits(32);
                 actor.state = BooState::ChasingRight.to_raw();
             } else {
                 // Mario is to the left
-                actor.sprite_flip.set_horizontal(false);
+                actor.sprite_flip = SpriteFlipFlags::from_bits(0);
                 actor.state = BooState::ChasingLeft.to_raw();
             }
             actor.motion_leg = 8; // neutral Y speed index
@@ -101,7 +101,7 @@ pub fn update(actor: &mut Actor, context: BooContext) -> Result<BooEffect, Verti
             actor.track_player_y(context.mario_ref_y)?;
             // Step X right (+1).
             actor.position.move_x(1);
-            if actor.travel_direction.raw() < 16 {
+            if actor.travel_direction.raw() != 16 {
                 actor.travel_direction =
                     Facing::from_raw(actor.travel_direction.raw().wrapping_add(1));
             }
@@ -124,6 +124,76 @@ pub fn update(actor: &mut Actor, context: BooContext) -> Result<BooEffect, Verti
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn boo_source_initialization_overwrites_dirty_sprite_flags() {
+        for (right, flip, state) in [(true, 32, 1), (false, 0, 2)] {
+            for dirty in [0xff, 0xdf, 0x40, 0x1f] {
+                let mut expected = std::array::from_fn(|i| (i as u8).wrapping_mul(37));
+                expected[0..2].copy_from_slice(&100u16.to_be_bytes());
+                expected[3..5].copy_from_slice(&100u16.to_be_bytes());
+                expected[13] = dirty;
+                expected[15] = 0;
+                let mut actor = Actor::from_raw_slot(&expected);
+                assert_eq!(
+                    update(
+                        &mut actor,
+                        BooContext {
+                            frame: FrameTick(4),
+                            mario_dir_right: right,
+                            mario_ref_x: if right { 150 } else { 50 },
+                            mario_ref_y: 100,
+                        }
+                    ),
+                    Ok(BooEffect::Chasing)
+                );
+                expected[11] = 13;
+                expected[13] = flip;
+                expected[15] = state;
+                expected[18] = 0x48;
+                expected[24] = 8;
+                expected[25] = 8;
+                assert_eq!(actor.to_raw_slot(), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn boo_source_travel_counter_exact_endpoints_and_byte_wrap() {
+        for (right, counter, next) in [
+            (true, 15, 16),
+            (true, 16, 16),
+            (true, 17, 18),
+            (true, 255, 0),
+            (false, 0, 0),
+            (false, 1, 0),
+            (false, 255, 254),
+        ] {
+            let mut expected = std::array::from_fn(|i| (i as u8).wrapping_mul(37));
+            expected[0..2].copy_from_slice(&100u16.to_be_bytes());
+            expected[3..5].copy_from_slice(&100u16.to_be_bytes());
+            expected[15] = if right { 1 } else { 2 };
+            expected[24] = 8;
+            expected[25] = counter;
+            let mut actor = Actor::from_raw_slot(&expected);
+            assert_eq!(
+                update(
+                    &mut actor,
+                    BooContext {
+                        frame: FrameTick(4),
+                        mario_dir_right: right,
+                        mario_ref_x: if right { 150 } else { 50 },
+                        mario_ref_y: 100,
+                    }
+                ),
+                Ok(BooEffect::Chasing)
+            );
+            expected[1] = if right { 101 } else { 99 };
+            expected[24] = 9; // Equality increments Y tracking; profile byte 9 is zero.
+            expected[25] = next;
+            assert_eq!(actor.to_raw_slot(), expected);
+        }
+    }
 
     #[test]
     fn boo_adapter_projects_source_facing_and_profile_errors() {
