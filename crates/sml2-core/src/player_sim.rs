@@ -247,13 +247,10 @@ pub struct MapHandoffOutcome {
     ///
     /// The ROM's `$3F04D` bands and the castle arm both write `sMapScreenId` and
     /// then call that screen's loader (`$3D0FF`/`$3D208`/`$3D371`/`$3D49F`/
-    /// `$3D61F`/`$3D79A`/`$3D6EB`/`$3D880`) — the zone gfx, the script pointers,
-    /// the entry cursor and the camera. **Those loaders are not ported**, so the
-    /// screen is REPORTED here rather than entered: both frame loops print a
-    /// `note:` when it is set, and the frame that would have loaded it is the
-    /// unported path. `None` means no band matched (the `$3F142` tail) or the
-    /// node was below `$1E`.
+    /// `$3D61F`/`$3D79A`/`$3D6EB`/`$3D880`).
     pub screen: Option<u8>,
+    /// The music track ID requested by the screen loader ($2AAA / sMusicRequest).
+    pub music: Option<u8>,
 }
 
 /// Buttons held for one frame (plus a separate press edge for A/Mario).
@@ -2421,12 +2418,18 @@ impl PlayerSim {
             if self.dead == 0 {
                 self.map_node = 0x3F;
                 out.screen = Some(4);
+                out.music = Some(28);
+            } else {
+                out.music = Some(6);
             }
         } else if self.map_node == 0 && self.dead == 0 {
             // $3F024: `or a / jr nz,$3F03D` — only node 0 marks the stage cleared
             // and moves to node $14.
             self.level_progress[0] |= 0x80;
             self.map_node = 0x14;
+            out.music = Some(6);
+        } else {
+            out.music = Some(6);
         }
         // `$3F03D` / `$3F147` / `$3F14C`: every tail path above ends in exactly
         // one `call $2934` — the bands through `$3F147` (or `$3F142`'s `$3F14C`),
@@ -2439,59 +2442,123 @@ impl PlayerSim {
     }
 
     /// `$3F04D`-`$3F14C` — the tail for a node at or above `$1E` (every zone and
-    /// castle node). Each band selects a zone screen; four of the nodes rewrite
-    /// the node as they pass (`$5B`, `$66`, `$78`, `$7A`) and three of those also
-    /// set a gate byte, gated on a live Mario.
-    ///
-    /// The node rewrites and the gate bytes are map state the port consumes
-    /// (`$A86B`-`$A86F` live in the save image's first 64 bytes and the map's own
-    /// cursor helpers read them), so they land here. The screens' loaders do not
-    /// — see [`MapHandoffOutcome::screen`].
+    /// castle node). Each band selects a zone screen and executes its loader
+    /// ($3D0FF/$3D208/$3D371/$3D49F/$3D61F/$3D79A/$3D6EB/$3D880).
     fn zone_tail(&mut self, out: &mut MapHandoffOutcome) {
-        use crate::map::progress_offset;
+        use crate::map::progress_offset as po;
         let n = self.map_node;
         match n {
-            0x1E..=0x27 => out.screen = Some(2), // $3F04D -> $3D0FF
-            0x28..=0x31 => out.screen = Some(1), // $3F05C -> $3D208
-            0x32..=0x3B => out.screen = Some(3), // $3F06B -> $3D371
-            0x3C..=0x45 => out.screen = Some(4), // $3F07A -> $3D49F
-            0x46..=0x4F => out.screen = Some(5), // $3F089 -> $3D61F
-            0x50..=0x59 => out.screen = Some(6), // $3F098 -> $3D79A
+            0x1E..=0x27 => {
+                out.screen = Some(2); // $3F04D -> $3D0FF
+                out.music = Some(16);
+                if self.exit_tile_flag != 0 && self.dead == 0 {
+                    self.map_node = 0x25; // 37 ($3D1A4)
+                    self.level_progress[po::TREE_A_PATH_1] |= 1;
+                }
+                if self.map_node == 0x26 {
+                    self.map_node = 0x27; // 39 ($3D1B5)
+                    self.dead = 0xFF;
+                }
+            }
+            0x28..=0x31 => {
+                out.screen = Some(1); // $3F05C -> $3D208
+                out.music = Some(30);
+                if self.exit_tile_flag != 0 && self.dead == 0 {
+                    if self.map_node == 0x2C {
+                        self.level_progress[po::PUMPKIN_PATH_1] |= 1; // $3D2B5
+                    } else if self.map_node == 0x2F {
+                        self.level_progress[po::PUMPKIN_PATH_2] |= 1; // $3D2E8
+                    }
+                }
+            }
+            0x32..=0x3B => {
+                out.screen = Some(3); // $3F06B -> $3D371
+                out.music = Some(5);
+                if self.map_node == 0x32 && self.exit_tile_flag != 0 && self.dead == 0 {
+                    self.map_node = 0x6B; // 107 ($3D416)
+                    self.level_progress[po::MACRO_PATH_0] |= 1;
+                }
+                if self.map_node == 0x6A && self.dead == 0 {
+                    self.map_node = 0x6C; // 108 ($3D446)
+                    self.set_gate(po::GATE_MACRO);
+                    self.dead = 0xFF;
+                }
+            }
+            0x3C..=0x45 => {
+                out.screen = Some(4); // $3F07A -> $3D49F
+                out.music = Some(28);
+                if self.exit_tile_flag != 0 && self.dead == 0 {
+                    self.map_node = 0x43; // 67 ($3D540)
+                    self.level_progress[po::SPACE_PATH_0] |= 1;
+                }
+                if self.map_node == 0x44 {
+                    self.map_node = 0x45; // 69 ($3D573)
+                    self.dead = 0xFF;
+                }
+            }
+            0x46..=0x4F => {
+                out.screen = Some(5); // $3F089 -> $3D61F
+                out.music = Some(18);
+                if self.exit_tile_flag != 0 && self.dead == 0 {
+                    self.level_progress[po::TREE_B_PATH_1] |= 1; // $3D6A7
+                }
+            }
+            0x50..=0x59 => {
+                out.screen = Some(6); // $3F098 -> $3D79A
+                out.music = Some(27);
+            }
             0x5A..=0x63 => {
                 if n == 0x5B {
                     self.map_node = 0x5C; // $3F0B1
                 }
                 out.screen = Some(7); // $3F0B7 -> $3D6EB
+                out.music = Some(14);
             }
             // $3F0C2's band: `$66` rewrites to $68 and gates, `$6A`/`$6B`/`$6C`
             // jump back into the screen-3 arm, the rest take `$3F03D`.
             0x66 => {
                 self.map_node = 0x68; // $3F0C8
                 if self.dead == 0 {
-                    self.set_gate(progress_offset::GATE_MARIO); // $3F0D4: set 7
+                    self.set_gate(po::GATE_MARIO); // $3F0D4: set 7
+                }
+                out.music = Some(6);
+            }
+            0x6A | 0x6B | 0x6C => {
+                out.screen = Some(3); // $3F0E4 -> $3F06F -> $3D371
+                out.music = Some(5);
+                if self.map_node == 0x6A && self.dead == 0 {
+                    self.map_node = 0x6C;
+                    self.set_gate(po::GATE_MACRO);
+                    self.dead = 0xFF;
                 }
             }
-            0x6A | 0x6B | 0x6C => out.screen = Some(3), // $3F0E4 -> $3F06F
-            0x6E..=0x77 => out.screen = Some(8),        // $3F0F6 -> $3D880
+            0x6E..=0x77 => {
+                out.screen = Some(8); // $3F0F6 -> $3D880
+                out.music = Some(13);
+            }
             // $3F104: `$78` rewrites to $2E and gates, then takes screen 1
             // whether or not Mario is alive.
             0x78 => {
                 self.map_node = 0x2E; // $3F10C
                 if self.dead == 0 {
-                    self.set_gate(progress_offset::GATE_PUMPKIN_B); // $3F118
+                    self.set_gate(po::GATE_PUMPKIN_B); // $3F118
                 }
                 out.screen = Some(1); // $3F060 -> $3D208
+                out.music = Some(30);
             }
             0x7A => {
                 self.map_node = 0x31; // $3F12B
                 if self.dead == 0 {
-                    self.set_gate(progress_offset::GATE_PUMPKIN_C); // $3F136
+                    self.set_gate(po::GATE_PUMPKIN_C); // $3F136
                 }
                 out.screen = Some(1); // $3F060
+                out.music = Some(30);
             }
             // $3F142 (`call $3F156 / jr $3F14C`): a node with no band of its own —
             // no screen, just the tail's save.
-            _ => {}
+            _ => {
+                out.music = Some(6);
+            }
         }
     }
 
@@ -3562,7 +3629,7 @@ mod tests {
             (0x1A, 0x69),
             (0x29, 0x2C),
             (0x2A, 0x2F),
-            (0x3C, 0x40),
+            (0x3C, 0x43), // $3C -> $40 (pass 2) -> $43 (space zone loader $3D540)
         ] {
             let mut sim = small_sim();
             sim.map_node = from;
@@ -3737,7 +3804,100 @@ mod tests {
             let dead_out = dead.map_handoff(&nodes);
             assert_eq!(dead.map_node, from, "a dead Mario's node does not move");
             assert_eq!(dead_out.screen, None);
+            assert_eq!(dead_out.music, Some(6));
         }
+    }
+
+    /// `$3D0FF`..`$3D880`: zone screen loader interactions during level hand-off.
+    ///
+    /// Verifies that secret clears unlock zone paths, retarget nodes where
+    /// specified by the ROM loaders, and set the loader-requested music track.
+    #[test]
+    fn map_handoff_zone_loaders_paths_retargets_and_music() {
+        use crate::map::progress_offset as po;
+        let nodes = handoff_nodes();
+
+        // Tree Zone A secret exit ($3D18E): retargets to node 37, sets path 1 bit 0, music 16
+        let mut sim = small_sim();
+        sim.map_node = 0x23;
+        sim.exit_tile_flag = 0x80;
+        let out = sim.map_handoff(&nodes);
+        assert_eq!(sim.map_node, 0x25, "node 37 in decimal");
+        assert_eq!(sim.level_progress[po::TREE_A_PATH_1] & 1, 1);
+        assert_eq!(out.screen, Some(2));
+        assert_eq!(out.music, Some(16));
+
+        // Tree Zone A node $26 clear ($3D1B5): retargets to 39, sets dead = $FF
+        let mut sim = small_sim();
+        sim.map_node = 0x26;
+        let out = sim.map_handoff(&nodes);
+        assert_eq!(sim.map_node, 0x27, "node 39 in decimal");
+        assert_eq!(sim.dead, 0xFF);
+        assert_eq!(out.music, Some(16));
+
+        // Pumpkin Zone secret exits ($3D29F): node $2C and $2F
+        let mut sim = small_sim();
+        sim.map_node = 0x29; // secret rewrite sends $29 -> $2C
+        sim.exit_tile_flag = 0x80;
+        let out = sim.map_handoff(&nodes);
+        assert_eq!(sim.level_progress[po::PUMPKIN_PATH_1] & 1, 1);
+        assert_eq!(out.screen, Some(1));
+        assert_eq!(out.music, Some(30));
+
+        let mut sim = small_sim();
+        sim.map_node = 0x2A; // secret rewrite sends $2A -> $2F
+        sim.exit_tile_flag = 0x80;
+        let out = sim.map_handoff(&nodes);
+        assert_eq!(sim.level_progress[po::PUMPKIN_PATH_2] & 1, 1);
+        assert_eq!(out.music, Some(30));
+
+        // Macro Zone secret exit ($3D409): node $32 -> node 107 ($6B), path 0 bit 0
+        let mut sim = small_sim();
+        sim.map_node = 0x32;
+        sim.exit_tile_flag = 0x80;
+        let out = sim.map_handoff(&nodes);
+        assert_eq!(sim.map_node, 0x6B, "node 107 in decimal");
+        assert_eq!(sim.level_progress[po::MACRO_PATH_0] & 1, 1);
+        assert_eq!(out.screen, Some(3));
+        assert_eq!(out.music, Some(5));
+
+        // Macro Zone node $6A ($3D43D): retargets to 108 ($6C), sets gate bit 7, dead = $FF
+        let mut sim = small_sim();
+        sim.map_node = 0x6A;
+        let out = sim.map_handoff(&nodes);
+        assert_eq!(sim.map_node, 0x6C, "node 108 in decimal");
+        assert_eq!(sim.level_progress[po::GATE_MACRO] & 0x80, 0x80);
+        assert_eq!(sim.dead, 0xFF);
+        assert_eq!(out.screen, Some(3));
+        assert_eq!(out.music, Some(5));
+
+        // Space Zone secret exit ($3D533): node $3C -> $40 (secret rewrite) -> node 67 ($43)
+        let mut sim = small_sim();
+        sim.map_node = 0x3C;
+        sim.exit_tile_flag = 0x80;
+        let out = sim.map_handoff(&nodes);
+        assert_eq!(sim.map_node, 0x43, "node 67 in decimal");
+        assert_eq!(sim.level_progress[po::SPACE_PATH_0] & 1, 1);
+        assert_eq!(out.screen, Some(4));
+        assert_eq!(out.music, Some(28));
+
+        // Space Zone node $44 ($3D56B): retargets to 69 ($45), dead = $FF
+        let mut sim = small_sim();
+        sim.map_node = 0x44;
+        let out = sim.map_handoff(&nodes);
+        assert_eq!(sim.map_node, 0x45, "node 69 in decimal");
+        assert_eq!(sim.dead, 0xFF);
+        assert_eq!(out.screen, Some(4));
+        assert_eq!(out.music, Some(28));
+
+        // Tree Zone B secret exit ($3D69C): path 1 bit 0
+        let mut sim = small_sim();
+        sim.map_node = 0x48; // secret rewrite sends $48 -> $47
+        sim.exit_tile_flag = 0x80;
+        let out = sim.map_handoff(&nodes);
+        assert_eq!(sim.level_progress[po::TREE_B_PATH_1] & 1, 1);
+        assert_eq!(out.screen, Some(5));
+        assert_eq!(out.music, Some(18));
     }
 
     /// The tail's own `$2934`: every path through `$3F003` saves exactly once

@@ -17,27 +17,6 @@
       "status": "pending"
     },
     {
-      "id": "map_zone_screen_loaders",
-      "title": "The zone screens the level->map hand-off selects ($3D0FF/$3D208/$3D371/$3D49F/$3D61F/$3D79A/$3D6EB/$3D880)",
-      "asm_refs": [
-        "main.asm:$3F04D",
-        "main.asm:$3F07E",
-        "main.asm:$3D0FF",
-        "main.asm:$3D208",
-        "main.asm:$3D371",
-        "main.asm:$3D49F",
-        "main.asm:$3D61F",
-        "main.asm:$3D79A",
-        "main.asm:$3D6EB",
-        "main.asm:$3D880"
-      ],
-      "dependencies": [
-        "map_handoff_3EF2B"
-      ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-      "status": "pending"
-    },
-    {
       "id": "camera_pan_timer",
       "title": "Finish camera-pan timer producers and remaining flutter gate after shared draw timing is verified",
       "asm_refs": [

@@ -464,6 +464,188 @@ impl MapSim {
         self.cursor_y = r.cursor_y;
     }
 
+    /// Load a zone screen ($3D0FF/$3D208/$3D371/$3D49F/$3D61F/$3D79A/$3D6EB/$3D880)
+    /// or the hub ($3F156), as selected by the level->map hand-off ($3F04D/$3F07E)
+    /// or a map door.
+    ///
+    /// Clears scroll and walking latches, resets camera to screen origin (0, 0)
+    /// for zone screens or loads staged camera for the hub, applies screen-specific
+    /// node retargets, path unlocks and gate latches, loads camera/cursor records
+    /// when the node changes, sets the move-frame anim gate ($92), and returns
+    /// the requested music track ID.
+    pub fn load_screen(
+        &mut self,
+        screen_id: u8,
+        exit_tile_flag: u8,
+        records: &MapNodeRecords,
+    ) -> u8 {
+        use crate::map::progress_offset as po;
+
+        self.screen_id = screen_id;
+        self.cursor_walking = 0;
+        self.scroll_only_latch = 0;
+        self.frame_counter = 0;
+
+        match screen_id {
+            0 => {
+                // $3F156: Overworld hub loader
+                self.load_node(self.node, records);
+                self.rock_anim_timer = 0;
+                self.cursor_anim = 0;
+                6 // $3EA9A music 6
+            }
+            1 => {
+                // $3D208: Pumpkin Zone loader
+                self.cam_x = 0;
+                self.cam_y = 0;
+                self.cursor_anim = 0x92;
+                if exit_tile_flag != 0 && self.mario_dead == 0 {
+                    if self.node == 0x2C {
+                        self.node = 44; // 0x2C
+                        self.load_node(44, records);
+                        self.level_progress[po::PUMPKIN_PATH_1] |= 1;
+                    } else if self.node == 0x2F {
+                        self.node = 47; // 0x2F
+                        self.load_node(47, records);
+                        self.level_progress[po::PUMPKIN_PATH_2] |= 1;
+                    }
+                }
+                30 // Music request 30
+            }
+            2 => {
+                // $3D0FF: Tree Zone screen A loader
+                self.cam_x = 0;
+                self.cam_y = 0;
+                self.cursor_anim = 0x92;
+                if exit_tile_flag != 0 && self.mario_dead == 0 {
+                    self.node = 37; // 0x25
+                    self.load_node(37, records);
+                    self.level_progress[po::TREE_A_PATH_1] |= 1;
+                }
+                if self.node == 0x26 {
+                    self.node = 39; // 0x27
+                    self.load_node(39, records);
+                    self.mario_dead = 0xFF;
+                }
+                16 // Music request 16
+            }
+            3 => {
+                // $3D371: Macro Zone loader
+                self.cam_x = 0;
+                self.cam_y = 0;
+                self.cursor_move = 0x21; // $3D38D: ld a, 33; $3D402: or $20
+                self.cursor_anim = 0x92;
+                if self.node == 0x32 && exit_tile_flag != 0 && self.mario_dead == 0 {
+                    self.node = 107; // 0x6B
+                    self.load_node(107, records);
+                    self.level_progress[po::MACRO_PATH_0] |= 1;
+                }
+                if self.node == 0x6A && self.mario_dead == 0 {
+                    self.node = 108; // 0x6C
+                    self.load_node(108, records);
+                    self.level_progress[po::GATE_MACRO] |= 0x80;
+                    self.mario_dead = 0xFF;
+                }
+                5 // Music request 5
+            }
+            4 => {
+                // $3D49F: Space Zone loader
+                self.cam_x = 0;
+                self.cam_y = 0;
+                self.cursor_anim = 0x92;
+                if exit_tile_flag != 0 && self.mario_dead == 0 {
+                    self.node = 67; // 0x43
+                    self.load_node(67, records);
+                    self.level_progress[po::SPACE_PATH_0] |= 1;
+                }
+                if self.node == 0x44 {
+                    self.node = 69; // 0x45
+                    self.load_node(69, records);
+                    self.mario_dead = 0xFF;
+                }
+                28 // Music request 28
+            }
+            5 => {
+                // $3D61F: Tree Zone screen B loader
+                self.cam_x = 0;
+                self.cam_y = 0;
+                self.cursor_anim = 0x92;
+                if exit_tile_flag != 0 && self.mario_dead == 0 {
+                    self.level_progress[po::TREE_B_PATH_1] |= 1;
+                }
+                18 // Music request 18
+            }
+            6 => {
+                // $3D79A: Mario Zone loader
+                self.cam_x = 0;
+                self.cam_y = 0;
+                self.cursor_anim = 0x92;
+                27 // Music request 27
+            }
+            7 => {
+                // $3D6EB: Turtle Zone loader
+                self.cam_x = 0;
+                self.cam_y = 0;
+                self.cursor_anim = 0x92;
+                14 // Music request 14
+            }
+            8 => {
+                // $3D880: Castle loader
+                self.cam_x = 0;
+                self.cam_y = 0;
+                self.cursor_anim = 0x92;
+                self.load_node(self.node, records);
+                13 // Music request 13
+            }
+            _ => 6,
+        }
+    }
+
+    /// `$3F156`: load overworld hub (screen 0).
+    pub fn load_screen_hub(&mut self, records: &MapNodeRecords) -> u8 {
+        self.load_screen(0, 0, records)
+    }
+
+    /// `$3D208`: load Pumpkin Zone (screen 1).
+    pub fn load_screen_pumpkin(&mut self, exit_tile_flag: u8, records: &MapNodeRecords) -> u8 {
+        self.load_screen(1, exit_tile_flag, records)
+    }
+
+    /// `$3D0FF`: load Tree Zone screen A (screen 2).
+    pub fn load_screen_tree_a(&mut self, exit_tile_flag: u8, records: &MapNodeRecords) -> u8 {
+        self.load_screen(2, exit_tile_flag, records)
+    }
+
+    /// `$3D371`: load Macro Zone (screen 3).
+    pub fn load_screen_macro(&mut self, exit_tile_flag: u8, records: &MapNodeRecords) -> u8 {
+        self.load_screen(3, exit_tile_flag, records)
+    }
+
+    /// `$3D49F`: load Space Zone (screen 4).
+    pub fn load_screen_space(&mut self, exit_tile_flag: u8, records: &MapNodeRecords) -> u8 {
+        self.load_screen(4, exit_tile_flag, records)
+    }
+
+    /// `$3D61F`: load Tree Zone screen B (screen 5).
+    pub fn load_screen_tree_b(&mut self, exit_tile_flag: u8, records: &MapNodeRecords) -> u8 {
+        self.load_screen(5, exit_tile_flag, records)
+    }
+
+    /// `$3D79A`: load Mario Zone (screen 6).
+    pub fn load_screen_mario(&mut self, records: &MapNodeRecords) -> u8 {
+        self.load_screen(6, 0, records)
+    }
+
+    /// `$3D6EB`: load Turtle Zone (screen 7).
+    pub fn load_screen_turtle(&mut self, records: &MapNodeRecords) -> u8 {
+        self.load_screen(7, 0, records)
+    }
+
+    /// `$3D880`: load Castle (screen 8).
+    pub fn load_screen_castle(&mut self, records: &MapNodeRecords) -> u8 {
+        self.load_screen(8, 0, records)
+    }
+
     /// `$3C38C`: the map presses its own keys.
     ///
     /// Forty `cp $XX / call z` comparisons run before the frame's cursor logic, and
@@ -2118,5 +2300,145 @@ mod tests {
             "the arrival node is the byte right before node 1's stream"
         );
         assert_eq!(walk.byte_at(0x4000), None, "outside the extracted span");
+    }
+
+    /// `$3D0FF`..`$3D880` and `$3F156`: zone screen loaders and overworld hub loader.
+    ///
+    /// Verifies that loading each screen sets screen_id, camera/scroll, cursor_anim,
+    /// path bits, node retargets, and requests the exact ROM music track.
+    #[test]
+    fn zone_screen_loaders_state_effects_and_music() {
+        use crate::map::progress_offset as po;
+        let r = recs();
+
+        // Screen 0: Hub ($3F156)
+        let mut map = MapSim::new();
+        map.node = 0x23;
+        map.rock_anim_timer = 5;
+        map.cursor_anim = 0x92;
+        let music = map.load_screen_hub(&r);
+        assert_eq!(map.screen_id, 0);
+        assert_eq!(map.rock_anim_timer, 0);
+        assert_eq!(map.cursor_anim, 0);
+        assert_eq!((map.cam_x, map.cam_y), (0x0011, 0x00F2), "seeded from record");
+        assert_eq!(music, 6, "hub music track 6");
+
+        // Screen 1: Pumpkin Zone ($3D208)
+        let mut map = MapSim::new();
+        map.node = 0x2C;
+        map.cam_x = 100;
+        map.cam_y = 200;
+        let music = map.load_screen_pumpkin(0x80, &r);
+        assert_eq!(map.screen_id, 1);
+        assert_eq!((map.cam_x, map.cam_y), (0, 0), "scroll reset to 0");
+        assert_eq!(map.cursor_anim, 0x92);
+        assert_eq!(map.node, 44, "node $2C secret clear retargets to 44");
+        assert_eq!(map.level_progress[po::PUMPKIN_PATH_1] & 1, 1, "pumpkin path 1 bit 0");
+        assert_eq!(music, 30, "pumpkin zone music track 30");
+
+        let mut map = MapSim::new();
+        map.node = 0x2F;
+        map.load_screen_pumpkin(0x80, &r);
+        assert_eq!(map.node, 47, "node $2F secret clear retargets to 47");
+        assert_eq!(map.level_progress[po::PUMPKIN_PATH_2] & 1, 1, "pumpkin path 2 bit 0");
+
+        // Screen 2: Tree Zone screen A ($3D0FF)
+        let mut map = MapSim::new();
+        map.node = 0x23;
+        let music = map.load_screen_tree_a(0x80, &r);
+        assert_eq!(map.screen_id, 2);
+        assert_eq!((map.cam_x, map.cam_y), (0, 0));
+        assert_eq!(map.cursor_anim, 0x92);
+        assert_eq!(map.node, 37, "secret clear retargets to node 37");
+        assert_eq!(map.level_progress[po::TREE_A_PATH_1] & 1, 1);
+        assert_eq!(music, 16, "tree zone music track 16");
+
+        // Tree Zone node $26 clear ($3D1B5)
+        let mut map = MapSim::new();
+        map.node = 0x26;
+        map.load_screen_tree_a(0, &r);
+        assert_eq!(map.node, 39, "node $26 retargets to 39");
+        assert_eq!(map.mario_dead, 0xFF, "mario_dead set to $FF");
+
+        // Screen 3: Macro Zone ($3D371)
+        let mut map = MapSim::new();
+        map.node = 0x32;
+        let music = map.load_screen_macro(0x80, &r);
+        assert_eq!(map.screen_id, 3);
+        assert_eq!((map.cam_x, map.cam_y), (0, 0));
+        assert_eq!(map.cursor_move, 0x21, "cursor move byte $21");
+        assert_eq!(map.cursor_anim, 0x92);
+        assert_eq!(map.node, 107, "node $32 secret clear retargets to 107");
+        assert_eq!(map.level_progress[po::MACRO_PATH_0] & 1, 1);
+        assert_eq!(music, 5, "macro zone music track 5");
+
+        let mut map = MapSim::new();
+        map.node = 0x6A;
+        map.load_screen_macro(0, &r);
+        assert_eq!(map.node, 108, "node $6A retargets to 108");
+        assert_eq!(map.level_progress[po::GATE_MACRO] & 0x80, 0x80, "macro gate bit 7");
+        assert_eq!(map.mario_dead, 0xFF);
+
+        // Screen 4: Space Zone ($3D49F)
+        let mut map = MapSim::new();
+        map.node = 0x40;
+        let music = map.load_screen_space(0x80, &r);
+        assert_eq!(map.screen_id, 4);
+        assert_eq!((map.cam_x, map.cam_y), (0, 0));
+        assert_eq!(map.cursor_anim, 0x92);
+        assert_eq!(map.node, 67, "secret clear retargets to node 67");
+        assert_eq!(map.level_progress[po::SPACE_PATH_0] & 1, 1);
+        assert_eq!(music, 28, "space zone music track 28");
+
+        let mut map = MapSim::new();
+        map.node = 0x44;
+        map.load_screen_space(0, &r);
+        assert_eq!(map.node, 69, "node $44 retargets to 69");
+        assert_eq!(map.mario_dead, 0xFF);
+
+        // Screen 5: Tree Zone screen B ($3D61F)
+        let mut map = MapSim::new();
+        map.node = 0x46;
+        let music = map.load_screen_tree_b(0x80, &r);
+        assert_eq!(map.screen_id, 5);
+        assert_eq!((map.cam_x, map.cam_y), (0, 0));
+        assert_eq!(map.cursor_anim, 0x92);
+        assert_eq!(map.level_progress[po::TREE_B_PATH_1] & 1, 1);
+        assert_eq!(music, 18, "tree zone B music track 18");
+
+        // Screen 6: Mario Zone ($3D79A)
+        let mut map = MapSim::new();
+        map.node = 0x50;
+        let music = map.load_screen_mario(&r);
+        assert_eq!(map.screen_id, 6);
+        assert_eq!((map.cam_x, map.cam_y), (0, 0));
+        assert_eq!(map.cursor_anim, 0x92);
+        assert_eq!(music, 27, "mario zone music track 27");
+
+        // Screen 7: Turtle Zone ($3D6EB)
+        let mut map = MapSim::new();
+        map.node = 0x5A;
+        let music = map.load_screen_turtle(&r);
+        assert_eq!(map.screen_id, 7);
+        assert_eq!((map.cam_x, map.cam_y), (0, 0));
+        assert_eq!(map.cursor_anim, 0x92);
+        assert_eq!(music, 14, "turtle zone music track 14");
+
+        // Screen 8: Castle ($3D880)
+        let mut map = MapSim::new();
+        map.node = 0x72;
+        let music = map.load_screen_castle(&r);
+        assert_eq!(map.screen_id, 8);
+        assert_eq!((map.cam_x, map.cam_y), (0, 0));
+        assert_eq!(map.cursor_anim, 0x92);
+        assert_eq!(music, 13, "castle music track 13");
+
+        // Dead Mario suppresses secret exit path unlocks and retargets
+        let mut map = MapSim::new();
+        map.node = 0x23;
+        map.mario_dead = 0xFF;
+        map.load_screen_tree_a(0x80, &r);
+        assert_eq!(map.node, 0x23, "dead mario does not retarget");
+        assert_eq!(map.level_progress[po::TREE_A_PATH_1], 0, "path 1 bit 0 not set");
     }
 }

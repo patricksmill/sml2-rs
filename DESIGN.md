@@ -1264,13 +1264,14 @@ move. Bands: `$1E-$27`→screen 2 (`$3D0FF`), `$28-$31`→1 (`$3D208`), `$32-$3B
 screen 1, and `$3F142` for everything else (no screen, the tail save). The three gate writes
 and the node rewrites need a LIVE Mario; the screen selection and `$5B`'s rewrite do not.
 
-**The screen loaders are NOT ported, so the selection is reported, not entered.**
-`MapHandoffOutcome::screen` carries the `sMapScreenId` the tail selected, and both frame
-loops print a `note:` for it (one shared printer, so the two loops cannot disagree about
-whether the path is loud). A capture that exits a level on a node `$1E` or above therefore
-FAILS the gate rather than leaving the map parked on a screen nothing loaded — the
-"half-ported state machine fails harder than an unported one" rule, applied. Filed as
-`map_zone_screen_loaders` with the band table and the loader addresses.
+**The screen loaders are ported (`$3D0FF`/`$3D208`/`$3D371`/`$3D49F`/`$3D61F`/`$3D79A`/`$3D6EB`/`$3D880`).**
+`MapSim::load_screen` and `PlayerSim::map_handoff` implement the zone screen selection bands
+and screen loader routines. When entering a zone screen, scroll is reset to (0, 0), walking
+and scroll-only latches are cleared, move animation ($92) is armed, and zone-specific node
+retargets and path-unlock bits (Tree A secret node 37 + path 1, Tree A node $26->39, Pumpkin
+secret path 1/2, Macro secret node 107 + path 0, Macro node $6A gate/retarget, Space secret
+node 67 + path 0, Space node $44->69, Tree B secret path 1) are executed alongside the
+loader-requested music track.
 
 **The `$650E`/`$3C364` question is settled: the byte is the `sLevelProgress` index.** Three
 sites read it and two agree: `$3EEF0` (the writer, main.asm:24089) and `$3E1D7` (the entry

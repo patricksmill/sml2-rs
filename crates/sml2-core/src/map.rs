@@ -106,12 +106,26 @@ impl MapNodeRecords {
 /// `$3C2B8`/`$3C2E7`/`$3C2FE` (`bit 7` of the Macro gate, `bit 0` of Macro path 0,
 /// `bit 7` of Macro path 2) and the per-screen handlers are their readers.
 pub mod progress_offset {
+    /// `$A84A` Tree Zone screen A path 1 (bit 0 set on secret clear, node 37).
+    pub const TREE_A_PATH_1: usize = 2;
     /// `$A84D` Tree Zone screen A gold coin (bit 7 = collected).
     pub const GOLDEN_COIN_1: usize = 5;
+    /// `$A84F` Pumpkin Zone screen A path 1 (bit 0 set on node $2C secret clear).
+    pub const PUMPKIN_PATH_1: usize = 7;
+    /// `$A850` Pumpkin Zone screen A path 2 (bit 0 set on node $2F secret clear).
+    pub const PUMPKIN_PATH_2: usize = 8;
+    /// `$A851` Pumpkin Zone screen A gold coin (bit 7 = collected).
+    pub const GOLDEN_COIN_2: usize = 9;
     /// `$A853` Macro Zone path 0 (bit 0 gates the `$3C2E7` cursor move).
     pub const MACRO_PATH_0: usize = 11;
     /// `$A855` Macro Zone path 2 (bit 7 gates the `$3C2B8` A-move).
     pub const MACRO_PATH_2: usize = 13;
+    /// `$A858` Space Zone path 0 (bit 0 set on secret clear, node 67).
+    pub const SPACE_PATH_0: usize = 16;
+    /// `$A85E` Tree Zone screen B path 1 (bit 0 set on secret clear).
+    pub const TREE_B_PATH_1: usize = 22;
+    /// `$A865` Mario Zone gold coin (bit 7 = collected).
+    pub const GOLDEN_COIN_6: usize = 29;
     /// `$A86B` Macro gate — set when node `$6A` completes.
     pub const GATE_MACRO: usize = 35;
     /// `$A86D` Mario-Zone gate — set when node `$66` completes.
@@ -120,6 +134,8 @@ pub mod progress_offset {
     pub const GATE_PUMPKIN_B: usize = 38;
     /// `$A86F` Pumpkin-Zone gate C — set when node `$7A` completes.
     pub const GATE_PUMPKIN_C: usize = 39;
+    /// `$A871` Space Zone gate — read-only census.
+    pub const GATE_SPACE: usize = 41;
 }
 
 /// The two parallel node tables, as `sml2-extract` writes them.
