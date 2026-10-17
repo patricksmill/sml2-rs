@@ -83,60 +83,78 @@ where
                 FallWalkerEffect::Falling
             }
         }
-        FallWalkerState::WalkLeft => {
-            if context.frame.every(2) {
-                actor.position.move_x(-1);
-                if world.probe_left_wall(actor) {
-                    actor.state = FallWalkerState::WalkRight.to_raw();
-                    actor.sprite_flip.toggle_horizontal();
-                    FallWalkerEffect::Turned {
-                        state: FallWalkerState::WalkRight,
-                    }
-                } else {
-                    FallWalkerEffect::Moved {
-                        state: FallWalkerState::WalkLeft,
-                    }
+        FallWalkerState::WalkLeft | FallWalkerState::WalkRight => {
+            patrol(actor, context.frame, world).unwrap_or(FallWalkerEffect::None)
+        }
+    }
+}
+
+/// Shared `$582FB`/`$5831A` patrol body, also entered directly by anims 65/66.
+///
+/// Even frames move one pixel and probe the leading wall (turning on contact);
+/// odd frames probe the ground and reverse at a ledge. The caller owns the
+/// sprite cadence: `$582D1`/`$594EB` run `$5B585`, while anims 65/66 run
+/// `$5B511`. Returns `None` for a state outside the patrol pair.
+pub(super) fn patrol<W>(
+    actor: &mut Actor,
+    frame: FrameTick,
+    world: &mut W,
+) -> Option<FallWalkerEffect>
+where
+    W: FallWalkerWorld,
+{
+    match FallWalkerState::from_raw(actor.state) {
+        FallWalkerState::WalkLeft => Some(if frame.every(2) {
+            actor.position.move_x(-1);
+            if world.probe_left_wall(actor) {
+                actor.state = FallWalkerState::WalkRight.to_raw();
+                actor.sprite_flip.toggle_horizontal();
+                FallWalkerEffect::Turned {
+                    state: FallWalkerState::WalkRight,
                 }
             } else {
-                // Odd frame: ledge reverse
-                if !world.probe_ground(actor) {
-                    actor.state = FallWalkerState::WalkRight.to_raw();
-                    actor.sprite_flip.toggle_horizontal();
-                    FallWalkerEffect::LedgeReversed {
-                        state: FallWalkerState::WalkRight,
-                    }
-                } else {
-                    FallWalkerEffect::None
+                FallWalkerEffect::Moved {
+                    state: FallWalkerState::WalkLeft,
                 }
             }
-        }
-        FallWalkerState::WalkRight => {
-            if context.frame.every(2) {
-                actor.position.move_x(1);
-                if world.probe_right_wall(actor) {
-                    actor.state = FallWalkerState::WalkLeft.to_raw();
-                    actor.sprite_flip.toggle_horizontal();
-                    FallWalkerEffect::Turned {
-                        state: FallWalkerState::WalkLeft,
-                    }
-                } else {
-                    FallWalkerEffect::Moved {
-                        state: FallWalkerState::WalkRight,
-                    }
+        } else {
+            // Odd frame: ledge reverse
+            if !world.probe_ground(actor) {
+                actor.state = FallWalkerState::WalkRight.to_raw();
+                actor.sprite_flip.toggle_horizontal();
+                FallWalkerEffect::LedgeReversed {
+                    state: FallWalkerState::WalkRight,
                 }
             } else {
-                // Odd frame: ledge reverse
-                if !world.probe_ground(actor) {
-                    actor.state = FallWalkerState::WalkLeft.to_raw();
-                    actor.sprite_flip.toggle_horizontal();
-                    FallWalkerEffect::LedgeReversed {
-                        state: FallWalkerState::WalkLeft,
-                    }
-                } else {
-                    FallWalkerEffect::None
+                FallWalkerEffect::None
+            }
+        }),
+        FallWalkerState::WalkRight => Some(if frame.every(2) {
+            actor.position.move_x(1);
+            if world.probe_right_wall(actor) {
+                actor.state = FallWalkerState::WalkLeft.to_raw();
+                actor.sprite_flip.toggle_horizontal();
+                FallWalkerEffect::Turned {
+                    state: FallWalkerState::WalkLeft,
+                }
+            } else {
+                FallWalkerEffect::Moved {
+                    state: FallWalkerState::WalkRight,
                 }
             }
-        }
+        } else {
+            // Odd frame: ledge reverse
+            if !world.probe_ground(actor) {
+                actor.state = FallWalkerState::WalkLeft.to_raw();
+                actor.sprite_flip.toggle_horizontal();
+                FallWalkerEffect::LedgeReversed {
+                    state: FallWalkerState::WalkLeft,
+                }
+            } else {
+                FallWalkerEffect::None
+            }
+        }),
+        FallWalkerState::Init => None,
     }
 }
 
