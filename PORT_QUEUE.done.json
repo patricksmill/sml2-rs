@@ -793,6 +793,54 @@
       ],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
       "status": "verified"
+    },
+    {
+      "id": "boss_wario_anim20",
+      "title": "Port Wario boss anim 20 (ROM $A8AB), including the $34/$38 camera-pan writes",
+      "asm_refs": [
+        "main.asm:$A8AB",
+        "main.asm:$A90E",
+        "main.asm:$A9EA",
+        "main.asm:$AA60"
+      ],
+      "dependencies": [
+        "boss_wario_child22",
+        "boss_wario_transition21",
+        "level_countdown_timer",
+        "boss_wario_phase1_exit_helper",
+        "boss_entry_object_scratch_reset"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "verified"
+    },
+    {
+      "id": "boss_wario_transition21",
+      "title": "Port Wario child anim21/24 and consume the boss-transition latch",
+      "asm_refs": [
+        "main.asm:$AAA5",
+        "main.asm:$AAA8",
+        "main.asm:$AACA"
+      ],
+      "dependencies": [
+        "hardware_divider_input",
+        "boss_entry_object_scratch_reset"
+      ],
+      "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
+      "status": "verified"
+    },
+    {
+      "id": "boss_wario_phase_handoff",
+      "title": "Connect Wario phase exits to scene state and dynamically created object streams",
+      "asm_refs": [
+        "main.asm:$A96D",
+        "main.asm:$AC55"
+      ],
+      "dependencies": [
+        "boss_wario_anim20",
+        "boss_wario_anim23"
+      ],
+      "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
+      "status": "verified"
     }
   ]
 }

@@ -33,54 +33,6 @@
       "detail": "Console (level 13, cam 3760/192, mario 3759/212, Right held): arm f28 (Mario frozen at world 3779, sPipeTravelDirection=$30), sSceneId=$10 at f52, scene ops f67-f70, Mario placed f75, fade set f68, fade 0 f420, parts act f421. Port: arm f29 at the same 3779 (the $188B walk-in arm is right), but sSceneId=$10 at f52, ops f53-f57, placed f92, fade f54 -> 0 at f444, parts f444. So the port's arm-to-placement is 63 frames vs the console's 47: 23 frames of pipe_dir = 3 slide plus a 40-frame camera transition. The console's ops run *inside* the travel (sPipeTravelDirection still $30 at f67-f70, 8 frames before the placement), so the VM is not gated on 'is Mario travelling': that was tried and reverted (it runs the $2x arm after the placement and lands Mario at 1308 instead of 1561). The ROM's travelling sub-phase ends before sPipeTravelDirection clears, and that is the thing to model. Also still true: PlayerSim::step's sFadeTimer decrement is skipped on travel frames, which is only correct while no scene has armed a fade before a travel."
     },
     {
-      "id": "boss_wario_anim20",
-      "title": "Port Wario boss anim 20 (ROM $A8AB), including the $34/$38 camera-pan writes",
-      "asm_refs": [
-        "main.asm:$A8AB",
-        "main.asm:$A90E",
-        "main.asm:$A9EA",
-        "main.asm:$AA60"
-      ],
-      "dependencies": [
-        "boss_wario_child22",
-        "boss_wario_transition21",
-        "level_countdown_timer",
-        "boss_wario_phase1_exit_helper",
-        "boss_entry_object_scratch_reset"
-      ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-      "status": "pending"
-    },
-    {
-      "id": "boss_wario_transition21",
-      "title": "Port Wario child anim21/24 and consume the boss-transition latch",
-      "asm_refs": [
-        "main.asm:$AAA5",
-        "main.asm:$AAA8",
-        "main.asm:$AACA"
-      ],
-      "dependencies": [
-        "hardware_divider_input",
-        "boss_entry_object_scratch_reset"
-      ],
-      "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
-      "status": "pending"
-    },
-    {
-      "id": "boss_wario_phase_handoff",
-      "title": "Connect Wario phase exits to scene state and dynamically created object streams",
-      "asm_refs": [
-        "main.asm:$A96D",
-        "main.asm:$AC55"
-      ],
-      "dependencies": [
-        "boss_wario_anim20",
-        "boss_wario_anim23"
-      ],
-      "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
-      "status": "pending"
-    },
-    {
       "id": "wario_arena_entry_enable",
       "title": "Enable def 6 (Wario, level 0) in boss_def_portable once the fight can finish",
       "asm_refs": [
