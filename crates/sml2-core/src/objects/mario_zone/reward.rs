@@ -29,7 +29,9 @@ impl ObjectSim {
             self.spawn_sprite = 0x0C;
             self.boss_spawn_child(st); // $B224
         }
-        self.boss_reward_sprite_helper(st); // $965E
+        if st.b[B_FSTATE] < 4 {
+            self.boss_reward_sprite_helper(st); // $965E
+        }
         self.handler_boss_anim4_5_states(st, tables, 0x966A);
     }
 
@@ -68,11 +70,17 @@ impl ObjectSim {
                 }
             }
             3 => {
-                // $9688: rise 4 px a frame until SCRY < 8 then level clear
+                // $9688: rise 4 px a frame until SCRY < 8 then level clear ($FF9B = 29)
                 self.scr_y_sub(st, 4);
                 if st.b[B_SCRY] < 8 {
                     self.boss_clear_flag = 1;
+                    st.b[B_FSTATE] = 4;
+                    self.done = 1;
+                    self.boss_clear_handoff = true;
                 }
+            }
+            4 => {
+                self.done = 1;
             }
             s => self.note_unported(table_base + (s as u32) * 2),
         }

@@ -264,12 +264,22 @@ fn anim4_spawns_anim5_and_chain_reaches_win() {
     assert_eq!(st.b[B_FSTATE], 3);
     assert_eq!(st.b[B_FLIP] & 0x40, 0x00, "flips again");
 
-    // Anim 4 state 3: rises 4 px per frame until SCRY < 8
+    // Anim 4 state 3: rises 4 px per frame until SCRY < 8 then transitions to state 4
     st.b[B_SCRY] = 10;
     obj.boss_clear_flag = 0;
+    obj.boss_clear_handoff = false;
     obj.handler_boss_anim4(&mut st, &t);
     assert_eq!(st.b[B_SCRY], 6);
+    assert_eq!(st.b[B_FSTATE], 4);
     assert_eq!(obj.boss_clear_flag, 1, "win flag armed at SCRY < 8");
+    assert!(obj.boss_clear_handoff, "level handoff armed at SCRY < 8");
+    assert_eq!(obj.done, 1);
+    // State 4 parks: subsequent frames do not rise or wrap
+    obj.done = 0;
+    obj.handler_boss_anim4(&mut st, &t);
+    assert_eq!(st.b[B_SCRY], 6);
+    assert_eq!(st.b[B_FSTATE], 4);
+    assert_eq!(obj.done, 1);
 }
 
 #[test]
@@ -299,56 +309,40 @@ fn pig3_crouches_then_leaps_high_and_lands_into_crouch() {
     let mut obj = ObjectSim::new(Vec::new(), 0);
     obj.configure(0);
     obj.boss_def_index = 2;
-    obj.boss_hits_remaining = 6; // full HP: speed = 1
+    obj.boss_hits_remaining = 6;
 
     let mut st = streamed_slot(0, 0, 0x20);
     st.b[B_DEF] = 12;
-    st.b[B_FSTATE] = 4; // landed into state 4 (moving left)
-    st.b[B_T28] = 8;    // 8-frame crouch
+    st.b[B_FSTATE] = 4;
+    st.b[B_T28] = 8;
     st.b[B_SCRX] = 0x60;
     st.b[B_SCRY] = 0x90;
 
-    // First 7 frames: crouched in pose 0x28
     for i in (1..=7).rev() {
         obj.handler_boss_def2_controller(&mut st, &layout, &t);
-        assert_eq!(st.b[B_T28], i as u8);
-        assert_eq!(st.b[B_SPRITE], 0x28, "crouching pose");
-        assert_eq!(st.b[B_SCRY], 0x90, "grounded");
+        assert_eq!((st.b[B_T28], st.b[B_SPRITE], st.b[B_SCRY]), (i as u8, 0x28, 0x90));
     }
-    // 8th call: B_T28 reaches 0, swaps to jump sprite 0x29
-    obj.fff0 = 1; // odd frame -> returns without moving
+    obj.fff0 = 1;
     obj.handler_boss_def2_controller(&mut st, &layout, &t);
-    assert_eq!(st.b[B_T28], 0);
-    assert_eq!(st.b[B_SPRITE], 0x29, "jump pose armed");
-    assert_eq!(st.b[B_SCRY], 0x90);
+    assert_eq!((st.b[B_T28], st.b[B_SPRITE], st.b[B_SCRY]), (0, 0x29, 0x90));
 
-    // On even frame: starts high ascent (step + 2)
     obj.fff0 = 2;
-    let initial_y = st.b[B_SCRY];
-    let initial_x = st.b[B_SCRX];
+    let (initial_x, initial_y) = (st.b[B_SCRX], st.b[B_SCRY]);
     obj.handler_boss_def2_controller(&mut st, &layout, &t);
-    assert_eq!(st.b[B_SCRX], initial_x - 1, "speed 1 leftward");
-    assert!(st.b[B_SCRY] < initial_y, "ascended upward");
+    assert_eq!(st.b[B_SCRX], initial_x - 1);
+    assert!(st.b[B_SCRY] < initial_y);
 
-    // Step through remaining ascent frames (14 more even frames)
     for _ in 0..14 {
         obj.fff0 = 4;
         obj.handler_boss_def2_controller(&mut st, &layout, &t);
     }
-    // Reached apex: phase reset to 0, T24 set to 1 (descent)
-    assert_eq!(st.b[B_T24], 1, "toggled to descent");
-    assert_eq!(st.b[B_PHASE], 0, "phase reset for descent");
+    assert_eq!((st.b[B_T24], st.b[B_PHASE]), (1, 0));
 
-    // Step through descent (15 even frames)
     for _ in 0..15 {
         obj.fff0 = 6;
         obj.handler_boss_def2_controller(&mut st, &layout, &t);
     }
-    // Landed!
-    assert_eq!(st.b[B_SCRY], 0x90, "landed at floor 0x90");
-    assert_eq!(st.b[B_T24], 0, "descent complete");
-    assert_eq!(st.b[B_T28], 8, "crouch reload on landing");
-    assert_eq!(obj.sfx1, 12, "landing sfx");
+    assert_eq!((st.b[B_SCRY], st.b[B_T24], st.b[B_T28], obj.sfx1), (0x90, 0, 8, 12));
 }
 
 #[test]
@@ -361,45 +355,30 @@ fn pig3_speed_escalates_and_bounces_between_walls() {
 
     let mut st = streamed_slot(0, 0, 0x29);
     st.b[B_DEF] = 12;
-    st.b[B_T28] = 0; // mid-air jump
 
-    // Hit 0 (6 hits left): speed = 4 - 3 = 1
-    obj.boss_hits_remaining = 6;
-    st.b[B_FSTATE] = 4; // left
-    st.b[B_SCRX] = 0x50;
-    obj.fff0 = 2;
-    obj.handler_boss_def2_controller(&mut st, &layout, &t);
-    assert_eq!(st.b[B_SCRX], 0x4F, "speed 1 at 6 hits");
+    // Hits: speed escalates (4 - hits/2)
+    for (hits, fff0, exp_x) in [(6, 2, 0x4F), (4, 4, 0x4E), (2, 6, 0x4D)] {
+        obj.boss_hits_remaining = hits;
+        st.b[B_FSTATE] = 4;
+        st.b[B_SCRX] = 0x50;
+        obj.fff0 = fff0;
+        obj.handler_boss_def2_controller(&mut st, &layout, &t);
+        assert_eq!(st.b[B_SCRX], exp_x);
+    }
 
-    // Hit 1 (4 hits left): speed = 4 - 2 = 2
-    obj.boss_hits_remaining = 4;
-    st.b[B_SCRX] = 0x50;
-    obj.fff0 = 4;
-    obj.handler_boss_def2_controller(&mut st, &layout, &t);
-    assert_eq!(st.b[B_SCRX], 0x4E, "speed 2 at 4 hits");
-
-    // Hit 2 (2 hits left): speed = 4 - 1 = 3
-    obj.boss_hits_remaining = 2;
-    st.b[B_SCRX] = 0x50;
-    obj.fff0 = 6;
-    obj.handler_boss_def2_controller(&mut st, &layout, &t);
-    assert_eq!(st.b[B_SCRX], 0x4D, "speed 3 at 2 hits");
-
-    // Wall bounce left: hitting < 0x10 flips to State 5 (moving right)
+    // Wall bounce left: < 0x10 flips to State 5 (moving right)
     st.b[B_FSTATE] = 4;
-    st.b[B_FLIP] = 0x20; // facing left
+    st.b[B_FLIP] = 0x20;
     st.b[B_SCRX] = 0x11;
     obj.fff0 = 8;
     obj.handler_boss_def2_controller(&mut st, &layout, &t);
-    assert_eq!(st.b[B_FSTATE], 5, "flipped to rightward state");
-    assert_eq!(st.b[B_FLIP], 0, "flipped facing right");
+    assert_eq!((st.b[B_FSTATE], st.b[B_FLIP]), (5, 0));
 
-    // Wall bounce right: hitting >= 0xA0 flips to State 4 (moving left)
+    // Wall bounce right: >= 0xA0 flips to State 4 (moving left)
     st.b[B_FSTATE] = 5;
     st.b[B_SCRX] = 0x9F;
     obj.fff0 = 10;
     obj.handler_boss_def2_controller(&mut st, &layout, &t);
-    assert_eq!(st.b[B_FSTATE], 4, "flipped to leftward state");
-    assert_eq!(st.b[B_FLIP], 0x20, "flipped facing left");
+    assert_eq!((st.b[B_FSTATE], st.b[B_FLIP]), (4, 0x20));
 }
 

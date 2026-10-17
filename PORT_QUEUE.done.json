@@ -702,6 +702,21 @@
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
       "status": "done",
       "detail": "anim 4 state 0: state=1, spawn staging anim $05/sprite $0C/attr $FFDD, call $B224 (the count went 1 -> 2 in the poke). $965E: $B38C sprite helper (FFF0 & 1 gate, B_ANIMFRAME cycle 1..5 with a $FFDD ^= $20 at 3), then the state table $966A = [$5629, $5670, $5688]: states 1/2 = the $71D6 (c=21, table $720E) / $718F (c=21, $71A3) descents with $FFDD ^= $40 at each transition; state 3 = $5688, rise 4 px a frame until SCRY < 8 then $FF9B = $1D. anim 5 state 0: 8 frames, then SCRY += $18 and state 1; its table $96BE = [$56C4, $56E1, $5688] = the two picker descents and the same $5688 win. Needs the $720E table ($B20E, 22 bytes) extracted - it is a window of the same $72xx profile blob as boss_picker_profile."
+    },
+    {
+      "id": "boss_clear_ending_handoff",
+      "title": "The boss-clear ending: $FF9B = $1F after $92C4's 640-frame fade (why the fight can't be finished)",
+      "asm_refs": [
+        "main.asm:$92C4",
+        "home.asm:~115",
+        "home.asm:$02AD (state $1F body)"
+      ],
+      "dependencies": [
+        "boss_fight_def2"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done",
+      "detail": "sBossHits ($AFC5) seeds 6 and drops 2 per stomp; at 0 the hit path's $92C4 sets sObjectRemoveMode = 1 and sFadeTimer = $0280. Poking exactly that on the console (remove_mode = 1, $A267/$A266 = $0280) took $FF9B to $1F with the fade counting down, and the port already models the fade - what is missing is the $1F body's overworld hand-off, so the port's clear fade expires into nothing. This, not anim $0D, is the 'you can't beat the boss' gap."
     }
   ]
 }

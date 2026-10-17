@@ -187,6 +187,7 @@ pub struct ObjectSim {
     pub sfx2: u8,
     pub music_request: Option<u8>,
     pub boss_clear_flag: u8,
+    pub boss_clear_handoff: bool,
     pub fade_timer_set: Option<u16>,
     /// Object-produced camera writes, consumed after the object pass.
     pub camera_pan_set: Option<u8>,
@@ -279,6 +280,7 @@ impl ObjectSim {
             sfx2: 0,
             music_request: None,
             boss_clear_flag: 0,
+            boss_clear_handoff: false,
             fade_timer_set: None,
             camera_pan_set: None,
             scene_phase_set: None,

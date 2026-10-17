@@ -96,21 +96,6 @@
       "detail": "Console (level 13, cam 3760/192, mario 3759/212, Right held): arm f28 (Mario frozen at world 3779, sPipeTravelDirection=$30), sSceneId=$10 at f52, scene ops f67-f70, Mario placed f75, fade set f68, fade 0 f420, parts act f421. Port: arm f29 at the same 3779 (the $188B walk-in arm is right), but sSceneId=$10 at f52, ops f53-f57, placed f92, fade f54 -> 0 at f444, parts f444. So the port's arm-to-placement is 63 frames vs the console's 47: 23 frames of pipe_dir = 3 slide plus a 40-frame camera transition. The console's ops run *inside* the travel (sPipeTravelDirection still $30 at f67-f70, 8 frames before the placement), so the VM is not gated on 'is Mario travelling': that was tried and reverted (it runs the $2x arm after the placement and lands Mario at 1308 instead of 1561). The ROM's travelling sub-phase ends before sPipeTravelDirection clears, and that is the thing to model. Also still true: PlayerSim::step's sFadeTimer decrement is skipped on travel frames, which is only correct while no scene has armed a fade before a travel."
     },
     {
-      "id": "boss_clear_ending_handoff",
-      "title": "The boss-clear ending: $FF9B = $1F after $92C4's 640-frame fade (why the fight can't be finished)",
-      "asm_refs": [
-        "main.asm:$92C4",
-        "home.asm:~115",
-        "home.asm:$02AD (state $1F body)"
-      ],
-      "dependencies": [
-        "boss_fight_def2"
-      ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-      "status": "pending",
-      "detail": "sBossHits ($AFC5) seeds 6 and drops 2 per stomp; at 0 the hit path's $92C4 sets sObjectRemoveMode = 1 and sFadeTimer = $0280. Poking exactly that on the console (remove_mode = 1, $A267/$A266 = $0280) took $FF9B to $1F with the fade counting down, and the port already models the fade - what is missing is the $1F body's overworld hand-off, so the port's clear fade expires into nothing. This, not anim $0D, is the 'you can't beat the boss' gap."
-    },
-    {
       "id": "boss_wario_anim20",
       "title": "Port Wario boss anim 20 (ROM $A8AB), including the $34/$38 camera-pan writes",
       "asm_refs": [

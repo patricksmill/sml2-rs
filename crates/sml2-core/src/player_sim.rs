@@ -857,9 +857,6 @@ impl PlayerSim {
             return None;
         }
         self.exit_bell_probe(layout);
-        // The boss clear only sets the level-clear phase, so it returns nothing
-        // here: `environment_probe`'s `Some` is a hazard interaction.
-        self.boss_clear_probe();
         None
     }
 
@@ -873,19 +870,6 @@ impl PlayerSim {
     /// the exit phase, which leaves the in-level loop exactly like the death
     /// fade's `$FF9B = 9` — arms the 192-frame fade, and clears
     /// `sSecretRouteFlag` and `sTileAnimConfig`. Returns true when it fired.
-    /// `$5E12`'s third term: while `sBossClearFlag` is set the frame diverts the
-    /// way the bell and a death do, so a finished fight runs the level clear —
-    /// and, with it, the level reload that clears `$0EB0`'s park.
-    fn boss_clear_probe(&mut self) -> bool {
-        if !self.boss_clear || self.exit_phase || self.dead != 0 {
-            return false;
-        }
-        self.music_request = 3;
-        self.exit_phase = true;
-        self.fade_timer = 192;
-        true
-    }
-
     fn exit_bell_probe(&mut self, layout: &LevelLayout) -> bool {
         let t = self.tile(layout, self.x.wrapping_add(16), self.y.wrapping_add(28));
         if t & 0xFE != 0x4A {
@@ -2494,6 +2478,46 @@ impl PlayerSim {
         if obj.boss_clear_flag != 0 {
             self.boss_clear = true;
         }
+        let boss_handoff = obj.boss_clear_handoff
+            || (self.boss_clear && self.fade_timer == 0 && obj.boss_def_index != 0);
+        if boss_handoff && !self.exit_completed {
+            obj.boss_clear_handoff = false;
+            self.music_request = 15;
+            if self.level_progress_flags & 0x80 == 0 {
+                self.level_tally = bcd_inc(self.level_tally);
+            }
+            self.tile_anim_config = 0;
+            const BOSS_COIN_OFFSETS: [usize; 25] = [
+                0, 0, 0, 0, 0, 5, 0, 0, 0, 9, 0, 0, 0, 29, 0, 0, 23, 0, 0, 17, 0, 0, 0, 14, 0,
+            ];
+            let level = if obj.level_id != 0 {
+                obj.level_id as usize
+            } else {
+                match self.map_node {
+                    0x20 => 5,
+                    0x2B => 9,
+                    0x53 => 13,
+                    0x49 => 16,
+                    0x3D => 19,
+                    0x35 => 23,
+                    _ => 0,
+                }
+            };
+            if level < BOSS_COIN_OFFSETS.len() {
+                let off = BOSS_COIN_OFFSETS[level];
+                if off != 0 {
+                    if let Some(p) = self.level_progress.get_mut(off) {
+                        *p |= 0x80;
+                    }
+                    self.golden_coin_flags = self.golden_coin_flags();
+                }
+            }
+            if self.golden_coin_count() == 6 {
+                self.music_request = 26;
+            }
+            self.exit_phase = true;
+            self.exit_completed = true;
+        }
         // The `$8000` dispatcher gate reads `sMarioDead`, and the interaction
         // pass writes it back (15 on a harmful hit).
         if self.dead == 0 && obj.mario_dead != 0 {
@@ -2758,27 +2782,6 @@ impl PlayerSim {
 /// Fast unit coverage for the coin touch, the level-map overlay and the BCD
 /// credit — the semantics the `traj16` replay verifies against the console,
 /// pinned here so a regression fails in `cargo test` without PyBoy.
-    /// `$5E12`'s third term (`main.asm:1307`): `sBossClearFlag` diverts the
-    /// frame into the level clear, exactly as the bell and a death do — which is
-    /// what ends the level and clears `$0EB0`'s park.
-    #[test]
-    fn the_boss_clear_flag_runs_the_level_clear() {
-        let layout = crate::level::LevelLayout::from_bytes(&[0x60; crate::level::LAYOUT_SIZE]).unwrap();
-        let mut sim = PlayerSim::new();
-        sim.boss_clear = true;
-        assert!(!sim.exit_phase);
-        sim.environment_probe(&layout);
-        assert!(sim.exit_phase, "the level-clear phase");
-        assert_eq!(sim.fade_timer, 192);
-        assert_eq!(sim.music_request, 3);
-        // Idempotent, and a death takes precedence.
-        let mut sim = PlayerSim::new();
-        sim.boss_clear = true;
-        sim.dead = 15;
-        sim.environment_probe(&layout);
-        assert!(!sim.exit_phase, "a death owns the frame");
-    }
-
     /// The flag reaches the sim from the object pass the way the sfx/fade bytes
     /// do (`$9285` -> `$A2E3` -> this).
     #[test]
@@ -2789,6 +2792,10 @@ impl PlayerSim {
         sim.apply_object_result(&mut obj, false);
         assert!(sim.boss_clear);
     }
+
+#[cfg(test)]
+#[path = "player_boss_clear_tests.rs"]
+mod boss_clear_tests;
 
 #[cfg(test)]
 mod tests {
