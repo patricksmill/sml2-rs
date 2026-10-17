@@ -125,6 +125,7 @@ mod tests;
 mod walkers;
 mod wario_child22;
 mod wario_child25;
+mod wario_child_fall;
 mod wario_phase1;
 mod wario20;
 #[cfg(test)]
