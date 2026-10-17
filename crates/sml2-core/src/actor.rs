@@ -330,6 +330,18 @@ impl Actor {
         Ok(step)
     }
 
+    /// ROM `$B2EF/$B302`: alternate the low sprite bit at the chosen cadence.
+    pub fn animate_two_frame_toggle(&mut self, frame: FrameTick, period: u64) {
+        self.animate_sprite_blink(frame, period, 1);
+    }
+
+    /// ROM `$B321` uses mask `$1F`; only the sprite changes on cadence ticks.
+    pub fn animate_sprite_blink(&mut self, frame: FrameTick, period: u64, sprite_mask: u8) {
+        if frame.every(period) {
+            self.sprite ^= sprite_mask;
+        }
+    }
+
     /// ROM `$B339`: advance before applying the four-step sprite bob.
     /// Only equality with four resets the phase; byte overflow also reaches zero.
     /// An invalid table index leaves the advanced phase and the unchanged sprite.

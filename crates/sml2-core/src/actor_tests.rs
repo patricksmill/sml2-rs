@@ -253,3 +253,87 @@ fn four_step_bob_reports_invalid_advanced_index_without_inventing_delta() {
         assert_eq!(actor.to_raw_slot(), slot);
     }
 }
+
+#[test]
+fn sprite_alternation_matches_literal_rom_sprites_at_every_frame_byte() {
+    // Source XOR literals: $01 at $B304 and $1F at $B328.
+    for (sprite, toggle_sprite, blink_sprite) in [
+        (0x00, 0x01, 0x1F),
+        (0x01, 0x00, 0x1E),
+        (0x1F, 0x1E, 0x00),
+        (0x7F, 0x7E, 0x60),
+        (0x80, 0x81, 0x9F),
+        (0xFE, 0xFF, 0xE1),
+        (0xFF, 0xFE, 0xE0),
+    ] {
+        for frame in 0..=255 {
+            let mut slot = std::array::from_fn(|index| (index as u8).wrapping_mul(17));
+            slot[11] = sprite;
+            let original = Actor::from_raw_slot(&slot);
+            let mut toggle = original;
+            toggle.animate_two_frame_toggle(FrameTick(frame), 8);
+            let mut expected = slot;
+            if frame & 7 == 0 {
+                expected[11] = toggle_sprite;
+            }
+            assert_eq!(toggle.to_raw_slot(), expected, "toggle frame {frame}");
+
+            let mut blink = original;
+            blink.animate_sprite_blink(FrameTick(frame), 8, 31);
+            expected[11] = if frame & 7 == 0 { blink_sprite } else { sprite };
+            assert_eq!(blink.to_raw_slot(), expected, "blink frame {frame}");
+        }
+    }
+}
+
+#[test]
+fn sprite_alternation_updates_native_state_and_continues_across_frame_wrap() {
+    let original = Actor {
+        sprite: 0xFF,
+        state: 7,
+        animation_frame: 0xFE,
+        timer: 0xA5,
+        position: Position { x: 0xFFFF, y: 0 },
+        ..Actor::default()
+    };
+    let mut actor = original;
+    actor.animate_two_frame_toggle(FrameTick(248), 8);
+    assert_eq!(
+        actor,
+        Actor {
+            sprite: 0xFE,
+            ..original
+        }
+    );
+    actor.animate_two_frame_toggle(FrameTick(255), 8);
+    assert_eq!(
+        actor,
+        Actor {
+            sprite: 0xFE,
+            ..original
+        }
+    );
+    actor.animate_two_frame_toggle(FrameTick(256), 8);
+    assert_eq!(actor, original);
+    actor.animate_sprite_blink(FrameTick(264), 8, 31);
+    assert_eq!(
+        actor,
+        Actor {
+            sprite: 0xE0,
+            ..original
+        }
+    );
+    actor.animate_sprite_blink(FrameTick(272), 8, 31);
+    assert_eq!(actor, original);
+}
+
+#[test]
+fn sprite_alternation_accepts_native_period_and_mask() {
+    let mut actor = Actor::default();
+    actor.animate_sprite_blink(FrameTick(257), 3, 0x80);
+    assert_eq!(actor.sprite, 0);
+    actor.animate_sprite_blink(FrameTick(258), 3, 0x80);
+    assert_eq!(actor.sprite, 0x80);
+    actor.animate_two_frame_toggle(FrameTick(261), 3);
+    assert_eq!(actor.sprite, 0x81);
+}
