@@ -191,6 +191,12 @@ pub struct MotionProfileError {
     pub profile_len: usize,
 }
 
+/// An incremented animation phase outside the source's four-entry table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AnimationFrameError {
+    pub frame: u8,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Actor {
     pub position: Position,
@@ -315,6 +321,28 @@ impl Actor {
             self.motion_phase = self.motion_phase.wrapping_add(1);
         }
         Ok(step)
+    }
+
+    /// ROM `$B339`: advance before applying the four-step sprite bob.
+    /// Only equality with four resets the phase; byte overflow also reaches zero.
+    /// An invalid table index leaves the advanced phase and the unchanged sprite.
+    pub fn animate_four_step_bob(&mut self, frame: FrameTick) -> Result<(), AnimationFrameError> {
+        if !frame.every(4) {
+            return Ok(());
+        }
+        self.animation_frame = self.animation_frame.wrapping_add(1);
+        if self.animation_frame == 4 {
+            self.animation_frame = 0;
+        }
+        // ROM `$B356..$B359`: FE 01 FF 02.
+        const DELTAS: [i8; 4] = [-2, 1, -1, 2];
+        let delta = DELTAS
+            .get(usize::from(self.animation_frame))
+            .ok_or(AnimationFrameError {
+                frame: self.animation_frame,
+            })?;
+        self.sprite = self.sprite.wrapping_add_signed(*delta);
+        Ok(())
     }
 
     pub fn move_screen_horizontally(&mut self, distance: u8) {

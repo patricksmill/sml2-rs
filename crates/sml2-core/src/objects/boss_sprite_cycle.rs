@@ -1,28 +1,32 @@
 //! Bank 2 `$7339` sprite cycle shared by the Wario handlers.
 
-use super::{ObjectSim, Staging, B_ANIMFRAME, B_SPRITE};
-
-/// ROM `$B356..$B359` (CPU `$7356..$7359`).
-const SPRITE_DELTAS: [u8; 4] = [0xFE, 0x01, 0xFF, 0x02];
+use super::{ObjectSim, Staging};
+use crate::actor::{Actor, FrameTick};
 
 impl ObjectSim {
     /// `$B339`: on every fourth frame, advance the cycle and add its sprite delta.
     /// The caller supplies the ROM's reachable cycle index, `B_ANIMFRAME < 4`.
     pub(super) fn boss_sprite_cycle_b339(&self, s: &mut Staging) {
-        if self.fff0 & 3 != 0 {
-            return;
-        }
-        s.b[B_ANIMFRAME] = s.b[B_ANIMFRAME].wrapping_add(1);
-        if s.b[B_ANIMFRAME] == 4 {
-            s.b[B_ANIMFRAME] = 0;
-        }
-        s.b[B_SPRITE] = s.b[B_SPRITE].wrapping_add(SPRITE_DELTAS[s.b[B_ANIMFRAME] as usize]);
+        let mut actor = Actor::from_raw_slot(&s.b);
+        let result = actor.animate_four_step_bob(FrameTick(u64::from(self.fff0)));
+        s.b = actor.to_raw_slot();
+        result.expect("boss sprite cycle index must address the four-entry ROM table");
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::objects::{B_ANIMFRAME, B_SPRITE};
+
+    #[test]
+    #[should_panic(expected = "boss sprite cycle index must address the four-entry ROM table")]
+    fn helper_0x0b339_invalid_index_retains_panic_contract() {
+        let sim = ObjectSim::new(vec![], 0);
+        let mut s = Staging::default();
+        s.b[B_ANIMFRAME] = 4;
+        sim.boss_sprite_cycle_b339(&mut s);
+    }
 
     #[test]
     fn helper_0x0b339_frame_gate_preserves_staging() {

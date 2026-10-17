@@ -200,3 +200,56 @@ fn malformed_motion_profiles_report_error_without_changing_state() {
     );
     assert_eq!(actor.motion_phase, 2);
 }
+
+#[test]
+fn four_step_bob_gates_and_preserves_unrelated_slot_bytes() {
+    for frame in 0..=257 {
+        let mut slot = [0xA5; 32];
+        slot[26] = 0;
+        let mut actor = Actor::from_raw_slot(&slot);
+        assert_eq!(actor.animate_four_step_bob(FrameTick(frame)), Ok(()));
+        if frame % 4 == 0 {
+            slot[26] = 1;
+            slot[11] = 0xA6;
+        }
+        assert_eq!(actor.to_raw_slot(), slot, "frame {frame}");
+    }
+}
+
+#[test]
+fn four_step_bob_advances_before_indexing_and_wraps_sprite_both_ways() {
+    // Literal ROM deltas are indexed after increment: +1, -1, +2, -2.
+    for (phase, sprite, next_phase, next_sprite) in [
+        (0, 0xFF, 1, 0),
+        (1, 0, 2, 0xFF),
+        (2, 0xFF, 3, 1),
+        (3, 0, 0, 0xFE),
+        (255, 0, 0, 0xFE),
+    ] {
+        let mut slot = [0xA5; 32];
+        slot[26] = phase;
+        slot[11] = sprite;
+        let mut actor = Actor::from_raw_slot(&slot);
+        assert_eq!(actor.animate_four_step_bob(FrameTick(256)), Ok(()));
+        slot[26] = next_phase;
+        slot[11] = next_sprite;
+        assert_eq!(actor.to_raw_slot(), slot);
+    }
+}
+
+#[test]
+fn four_step_bob_reports_invalid_advanced_index_without_inventing_delta() {
+    for phase in 4..=254 {
+        let mut slot = [0xA5; 32];
+        slot[26] = phase;
+        let mut actor = Actor::from_raw_slot(&slot);
+        assert_eq!(actor.animate_four_step_bob(FrameTick(1)), Ok(()));
+        assert_eq!(actor.to_raw_slot(), slot);
+        assert_eq!(
+            actor.animate_four_step_bob(FrameTick(4)),
+            Err(AnimationFrameError { frame: phase + 1 })
+        );
+        slot[26] = phase + 1;
+        assert_eq!(actor.to_raw_slot(), slot);
+    }
+}
