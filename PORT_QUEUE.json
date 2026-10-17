@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "4 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "3 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "remaining_handler_classes",
@@ -24,19 +24,6 @@
     "native_actor_boundary"
    ],
    "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
-   "status": "pending"
-  },
-  {
-   "id": "wario_ending_sequence",
-   "title": "Port complete ending sequence and credits from state19 through original completion",
-   "asm_refs": [
-    "main.asm:$6800F"
-   ],
-   "dependencies": [
-    "wario_ending_entry",
-    "native_sound_driver"
-   ],
-   "verification_gate": "All source state targets, display/audio timing, normal runtime entry and final completion scenarios",
    "status": "pending"
   },
   {

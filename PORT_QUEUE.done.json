@@ -921,6 +921,19 @@
    "dependencies": [],
    "verification_gate": "Source-derived native channel/stream state, ordered audio effects, deterministic output and normal runtime consumption",
    "status": "done"
+  },
+  {
+   "id": "wario_ending_sequence",
+   "title": "Port complete ending sequence and credits from state19 through original completion",
+   "asm_refs": [
+    "main.asm:$6800F"
+   ],
+   "dependencies": [
+    "wario_ending_entry",
+    "native_sound_driver"
+   ],
+   "verification_gate": "All source state targets, display/audio timing, normal runtime entry and final completion scenarios",
+   "status": "done"
   }
  ]
 }
