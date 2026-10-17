@@ -77,7 +77,6 @@ impl ObjectSim {
                         return;
                     }
                 }
-                self.boss_bob(st, tables);
             }
             s => self.note_unported(0x9E5C + (s as u32) * 2),
         }

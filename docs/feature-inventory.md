@@ -6,7 +6,7 @@ acceptance follow [the completion workflow](plans/2026-10-15-rust-completion-wor
 
 Wario forms, children, phase exits, adapters and tests live in
 [`objects/wario/`](../crates/sml2-core/src/objects/wario/mod.rs). Mario Zone
-boss parts, controller, spawner, child, and tests live in
+boss parts, controller, spawner, child, reward chain (anims 4 & 5), and tests live in
 [`objects/mario_zone/`](../crates/sml2-core/src/objects/mario_zone/mod.rs). Shared boss
 behavior remains in the parent object module.
 

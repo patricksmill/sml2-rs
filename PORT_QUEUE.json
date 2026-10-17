@@ -1,227 +1,212 @@
 {
- "active_milestone": "mechanics_all_levels",
- "milestone_note": "13 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
- "queue": [
-  {
-   "id": "remaining_handler_classes",
-   "title": "The 86 unported handler classes behind the 32 levels' object streams",
-   "asm_refs": [
-    "main.asm:$58040",
-    "main.asm:$59C07"
-   ],
-   "dependencies": [
-    "per_level_handler_coverage",
-    "level_boot_route"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "pending"
-  },
-  {
-   "id": "moon_physics_remaining_arms",
-   "title": "The remaining sMoonPhysics readers: the bit-1 zone machinery, the flutter-vs-moon arms, the $2E7C shield and the bank-1 poses",
-   "asm_refs": [
-    "home.asm:$1BFF",
-    "home.asm:$14FA",
-    "home.asm:$1541",
-    "home.asm:$181C",
-    "home.asm:$2E7C",
-    "main.asm:$5354",
-    "main.asm:$53CF",
-    "main.asm:$54FB"
-   ],
-   "dependencies": [
-    "space_physics_seeding"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "pending"
-  },
-  {
-   "id": "map_zone_screen_loaders",
-   "title": "The zone screens the level->map hand-off selects ($3D0FF/$3D208/$3D371/$3D49F/$3D61F/$3D79A/$3D6EB/$3D880)",
-   "asm_refs": [
-    "main.asm:$3F04D",
-    "main.asm:$3F07E",
-    "main.asm:$3D0FF",
-    "main.asm:$3D208",
-    "main.asm:$3D371",
-    "main.asm:$3D49F",
-    "main.asm:$3D61F",
-    "main.asm:$3D79A",
-    "main.asm:$3D6EB",
-    "main.asm:$3D880"
-   ],
-   "dependencies": [
-    "map_handoff_3EF2B"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "pending"
-  },
-  {
-   "id": "camera_pan_timer",
-   "title": "Finish camera-pan timer producers and remaining flutter gate after shared draw timing is verified",
-   "asm_refs": [
-    "home.asm:$2062",
-    "main.asm:$54E9",
-    "main.asm:$C090",
-    "home.asm:$1090",
-    "home.asm:$160A",
-    "home.asm:$1701",
-    "main.asm:$A9EA",
-    "main.asm:$AA60",
-    "main.asm:$AD4E"
-   ],
-   "dependencies": [
-    "record_field_timing_audit",
-    "boss_wario_anim20",
-    "boss_wario_anim23",
-    "moon_physics_remaining_arms"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "pending"
-  },
-  {
-   "id": "boss_arena_phase_cascade",
-   "title": "Arena cascade is 24 frames late: the port's pipe entry spends 63 frames where the console spends 47",
-   "asm_refs": [
-    "home.asm:$20A4",
-    "home.asm:~115 (VBlank fade tick)",
-    "main.asm:$20EB",
-    "main.asm:$B14E"
-   ],
-   "dependencies": [
-    "boss_fight_def2"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "pending",
-   "detail": "Console (level 13, cam 3760/192, mario 3759/212, Right held): arm f28 (Mario frozen at world 3779, sPipeTravelDirection=$30), sSceneId=$10 at f52, scene ops f67-f70, Mario placed f75, fade set f68, fade 0 f420, parts act f421. Port: arm f29 at the same 3779 (the $188B walk-in arm is right), but sSceneId=$10 at f52, ops f53-f57, placed f92, fade f54 -> 0 at f444, parts f444. So the port's arm-to-placement is 63 frames vs the console's 47: 23 frames of pipe_dir = 3 slide plus a 40-frame camera transition. The console's ops run *inside* the travel (sPipeTravelDirection still $30 at f67-f70, 8 frames before the placement), so the VM is not gated on 'is Mario travelling': that was tried and reverted (it runs the $2x arm after the placement and lands Mario at 1308 instead of 1561). The ROM's travelling sub-phase ends before sPipeTravelDirection clears, and that is the thing to model. Also still true: PlayerSim::step's sFadeTimer decrement is skipped on travel frames, which is only correct while no scene has armed a fade before a travel."
-  },
-  {
-   "id": "boss_clear_ending_handoff",
-   "title": "The boss-clear ending: $FF9B = $1F after $92C4's 640-frame fade (why the fight can't be finished)",
-   "asm_refs": [
-    "main.asm:$92C4",
-    "home.asm:~115",
-    "home.asm:$02AD (state $1F body)"
-   ],
-   "dependencies": [
-    "boss_fight_def2"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "pending",
-   "detail": "sBossHits ($AFC5) seeds 6 and drops 2 per stomp; at 0 the hit path's $92C4 sets sObjectRemoveMode = 1 and sFadeTimer = $0280. Poking exactly that on the console (remove_mode = 1, $A267/$A266 = $0280) took $FF9B to $1F with the fade counting down, and the port already models the fade - what is missing is the $1F body's overworld hand-off, so the port's clear fade expires into nothing. This, not anim $0D, is the 'you can't beat the boss' gap."
-  },
-  {
-   "id": "boss_anim_4_5_chain",
-   "title": "Boss anims 4/5 ($9642/$9698): the spawn chain that ends at $FF9B = $1D",
-   "asm_refs": [
-    "main.asm:$9642",
-    "main.asm:$9698",
-    "main.asm:$9688"
-   ],
-   "dependencies": [
-    "boss_child_anim_0d"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "pending",
-   "detail": "anim 4 state 0: state=1, spawn staging anim $05/sprite $0C/attr $FFDD, call $B224 (the count went 1 -> 2 in the poke). $965E: $B38C sprite helper (FFF0 & 1 gate, B_ANIMFRAME cycle 1..5 with a $FFDD ^= $20 at 3), then the state table $966A = [$5629, $5670, $5688]: states 1/2 = the $71D6 (c=21, table $720E) / $718F (c=21, $71A3) descents with $FFDD ^= $40 at each transition; state 3 = $5688, rise 4 px a frame until SCRY < 8 then $FF9B = $1D. anim 5 state 0: 8 frames, then SCRY += $18 and state 1; its table $96BE = [$56C4, $56E1, $5688] = the two picker descents and the same $5688 win. Needs the $720E table ($B20E, 22 bytes) extracted - it is a window of the same $72xx profile blob as boss_picker_profile."
-  },
-  {
-   "id": "boss_wario_anim20",
-   "title": "Port Wario boss anim 20 (ROM $A8AB), including the $34/$38 camera-pan writes",
-   "asm_refs": [
-    "main.asm:$A8AB",
-    "main.asm:$A90E",
-    "main.asm:$A9EA",
-    "main.asm:$AA60"
-   ],
-   "dependencies": [
-    "boss_wario_child22",
-    "boss_wario_transition21",
-    "level_countdown_timer",
-    "boss_wario_phase1_exit_helper",
-    "boss_entry_object_scratch_reset"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "pending"
-  },
-  {
-   "id": "boss_wario_transition21",
-   "title": "Port Wario child anim21/24 and consume the boss-transition latch",
-   "asm_refs": [
-    "main.asm:$AAA5",
-    "main.asm:$AAA8",
-    "main.asm:$AACA"
-   ],
-   "dependencies": [
-    "hardware_divider_input",
-    "boss_entry_object_scratch_reset"
-   ],
-   "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
-   "status": "pending"
-  },
-  {
-   "id": "boss_wario_phase_handoff",
-   "title": "Connect Wario phase exits to scene state and dynamically created object streams",
-   "asm_refs": [
-    "main.asm:$A96D",
-    "main.asm:$AC55"
-   ],
-   "dependencies": [
-    "boss_wario_anim20",
-    "boss_wario_anim23"
-   ],
-   "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
-   "status": "pending"
-  },
-  {
-   "id": "hardware_divider_input",
-   "title": "Finish shared sampled DIV input through normal map and game-state callers; level/Wario input is verified",
-   "asm_refs": [
-    "main.asm:$3C13E",
-    "main.asm:$AB1D"
-   ],
-   "dependencies": [
-    "wario_divider_input"
-   ],
-   "verification_gate": "Source-derived input timing, both sampled parities, and native/replay input integration tests",
-   "status": "pending"
-  },
-  {
-   "id": "wario_arena_entry_enable",
-   "title": "Enable def 6 (Wario, level 0) in boss_def_portable once the fight can finish",
-   "asm_refs": [
-    "home.asm:$0EB0",
-    "main.asm:$8D9C"
-   ],
-   "dependencies": [
-    "boss_wario_anim23",
-    "boss_clear_ending_handoff"
-   ],
-   "verification_gate": "Play/replay entry takes the $F0 park, the fight reaches its level clear, and the clear reseeds sSceneState",
-   "status": "pending"
-  },
-  {
-   "id": "native_handler_migration",
-   "title": "Migrate remaining existing byte-oriented game handlers and shared behavior to native Actor/World methods",
-   "asm_refs": [],
-   "dependencies": [
-    "native_actor_boundary"
-   ],
-   "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
-   "status": "pending"
-  }
- ],
- "workflow_rules": {
-  "set": "2026-10-15",
-  "rules": [
-   "Canonical workflow: PORTING.md (supersedes long queue notes for how to work).",
-   "One ticket = one handler address OR one PORT_QUEUE id; max ~15k tokens context.",
-   "No new captures/traj*.json; unit-test slot bytes; sweep once per work package.",
-   "Cheap/flash models: scripts and scaffolding only \u2014 not handler logic."
+  "active_milestone": "mechanics_all_levels",
+  "milestone_note": "13 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+  "queue": [
+    {
+      "id": "remaining_handler_classes",
+      "title": "The 86 unported handler classes behind the 32 levels' object streams",
+      "asm_refs": [
+        "main.asm:$58040",
+        "main.asm:$59C07"
+      ],
+      "dependencies": [
+        "per_level_handler_coverage",
+        "level_boot_route"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "pending"
+    },
+    {
+      "id": "moon_physics_remaining_arms",
+      "title": "The remaining sMoonPhysics readers: the bit-1 zone machinery, the flutter-vs-moon arms, the $2E7C shield and the bank-1 poses",
+      "asm_refs": [
+        "home.asm:$1BFF",
+        "home.asm:$14FA",
+        "home.asm:$1541",
+        "home.asm:$181C",
+        "home.asm:$2E7C",
+        "main.asm:$5354",
+        "main.asm:$53CF",
+        "main.asm:$54FB"
+      ],
+      "dependencies": [
+        "space_physics_seeding"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "pending"
+    },
+    {
+      "id": "map_zone_screen_loaders",
+      "title": "The zone screens the level->map hand-off selects ($3D0FF/$3D208/$3D371/$3D49F/$3D61F/$3D79A/$3D6EB/$3D880)",
+      "asm_refs": [
+        "main.asm:$3F04D",
+        "main.asm:$3F07E",
+        "main.asm:$3D0FF",
+        "main.asm:$3D208",
+        "main.asm:$3D371",
+        "main.asm:$3D49F",
+        "main.asm:$3D61F",
+        "main.asm:$3D79A",
+        "main.asm:$3D6EB",
+        "main.asm:$3D880"
+      ],
+      "dependencies": [
+        "map_handoff_3EF2B"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "pending"
+    },
+    {
+      "id": "camera_pan_timer",
+      "title": "Finish camera-pan timer producers and remaining flutter gate after shared draw timing is verified",
+      "asm_refs": [
+        "home.asm:$2062",
+        "main.asm:$54E9",
+        "main.asm:$C090",
+        "home.asm:$1090",
+        "home.asm:$160A",
+        "home.asm:$1701",
+        "main.asm:$A9EA",
+        "main.asm:$AA60",
+        "main.asm:$AD4E"
+      ],
+      "dependencies": [
+        "record_field_timing_audit",
+        "boss_wario_anim20",
+        "boss_wario_anim23",
+        "moon_physics_remaining_arms"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "pending"
+    },
+    {
+      "id": "boss_arena_phase_cascade",
+      "title": "Arena cascade is 24 frames late: the port's pipe entry spends 63 frames where the console spends 47",
+      "asm_refs": [
+        "home.asm:$20A4",
+        "home.asm:~115 (VBlank fade tick)",
+        "main.asm:$20EB",
+        "main.asm:$B14E"
+      ],
+      "dependencies": [
+        "boss_fight_def2"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "pending",
+      "detail": "Console (level 13, cam 3760/192, mario 3759/212, Right held): arm f28 (Mario frozen at world 3779, sPipeTravelDirection=$30), sSceneId=$10 at f52, scene ops f67-f70, Mario placed f75, fade set f68, fade 0 f420, parts act f421. Port: arm f29 at the same 3779 (the $188B walk-in arm is right), but sSceneId=$10 at f52, ops f53-f57, placed f92, fade f54 -> 0 at f444, parts f444. So the port's arm-to-placement is 63 frames vs the console's 47: 23 frames of pipe_dir = 3 slide plus a 40-frame camera transition. The console's ops run *inside* the travel (sPipeTravelDirection still $30 at f67-f70, 8 frames before the placement), so the VM is not gated on 'is Mario travelling': that was tried and reverted (it runs the $2x arm after the placement and lands Mario at 1308 instead of 1561). The ROM's travelling sub-phase ends before sPipeTravelDirection clears, and that is the thing to model. Also still true: PlayerSim::step's sFadeTimer decrement is skipped on travel frames, which is only correct while no scene has armed a fade before a travel."
+    },
+    {
+      "id": "boss_clear_ending_handoff",
+      "title": "The boss-clear ending: $FF9B = $1F after $92C4's 640-frame fade (why the fight can't be finished)",
+      "asm_refs": [
+        "main.asm:$92C4",
+        "home.asm:~115",
+        "home.asm:$02AD (state $1F body)"
+      ],
+      "dependencies": [
+        "boss_fight_def2"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "pending",
+      "detail": "sBossHits ($AFC5) seeds 6 and drops 2 per stomp; at 0 the hit path's $92C4 sets sObjectRemoveMode = 1 and sFadeTimer = $0280. Poking exactly that on the console (remove_mode = 1, $A267/$A266 = $0280) took $FF9B to $1F with the fade counting down, and the port already models the fade - what is missing is the $1F body's overworld hand-off, so the port's clear fade expires into nothing. This, not anim $0D, is the 'you can't beat the boss' gap."
+    },
+    {
+      "id": "boss_wario_anim20",
+      "title": "Port Wario boss anim 20 (ROM $A8AB), including the $34/$38 camera-pan writes",
+      "asm_refs": [
+        "main.asm:$A8AB",
+        "main.asm:$A90E",
+        "main.asm:$A9EA",
+        "main.asm:$AA60"
+      ],
+      "dependencies": [
+        "boss_wario_child22",
+        "boss_wario_transition21",
+        "level_countdown_timer",
+        "boss_wario_phase1_exit_helper",
+        "boss_entry_object_scratch_reset"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "pending"
+    },
+    {
+      "id": "boss_wario_transition21",
+      "title": "Port Wario child anim21/24 and consume the boss-transition latch",
+      "asm_refs": [
+        "main.asm:$AAA5",
+        "main.asm:$AAA8",
+        "main.asm:$AACA"
+      ],
+      "dependencies": [
+        "hardware_divider_input",
+        "boss_entry_object_scratch_reset"
+      ],
+      "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
+      "status": "pending"
+    },
+    {
+      "id": "boss_wario_phase_handoff",
+      "title": "Connect Wario phase exits to scene state and dynamically created object streams",
+      "asm_refs": [
+        "main.asm:$A96D",
+        "main.asm:$AC55"
+      ],
+      "dependencies": [
+        "boss_wario_anim20",
+        "boss_wario_anim23"
+      ],
+      "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
+      "status": "pending"
+    },
+    {
+      "id": "hardware_divider_input",
+      "title": "Finish shared sampled DIV input through normal map and game-state callers; level/Wario input is verified",
+      "asm_refs": [
+        "main.asm:$3C13E",
+        "main.asm:$AB1D"
+      ],
+      "dependencies": [
+        "wario_divider_input"
+      ],
+      "verification_gate": "Source-derived input timing, both sampled parities, and native/replay input integration tests",
+      "status": "pending"
+    },
+    {
+      "id": "wario_arena_entry_enable",
+      "title": "Enable def 6 (Wario, level 0) in boss_def_portable once the fight can finish",
+      "asm_refs": [
+        "home.asm:$0EB0",
+        "main.asm:$8D9C"
+      ],
+      "dependencies": [
+        "boss_wario_anim23",
+        "boss_clear_ending_handoff"
+      ],
+      "verification_gate": "Play/replay entry takes the $F0 park, the fight reaches its level clear, and the clear reseeds sSceneState",
+      "status": "pending"
+    },
+    {
+      "id": "native_handler_migration",
+      "title": "Migrate remaining existing byte-oriented game handlers and shared behavior to native Actor/World methods",
+      "asm_refs": [],
+      "dependencies": [
+        "native_actor_boundary"
+      ],
+      "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
+      "status": "pending"
+    }
   ],
-  "gate_standard": "PORTING.md \u00a7 What \u201cdone\u201d means",
-  "policy": "PORTING.md",
-  "plan": "docs/plans/2026-10-15-port-finish-reset.md"
- },
- "archive_file": "PORT_QUEUE.done.json"
+  "workflow_rules": {
+    "set": "2026-10-15",
+    "rules": [
+      "Canonical workflow: PORTING.md (supersedes long queue notes for how to work).",
+      "One ticket = one handler address OR one PORT_QUEUE id; max ~15k tokens context.",
+      "No new captures/traj*.json; unit-test slot bytes; sweep once per work package.",
+      "Cheap/flash models: scripts and scaffolding only \u2014 not handler logic."
+    ],
+    "gate_standard": "PORTING.md \u00a7 What \u201cdone\u201d means",
+    "policy": "PORTING.md",
+    "plan": "docs/plans/2026-10-15-port-finish-reset.md"
+  },
+  "archive_file": "PORT_QUEUE.done.json"
 }

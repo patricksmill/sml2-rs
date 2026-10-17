@@ -3,8 +3,8 @@
 use crate::level::{LevelLayout, LAYOUT_SIZE};
 use crate::object::ObjectTables;
 use crate::objects::{
-    ObjectSim, Staging, B_DEF, B_FLAGS, B_FSTATE, B_PHASE, B_SCRX, B_SCRY, B_SPRITE, B_STATE,
-    B_T28, B_TYPE,
+    ObjectSim, Staging, B_DEF, B_FLAGS, B_FLIP, B_FSTATE, B_PHASE, B_SCRX, B_SCRY, B_SPRITE,
+    B_STATE, B_T24, B_T28, B_TYPE,
 };
 
 fn blank_layout() -> LevelLayout {
@@ -167,3 +167,128 @@ fn child_anim13_morphs_to_anim4_under_remove_mode_2() {
     assert_eq!(st.b[B_PHASE], 0);
     assert_eq!(st.b[B_TYPE], 0);
 }
+
+#[test]
+fn pig2_hops_left_preserves_state5_and_turns_at_boundary() {
+    let t = tables();
+    let layout = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.boss_def_index = 2;
+
+    let mut st = streamed_slot(0, 0, 0x20);
+    st.b[B_DEF] = 11;
+    st.b[B_STATE] = 6;
+    st.b[B_SCRX] = 0x88;
+    st.b[B_SCRY] = 0x8E;
+    st.b[B_T24] = 1;
+    st.b[B_FSTATE] = 3; // intro drop from chimney
+    // Step until descent completes at 0x90: lands into state 5 (facing left) with crouch pose
+    for _ in 0..20 {
+        obj.handler_boss_def2_pig2(&mut st, &layout, &t);
+        if st.b[B_SCRY] >= 0x90 {
+            break;
+        }
+    }
+    assert_eq!(st.b[B_SCRY], 0x90);
+    assert_eq!(st.b[B_FSTATE], 5, "lands into leftward hop state");
+    assert_eq!(st.b[B_FLIP], 0, "facing left");
+    assert_eq!(st.b[B_SPRITE], 0x28, "crouch pose");
+    assert_eq!(st.b[B_T28], 8, "crouch countdown reload");
+
+    // Spend the 8-frame crouch:
+    for i in (1..=7).rev() {
+        obj.handler_boss_def2_pig2(&mut st, &layout, &t);
+        assert_eq!(st.b[B_T28], i as u8);
+        assert_eq!(st.b[B_SPRITE], 0x28, "crouching pose");
+        assert_eq!(st.b[B_SCRY], 0x90, "stays grounded while crouching");
+    }
+    // Next call: B_T28 reaches 0, sprite swaps to 0x20, and jump begins
+    obj.handler_boss_def2_pig2(&mut st, &layout, &t);
+    assert_eq!(st.b[B_T28], 0);
+    assert_eq!(st.b[B_SPRITE], 0x20, "swaps to jump sprite");
+    assert_eq!(st.b[B_FSTATE], 5, "still in state 5 (moving left)");
+
+    // Complete the hop and verify that landing does NOT force state 4:
+    st.b[B_T24] = 1;
+    st.b[B_SCRY] = 0x8E;
+    for _ in 0..20 {
+        obj.handler_boss_def2_pig2(&mut st, &layout, &t);
+        if st.b[B_SCRY] >= 0x90 {
+            break;
+        }
+    }
+    assert_eq!(st.b[B_SCRY], 0x90);
+    assert_eq!(st.b[B_FSTATE], 5, "landing preserves state 5 (leftward)");
+    assert_eq!(st.b[B_FLIP], 0, "preserves leftward flip");
+    assert_eq!(st.b[B_T28], 8, "reloads crouch countdown for next hop");
+    assert_eq!(st.b[B_SPRITE], 0x28);
+
+    // When hitting left arena boundary, flips to state 4 (moving right):
+    st.b[B_SCRX] = 0x10;
+    st.b[B_T28] = 0; // in air
+    obj.handler_boss_def2_pig2(&mut st, &layout, &t);
+    assert_eq!(st.b[B_FSTATE], 4, "flipped to rightward hop");
+    assert_eq!(st.b[B_FLIP], 0x20, "flipped to right-facing");
+}
+
+#[test]
+fn anim4_spawns_anim5_and_chain_reaches_win() {
+    let t = tables();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.boss_def_count = 1;
+
+    let mut st = streamed_slot(0, 0, 9);
+    st.b[B_DEF] = 4;
+    st.b[B_FSTATE] = 0;
+    st.b[B_SCRY] = 0x90;
+    st.b[B_SCRX] = 0x58;
+
+    // State 0: spawns anim 5 and transitions to state 1
+    obj.handler_boss_anim4(&mut st, &t);
+    assert_eq!(st.b[B_FSTATE], 1);
+    assert_eq!(obj.boss_def_count, 2);
+    assert_eq!(obj.slots[2].b[B_DEF], 5);
+    assert_eq!(obj.slots[2].b[B_SPRITE], 0x0C);
+
+    // Anim 4 state 1: descent with b1d6
+    st.b[B_PHASE] = 21; // at cap
+    obj.handler_boss_anim4(&mut st, &t);
+    assert_eq!(st.b[B_FSTATE], 2);
+    assert_eq!(st.b[B_FLIP] & 0x40, 0x40, "flips at state transition");
+
+    // Anim 4 state 2: descent with profile 21
+    st.b[B_PHASE] = 21; // at cap
+    obj.handler_boss_anim4(&mut st, &t);
+    assert_eq!(st.b[B_FSTATE], 3);
+    assert_eq!(st.b[B_FLIP] & 0x40, 0x00, "flips again");
+
+    // Anim 4 state 3: rises 4 px per frame until SCRY < 8
+    st.b[B_SCRY] = 10;
+    obj.boss_clear_flag = 0;
+    obj.handler_boss_anim4(&mut st, &t);
+    assert_eq!(st.b[B_SCRY], 6);
+    assert_eq!(obj.boss_clear_flag, 1, "win flag armed at SCRY < 8");
+}
+
+#[test]
+fn anim5_waits_8_frames_then_descends() {
+    let t = tables();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    let mut st = streamed_slot(0, 0, 0x0C);
+    st.b[B_DEF] = 5;
+    st.b[B_FSTATE] = 0;
+    st.b[B_SCRY] = 0x50;
+
+    for _ in 0..7 {
+        obj.handler_boss_anim5(&mut st, &t);
+        assert_eq!(st.b[B_FSTATE], 0);
+        assert_eq!(st.b[B_SCRY], 0x50);
+    }
+    // 8th frame: SCRY += 0x18 and state 1
+    obj.handler_boss_anim5(&mut st, &t);
+    assert_eq!(st.b[B_SCRY], 0x68);
+    assert_eq!(st.b[B_FSTATE], 1);
+}
+

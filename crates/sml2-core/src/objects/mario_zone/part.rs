@@ -86,8 +86,10 @@ impl ObjectSim {
         st.b[B_SCRY] = 0x90;
         st.b[B_PHASE] = 0;
         st.b[B_T24] = 0;
-        st.b[B_FSTATE] = 4;
-        st.b[B_FLIP] = 0x20;
+        if st.b[B_FSTATE] <= 3 {
+            st.b[B_FSTATE] = 4;
+            st.b[B_FLIP] = 0x20;
+        }
     }
 
     /// `$9D3D`: a walk hit the end of the arena — flip the state bit and the
@@ -98,17 +100,14 @@ impl ObjectSim {
         self.sfx1 = st.b[B_DEF];
     }
 
-    /// `$9C36` (boss anim 10) and `$9D4F` (anim 11): the two parts of the
-    /// Mario Zone boss. Same hit body, same shared states; the walk states are
-    /// mirrored and anim 11's intro waits for the other part to clear.
-    pub(in crate::objects) fn handler_boss_def2_part(
+    /// `$9C36` (boss anim 10): Pig 1 (straw house) runs horizontally along the floor.
+    pub(in crate::objects) fn handler_boss_def2_pig1(
         &mut self,
         st: &mut Staging,
         layout: &LevelLayout,
         tables: &ObjectTables,
-        left: bool,
     ) {
-        let _ = (layout, tables);
+        let _ = layout;
         self.boss_damage_pass(st);
         if self.done != 0 {
             self.boss_hp_hit(st); // $9C3F
@@ -119,11 +118,58 @@ impl ObjectSim {
             if !self.fade_idle() {
                 return; // $B14E
             }
-            if !left {
-                self.boss_fade_done(st); // $9C8B
-                return;
+            self.boss_fade_done(st); // $9C8B
+            return;
+        }
+        match st.b[B_FSTATE] {
+            1 => self.boss_hit_stun(st), // $9CAC
+            2 => {
+                self.sprite_blink(st, 0x01, 0x01); // $B2F6
+                self.boss_morph_to_anim3(st); // $9443
             }
-            // $9D63: the left part waits until exactly one child is left.
+            3 => {
+                self.scr_x_add(st, 1);
+                self.boss_bob(st, tables); // $9CDF
+            }
+            4 | 5 => {
+                let hp = st.b[B_STATE] >> 1;
+                let b = 4u8.wrapping_sub(hp);
+                self.sprite_cycle8(st); // $B3D7
+                if st.b[B_FSTATE] == 4 {
+                    self.scr_x_add(st, b);
+                    if st.b[B_SCRX] >= 0xA0 {
+                        self.boss_end_flip(st); // $9D3D
+                    }
+                } else {
+                    self.scr_x_sub(st, b);
+                    if st.b[B_SCRX] < 0x10 {
+                        self.boss_end_flip(st);
+                    }
+                }
+            }
+            s => self.note_unported(0x9CA1 + (s as u32) * 2),
+        }
+    }
+
+    /// `$9D4F` (boss anim 11): Pig 2 (wood house) hops/bounces across the room.
+    pub(in crate::objects) fn handler_boss_def2_pig2(
+        &mut self,
+        st: &mut Staging,
+        layout: &LevelLayout,
+        tables: &ObjectTables,
+    ) {
+        let _ = layout;
+        self.boss_damage_pass(st);
+        if self.done != 0 {
+            self.boss_hp_hit(st); // $9C3F
+            return;
+        }
+        if st.b[B_FSTATE] == 0 {
+            self.flip_blink(st); // $B402
+            if !self.fade_idle() {
+                return; // $B14E
+            }
+            // $9D63: waits until exactly one child is left.
             if self.boss_def_count != 1 {
                 return;
             }
@@ -142,19 +188,21 @@ impl ObjectSim {
                 self.boss_morph_to_anim3(st); // $9443
             }
             3 => {
-                if left {
-                    self.scr_x_sub(st, 1);
-                    st.b[B_T28] = 8;
-                } else {
-                    self.scr_x_add(st, 1);
-                }
+                self.scr_x_sub(st, 1);
+                st.b[B_T28] = 8;
+                let before_y = st.b[B_SCRY];
                 self.boss_bob(st, tables); // $9CDF
+                if before_y < 0x90 && st.b[B_SCRY] == 0x90 {
+                    // Landed from right-side chimney; face and hop left.
+                    st.b[B_FSTATE] = 5;
+                    st.b[B_FLIP] = 0;
+                    st.b[B_SPRITE] = 0x28;
+                }
             }
             4 | 5 => {
                 let hp = st.b[B_STATE] >> 1;
                 let b = 4u8.wrapping_sub(hp);
-                // anim 11's state 4 spends a `$28` sprite countdown first.
-                if left && st.b[B_T28] != 0 {
+                if st.b[B_T28] != 0 {
                     st.b[B_SPRITE] = if st.b[B_T28] == 1 { 0x20 } else { 0x28 };
                     st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
                     if st.b[B_T28] != 0 {
@@ -162,20 +210,39 @@ impl ObjectSim {
                     }
                 }
                 if st.b[B_FSTATE] == 4 {
-                    self.sprite_cycle8(st); // $B3D7
                     self.scr_x_add(st, b);
                     if st.b[B_SCRX] >= 0xA0 {
-                        self.boss_end_flip(st); // $9D3D
+                        self.boss_end_flip(st);
                     }
                 } else {
-                    self.sprite_cycle8(st);
                     self.scr_x_sub(st, b);
                     if st.b[B_SCRX] < 0x10 {
                         self.boss_end_flip(st);
                     }
                 }
+                let before_y = st.b[B_SCRY];
+                self.boss_bob(st, tables);
+                if before_y < 0x90 && st.b[B_SCRY] == 0x90 {
+                    st.b[B_T28] = 8;
+                    st.b[B_SPRITE] = 0x28;
+                }
             }
-            s => self.note_unported(0x9CA1 + (s as u32) * 2),
+            s => self.note_unported(0x9D78 + (s as u32) * 2),
+        }
+    }
+
+    /// Shared router for def-2 parts: `left == false` -> Pig 1, `left == true` -> Pig 2.
+    pub(in crate::objects) fn handler_boss_def2_part(
+        &mut self,
+        st: &mut Staging,
+        layout: &LevelLayout,
+        tables: &ObjectTables,
+        left: bool,
+    ) {
+        if left {
+            self.handler_boss_def2_pig2(st, layout, tables);
+        } else {
+            self.handler_boss_def2_pig1(st, layout, tables);
         }
     }
 }

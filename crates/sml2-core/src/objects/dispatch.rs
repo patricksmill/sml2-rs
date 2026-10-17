@@ -54,6 +54,8 @@ impl ObjectSim {
             0x9D4F => self.handler_boss_def2_part(st, layout, tables, true),
             0x9E07 => self.handler_boss_def2_controller(st, layout, tables),
             0x9606 => self.handler_boss_def2(st),
+            0x9642 => self.handler_boss_anim4(st, tables),
+            0x9698 => self.handler_boss_anim5(st, tables),
             0x9EE3 => self.handler_boss_anim13(st),
             0xAB30 => self.boss_anim22(st),
             0xAB6E => self.boss_anim25(st),
