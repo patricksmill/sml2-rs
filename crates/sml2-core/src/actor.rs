@@ -7,6 +7,10 @@ pub use motion::RiseProfile;
 #[path = "actor_screen.rs"]
 mod screen;
 
+#[path = "actor_ending_animation.rs"]
+mod ending_animation;
+pub use ending_animation::EndingBobError;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Position {
     pub x: u16,
@@ -109,6 +113,9 @@ impl SpriteFlipFlags {
     }
     pub fn toggle_horizontal(&mut self) {
         self.0 ^= 0x20;
+    }
+    pub fn set_horizontal(&mut self, enabled: bool) {
+        self.0 = (self.0 & !0x20) | if enabled { 0x20 } else { 0 };
     }
     pub fn toggle_vertical(&mut self) {
         self.0 ^= 0x40;
