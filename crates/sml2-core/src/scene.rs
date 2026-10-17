@@ -435,11 +435,11 @@ impl SceneVm {
 /// ends in. Def 2 (the Mario Zone, level `$0D`) is anims 10/11/12 — all three
 /// ported; the others still report (`CameraSim::take_blocked_scene_load`).
 ///
-/// Def 6 (Wario, level 0) is next but NOT yet: the fight's next state after the
-/// phase-one exit is anim 23 (`$AB8B`, still no dispatch arm) and its ending is
-/// unported, so taking the park would freeze the camera with nothing to clear it.
+/// Def 2 (the Mario Zone, level `$0D`) and Def 6 (Wario, level `$18`) are ported:
+/// their fights end in a level clear / arena sequence which reseeds `sSceneState`
+/// and clears the `$F0` park.
 pub fn boss_def_portable(def_index: u8) -> bool {
-    matches!(def_index, 2)
+    matches!(def_index, 2 | 6)
 }
 
 pub fn boss_def_index(level_id: u8, phase: u8) -> u8 {

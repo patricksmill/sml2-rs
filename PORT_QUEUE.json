@@ -1,57 +1,43 @@
 {
-  "active_milestone": "mechanics_all_levels",
-  "milestone_note": "13 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
-  "queue": [
-    {
-      "id": "remaining_handler_classes",
-      "title": "The 86 unported handler classes behind the 32 levels' object streams",
-      "asm_refs": [
-        "main.asm:$58040",
-        "main.asm:$59C07"
-      ],
-      "dependencies": [
-        "per_level_handler_coverage",
-        "level_boot_route"
-      ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-      "status": "pending"
-    },
-    {
-      "id": "wario_arena_entry_enable",
-      "title": "Enable def 6 (Wario, level 0) in boss_def_portable once the fight can finish",
-      "asm_refs": [
-        "home.asm:$0EB0",
-        "main.asm:$8D9C"
-      ],
-      "dependencies": [
-        "boss_wario_anim23",
-        "boss_clear_ending_handoff"
-      ],
-      "verification_gate": "Play/replay entry takes the $F0 park, the fight reaches its level clear, and the clear reseeds sSceneState",
-      "status": "pending"
-    },
-    {
-      "id": "native_handler_migration",
-      "title": "Migrate remaining existing byte-oriented game handlers and shared behavior to native Actor/World methods",
-      "asm_refs": [],
-      "dependencies": [
-        "native_actor_boundary"
-      ],
-      "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
-      "status": "pending"
-    }
-  ],
-  "workflow_rules": {
-    "set": "2026-10-15",
-    "rules": [
-      "Canonical workflow: PORTING.md (supersedes long queue notes for how to work).",
-      "One ticket = one handler address OR one PORT_QUEUE id; max ~15k tokens context.",
-      "No new captures/traj*.json; unit-test slot bytes; sweep once per work package.",
-      "Cheap/flash models: scripts and scaffolding only \u2014 not handler logic."
-    ],
-    "gate_standard": "PORTING.md \u00a7 What \u201cdone\u201d means",
-    "policy": "PORTING.md",
-    "plan": "docs/plans/2026-10-15-port-finish-reset.md"
+ "active_milestone": "mechanics_all_levels",
+ "milestone_note": "2 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "queue": [
+  {
+   "id": "remaining_handler_classes",
+   "title": "The 86 unported handler classes behind the 32 levels' object streams",
+   "asm_refs": [
+    "main.asm:$58040",
+    "main.asm:$59C07"
+   ],
+   "dependencies": [
+    "per_level_handler_coverage",
+    "level_boot_route"
+   ],
+   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+   "status": "pending"
   },
-  "archive_file": "PORT_QUEUE.done.json"
+  {
+   "id": "native_handler_migration",
+   "title": "Migrate remaining existing byte-oriented game handlers and shared behavior to native Actor/World methods",
+   "asm_refs": [],
+   "dependencies": [
+    "native_actor_boundary"
+   ],
+   "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
+   "status": "pending"
+  }
+ ],
+ "workflow_rules": {
+  "set": "2026-10-15",
+  "rules": [
+   "Canonical workflow: PORTING.md (supersedes long queue notes for how to work).",
+   "One ticket = one handler address OR one PORT_QUEUE id; max ~15k tokens context.",
+   "No new captures/traj*.json; unit-test slot bytes; sweep once per work package.",
+   "Cheap/flash models: scripts and scaffolding only \u2014 not handler logic."
+  ],
+  "gate_standard": "PORTING.md \u00a7 What \u201cdone\u201d means",
+  "policy": "PORTING.md",
+  "plan": "docs/plans/2026-10-15-port-finish-reset.md"
+ },
+ "archive_file": "PORT_QUEUE.done.json"
 }
