@@ -663,6 +663,16 @@
    "dependencies": [],
    "verification_gate": "Coordinate/flag/unknown-value preservation, native movement and shared motion tests; full core suite",
    "status": "done"
+  },
+  {
+   "id": "native_wario_child_migration",
+   "title": "Migrate Wario child21/24 to typed domain behavior through the actor boundary",
+   "asm_refs": [],
+   "dependencies": [
+    "native_actor_boundary"
+   ],
+   "verification_gate": "Existing ROM-derived byte tests and actual boss dispatch/producer-consumer paths; sensitivity; core/runtime and frozen sweep",
+   "status": "done"
   }
  ]
 }

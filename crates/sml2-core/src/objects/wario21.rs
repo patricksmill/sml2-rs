@@ -1,63 +1,115 @@
-//! Wario's moving child, ROM `$AAA5`, shared by boss animations 21 and 24.
+//! Wario's moving child, shared by boss animations 21 and 24.
 
-use super::*;
+use crate::actor::{Actor, ContactKind, Facing, FrameTick, MotionProfileError};
 
-impl ObjectSim {
-    pub(super) fn handler_wario21(&mut self, st: &mut Staging, tables: &ObjectTables) {
-        match st.b[B_FSTATE] {
-            0 => st.b[B_FSTATE] = 1,
-            1 => {
-                if self.fff0 & 3 == 0 {
-                    if st.b[B_T25] == 0 {
-                        self.scr_x_sub(st, 3);
-                    } else {
-                        self.scr_x_add(st, 3);
-                    }
-                    if st.b[B_SCRX] >= 0xB0 {
-                        st.b[B_T25] ^= 1;
-                    }
-                }
-                if self.boss_transition != 0 {
-                    self.boss_transition = 0;
-                    st.b[B_FSTATE] = 2;
-                    st.b[B_TYPE] = 0x40;
-                }
-            }
-            2 => {
-                self.boss_flash_b40e(st);
-                let (step, cap) = self.step_picker(st, &tables.boss_picker_profile, 36);
-                self.scr_y_add(st, step);
-                if st.b[B_PHASE] == cap {
-                    st.b[B_FLASH] = 0;
-                    st.b[B_PHASE] = 0;
-                    st.b[B_FSTATE] = 3;
-                }
-            }
-            3 => {
-                if self.fff0 & 7 != 0 {
-                    return;
-                }
-                st.b[B_SPRITE] = st.b[B_SPRITE].wrapping_add(1);
-                if st.b[B_SPRITE] != 0x63 {
-                    return;
-                }
-                st.b[B_SCRY] = 0x38;
-                st.b[B_SPRITE] = 0x60;
-                st.b[B_TYPE] = 0;
-                st.b[B_FSTATE] = 0;
-                st.b[B_T25] = 0;
-                if self.div & 1 != 0 {
-                    st.b[B_SCRX] = 0xA7;
-                } else {
-                    st.b[B_SCRX] = 0;
-                    st.b[B_T25] = 1;
-                }
-            }
-            _ => self.note_unported(0xAAA5),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+enum ChildState {
+    Initialize,
+    Patrol,
+    Falling,
+    Respawning,
+}
+
+impl TryFrom<u8> for ChildState {
+    type Error = ChildError;
+
+    fn try_from(state: u8) -> Result<Self, Self::Error> {
+        match state {
+            0 => Ok(Self::Initialize),
+            1 => Ok(Self::Patrol),
+            2 => Ok(Self::Falling),
+            3 => Ok(Self::Respawning),
+            other => Err(ChildError::UnsupportedState(other)),
         }
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum RespawnEdge {
+    Left,
+    Right,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ChildContext {
+    pub frame: FrameTick,
+    pub transition_pending: bool,
+    pub respawn_edge: RespawnEdge,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(super) struct ChildEffects {
+    pub consume_transition: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ChildError {
+    UnsupportedState(u8),
+    InvalidFallProfile(MotionProfileError),
+}
+
+pub(super) fn update_child(
+    actor: &mut Actor,
+    context: ChildContext,
+    fall_profile: &[u8],
+) -> Result<ChildEffects, ChildError> {
+    let mut effects = ChildEffects::default();
+    match ChildState::try_from(actor.state)? {
+        ChildState::Initialize => actor.state = ChildState::Patrol as u8,
+        ChildState::Patrol => {
+            if context.frame.every(4) {
+                actor.move_screen_horizontally(3);
+                if actor.screen.x >= 176 {
+                    actor.travel_direction.reverse();
+                }
+            }
+            if context.transition_pending {
+                actor.state = ChildState::Falling as u8;
+                actor.contact_kind = ContactKind::WARIO_CHILD;
+                effects.consume_transition = true;
+            }
+        }
+        ChildState::Falling => {
+            actor.flash.animate_palette(context.frame);
+            let distance = actor
+                .motion_step(fall_profile, 36)
+                .map_err(ChildError::InvalidFallProfile)?;
+            actor.screen.move_y(i16::from(distance));
+            if actor.motion_phase == 36 {
+                actor.flash.clear();
+                actor.motion_phase = 0;
+                actor.state = ChildState::Respawning as u8;
+            }
+        }
+        ChildState::Respawning if context.frame.every(8) => {
+            actor.sprite = actor.sprite.wrapping_add(1);
+            if actor.sprite == 99 {
+                actor.screen.y = 56;
+                actor.sprite = 96;
+                actor.contact_kind = ContactKind::NONE;
+                actor.state = ChildState::Initialize as u8;
+                actor.travel_direction = Facing::LEFT;
+                actor.screen.x = match context.respawn_edge {
+                    RespawnEdge::Left => {
+                        actor.travel_direction = Facing::RIGHT;
+                        0
+                    }
+                    RespawnEdge::Right => 167,
+                };
+            }
+        }
+        ChildState::Respawning => {}
+    }
+    Ok(effects)
+}
+
+// Preserve the existing byte-oriented fixtures at the compatibility boundary.
+#[cfg(test)]
+use super::*;
+#[cfg(test)]
+#[path = "wario21_native_tests.rs"]
+mod native_tests;
 #[cfg(test)]
 #[path = "wario21_tests.rs"]
 mod tests;

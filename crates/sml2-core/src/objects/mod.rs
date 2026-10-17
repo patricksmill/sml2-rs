@@ -115,6 +115,7 @@ mod handler_0x5b0d5;
 mod helpers;
 mod interaction;
 mod items;
+mod native_actor_adapter;
 mod scratch;
 mod shell;
 mod stream;
