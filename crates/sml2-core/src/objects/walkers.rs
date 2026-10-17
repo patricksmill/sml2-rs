@@ -245,37 +245,41 @@ impl ObjectSim {
         layout: &LevelLayout,
         tables: &ObjectTables,
     ) {
-        match st.b[B_FSTATE] {
-            // $4DE5: the countdown, then the shared move chain at $4DEE.
-            1 => {
-                if st.b[B_T28] != 0 {
-                    st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
-                    if st.b[B_T28] != 0 {
-                        return;
-                    }
-                }
-                let b = self.fall_step(st); // $7451: c = $15 / $7488
-                self.mv_y_add(st, b); // $3D3D
-                self.carry_mario(st, b); // $3CDF
-                self.m_ground_own(st, layout); // $3B40
-                if self.move_flags & 0x08 == 0 {
-                    return;
-                }
-                self.remove_object(st, tables); // $72D7
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        struct CarrierSimWorld<'a> {
+            sim: &'a mut ObjectSim,
+            st: &'a mut Staging,
+            layout: &'a LevelLayout,
+        }
+        impl<'a> carrier::CarrierWorld for CarrierSimWorld<'a> {
+            fn step_fall(&mut self, actor: &mut crate::actor::Actor) -> u8 {
+                let dy = self.sim.fall_step(self.st);
+                actor.motion_phase = self.st.b[B_PHASE];
+                dy
             }
-            // $4E04: wait until Mario stands on the platform.
-            2 => {
-                if st.b[B_FLAGS] & 0x08 == 0 {
-                    return;
-                }
-                st.b[B_FSTATE] = 1;
-                st.b[B_T28] = 0x1C;
+            fn probe_ground(&mut self, actor: &crate::actor::Actor) -> bool {
+                set_x(&mut self.st.b, actor.position.x);
+                set_y(&mut self.st.b, actor.position.y);
+                self.sim.m_ground_own(self.st, self.layout);
+                self.sim.move_flags & 0x08 != 0
             }
-            // $4DD1: the one-shot init.
-            _ => {
-                st.b[B_TYPE] = 0x20;
-                st.b[B_FSTATE] = 2;
+        }
+        let mut world = CarrierSimWorld {
+            sim: self,
+            st,
+            layout,
+        };
+        let effect = carrier::update(&mut actor, &mut world);
+        st.b = actor.to_raw_slot();
+        match effect {
+            carrier::CarrierEffect::Falling { carry_dy } => {
+                self.carry_mario(st, carry_dy);
             }
+            carrier::CarrierEffect::Despawn { carry_dy } => {
+                self.carry_mario(st, carry_dy);
+                self.remove_object(st, tables);
+            }
+            _ => {}
         }
     }
 

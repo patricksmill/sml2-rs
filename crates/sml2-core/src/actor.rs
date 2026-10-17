@@ -174,6 +174,9 @@ impl InteractionFlags {
     pub const fn star_defeat(self) -> bool {
         self.0 & 0x04 != 0
     }
+    pub const fn stood_on(self) -> bool {
+        self.0 & 0x08 != 0
+    }
     pub const fn touched(self) -> bool {
         self.0 & 0x10 != 0
     }
