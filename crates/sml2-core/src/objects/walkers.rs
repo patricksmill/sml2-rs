@@ -4,19 +4,47 @@ use super::*;
 
 impl ObjectSim {
     pub(super) fn handler_walker(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.sprite_toggle(st);
-        if st.b[B_FSTATE] == 0 {
-            // First run: face Mario, set flash + type, done.
-            self.face_mario(st);
-            st.b[B_FLASH] = 16;
-            st.b[B_TYPE] = 0x4E;
-            return;
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = walker::WalkerContext {
+            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            mario_ref_x: self.mario_ref_x,
+        };
+        struct WalkerSimWorld<'a> {
+            sim: &'a mut ObjectSim,
+            st: &'a mut Staging,
+            layout: &'a LevelLayout,
         }
-        // $58215: main loop, gated to even $FFF0.
-        if self.fff0 & 1 != 0 {
-            return;
+        impl<'a> walker::WalkerWorld for WalkerSimWorld<'a> {
+            fn probe_left_wall(&mut self, _actor: &crate::actor::Actor) -> bool {
+                self.sim.m_left_wall(self.st, self.layout);
+                self.sim.move_flags & 0x02 != 0
+            }
+            fn probe_right_wall(&mut self, _actor: &crate::actor::Actor) -> bool {
+                self.sim.m_right_wall(self.st, self.layout);
+                self.sim.move_flags & 0x01 != 0
+            }
+            fn probe_ground(&mut self, actor: &crate::actor::Actor) -> bool {
+                set_x(&mut self.st.b, actor.position.x);
+                set_y(&mut self.st.b, actor.position.y);
+                self.sim.m_ground_own(self.st, self.layout);
+                self.sim.move_flags & 0x08 != 0
+            }
+            fn step_fall(&mut self, actor: &mut crate::actor::Actor) -> u8 {
+                let dy = self.sim.fall_step(self.st);
+                actor.motion_phase = self.st.b[B_PHASE];
+                dy
+            }
         }
-        self.walker_state(st, layout, st.b[B_FSTATE]);
+        let mut world = WalkerSimWorld {
+            sim: self,
+            st,
+            layout,
+        };
+        let effect = walker::update(&mut actor, context, &mut world);
+        if let walker::WalkerEffect::Initialized { facing } = effect {
+            self.facing = facing;
+        }
+        st.b = actor.to_raw_slot();
     }
 
     pub(super) fn walker_state(&mut self, st: &mut Staging, layout: &LevelLayout, state: u8) {

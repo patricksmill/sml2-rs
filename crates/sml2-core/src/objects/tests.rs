@@ -3032,3 +3032,56 @@ fn the_carried_shell_is_defeated_by_a_hit_or_a_ceiling() {
     assert_eq!(st.b[B_STATE], 0, "$5B2D7 removal");
     assert_eq!(obj.action_latch, 0);
 }
+
+#[test]
+fn handler_walker_native_migration_preserves_raw_slot_bytes() {
+    let layout = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.mario_ref_x = 150;
+    obj.fff0 = 2; // even frame
+
+    // 1. Initial run: faces Mario (mario_ref_x > 100) -> state 2, flip 0x20, flash 16, type 0x4E
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 200);
+    st.b[B_FSTATE] = 0;
+    obj.handler_walker(&mut st, &layout);
+    assert_eq!(st.b[B_FSTATE], 2);
+    assert_eq!(st.b[B_FLIP], 0x20);
+    assert_eq!(st.b[B_FLASH], 16);
+    assert_eq!(st.b[B_TYPE], 0x4E);
+    assert_eq!(obj.facing, 1);
+
+    // 2. Initial run with Mario to the left -> state 1, flip 0
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.mario_ref_x = 50;
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 200);
+    st.b[B_FSTATE] = 0;
+    obj.handler_walker(&mut st, &layout);
+    assert_eq!(st.b[B_FSTATE], 1);
+    assert_eq!(st.b[B_FLIP], 0);
+    assert_eq!(st.b[B_FLASH], 16);
+    assert_eq!(st.b[B_TYPE], 0x4E);
+    assert_eq!(obj.facing, 0xFF);
+
+    // 3. Wall hit turns Walker
+    let mut layout_wall = blank_layout();
+    let col = (93 / 16) as usize;
+    let row = (189 / 16) as usize;
+    layout_wall.cells[row * 256 + col] = 0x20;
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.fff0 = 2;
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 200);
+    st.b[B_FSTATE] = 1; // WalkLeft
+    obj.handler_walker(&mut st, &layout_wall);
+    assert_eq!(st.b[B_FSTATE], 2, "turned right on wall");
+    assert_eq!(st.b[B_FLIP], 0x20);
+    assert_eq!(x_of(&st.b), 100, "did not move X on turn");
+}
