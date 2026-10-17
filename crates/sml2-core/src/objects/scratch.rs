@@ -58,6 +58,7 @@ impl ObjectSim {
         self.boss_transition = 0; // $AFCE
         self.ending_door_active = 0; // $AFCF
         self.boss_delay = 0; // $AFD0
+        self.saved_power_state = 0; // $AFD1
     }
 }
 
@@ -124,6 +125,7 @@ mod tests {
         sim.boss_transition = 1;
         sim.ending_door_active = 1;
         sim.boss_delay = 1;
+        sim.saved_power_state = 0xFE;
     }
 
     #[test]
@@ -185,6 +187,7 @@ mod tests {
             ),
             (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         );
+        assert_eq!(sim.saved_power_state, 0);
         // $AF1E/$AF1F are zero, so the physical pointer is $0000 and the
         // public index is inactive — not the $AB06 of a live cursor.
         assert_eq!(sim.stream_index, 0);
@@ -291,6 +294,7 @@ mod tests {
         assert_eq!(sim.stream_ptr().to_be_bytes(), [0, 0]);
         assert_eq!(sim.prev_cam_x, 0);
         assert_eq!(sim.done, 0);
+        assert_eq!(sim.saved_power_state, 0);
         // Outside the page nothing moved.
         assert_eq!((sim.fff0, sim.fade_timer, sim.pending_item), (0, 0x1234, 0x42));
         assert_eq!(sim.spawned, vec![true, true]);
@@ -323,6 +327,7 @@ mod tests {
             (sim.boss_transition, sim.ending_door_active, sim.boss_delay),
             (0, 0, 0)
         );
+        assert_eq!(sim.saved_power_state, 0);
         assert_eq!(sim.stream_ptr(), 0xAB06, "$EC17 re-seeds after the clear");
         assert_eq!(sim.slot_done, [false; SLOT_COUNT]);
         assert_eq!(sim.slots[0].b, [0; 32]);

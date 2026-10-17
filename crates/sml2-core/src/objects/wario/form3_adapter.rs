@@ -3,12 +3,16 @@
 use super::form3::{self, Context};
 use crate::actor::{Actor, ContactKind, FrameTick, SpriteFlipFlags};
 use crate::objects::boss_stun::HitStunContext;
-use crate::objects::{ObjectSim, ObjectTables, Staging, B_SPRITE};
+use crate::objects::{ObjectSim, ObjectTables, Staging};
 
 impl ObjectSim {
     pub(in crate::objects) fn handler_wario26(&mut self, st: &mut Staging, tables: &ObjectTables) {
         self.boss_damage_pass(st);
-        let child_sprite = self.slots.get(1).map(|s| s.b[B_SPRITE]).unwrap_or(0);
+        let child_sprite = self
+            .slots
+            .get(1)
+            .map(|s| Actor::from_raw_slot(&s.b).sprite)
+            .unwrap_or(0);
         let context = Context {
             spawn_flip: SpriteFlipFlags::from_bits(self.spawn_attr),
             frame: FrameTick(u64::from(self.fff0)),
@@ -28,6 +32,7 @@ impl ObjectSim {
             level_timer_low: self.timer_low,
             player_screen_x: self.player_screen_x,
             player_powerup: self.mario.powerup,
+            saved_power_state: self.saved_power_state,
             child_sprite,
         };
         let mut actor = Actor::from_raw_slot(&st.b);
@@ -70,6 +75,9 @@ impl ObjectSim {
         if effects.boss_clear_flag {
             self.boss_clear_flag = 1;
         }
+        if let Some(saved) = effects.saved_power_state {
+            self.saved_power_state = saved;
+        }
         if let Some(phase) = effects.fight_phase {
             self.scene_phase_set = Some(phase);
         }
@@ -81,7 +89,6 @@ impl ObjectSim {
         }
         if effects.done {
             self.done = 1;
-            st.b = [0u8; 32];
         }
     }
 }

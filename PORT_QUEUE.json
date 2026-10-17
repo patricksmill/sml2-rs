@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "7 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "6 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "remaining_handler_classes",
@@ -24,18 +24,6 @@
     "native_actor_boundary"
    ],
    "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
-   "status": "pending"
-  },
-  {
-   "id": "wario_form3_source_corrections",
-   "title": "Correct final Wario saved-power state, wrapped proximity and shared animation contracts",
-   "asm_refs": [
-    "main.asm:$AD93",
-    "main.asm:$AF66",
-    "main.asm:$B35A"
-   ],
-   "dependencies": [],
-   "verification_gate": "Independent ROM regressions, persistent latch reset, real scene handoff and core/runtime/sensitivity gates",
    "status": "pending"
   },
   {

@@ -1,7 +1,9 @@
 //! Unit tests for native third-form Wario (anim 26, ROM `$0AD93`).
 
-use super::form3::{update, Context};
-use crate::actor::{Actor, ContactKind, Facing, FrameTick, SpriteFlipFlags};
+use super::form3::{update, Context, UpdateError};
+use crate::actor::{
+    Actor, AnimationFrameError, ContactKind, EndingBobError, Facing, FrameTick, SpriteFlipFlags,
+};
 use crate::objects::boss_spawn::BossSpawnRequest;
 use crate::objects::boss_stun::HitStunContext;
 
@@ -31,6 +33,7 @@ fn default_context() -> Context {
         level_timer_low: 0,
         player_screen_x: 80,
         player_powerup: 0,
+        saved_power_state: 0xFE,
         child_sprite: 14,
     }
 }
@@ -144,13 +147,21 @@ fn state4_and_5_walk_and_wall_bounce() {
     // Walking left hits left wall (x < 24)
     update(&mut actor, ctx, &DUMMY_PICKER_PROFILE).expect("bounce left wall");
     assert_eq!(actor.state, 5, "toggled to state 5");
-    assert_eq!(actor.sprite_flip, SpriteFlipFlags::from_bits(32), "flipped right");
+    assert_eq!(
+        actor.sprite_flip,
+        SpriteFlipFlags::from_bits(32),
+        "flipped right"
+    );
 
     // Walking right hits right wall (x >= 152)
     actor.screen.x = 151;
     update(&mut actor, ctx, &DUMMY_PICKER_PROFILE).expect("bounce right wall");
     assert_eq!(actor.state, 4, "toggled back to state 4");
-    assert_eq!(actor.sprite_flip, SpriteFlipFlags::from_bits(0), "flipped left");
+    assert_eq!(
+        actor.sprite_flip,
+        SpriteFlipFlags::from_bits(0),
+        "flipped left"
+    );
 }
 
 #[test]
@@ -169,8 +180,8 @@ fn proximity_under_48_px_triggers_jump_states() {
 }
 
 #[test]
-fn jump_distinguishes_fire_mario_high_jump_and_returns_to_walk() {
-    // Normal Mario jump (Low profile, cap 15)
+fn jump_uses_saved_power_state_and_returns_to_walk() {
+    // Nonzero saved byte jump (Low profile, cap 15)
     let mut actor = Actor::default();
     actor.state = 6;
     actor.screen.x = 80;
@@ -179,7 +190,7 @@ fn jump_distinguishes_fire_mario_high_jump_and_returns_to_walk() {
     actor.motion_leg = 0;
 
     let mut ctx = default_context();
-    ctx.player_powerup = 0; // small Mario
+    ctx.saved_power_state = 0xFE; // power 0 minus 2
 
     for _ in 0..15 {
         update(&mut actor, ctx, &DUMMY_PICKER_PROFILE).expect("rise step");
@@ -193,13 +204,13 @@ fn jump_distinguishes_fire_mario_high_jump_and_returns_to_walk() {
     assert_eq!(actor.state, 4, "jump completed -> state 4");
     assert_eq!(actor.sprite, 88);
 
-    // Fire Mario jump (High profile, cap 27)
+    // Zero saved byte jump (High profile, cap 27)
     actor.state = 7;
     actor.screen.x = 80;
     actor.screen.y = 80;
     actor.motion_phase = 0;
     actor.motion_leg = 0;
-    ctx.player_powerup = 2; // Fire Mario
+    ctx.saved_power_state = 0; // power 2 minus 2; source makes no Fire claim
 
     for _ in 0..27 {
         update(&mut actor, ctx, &DUMMY_PICKER_PROFILE).expect("high rise step");
@@ -269,8 +280,102 @@ fn defeat_cascade_to_ending_exit() {
     let mut ctx_even = default_context();
     ctx_even.frame = FrameTick(0); // even frame
     let effects = update(&mut actor, ctx_even, &DUMMY_PICKER_PROFILE).expect("run offscreen");
-    assert_eq!(actor.screen.x, 194);
+    assert_eq!(actor.to_raw_slot(), [0; 32]);
     assert!(effects.done, "slot done / blank");
     assert_eq!(effects.fight_phase, Some(3), "boss fight phase = 3");
-    assert_eq!(effects.scene_state, Some(0), "scene state = 0");
+    // The actual phase event consumer clears scene state (integration test).
+}
+
+#[test]
+fn source_regression_wrapped_proximity_24_to_255_enters_jump() {
+    let mut actor = Actor::default();
+    actor.state = 4;
+    actor.screen.x = 26; // AF15 moves left two before B2DB: 24 -> 255 = -25.
+    let mut ctx = default_context();
+    ctx.frame = FrameTick(1);
+    ctx.player_screen_x = 255;
+    update(&mut actor, ctx, &DUMMY_PICKER_PROFILE).unwrap();
+    assert_eq!((actor.state, actor.screen.x, actor.sprite), (6, 24, 91));
+}
+
+#[test]
+fn source_regression_malformed_bob_phase_does_not_reset_above_four() {
+    for state in [4, 10] {
+        let mut actor = Actor::default();
+        actor.state = state;
+        actor.screen.x = 80;
+        actor.sprite = 102;
+        actor.animation_frame = 4;
+        let expected_error = if state == 4 {
+            UpdateError::InvalidWalkAnimation(AnimationFrameError { frame: 5 })
+        } else {
+            UpdateError::InvalidEndingAnimation(EndingBobError { lookup_index: 5 })
+        };
+        assert_eq!(
+            update(&mut actor, default_context(), &DUMMY_PICKER_PROFILE),
+            Err(expected_error)
+        );
+        assert_eq!(
+            (actor.animation_frame, actor.sprite, actor.screen.x),
+            (5, 102, 80)
+        );
+    }
+}
+
+#[test]
+fn source_regression_ending_reset_indexes_with_cleared_flip_byte() {
+    let mut actor = Actor::default();
+    actor.state = 10;
+    actor.timer = 2;
+    actor.sprite = 102;
+    actor.animation_frame = 3;
+    actor.sprite_flip = SpriteFlipFlags::from_bits(0x21);
+    update(&mut actor, default_context(), &DUMMY_PICKER_PROFILE).unwrap();
+    // B36A clears bit5, leaving A=1 for B370's lookup: delta +1, not delta -1.
+    assert_eq!(
+        (
+            actor.animation_frame,
+            actor.sprite,
+            actor.sprite_flip.bits()
+        ),
+        (0, 103, 1)
+    );
+}
+
+#[test]
+fn source_regression_domain_ending_clears_every_slot_byte() {
+    let mut actor = Actor::from_raw_slot(&[0xA5; 32]);
+    actor.state = 10;
+    actor.timer = 0;
+    actor.screen.x = 191;
+    let mut ctx = default_context();
+    ctx.frame = FrameTick(2); // movement gate true; animation gate false.
+    let effects = update(&mut actor, ctx, &DUMMY_PICKER_PROFILE).unwrap();
+    assert!(effects.done);
+    assert_eq!(actor.to_raw_slot(), [0; 32]);
+}
+
+#[test]
+fn form3_ending_reset_propagates_flip_lookup_error_after_phase_and_flip_writes() {
+    let mut actor = Actor::default();
+    actor.state = 10;
+    actor.timer = 2;
+    actor.animation_frame = 3;
+    actor.sprite_flip = SpriteFlipFlags::from_bits(0xA0);
+    actor.sprite = 102;
+    assert_eq!(
+        update(&mut actor, default_context(), &DUMMY_PICKER_PROFILE),
+        Err(UpdateError::InvalidEndingAnimation(EndingBobError {
+            lookup_index: 0x80
+        }))
+    );
+    assert_eq!(
+        (
+            actor.animation_frame,
+            actor.sprite_flip.bits(),
+            actor.sprite,
+            actor.timer
+        ),
+        (0, 0x80, 102, 2)
+    );
 }

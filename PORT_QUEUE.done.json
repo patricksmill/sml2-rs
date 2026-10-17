@@ -871,6 +871,18 @@
    ],
    "verification_gate": "Play/replay entry takes the $F0 park, the fight reaches its level clear, and the clear reseeds sSceneState",
    "status": "done"
+  },
+  {
+   "id": "wario_form3_source_corrections",
+   "title": "Correct final Wario saved-power state, wrapped proximity and shared animation contracts",
+   "asm_refs": [
+    "main.asm:$AD93",
+    "main.asm:$AF66",
+    "main.asm:$B35A"
+   ],
+   "dependencies": [],
+   "verification_gate": "Independent ROM regressions, persistent latch reset, real scene handoff and core/runtime/sensitivity gates",
+   "status": "done"
   }
  ]
 }

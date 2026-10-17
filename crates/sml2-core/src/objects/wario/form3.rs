@@ -1,6 +1,9 @@
 //! Native third-form (final) Wario, ROM `$0AD93`; slot/world mapping lives in the adapter.
 
-use crate::actor::{Actor, ContactKind, Facing, FrameTick, RiseProfile, SpriteFlipFlags};
+use crate::actor::{
+    Actor, AnimationFrameError, ContactKind, EndingBobError, Facing, FrameTick, RiseProfile,
+    SpriteFlipFlags,
+};
 use crate::objects::boss_spawn::BossSpawnRequest;
 use crate::objects::boss_stun::{update_hit_stun, HitStunContext};
 
@@ -18,6 +21,7 @@ pub(super) struct Context {
     pub level_timer_low: u8,
     pub player_screen_x: u8,
     pub player_powerup: u8,
+    pub saved_power_state: u8,
     pub child_sprite: u8,
 }
 
@@ -35,7 +39,7 @@ pub(super) struct Effects {
     pub music_request: Option<u8>,
     pub boss_clear_flag: bool,
     pub fight_phase: Option<u8>,
-    pub scene_state: Option<u8>,
+    pub saved_power_state: Option<u8>,
     pub done: bool,
 }
 
@@ -43,6 +47,8 @@ pub(super) struct Effects {
 pub(super) enum UpdateError {
     UnsupportedState,
     InvalidMotionProfile,
+    InvalidWalkAnimation(AnimationFrameError),
+    InvalidEndingAnimation(EndingBobError),
 }
 
 pub(super) fn update(
@@ -94,14 +100,9 @@ pub(super) fn update(
             // ROM $AEDB: prepare trajectory child throw
             actor.animation_frame = 0;
             actor.sprite = 92;
-            let facing_right = context.player_screen_x >= actor.screen.x;
-            effects.facing = Some(if facing_right { Facing::RIGHT } else { Facing::LEFT });
-            actor.sprite_flip = if facing_right {
-                SpriteFlipFlags::from_bits(32)
-            } else {
-                SpriteFlipFlags::from_bits(0)
-            };
-            actor.state = if facing_right { 5 } else { 4 };
+            let facing = actor.face_toward_screen(context.player_screen_x);
+            effects.facing = Some(facing);
+            actor.state = if facing.is_right() { 5 } else { 4 };
             effects.spawn_child = Some(BossSpawnRequest {
                 animation: 27,
                 sprite: 14,
@@ -120,41 +121,32 @@ pub(super) fn update(
                 return Ok(effects);
             }
 
-            // ROM $B339: walk animation cycle
-            if context.frame.0 & 3 == 0 {
-                actor.animation_frame = actor.animation_frame.wrapping_add(1);
-                if actor.animation_frame >= 4 {
-                    actor.animation_frame = 0;
-                }
-                const TABLE_B356: [i8; 4] = [-2, 1, -1, 2];
-                actor.sprite = actor
-                    .sprite
-                    .wrapping_add(TABLE_B356[actor.animation_frame as usize] as u8);
-            }
+            actor
+                .animate_four_step_bob(context.frame)
+                .map_err(UpdateError::InvalidWalkAnimation)?;
 
             if actor.state == 4 {
                 actor.screen.move_x(-2);
                 if actor.screen.x < 24 {
                     actor.state ^= 1;
-                    actor.sprite_flip =
-                        SpriteFlipFlags::from_bits(actor.sprite_flip.bits() ^ 32);
+                    actor.sprite_flip.toggle_horizontal();
                     return Ok(effects);
                 }
             } else {
                 actor.screen.move_x(2);
                 if actor.screen.x >= 152 {
                     actor.state ^= 1;
-                    actor.sprite_flip =
-                        SpriteFlipFlags::from_bits(actor.sprite_flip.bits() ^ 32);
+                    actor.sprite_flip.toggle_horizontal();
                     return Ok(effects);
                 }
             }
 
             // Proximity check to player
-            let dist_x = context.player_screen_x.abs_diff(actor.screen.x);
+            let dist_x = actor.screen.horizontal_distance_to(context.player_screen_x);
             if dist_x < 48 {
                 actor.state += 2; // 4 -> 6, 5 -> 7
                 actor.sprite = 91;
+                effects.saved_power_state = Some(context.player_powerup.wrapping_sub(2));
             } else if context.level_timer_low & 3 == 0 && context.child_sprite < 14 {
                 actor.state = 3;
             }
@@ -165,26 +157,24 @@ pub(super) fn update(
                 actor.screen.move_x(-1);
                 if actor.screen.x < 24 {
                     actor.state ^= 1;
-                    actor.sprite_flip =
-                        SpriteFlipFlags::from_bits(actor.sprite_flip.bits() ^ 32);
+                    actor.sprite_flip.toggle_horizontal();
                     return Ok(effects);
                 }
             } else {
                 actor.screen.move_x(1);
                 if actor.screen.x >= 152 {
                     actor.state ^= 1;
-                    actor.sprite_flip =
-                        SpriteFlipFlags::from_bits(actor.sprite_flip.bits() ^ 32);
+                    actor.sprite_flip.toggle_horizontal();
                     return Ok(effects);
                 }
             }
 
-            // High jump if Fire Mario (powerup == 2), Low jump otherwise
-            let is_fire = context.player_powerup == 2;
-            let cap = if is_fire { 27 } else { 15 };
+            // AF91 selects from the power byte saved by AF66, even if Mario changes.
+            let high_jump = context.saved_power_state == 0;
+            let cap = if high_jump { 27 } else { 15 };
 
             if actor.motion_leg == 0 {
-                let profile = if is_fire {
+                let profile = if high_jump {
                     RiseProfile::High
                 } else {
                     RiseProfile::Low
@@ -221,13 +211,7 @@ pub(super) fn update(
             actor.timer = actor.timer.wrapping_sub(1);
             if actor.timer == 0 {
                 actor.timer = 48;
-                let facing_right = context.player_screen_x >= actor.screen.x;
-                effects.facing = Some(if facing_right { Facing::RIGHT } else { Facing::LEFT });
-                actor.sprite_flip = if facing_right {
-                    SpriteFlipFlags::from_bits(32)
-                } else {
-                    SpriteFlipFlags::from_bits(0)
-                };
+                effects.facing = Some(actor.face_toward_screen(context.player_screen_x));
                 actor.state = 9;
                 actor.sprite = 99;
                 effects.spawn_child = Some(BossSpawnRequest {
@@ -254,22 +238,9 @@ pub(super) fn update(
         10 => {
             // ROM $AEAE: defeat run offscreen
             effects.fade_low = Some(5);
-            if context.frame.0 & 3 == 0 {
-                actor.animation_frame = actor.animation_frame.wrapping_add(1);
-                if actor.animation_frame >= 4 {
-                    actor.animation_frame = 0;
-                    actor.sprite_flip =
-                        SpriteFlipFlags::from_bits(actor.sprite_flip.bits() & !32);
-                }
-                const TABLE_B388: [i8; 4] = [-1, 1, -1, 1];
-                actor.sprite = actor
-                    .sprite
-                    .wrapping_add(TABLE_B388[actor.animation_frame as usize] as u8);
-                if actor.animation_frame == 3 {
-                    actor.sprite_flip =
-                        SpriteFlipFlags::from_bits(actor.sprite_flip.bits() | 32);
-                }
-            }
+            actor
+                .animate_ending_bob(context.frame)
+                .map_err(UpdateError::InvalidEndingAnimation)?;
             if actor.timer != 0 {
                 actor.timer -= 1;
                 return Ok(effects);
@@ -281,7 +252,8 @@ pub(super) fn update(
             if actor.screen.x >= 192 {
                 effects.done = true;
                 effects.fight_phase = Some(3);
-                effects.scene_state = Some(0);
+                // The phase event consumer also writes scene state zero.
+                *actor = Actor::default();
             }
         }
         11 => {

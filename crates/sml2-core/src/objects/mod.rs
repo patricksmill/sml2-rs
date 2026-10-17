@@ -211,6 +211,8 @@ pub struct ObjectSim {
     pub boss_timer_reload: u8,
     /// `$AFD0`: Wario's falling-child completion latch.
     pub boss_delay: u8,
+    /// `$AFD1`: player power minus two, saved when final Wario begins a jump.
+    pub saved_power_state: u8,
     /// `$AFCE`: Wario's transition latch, consumed by anim21/24.
     pub boss_transition: u8,
     /// `$AFCF`: Wario intro door-animation latch.
@@ -299,6 +301,7 @@ impl ObjectSim {
             boss_sprite: 0,
             boss_timer_reload: 0,
             boss_delay: 0,
+            saved_power_state: 0,
             boss_transition: 0,
             ending_door_active: 0,
             boss_defeated: false,
