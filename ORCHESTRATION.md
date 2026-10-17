@@ -72,15 +72,17 @@ do not extend byte-indexed handler logic or recreate HRAM scratch.
 Task: Port object handler ROM 0x{ADDR} using ONLY:
   - tasks/handlers/0x{ADDR}.md
   - one named sibling handler module under crates/sml2-core/src/objects/
-  - objects/staging.rs and objects/helpers.rs
-Touch the named module plus dispatch.rs (one arm) and mod.rs (registration only).
+  - crates/sml2-core/src/actor.rs
+  - one named compatibility adapter sibling module
+Touch the named domain/adapter modules plus dispatch.rs (one arm) and mod.rs
+(registrations only). Resolve missing native shared behavior as a prerequisite.
 Require a COMPLETE generated slice; place new tests in the named module.
 
 Do not read objects.rs monolith, DESIGN.md, PORT_QUEUE, or main.asm wholesale.
 
 Deliverables:
-  1. handler implementation + one arm in dispatch.rs
-  2. #[test] that constructs slot/staging in memory and asserts result bytes
+  1. native handler + compatibility adapter + one arm in dispatch.rs
+  2. native behavior tests and ROM-derived slot bytes at the conversion boundary
   3. cargo test -p sml2-core {test_filter} must pass
 
 If borrow-checker or cross-bank control flow blocks you after 2 attempts, stop and report ESCALATE.

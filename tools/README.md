@@ -72,9 +72,12 @@ python3 tools/dispatch_prompt.py --queue boss_arena_phase_cascade
 ```
 
 Handler prompts always regenerate the brief and stop if it is incomplete. By
-default they name a new `handler_0xADDR.rs` sibling module, local tests, one dispatch
-arm, and module registration. Choose a new module when a family is already too
-large. `--dependency` and `--max-states` pass through to slicing. Queue prompts
+default they name a new `handler_0xADDR.rs` domain module, a bounded
+`handler_0xADDR_adapter.rs` compatibility module, native tests with ROM-byte
+assertions at the conversion boundary, one dispatch arm, and module registrations.
+Prompts require the native guide and `Actor` API; raw slot/register logic belongs
+outside domain handlers. Resolve missing native helpers first. Choose new modules
+when a family or adapter is already too large. `--dependency` and `--max-states` pass through to slicing. Queue prompts
 validate the named current files and include existing object integration tests
 when appropriate. Successful stdout is the worker message; generator diagnostics
 are written to stderr.

@@ -73,7 +73,10 @@ def make_brief(root: Path, decomp: Path, addr: int, *, bank=None, budget=800, de
 
 Implement in a focused sibling module under `crates/sml2-core/src/objects/`;
 register it in `objects/mod.rs` if new, and wire `objects/dispatch.rs`.
-Reuse `objects/staging.rs` and `objects/helpers.rs`. New tests belong beside the
+Apply `docs/idiomatic-rust-porting.md`: use typed `Actor` state from `actor.rs`.
+Keep slot conversion and legacy world input/effect mapping in an explicit adapter;
+do not put raw offsets, register names or HRAM scratch in domain handler logic.
+Resolve typed shared-helper prerequisites first. New tests belong beside the
 implementation; shared integration fixtures are currently in `objects/tests.rs`.
 
 ## Exact ROM-addressed instructions and ASM locations

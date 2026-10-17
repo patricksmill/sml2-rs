@@ -9,13 +9,13 @@ Rules: `PORTING.md` (byte-verified semantics, unit tests, no captures).
 **Forbidden:** reading `objects.rs` as a whole, `DESIGN.md`, `PORT_QUEUE.json`, `main.asm` except lines quoted in the task md, autonomous repo search, porting multiple handlers, RGBDS bulk transpile.
 
 **Deliverables:**
-1. Handler and local tests in the named sibling module under `objects/`
+1. Native handler and local tests in the named sibling module under `objects/`, plus its explicitly named compatibility adapter
 2. One `dispatch.rs` match arm
 3. `#[test]` with in-memory slot/staging and byte assertions
 4. `cargo test -p sml2-core` passing for your test filter
 
 After **2** failed compile/fix attempts on the same handler, stop and reply `ESCALATE` with a short summary — do not thrash.
 
-Mirror disassembly branch structure; call existing helpers in `helpers.rs` when the slice references `$5Bxxx` routines already ported.
+Apply `docs/idiomatic-rust-porting.md`: use typed `Actor` fields, enums and shared native methods. Keep raw slot conversion inside Actor conversion methods at the adapter boundary. Do not put slot offsets, register names or HRAM scratch in domain logic. Existing byte-oriented helpers establish source contracts; resolve missing native shared behavior as a prerequisite.
 
 Require `Slice status: COMPLETE` in the supplied brief. Report unresolved dependencies instead of implementing from incomplete slices.

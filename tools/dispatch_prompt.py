@@ -46,6 +46,9 @@ def handler_prompt(addr: int, *, module: str | None = None, dependencies=(), bud
         raise ValueError('choose a handler sibling module under crates/sml2-core/src/objects/')
     if path.exists() and len(path.read_text().splitlines()) >= 400:
         raise ValueError(f'{module} is already at least 400 lines; choose a new focused sibling module')
+    adapter = path.with_name(f'{path.stem}_adapter.rs')
+    if adapter.exists() and len(adapter.read_text().splitlines()) >= 400:
+        raise ValueError(f'{adapter.name} is already at least 400 lines; choose a focused adapter')
     run_handler_task(addr, dependencies=dependencies, budget=budget)
     task = ROOT / "tasks/handlers" / f"0x{addr:05X}.md"
     if '**Slice status: COMPLETE**' not in task.read_text():
@@ -53,24 +56,33 @@ def handler_prompt(addr: int, *, module: str | None = None, dependencies=(), bud
     return f"""Port object handler ROM 0x{addr:05X}.
 
 Read ONLY:
+  - PORTING.md
+  - docs/idiomatic-rust-porting.md
   - {task.relative_to(ROOT)}
+  - crates/sml2-core/src/actor.rs
   - {module} (create if absent)
-  - crates/sml2-core/src/objects/staging.rs
-  - crates/sml2-core/src/objects/helpers.rs
+  - {adapter.relative_to(ROOT)} (create if absent)
 
 Touch ONLY:
   - {module} (implementation and local tests)
+  - {adapter.relative_to(ROOT)} (slot compatibility and world input/effect adapter)
   - crates/sml2-core/src/objects/dispatch.rs (one arm)
-  - crates/sml2-core/src/objects/mod.rs (module registration only, if new)
+  - crates/sml2-core/src/objects/mod.rs (module registrations only, if new)
 
 Read the supplied brief's exact existing helper contracts when listed.
 Do NOT read: DESIGN.md, PORT_QUEUE, captures/, notes/, whole main.asm.
 Rules: PORTING.md. Keep a handler module below approximately 400 lines;
 choose a new focused sibling module when the existing family exceeds that size.
+Domain logic uses typed Actor fields, states and shared native behavior.
+No slot offsets, register names or HRAM scratch belong in handler logic.
+Keep raw slot conversion in Actor::from_raw_slot / Actor::to_raw_slot at the adapter.
+Resolve missing typed shared-helper prerequisites before implementing the handler;
+existing byte-oriented helpers establish source contracts, not the native API.
 
 Deliverables:
-  1. Implementation + one dispatch arm for 0x{addr:05X}
-  2. Local #[test] with slot/staging byte assertions, including boundary and gate cases
+  1. Native domain implementation + explicit adapter + one dispatch arm for 0x{addr:05X}
+  2. Native behavior tests and raw-slot byte assertions at the conversion boundary,
+     including source boundaries, frame gates and real producer/consumer paths
   3. Targeted new tests, followed by cargo test -p sml2-core
 
 Reply ESCALATE after 2 failed fix attempts.

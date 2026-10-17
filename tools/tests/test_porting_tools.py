@@ -264,6 +264,20 @@ class GateTests(unittest.TestCase):
 
 
 class PromptTests(unittest.TestCase):
+    def test_handler_prompt_requires_native_logic_and_bounded_adapter(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'tasks/handlers').mkdir(parents=True)
+            (root / 'tasks/handlers/0x58201.md').write_text('**Slice status: COMPLETE**')
+            with patch.object(dispatch_prompt, 'ROOT', root), patch.object(dispatch_prompt, 'run_handler_task'):
+                prompt = dispatch_prompt.handler_prompt(0x58201)
+            self.assertIn('docs/idiomatic-rust-porting.md', prompt)
+            self.assertIn('crates/sml2-core/src/actor.rs', prompt)
+            self.assertIn('handler_0x58201_adapter.rs', prompt)
+            self.assertIn('No slot offsets, register names or HRAM scratch', prompt)
+            self.assertIn('Actor::from_raw_slot / Actor::to_raw_slot', prompt)
+            self.assertNotIn('objects/helpers.rs', prompt)
+
     def test_current_queue_files_exist(self):
         for files in dispatch_prompt.QUEUE_FILES.values():
             for file in files:
