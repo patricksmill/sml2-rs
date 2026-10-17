@@ -1,6 +1,7 @@
 //! Core simulation structures and definitions for Super Mario Land 2.
 
 pub mod actor;
+pub mod audio;
 pub mod camera;
 pub mod collision;
 pub mod divider;
