@@ -17,6 +17,9 @@ mod sprite_sequence;
 #[path = "actor_sprite_deltas.rs"]
 mod sprite_deltas;
 
+#[path = "actor_direction_allocation.rs"]
+mod direction_allocation;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Position {
     pub x: u16,
