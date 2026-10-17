@@ -123,6 +123,9 @@ impl SpriteFlipFlags {
     pub fn toggle_vertical(&mut self) {
         self.0 ^= 0x40;
     }
+    pub fn set_vertical(&mut self, enabled: bool) {
+        self.0 = (self.0 & !0x40) | if enabled { 0x40 } else { 0 };
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

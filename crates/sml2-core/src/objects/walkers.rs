@@ -370,6 +370,15 @@ impl ObjectSim {
         }
     }
 
+    pub(super) fn handler_piranha_fireball(&mut self, st: &mut Staging) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = piranha_fireball::FireballContext {
+            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+        };
+        let _effect = piranha_fireball::update(&mut actor, context);
+        st.b = actor.to_raw_slot();
+    }
+
     pub(super) fn handler_boo(&mut self, st: &mut Staging) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = boo::BooContext {

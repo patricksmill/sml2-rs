@@ -3399,6 +3399,47 @@ fn handler_boo_0x59545_dispatch_and_stalking_behavior() {
     assert_eq!(st.b[B_SPRITE], 14);
 }
 
+#[test]
+fn handler_piranha_fireball_0x585ed_dispatch_and_movement() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 200);
+    st.b[B_DEF] = 14;
+    st.b[B_SPRITE] = 22;
+    // Downward right: horizontal flip = true, vertical flip = true
+    st.b[B_FLIP] = 0x60;
+
+    // Dispatch frame 0: Init frame
+    obj.fff0 = 1; // odd frame (no sprite toggle)
+    obj.dispatch_handler(0x585ED, &mut st, &l, &t);
+    assert_eq!(st.b[B_TYPE], 0x40, "lethal obstacle type 0x40");
+    assert_eq!(st.y(), 188, "offset y by -12");
+    assert_eq!(st.x(), 100);
+    assert_eq!(st.b[B_FLIP] & 0x40, 0, "vertical flip cleared");
+    assert_eq!(st.b[B_T24], 1, "motion_leg set to 1 for downward direction");
+    assert_eq!(st.b[B_FSTATE], 2, "state is MovingRight (2)");
+
+    // Dispatch frame 1: Moving right (+2 X, +1 Y)
+    obj.fff0 = 2; // even frame: toggles sprite 22 -> 23
+    obj.dispatch_handler(0x585ED, &mut st, &l, &t);
+    assert_eq!(st.x(), 102, "advanced 2 px right");
+    assert_eq!(st.y(), 189, "advanced 1 px down");
+    assert_eq!(st.b[B_SPRITE], 23, "toggled sprite to 23");
+
+    // Dispatch frame 2: Next step (+2 X, +1 Y)
+    obj.fff0 = 3; // odd frame: keeps sprite 23
+    obj.dispatch_handler(0x585ED, &mut st, &l, &t);
+    assert_eq!(st.x(), 104, "advanced to 104");
+    assert_eq!(st.y(), 190, "advanced to 190");
+    assert_eq!(st.b[B_SPRITE], 23);
+}
+
+
 
 
 

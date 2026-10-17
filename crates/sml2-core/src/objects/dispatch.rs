@@ -18,6 +18,7 @@ impl ObjectSim {
             0x584CB => self.handler_bobber(st, tables, pipe_bobber::EmergenceDirection::Down),
             0x584E0 => self.handler_bobber(st, tables, pipe_bobber::EmergenceDirection::Up),
             0x58541 => self.handler_fire_piranha(st, tables),
+            0x585ED => self.handler_piranha_fireball(st),
             0x5862E => self.handler_crawler(st, layout),
             0x586E1 => self.handler_marker85(st),
             0x586EE => self.handler_marker66(st),
