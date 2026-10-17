@@ -65,6 +65,7 @@ impl ObjectSim {
             0x59F5E => self.handler_wave_flyer(st),
             0x5A1F6 => self.handler_perched_flyer(st),
             0x5A773 => self.handler_cannon_ant(st),
+            0x5A8D2 => self.handler_0x5a8d2(st),
             0x5A9E8 => self.handler_charging_enemy(st, tables),
             0x5B1C8 => self.handler_grower92(st),
             0x5B241 => self.handler_floater94(st),
