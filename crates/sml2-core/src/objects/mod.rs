@@ -135,6 +135,7 @@ mod carrier;
 mod fallwalker;
 mod fire_piranha;
 mod groundwalker;
+mod paced_walker;
 mod pipe_bobber;
 mod piranha_fireball;
 mod squashed;

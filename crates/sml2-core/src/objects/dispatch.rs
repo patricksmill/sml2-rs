@@ -34,6 +34,7 @@ impl ObjectSim {
             0x594EB => self.handler_fallwalker52(st, layout),
             0x59545 => self.handler_boo(st),
             0x59BC5 => self.handler_groundwalker88(st, layout),
+            0x59CE7 => self.handler_paced_walker(st, layout),
             0x5B1C8 => self.handler_grower92(st),
             0x5B241 => self.handler_floater94(st),
             0x5B28C => self.handler_floater95(st),

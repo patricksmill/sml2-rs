@@ -3439,6 +3439,50 @@ fn handler_piranha_fireball_0x585ed_dispatch_and_movement() {
     assert_eq!(st.b[B_SPRITE], 23);
 }
 
+#[test]
+fn handler_paced_walker_0x59ce7_dispatch_and_movement() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 50);
+    st.b[B_SPRITE] = 162;
+    obj.mario_ref_x = 200; // Mario to the right
+    obj.fff0 = 1; // not multiple of 4
+
+    // Dispatch frame 0: State 0 init
+    obj.dispatch_handler(0x59CE7, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 2, "state is WalkRight (2)");
+    assert_eq!(st.b[B_FLIP] & 0x20, 0x20, "horizontal flip set");
+    assert_eq!(st.b[B_FLASH], 0x10, "flash byte set to 0x10");
+    assert_eq!(st.b[B_TYPE], 76, "contact kind 76 (0x4C)");
+    assert_eq!(st.b[B_T28], 1, "pause timer initialized to 1");
+    assert_eq!(st.x(), 100);
+
+    // Dispatch frame 1: timer 1 -> 0, arms budget to 48, no movement
+    obj.fff0 = 2;
+    obj.dispatch_handler(0x59CE7, &mut st, &l, &t);
+    assert_eq!(st.b[B_T28], 0);
+    assert_eq!(st.b[B_T25], 48);
+    assert_eq!(st.x(), 100);
+
+    // Dispatch frame 2: step 1 to the right
+    obj.fff0 = 3;
+    obj.dispatch_handler(0x59CE7, &mut st, &l, &t);
+    assert_eq!(st.b[B_T25], 47);
+    assert_eq!(st.x(), 101);
+
+    // Dispatch frame 3: tick multiple of 4 (fff0 = 4) toggles sprite
+    obj.fff0 = 4;
+    obj.dispatch_handler(0x59CE7, &mut st, &l, &t);
+    assert_eq!(st.b[B_T25], 46);
+    assert_eq!(st.x(), 102);
+    assert_eq!(st.b[B_SPRITE], 163, "low bit of sprite toggled");
+}
+
 
 
 
