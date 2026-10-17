@@ -294,6 +294,10 @@ mod handler_0x5a683_adapter;
 mod handler_0x5a6e7;
 #[path = "handler_0x5A6E7_adapter.rs"]
 mod handler_0x5a6e7_adapter;
+#[path = "handler_0x5A721.rs"]
+mod handler_0x5a721;
+#[path = "handler_0x5A721_adapter.rs"]
+mod handler_0x5a721_adapter;
 #[path = "handler_0x586E6.rs"]
 mod handler_0x586e6;
 #[path = "handler_0x586E6_adapter.rs"]
