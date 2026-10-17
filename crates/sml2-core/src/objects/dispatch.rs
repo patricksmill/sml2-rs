@@ -21,6 +21,7 @@ impl ObjectSim {
             0x585ED => self.handler_piranha_fireball(st),
             0x5862E => self.handler_crawler(st, layout),
             0x586E1 => self.handler_marker85(st),
+            0x586E6 => self.handler_0x586e6(st),
             0x586EE => self.handler_marker66(st),
             0x586F5 => self.handler_pickup16(st, tables),
             0x58848 => self.handler_0x58848(st, layout),
