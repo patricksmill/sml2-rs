@@ -3758,6 +3758,59 @@ fn handler_wave_flyer_0x59f5e_dispatch_and_movement() {
     assert_eq!(st.b[B_FLIP] & 0x20, 0, "faces left (no flip_h)");
 }
 
+#[test]
+fn handler_horizontal_platform_0x58c6a_dispatch_and_movement() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 80);
+    obj.mario_ref_x = 150; // Mario to the right
+    obj.mario.x = 100;
+    obj.mario.y = 64;
+
+    // Frame 0: Init (Mario right -> InitialRight / 2)
+    obj.dispatch_handler(0x58C6A, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 2, "state is InitialRight (2)");
+    assert_eq!(st.b[B_TYPE], 32, "contact kind 32 (0x20 solid on-object)");
+    assert_eq!(st.b[B_T24], 36, "motion leg is 36 (half span)");
+    assert_eq!(st.b[B_PHASE], 0, "motion phase is 0");
+    assert_eq!(st.b[B_FLIP] & 0x20, 0x20, "faces right (flip_h)");
+    assert_eq!(obj.facing, 1);
+
+    // Mario stands on platform (bit 3 of B_FLAGS / interactions)
+    st.b[B_FLAGS] = 0x08;
+
+    // 35 steps right
+    for step in 1..=35 {
+        obj.dispatch_handler(0x58C6A, &mut st, &l, &t);
+        assert_eq!(st.x(), 100 + step);
+        assert_eq!(obj.mario_x_adjust, Some(100 + step), "carries Mario right");
+    }
+    assert_eq!(st.x(), 135);
+    assert_eq!(st.b[B_PHASE], 35);
+
+    // 36th step: reaches boundary (136), turns to FullLeft (3), motion_phase resets to 0
+    obj.dispatch_handler(0x58C6A, &mut st, &l, &t);
+    assert_eq!(st.x(), 136);
+    assert_eq!(st.b[B_FSTATE], 3, "turns to FullLeft (3)");
+    assert_eq!(st.b[B_PHASE], 0, "motion phase resets to 0");
+    assert_eq!(obj.mario_x_adjust, Some(136));
+
+    // Move 72 steps left in FullLeft
+    for _ in 1..=72 {
+        obj.dispatch_handler(0x58C6A, &mut st, &l, &t);
+    }
+    // 136 - 72 = 64
+    assert_eq!(st.x(), 64);
+    assert_eq!(st.b[B_FSTATE], 4, "turns to FullRight (4)");
+    assert_eq!(st.b[B_PHASE], 0, "motion phase resets to 0");
+    assert_eq!(obj.mario_x_adjust, Some(64));
+}
+
 
 
 

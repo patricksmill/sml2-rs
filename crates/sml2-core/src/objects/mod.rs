@@ -137,6 +137,7 @@ mod charging_enemy;
 mod fallwalker;
 mod fire_piranha;
 mod groundwalker;
+mod horizontal_platform;
 mod paced_walker;
 mod perched_flyer;
 mod pipe_bobber;
@@ -182,6 +183,7 @@ pub struct ObjectSim {
     pub stomp_bounce: bool,
     pub on_object: bool,
     pub on_ground_cleared: bool,
+    pub mario_x_adjust: Option<u16>,
     pub mario_y_adjust: Option<u16>,
     pub stomp_bounce_timer: u8,
     pub stomp_chain: u8,
@@ -279,6 +281,7 @@ impl ObjectSim {
             stomp_bounce: false,
             on_object: false,
             on_ground_cleared: false,
+            mario_x_adjust: None,
             mario_y_adjust: None,
             stomp_bounce_timer: 0,
             stomp_chain: 0,
@@ -480,6 +483,7 @@ impl ObjectSim {
         self.stomp_bounce = false;
         self.on_object = false;
         self.on_ground_cleared = false;
+        self.mario_x_adjust = None;
         self.mario_y_adjust = None;
         self.stomp_bounce_timer = 0;
         self.stomp_chain = 0;

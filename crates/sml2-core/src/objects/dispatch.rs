@@ -30,6 +30,7 @@ impl ObjectSim {
             0x587D7 => self.handler_pose87(st, tables),
             0x5839B => self.handler_kicked(st, layout),
             0x58444 => self.handler_carried(st, layout, tables),
+            0x58C6A => self.handler_horizontal_platform(st),
             0x58DD1 => self.handler_carrier46(st, layout, tables),
             0x594EB => self.handler_fallwalker52(st, layout),
             0x59545 => self.handler_boo(st),

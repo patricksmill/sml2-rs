@@ -2698,6 +2698,9 @@ impl PlayerSim {
             self.pending_item = obj.pending_item;
             obj.pending_item = 0;
         }
+        if let Some(x) = obj.mario_x_adjust {
+            self.x = x;
+        }
         if let Some(y) = obj.mario_y_adjust {
             self.y = y;
         }

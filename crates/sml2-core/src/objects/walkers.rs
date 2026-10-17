@@ -425,6 +425,34 @@ impl ObjectSim {
         self.mario_y_adjust = Some(y.wrapping_add(b as u16));
     }
 
+    pub(super) fn carry_mario_x(&mut self, st: &mut Staging, dx: i16) {
+        if st.b[B_FLAGS] & 0x08 == 0 {
+            return;
+        }
+        let x = self.mario_x_adjust.unwrap_or(self.mario.x);
+        self.mario_x_adjust = Some(x.wrapping_add_signed(dx));
+    }
+
+    pub(super) fn handler_horizontal_platform(&mut self, st: &mut Staging) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = horizontal_platform::HorizontalPlatformContext {
+            mario_ref_x: self.mario_ref_x,
+        };
+        let effect = horizontal_platform::update(&mut actor, context);
+        match effect {
+            horizontal_platform::HorizontalPlatformEffect::Initialized { facing } => {
+                self.facing = facing;
+            }
+            horizontal_platform::HorizontalPlatformEffect::Moved { carry_dx, .. }
+            | horizontal_platform::HorizontalPlatformEffect::Turned { carry_dx, .. } => {
+                if let Some(dx) = carry_dx {
+                    self.carry_mario_x(st, dx);
+                }
+            }
+        }
+        st.b = actor.to_raw_slot();
+    }
+
     pub(super) fn handler_hopper(
         &mut self,
         st: &mut Staging,
