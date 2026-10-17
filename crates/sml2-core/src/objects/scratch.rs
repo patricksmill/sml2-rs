@@ -32,6 +32,7 @@ impl ObjectSim {
         self.scan_dir = 0; // $AF22
         self.prev_cam_x = 0; // $AF24/$AF25
         self.remove_mode = 0; // $AF26
+        self.slot_ptr_hi = 0; // $AF28
         self.boss_slot_ptr_lo = 0; // $AF29
         self.window_hit = false; // $AF2A
         self.sprite_flip_flags = 0; // $AF2B
@@ -99,6 +100,7 @@ mod tests {
         sim.scan_dir = 1;
         sim.prev_cam_x = 0x4321;
         sim.remove_mode = 2;
+        sim.slot_ptr_hi = 0xAE;
         sim.boss_slot_ptr_lo = 0x40;
         sim.window_hit = true;
         sim.sprite_flip_flags = 0x60;
@@ -148,6 +150,7 @@ mod tests {
         );
         assert_eq!(
             (
+                sim.slot_ptr_hi,
                 sim.boss_slot_ptr_lo,
                 sim.window_hit,
                 sim.sprite_flip_flags,
@@ -157,7 +160,7 @@ mod tests {
                 sim.mario_ref_x,
                 sim.mario_ref_y,
             ),
-            (0, false, 0, 0, 0, 0, 0, 0)
+            (0, 0, false, 0, 0, 0, 0, 0, 0)
         );
         assert_eq!(
             (

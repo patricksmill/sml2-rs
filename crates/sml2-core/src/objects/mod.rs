@@ -119,6 +119,7 @@ mod handler_0x586eb;
 mod handler_0x591f9;
 mod vertical_bobber;
 mod handler_0x5b0d5;
+mod handler_0x5b36d;
 mod helpers;
 mod interaction;
 mod items;
@@ -195,6 +196,7 @@ pub struct ObjectSim {
     pub camera_pan_set: Option<u8>,
     /// Wario exit clears scene state and selects this boss phase.
     pub scene_phase_set: Option<u8>,
+    pub slot_ptr_hi: u8,
     pub boss_slot_ptr_lo: u8,
     pub fade_timer: u16,
     /// Entry-frame `$A254` input from the level countdown owner.
@@ -288,6 +290,7 @@ impl ObjectSim {
             fade_timer_set: None,
             camera_pan_set: None,
             scene_phase_set: None,
+            slot_ptr_hi: 0xAD,
             boss_slot_ptr_lo: 0,
             fade_timer: 0,
             timer_low: 0,
@@ -724,6 +727,10 @@ impl ObjectSim {
             b: self.slots[i].b,
             ..Default::default()
         };
+        // $818D: set slot pointer registers $AF28/$AF29
+        let (hi, lo) = handler_0x5b36d::slot_address(i);
+        self.slot_ptr_hi = hi;
+        self.boss_slot_ptr_lo = lo;
         // $8000 clears `sObjectHitFlag` per slot per frame, before the handler.
         self.object_hit_flag = 0;
         self.pending_kick = false;
