@@ -12,7 +12,7 @@ fn fixture(state: u8) -> (ObjectSim, Staging) {
 
 #[test]
 fn handler_0x5a236_init_arms_contact_32() {
-    let (sim, mut st) = fixture(0);
+    let (mut sim, mut st) = fixture(0);
     let mut expected = st.b;
     expected[15] = 1;
     expected[18] = 32;
