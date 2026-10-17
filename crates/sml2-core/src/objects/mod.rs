@@ -115,6 +115,7 @@ mod boss_reverse_picker;
 #[cfg(test)]
 mod boss_screen_input_tests;
 mod dispatch;
+mod terrain_probes;
 mod handler_0x58848;
 mod handler_0x58848_adapter;
 mod handler_0x586eb;

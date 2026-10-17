@@ -1,14 +1,14 @@
 //! Legacy world inputs and probe effects for the native hopping enemy.
 use super::{
     handler_0x58848::{self, World},
+    terrain_probes::TerrainProbes,
     *,
 };
 use crate::actor::{Actor, FrameTick, Position};
 
 struct Inputs<'a> {
     sim: &'a mut ObjectSim,
-    layout: &'a LevelLayout,
-    probe: Position,
+    probes: TerrainProbes<'a>,
 }
 
 impl World for Inputs<'_> {
@@ -34,38 +34,10 @@ impl World for Inputs<'_> {
         }
     }
     fn wall_blocked(&mut self, position: Position, right: bool) -> bool {
-        let flag = if right { 1 } else { 2 };
-        self.sim.move_flags = if right { 0x11 } else { 0x22 };
-        self.probe = Position {
-            x: position.x.wrapping_add_signed(if right { 7 } else { -7 }),
-            y: position.y.wrapping_sub(11),
-        };
-        if ObjectSim::probe(self.layout, self.probe.x, self.probe.y) < 0x38 {
-            return true;
-        }
-        self.probe.y = position.y.wrapping_sub(5);
-        if ObjectSim::probe(self.layout, self.probe.x, self.probe.y) < 0x38 {
-            return true;
-        }
-        self.sim.move_flags &= !flag;
-        false
+        self.probes.wall_blocked(position, right, 7)
     }
     fn grounded(&mut self, position: Position) -> bool {
-        self.sim.move_flags = 0x88;
-        // The alignment early return writes only the low probe byte.
-        self.probe.y = (self.probe.y & 0xff00) | (position.y & 0xff);
-        if position.y as u8 & 0x0c != 0 {
-            self.sim.move_flags = 0x80;
-            return false;
-        }
-        self.probe.y = position.y;
-        self.probe.x = position.x;
-        if ObjectSim::probe(self.layout, self.probe.x, self.probe.y) >= 0x48 {
-            self.sim.move_flags = 0x80;
-            false
-        } else {
-            true
-        }
+        self.probes.grounded(position)
     }
     fn rise(&self) -> &[u8] {
         &BOUNCE_SPEED[3..]
@@ -81,12 +53,14 @@ impl ObjectSim {
         let frame = FrameTick(u64::from(self.fff0));
         let mut inputs = Inputs {
             sim: self,
-            layout,
-            probe: Position { x: st.px, y: st.py },
+            probes: TerrainProbes::new(layout, Position { x: st.px, y: st.py }),
         };
         let result = handler_0x58848::update(&mut actor, frame, &mut inputs);
-        st.px = inputs.probe.x;
-        st.py = inputs.probe.y;
+        if let Some(flags) = inputs.probes.legacy_move_flags() {
+            inputs.sim.move_flags = flags;
+        }
+        st.px = inputs.probes.position().x;
+        st.py = inputs.probes.position().y;
         st.b = actor.to_raw_slot();
         if result.is_err() {
             self.note_unported(0x58848);
