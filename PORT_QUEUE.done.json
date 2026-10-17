@@ -949,6 +949,16 @@
    ],
    "verification_gate": "Real scene/stream reentry across all3 forms with no blocked scene load or unported diagnostics and final ending",
    "status": "done"
+  },
+  {
+   "id": "native_handler_migration",
+   "title": "Migrate remaining existing byte-oriented game handlers and shared behavior to native Actor/World methods",
+   "asm_refs": [],
+   "dependencies": [
+    "native_actor_boundary"
+   ],
+   "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
+   "status": "done"
   }
  ]
 }

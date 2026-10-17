@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "2 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "1 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "remaining_handler_classes",
@@ -14,16 +14,6 @@
     "level_boot_route"
    ],
    "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "pending"
-  },
-  {
-   "id": "native_handler_migration",
-   "title": "Migrate remaining existing byte-oriented game handlers and shared behavior to native Actor/World methods",
-   "asm_refs": [],
-   "dependencies": [
-    "native_actor_boundary"
-   ],
-   "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
    "status": "pending"
   }
  ],
