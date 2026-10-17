@@ -64,6 +64,14 @@ impl EndingAssets {
         &self.tilemap
     }
 
+    pub fn tiles_mut(&mut self) -> &mut [u8] {
+        &mut self.tiles
+    }
+
+    pub fn tilemap_mut(&mut self) -> &mut [u8] {
+        &mut self.tilemap
+    }
+
     /// Signed BG addressing selects $8800..$97FF within the shared tile data.
     pub fn background_tile(&self, id: u8) -> &[u8; 16] {
         let offset = 0x800 + bg_tile_offset(id);
@@ -120,6 +128,10 @@ impl Default for EndingScene {
 impl EndingScene {
     pub fn assets(&self) -> Option<&EndingAssets> {
         self.assets.as_ref()
+    }
+
+    pub fn assets_mut(&mut self) -> Option<&mut EndingAssets> {
+        self.assets.as_mut()
     }
 
     /// Complete logical effects of $29DD. The caller owns the ending substate
