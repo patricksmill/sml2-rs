@@ -9,6 +9,7 @@ pub mod divider;
 pub mod ending_entry;
 pub mod ending_raster;
 pub mod ending_scene;
+pub mod ending_sequence;
 pub mod ending_sprites;
 pub mod level;
 pub mod level_timer;
