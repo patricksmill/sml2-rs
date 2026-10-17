@@ -285,6 +285,20 @@ impl ObjectSim {
         st.b = actor.to_raw_slot();
     }
 
+    pub(super) fn handler_perched_flyer(&mut self, st: &mut Staging) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = perched_flyer::PerchedFlyerContext {
+            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            mario_ref_x: self.mario_ref_x,
+        };
+        let effect = perched_flyer::update(&mut actor, context);
+        if let perched_flyer::PerchedFlyerEffect::Startled { sfx, facing } = effect {
+            self.sfx1 = sfx;
+            self.facing = facing;
+        }
+        st.b = actor.to_raw_slot();
+    }
+
     pub(super) fn handler_carrier46(
         &mut self,
         st: &mut Staging,

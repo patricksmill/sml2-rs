@@ -3523,6 +3523,48 @@ fn handler_vertical_pacer_0x59e06_dispatch_and_movement() {
     assert_eq!(st.b[B_SPRITE], 75, "low bit of sprite toggled");
 }
 
+#[test]
+fn handler_perched_flyer_0x5a1f6_dispatch_and_movement() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 80);
+    st.b[B_SPRITE] = 94;
+    obj.mario_ref_x = 200; // far away (> 24)
+
+    // Dispatch frame 0: State 0 init
+    obj.dispatch_handler(0x5A1F6, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 3, "state is Perched (3)");
+    assert_eq!(st.b[B_TYPE], 77, "contact kind 77 (0x4D)");
+
+    // Dispatch frame 1: Mario still far away -> sets bit 0 of sprite, stays perched
+    obj.dispatch_handler(0x5A1F6, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 3);
+    assert_eq!(st.b[B_SPRITE], 95);
+    assert_eq!(st.x(), 100);
+    assert_eq!(st.y(), 80);
+    assert_eq!(obj.sfx1, 0);
+
+    // Dispatch frame 2: Mario approaches to 110 (10 px to the right, < 24) -> startled!
+    obj.mario_ref_x = 110;
+    obj.dispatch_handler(0x5A1F6, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 2, "state becomes FleeLeft (2)");
+    assert_eq!(st.b[B_FLIP] & 0x20, 0x20, "flip horizontal set");
+    assert_eq!(obj.sfx1, 23, "emits SFX 23");
+    assert_eq!(st.x(), 100);
+
+    // Dispatch frame 3: flies away (X -= 3, Y -= 1)
+    obj.fff0 = 2; // even frame toggles sprite
+    obj.dispatch_handler(0x5A1F6, &mut st, &l, &t);
+    assert_eq!(st.x(), 97);
+    assert_eq!(st.y(), 79);
+    assert_eq!(st.b[B_SPRITE], 94, "sprite toggled");
+}
+
 
 
 
