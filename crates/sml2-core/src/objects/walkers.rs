@@ -584,6 +584,43 @@ impl ObjectSim {
         st.b = actor.to_raw_slot();
     }
 
+    pub(super) fn handler_dashing_walker(&mut self, st: &mut Staging, layout: &LevelLayout) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = dashing_walker::DashingWalkerContext {
+            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            mario_ref_x: self.mario_ref_x,
+        };
+        struct DashingWalkerSimWorld<'a> {
+            sim: &'a mut ObjectSim,
+            st: &'a mut Staging,
+            layout: &'a LevelLayout,
+        }
+        impl<'a> dashing_walker::DashingWalkerWorld for DashingWalkerSimWorld<'a> {
+            fn probe_left_wall(&mut self, actor: &crate::actor::Actor) -> bool {
+                set_x(&mut self.st.b, actor.position.x);
+                set_y(&mut self.st.b, actor.position.y);
+                self.sim.m_left_wall(self.st, self.layout);
+                self.sim.move_flags & 0x02 != 0
+            }
+            fn probe_right_wall(&mut self, actor: &crate::actor::Actor) -> bool {
+                set_x(&mut self.st.b, actor.position.x);
+                set_y(&mut self.st.b, actor.position.y);
+                self.sim.m_right_wall(self.st, self.layout);
+                self.sim.move_flags & 0x01 != 0
+            }
+        }
+        let mut world = DashingWalkerSimWorld {
+            sim: self,
+            st,
+            layout,
+        };
+        let effect = dashing_walker::update(&mut actor, context, &mut world);
+        if let dashing_walker::DashingWalkerEffect::Initialized { facing } = effect {
+            self.facing = facing;
+        }
+        st.b = actor.to_raw_slot();
+    }
+
     pub(super) fn handler_hopper(
         &mut self,
         st: &mut Staging,

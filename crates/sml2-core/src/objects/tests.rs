@@ -4007,11 +4007,51 @@ fn handler_falling_dropper_0x595b2_dispatch_and_movement() {
     assert_eq!(st.b[B_PHASE], 4);
 }
 
+#[test]
+fn handler_dashing_walker_0x59d5a_dispatch_and_movement() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(15); // level 15 (Space Zone 1)
 
+    let mut st = Staging::default();
+    set_x(&mut st.b, 200);
+    set_y(&mut st.b, 80);
+    st.b[B_SPRITE] = 14;
 
+    // Mario is to the left: x = 100 -> faces left: PatrolLeft (1), flip 0
+    obj.mario_ref_x = 100;
+    obj.dispatch_handler(0x59D5A, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 1, "state is PatrolLeft (1)");
+    assert_eq!(st.b[B_FLIP] & 0x20, 0, "facing left");
+    assert_eq!(st.b[B_TYPE], 72, "contact kind 72 (0x48)");
+    assert_eq!(st.b[B_FLASH], 0x10, "flash 0x10");
+    assert_eq!(obj.facing, 0xFF, "facing left");
 
+    // Mario far away: x = 100 (dx = 100 >= 36) -> steps 1 px left
+    obj.dispatch_handler(0x59D5A, &mut st, &l, &t);
+    assert_eq!(st.x(), 199);
+    assert_eq!(st.b[B_FSTATE], 1);
 
+    // Mario moves close: x = 180 (dx = 19 < 36) -> steps 1 px left (198) and triggers ChargeLeft (3)
+    obj.mario_ref_x = 180;
+    obj.dispatch_handler(0x59D5A, &mut st, &l, &t);
+    assert_eq!(st.x(), 198);
+    assert_eq!(st.b[B_FSTATE], 3, "state transitioned to ChargeLeft (3)");
+    assert_eq!(st.b[B_PHASE], 0);
 
+    // Charge step 1 (phase 0): FALL_SPEED[0] = 0 -> moves 0 px, phase becomes 1
+    obj.dispatch_handler(0x59D5A, &mut st, &l, &t);
+    assert_eq!(st.x(), 198);
+    assert_eq!(st.b[B_PHASE], 1);
 
+    // Charge step 2 (phase 1): FALL_SPEED[1] = 0 -> moves 0 px, phase becomes 2
+    obj.dispatch_handler(0x59D5A, &mut st, &l, &t);
+    assert_eq!(st.x(), 198);
+    assert_eq!(st.b[B_PHASE], 2);
 
-
+    // Charge step 3 (phase 2): FALL_SPEED[2] = 1 -> moves 1 px left (198 -> 197), phase becomes 3
+    obj.dispatch_handler(0x59D5A, &mut st, &l, &t);
+    assert_eq!(st.x(), 197);
+    assert_eq!(st.b[B_PHASE], 3);
+}
