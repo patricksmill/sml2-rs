@@ -130,6 +130,7 @@ mod stream_cursor;
 #[cfg(test)]
 mod tests;
 mod mario_zone;
+mod boo;
 mod carrier;
 mod fallwalker;
 mod fire_piranha;

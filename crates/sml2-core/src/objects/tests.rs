@@ -3354,6 +3354,52 @@ fn handler_fire_piranha_pipe_travel_despawn() {
     assert_eq!(obj.done, 2, "despawn removal marked done=2");
 }
 
+#[test]
+fn handler_boo_0x59545_dispatch_and_stalking_behavior() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.fff0 = 4; // frame divisible by 4
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 100);
+
+    // Case 1: Mario is at x = 150 looking left (facing Boo).
+    // Boo is shy!
+    obj.mario_ref_x = 150;
+    obj.mario.dir_right = false;
+    obj.dispatch_handler(0x59545, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 0, "state is Shy (0)");
+    assert_eq!(st.b[B_SPRITE], 14, "shy sprite is 14");
+
+    // Case 2: Mario turns around (dir_right = true).
+    // Boo uncovers face (sprite 13) and pursues right!
+    obj.mario.dir_right = true;
+    obj.dispatch_handler(0x59545, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 1, "state is ChasingRight (1)");
+    assert_eq!(st.b[B_SPRITE], 13);
+    assert_eq!(st.b[B_FLIP] & 0x20, 0x20, "horizontally flipped right");
+    assert_eq!(st.b[B_TYPE], 0x48);
+
+    // Case 3: Step right. Next frame divisible by 4.
+    obj.fff0 = 8;
+    obj.mario_ref_y = 100; // Mario at same Y -> motion_leg remains 8 -> dy = 0
+    obj.dispatch_handler(0x59545, &mut st, &l, &t);
+    assert_eq!(st.x(), 101, "moved 1 px right");
+    assert_eq!(st.y(), 100);
+
+    // Case 4: Mario turns back to look at Boo (dir_right = false).
+    // Boo immediately freezes in shy pose.
+    obj.fff0 = 12;
+    obj.mario.dir_right = false;
+    obj.dispatch_handler(0x59545, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 0, "frozen in Shy state");
+    assert_eq!(st.b[B_SPRITE], 14);
+}
+
+
 
 
 

@@ -31,6 +31,7 @@ impl ObjectSim {
             0x58444 => self.handler_carried(st, layout, tables),
             0x58DD1 => self.handler_carrier46(st, layout, tables),
             0x594EB => self.handler_fallwalker52(st, layout),
+            0x59545 => self.handler_boo(st),
             0x59BC5 => self.handler_groundwalker88(st, layout),
             0x5B1C8 => self.handler_grower92(st),
             0x5B241 => self.handler_floater94(st),

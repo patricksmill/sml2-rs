@@ -370,6 +370,18 @@ impl ObjectSim {
         }
     }
 
+    pub(super) fn handler_boo(&mut self, st: &mut Staging) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = boo::BooContext {
+            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            mario_dir_right: self.mario.dir_right,
+            mario_ref_x: self.mario_ref_x,
+            mario_ref_y: self.mario_ref_y,
+        };
+        let _effect = boo::update(&mut actor, context);
+        st.b = actor.to_raw_slot();
+    }
+
     pub(super) fn handler_crawler(&mut self, st: &mut Staging, layout: &LevelLayout) {
         self.sprite_toggle1(st);
         match st.b[B_FSTATE] {
