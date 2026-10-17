@@ -7,6 +7,7 @@ pub mod collision;
 pub mod credits_text;
 pub mod divider;
 pub mod ending_entry;
+pub mod ending_raster;
 pub mod ending_scene;
 pub mod ending_sprites;
 pub mod level;
