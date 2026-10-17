@@ -134,6 +134,12 @@ mod wario_child_fall;
 mod wario_phase1;
 mod wario_phase2;
 mod wario20;
+mod wario23;
+mod wario23_adapter;
+#[cfg(test)]
+mod wario23_tests;
+#[cfg(test)]
+mod wario23_integration;
 #[cfg(test)]
 mod wario20_integration;
 mod wario21;

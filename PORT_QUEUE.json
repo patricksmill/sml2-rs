@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "14 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "13 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "remaining_handler_classes",
@@ -140,20 +140,6 @@
     "level_countdown_timer",
     "boss_wario_phase1_exit_helper",
     "boss_entry_object_scratch_reset"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "pending"
-  },
-  {
-   "id": "boss_wario_anim23",
-   "title": "Port Wario boss anim 23 (ROM $AB8B), including the $38 camera-pan write",
-   "asm_refs": [
-    "main.asm:$AB8B",
-    "main.asm:$AC04",
-    "main.asm:$AD4E"
-   ],
-   "dependencies": [
-    "boss_wario_anim20"
    ],
    "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
    "status": "pending"
