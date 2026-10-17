@@ -4,37 +4,7 @@ use super::*;
 
 impl ObjectSim {
     pub(super) fn boss_damage_pass(&mut self, st: &mut Staging) {
-        let flags = st.b[B_FLAGS];
-        let stomp = flags & 0x01 != 0;
-        let other = flags & 0x02 != 0;
-        if !stomp && !other {
-            return;
-        }
-        self.done = 1;
-        if stomp {
-            self.boss_hit_latch = 1;
-        }
-        if self.boss_slot_ptr_lo != 0 {
-            return; // not the primary slot
-        }
-        if stomp {
-            self.sfx0 = 0x13;
-        } else {
-            self.sfx1 = 9;
-        }
-        let n = if stomp { 2 } else { 1 };
-        let (hits, borrow) = self.boss_hits_remaining.overflowing_sub(n);
-        self.boss_hits_remaining = hits;
-        if hits != 0 && !borrow {
-            return;
-        }
-        // $92C4: arm removal, and for defs 0-5 the boss-clear fade.
-        self.remove_mode = 1;
-        if self.boss_def_index >= 6 {
-            return;
-        }
-        self.fade_timer_set = Some(0x0280);
-        self.boss_clear_flag = 1;
+        self.apply_boss_damage(st);
     }
 
     pub(super) fn fade_idle(&self) -> bool {

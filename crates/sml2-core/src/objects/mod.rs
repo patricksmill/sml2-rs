@@ -107,6 +107,7 @@ mod boss;
 mod boss_flash;
 #[cfg(test)]
 mod boss_flash_paths;
+mod boss_damage;
 mod boss_sprite_cycle;
 mod boss_reverse_picker;
 mod dispatch;
