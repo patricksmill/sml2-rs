@@ -11,6 +11,9 @@ mod screen;
 mod ending_animation;
 pub use ending_animation::EndingBobError;
 
+#[path = "actor_sprite_sequence.rs"]
+mod sprite_sequence;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Position {
     pub x: u16,
