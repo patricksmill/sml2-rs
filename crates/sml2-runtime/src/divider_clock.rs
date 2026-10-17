@@ -24,6 +24,11 @@ impl NativeDividerClock {
     fn sample_elapsed(&self, elapsed: Duration) -> u8 {
         Divider::from_elapsed(self.initial_counter, elapsed).sample()
     }
+
+    /// Construct sampled map input from the native clock.
+    pub fn map_input(&self, keys_held: u8, keys_pressed: u8) -> sml2_core::map_sim::MapInput {
+        sml2_core::map_sim::MapInput::new(keys_held, keys_pressed, self.sample())
+    }
 }
 
 /// Replay time advances independently of object/player update gates. The
@@ -57,6 +62,11 @@ impl VirtualDividerClock {
             ((self.ticks % 60) * 1_000_000_000 / 60) as u32,
         );
         Divider::from_elapsed(self.initial_counter, elapsed).sample()
+    }
+
+    /// Construct sampled map input from the virtual clock.
+    pub fn map_input(&self, keys_held: u8, keys_pressed: u8) -> sml2_core::map_sim::MapInput {
+        sml2_core::map_sim::MapInput::new(keys_held, keys_pressed, self.sample())
     }
 }
 
@@ -117,5 +127,50 @@ mod tests {
         assert_eq!(clock.sample(), before);
         clock.advance_tick();
         assert_eq!(clock.ticks, 194);
+    }
+
+    #[test]
+    fn native_and_virtual_clocks_supply_map_inputs_across_frames_and_game_transitions() {
+        use sml2_core::map_sim::MapSim;
+
+        let mut vclock = VirtualDividerClock::new(0);
+        let mut map = MapSim::new();
+        let mut saw_even = false;
+        let mut saw_odd = false;
+        let mut expected_xor = 0u8;
+
+        for _ in 0..40 {
+            vclock.advance_tick();
+            let input = vclock.map_input(0, 0);
+            if input.div & 1 == 0 {
+                saw_even = true;
+            } else {
+                saw_odd = true;
+            }
+            expected_xor ^= input.div;
+            assert_eq!(input.keys_held, 0);
+            assert_eq!(input.keys_pressed, 0);
+            map.bookkeeping(input.div);
+        }
+        assert!(saw_even, "virtual clock sampled even parity for map input");
+        assert!(saw_odd, "virtual clock sampled odd parity for map input");
+        assert_eq!(map.frame_counter, 40);
+        assert_eq!(map.keys_xor, expected_xor);
+        assert_eq!(map.rand_latch, vclock.sample());
+
+        // Game transitions (player respawn, level reset) do NOT reset or mutate the clock
+        let ticks_before = vclock.ticks;
+        let mut player = sml2_core::player_sim::PlayerSim::new();
+        player.respawn(100, 200);
+        let mut objects = sml2_core::objects::ObjectSim::new(vec![], 0);
+        objects.reset_level_start();
+        assert_eq!(vclock.ticks, ticks_before, "game transitions do not reset clock");
+
+        // Native clock map input produces valid MapInput and samples without mutating origin
+        let nclock = NativeDividerClock::new(0x3412);
+        let n_input = nclock.map_input(0x10, 0x01);
+        assert_eq!(n_input.keys_held, 0x10);
+        assert_eq!(n_input.keys_pressed, 0x01);
+        assert_eq!(n_input.div, nclock.sample());
     }
 }

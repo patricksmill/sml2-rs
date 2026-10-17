@@ -125,19 +125,6 @@
       "status": "pending"
     },
     {
-      "id": "hardware_divider_input",
-      "title": "Finish shared sampled DIV input through normal map and game-state callers; level/Wario input is verified",
-      "asm_refs": [
-        "main.asm:$3C13E",
-        "main.asm:$AB1D"
-      ],
-      "dependencies": [
-        "wario_divider_input"
-      ],
-      "verification_gate": "Source-derived input timing, both sampled parities, and native/replay input integration tests",
-      "status": "pending"
-    },
-    {
       "id": "wario_arena_entry_enable",
       "title": "Enable def 6 (Wario, level 0) in boss_def_portable once the fight can finish",
       "asm_refs": [

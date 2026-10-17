@@ -261,6 +261,25 @@ pub struct MapInput {
     pub div: u8,
 }
 
+impl MapInput {
+    pub const fn new(keys_held: u8, keys_pressed: u8, div: u8) -> Self {
+        Self {
+            keys_held,
+            keys_pressed,
+            div,
+        }
+    }
+
+    /// Construct map input using a sampled hardware divider register ($FF04).
+    pub fn with_divider(keys_held: u8, keys_pressed: u8, divider: &crate::divider::Divider) -> Self {
+        Self {
+            keys_held,
+            keys_pressed,
+            div: divider.sample(),
+        }
+    }
+}
+
 /// The ROM's writes outside the map's own RAM block, for one frame.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct MapEntry {
@@ -648,7 +667,7 @@ impl MapSim {
     /// and its two `$FF04`-seeded latches. `$3C13E` reads `$FF00+c` with `c = 4`,
     /// i.e. the divider, not the joypad, which is why nothing mechanical reads
     /// these bytes.
-    fn bookkeeping(&mut self, div: u8) {
+    pub fn bookkeeping(&mut self, div: u8) {
         self.keys_xor ^= div;
         self.frame_counter = self.frame_counter.wrapping_add(1);
         self.tick_timer = self.tick_timer.wrapping_sub(1);
@@ -1722,6 +1741,50 @@ mod tests {
         map.bookkeeping(0x55);
         assert_eq!(map.rand_latch, 0x55, "the 40th frame moves the latch");
         assert_eq!(map.tick_timer, 40, "and reloads");
+    }
+
+    /// `$3C13E`: source-derived divider input timing and parity integration.
+    ///
+    /// Hardware DIV (upper byte of the 16-bit 4,194,304 Hz counter) advances
+    /// 70,224 cycles per Game Boy frame (456 cycles/line * 154 lines).
+    /// Advances across 40 frames sample both parities (even and odd), accumulate
+    /// through `sMapKeysXor`, and latch into `sMapRandLatch` on the 40th frame.
+    #[test]
+    fn map_bookkeeping_source_derived_timing_and_parities() {
+        use crate::divider::Divider;
+
+        let mut map = MapSim::new();
+        let mut divider = Divider::new(0x00FF);
+        let mut even_count = 0;
+        let mut odd_count = 0;
+        let mut expected_xor = 0u8;
+
+        for frame in 1..=40 {
+            // Nominal Game Boy frame cycle count (70,224 cycles)
+            divider.advance_cycles(70_224);
+            let input = MapInput::with_divider(0, 0, &divider);
+            if input.div & 1 == 0 {
+                even_count += 1;
+            } else {
+                odd_count += 1;
+            }
+            expected_xor ^= input.div;
+            map.bookkeeping(input.div);
+
+            assert_eq!(map.frame_counter, frame as u8);
+            assert_eq!(map.keys_xor, expected_xor);
+            if frame < 40 {
+                assert_eq!(map.tick_timer, 40 - frame as u8);
+                assert_eq!(map.rand_latch, 0);
+            }
+        }
+
+        // Both parities must be sampled across the sequence:
+        assert!(even_count > 0, "even parity sampled");
+        assert!(odd_count > 0, "odd parity sampled");
+        assert_eq!(map.frame_counter, 40);
+        assert_eq!(map.tick_timer, 40, "tick timer reloads to 40");
+        assert_eq!(map.rand_latch, divider.sample(), "40th frame latches divider sample");
     }
 
     /// A truncated graph starts no walk rather than reading past its blob.

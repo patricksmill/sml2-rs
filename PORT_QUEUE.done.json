@@ -736,6 +736,19 @@
       ],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
       "status": "verified"
+    },
+    {
+      "id": "hardware_divider_input",
+      "title": "Finish shared sampled DIV input through normal map and game-state callers; level/Wario input is verified",
+      "asm_refs": [
+        "main.asm:$3C13E",
+        "main.asm:$AB1D"
+      ],
+      "dependencies": [
+        "wario_divider_input"
+      ],
+      "verification_gate": "Source-derived input timing, both sampled parities, and native/replay input integration tests",
+      "status": "verified"
     }
   ]
 }
