@@ -62,6 +62,19 @@ the selected bank when slicing a home-bank entry. `--out-dir` allows scratch
 briefs without editing tracked tasks. Regenerate symbols with the decomp's
 established build instructions if source locations cannot be resolved.
 
+For ending routines with verified VBlank entry frames and interrupt terminals,
+`--entry-contract` scopes traversal to closed, byte-checked caller preconditions:
+
+```bash
+python3 tools/handler_task.py --addr 0x68572 --entry-contract ending-text-vblank
+python3 tools/handler_task.py --addr 0x26D7 --entry-contract ending-transfer-vblank
+```
+
+These contracts check caller and body witnesses against ROM bytes and SourceIndex,
+preserve the VBlank saved-register frame, and close interrupt control flow at `reti`
+without following the opaque interrupted PC or inventing native helper bindings.
+Generic traversal without `--entry-contract` continues to report `INCOMPLETE`.
+
 ## Dispatch prompts
 
 ```bash

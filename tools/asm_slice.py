@@ -5,9 +5,14 @@ transfers and exhausted budgets are reported, never presented as complete slices
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import re
+
+try:
+    from ending_interrupt_contracts import CONTRACTS
+except ImportError:
+    from tools.ending_interrupt_contracts import CONTRACTS
 
 THREE = {0x01, 0x08, 0x11, 0x21, 0x31, 0xC2, 0xC3, 0xC4, 0xCA, 0xCC,
          0xCD, 0xD2, 0xD4, 0xDA, 0xDC, 0xEA, 0xFA}
@@ -131,6 +136,9 @@ class Slice:
     tables: dict[int, list[int]]
     dependencies: dict[int, str]
     unresolved: set[str]
+    entry_contract: str | None = None
+    contract_evidence: str = ''
+    interrupt_exits: set[int] = field(default_factory=set)
 
     @property
     def complete(self) -> bool:
@@ -138,11 +146,15 @@ class Slice:
 
 
 def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | None = None,
-                  bindings: dict[int, str] | None = None, budget: int = 800) -> Slice:
+                  bindings: dict[int, str] | None = None, budget: int = 800,
+                  entry_contract: str | None = None) -> Slice:
     if not 0 <= entry < len(rom) or budget < 1:
         raise ValueError('invalid entry address or instruction budget')
     bindings = bindings or {}
-    initial_bank = bank_cpu(entry)[0] if bank is None else bank
+    contract = CONTRACTS[entry_contract] if entry_contract in CONTRACTS else None
+    if entry_contract is not None and contract is None:
+        raise ValueError(f'unknown entry contract: {entry_contract}')
+    initial_bank = (contract.bank if contract else bank_cpu(entry)[0]) if bank is None else bank
     if not 0 <= initial_bank < (len(rom) + 0x3FFF) // 0x4000:
         raise ValueError('selected bank is outside this ROM')
     if entry >= 0x4000 and initial_bank != bank_cpu(entry)[0]:
@@ -152,6 +164,14 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
     pending = [(entry, initial_bank, None, None, ())]
     seen = set()
     result = Slice({}, {}, {}, set())
+    if contract:
+        result.entry_contract = contract.name
+        try:
+            contract.validate(rom, source, entry, initial_bank, bindings, instruction_size)
+            result.contract_evidence = contract.describe(source)
+        except ValueError as exc:
+            result.unresolved.add(str(exc))
+            return result
     while pending:
         state = pending.pop()
         if state in seen:
@@ -161,6 +181,19 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
             break
         seen.add(state)
         pc, selected, a, hl, stack = state
+        if contract and not contract.contains(pc):
+            result.unresolved.add(f'0x{pc:X}: transfer outside checked entry-contract body')
+            continue
+        if contract and pc == contract.terminal:
+            try:
+                terminal = contract.terminal_instructions(rom, source, stack, selected, instruction_size)
+                if len(seen) + len(terminal) - 1 > budget:
+                    raise ValueError(f'control-flow budget ({budget} states) exhausted at interrupt terminal')
+                result.instructions.update(terminal)
+                result.interrupt_exits.add(pc)
+            except ValueError as exc:
+                result.unresolved.add(f'0x{pc:X}: {exc}')
+            continue
         if pc != entry and pc in bindings:
             result.dependencies[pc] = bindings[pc]
             if stack:
@@ -193,6 +226,10 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
             elif op not in {0xEA, 0xE0, 0xE2, 0xC3, 0x18, 0x20, 0x28, 0x30, 0x38,
                             0xC2, 0xCA, 0xD2, 0xDA, 0xFE, 0xC5, 0xD5, 0xE5, 0xF5}:
                 a = None
+            # These loads are valid only in a byte-for-byte checked body. No
+            # arbitrary memory facts survive stores or unreviewed callees.
+            if contract and pc in dict(contract.constant_loads):
+                a = dict(contract.constant_loads)[pc]
             if op == 0x21:
                 hl = int.from_bytes(raw[1:], 'little')
             elif op in {0x09, 0x19, 0x22, 0x23, 0x24, 0x25, 0x26, 0x29, 0x2A, 0x2B,
@@ -218,6 +255,11 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
                 if op not in {0xC9, 0xD9}:
                     emit(next_cpu, bank=selected, av=a, hv=hl)
             elif op in {0xCD, 0xC4, 0xCC, 0xD4, 0xDC}:
+                if contract and pc in contract.skipped_calls:
+                    # Exact LDH/CP/CALL guard and unchanged state19 fact were
+                    # validated together with the complete bounded body.
+                    emit(next_cpu, bank=selected, av=a, hv=hl)
+                    continue
                 if len(stack) >= 24:
                     raise ValueError('call-stack budget exceeded')
                 emit(int.from_bytes(raw[1:], 'little'), bank=selected, words=stack + (next_cpu,))

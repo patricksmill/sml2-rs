@@ -15,6 +15,10 @@ import re
 import sys
 
 from asm_slice import SourceIndex, bank_cpu, slice_handler
+try:
+    from ending_interrupt_contracts import CONTRACTS
+except ImportError:
+    from tools.ending_interrupt_contracts import CONTRACTS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -44,11 +48,13 @@ def bindings_for(values: list[str], root: Path) -> dict[int, str]:
     return bindings
 
 
-def make_brief(root: Path, decomp: Path, addr: int, *, bank=None, budget=800, dependencies=None) -> tuple[str, bool]:
+def make_brief(root: Path, decomp: Path, addr: int, *, bank=None, budget=800, dependencies=None,
+               entry_contract=None) -> tuple[str, bool]:
     data = json.loads((root / 'extracted/objects.json').read_text())
     rom = (decomp / 'baserom.gb').read_bytes()
     source = SourceIndex.load(decomp, rom)
-    result = slice_handler(rom, source, addr, bank=bank, budget=budget, bindings=dependencies)
+    result = slice_handler(rom, source, addr, bank=bank, budget=budget, bindings=dependencies,
+                           entry_contract=entry_contract)
     bank_id, cpu = bank_cpu(addr)
     anims = []
     for mode in ('a', 'b', 'boss'):
@@ -63,11 +69,15 @@ def make_brief(root: Path, decomp: Path, addr: int, *, bank=None, budget=800, de
                           for pc, contract in sorted(result.dependencies.items())) or '- None.'
     unresolved = '\n'.join(f'- {reason}' for reason in sorted(result.unresolved)) or '- None.'
     status = 'COMPLETE' if result.complete else 'INCOMPLETE'
+    selected_bank = bank if bank is not None else (CONTRACTS[entry_contract].bank if entry_contract else bank_id)
+    scope = f' under entry contract `{entry_contract}`' if entry_contract else ''
+    entry_evidence = result.contract_evidence or ('Contract validation failed; see unresolved work.' if entry_contract else '- None.')
+    exits = ', '.join(f'0x{pc:05X}' for pc in sorted(result.interrupt_exits)) or 'None'
     return f'''# Handler 0x{addr:05X}
 
-**Slice status: {status}** — this describes control-flow coverage, not implementation verification.
+**Slice status: {status}**{scope} — this describes control-flow coverage, not implementation verification.
 **Address:** ROM `0x{addr:05X}`, bank `${bank_id:02X}` ({bank_id} decimal), CPU `${cpu:04X}`.
-**Selected bank at entry:** `${(bank_id if bank is None else bank):02X}`.
+**Selected bank at entry:** `${selected_bank:02X}`.
 **Anims:** {', '.join(anims) or '(helper / no table entry)'}.
 **Policy:** [PORTING.md](../../PORTING.md).
 
@@ -88,6 +98,12 @@ mark every entry. Review table bounds and dependency contracts before porting.
 ```text
 {instructions}
 ```
+
+## Checked entry and interrupt-return contract
+
+{entry_evidence}
+
+Structurally checked interrupt terminal entries: {exits}.
 
 ## Recovered rst $28 state tables (CPU targets)
 
@@ -117,6 +133,8 @@ def main() -> int:
     ap.add_argument('--bank', type=lambda s: int(s, 0), help='selected bank for a home-bank entry')
     ap.add_argument('--max-states', type=int, default=800)
     ap.add_argument('--dependency', action='append', default=[])
+    ap.add_argument('--entry-contract', choices=sorted(CONTRACTS),
+                    help='closed, byte-checked ending VBlank caller profile (scopes COMPLETE)')
     ap.add_argument('--out-dir', type=Path, default=ROOT / 'tasks/handlers')
     args = ap.parse_args()
     try:
@@ -124,7 +142,8 @@ def main() -> int:
         data = json.loads((ROOT / 'extracted/objects.json').read_text())
         addr = args.addr if args.addr is not None else handler_for_anim(data, args.anim, args.mode)
         body, complete = make_brief(ROOT, decomp, addr, bank=args.bank, budget=args.max_states,
-                                    dependencies=bindings_for(args.dependency, ROOT))
+                                    dependencies=bindings_for(args.dependency, ROOT),
+                                    entry_contract=args.entry_contract)
         args.out_dir.mkdir(parents=True, exist_ok=True)
         out = args.out_dir / f'0x{addr:05X}.md'
         out.write_text(body)

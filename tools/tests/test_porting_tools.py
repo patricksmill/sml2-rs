@@ -18,6 +18,12 @@ import handler_coverage as coverage
 import handler_task
 import dispatch_prompt
 import replay_gate
+try:
+    from ending_interrupt_contracts import CONTRACTS
+except ImportError:
+    from tools.ending_interrupt_contracts import CONTRACTS
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 class CoverageTests(unittest.TestCase):
@@ -220,6 +226,158 @@ UnknownCall_0x58000:
             source = SourceIndex.load(root, self.rom)
             self.assertIn('main.asm:5 ret', source.locations[0x58001])
             self.assertTrue(slice_handler(self.rom, source, 0x58000).complete)
+
+    def test_default_ending_slices_remain_incomplete(self):
+        decomp = Path(os.environ.get('SML2_DECOMP_ROOT', ROOT.parent / 'sml2decomp'))
+        if (decomp / 'baserom.gb').is_file():
+            rom = (decomp / 'baserom.gb').read_bytes()
+            source = SourceIndex.load(decomp, rom)
+            res_text = slice_handler(rom, source, 0x68572)
+            self.assertFalse(res_text.complete)
+            res_transfer = slice_handler(rom, source, 0x26D7)
+            self.assertFalse(res_transfer.complete)
+
+            res_budget = slice_handler(rom, source, 0x68572, entry_contract='ending-text-vblank', budget=1)
+            self.assertFalse(res_budget.complete)
+            self.assertTrue(any('budget' in reason for reason in res_budget.unresolved))
+
+    def test_positive_ending_text_vblank_contract(self):
+        decomp = Path(os.environ.get('SML2_DECOMP_ROOT', ROOT.parent / 'sml2decomp'))
+        if not (decomp / 'baserom.gb').is_file():
+            self.skipTest('baserom.gb not found')
+        rom = (decomp / 'baserom.gb').read_bytes()
+        source = SourceIndex.load(decomp, rom)
+        res = slice_handler(rom, source, 0x68572, entry_contract='ending-text-vblank')
+        self.assertTrue(res.complete, res.unresolved)
+        self.assertEqual(res.dependencies, {})
+        self.assertEqual(res.entry_contract, 'ending-text-vblank')
+        self.assertEqual(res.interrupt_exits, {0x685D5})
+        for loc in (0x685D5, 0x685D8, 0x685DB, 0x685DD, 0x685E0, 0x685E1, 0x685E2, 0x685E3, 0x685E4):
+            self.assertIn(loc, res.instructions)
+        self.assertIn(0x68591, res.instructions)
+        self.assertIn(0x68593, res.instructions)
+        self.assertIn(0x685A5, res.instructions)
+        self.assertIn(0x685C9, res.instructions)
+        self.assertIn(0x685CB, res.instructions)
+
+    def test_positive_ending_transfer_vblank_contract(self):
+        decomp = Path(os.environ.get('SML2_DECOMP_ROOT', ROOT.parent / 'sml2decomp'))
+        if not (decomp / 'baserom.gb').is_file():
+            self.skipTest('baserom.gb not found')
+        rom = (decomp / 'baserom.gb').read_bytes()
+        source = SourceIndex.load(decomp, rom)
+        res = slice_handler(rom, source, 0x26D7, entry_contract='ending-transfer-vblank')
+        self.assertTrue(res.complete, res.unresolved)
+        self.assertEqual(res.dependencies, {})
+        self.assertEqual(res.entry_contract, 'ending-transfer-vblank')
+        self.assertEqual(res.interrupt_exits, {0x2719})
+        self.assertIn(0x26D7, res.instructions)
+        self.assertIn(0x26DA, res.instructions)
+        self.assertIn(0x2716, res.instructions)
+        self.assertNotIn(0x2089, res.instructions)
+        self.assertIn(0x26F6, res.instructions)
+        self.assertIn(0x26EF, res.instructions)
+        self.assertIn(0x26F8, res.instructions)
+        self.assertIn(0x270C, res.instructions)
+        self.assertIn(0x270E, res.instructions)
+        self.assertIn(0x2712, res.instructions)
+        for loc in (0x2719, 0x271B, 0x271D, 0x2720, 0x2723, 0x2724, 0x2725, 0x2726, 0x2727):
+            self.assertIn(loc, res.instructions)
+
+    def test_ending_contract_witness_tampering_and_invariants(self):
+        decomp = Path(os.environ.get('SML2_DECOMP_ROOT', ROOT.parent / 'sml2decomp'))
+        if not (decomp / 'baserom.gb').is_file():
+            self.skipTest('baserom.gb not found')
+        clean_rom = (decomp / 'baserom.gb').read_bytes()
+        source = SourceIndex.load(decomp, clean_rom)
+
+        tamper_cases = [
+            (0x154, 'wrong save order at VBlank DI/save'),
+            (0x2CA3, 'wrong wrapper bank/store'),
+            (0x6806E, 'changed request bank'),
+            (0x2712, 'changed state comparison'),
+            (0x2716, 'changed call instruction/condition'),
+            (0x685D5, 'wrong terminal restore operand'),
+            (0x685DD, 'missing frame-ready write'),
+            (0x685E0, 'wrong POP order/count'),
+            (0x685E4, 'RET instead of RETI'),
+        ]
+        transfer_addrs = {0x6806E, 0x2712, 0x2716}
+        for addr, desc in tamper_cases:
+            with self.subTest(tamper=desc, addr=hex(addr)):
+                bad_rom = bytearray(clean_rom)
+                bad_rom[addr] ^= 0xFF
+                contract_name = 'ending-transfer-vblank' if addr in transfer_addrs else 'ending-text-vblank'
+                entry = 0x26D7 if contract_name == 'ending-transfer-vblank' else 0x68572
+                res = slice_handler(bad_rom, source, entry, entry_contract=contract_name)
+                self.assertFalse(res.complete, f'tamper at {hex(addr)} ({desc}) should have failed')
+
+    def test_ending_contract_stack_and_bank_invariants(self):
+        contract = CONTRACTS['ending-text-vblank']
+        decomp = Path(os.environ.get('SML2_DECOMP_ROOT', ROOT.parent / 'sml2decomp'))
+        if not (decomp / 'baserom.gb').is_file():
+            self.skipTest('baserom.gb not found')
+        rom = (decomp / 'baserom.gb').read_bytes()
+        source = SourceIndex.load(decomp, rom)
+        from asm_slice import instruction_size
+        with self.assertRaisesRegex(ValueError, 'unbalanced local push/call stack'):
+            contract.terminal_instructions(rom, source, stack=(0x1234,), selected=0x1A, instruction_size=instruction_size)
+        with self.assertRaisesRegex(ValueError, 'selected bank contradicts caller-bank fact'):
+            contract.terminal_instructions(rom, source, stack=(), selected=0x01, instruction_size=instruction_size)
+
+        with self.assertRaisesRegex(ValueError, 'cannot be combined with helper bindings'):
+            contract.validate(rom, source, 0x68572, 0x1A, bindings={0x1234: 'foo'}, instruction_size=instruction_size)
+
+        with self.assertRaisesRegex(ValueError, 'contradicts contract'):
+            contract.validate(rom, source, 0x68572, 0x01, bindings={}, instruction_size=instruction_size)
+        with self.assertRaisesRegex(ValueError, 'contradicts contract'):
+            contract.validate(rom, source, 0x26D7, 0x1A, bindings={}, instruction_size=instruction_size)
+
+        with self.assertRaisesRegex(ValueError, 'unknown entry contract'):
+            slice_handler(rom, source, 0x68572, entry_contract='invalid-contract')
+
+    def test_ending_contract_source_locations_checked(self):
+        decomp = Path(os.environ.get('SML2_DECOMP_ROOT', ROOT.parent / 'sml2decomp'))
+        if not (decomp / 'baserom.gb').is_file():
+            self.skipTest('baserom.gb not found')
+        rom = (decomp / 'baserom.gb').read_bytes()
+        full_source = SourceIndex.load(decomp, rom)
+        incomplete_source = SourceIndex(dict(full_source.locations), dict(full_source.tables))
+        del incomplete_source.locations[0x68572]
+        res = slice_handler(rom, incomplete_source, 0x68572, entry_contract='ending-text-vblank')
+        self.assertFalse(res.complete)
+        self.assertTrue(any('missing exact source' in r for r in res.unresolved))
+
+    def test_handler_task_entry_contract_output_and_cli(self):
+        with tempfile.TemporaryDirectory() as d:
+            out_dir = Path(d)
+            decomp = Path(os.environ.get('SML2_DECOMP_ROOT', ROOT.parent / 'sml2decomp'))
+            if not (decomp / 'baserom.gb').is_file():
+                self.skipTest('baserom.gb not found')
+            brief, complete = handler_task.make_brief(
+                ROOT, decomp, 0x68572, entry_contract='ending-text-vblank')
+            self.assertTrue(complete)
+            self.assertIn('**Slice status: COMPLETE** under entry contract `ending-text-vblank`', brief)
+            self.assertIn('## Checked entry and interrupt-return contract', brief)
+            self.assertIn('Structurally checked interrupt terminal entries: 0x685D5', brief)
+            self.assertIn('## Existing helper dependencies supplied by the supervisor\n\n- None.', brief)
+
+            brief_t, complete_t = handler_task.make_brief(
+                ROOT, decomp, 0x26D7, entry_contract='ending-transfer-vblank')
+            self.assertTrue(complete_t)
+            self.assertIn('**Slice status: COMPLETE** under entry contract `ending-transfer-vblank`', brief_t)
+            self.assertIn('Structurally checked interrupt terminal entries: 0x02719', brief_t)
+
+            with patch.object(sys, 'argv', ['handler_task', '--addr', '0x68572',
+                                            '--entry-contract', 'ending-text-vblank',
+                                            '--out-dir', str(out_dir)]):
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    self.assertEqual(handler_task.main(), 0)
+
+            with patch.object(sys, 'argv', ['handler_task', '--addr', '0x68572',
+                                            '--out-dir', str(out_dir)]):
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    self.assertEqual(handler_task.main(), 2)
 
 
 class GateTests(unittest.TestCase):
