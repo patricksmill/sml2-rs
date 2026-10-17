@@ -299,6 +299,30 @@ impl ObjectSim {
         st.b = actor.to_raw_slot();
     }
 
+    pub(super) fn handler_cannon_ant(&mut self, st: &mut Staging) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = cannon_ant::CannonAntContext {
+            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            mario_ref_x: self.mario_ref_x,
+            mario_ref_y: self.mario_ref_y,
+        };
+        let effect = cannon_ant::update(&mut actor, context);
+        st.b = actor.to_raw_slot();
+        match effect {
+            cannon_ant::CannonAntEffect::Initialized { facing } => {
+                self.facing = facing;
+            }
+            cannon_ant::CannonAntEffect::FireProjectile { anim, sprite, attr, sfx } => {
+                self.spawn_anim = anim;
+                self.spawn_sprite = sprite;
+                self.spawn_attr = attr;
+                self.spawn_dynamic_5b36d(st);
+                self.sfx1 = sfx;
+            }
+            _ => {}
+        }
+    }
+
     pub(super) fn handler_carrier46(
         &mut self,
         st: &mut Staging,

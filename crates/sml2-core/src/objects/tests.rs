@@ -3565,6 +3565,54 @@ fn handler_perched_flyer_0x5a1f6_dispatch_and_movement() {
     assert_eq!(st.b[B_SPRITE], 94, "sprite toggled");
 }
 
+#[test]
+fn handler_cannon_ant_0x5a773_dispatch_and_movement() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 80);
+    st.b[B_SPRITE] = 146;
+    obj.mario_ref_x = 50; // Mario to the left
+    obj.mario_ref_y = 40; // Mario above
+
+    // Dispatch frame 0: State 0 init
+    obj.dispatch_handler(0x5A773, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 1, "state is WalkLeft (1)");
+    assert_eq!(st.b[B_TYPE], 77, "contact kind 77 (0x4D)");
+    assert_eq!(st.b[B_T25], 24, "initial walk budget 24");
+    assert_eq!(st.b[B_T24], 48, "full walk budget 48");
+
+    // Fast-forward 23 steps left
+    for _ in 1..=23 {
+        obj.dispatch_handler(0x5A773, &mut st, &l, &t);
+    }
+    assert_eq!(st.x(), 77);
+    assert_eq!(st.b[B_T25], 1);
+
+    // 24th step reaches 0: transitions to Aim (3), aims up (sprite 148)
+    obj.dispatch_handler(0x5A773, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 3, "state is Aim (3)");
+    assert_eq!(st.b[B_SPRITE], 148, "aiming up sprite 148");
+    assert_eq!(st.b[B_T28], 16, "aim timer 16");
+
+    // 16 frames of countdown
+    for _ in 1..=16 {
+        obj.dispatch_handler(0x5A773, &mut st, &l, &t);
+    }
+    assert_eq!(st.b[B_T28], 0);
+
+    // Next frame: fires projectile (anim 78, sprite 145, sfx 17)
+    obj.dispatch_handler(0x5A773, &mut st, &l, &t);
+    assert_eq!(obj.sfx1, 17, "fires with sfx 17");
+    assert_eq!(obj.standby, 1, "spawned dynamic projectile in standby");
+    assert_eq!(st.b[B_FSTATE], 4, "state is Recovery (4)");
+    assert_eq!(st.b[B_T28], 32, "recovery timer 32");
+}
+
 
 
 

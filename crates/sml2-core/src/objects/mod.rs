@@ -132,6 +132,7 @@ mod tests;
 mod mario_zone;
 mod boo;
 mod carrier;
+mod cannon_ant;
 mod fallwalker;
 mod fire_piranha;
 mod groundwalker;

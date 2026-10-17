@@ -37,6 +37,7 @@ impl ObjectSim {
             0x59CE7 => self.handler_paced_walker(st, layout),
             0x59E06 => self.handler_vertical_pacer(st),
             0x5A1F6 => self.handler_perched_flyer(st),
+            0x5A773 => self.handler_cannon_ant(st),
             0x5B1C8 => self.handler_grower92(st),
             0x5B241 => self.handler_floater94(st),
             0x5B28C => self.handler_floater95(st),
