@@ -118,6 +118,10 @@ mod dispatch;
 mod terrain_probes;
 mod handler_0x58848;
 mod handler_0x58848_adapter;
+#[path = "handler_0x58B43.rs"]
+mod handler_0x58b43;
+#[path = "handler_0x58B43_adapter.rs"]
+mod handler_0x58b43_adapter;
 #[path = "handler_0x589A6.rs"]
 mod handler_0x589a6;
 #[path = "handler_0x589A6_adapter.rs"]
