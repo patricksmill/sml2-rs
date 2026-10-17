@@ -1,4 +1,9 @@
 //! Eight-way emergence followed by timed activation and player tracking.
+//!
+//! This is the shared body for ROM `$5902D` (anim 53) and ROM `$5934A`
+//! (anim 62). Both entries jump into the same `$59032` init, use the same
+//! `$59092`/`$590A8` tracking states and the same `$590D8` wind-down; only the
+//! state-3 wait body's two immediates differ, carried by [`StateThree`].
 use crate::actor::{
     Actor, ContactKind, FlashFlags, FrameTick, Position, SpriteFlipFlags, VerticalTrackingError,
 };
@@ -7,6 +12,19 @@ use std::cmp::Ordering;
 // Signed ROM data at $59082 and $5908A, respectively.
 const EMERGENCE_Y: [i8; 8] = [4, -20, -32, 40, 28, 16, -44, -8];
 const EMERGENCE_X: [i8; 8] = [0, -16, 24, -24, 32, -40, -16, 40];
+
+/// The two immediates of a state-3 wait body (`$FFDB` sprite, `$FFEC` timer).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct StateThree {
+    pub(super) sprite: u8,
+    pub(super) timer: u8,
+}
+
+/// ROM `$590CF`/`$590D3`: `ld a,110` -> `$FFDB`, `ld a,24` -> `$FFEC` (anim 53).
+pub(super) const ANIM_53_STATE_THREE: StateThree = StateThree {
+    sprite: 110,
+    timer: 24,
+};
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Error {
@@ -30,6 +48,7 @@ pub(super) fn update(
     actor: &mut Actor,
     frame: FrameTick,
     world: &mut impl World,
+    state_three: StateThree,
 ) -> Result<Effect, Error> {
     match actor.state {
         0 => {
@@ -71,8 +90,8 @@ pub(super) fn update(
             if actor.timer == 0 {
                 actor.state = 4;
                 actor.contact_kind = ContactKind::from_raw(82);
-                actor.sprite = 110;
-                actor.timer = 24;
+                actor.sprite = state_three.sprite;
+                actor.timer = state_three.timer;
             }
         }
         4 => {
