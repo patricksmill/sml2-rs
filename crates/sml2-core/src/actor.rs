@@ -389,6 +389,15 @@ impl Actor {
         Ok(())
     }
 
+    /// Some platform routines use the travel parameter as a distance limit.
+    pub fn travel_span(&self) -> u8 {
+        self.travel_direction.raw()
+    }
+
+    pub fn set_travel_span(&mut self, distance: u8) {
+        self.travel_direction = Facing::from_raw(distance);
+    }
+
     pub fn move_screen_horizontally(&mut self, distance: u8) {
         self.screen
             .move_x(self.travel_direction.displacement(distance));

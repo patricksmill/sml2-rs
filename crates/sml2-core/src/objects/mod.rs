@@ -146,6 +146,8 @@ mod paced_walker;
 mod perched_flyer;
 mod pipe_bobber;
 mod piranha_fireball;
+mod rising_platform;
+mod rising_platform_adapter;
 mod squashed;
 mod vertical_pacer;
 mod walker;
