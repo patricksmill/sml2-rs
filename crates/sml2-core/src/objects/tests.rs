@@ -3483,6 +3483,46 @@ fn handler_paced_walker_0x59ce7_dispatch_and_movement() {
     assert_eq!(st.b[B_SPRITE], 163, "low bit of sprite toggled");
 }
 
+#[test]
+fn handler_vertical_pacer_0x59e06_dispatch_and_movement() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 200);
+    st.b[B_SPRITE] = 74;
+    obj.fff0 = 1; // odd frame
+
+    // Dispatch frame 0: State 0 init
+    obj.dispatch_handler(0x59E06, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 1, "state is MoveUp (1)");
+    assert_eq!(st.b[B_FLASH], 0x10, "flash byte set to 0x10");
+    assert_eq!(st.b[B_TYPE], 76, "contact kind 76 (0x4C)");
+    assert_eq!(st.b[B_T24], 48, "motion_leg initialized to 48");
+    assert_eq!(st.y(), 200);
+
+    // Dispatch frame 1: odd frame (fff0 = 1) -> gate returns, no movement
+    obj.dispatch_handler(0x59E06, &mut st, &l, &t);
+    assert_eq!(st.b[B_T24], 48);
+    assert_eq!(st.y(), 200);
+
+    // Dispatch frame 2: even frame (fff0 = 2) -> steps Y up by 1
+    obj.fff0 = 2;
+    obj.dispatch_handler(0x59E06, &mut st, &l, &t);
+    assert_eq!(st.b[B_T24], 47);
+    assert_eq!(st.y(), 199);
+
+    // Dispatch frame 3: even frame (fff0 = 4) -> steps Y up by 1 and toggles sprite
+    obj.fff0 = 4;
+    obj.dispatch_handler(0x59E06, &mut st, &l, &t);
+    assert_eq!(st.b[B_T24], 46);
+    assert_eq!(st.y(), 198);
+    assert_eq!(st.b[B_SPRITE], 75, "low bit of sprite toggled");
+}
+
 
 
 

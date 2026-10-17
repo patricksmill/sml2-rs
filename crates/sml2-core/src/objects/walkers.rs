@@ -276,6 +276,15 @@ impl ObjectSim {
         st.b = actor.to_raw_slot();
     }
 
+    pub(super) fn handler_vertical_pacer(&mut self, st: &mut Staging) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let context = vertical_pacer::VerticalPacerContext {
+            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+        };
+        let _ = vertical_pacer::update(&mut actor, context);
+        st.b = actor.to_raw_slot();
+    }
+
     pub(super) fn handler_carrier46(
         &mut self,
         st: &mut Staging,

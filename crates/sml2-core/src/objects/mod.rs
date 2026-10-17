@@ -139,6 +139,7 @@ mod paced_walker;
 mod pipe_bobber;
 mod piranha_fireball;
 mod squashed;
+mod vertical_pacer;
 mod walker;
 mod walkers;
 mod wario;
