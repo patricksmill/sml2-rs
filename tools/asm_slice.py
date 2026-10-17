@@ -23,6 +23,13 @@ TWO = {0x06, 0x0E, 0x10, 0x16, 0x18, 0x1E, 0x20, 0x26, 0x28, 0x2E,
        0xE8, 0xEE, 0xF0, 0xF6, 0xF8, 0xFE}
 ILLEGAL = {0xD3, 0xDB, 0xDD, 0xE3, 0xE4, 0xEB, 0xEC, 0xED, 0xF4, 0xFC, 0xFD}
 
+# `rst $28` words the decomp lists as instructions. Exclusive ROM ends, reviewed
+# against baserom: little-endian pointers, then the next real instruction.
+# A source `dw` declaration still wins when SourceIndex records one.
+REVIEWED_RST28_TABLES = {
+    0x58D4E: 0x58D56,  # 0x58D34 anim 45: $4D56, $4D78, $4D9A, $4DBF
+}
+
 
 def rom_address(bank: int, cpu: int) -> int:
     if not 0 <= bank < 512 or not 0 <= cpu < 0x8000:
@@ -301,6 +308,8 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
             elif op == 0xEF:  # rst $28 consumes its return address as a pointer table
                 start = rom_address(selected, next_cpu)
                 end = source.tables.get(start)
+                if end is None:
+                    end = REVIEWED_RST28_TABLES.get(start)
                 if state_contract and pc == state_contract.dispatch:
                     if (start != state_contract.pointers[0] or selected != state_contract.bank
                             or end != state_contract.declaration[1]):
