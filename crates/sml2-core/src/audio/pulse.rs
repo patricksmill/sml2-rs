@@ -1,4 +1,4 @@
-//! Pulse-channel effect 6: ROM $101F3/$101F9 and frames $1020B/$10211.
+//! Pulse-channel effects 6 and 7, sharing the source channel start/stop behavior.
 
 /// Ordered control writes for the first pulse channel. Values retain the
 /// original channel-control encodings for a future synthesizer/output adapter.
@@ -81,7 +81,37 @@ const EFFECT6_SECOND: PulseFrame = PulseFrame {
     ..EFFECT6_FIRST
 };
 
+const EFFECT7_FIRST: PulseFrame = PulseFrame {
+    sweep: 0x00,
+    duty_length: 0x80,
+    envelope: 0xa7,
+    frequency_low: 0x83,
+    frequency_control: 0x87,
+    ticks: 4,
+};
+
 impl PulseEffectState {
+    /// Source start entry $10217. As with effect 6, the caller selects the
+    /// entrypoint; this copies any pending request verbatim without consuming it.
+    pub fn start_effect7(&mut self, music: &mut PulseMusicState, out: &mut Vec<PulseWrite>) {
+        self.start_frame(music, EFFECT7_FIRST, out);
+    }
+
+    /// Source tick entry $1021D. The second command changes only frequency,
+    /// retaining the current sweep, duty, and envelope controls.
+    pub fn tick_effect7(&mut self, music: &mut PulseMusicState, out: &mut Vec<PulseWrite>) {
+        self.timer = self.timer.wrapping_sub(1);
+        if self.timer != 0 {
+            return;
+        }
+        self.step = self.step.wrapping_add(1);
+        if self.step == 2 {
+            self.stop(music, out);
+        } else {
+            self.emit_frequency_frame(0x9d, 0x07, 80, out);
+        }
+    }
+
     /// Source start entry $101F3. Copies the request verbatim without consuming
     /// it; request acceptance and clearing belong to the future dispatcher.
     pub fn start_effect6(&mut self, music: &mut PulseMusicState, out: &mut Vec<PulseWrite>) {
@@ -129,6 +159,15 @@ impl PulseEffectState {
         self.timer = frame.ticks;
     }
 
+    // Source $106CC/$111D3: only the two frequency controls, then the timer.
+    fn emit_frequency_frame(&mut self, low: u8, control: u8, ticks: u8, out: &mut Vec<PulseWrite>) {
+        out.extend([
+            PulseWrite::FrequencyLow(low),
+            PulseWrite::FrequencyControl(control),
+        ]);
+        self.timer = ticks;
+    }
+
     // Shared source stop $106A8; preserves the pending request and lower flags.
     fn stop(&mut self, music: &mut PulseMusicState, out: &mut Vec<PulseWrite>) {
         self.active_effect = 0;
@@ -143,161 +182,4 @@ impl PulseEffectState {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn dirty_state() -> (PulseEffectState, PulseMusicState) {
-        (
-            PulseEffectState {
-                request: 6,
-                active_effect: 0xe1,
-                timer: 0xfe,
-                step: 0x99,
-                duration: 0x53,
-                busy: 0x81,
-            },
-            PulseMusicState {
-                flags: PulseMusicFlags::from_bits(0x65),
-                vibrato_timer: 0x37,
-            },
-        )
-    }
-
-    fn first_frame() -> [PulseWrite; 5] {
-        [
-            PulseWrite::Sweep(0),
-            PulseWrite::DutyLength(0xba),
-            PulseWrite::Envelope(0xc0),
-            PulseWrite::FrequencyLow(0xb6),
-            PulseWrite::FrequencyControl(0xc6),
-        ]
-    }
-
-    fn second_frame() -> [PulseWrite; 5] {
-        [
-            PulseWrite::Sweep(0),
-            PulseWrite::DutyLength(0xba),
-            PulseWrite::Envelope(0xc0),
-            PulseWrite::FrequencyLow(0x39),
-            PulseWrite::FrequencyControl(0xc7),
-        ]
-    }
-
-    #[test]
-    fn pulse_effect6_start_preserves_dirty_values_and_appends_exact_ordered_writes() {
-        let (mut effect, mut music) = dirty_state();
-        let mut out = vec![PulseWrite::Envelope(0x42)];
-        effect.start_effect6(&mut music, &mut out);
-        assert_eq!(out[0], PulseWrite::Envelope(0x42));
-        assert_eq!(&out[1..], &first_frame());
-        assert_eq!(
-            effect,
-            PulseEffectState {
-                request: 6,
-                active_effect: 6,
-                timer: 8,
-                step: 0,
-                duration: 0x53,
-                busy: 0x81
-            }
-        );
-        assert_eq!(
-            music,
-            PulseMusicState {
-                flags: PulseMusicFlags::from_bits(0xe5),
-                vibrato_timer: 0x37
-            }
-        );
-        assert!(music.flags.effect_owns_channel());
-    }
-
-    #[test]
-    fn pulse_effect6_complete_eight_plus_two_tick_sequence() {
-        let (mut effect, mut music) = dirty_state();
-        let mut out = Vec::new();
-        effect.start_effect6(&mut music, &mut out);
-        out.clear();
-        for remaining in (1..8).rev() {
-            effect.tick_effect6(&mut music, &mut out);
-            assert_eq!(effect.timer, remaining);
-            assert_eq!(effect.step, 0);
-            assert!(out.is_empty());
-        }
-        effect.tick_effect6(&mut music, &mut out);
-        assert_eq!(out, second_frame());
-        assert_eq!((effect.timer, effect.step), (2, 1));
-        assert_eq!(
-            (effect.duration, effect.busy, music.vibrato_timer),
-            (0x53, 0x81, 0x37)
-        );
-        out.clear();
-        effect.request = 0x19; // New request survives continuation and stop.
-        effect.tick_effect6(&mut music, &mut out);
-        assert_eq!((effect.timer, effect.step), (1, 1));
-        assert!(out.is_empty());
-        effect.tick_effect6(&mut music, &mut out);
-        assert_eq!(out, [PulseWrite::Sweep(0)]);
-        assert_eq!(
-            effect,
-            PulseEffectState {
-                request: 0x19,
-                ..PulseEffectState::default()
-            }
-        );
-        assert_eq!(
-            music,
-            PulseMusicState {
-                flags: PulseMusicFlags::from_bits(0x65),
-                vibrato_timer: 0
-            }
-        );
-        assert!(!music.flags.effect_owns_channel());
-        assert_eq!(music.flags.bits(), 0x65);
-    }
-
-    #[test]
-    fn pulse_effect6_zero_timer_wraps_without_other_changes() {
-        let (mut effect, mut music) = dirty_state();
-        effect.timer = 0;
-        let mut expected = effect;
-        expected.timer = 255;
-        let expected_music = music;
-        let mut out = Vec::new();
-        effect.tick_effect6(&mut music, &mut out);
-        assert_eq!(effect, expected);
-        assert_eq!(music, expected_music);
-        assert!(out.is_empty());
-    }
-
-    #[test]
-    fn pulse_effect6_step_wrap_and_equality_only_stop_preserve_dirty_state() {
-        for (old_step, new_step) in [(255, 0), (2, 3)] {
-            let (mut effect, mut music) = dirty_state();
-            effect.timer = 1;
-            effect.step = old_step;
-            let mut expected = effect;
-            expected.timer = 2;
-            expected.step = new_step;
-            let expected_music = music;
-            let mut out = Vec::new();
-            effect.tick_effect6(&mut music, &mut out);
-            assert_eq!(effect, expected);
-            assert_eq!(music, expected_music);
-            assert_eq!(out, second_frame());
-        }
-    }
-
-    #[test]
-    fn pulse_effect6_start_copies_noncanonical_request_without_consuming_it() {
-        for request in [0, 0xff] {
-            let (mut effect, mut music) = dirty_state();
-            effect.request = request;
-            music.flags = PulseMusicFlags::from_bits(0xff);
-            let mut out = Vec::new();
-            effect.start_effect6(&mut music, &mut out);
-            assert_eq!((effect.request, effect.active_effect), (request, request));
-            assert_eq!(music.flags.bits(), 0xff);
-            assert_eq!(out, first_frame());
-        }
-    }
-}
+mod tests;
