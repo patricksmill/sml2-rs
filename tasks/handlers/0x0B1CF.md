@@ -1,0 +1,54 @@
+# Handler 0x0B1CF
+
+**Slice status: COMPLETE** — this describes control-flow coverage, not implementation verification.
+**Address:** ROM `0x0B1CF`, bank `$02` (2 decimal), CPU `$71CF`.
+**Selected bank at entry:** `$02`.
+**Anims:** (helper / no table entry).
+**Policy:** [PORTING.md](../../PORTING.md).
+
+Implement in a focused sibling module under `crates/sml2-core/src/objects/`;
+register it in `objects/mod.rs` if new, and wire `objects/dispatch.rs`.
+Apply `docs/idiomatic-rust-porting.md`: use typed `Actor` state from `actor.rs`.
+Keep slot conversion and legacy world input/effect mapping in an explicit adapter;
+do not put raw offsets, register names or HRAM scratch in domain handler logic.
+Resolve typed shared-helper prerequisites first. New tests belong beside the
+implementation; shared integration fixtures are currently in `objects/tests.rs`.
+
+## Exact ROM-addressed instructions and ASM locations
+
+Addresses and edges derive from ROM bytes. Source labels are not assumed to
+mark every entry. Review table bounds and dependency contracts before porting.
+
+```text
+0x0B1CF  0E 1B    main.asm:7869 ld c, 27
+0x0B1D1  21 08 72 main.asm:7870 ld hl, $7208
+0x0B1D4  18 1A    main.asm:7871 jr UnknownRJump_0xB1F0
+0x0B1F0  F0 E0    main.asm:7893 ldh a, [$FFE0]
+0x0B1F2  5F       main.asm:7894 ld e, a
+0x0B1F3  16 00    main.asm:7895 ld d, 0
+0x0B1F5  19       main.asm:7896 add hl, de
+0x0B1F6  46       main.asm:7897 ld b, [hl]
+0x0B1F7  21 E0 FF main.asm:7898 ld hl, $FFE0
+0x0B1FA  7E       main.asm:7899 ld a, [hl]
+0x0B1FB  B9       main.asm:7900 cp c
+0x0B1FC  C8       main.asm:7901 ret z
+0x0B1FD  34       main.asm:7902 inc [hl]
+0x0B1FE  C9       main.asm:7903 ret
+```
+
+## Recovered rst $28 state tables (CPU targets)
+
+- None.
+
+## Existing helper dependencies supplied by the supervisor
+
+- None.
+
+## Unresolved work
+
+- None.
+
+An INCOMPLETE brief must not be dispatched as a ready implementation task.
+Resolve the listed transfer or split a helper prerequisite and regenerate.
+Byte assertions must cover state transitions, gates, arithmetic boundaries,
+removal/reset, and dispatch. No generated brief constitutes behavioral proof.
