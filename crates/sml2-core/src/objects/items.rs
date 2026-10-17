@@ -110,20 +110,13 @@ impl ObjectSim {
     }
 
     pub(super) fn handler_squashed(&mut self, st: &mut Staging, tables: &ObjectTables) {
-        if st.b[B_FSTATE] == 1 {
-            // $582C3: count +16 down; at 0 remove via $5B2D7.
-            st.b[B_PHASE] = st.b[B_PHASE].wrapping_sub(1);
-            if st.b[B_PHASE] != 0 {
-                return;
-            }
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let effect = squashed::update(&mut actor);
+        st.b = actor.to_raw_slot();
+        if let squashed::SquashedEffect::Despawn = effect {
             self.remove_mode = 1;
             self.remove_object(st, tables);
-            return;
         }
-        st.b[B_FLASH] = 16;
-        st.b[B_FSTATE] = 1;
-        st.b[B_PHASE] = 32;
-        st.b[B_TYPE] = 0;
     }
 
     pub(super) fn handler_grower92(&mut self, st: &mut Staging) {

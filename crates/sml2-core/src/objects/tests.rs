@@ -3137,3 +3137,35 @@ fn handler_fallwalker_native_migration_preserves_raw_slot_bytes() {
     assert_eq!(obj.facing, 1);
 }
 
+#[test]
+fn handler_squashed_native_migration_preserves_raw_slot_bytes() {
+    let t = tables();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+
+    // State 0 init: sets flash 16, state 1, phase 32, type 0
+    let mut st = Staging::default();
+    st.b[B_FSTATE] = 0;
+    st.b[B_TYPE] = 0x4E;
+    obj.handler_squashed(&mut st, &t);
+    assert_eq!(st.b[B_FLASH], 16);
+    assert_eq!(st.b[B_FSTATE], 1);
+    assert_eq!(st.b[B_PHASE], 32);
+    assert_eq!(st.b[B_TYPE], 0);
+
+    // State 1 countdown: decrements phase
+    obj.handler_squashed(&mut st, &t);
+    assert_eq!(st.b[B_PHASE], 31);
+    assert_eq!(st.b[B_STATE], 0); // not removed yet
+
+    // At phase 1: counts down to 0 and despawns
+    st.b[B_PHASE] = 1;
+    st.b[B_STATE] = 2; // Active slot
+    obj.handler_squashed(&mut st, &t);
+    assert_eq!(st.b[B_PHASE], 0);
+    assert_eq!(st.b[B_STATE], 0, "removed via remove_mode 1");
+    assert_eq!(obj.money_bag, 1, "credited coin on remove_mode 1");
+    assert_eq!(obj.remove_mode, 0, "reset after removal");
+}
+
+
