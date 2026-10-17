@@ -112,6 +112,8 @@ mod boss_damage;
 mod boss_spawn;
 mod boss_sprite_cycle;
 mod boss_reverse_picker;
+#[cfg(test)]
+mod boss_screen_input_tests;
 mod dispatch;
 mod handler_0x586eb;
 mod handler_0x5b0d5;
@@ -182,6 +184,8 @@ pub struct ObjectSim {
     pub spawn_sprite: u8,
     pub spawn_attr: u8,
     pub mario: MarioContact,
+    /// Current player screen X, projected before boss targeting.
+    pub player_screen_x: u8,
     pub slot_done: [bool; SLOT_COUNT],
     pub action_latch: u8,
     pub object_hit_flag: u8,
@@ -273,6 +277,7 @@ impl ObjectSim {
             spawn_sprite: 0,
             spawn_attr: 0,
             mario: MarioContact::default(),
+            player_screen_x: 64,
             slot_done: [false; SLOT_COUNT],
             action_latch: 0,
             object_hit_flag: 0,
