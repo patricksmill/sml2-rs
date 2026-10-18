@@ -441,6 +441,10 @@ mod mario_zone;
 mod boo;
 mod carrier;
 mod cannon_ant;
+#[path = "handler_0x5A816.rs"]
+mod handler_0x5a816;
+#[path = "handler_0x5A816_adapter.rs"]
+mod handler_0x5a816_adapter;
 mod charging_enemy;
 mod dashing_walker;
 mod edge_walker;
