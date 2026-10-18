@@ -48,6 +48,7 @@ impl ObjectSim {
         self.apply_boss_spawn(st);
     }
 
+    #[cfg(test)]
     pub(super) fn boss_hit_save(&mut self, st: &mut Staging) {
         self.spawn_sprite = st.b[B_SPRITE];
         self.saved_frame_state = st.b[B_FSTATE];

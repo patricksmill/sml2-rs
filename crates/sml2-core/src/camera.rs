@@ -627,7 +627,7 @@ impl CameraSim {
     /// calls `ObjectSim::spawn_boss` and switches to the boss driver.
     ///
     /// Callers check [`crate::scene::boss_def_portable`] before taking this
-    /// branch. Definitions 1/2/3/4/5 finish through the reward's level-clear event;
+    /// branch. Definitions 0/1/2/3/4/5 finish through the reward's level-clear event;
     /// Wario definitions 6/7/8 finish through their phase/ending events.
     /// Unsupported definitions use `take_blocked_scene_load` instead.
     ///
@@ -711,7 +711,8 @@ mod tests {
         assert!(boss_def_portable(6), "Wario form 1 is ported");
         assert!(boss_def_portable(7), "Wario form 2 is ported");
         assert!(boss_def_portable(8), "Wario form 3 is ported");
-        assert!(!boss_def_portable(0));
+        assert!(boss_def_portable(0), "the Tree Zone arena flow is verified");
+        assert!(!boss_def_portable(9), "unknown definitions remain blocked");
         assert!(boss_def_portable(3), "definition 3 arena flow is verified");
         assert!(boss_def_portable(4), "definition 4 arena flow is verified");
         assert!(boss_def_portable(5), "definition 5 arena flow is verified");

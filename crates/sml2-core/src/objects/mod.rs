@@ -121,6 +121,8 @@ mod boss_stun;
 mod boss_morph;
 mod tree_boss;
 mod tree_boss_adapter;
+#[cfg(test)]
+mod tree_boss_flow_tests;
 mod patrol_boss;
 mod patrol_boss_adapter;
 mod sweep_boss;

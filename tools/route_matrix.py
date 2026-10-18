@@ -51,7 +51,7 @@ DISPATCH = ROOT / "crates" / "sml2-core" / "src" / "objects" / "dispatch.rs"
 TABLE_B_FROM_LEVEL = 0x0A
 # Mirrors `scene::boss_def_index` and `scene::boss_def_portable`.
 BOSS_LADDER = {0x05: 0, 0x09: 1, 0x0D: 2, 0x10: 3, 0x13: 4, 0x17: 5}
-BOSS_PORTABLE = {1, 2, 3, 4, 5, 6, 7, 8}
+BOSS_PORTABLE = set(range(9))
 SECRET_OVERLAY_ROM = 0x377B
 SECRET_RECORD_LEN = 8
 

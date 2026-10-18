@@ -32,6 +32,8 @@ mod door_boss_entry_tests;
 #[cfg(test)]
 mod patrol_boss_entry_tests;
 #[cfg(test)]
+mod tree_boss_entry_tests;
+#[cfg(test)]
 mod sweep_boss_entry_tests;
 #[cfg(test)]
 mod circuit_boss_entry_tests;

@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "2 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "1 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "mechanics_all_levels_acceptance",
@@ -15,21 +15,6 @@
     "per_level_handler_coverage"
    ],
    "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "pending"
-  },
-  {
-   "id": "boss_def0_arena_entry",
-   "title": "Boss definition 0 arena entry and clear flow (level ID $05, scene $0B)",
-   "asm_refs": [
-    "main.asm:$8D9C",
-    "main.asm:$8DFD",
-    "main.asm:$93A7",
-    "home.asm:$0EB0"
-   ],
-   "dependencies": [
-    "boss_def0_native_handler"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \"done\" means; runtime arena-flow test in the shape of definitions 3-5, then enable boss_def_portable(0)",
    "status": "pending"
   }
  ],

@@ -428,14 +428,8 @@ impl SceneVm {
 ///
 /// Returns `(count, hits, sprite, obj0_def, Vec<sub_obj_defs>)`.
 ///
-/// DATA ONLY, AND NO CALLER YET: this is the `$8DFD`/`$8E6C` read side
-/// (`sObjectDefIndex` -> the 3-byte count/hits/sprite record through the
-/// 9-pointer table at `$4E3F`, `sObject0Def` through `$4E9A`, and
-/// `sObjectDefCount` 18-byte images through `$4EAC`). Nothing spawns a boss
-/// with it: the `$0EB0` scene branch, the `$8DA9` alternate driver and the
-/// slot staging into `$AD05` are still unported (see the `scene_boss_spawn`
-/// queue item). It is here because the table is ROM-verified data, not
-/// because the boss exists.
+/// `ObjectSim::spawn_boss` consumes these ROM-derived records after the
+/// runtime accepts a pending `$0EB0` arena load.
 ///
 /// `$8DFD` computes the index as `sBossFightPhase + b` with `b` per level
 /// (level 5 -> 0, 9 -> 1, $0D -> 2, $10 -> 3, $13 -> 4, $17 -> 5, else 6);
@@ -448,13 +442,13 @@ impl SceneVm {
 /// `$10` -> 3, `$13` -> 4, `$17` -> 5, and anything else (including `$18`,
 /// the Wario castle) -> 6. That index selects the 3-byte record (count, hits,
 /// sprite) and the two 18-byte def images in [`lookup_boss_spawn_def`].
-/// Definitions accepted through normal arena entry: 1 (level `$09`), 2
+/// Definitions accepted through normal arena entry: 0 (level `$05`), 1 (`$09`), 2
 /// (`$0D`), 3 (`$10`), 4 (`$13`), 5 (`$17`), and Wario's 6/7/8 (`$18`).
 /// The regular fights finish
 /// through reward and level reset; Wario uses phase exits and the ending.
 /// Unsupported definitions still use `CameraSim::take_blocked_scene_load`.
 pub fn boss_def_portable(def_index: u8) -> bool {
-    matches!(def_index, 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8)
+    matches!(def_index, 0..=8)
 }
 
 pub fn boss_def_index(level_id: u8, phase: u8) -> u8 {

@@ -182,9 +182,14 @@ approach — the smoke harness runs 1200 frames and never reaches a bell.
    reload. Run `sml2-runtime --level 11 --level-progress 8 --headless 1` for
    level 12's alternate entry. The runtime still lacks a live overworld loop;
    the CLI supplies its entry progress byte. Played approaches remain pending.
-2. **Boss definition 0 is blocked** — level 6 (TreeZone5, scene `$0B`) resolves
-   to def 0, which `boss_def_portable` excludes. Promoted as
-   `boss_def0_arena_entry`.
+2. **All nine boss definitions now accept arena entry.** Level 6 (TreeZone5,
+   scene `$0B`, definition 0) is covered by runtime
+   `tree_boss_real_level_scene_entry_selects_portable_definition`; its source
+   scene map and script drive `$0EB0` entry. Core
+   `tree_arena_all_divider_choices_defeat_reward_map_and_reentry` covers all
+   sweep states, collision-generated stomps, the appended reward, one golden
+   coin, save serialization, map node `$20`/screen 2, and clean re-entry. These
+   are direct-placement acceptance tests; played approaches remain pending.
 3. **The approach routes are unplayed.** Every bell arms when stood on, but no
    test walks from a spawn (or secret entry) to a bell. Level 19's upper bell and
    the castle/night levels' bells are the obvious first played routes.
