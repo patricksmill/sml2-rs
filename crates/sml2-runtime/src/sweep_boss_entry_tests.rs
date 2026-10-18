@@ -1,0 +1,102 @@
+//! Source scene 13 in level $13 reaches definition 4 through runtime APIs.
+use super::*;
+use sml2_core::{
+    camera::CameraSim,
+    objects::{ObjectSim, B_DEF, B_FSTATE},
+};
+
+#[test]
+fn sweep_boss_real_level_scene_entry_selects_portable_definition() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../extracted/levels");
+    let manifest: LevelManifest =
+        serde_json::from_str(&fs::read_to_string(dir.join("level20.manifest.json")).unwrap())
+            .unwrap();
+    assert_eq!(manifest.level_id, 0x13);
+    let mut player = PlayerSim::new();
+    // Direct placement at the source entrance cell: right edge of (15,0).
+    player.x = 0x0FF1;
+    player.y = 0x00D4;
+    let mut camera = CameraSim::new(0x0FB0, 0x00C0);
+    camera.prev_mario_y_lo = player.y as u8;
+    camera
+        .edge_map
+        .copy_from_slice(&fs::read(dir.join("level20.edge.bin")).unwrap());
+    camera.scene_map = fs::read(dir.join("level20.scene.bin")).unwrap();
+    assert_eq!(camera.scene_map[15], 13);
+    let scripts =
+        SceneScripts::from_bytes(&fs::read(dir.join("../scenes/script_table.bin")).unwrap())
+            .unwrap();
+    assert_eq!(
+        scripts
+            .scripts()
+            .into_iter()
+            .find(|(id, _)| *id == 13)
+            .unwrap()
+            .1,
+        vec![0x63, 0x20, 0x30, 0x58, 0x58, 0x40, 1, 0xFF]
+    );
+    let mut vm = SceneVm::default();
+    let mut objects = ObjectSim::new(vec![], camera.x);
+    objects.configure(manifest.level_id);
+    let tables: ObjectTables = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../extracted/objects.json"
+    )))
+    .unwrap();
+    let arena = LevelLayout::from_bytes(&fs::read(dir.join("../scenes/arena_layout.bin")).unwrap())
+        .unwrap();
+    let mut ran = vec![];
+    let mut entered = false;
+    for _ in 0..128 {
+        player.tick_fade_timer();
+        camera.step(&mut player);
+        if camera.scene_load_pending {
+            let definition = boss_def_index(manifest.level_id, camera.boss_fight_phase);
+            assert_eq!(definition, 4);
+            assert!(boss_def_portable(definition));
+            let (music, song) = camera.begin_scene_load(manifest.level_id).unwrap();
+            player.music_request = music;
+            player.level_song = song;
+            objects.spawn_boss(definition);
+            entered = true;
+        }
+        if entered {
+            objects.sample_player_inputs(&player);
+            objects.step(
+                camera.x,
+                camera.y,
+                &arena,
+                &tables,
+                &build_contact(&player, &PlayerKeys::default(), 0),
+                camera.boss_mode(),
+            );
+            player.apply_object_result(&mut objects, false);
+            camera.apply_object_result(&mut objects);
+        }
+        if let SceneStep::Ran(op) = vm.step(&mut player, &mut camera, &scripts) {
+            ran.push(op);
+        }
+        assert!(vm.unported().is_empty());
+        assert!(objects.unported.is_empty());
+        if entered {
+            break;
+        }
+    }
+    assert!(entered, "source entrance did not reach arena");
+    assert_eq!(ran, vec![0x63, 0x20, 0x30, 0x40]);
+    assert_eq!(player.level_gfx_index, 3);
+    assert_eq!((player.music_request, player.level_song), (32, 32));
+    assert!(camera.boss_mode());
+    assert_eq!((camera.x, camera.y), (592, 88));
+    assert!(!camera.take_blocked_scene_load());
+    assert_eq!(objects.boss_hits_remaining, 6);
+    assert_eq!(objects.boss_def_count, 2);
+    assert_eq!(
+        objects.slots[..3]
+            .iter()
+            .map(|s| s.b[B_DEF])
+            .collect::<Vec<_>>(),
+        vec![16, 17, 18]
+    );
+    assert_eq!(objects.slots[0].b[B_FSTATE], 0, "fade gates boss intro");
+}

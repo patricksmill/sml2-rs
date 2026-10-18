@@ -617,7 +617,7 @@ impl CameraSim {
     /// calls `ObjectSim::spawn_boss` and switches to the boss driver.
     ///
     /// Callers check [`crate::scene::boss_def_portable`] before taking this
-    /// branch. Definitions 1/2/3 finish through the reward's level-clear event;
+    /// branch. Definitions 1/2/3/4 finish through the reward's level-clear event;
     /// Wario definitions 6/7/8 finish through their phase/ending events.
     /// Unsupported definitions use `take_blocked_scene_load` instead.
     ///
@@ -690,8 +690,8 @@ mod tests {
         c
     }
 
-    /// `$0EB0`'s branch is taken only for a def whose handlers are all ported
-    /// (def 2 today, the Mario Zone): the park lands — which is what `$0652`
+    /// `$0EB0`'s branch is taken for an accepted arena definition:
+    /// the park lands — which is what `$0652`
     /// reads — and `begin_scene_load` returns the song.
     #[test]
     fn the_scene_branch_is_taken_for_a_portable_def() {
@@ -703,7 +703,8 @@ mod tests {
         assert!(boss_def_portable(8), "Wario form 3 is ported");
         assert!(!boss_def_portable(0));
         assert!(boss_def_portable(3), "definition 3 arena flow is verified");
-        assert!(!boss_def_portable(4));
+        assert!(boss_def_portable(4), "definition 4 arena flow is verified");
+        assert!(!boss_def_portable(5));
         let mut c = cam_at(80, 448);
         c.scene_state = 0x0F;
         c.finish_transition();

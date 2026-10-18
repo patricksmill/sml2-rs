@@ -431,11 +431,11 @@ impl SceneVm {
 /// the Wario castle) -> 6. That index selects the 3-byte record (count, hits,
 /// sprite) and the two 18-byte def images in [`lookup_boss_spawn_def`].
 /// Definitions accepted through normal arena entry: 1 (level `$09`), 2
-/// (`$0D`), 3 (`$10`), and Wario's 6/7/8 (`$18`). The regular fights finish
+/// (`$0D`), 3 (`$10`), 4 (`$13`), and Wario's 6/7/8 (`$18`). The regular fights finish
 /// through reward and level reset; Wario uses phase exits and the ending.
 /// Unsupported definitions still use `CameraSim::take_blocked_scene_load`.
 pub fn boss_def_portable(def_index: u8) -> bool {
-    matches!(def_index, 1 | 2 | 3 | 6 | 7 | 8)
+    matches!(def_index, 1 | 2 | 3 | 4 | 6 | 7 | 8)
 }
 
 pub fn boss_def_index(level_id: u8, phase: u8) -> u8 {
