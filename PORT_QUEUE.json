@@ -1,17 +1,18 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "1 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "1 pending in PORT_QUEUE.json; all 126 declared level-table handlers and the boss table are native (0 unported). Next: per-level route/mechanics acceptance, not handler bodies.",
  "queue": [
   {
-   "id": "remaining_handler_classes",
-   "title": "Remaining source-required level and boss object handlers and dynamic spawn closure",
+   "id": "mechanics_all_levels_acceptance",
+   "title": "Per-level mechanics acceptance: source-derived route entry/exit and dynamic-spawn closure",
    "asm_refs": [
     "main.asm:$58040",
-    "main.asm:$59C07"
+    "main.asm:$59C07",
+    "main.asm:$92E8"
    ],
    "dependencies": [
-    "per_level_handler_coverage",
-    "level_boot_route"
+    "level_boot_route",
+    "per_level_handler_coverage"
    ],
    "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
    "status": "pending"

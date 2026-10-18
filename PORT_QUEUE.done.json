@@ -959,6 +959,20 @@
    ],
    "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
    "status": "done"
+  },
+  {
+   "id": "remaining_handler_classes",
+   "title": "Remaining source-required level and boss object handlers and dynamic spawn closure",
+   "asm_refs": [
+    "main.asm:$58040",
+    "main.asm:$59C07"
+   ],
+   "dependencies": [
+    "per_level_handler_coverage",
+    "level_boot_route"
+   ],
+   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+   "status": "done"
   }
  ]
 }
