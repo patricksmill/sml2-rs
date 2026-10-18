@@ -94,9 +94,10 @@ fn handler_0x96fe_mouth_spawns_then_returns_to_the_intro() {
     sim.handler_0x96fe(&mut st);
     assert_eq!(st.b[B_SPRITE], 14);
     assert_eq!(st.b[B_FSTATE], 6);
-    assert_eq!(st.b[B_HITREACT], 48);
+    assert_eq!(st.b[B_T24], 48);
+    assert_eq!(st.b[B_HITREACT], 0);
 
-    st.b[B_HITREACT] = 2;
+    st.b[B_T24] = 2;
     sim.handler_0x96fe(&mut st);
     assert_eq!(st.b[B_FSTATE], 7);
     sim.handler_0x96fe(&mut st);

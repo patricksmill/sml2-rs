@@ -30,8 +30,7 @@ impl ObjectSim {
             2 => self.boss_morph_to_anim3(st),
             3 => self.open_and_spawn(st),
             4 => self.pause_after_the_spawn(st),
-            5 => self.step_the_mouth(st),
-            6 => self.hold_the_open_mouth(st),
+            5 | 6 => self.advance_door_boss_mouth(st),
             7 => st.b[B_FSTATE] = 0,
             _ => self.note_unported(0x96FE),
         }
@@ -111,25 +110,10 @@ impl ObjectSim {
         st.b[B_TYPE] = 0;
     }
 
-    fn step_the_mouth(&mut self, st: &mut Staging) {
-        if self.fff0 & 3 != 0 {
-            return;
-        }
-        st.b[B_SPRITE] = st.b[B_SPRITE].wrapping_add(1);
-        if st.b[B_SPRITE] != 0x19 {
-            return;
-        }
-        st.b[B_SPRITE] = 14;
-        st.b[B_FSTATE] = 6;
-        st.b[B_HITREACT] = 48;
-    }
-
-    fn hold_the_open_mouth(&mut self, st: &mut Staging) {
-        st.b[B_HITREACT] = st.b[B_HITREACT].wrapping_sub(2);
-        if st.b[B_HITREACT] != 0 {
-            return;
-        }
-        st.b[B_FSTATE] = 7;
+    fn advance_door_boss_mouth(&mut self, st: &mut Staging) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        door_boss_mouth::update(&mut actor, crate::actor::FrameTick(u64::from(self.fff0)));
+        st.b = actor.to_raw_slot();
     }
 }
 
