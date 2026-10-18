@@ -1,5 +1,5 @@
 //! Boss anim 8, ROM `$98C8` (bank 2 CPU `$58C8`).
-use crate::actor::{Actor, ContactKind, FrameTick, MotionProfileError};
+use crate::actor::{Actor, ContactKind, FrameTick, MotionProfileError, ScreenPosition};
 
 pub(super) struct Inputs<'a> {
     pub remove_mode: u8,
@@ -26,13 +26,7 @@ pub(super) fn update(actor: &mut Actor, input: Inputs<'_>) -> Result<Effects, Up
     let effects = Effects::default();
     // This override precedes every state, including the waiting state.
     if input.remove_mode == 2 {
-        actor.screen.y = 116;
-        actor.screen.x = 88;
-        actor.definition = 4;
-        actor.sprite = 9;
-        actor.state = 0;
-        actor.motion_phase = 0;
-        actor.contact_kind = ContactKind::NONE;
+        super::boss_reward::morph(actor, ScreenPosition { x: 88, y: 116 });
         return Ok(effects);
     }
     if actor.state == 0 {

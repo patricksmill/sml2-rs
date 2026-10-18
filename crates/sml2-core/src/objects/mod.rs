@@ -121,6 +121,9 @@ mod boss_stun;
 mod boss_morph;
 mod patrol_boss;
 mod patrol_boss_adapter;
+mod patrol_child;
+mod patrol_child_adapter;
+mod boss_reward;
 #[cfg(test)]
 mod boss_flash_paths;
 mod boss_damage;
