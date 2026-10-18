@@ -220,7 +220,7 @@ pub struct SpawnRecord {
     pub anim_index: u8,
     /// Record byte 2: 0 = spawns in both modes; 1 = skipped in Easy Mode
     /// (normal gate: `(flag & $0E) == 0`, easy gate: `(flag & $0F) == 0`).
-    /// The game writes 2 here once the record has spawned.
+    /// Live marker: allocation writes 2; mode-0 removal writes 0 or spent $10.
     pub mode_flag: u8,
     /// Sprite id resolved from `anim_index` through the mode's anim->sprite
     /// table (see `object.rs`); what `$FFDB` becomes in-game.
@@ -228,7 +228,8 @@ pub struct SpawnRecord {
     /// Collision extents of the sprite: `[x0, x1, y0, y1]` signed offsets
     /// (slot+19..+22 in-game).
     pub hitbox: [i8; 4],
-    /// The 6 expanded bytes as stored in the `$AB06` buffer.
+    /// Original extraction snapshot of the 6 expanded bytes. Live state is in
+    /// the typed fields above; gameplay mutations do not update this snapshot.
     pub raw: [u8; 6],
 }
 

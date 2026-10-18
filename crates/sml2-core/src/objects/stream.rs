@@ -116,6 +116,7 @@ impl ObjectSim {
             self.derive_sprite(&mut s, tables);
             self.refresh_hitbox(&mut s, tables, false);
             self.slots[slot].b = s.b;
+            self.records[ri].mode_flag = 2;
             self.spawned[ri] = true;
             self.standby = self.standby.wrapping_add(1);
             // The last record leaves the pointer parked on itself (see

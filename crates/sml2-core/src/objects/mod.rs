@@ -427,6 +427,8 @@ mod tests;
 mod defeat_motion_tests;
 #[cfg(test)]
 mod stomp_morph_tests;
+#[cfg(test)]
+mod record_marker_tests;
 mod mario_zone;
 mod boo;
 mod carrier;

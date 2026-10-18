@@ -52,7 +52,8 @@ impl ObjectSim {
     pub(super) fn remove_object(&mut self, st: &mut Staging, tables: &ObjectTables) {
         if self.remove_mode == 0 {
             if let Some(ri) = self.record_index(st) {
-                // [$FFD2] == $10 would write $10 back (spent marker).
+                let actor = crate::actor::Actor::from_raw_slot(&st.b);
+                self.records[ri].mode_flag = if actor.marker == 0x10 { 0x10 } else { 0 };
                 self.spawned[ri] = false;
             }
         }
