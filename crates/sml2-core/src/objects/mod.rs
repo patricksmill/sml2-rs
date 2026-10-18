@@ -429,6 +429,10 @@ mod defeat_motion_tests;
 mod stomp_morph_tests;
 #[cfg(test)]
 mod record_marker_tests;
+mod record_origin;
+mod record_reset;
+#[cfg(test)]
+mod record_reset_tests;
 mod mario_zone;
 mod boo;
 mod carrier;

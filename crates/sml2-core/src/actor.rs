@@ -28,6 +28,10 @@ pub use vertical_tracking::{VerticalTrackingError, VERTICAL_TRACKING_Y_SPEED};
 #[path = "actor_direction_allocation.rs"]
 mod direction_allocation;
 
+#[path = "actor_spawn_reset.rs"]
+mod spawn_reset;
+pub use spawn_reset::{SpawnOrigin, SpriteReset};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Position {
     pub x: u16,

@@ -89,7 +89,7 @@ fn handler_0x5a5ec_pause_restores_the_spawn_record() {
     sim.fff0 = 0;
     let mut st = Staging::default();
     st.b[6] = 0xAB;
-    st.b[7] = 0x06;
+    st.b[7] = 0x08; // record start $AB06 + 2, as $8CA8 stores it
     st.b[8] = 2;
     st.b[14] = 16;
     st.b[15] = 4;
@@ -99,7 +99,8 @@ fn handler_0x5a5ec_pause_restores_the_spawn_record() {
     assert_eq!(u16::from_be_bytes([st.b[0], st.b[1]]), 0x0120);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 0x0080);
     assert_eq!(st.b[8], 1);
-    assert_eq!(sim.standby, 1);
+    // $5B2BF/$863C never reclassify the slot; promotion/demotion own the counts.
+    assert_eq!((sim.active, sim.standby), (1, 0));
     assert!(sim.unported.is_empty());
 }
 

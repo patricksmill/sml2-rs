@@ -324,17 +324,8 @@ impl ObjectSim {
     }
 
     pub(super) fn respawn_object_5b2bf(&mut self, st: &mut Staging, tables: &ObjectTables) {
-        if let Some(ri) = self.record_index(st) {
-            let rec = &self.records[ri];
-            set_x(&mut st.b, rec.x);
-            set_y(&mut st.b, rec.y);
-            st.b[B_MARKER] = rec.mode_flag;
-            self.derive_sprite(st, tables);
-            st.b[B_STATE] = 1;
-            self.active = self.active.wrapping_sub(1);
-            self.standby = self.standby.wrapping_add(1);
-        } else {
-            st.b[B_STATE] = 1;
+        if self.reset_record_origin(st, tables).is_err() {
+            self.note_unported(0x5B2BF);
         }
     }
 

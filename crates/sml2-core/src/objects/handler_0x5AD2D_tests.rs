@@ -58,7 +58,7 @@ fn handler_0x5ad2d_slides_right_and_respawns_at_screen_b8() {
     let mut st = Staging::default();
     position(&mut st.b, 50, 50);
     st.b[6] = 0xAB;
-    st.b[7] = 0x06;
+    st.b[7] = 0x08; // record start $AB06 + 2, as $8CA8 stores it
     st.b[8] = 2;
     st.b[10] = 0xB8;
     st.b[15] = 1;
@@ -67,7 +67,8 @@ fn handler_0x5ad2d_slides_right_and_respawns_at_screen_b8() {
     assert_eq!(u16::from_be_bytes([st.b[0], st.b[1]]), 0x0120);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 0x0080);
     assert_eq!(st.b[8], 1);
-    assert_eq!(sim.standby, 1);
+    // $5B2BF/$863C never reclassify the slot; promotion/demotion own the counts.
+    assert_eq!((sim.active, sim.standby), (1, 0));
 }
 
 #[test]
