@@ -145,6 +145,10 @@ mod boss_damage;
 mod boss_spawn;
 mod reward_spawn;
 mod moneybag_reward;
+#[path = "handler_0x587A1.rs"]
+mod handler_0x587a1;
+#[path = "handler_0x587A1_adapter.rs"]
+mod handler_0x587a1_adapter;
 mod boss_sprite_cycle;
 mod boss_reverse_picker;
 #[cfg(test)]
