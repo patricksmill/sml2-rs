@@ -10,8 +10,7 @@ impl ObjectSim {
         st.b = actor.to_raw_slot();
         match result {
             Ok(handler_0x5a683::Effect::Carried) => {
-                let x = self.mario_x_adjust.unwrap_or(self.mario.x);
-                self.mario_x_adjust = Some(x.wrapping_add(1));
+                self.carry_mario_right(1);
             }
             Ok(handler_0x5a683::Effect::Continue) => {}
             Err(_) => self.note_unported(0x5A683),

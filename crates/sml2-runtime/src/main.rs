@@ -1259,6 +1259,7 @@ fn build_contact(sim: &PlayerSim, keys: &PlayerKeys, pan: u8) -> sml2_core::obje
         moon_physics: sim.moon,
         pan,
         travelling: sim.pipe_dir >= 0x10,
+        hvel: sim.hvel,
     }
 }
 

@@ -96,6 +96,10 @@ pub struct CameraSim {
     pub scroll_y: u8,
     /// `sScrollX` ($A2B1): latched scroll X = `cam.x - 80`.
     pub scroll_x: u8,
+    /// `sScrollDeltaRight` ($A20B): horizontal scroll delta accumulated for the camera pass.
+    pub scroll_delta_right: u8,
+    /// `sScrollDeltaLeft` ($A20C): horizontal scroll delta accumulated for the camera pass.
+    pub scroll_delta_left: u8,
 }
 
 impl CameraSim {
@@ -131,6 +135,8 @@ impl CameraSim {
             player_pan: 0,
             scroll_y,
             scroll_x,
+            scroll_delta_right: 0,
+            scroll_delta_left: 0,
         }
     }
 
@@ -152,6 +158,8 @@ impl CameraSim {
         self.sfx0 = 0;
         self.pan_timer = 0;
         self.player_pan = 0;
+        self.scroll_delta_right = 0;
+        self.scroll_delta_left = 0;
         self.update_scroll();
     }
 
@@ -385,8 +393,8 @@ impl CameraSim {
             self.run_transition(sim);
             return;
         }
-        // Deltas published by the player update ($14BF).
-        let (mut d_r, mut d_l) = (0u8, 0u8);
+        // Deltas published by the player update ($14BF) or platform carriers ($3CC0/$3CF1).
+        let (mut d_r, mut d_l) = (self.scroll_delta_right, self.scroll_delta_left);
         if sim.x_sub != 0 {
             if sim.x_sub < 0x80 {
                 d_r = sim.x_sub;
@@ -394,6 +402,8 @@ impl CameraSim {
                 d_l = 0u8.wrapping_sub(sim.x_sub);
             }
         }
+        self.scroll_delta_right = 0;
+        self.scroll_delta_left = 0;
         let mx_lo = sim.x as u8;
         let my_lo = sim.y as u8;
         let edges = self.edge_bits();
@@ -401,9 +411,7 @@ impl CameraSim {
         // $0B2A's dispatcher: with `sAutoScroll` set, `$0DAF` replaces the
         // ENTIRE horizontal section and then jumps straight to `$0C7D`, so
         // neither the right nor the left chain below runs on an autoscroll
-        // frame. (`$0C76`'s scroll-delta clear is skipped too; the port
-        // derives its deltas from `x_sub` every frame, so it has no state
-        // to clear.)
+        // frame.
         if self.auto_scroll != 0 {
             self.run_autoscroll(sim);
         } else {
@@ -1575,5 +1583,29 @@ mod tests {
             c.update_player_pan(y, true, true);
             assert_eq!((c.pan_timer, c.scroll_y, c.player_pan), (3, 253, 0));
         }
+    }
+
+    #[test]
+    fn passive_scroll_deltas_move_camera_and_clear() {
+        let mut c = CameraSim::new(80, 72);
+        c.right_enabled = true;
+        let mut sim = PlayerSim::new();
+        sim.x = 80;
+        sim.y = 72;
+        sim.x_sub = 0;
+        c.scroll_delta_right = 2;
+
+        c.step(&mut sim);
+        assert_eq!(c.x, 83);
+        assert_eq!(c.scroll_delta_right, 0);
+        assert_eq!(c.scroll_delta_left, 0);
+
+        // Active x_sub overrides passive scroll delta
+        c.right_enabled = true;
+        c.scroll_delta_right = 2;
+        sim.x_sub = 3;
+        c.step(&mut sim);
+        assert_eq!(c.x, 87);
+        assert_eq!(c.scroll_delta_right, 0);
     }
 }

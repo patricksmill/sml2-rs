@@ -78,3 +78,36 @@ fn handler_0x5a236_real_mode_b_anim62_step() {
     assert_eq!(sim.slots[1].b[15], 1);
     assert!(sim.unported.is_empty());
 }
+
+#[test]
+fn handler_0x5a236_carries_mario_and_drives_camera_follow() {
+    use crate::camera::CameraSim;
+    use crate::player_sim::PlayerSim;
+
+    let mut obj = ObjectSim::new(vec![], 0);
+    let mut st = Staging::default();
+    st.b[15] = 1;
+    st.b[23] = InteractionFlags::from_bits(0x08).bits();
+    obj.fff0 = 0;
+    obj.mario.x = 80;
+    obj.mario.hvel = 0x80;
+
+    obj.handler_0x5a236(&mut st);
+    assert_eq!(obj.mario_x_adjust, Some(81));
+    assert_eq!(obj.scroll_delta_right, 1);
+
+    let mut cam = CameraSim::new(80, 72);
+    cam.right_enabled = true;
+    cam.apply_object_result(&mut obj);
+    assert_eq!(cam.scroll_delta_right, 1);
+    assert_eq!(obj.scroll_delta_right, 0);
+
+    let mut player = PlayerSim::new();
+    player.x = 81;
+    player.y = 72;
+    player.x_sub = 0;
+    cam.step(&mut player);
+
+    assert_eq!(cam.x, 82);
+    assert_eq!(cam.scroll_delta_right, 0);
+}

@@ -176,7 +176,7 @@ impl Staging {
 }
 
 /// Mario state the engine reads (post player-update, pre object engine).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct MarioContact {
     pub x: u16,
     pub y: u16,
@@ -216,6 +216,35 @@ pub struct MarioContact {
     /// `sPipeTravelDirection >= $10`: the frame loop skips `$2D7D` entirely
     /// while Mario is inside a pipe (`$05E4` line `ld a,[sPipeTravelDirection]`).
     pub travelling: bool,
+    /// `sHVelocityIndex` ($A200): $80 idle, < $80 moving left, >= $80 moving right.
+    pub hvel: u8,
+}
+
+impl Default for MarioContact {
+    fn default() -> Self {
+        Self {
+            x: 0,
+            y: 0,
+            dead: 0,
+            powerup: 0,
+            ducking: false,
+            spin_jump: false,
+            star_high: 0,
+            invincibility: 0,
+            flutter: 0,
+            vvel: 0,
+            on_ground: false,
+            on_object: false,
+            dir_right: false,
+            b_held: false,
+            a_held: false,
+            scene_state: 0,
+            moon_physics: 0,
+            pan: 0,
+            travelling: false,
+            hvel: 0x80,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

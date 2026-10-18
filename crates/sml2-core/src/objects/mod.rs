@@ -510,6 +510,10 @@ pub struct ObjectSim {
     pub camera_pan_set: Option<u8>,
     /// Wario exit clears scene state and selects this boss phase.
     pub scene_phase_set: Option<u8>,
+    /// Accumulated horizontal carrier scroll right ($3CC0).
+    pub scroll_delta_right: u8,
+    /// Accumulated horizontal carrier scroll left ($3CF1).
+    pub scroll_delta_left: u8,
     pub slot_ptr_hi: u8,
     pub boss_slot_ptr_lo: u8,
     pub fade_timer: u16,
@@ -612,6 +616,8 @@ impl ObjectSim {
             fade_timer_set: None,
             camera_pan_set: None,
             scene_phase_set: None,
+            scroll_delta_right: 0,
+            scroll_delta_left: 0,
             slot_ptr_hi: 0xAD,
             boss_slot_ptr_lo: 0,
             fade_timer: 0,
@@ -804,9 +810,44 @@ impl ObjectSim {
         self.mario = MarioContact::default();
         self.camera_pan_set = None;
         self.scene_phase_set = None;
+        self.scroll_delta_right = 0;
+        self.scroll_delta_left = 0;
         // $AF06: $EC40 clears it; $EC4B then sets 1 for levels >= $0A.
         self.sprite_map_index = if self.level_id >= 0x0A { 1 } else { 0 };
         self.odd = self.fff0 & 1 == 1; // fff0 kept ($FFF0 is HRAM)
+    }
+
+    /// ROM `$3CC0`: carrier platform horizontal carry right.
+    /// If rider is stood on platform:
+    /// - Mario's X += b
+    /// - If Mario is not moving left (hvel >= 0x80), scroll_delta_right += b.
+    pub(super) fn carry_mario_right(&mut self, b: u8) {
+        let x = self.mario_x_adjust.unwrap_or(self.mario.x);
+        self.mario_x_adjust = Some(x.wrapping_add(b as u16));
+        if self.mario.hvel >= 0x80 {
+            self.scroll_delta_right = self.scroll_delta_right.wrapping_add(b);
+        }
+    }
+
+    /// ROM `$3CF1`: carrier platform horizontal carry left.
+    /// If rider is stood on platform:
+    /// - Mario's X -= b
+    /// - If Mario is not moving right (hvel < 0x81), scroll_delta_left += b.
+    pub(super) fn carry_mario_left(&mut self, b: u8) {
+        let x = self.mario_x_adjust.unwrap_or(self.mario.x);
+        self.mario_x_adjust = Some(x.wrapping_sub(b as u16));
+        if self.mario.hvel < 0x81 {
+            self.scroll_delta_left = self.scroll_delta_left.wrapping_add(b);
+        }
+    }
+
+    /// Carrier platform horizontal carry with signed dx.
+    pub(super) fn carry_mario_dx(&mut self, dx: i16) {
+        if dx > 0 {
+            self.carry_mario_right(dx as u8);
+        } else if dx < 0 {
+            self.carry_mario_left((-dx) as u8);
+        }
     }
 
     // ---------------------------------------------------------------------

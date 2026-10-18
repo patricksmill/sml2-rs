@@ -19,8 +19,7 @@ impl ObjectSim {
             }
             // $3CF1/$3CC0: the rider moves with the platform's 16-bit X.
             Ok(handler_0x58c52::Effect::Moved { carry_dx: Some(dx) }) => {
-                let x = self.mario_x_adjust.unwrap_or(self.mario.x);
-                self.mario_x_adjust = Some(x.wrapping_add_signed(dx));
+                self.carry_mario_dx(dx);
             }
             Ok(_) => {}
             Err(_) => self.note_unported(0x58C52),

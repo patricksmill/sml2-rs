@@ -11,8 +11,7 @@ impl ObjectSim {
         match result {
             Ok(handler_0x5ad4d::Effect::Continue) => {}
             Ok(handler_0x5ad4d::Effect::Carried { dx }) => {
-                let x = self.mario_x_adjust.unwrap_or(self.mario.x);
-                self.mario_x_adjust = Some(x.wrapping_add_signed(dx));
+                self.carry_mario_dx(dx);
             }
             Err(_) => self.note_unported(0x5AD4D),
         }

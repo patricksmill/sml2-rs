@@ -429,8 +429,7 @@ impl ObjectSim {
         if st.b[B_FLAGS] & 0x08 == 0 {
             return;
         }
-        let x = self.mario_x_adjust.unwrap_or(self.mario.x);
-        self.mario_x_adjust = Some(x.wrapping_add_signed(dx));
+        self.carry_mario_dx(dx);
     }
 
     pub(super) fn handler_horizontal_platform(&mut self, st: &mut Staging) {

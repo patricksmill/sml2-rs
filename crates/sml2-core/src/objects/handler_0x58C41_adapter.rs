@@ -17,8 +17,7 @@ impl ObjectSim {
                 };
             }
             Ok(handler_0x58c41::Effect::Moved { carry_dx: Some(dx) }) => {
-                let x = self.mario_x_adjust.unwrap_or(self.mario.x);
-                self.mario_x_adjust = Some(x.wrapping_add_signed(dx));
+                self.carry_mario_dx(dx);
             }
             Ok(_) => {}
             Err(_) => self.note_unported(0x58C41),

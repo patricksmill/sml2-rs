@@ -22,6 +22,14 @@ impl CameraSim {
             self.boss_fight_phase = phase;
             self.scene_state = 0;
         }
+        if obj.scroll_delta_right != 0 {
+            self.scroll_delta_right = self.scroll_delta_right.wrapping_add(obj.scroll_delta_right);
+            obj.scroll_delta_right = 0;
+        }
+        if obj.scroll_delta_left != 0 {
+            self.scroll_delta_left = self.scroll_delta_left.wrapping_add(obj.scroll_delta_left);
+            obj.scroll_delta_left = 0;
+        }
     }
 }
 
@@ -95,5 +103,24 @@ mod tests {
         );
         assert_eq!((cam.boss_fight_phase, cam.scene_state), (5, 0xF0));
         assert_eq!((cam.x, cam.y, cam.scroll_x, cam.scroll_y), (80, 72, 0, 0));
+    }
+
+    #[test]
+    fn scroll_delta_transfers_from_object_sim_to_camera_sim_and_clears_object() {
+        let mut cam = CameraSim::new(80, 72);
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.scroll_delta_right = 2;
+        obj.scroll_delta_left = 1;
+
+        cam.apply_object_result(&mut obj);
+        assert_eq!(cam.scroll_delta_right, 2);
+        assert_eq!(cam.scroll_delta_left, 1);
+        assert_eq!(obj.scroll_delta_right, 0);
+        assert_eq!(obj.scroll_delta_left, 0);
+
+        obj.scroll_delta_right = 3;
+        cam.apply_object_result(&mut obj);
+        assert_eq!(cam.scroll_delta_right, 5);
+        assert_eq!(obj.scroll_delta_right, 0);
     }
 }
