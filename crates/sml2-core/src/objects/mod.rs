@@ -169,6 +169,10 @@ mod handler_0x5902d_adapter;
 mod handler_0x5934a;
 #[path = "handler_0x5934A_adapter.rs"]
 mod handler_0x5934a_adapter;
+#[path = "handler_0x59376.rs"]
+mod handler_0x59376;
+#[path = "handler_0x59376_adapter.rs"]
+mod handler_0x59376_adapter;
 #[path = "handler_0x593DA.rs"]
 mod handler_0x593da;
 #[path = "handler_0x593DA_adapter.rs"]
@@ -185,6 +189,10 @@ mod handler_0x5945a_adapter;
 mod handler_0x59487;
 #[path = "handler_0x59487_adapter.rs"]
 mod handler_0x59487_adapter;
+#[path = "handler_0x594FB.rs"]
+mod handler_0x594fb;
+#[path = "handler_0x594FB_adapter.rs"]
+mod handler_0x594fb_adapter;
 #[path = "handler_0x589A6.rs"]
 mod handler_0x589a6;
 #[path = "handler_0x589A6_adapter.rs"]
@@ -237,10 +245,18 @@ mod handler_0x59270_adapter;
 mod handler_0x595fe;
 #[path = "handler_0x595FE_adapter.rs"]
 mod handler_0x595fe_adapter;
+#[path = "handler_0x5966C.rs"]
+mod handler_0x5966c;
+#[path = "handler_0x5966C_adapter.rs"]
+mod handler_0x5966c_adapter;
 #[path = "handler_0x596D9.rs"]
 mod handler_0x596d9;
 #[path = "handler_0x596D9_adapter.rs"]
 mod handler_0x596d9_adapter;
+#[path = "handler_0x59728.rs"]
+mod handler_0x59728;
+#[path = "handler_0x59728_adapter.rs"]
+mod handler_0x59728_adapter;
 #[path = "handler_0x59763.rs"]
 mod handler_0x59763;
 #[path = "handler_0x59763_adapter.rs"]
@@ -265,6 +281,10 @@ mod handler_0x59aad_adapter;
 mod handler_0x59b0e;
 #[path = "handler_0x59B0E_adapter.rs"]
 mod handler_0x59b0e_adapter;
+#[path = "handler_0x59BE1.rs"]
+mod handler_0x59be1;
+#[path = "handler_0x59BE1_adapter.rs"]
+mod handler_0x59be1_adapter;
 #[path = "handler_0x59B1F.rs"]
 mod handler_0x59b1f;
 #[path = "handler_0x59B1F_adapter.rs"]
@@ -329,6 +349,10 @@ mod handler_0x5a355_adapter;
 mod handler_0x5a545;
 #[path = "handler_0x5A545_adapter.rs"]
 mod handler_0x5a545_adapter;
+#[path = "handler_0x5A5C7.rs"]
+mod handler_0x5a5c7;
+#[path = "handler_0x5A5C7_adapter.rs"]
+mod handler_0x5a5c7_adapter;
 #[path = "handler_0x5A5EC.rs"]
 mod handler_0x5a5ec;
 #[path = "handler_0x5A5EC_adapter.rs"]
@@ -357,6 +381,10 @@ mod handler_0x5a739_adapter;
 mod handler_0x5a992;
 #[path = "handler_0x5A992_adapter.rs"]
 mod handler_0x5a992_adapter;
+#[path = "handler_0x5AA68.rs"]
+mod handler_0x5aa68;
+#[path = "handler_0x5AA68_adapter.rs"]
+mod handler_0x5aa68_adapter;
 #[path = "handler_0x5AA71.rs"]
 mod handler_0x5aa71;
 #[path = "handler_0x5AA71_adapter.rs"]
@@ -373,6 +401,10 @@ mod handler_0x5ab4b_adapter;
 mod handler_0x5ab79;
 #[path = "handler_0x5AB79_adapter.rs"]
 mod handler_0x5ab79_adapter;
+#[path = "handler_0x5AC01.rs"]
+mod handler_0x5ac01;
+#[path = "handler_0x5AC01_adapter.rs"]
+mod handler_0x5ac01_adapter;
 #[path = "handler_0x5AC3C.rs"]
 mod handler_0x5ac3c;
 #[path = "handler_0x5AC3C_adapter.rs"]
@@ -405,6 +437,10 @@ mod handler_0x5aef4_adapter;
 mod handler_0x5afd7;
 #[path = "handler_0x5AFD7_adapter.rs"]
 mod handler_0x5afd7_adapter;
+#[path = "handler_0x5B06D.rs"]
+mod handler_0x5b06d;
+#[path = "handler_0x5B06D_adapter.rs"]
+mod handler_0x5b06d_adapter;
 #[path = "handler_0x5B177.rs"]
 mod handler_0x5b177;
 #[path = "handler_0x5B177_adapter.rs"]
@@ -422,6 +458,10 @@ mod handler_0x591f9;
 mod vertical_bobber;
 mod handler_0x5b0d5;
 mod handler_0x5b36d;
+#[path = "handler_0x5A85C.rs"]
+mod handler_0x5a85c;
+#[path = "handler_0x5A85C_adapter.rs"]
+mod handler_0x5a85c_adapter;
 #[path = "handler_0x5A8D2.rs"]
 mod handler_0x5a8d2;
 #[path = "handler_0x5A8D2_adapter.rs"]

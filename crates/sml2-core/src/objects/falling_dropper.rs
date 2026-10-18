@@ -42,16 +42,23 @@ pub struct FallingDropperContext {
     pub mario_ref_x: u16,
 }
 
+/// Fall-step helper for ROM `$5B451`: retrieves speed from `FALL_SPEED`,
+/// increments `motion_phase` up to the caller's cap, and returns speed.
+#[inline]
+pub fn step_fall_speed_cap(actor: &mut Actor, cap: u8) -> u8 {
+    let idx = (actor.motion_phase as usize).min(usize::from(cap));
+    let speed = FALL_SPEED[idx];
+    if actor.motion_phase != cap {
+        actor.motion_phase = actor.motion_phase.wrapping_add(1);
+    }
+    speed
+}
+
 /// Fall-step helper for ROM `$5B451`: retrieves speed from `FALL_SPEED` (cap 21),
 /// increments `motion_phase` up to 21, and returns speed.
 #[inline]
 pub fn step_fall_speed(actor: &mut Actor) -> u8 {
-    let idx = (actor.motion_phase as usize).min(21);
-    let speed = FALL_SPEED[idx];
-    if actor.motion_phase != 21 {
-        actor.motion_phase = actor.motion_phase.wrapping_add(1);
-    }
-    speed
+    step_fall_speed_cap(actor, 21)
 }
 
 /// Domain update for Falling Dropper (ROM $595B2, anim 78).
