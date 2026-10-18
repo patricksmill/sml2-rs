@@ -761,6 +761,10 @@ impl ObjectSim {
     /// stream buffer and `$EC31` clears the 16 slots. `$FFF0` lives in HRAM
     /// and is *not* cleared — the toggle phase carries across the reload.
     pub fn reset_level_start(&mut self) {
+        // `$05B9` follows the `$EBBB` scratch/slot reset during level load.
+        // Clear the object-side mirror and its consumed game-state event too.
+        self.boss_clear_flag = 0;
+        self.boss_clear_handoff = false;
         for s in self.slots.iter_mut() {
             s.b = [0; 32];
         }

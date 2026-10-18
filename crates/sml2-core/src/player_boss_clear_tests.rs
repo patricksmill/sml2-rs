@@ -23,6 +23,30 @@ fn dirty_player() -> PlayerSim {
     sim
 }
 
+#[test]
+fn boss_clear_level_reload_resumes_countdown_without_replaying_reward() {
+    let mut sim = dirty_player();
+    sim.level_tally = 5;
+    sim.boss_clear = true;
+    sim.level_progress[23] = 0x80;
+    let progress = sim.level_progress;
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.boss_clear_flag = 1;
+    obj.boss_clear_handoff = true;
+    sim.respawn(36, 436);
+    obj.reset_level_start();
+    assert!(!sim.boss_clear);
+    assert_eq!(obj.boss_clear_flag, 0);
+    assert!(!obj.boss_clear_handoff);
+    sim.apply_object_result(&mut obj, false);
+    assert!(!sim.boss_clear);
+    assert!(!sim.exit_completed);
+    assert_eq!(sim.level_tally, 5);
+    assert_eq!(sim.level_progress, progress);
+    sim.update_level_timer();
+    assert_eq!((sim.level_timer.high, sim.level_timer.low), (0, 0x99));
+}
+
 /// `$5D6E..$5D77` reads the flag only to skip countdown writes. The
 /// `$5E12` continuation checks boss phase, not this flag; it is no bell exit.
 #[test]

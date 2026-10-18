@@ -2805,6 +2805,7 @@ impl PlayerSim {
     /// the death/powerup/invincibility state cleared. Fields the reload does
     /// not touch (on_ground, in_air, moon, the global phase) are left alone.
     pub fn respawn(&mut self, x: u16, y: u16) {
+        self.boss_clear = false; // Level-load tail `$05B9`: sBossClearFlag = 0.
         self.x = x;
         self.y = y;
         self.hvel = 0x80;
