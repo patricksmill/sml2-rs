@@ -118,6 +118,7 @@ mod side_door;
 mod door_boss_flow_tests;
 mod boss_flash;
 mod boss_stun;
+mod boss_morph;
 #[cfg(test)]
 mod boss_flash_paths;
 mod boss_damage;

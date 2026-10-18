@@ -72,19 +72,10 @@ impl ObjectSim {
     }
 
     pub(super) fn boss_morph_to_anim3(&mut self, st: &mut Staging) {
-        self.boss_flash_b40e(st); // $9443 -> $B40E
-                                           // The ROM decrements first and tests the NEW value (`dec a / ldh
-                                           // [$FFEC],a / ret nz`),
-                                           // so a 1 falls through to the hand-off on that same call.
-        st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
-        if st.b[B_T28] != 0 {
-            return;
-        }
-        st.b[B_FSTATE] = 0;
-        st.b[B_DEF] = 3;
-        st.b[B_ANIMFRAME] = 0;
-        st.b[B_FLASH] = 0;
-        if self.boss_slot_ptr_lo == 0 {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let morphed = boss_morph::update(&mut actor, crate::actor::FrameTick(u64::from(self.fff0)));
+        st.b = actor.to_raw_slot();
+        if morphed && self.boss_slot_ptr_lo == 0 {
             self.music_request = Some(0xFF);
         }
     }
