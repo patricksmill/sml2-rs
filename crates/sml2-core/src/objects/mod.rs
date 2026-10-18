@@ -418,6 +418,10 @@ mod handler_0x5b36d;
 mod handler_0x5a8d2;
 #[path = "handler_0x5A8D2_adapter.rs"]
 mod handler_0x5a8d2_adapter;
+#[path = "handler_0x5A8E4.rs"]
+mod handler_0x5a8e4;
+#[path = "handler_0x5A8E4_adapter.rs"]
+mod handler_0x5a8e4_adapter;
 mod helpers;
 mod interaction;
 mod items;

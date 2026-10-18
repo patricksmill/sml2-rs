@@ -112,6 +112,7 @@ impl ObjectSim {
             0x5A773 => self.handler_cannon_ant(st),
             0x5A816 => self.handler_0x5a816(st),
             0x5A8D2 => self.handler_0x5a8d2(st),
+            0x5A8E4 => self.handler_0x5a8e4(st, layout),
             0x5A9E8 => self.handler_charging_enemy(st, tables),
             0x5B1C8 => self.handler_grower92(st),
             0x5B241 => self.handler_floater94(st),
