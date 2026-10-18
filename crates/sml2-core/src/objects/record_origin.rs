@@ -2,6 +2,30 @@
 use super::{ObjectSim, RECORD_LEN, STREAM_BASE};
 use crate::actor::{Actor, Position, SpawnOrigin};
 
+/// Projection of a dynamic parent slot, as `$5B36D` children reference it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct SlotSource {
+    pub position: Position,
+    pub marker: u8,
+    pub activity: u8,
+}
+
+impl ObjectSim {
+    /// Read a committed slot through the spawn pointer a `$5B36D` child stores.
+    pub(super) fn project_slot_source(&self, pointer: u16) -> Option<SlotSource> {
+        if !(0xAD00..=0xAEFF).contains(&pointer) {
+            return None;
+        }
+        let slot = &self.slots[usize::from(pointer - 0xAD00) / 32];
+        let parent = Actor::from_raw_slot(&slot.b);
+        Some(SlotSource {
+            position: parent.position,
+            marker: parent.marker,
+            activity: slot.b[super::staging::B_STATE],
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum RecordResetError {
     OversizedStream { records: usize },

@@ -8,15 +8,11 @@ impl ObjectSim {
     /// pointer is a committed slot base ($AD00..$AEFF); anything else is an
     /// unresolved input rather than an invented projection.
     fn child_source(&self, pointer: u16) -> Option<handler_0x5a969::Source> {
-        if !(0xAD00..=0xAEFF).contains(&pointer) {
-            return None;
-        }
-        let slot = &self.slots[usize::from(pointer - 0xAD00) / 32];
-        let parent = Actor::from_raw_slot(&slot.b);
+        let source = self.project_slot_source(pointer)?;
         Some(handler_0x5a969::Source {
-            position: parent.position,
-            marker: parent.marker,
-            gone: slot.b[B_STATE] != 2,
+            position: source.position,
+            marker: source.marker,
+            gone: source.activity != 2,
         })
     }
 
