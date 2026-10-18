@@ -143,6 +143,8 @@ mod boss_reward;
 mod boss_flash_paths;
 mod boss_damage;
 mod boss_spawn;
+mod reward_spawn;
+mod moneybag_reward;
 mod boss_sprite_cycle;
 mod boss_reverse_picker;
 #[cfg(test)]
@@ -453,6 +455,8 @@ pub struct ObjectSim {
     stream_cursor_cleared: bool,
     pub spawned: Vec<bool>,
     pub prev_cam_x: u16,
+    /// Live `$FFCA/$FFCB` X and `$FFC8/$FFC9` Y, sampled before interaction.
+    pub camera_position: crate::actor::Position,
     pub scan_dir: u8,
     pub spawn_x: u16,
     pub phase: bool,
@@ -561,6 +565,7 @@ impl ObjectSim {
             stream_cursor_cleared: false,
             spawned: vec![false; n],
             prev_cam_x: cam_x,
+            camera_position: crate::actor::Position { x: cam_x, y: 0 },
             scan_dir: 0,
             // Level load leaves spawnX with the first scan edge's low byte
             // and the $FF high byte (the "camera unchanged" case).
@@ -761,6 +766,7 @@ impl ObjectSim {
         mario: &MarioContact,
         boss_mode: bool,
     ) {
+        self.camera_position = crate::actor::Position { x: cam_x, y: cam_y };
         self.mario = *mario;
         if !mario.travelling {
             self.collide(cam_x, cam_y, layout);

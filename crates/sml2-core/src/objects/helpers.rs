@@ -71,38 +71,11 @@ impl ObjectSim {
     }
 
     pub(super) fn money_bag_add(&mut self) {
-        let (v, overflow) = bcd_add(self.money_bag, 1);
-        self.money_bag = v;
-        if overflow {
-            self.bonus_spawn();
-        }
+        self.add_money_bag_reward();
     }
 
     pub(super) fn bonus_spawn(&mut self) {
-        let free = (0..SLOT_COUNT).find(|&i| self.slots[i].b[B_STATE] == 0);
-        let Some(i) = free else {
-            self.spawn_anim = 0;
-            self.spawn_sprite = 0;
-            self.spawn_attr = 0;
-            return;
-        };
-        let slot_hi = 0xAD + (i as u8 >> 1);
-        let slot_lo = (i as u8 & 1) * 0x20;
-        let cam = self.prev_cam_x; // the frame's camera is stored at $817D
-        let camy = 0u16; // camera Y is not needed for the walker captures
-        let s = &mut self.slots[i];
-        set_x(&mut s.b, cam);
-        set_y(&mut s.b, camy);
-        s.b[B_DEF] = self.spawn_anim;
-        s.b[B_RECHI] = slot_hi;
-        s.b[B_RECLO] = slot_lo & 0xF0;
-        s.b[B_STATE] = 1;
-        s.b[B_SPRITE] = self.spawn_sprite;
-        s.b[B_FLIP] = self.spawn_attr;
-        self.standby = self.standby.wrapping_add(1);
-        self.spawn_anim = 0;
-        self.spawn_sprite = 0;
-        self.spawn_attr = 0;
+        self.spawn_reward_from_camera();
     }
 
     pub(super) fn sprite_toggle(&self, st: &mut Staging) {
