@@ -80,37 +80,6 @@ impl ObjectSim {
         }
     }
 
-    pub(super) fn handler_boss_def0_main(
-        &mut self,
-        st: &mut Staging,
-        layout: &LevelLayout,
-        tables: &ObjectTables,
-    ) {
-        let _ = (layout, tables);
-        self.boss_damage_pass(st); // $93A7
-        if self.done != 0 {
-            self.boss_hit_save(st); // $93AA
-            return;
-        }
-        if st.b[B_FSTATE] == 0 {
-            // $93D5: the intro. Blink, then wait out the boss-clear fade before
-            // arming the fight.
-            self.sprite_blink(st, 0x03, 0x06); // $7309
-            if !self.fade_idle() {
-                return; // $714E: `ret nz` while a fade runs
-            }
-            st.b[B_TYPE] = 0x45;
-            st.b[B_SPRITE] = 3;
-            st.b[B_FSTATE] = 3;
-            return;
-        }
-        // $93EE: dec + `rst $28` over $93F0's seven targets.
-        match st.b[B_FSTATE] {
-            2 => self.boss_morph_to_anim3(st), // $9443
-            s => self.note_unported(0x93EF + (s as u32) * 2),
-        }
-    }
-
     pub(super) fn boss_hit_stun(&mut self, st: &mut Staging) {
         self.apply_boss_hit_stun(st);
     }

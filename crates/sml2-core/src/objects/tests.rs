@@ -2394,10 +2394,9 @@ fn the_boss_morph_tail_hands_the_slot_to_anim3() {
 }
 
 /// `$93A7` (boss anim 1): the intro wakes the fight once the fade is idle,
-/// and the not-yet-ported sweep states are reported rather than passed over
-/// silently.
+/// and begins its source movement profile before a projectile parks it in stun.
 #[test]
-fn the_def0_boss_wakes_up_then_reports_its_sweep_states() {
+fn the_def0_boss_wakes_up_then_moves_and_banks_a_hit() {
     let real: ObjectTables = serde_json::from_str(
         &std::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -2421,12 +2420,12 @@ fn the_def0_boss_wakes_up_then_reports_its_sweep_states() {
     assert_eq!(st.b[B_TYPE], 0x45);
     assert_eq!(st.b[B_SPRITE], 3);
     assert_eq!(st.b[B_FSTATE], 3, "$93E5: into the first sweep state");
-    // The sweep states themselves are the next batch: reported, not silent.
+    // State 3 reads the profile before incrementing its phase.
+    let old_y = st.b[B_SCRY];
     obj.dispatch_handler(0x93A7, &mut st, &layout, &real);
-    assert!(
-        obj.unported.iter().any(|a| *a == 0x93EF + 3 * 2),
-        "state 3's body is reported"
-    );
+    assert_eq!(st.b[B_PHASE], 1);
+    assert_eq!(st.b[B_SCRY], old_y.wrapping_add(real.boss_picker_profile[0]));
+    assert!(obj.unported.is_empty());
     // A hit banks the slot and parks it in the hit-stun.
     obj.done = 0;
     st.b[B_FLAGS] = 0x02;

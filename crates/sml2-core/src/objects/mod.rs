@@ -119,6 +119,8 @@ mod door_boss_flow_tests;
 mod boss_flash;
 mod boss_stun;
 mod boss_morph;
+mod tree_boss;
+mod tree_boss_adapter;
 mod patrol_boss;
 mod patrol_boss_adapter;
 mod sweep_boss;
@@ -614,6 +616,8 @@ pub struct ObjectSim {
     pub boss_hit_latch: u8,
     pub boss_5290: u8,
     pub boss_hits_remaining: u8,
+    /// `$AFC6`: Tree Zone boss's persistent low-health sweep latch.
+    pub boss_alt_phase: u8,
     pub boss_sprite: u8,
     pub boss_timer_reload: u8,
     /// `$AFC7` / `$AFC8` / `$AFC9`: the door boss phase, sequence latch, and side.
@@ -717,6 +721,7 @@ impl ObjectSim {
             boss_hit_latch: 0,
             boss_5290: 0,
             boss_hits_remaining: 0,
+            boss_alt_phase: 0,
             boss_sprite: 0,
             boss_timer_reload: 0,
             door_phase: 0,

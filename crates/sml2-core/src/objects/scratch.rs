@@ -53,6 +53,7 @@ impl ObjectSim {
         self.boss_hit_latch = 0; // $AFC3
         self.saved_frame_state = 0; // $AFC4
         self.boss_hits_remaining = 0; // $AFC5
+        self.boss_alt_phase = 0; // $AFC6
         self.door_phase = 0; // $AFC7
         self.door_sequence_active = 0; // $AFC8
         self.door_parity = 0; // $AFC9
@@ -71,6 +72,18 @@ impl ObjectSim {
 mod tests {
     use super::*;
     use crate::objects::{ObjectTables, SpawnRecord, B_DEF, SLOT_COUNT};
+
+    #[test]
+    fn tree_boss_alternate_phase_clears_on_arena_entry_and_level_reset() {
+        let mut sim = ObjectSim::new(Vec::new(), 0);
+        assert_eq!(sim.boss_alt_phase, 0);
+        sim.boss_alt_phase = 0xA5;
+        sim.spawn_boss(0);
+        assert_eq!(sim.boss_alt_phase, 0, "$8D9C clears $AFC6");
+        sim.boss_alt_phase = 1;
+        sim.reset_level_start();
+        assert_eq!(sim.boss_alt_phase, 0, "$049C clears $AFC6");
+    }
 
     fn tables() -> ObjectTables {
         serde_json::from_str(include_str!(concat!(

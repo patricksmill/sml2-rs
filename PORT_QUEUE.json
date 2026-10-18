@@ -26,7 +26,9 @@
     "main.asm:$93A7",
     "home.asm:$0EB0"
    ],
-   "dependencies": [],
+   "dependencies": [
+    "boss_def0_native_handler"
+   ],
    "verification_gate": "PORTING.md \u00a7 What \"done\" means; runtime arena-flow test in the shape of definitions 3-5, then enable boss_def_portable(0)",
    "status": "pending"
   }

@@ -985,6 +985,18 @@
    "dependencies": [],
    "verification_gate": "PORTING.md section What done means; extract the 32 8-byte records, seed spawn/camera from them when sLevelProgressFlags bit 3 is set, byte test on the $A800-$A807 block",
    "status": "done"
+  },
+  {
+   "id": "boss_def0_native_handler",
+   "title": "Complete native Tree Zone boss handler ROM $93A7 before arena acceptance",
+   "asm_refs": [
+    "main.asm:$93A7-$9594",
+    "main.asm:$9595",
+    "main.asm:$B16B"
+   ],
+   "dependencies": [],
+   "verification_gate": "PORTING.md; COMPLETE handler brief, native and slot-byte state/branch tests, sensitivity check, full core suite",
+   "status": "done"
   }
  ]
 }
