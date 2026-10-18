@@ -136,6 +136,8 @@ mod patrol_child_adapter;
 mod patrol_boss_flow_tests;
 #[cfg(test)]
 mod sweep_boss_flow_tests;
+#[cfg(test)]
+mod circuit_boss_flow_tests;
 mod boss_reward;
 #[cfg(test)]
 mod boss_flash_paths;

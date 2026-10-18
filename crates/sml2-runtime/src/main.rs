@@ -31,6 +31,8 @@ mod door_boss_entry_tests;
 mod patrol_boss_entry_tests;
 #[cfg(test)]
 mod sweep_boss_entry_tests;
+#[cfg(test)]
+mod circuit_boss_entry_tests;
 use divider_clock::{NativeDividerClock, VirtualDividerClock};
 
 use serde::Deserialize;
