@@ -123,6 +123,8 @@ mod patrol_boss;
 mod patrol_boss_adapter;
 mod sweep_boss;
 mod sweep_boss_adapter;
+mod sweep_child;
+mod sweep_child_adapter;
 mod patrol_child;
 mod patrol_child_adapter;
 #[cfg(test)]
