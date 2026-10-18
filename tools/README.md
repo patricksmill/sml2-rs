@@ -57,6 +57,23 @@ input or the binary is missing. The harness fails on a panic, a nonzero exit, a
 `note:` line, a non-empty `unported=[...]`, a `NOT APPLIED`/`NOT RELOADED`
 tileset swap, and missing or mismatched manifest records.
 
+## Route matrix
+
+```bash
+python3 tools/route_matrix.py --levels 12,19,28,29 --table
+python3 tools/route_matrix.py --table --json out.json
+```
+
+Derives the five route facts per level — entry (header spawn, camera, overworld
+node and progress slot), exits (every `$4A`/`$4B` cell with pixel coordinates),
+secret entry (the ROM `$377B` 8-byte overlay applied by `$55C0`), boss (arena
+scene plus the `$8DFD` ladder) and required mechanics (level properties, the
+player probe's tile classes, and the handler names behind the level's anims).
+It reads `baserom.gb` for the overlay, so `SML2_DECOMP_ROOT` must point at the
+disassembly. Exit **0** on success; **2** when an input is missing. A level's
+reviewed row is accepted only when `route_matrix_tests` arms its bell from the
+source cell (`cargo test -p sml2-core route_matrix`).
+
 ## Handler briefs
 
 ```bash

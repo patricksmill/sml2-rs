@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "2 pending in PORT_QUEUE.json; all 126 declared level-table handlers and the boss table are native (0 unported). Dynamic-spawn closure is measured (docs/dynamic-spawn-closure.md, tools/anim_closure.py) and tools/smoke_levels.py boots all 32 levels; boss definition 0 (level 6) arena entry is blocked. Next: per-level route entry/exit scenarios.",
+ "milestone_note": "3 pending in PORT_QUEUE.json; all 126 declared level-table handlers and the boss table are native (0 unported). Dynamic-spawn closure is measured and tools/smoke_levels.py boots all 32 levels; route matrix first slice (12/19/28/29) is measured in docs/route-matrix.md with exit cells test-pinned. Gaps: boss definition 0 arena entry; secret-route entry overlay unported.",
  "queue": [
   {
    "id": "mechanics_all_levels_acceptance",
@@ -28,6 +28,18 @@
    ],
    "dependencies": [],
    "verification_gate": "PORTING.md \u00a7 What \"done\" means; runtime arena-flow test in the shape of definitions 3-5, then enable boss_def_portable(0)",
+   "status": "pending"
+  },
+  {
+   "id": "secret_route_entry_overlay",
+   "title": "Apply the $377B secret-route entry overlay on level load",
+   "asm_refs": [
+    "main.asm:$55C0",
+    "main.asm:$377B",
+    "main.asm:$5579"
+   ],
+   "dependencies": [],
+   "verification_gate": "PORTING.md section What done means; extract the 32 8-byte records, seed spawn/camera from them when sLevelProgressFlags bit 3 is set, byte test on the $A800-$A807 block",
    "status": "pending"
   }
  ],

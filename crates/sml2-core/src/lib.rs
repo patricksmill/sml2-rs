@@ -20,6 +20,9 @@ mod object_events;
 pub mod objects;
 pub mod player;
 pub mod player_sim;
+#[cfg(test)]
+#[path = "route_matrix_tests.rs"]
+mod route_matrix_tests;
 pub mod scene;
 pub mod sprite_batch;
 pub mod tileset;
