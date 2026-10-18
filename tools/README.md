@@ -26,6 +26,37 @@ counts are implementation inventory, not test coverage. Boss-table inventory is
 conservative: all declared boss entries are counted, without claiming every entry
 is reachable. Dynamic spawn/state closure remains a separate source audit.
 
+## Anim closure
+
+```bash
+python3 tools/anim_closure.py [--json out.json] [--self-test]
+```
+
+Exit **0** means every anim value the source can produce in every level
+(spawn records, `$5B36D`/`$B31D` dynamic spawns, boss spawns, the `$FFD5`
+morph arms, the `$86F9` record rewrite) lands on an implemented table entry or
+a verified no-op. **1** reports an out-of-range or unimplemented landing, or a
+`$FFD5` writer that is not in the declared set; **2** means missing inputs.
+`--self-test` mutates a copy (an out-of-range spawn anim and an unimplemented
+table handler) and fails unless both are detected; it never edits inputs.
+The reasoning and limits are in [`docs/dynamic-spawn-closure.md`](../docs/dynamic-spawn-closure.md).
+
+## Level smoke gate
+
+```bash
+cargo build -p sml2-runtime
+python3 tools/smoke_levels.py [--levels 12,19,28,29] [--frames 600] [--json out.json]
+```
+
+Validates all 32 extracted manifests and assets, then runs the runtime's real
+play loop through `--headless` (no window, no rendering, virtual divider clock,
+one tick per frame) for a fixed budget: an idle pass and a walk pass that holds
+right and jumps every ninth frame. Exit **0** means every level booted and ran
+without an unported diagnostic; **1** names the failing level; **2** means an
+input or the binary is missing. The harness fails on a panic, a nonzero exit, a
+`note:` line, a non-empty `unported=[...]`, a `NOT APPLIED`/`NOT RELOADED`
+tileset swap, and missing or mismatched manifest records.
+
 ## Handler briefs
 
 ```bash

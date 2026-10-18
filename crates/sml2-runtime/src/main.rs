@@ -64,6 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut replay_file: Option<PathBuf> = None;
     let mut filmstrip: Option<PathBuf> = None;
     let mut play_mode = false;
+    let mut headless_frames: Option<u64> = None;
     let mut keys_tape: Option<String> = None;
     let mut view = (SCREEN_W, SCREEN_H);
     let mut args = env::args().skip(1);
@@ -123,6 +124,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             "--replay" => {
                 replay_file = Some(PathBuf::from(args.next().ok_or("--replay needs a path")?));
+            }
+            // Deterministic offscreen play: run N frames of the real `run_play`
+            // loop with no window and no rendering. Idle input unless a `--keys`
+            // tape is given. Used by tools/smoke_levels.py to boot every level.
+            "--headless" => {
+                let n = args
+                    .next()
+                    .ok_or("--headless needs a frame count")?
+                    .parse::<u64>()?;
+                headless_frames = Some(n);
+                play_mode = true;
             }
             "--filmstrip" => {
                 filmstrip = Some(PathBuf::from(args.next().ok_or("--filmstrip needs a dir")?));
@@ -300,6 +312,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             edge_map,
             scene_map,
             keys_tape.clone(),
+            headless_frames,
         );
     }
     if window_mode {
@@ -2319,7 +2332,7 @@ fn print_play_state(
     obj: &sml2_core::objects::ObjectSim,
 ) {
     println!(
-        "{why} at frame {frame}: mario=({:#06X},{:#06X}) state={:?} dead={} camera=({:#06X},{:#06X}) transition={} scene_state={:#04X} scene_id={:#04X} edge={:#04X} boss_mode={} boss_oam={} first_oam={:?} unported={:?}",
+        "{why} at frame {frame}: mario=({:#06X},{:#06X}) state={:?} dead={} camera=({:#06X},{:#06X}) transition={} scene_state={:#04X} scene_id={:#04X} edge={:#04X} boss_mode={} boss_oam={} first_oam={:?} objects={} unported={:?}",
         sim.x,
         sim.y,
         sim.state(),
@@ -2333,6 +2346,10 @@ fn print_play_state(
         cam.boss_mode(),
         obj.boss_oam.len(),
         obj.boss_oam.first(),
+        obj.slots
+            .iter()
+            .filter(|s| s.state() != sml2_core::objects::SlotState::Inactive)
+            .count(),
         obj.unported,
     );
 }
@@ -2357,6 +2374,7 @@ fn run_play(
     edge_map: Option<Vec<u8>>,
     scene_map: Option<Vec<u8>>,
     keys_tape: Option<String>,
+    headless_frames: Option<u64>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (vw, vh) = view;
     if let Some(e) = edge_map.as_ref() {
@@ -2393,21 +2411,33 @@ fn run_play(
     let mut layout_live = layout.clone();
     use minifb::{Key, Window, WindowOptions};
     // One free-running hardware-input origin spans pauses, fades and reloads.
-    let divider_clock = NativeDividerClock::new(0);
-    let mut window = Window::new(
-        &format!(
-            "sml2 level {} — play (arrows move, Z jump, X run, ENTER pause, Q quits)",
-            manifest.level_id
-        ),
-        vw * scale,
-        vh * scale,
-        WindowOptions {
-            resize: true,
-            ..WindowOptions::default()
-        },
-    )
-    .map_err(|e| format!("cannot open a window ({e}) — no display found"))?;
-    window.set_target_fps(60);
+    // A headless run has no hardware to sample, so it uses the replay clock:
+    // one explicit tick per frame keeps the run deterministic.
+    let native_clock = NativeDividerClock::new(0);
+    let mut virtual_clock = VirtualDividerClock::new(0);
+    let headless = headless_frames.is_some();
+    let mut window = if headless {
+        None
+    } else {
+        Some(
+            Window::new(
+                &format!(
+                    "sml2 level {} — play (arrows move, Z jump, X run, ENTER pause, Q quits)",
+                    manifest.level_id
+                ),
+                vw * scale,
+                vh * scale,
+                WindowOptions {
+                    resize: true,
+                    ..WindowOptions::default()
+                },
+            )
+            .map_err(|e| format!("cannot open a window ({e}) — no display found"))?,
+        )
+    };
+    if let Some(w) = window.as_mut() {
+        w.set_target_fps(60);
+    }
     let mut buf = vec![0u32; vw * scale * vh * scale];
     let mut anim_timer: u32 = 0;
     let mut anim_phase: u8 = 0;
@@ -2419,16 +2449,28 @@ fn run_play(
     let mut frame_n: u64 = 0;
     obj.configure(manifest.level_id);
     let obj_tables = spr.as_ref().map(|s| s.tables.clone());
-    while window.is_open() && !window.is_key_down(Key::Escape) && !window.is_key_down(Key::Q) {
-        let mut a_down = window.is_key_down(Key::Z) || window.is_key_down(Key::Space);
-        let mut b_down = window.is_key_down(Key::X) || window.is_key_down(Key::LeftShift);
-        let mut start_down = window.is_key_down(Key::Enter);
-        let mut select_down = window.is_key_down(Key::Backspace);
+    loop {
+        if let Some(w) = window.as_ref() {
+            if !w.is_open() || w.is_key_down(Key::Escape) || w.is_key_down(Key::Q) {
+                break;
+            }
+        } else if frame_n >= headless_frames.unwrap_or(0) {
+            print_play_state("headless end", frame_n, &sim, &cam, &obj);
+            break;
+        }
+        if headless {
+            virtual_clock.advance_tick();
+        }
+        let held = |k: Key| window.as_ref().is_some_and(|w| w.is_key_down(k));
+        let mut a_down = held(Key::Z) || held(Key::Space);
+        let mut b_down = held(Key::X) || held(Key::LeftShift);
+        let mut start_down = held(Key::Enter);
+        let mut select_down = held(Key::Backspace);
         let mut keys = PlayerKeys {
-            right: window.is_key_down(Key::Right),
-            left: window.is_key_down(Key::Left),
-            up: window.is_key_down(Key::Up),
-            down: window.is_key_down(Key::Down),
+            right: held(Key::Right),
+            left: held(Key::Left),
+            up: held(Key::Up),
+            down: held(Key::Down),
             a: a_down,
             b: b_down,
             start: start_down,
@@ -2594,7 +2636,11 @@ fn run_play(
             if !frozen {
                 let mario = build_contact(&sim, &keys, cam.scroll_pan);
                 obj.sample_player_inputs(&sim);
-                obj.div = divider_clock.sample();
+                obj.div = if headless {
+                    virtual_clock.sample()
+                } else {
+                    native_clock.sample()
+                };
                 // `$0EB0`'s scene branch; see the replay loop.
                 if cam.scene_load_pending {
                     let def_index = boss_def_index(manifest.level_id, cam.boss_fight_phase);
@@ -2755,63 +2801,101 @@ fn run_play(
             anim_timer = 0;
             anim_phase = (anim_phase + 1) & 3;
         }
-        let mut bg = bg_live.clone();
-        apply_tile_anim(&mut bg, &manifest.tile_anim, anim_rows, anim_phase);
-        // $076B: the status bar's coin digits follow the sim (the picked-up
-        // coin shows up immediately, like the console's per-frame patch).
-        let hud_live = hud_row_coins(hud, sim.coins_high, sim.coins_low);
-        let frame = render_view(
-            &manifest,
-            &layout_live,
-            &sim.layout_writes,
-            &bg,
-            cam.x,
-            cam.y,
-            vw,
-            vh,
-            Some((&hud_live, hud_y)),
-            spr.as_ref(),
-            flash,
-        )?;
-        // Integer-scale + letterbox into the current window size.
-        let (win_w, win_h) = window.get_size();
-        if win_w == 0 || win_h == 0 {
-            continue;
-        }
-        if buf.len() != win_w * win_h {
-            buf = vec![0; win_w * win_h];
-        } else {
-            buf.fill(0);
-        }
-        let s = (win_w / vw).min(win_h / vh).max(1);
-        let ox = win_w.saturating_sub(vw * s) / 2;
-        let oy = win_h.saturating_sub(vh * s) / 2;
-        for y in 0..vh {
-            let py0 = oy + y * s;
-            if py0 + s > win_h {
-                break;
+        // Headless runs skip the whole render path: the frame loop's job in a
+        // smoke run is the simulation, and rendering a 160x144 frame per level
+        // would dominate the runtime.
+        if let Some(w) = window.as_mut() {
+            let mut bg = bg_live.clone();
+            apply_tile_anim(&mut bg, &manifest.tile_anim, anim_rows, anim_phase);
+            // $076B: the status bar's coin digits follow the sim (the picked-up
+            // coin shows up immediately, like the console's per-frame patch).
+            let hud_live = hud_row_coins(hud, sim.coins_high, sim.coins_low);
+            let frame = render_view(
+                &manifest,
+                &layout_live,
+                &sim.layout_writes,
+                &bg,
+                cam.x,
+                cam.y,
+                vw,
+                vh,
+                Some((&hud_live, hud_y)),
+                spr.as_ref(),
+                flash,
+            )?;
+            // Integer-scale + letterbox into the current window size.
+            let (win_w, win_h) = w.get_size();
+            if win_w == 0 || win_h == 0 {
+                continue;
             }
-            for x in 0..vw {
-                let px0 = ox + x * s;
-                if px0 + s > win_w {
+            if buf.len() != win_w * win_h {
+                buf = vec![0; win_w * win_h];
+            } else {
+                buf.fill(0);
+            }
+            let s = (win_w / vw).min(win_h / vh).max(1);
+            let ox = win_w.saturating_sub(vw * s) / 2;
+            let oy = win_h.saturating_sub(vh * s) / 2;
+            for y in 0..vh {
+                let py0 = oy + y * s;
+                if py0 + s > win_h {
                     break;
                 }
-                let g = frame[y * vw + x] as u32;
-                let px = g | (g << 8) | (g << 16);
-                for dy in 0..s {
-                    let row = (py0 + dy) * win_w + px0;
-                    buf[row..row + s].fill(px);
+                for x in 0..vw {
+                    let px0 = ox + x * s;
+                    if px0 + s > win_w {
+                        break;
+                    }
+                    let g = frame[y * vw + x] as u32;
+                    let px = g | (g << 8) | (g << 16);
+                    for dy in 0..s {
+                        let row = (py0 + dy) * win_w + px0;
+                        buf[row..row + s].fill(px);
+                    }
                 }
             }
+            w.update_with_buffer(&buf, win_w, win_h)
+                .map_err(|e| e.to_string())?;
         }
-        window
-            .update_with_buffer(&buf, win_w, win_h)
-            .map_err(|e| e.to_string())?;
     }
     println!(
         "play: ended at mario ({}, {}) cam ({}, {})",
         sim.x, sim.y, cam.x, cam.y
     );
+    if headless {
+        // Anything the port could not run is a failed smoke run, not a note.
+        let mut failed = false;
+        if !obj.unported.is_empty() {
+            println!(
+                "note: unported bank-16 handler path(s) hit: {}",
+                obj.unported
+                    .iter()
+                    .map(|a| format!("${a:05X}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            failed = true;
+        }
+        if !scene_vm.unported().is_empty() {
+            println!(
+                "note: scene script opcode(s) with no port implementation: {}",
+                scene_vm
+                    .unported()
+                    .iter()
+                    .map(|o| format!("${o:02X}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            failed = true;
+        }
+        if let Some(id) = scene_vm.bad_cursor_scene() {
+            println!("note: scene ${id:02X} latched but no script cursor was found - no scene byte ran");
+            failed = true;
+        }
+        if failed {
+            return Err("headless run reported unported paths".into());
+        }
+    }
     Ok(())
 }
 
