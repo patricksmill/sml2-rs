@@ -111,3 +111,52 @@ fn handler_0x5a236_carries_mario_and_drives_camera_follow() {
     assert_eq!(cam.x, 82);
     assert_eq!(cam.scroll_delta_right, 0);
 }
+
+#[test]
+fn mario_can_walk_freely_after_stepping_off_platform() {
+    use crate::player_sim::{PlayerKeys, PlayerSim};
+
+    let mut player = PlayerSim::new();
+    player.x = 80;
+    player.y = 72;
+    player.camx = 80;
+    player.on_ground = true;
+    let layout = LevelLayout::from_bytes(&[0x60; 0x3000]).unwrap();
+
+    let mut obj = ObjectSim::new(vec![], 0);
+    // Platform carried Mario in frame 1
+    obj.mario_x_adjust = Some(81);
+    obj.on_object = true;
+    player.apply_object_result(&mut obj, false);
+    assert_eq!(player.x, 81);
+    assert_eq!(obj.mario_x_adjust, None);
+
+    // Frame 2: Mario steps off platform and walks right
+    let keys = PlayerKeys {
+        right: true,
+        ..Default::default()
+    };
+    player.step(&keys, false, false, &layout);
+    player.step(&keys, false, false, &layout);
+    assert!(player.x > 81, "Mario moved right in player.step");
+    let moved_x = player.x;
+
+    let tables: ObjectTables = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../extracted/objects.json"
+    )))
+    .unwrap();
+    let contact = MarioContact {
+        x: player.x,
+        y: player.y,
+        on_ground: player.on_ground,
+        on_object: player.on_ground_obj,
+        hvel: player.hvel,
+        ..Default::default()
+    };
+    obj.step(80, 72, &layout, &tables, &contact, false);
+    assert_eq!(obj.mario_x_adjust, None);
+
+    player.apply_object_result(&mut obj, false);
+    assert_eq!(player.x, moved_x, "Mario's position was preserved after getting off platform");
+}

@@ -235,6 +235,7 @@ impl ObjectSim {
         self.stomp_bounce = false;
         self.on_object = false;
         self.on_ground_cleared = false;
+        self.mario_x_adjust = None;
         self.mario_y_adjust = None;
         if self.mario_dead != 0 {
             return;
