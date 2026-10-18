@@ -93,10 +93,12 @@ impl ObjectSim {
         }
         if ty & 0x01 == 0 {
             // $8633: sfx 3; anim + 1; sprite re-derive.
+            self.sfx0 = 3;
             st.b[B_DEF] = st.b[B_DEF].wrapping_add(1);
             self.finish_sprite_swap(st, tables);
         } else {
             // $85D7/$85DC: sfx 3; anim − 1.
+            self.sfx0 = 3;
             st.b[B_DEF] = st.b[B_DEF].wrapping_sub(1);
             self.finish_sprite_swap(st, tables);
         }

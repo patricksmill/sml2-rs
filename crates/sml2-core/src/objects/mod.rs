@@ -423,6 +423,8 @@ mod stream;
 mod stream_cursor;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod stomp_morph_tests;
 mod mario_zone;
 mod boo;
 mod carrier;
