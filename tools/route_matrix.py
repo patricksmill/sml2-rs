@@ -162,7 +162,11 @@ def build(level: int, objects, nodes, names) -> dict:
 
     props = man["properties"]
     mechanics = []
-    if props.get("space_physics"):
+    if props.get("space_physics") == 0x08:
+        mechanics.append("timed float (moon bit 3)")
+    elif props.get("space_physics") == 0x01:
+        mechanics.append("hold-A float (moon bit 0)")
+    elif props.get("space_physics"):
         mechanics.append(f"moon physics (space_physics={props['space_physics']:#04x})")
     if props.get("unknown"):
         mechanics.append(f"scroll limit (properties={props['unknown']:#04x})")

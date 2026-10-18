@@ -79,3 +79,51 @@ fn level28_exit_bell_arms_from_the_source_cell() {
 fn level29_exit_bell_arms_from_the_source_cell() {
     assert_bell(29, 94, 28, 0x4A);
 }
+
+/// Every `$4A`/`$4B` cell in every level must arm the bell from its own cell.
+///
+/// The source scan finds **35 bells across 25 levels** (7 `$4B` twins, 28 `$4A`
+/// bells); the six levels without one end through a boss clear or the castle
+/// flow.  The count is pinned so a re-extraction cannot silently shrink the set.
+#[test]
+fn every_source_exit_cell_arms_the_bell() {
+    const EXPECTED_BELLS: usize = 35;
+    let mut checked = 0usize;
+    let mut failures: Vec<String> = Vec::new();
+    for level in 1..=32u8 {
+        let (_manifest, layout) = load(level);
+        for (idx, &tile) in layout.cells.iter().enumerate() {
+            if tile & 0xFE != 0x4A {
+                continue;
+            }
+            let (col, row) = (idx % 256, idx / 256);
+            let (x, y) = stand_on(col, row);
+            let mut sim = PlayerSim::new();
+            sim.x = x;
+            sim.y = y;
+            sim.step(&PlayerKeys::default(), false, false, &layout);
+            checked += 1;
+            if !sim.exit_phase {
+                failures.push(format!("level{level:02} ({col},{row}) ${tile:02X}: not armed"));
+                continue;
+            }
+            if sim.fade_timer != 192 {
+                failures.push(format!("level{level:02} ({col},{row}): fade {}", sim.fade_timer));
+            }
+            let want = if tile == 0x4B { 0xFF } else { 0 };
+            if sim.exit_tile_flag != want {
+                failures.push(format!(
+                    "level{level:02} ({col},{row}): exit flag {:#04X} != {want:#04X}",
+                    sim.exit_tile_flag
+                ));
+            }
+        }
+    }
+    assert_eq!(checked, EXPECTED_BELLS, "source bell count changed");
+    assert!(
+        failures.is_empty(),
+        "{} of {checked} bell cell(s) failed: {}",
+        failures.len(),
+        failures.join("; ")
+    );
+}
