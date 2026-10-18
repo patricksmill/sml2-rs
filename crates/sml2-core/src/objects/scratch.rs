@@ -53,6 +53,9 @@ impl ObjectSim {
         self.boss_hit_latch = 0; // $AFC3
         self.saved_frame_state = 0; // $AFC4
         self.boss_hits_remaining = 0; // $AFC5
+        self.door_phase = 0; // $AFC7
+        self.door_sequence_active = 0; // $AFC8
+        self.door_parity = 0; // $AFC9
         self.boss_sprite = 0; // $AFCA
         self.saved_type = 0; // $AFCC
         self.boss_timer_reload = 0; // $AFCD
@@ -121,6 +124,9 @@ mod tests {
         sim.boss_hit_latch = 1;
         sim.saved_frame_state = 8;
         sim.boss_hits_remaining = 3;
+        sim.door_phase = 3;
+        sim.door_sequence_active = 1;
+        sim.door_parity = 1;
         sim.boss_sprite = 0x4F;
         sim.saved_type = 0x41;
         sim.boss_timer_reload = 80;
@@ -191,6 +197,7 @@ mod tests {
             (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         );
         assert_eq!(sim.saved_power_state, 0);
+        assert_eq!((sim.door_phase, sim.door_sequence_active, sim.door_parity), (0, 0, 0));
         // $AF1E/$AF1F are zero, so the physical pointer is $0000 and the
         // public index is inactive — not the $AB06 of a live cursor.
         assert_eq!(sim.stream_index, 0);
@@ -198,6 +205,26 @@ mod tests {
         // The stream buffer and its markers are outside the page.
         assert_eq!(sim.records, vec![record(), record()]);
         assert_eq!(sim.spawned, vec![false, false]);
+    }
+
+    #[test]
+    fn door_boss_reentry_and_level_reload_clear_sequence_scratch() {
+        let mut sim = ObjectSim::new(vec![record()], 80);
+        sim.configure(9);
+        for reload in [false, true] {
+            sim.door_phase = 3;
+            sim.door_sequence_active = 1;
+            sim.door_parity = 1;
+            sim.fff0 = 0xA5;
+            sim.div = 0x5A;
+            if reload { sim.reset_level_start(); } else { sim.spawn_boss(1); }
+            assert_eq!((sim.door_phase, sim.door_sequence_active, sim.door_parity), (0, 0, 0));
+            assert_eq!((sim.fff0, sim.div), (0xA5, 0x5A));
+            if !reload {
+                assert_eq!(sim.slots[0].b[B_DEF], 6);
+                assert_eq!(sim.boss_def_count, 3);
+            }
+        }
     }
 
     #[test]
