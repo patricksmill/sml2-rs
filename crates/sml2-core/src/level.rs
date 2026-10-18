@@ -178,6 +178,27 @@ pub struct LevelHeader {
 }
 
 impl LevelHeader {
+    /// `$5579-$55C6`: select the start block from the map's progress byte.
+    /// All eight overlay bytes are copied, including zero and padding records.
+    pub fn entry(&self, progress_flags: u8, overlay: Option<LevelStart>) -> LevelEntry {
+        let secret_route = if progress_flags & 8 != 0 { 0xFF } else { 0 };
+        let normal = LevelStart {
+            mario_y: self.mario_spawn_y,
+            mario_x: self.mario_spawn_x,
+            camera_y: self.camera_start_y,
+            camera_x: self.camera_start_x,
+        };
+        LevelEntry {
+            progress_flags,
+            start: if secret_route != 0 {
+                overlay.expect("secret entry requires regenerated level manifest")
+            } else {
+                normal
+            },
+            secret_route,
+        }
+    }
+
     /// Decode the 20 raw header bytes.
     pub fn from_bytes(b: &[u8; 20]) -> Self {
         Self {
@@ -194,6 +215,72 @@ impl LevelHeader {
             scene_state: b[18] & 0xF0,
             time_limit: b[19],
         }
+    }
+}
+
+/// The `$A800-$A807` start block. `$377B + level * 8` overlays these fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LevelStart {
+    pub mario_y: u16,
+    pub mario_x: u16,
+    pub camera_y: u16,
+    pub camera_x: u16,
+}
+
+impl LevelStart {
+    pub fn from_bytes(bytes: [u8; 8]) -> Self {
+        Self {
+            mario_y: u16::from_le_bytes([bytes[0], bytes[1]]),
+            mario_x: u16::from_le_bytes([bytes[2], bytes[3]]),
+            camera_y: u16::from_le_bytes([bytes[4], bytes[5]]),
+            camera_x: u16::from_le_bytes([bytes[6], bytes[7]]),
+        }
+    }
+
+    pub fn to_bytes(self) -> [u8; 8] {
+        let mut bytes = [0; 8];
+        for (dest, value) in bytes.chunks_exact_mut(2).zip([
+            self.mario_y, self.mario_x, self.camera_y, self.camera_x,
+        ]) {
+            dest.copy_from_slice(&value.to_le_bytes());
+        }
+        bytes
+    }
+}
+
+/// Resolved level-load state; later pickups cannot change the stored start block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LevelEntry {
+    pub start: LevelStart,
+    pub secret_route: u8,
+    pub progress_flags: u8,
+}
+
+#[cfg(test)]
+mod entry_tests {
+    use super::*;
+
+    #[test]
+    fn secret_route_entry_overwrites_only_a800_a807_and_resets_from_progress() {
+        let raw = [0x10, 1, 0x20, 2, 0x30, 3, 0x40, 4, 0xA8, 0xA9,
+            11, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0xA8, 0x19];
+        let header = LevelHeader::from_bytes(&raw);
+        // home.asm $377B + 11*8, byte-for-byte ROM witness.
+        let overlay_bytes = [0x94, 0x01, 0x31, 0x08, 0xBA, 0x01, 0x52, 0x08];
+        let overlay = LevelStart::from_bytes(overlay_bytes);
+        for progress in 0..=255u8 {
+            let entry = header.entry(progress, Some(overlay));
+            assert_eq!(entry.progress_flags, progress);
+            assert_eq!(entry.secret_route, if progress & 8 != 0 { 255 } else { 0 });
+            assert_eq!(entry.start.to_bytes().as_slice(), if progress & 8 != 0 { &overlay_bytes } else { &raw[..8] });
+        }
+        // The overlay must not replace the remainder of the selected header.
+        assert_eq!(header, LevelHeader::from_bytes(&raw));
+        assert_eq!(header.unknown, [0xA8, 0xA9]);
+        assert_eq!((header.level_id, header.music_track, header.time_limit), (11, 0x14, 0x19));
+        assert_eq!(header.entry(8, Some(LevelStart::from_bytes([0; 8]))).start.to_bytes(), [0; 8]);
+        let padding = [0xFA, 0x99, 0xA2, 0xA7, 0xC8, 0x3D, 0xE6, 0x0F];
+        assert_eq!(header.entry(8, Some(LevelStart::from_bytes(padding))).start.to_bytes(), padding);
     }
 }
 
@@ -334,6 +421,9 @@ pub struct LevelManifest {
     /// The 20 raw header bytes as stored in the ROM (lowercase hex).
     pub header_raw_hex: String,
     pub header: LevelHeader,
+    /// Exact ROM `$377B + level_id * 8` record; old manifests lack this field.
+    #[serde(default)]
+    pub secret_entry: Option<LevelStart>,
     /// Label of the level's RLE layout data, e.g. `Level_01`.
     pub level_data_label: String,
     pub tileset_map: TilesetMapRef,

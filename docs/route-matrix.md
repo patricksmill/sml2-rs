@@ -107,8 +107,8 @@ named tests.
   `$50/$51` hazard strip at row 29, columns 43–232 — the level's dominant
   traversal hazard (44 cells).
 - **Secret route.** The ROM overlay drops Mario at (2097, 404) — pixel column
-  131, four rows above the row-27 landing (`$18`, a solid). Data only: the port
-  does not apply the overlay (see gaps).
+  131, four rows above the row-27 landing (`$18`, a solid). The loader applies
+  this entry when the node progress byte has bit 3 set.
 - **Objects.** 31 records; anims 9/15/17/19/20/22/23/25/27/28/29/58/68/77.
   Distinctive: cannon ant (anim 77, `$5A773`), `$5A545` (anim 68), `$591F9`
   (anim 58). No boss arena scene.
@@ -124,7 +124,7 @@ named tests.
   `$4B` is the "route already cleared" twin: it leaves `sExitTileFlag = $FF`,
   which the `$3547` tally guard reads.
 - **Secret route.** Overlay drops Mario at (1905, 436) — inside the level, one
-  cell above the row-29 floor. Data only (unported overlay).
+  cell above the row-29 floor. The loader applies it for progress bit 3.
 - **Mechanics.** `space_physics = $08` (moon bit 3, the timed float) and
   `properties = $08` (scroll limit) — the same pair level 29 carries.
 - **Objects.** 25 records; cannon ant (77), `$5AFD7` (anim 88),
@@ -171,12 +171,17 @@ approach — the smoke harness runs 1200 frames and never reaches a bell.
 
 ## Gaps
 
-1. **The secret-route entry overlay is not ported.** `$55C0` copies the level's
-   8-byte record from ROM `$377B` over the header's Y/X/camera block when
-   `sLevelProgressFlags` bit 3 (or the secret-route item) set the flag. The
-   extraction has no field for it and the runtime always seeds the header spawn,
-   so the 22 levels with a non-zero record cannot be entered from their secret
-   points. Promoted as `secret_route_entry_overlay`.
+1. **Secret-route entries are implemented; live overworld integration remains.**
+   Extraction preserves all 32 indexed `$377B` records in `secret_entry`.
+   `LevelHeader::entry` copies the eight Y/X/camera bytes when progress bit 3 is
+   set; `$5579` resets the route latch from that bit, so a previous item pickup
+   cannot choose the next entry. `secret_route_entry_overwrites_only_a800_a807_and_resets_from_progress`
+   pins the bytes, and runtime test
+   `secret_route_entry_consumes_map_progress_and_reloads_stored_start` connects
+   `MapSim` selection to Mario/camera initialization, object route state, and
+   reload. Run `sml2-runtime --level 11 --level-progress 8 --headless 1` for
+   level 12's alternate entry. The runtime still lacks a live overworld loop;
+   the CLI supplies its entry progress byte. Played approaches remain pending.
 2. **Boss definition 0 is blocked** — level 6 (TreeZone5, scene `$0B`) resolves
    to def 0, which `boss_def_portable` excludes. Promoted as
    `boss_def0_arena_entry`.

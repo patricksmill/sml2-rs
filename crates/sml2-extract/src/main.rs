@@ -257,6 +257,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     ending::emit(&baserom, &extracted)?;
     let main_src = fs::read_to_string(decomp.join("main.asm"))?;
     let home_src = fs::read_to_string(decomp.join("home.asm"))?;
+    let secret_entries = parse::parse_secret_entries(&home_src, &baserom)?;
     let headers_src = fs::read_to_string(decomp.join("levels/levelheaders.asm"))?;
     let tilesets_src = fs::read_to_string(decomp.join("levels/tilesets.asm"))?;
     let enemysets_src = fs::read_to_string(decomp.join("levels/enemysets.asm"))?;
@@ -979,6 +980,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             header_label: raw.label.clone(),
             header_raw_hex: hex_encode(&raw.bytes),
             header,
+            // `$5579` indexes all 32 records without checking for zero/padding.
+            // The final record overlaps the instructions beginning at `$3873`.
+            secret_entry: Some(secret_entries[i]),
             level_data_label: raw.data_bank_symbol.clone(),
             tileset_map: TilesetMapRef {
                 index: map_nn,

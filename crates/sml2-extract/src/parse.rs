@@ -10,6 +10,51 @@
 
 use std::collections::HashMap;
 
+/// `$5579` reads 32 eight-byte records at `$377B`. The source declares 31
+/// `dw` rows; the final read includes the following code bytes.
+pub fn parse_secret_entries(
+    source: &str,
+    rom: &[u8],
+) -> Result<[sml2_core::level::LevelStart; 32], String> {
+    let bytes = rom.get(0x377B..0x387B).ok_or("short secret-entry ROM table")?;
+    let tail = source.split_once("UnknownData_0x377B:")
+        .ok_or("missing UnknownData_0x377B")?.1;
+    let mut declared = Vec::new();
+    for line in tail.lines().skip(1) {
+        let code = code_part(line);
+        if code.is_empty() { continue; }
+        let Some(words) = code.strip_prefix("dw ") else { break; };
+        for word in words.split(',') {
+            declared.extend_from_slice(&hex_word(word)?.to_le_bytes());
+        }
+    }
+    if declared.len() != 31 * 8 || declared != bytes[..31 * 8] {
+        return Err("$377B source/ROM mismatch (expected 31 declared rows)".into());
+    }
+    Ok(std::array::from_fn(|i| {
+        sml2_core::level::LevelStart::from_bytes(bytes[i * 8..i * 8 + 8].try_into().unwrap())
+    }))
+}
+
+#[cfg(test)]
+mod secret_entry_tests {
+    use super::*;
+
+    #[test]
+    fn secret_entries_cross_check_source_and_keep_zero_and_code_rows() {
+        let source = format!("UnknownData_0x377B: ;table\n{}\nNext:\n", "dw $0000, $0000, $0000, $0000\n".repeat(31));
+        let mut rom = vec![0; 0x387B];
+        let padding = [0xFA, 0x99, 0xA2, 0xA7, 0xC8, 0x3D, 0xE6, 0x0F];
+        rom[0x3873..0x387B].copy_from_slice(&padding);
+        let entries = parse_secret_entries(&source, &rom).unwrap();
+        assert_eq!(entries[0].to_bytes(), [0; 8]);
+        assert_eq!(entries[31].to_bytes(), padding);
+        rom[0x377B] = 1;
+        assert!(parse_secret_entries(&source, &rom).is_err());
+        assert!(parse_secret_entries(&source, &rom[..0x387A]).is_err());
+    }
+}
+
 /// Strip a trailing `; comment` and surrounding whitespace.
 fn code_part(line: &str) -> &str {
     line.split(';').next().unwrap_or("").trim()

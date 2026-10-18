@@ -16,7 +16,9 @@
 //!     (resizable window: integer scale + letterbox; arrows scroll,
 //!      shift = fast, Q/ESC quits)
 //!
-//! Camera defaults to the level header's `camera_start_x/y`. Tiles resolve
+//! `--level-progress BYTE` supplies the map entry progress byte in decimal;
+//! bit 3 selects the ROM's alternate Mario/camera start (e.g. `8`).
+//! Camera defaults to the resolved entry's camera start. Tiles resolve
 //! through `sml2_core::video`, which keeps palette indices as data — the
 //! seam a texture pack plugs into later (see sml2-rs/DESIGN.md).
 
@@ -64,6 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut replay_file: Option<PathBuf> = None;
     let mut filmstrip: Option<PathBuf> = None;
     let mut play_mode = false;
+    let mut level_progress = 0u8;
     let mut headless_frames: Option<u64> = None;
     let mut keys_tape: Option<String> = None;
     let mut view = (SCREEN_W, SCREEN_H);
@@ -79,6 +82,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             "--level" => {
                 level = Some(args.next().ok_or("--level needs a value")?.parse::<u8>()?);
+            }
+            // The map's `$A27D` entry byte (decimal), consumed by `$5579`.
+            "--level-progress" => {
+                level_progress = args.next().ok_or("--level-progress needs a byte")?.parse()?;
             }
             "--camera" => {
                 let x = args.next().ok_or("--camera needs X Y")?.parse::<u16>()?;
@@ -161,6 +168,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         levels_dir.join(format!("level{nn:02}.manifest.json")),
     )?)?;
     let layout = LevelLayout::from_bytes(&fs::read(levels_dir.join(&manifest.layout.file))?)?;
+    if level_progress & 8 != 0 && manifest.secret_entry.is_none() {
+        return Err("secret entry missing: regenerate assets with sml2-extract".into());
+    }
+    let level_entry = manifest.header.entry(level_progress, manifest.secret_entry);
     let bg = fs::read(levels_dir.join(format!("level{nn:02}.bgblock.bin")))?;
     if bg.len() != video::BG_VRAM_LEN {
         return Err(format!("bgblock.bin: expected {} bytes", video::BG_VRAM_LEN).into());
@@ -212,10 +223,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = (
         camera
             .map(|c| c.0)
-            .unwrap_or(manifest.header.camera_start_x),
+            .unwrap_or(level_entry.start.camera_x),
         camera
             .map(|c| c.1)
-            .unwrap_or(manifest.header.camera_start_y),
+            .unwrap_or(level_entry.start.camera_y),
     );
     // The level's 48-byte `sScreenEdgeMap` (`$03F1`). Both modes need it: the
     // replay harness derives `$FF98` from it and checks the captured byte, and
@@ -233,6 +244,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(rf) = replay_file {
         return run_replay(
             &rf,
+            level_entry,
             &manifest,
             &layout,
             &bg,
@@ -249,12 +261,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut sim = PlayerSim::new();
         seed_level_timer(&mut sim, &manifest);
         sim.powerup = 0;
-        sim.x = manifest.header.mario_spawn_x;
-        sim.y = manifest.header.mario_spawn_y;
         let mut cam = sml2_core::camera::CameraSim::new(
-            manifest.header.camera_start_x,
-            manifest.header.camera_start_y,
+            level_entry.start.camera_x,
+            level_entry.start.camera_y,
         );
+        apply_level_entry(&mut sim, &mut cam, level_entry);
         cam.prev_mario_y_lo = sim.y as u8;
         // The two per-level property bytes the ROM loads at $04F1: sMapScrollLimit
         // from `LevelPropertiesUNK` and sAutoScroll from `LevelPropertiesScroll`
@@ -1284,6 +1295,7 @@ fn build_contact(sim: &PlayerSim, keys: &PlayerKeys, pan: u8) -> sml2_core::obje
 #[allow(clippy::too_many_arguments)]
 fn run_replay(
     path: &Path,
+    level_entry: sml2_core::level::LevelEntry,
     manifest: &LevelManifest,
     layout: &LevelLayout,
     bg_base: &[u8],
@@ -1325,6 +1337,9 @@ fn run_replay(
     let nodes = load_map_nodes();
     let mut sim = PlayerSim::new();
     sim.powerup = 0; // level-0 spawn starts small
+    sim.secret_route = level_entry.secret_route;
+    sim.level_progress_flags = level_entry.progress_flags;
+    sim.level_progress_flags = level_entry.progress_flags;
     seed_level_timer(&mut sim, manifest);
     let f0 = &frames[0];
     sim.x = f0.x;
@@ -1622,7 +1637,7 @@ fn run_replay(
         if !fade_at_entry {
             // $8000's dispatcher gate reads sMarioDead; the interaction pass
             // then writes it back.
-            obj.sample_player_inputs(&sim);
+            sample_level_player_inputs(&mut obj, &sim);
             obj.div = divider_clock.sample();
             // `$0EB0`'s scene branch: taken only for a def whose handlers are
             // all ported (the fight then ends in the level clear, which reseeds
@@ -1699,13 +1714,9 @@ fn run_replay(
             } else {
                 // $0F2A + $04F1 + $EBBB: the reload puts Mario back at the
                 // header spawn and clears the object scratch (fff0 persists).
-                sim.respawn(manifest.header.mario_spawn_x, manifest.header.mario_spawn_y);
+                sim.respawn(level_entry.start.mario_x, level_entry.start.mario_y);
                 seed_level_timer(&mut sim, manifest);
-                cam.reset_level_start(
-                    manifest.header.camera_start_x,
-                    manifest.header.camera_start_y,
-                    sim.y as u8,
-                );
+                apply_level_entry(&mut sim, &mut cam, level_entry);
                 obj.reset_level_start();
             }
             let skipped = g.total.saturating_sub(1 + modeled);
@@ -2635,7 +2646,7 @@ fn run_play(
         if let Some(tables) = &obj_tables {
             if !frozen {
                 let mario = build_contact(&sim, &keys, cam.scroll_pan);
-                obj.sample_player_inputs(&sim);
+                sample_level_player_inputs(&mut obj, &sim);
                 obj.div = if headless {
                     virtual_clock.sample()
                 } else {
@@ -2938,6 +2949,25 @@ fn ending_frame_head(
     )
 }
 
+/// Share the level route latch with object handlers, including pose 87.
+fn sample_level_player_inputs(obj: &mut sml2_core::objects::ObjectSim, sim: &PlayerSim) {
+    obj.sample_player_inputs(sim);
+    obj.secret_route = sim.secret_route != 0;
+}
+
+/// Apply the resolved `$A800-$A807` block and `$5579` route/progress latches.
+fn apply_level_entry(
+    sim: &mut PlayerSim,
+    cam: &mut sml2_core::camera::CameraSim,
+    entry: sml2_core::level::LevelEntry,
+) {
+    sim.x = entry.start.mario_x;
+    sim.y = entry.start.mario_y;
+    sim.secret_route = entry.secret_route;
+    sim.level_progress_flags = entry.progress_flags;
+    cam.reset_level_start(entry.start.camera_x, entry.start.camera_y, sim.y as u8);
+}
+
 /// `$04F1`: the header seeds the countdown and the level's music byte on load.
 fn seed_level_timer(sim: &mut PlayerSim, manifest: &LevelManifest) {
     sim.level_timer = sml2_core::level_timer::LevelTimer::new(manifest.header.time_limit);
@@ -2954,6 +2984,58 @@ fn update_level_timer_at_frame_head(sim: &mut PlayerSim) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn secret_route_entry_consumes_map_progress_and_reloads_stored_start() {
+        use sml2_core::map::{MapNodeRecords, MapNodes, MapWalk};
+        use sml2_core::map_sim::{MapInput, MapSim};
+        use sml2_core::level::LevelStart;
+        let (mut manifest, _, _) = level_files("level12.manifest.json", "level12.bgblock.bin");
+        manifest.secret_entry = Some(LevelStart::from_bytes([
+            0x94, 0x01, 0x31, 0x08, 0xBA, 0x01, 0x52, 0x08,
+        ]));
+        let mut table = vec![0; MapNodes::BLOB_LEN];
+        table[2] = 11;
+        table[MapNodes::NODES + 2] = 1;
+        let nodes = MapNodes::from_bytes(&table).unwrap();
+        for progress in [0, 0x80, 8, 0x88] {
+            let mut map = MapSim::new();
+            map.screen_id = 1;
+            map.node = 2;
+            map.level_progress[1] = progress;
+            let transition = map.tick(
+                MapInput { keys_pressed: 1, ..Default::default() },
+                &nodes, &MapWalk::default(), &MapNodeRecords::default(),
+            );
+            assert_eq!(transition.level, Some(manifest.level_id));
+            let entry = manifest.header.entry(transition.progress_flags, manifest.secret_entry);
+            let mut sim = PlayerSim::new();
+            let mut cam = sml2_core::camera::CameraSim::new(0, 0);
+            sim.secret_route = 255; // old pickup/previous level must not leak.
+            apply_level_entry(&mut sim, &mut cam, entry);
+            let expected = if progress & 8 != 0 {
+                [0x94, 0x01, 0x31, 0x08, 0xBA, 0x01, 0x52, 0x08]
+            } else {
+                manifest.header.entry(0, None).start.to_bytes()
+            };
+            let observed = |sim: &PlayerSim, cam: &sml2_core::camera::CameraSim| LevelStart {
+                mario_y: sim.y, mario_x: sim.x, camera_y: cam.y, camera_x: cam.x,
+            }.to_bytes();
+            assert_eq!(observed(&sim, &cam), expected, "$A800-$A807 consumers");
+            assert_eq!(sim.secret_route, if progress & 8 != 0 { 255 } else { 0 });
+            assert_eq!(sim.level_progress_flags, progress);
+            let mut obj = sml2_core::objects::ObjectSim::new(Vec::new(), cam.x);
+            sample_level_player_inputs(&mut obj, &sim);
+            assert_eq!(obj.secret_route, progress & 8 != 0);
+            // Item $07 changes only the route latch. Death reload consumes
+            // the stored start, rather than choosing from that mutable latch.
+            sim.secret_route = 255;
+            sim.respawn(entry.start.mario_x, entry.start.mario_y);
+            apply_level_entry(&mut sim, &mut cam, entry);
+            assert_eq!(observed(&sim, &cam), expected);
+            assert_eq!(sim.secret_route, entry.secret_route);
+        }
+    }
 
     #[test]
     fn ending_entry_frame_head_keeps_trigger_player_and_objects_then_dispatches() {
