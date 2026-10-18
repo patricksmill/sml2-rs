@@ -51,7 +51,7 @@ fn handler_0x9ef4_real_driver_stomp_stun_defeat_and_death_morph() {
     let layout = LevelLayout::from_bytes(&[0x60; 0x3000]).unwrap();
     let mut sim = ObjectSim::new(vec![], 0);
     sim.spawn_boss(3);
-    // Isolate the main slot: anim-15 consumers remain a separate ticket.
+    // Isolate main-slot damage and morph from child behavior.
     sim.boss_def_count = 0;
     sim.slots[0].b[B_FSTATE] = 5;
     sim.slots[0].b[B_SPRITE] = 45;
@@ -155,8 +155,4 @@ fn handler_0x9ef4_child_selection_resets_on_entry_and_level_reload() {
     sim.scene_slot_parity = 255;
     sim.reset_level_start();
     assert_eq!(sim.scene_slot_parity, 0);
-    assert!(
-        !crate::scene::boss_def_portable(3),
-        "anim-15 consumer still pending"
-    );
 }

@@ -430,17 +430,12 @@ impl SceneVm {
 /// `$10` -> 3, `$13` -> 4, `$17` -> 5, and anything else (including `$18`,
 /// the Wario castle) -> 6. That index selects the 3-byte record (count, hits,
 /// sprite) and the two 18-byte def images in [`lookup_boss_spawn_def`].
-/// The boss defs whose handlers are all ported, so `$0EB0`'s scene branch can be
-/// taken for them: the park it sets is cleared by the level clear the fight
-/// ends in. Def 2 (the Mario Zone, level `$0D`) is anims 10/11/12 — all three
-/// ported; the others still report (`CameraSim::take_blocked_scene_load`).
-///
-/// Def 1 (the door boss, level `$09`), Def 2 (Mario Zone, level `$0D`), and
-/// Defs 6, 7, 8 (Wario, level `$18`,
-/// all 3 forms) are ported: their fights end in an arena sequence / level clear
-/// which reseeds `sSceneState` and clears the `$F0` park.
+/// Definitions accepted through normal arena entry: 1 (level `$09`), 2
+/// (`$0D`), 3 (`$10`), and Wario's 6/7/8 (`$18`). The regular fights finish
+/// through reward and level reset; Wario uses phase exits and the ending.
+/// Unsupported definitions still use `CameraSim::take_blocked_scene_load`.
 pub fn boss_def_portable(def_index: u8) -> bool {
-    matches!(def_index, 1 | 2 | 6 | 7 | 8)
+    matches!(def_index, 1 | 2 | 3 | 6 | 7 | 8)
 }
 
 pub fn boss_def_index(level_id: u8, phase: u8) -> u8 {

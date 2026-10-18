@@ -76,10 +76,6 @@ fn handler_0xa029_real_parent_command_drop_flight_and_idle_slot_reuse() {
         sim.boss_def_count, 2,
         "source keeps both reusable child slots"
     );
-    assert!(
-        !crate::scene::boss_def_portable(3),
-        "full arena acceptance is still separate"
-    );
 }
 
 #[test]
