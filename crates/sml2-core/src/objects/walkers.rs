@@ -725,12 +725,18 @@ impl ObjectSim {
 
     pub(super) fn handler_crawler(&mut self, st: &mut Staging, layout: &LevelLayout) {
         self.sprite_toggle1(st);
+        if st.b[B_FSTATE] == 0 {
+            self.face_mario(st);
+            st.b[B_FLASH] = 16;
+            st.b[B_TYPE] = 0x56;
+            return;
+        }
+        self.crawler_body(st, layout);
+    }
+
+    /// `$58642`: the shared crawl dispatch entered by anim 82 (and the crawler).
+    pub(super) fn crawler_body(&mut self, st: &mut Staging, layout: &LevelLayout) {
         match st.b[B_FSTATE] {
-            0 => {
-                self.face_mario(st);
-                st.b[B_FLASH] = 16;
-                st.b[B_TYPE] = 0x56;
-            }
             1 | 3 => {
                 // $5864E
                 if self.fff0 & 1 == 0 {
