@@ -2684,8 +2684,8 @@ fn the_boss_driver_leaves_the_screen_bytes_alone() {
 
 /// `$92DF` dispatches through the *boss* table (`$92E8`) — anim 16's boss
 /// handler is `$A0B9` (bank 2), while the level's profile table gives
-/// `$586F5` (bank 22) for the same anim. The boss path must report the
-/// former as unported, never silently run the latter.
+/// `$586F5` (bank 22) for the same anim. The boss path must initialize
+/// the native boss, never silently run the level handler.
 #[test]
 fn the_boss_driver_dispatches_through_the_92e8_table() {
     let real: ObjectTables = serde_json::from_str(
@@ -2716,10 +2716,11 @@ fn the_boss_driver_dispatches_through_the_92e8_table() {
     obj.boss_def_count = 0;
     obj.slots[0].b[B_DEF] = 16;
     obj.boss_engine(0, 0, &layout, &real);
-    assert!(
-        obj.unported.contains(&0xA0B9),
-        "the boss handler is reported"
-    );
+    assert_eq!(obj.slots[0].b[B_FSTATE], 3, "boss initialization state");
+    assert_eq!(obj.slots[0].b[B_TYPE], 69);
+    assert_eq!(obj.slots[0].b[B_T28], 1);
+    assert_eq!(obj.door_phase, 4);
+    assert!(obj.unported.is_empty(), "boss handler is implemented");
     assert!(
         !obj.unported.contains(&0x586F5),
         "and the level's handler for the same anim is not run"
