@@ -127,6 +127,9 @@ mod sweep_child;
 mod sweep_child_adapter;
 mod sweep_drop_child;
 mod sweep_drop_child_adapter;
+mod circuit_boss;
+mod circuit_boss_motion;
+mod circuit_boss_adapter;
 mod patrol_child;
 mod patrol_child_adapter;
 #[cfg(test)]

@@ -149,6 +149,7 @@ impl ObjectSim {
             0xA0B9 => self.handler_sweep_boss(st, tables),
             0xA27E => self.handler_sweep_child(st),
             0xA2BE => self.handler_sweep_drop_child(st, tables),
+            0xA372 => self.handler_circuit_boss(st),
             0xAB30 => self.boss_anim22(st),
             0xAB6E => self.boss_anim25(st),
             0xA8AB => self.handler_wario20(st, tables),
