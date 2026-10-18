@@ -10,7 +10,10 @@ pub(super) enum Effect {
 }
 
 pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Effect {
-    let _ = actor.animate_two_frame_toggle(frame, 4);
+    // $5B678: toggle flip bit 5 every eighth frame (the sprite is untouched).
+    if frame.every(8) {
+        actor.sprite_flip.toggle_horizontal();
+    }
     if actor.state == 0 {
         actor.face_toward(player_x);
         actor.contact_kind = ContactKind::from_raw(CONTACT);

@@ -8,7 +8,7 @@ impl ObjectSim {
         let effect = handler_0x59b0e::update(&mut actor, frame, self.mario_ref_x);
         st.b = actor.to_raw_slot();
         if matches!(effect, handler_0x59b0e::Effect::Crawl) {
-            self.handler_crawler(st, layout);
+            self.crawler_body(st, layout);
         }
     }
 }
