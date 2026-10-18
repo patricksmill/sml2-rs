@@ -108,6 +108,8 @@ mod boss;
 mod handler_0x96fe;
 #[path = "handler_0x9824.rs"]
 mod handler_0x9824;
+mod central_door;
+mod central_door_adapter;
 mod boss_flash;
 mod boss_stun;
 #[cfg(test)]
