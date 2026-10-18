@@ -212,6 +212,63 @@ UnknownCall_0x58010:
         with self.assertRaises(ValueError):
             handler_task.handler_for_anim({'boss_anim_handlers': [0x9322]}, -1, 'boss')
 
+    def symbolic_table_fixture(self, root, declaration):
+        (root / 'home.asm').write_text('SECTION "bank00", ROM0\n')
+        (root / 'main.asm').write_text('''SECTION "bank02", ROMX, BANK[$02]
+UnknownCall_0x8000:
+    rst $28
+UnknownData_0x8001:
+''' + declaration + '''
+UnknownJump_0x8010:
+    ret
+UnknownJump_0x8020:
+    ret
+''')
+        self.code(0x8000, [0xEF, 0x10, 0x40, 0x20, 0x40])
+        self.code(0x8010, [0xC9])
+        self.code(0x8020, [0xC9])
+
+    def test_symbolic_dw_forward_reference_keeps_exact_table_and_following_code(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            self.symbolic_table_fixture(root, '    dw $4010, UnknownJump_0x8020')
+            main = root / 'main.asm'
+            main.write_text(main.read_text().replace('\nUnknownJump_0x8010:', '\n    ret\nUnknownJump_0x8010:'))
+            self.code(0x8005, [0xC9])
+            source = SourceIndex.load(root, self.rom)
+            self.assertEqual(source.tables[0x8001], 0x8005)
+            self.assertIn('dw $4010, UnknownJump_0x8020', source.locations[0x8003])
+            self.assertIn('ret', source.locations[0x8005])
+            result = slice_handler(self.rom, source, 0x8000)
+            self.assertTrue(result.complete, result.unresolved)
+            self.assertEqual(result.tables[0x8001], [0x4010, 0x4020])
+            self.assertEqual(set(result.instructions), {0x8000, 0x8010, 0x8020})
+
+    def test_symbolic_dw_mismatched_rom_or_unknown_reference_rejects_whole_table(self):
+        for bad in ['UnknownJump_0x8030', 'missing', 'UnknownJump_0x8020 + 1']:
+            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                self.symbolic_table_fixture(root, '    dw $4010\n    dw ' + bad)
+                source = SourceIndex.load(root, self.rom)
+                self.assertNotIn(0x8001, source.tables)
+                self.assertFalse(slice_handler(self.rom, source, 0x8000).complete)
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            self.symbolic_table_fixture(root, '    dw $4010, UnknownJump_0x8020')
+            self.rom[0x8003] = 0x21
+            source = SourceIndex.load(root, self.rom)
+            self.assertNotIn(0x8001, source.tables)
+            self.assertFalse(slice_handler(self.rom, source, 0x8000).complete)
+
+    def test_symbolic_dw_supports_symbol_file_addresses(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            self.symbolic_table_fixture(root, '    dw $4010, NamedTarget')
+            (root / 'sml2.sym').write_text('02:4020 NamedTarget\n')
+            source = SourceIndex.load(root, self.rom)
+            self.assertEqual(source.tables[0x8001], 0x8005)
+            self.assertTrue(slice_handler(self.rom, source, 0x8000).complete)
+
     def test_source_local_label_does_not_consume_instruction_bytes(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)

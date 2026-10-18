@@ -40,6 +40,13 @@ known immediate bank writes, and known HL/stack transfers. Source lines come fro
 `home.asm` and `main.asm`, anchored by address labels and optionally `sml2.sym`.
 An unlabeled entry does not fall back to a nearby label's routine.
 
+State-table `dw` rows may mix numeric words with named labels resolved from
+explicit ROM-address labels or `sml2.sym`. Rows containing symbols must match
+the encoded ROM words before they supply table bounds or advance the source
+cursor. Unknown names, expressions and mismatched words invalidate the entire
+contiguous declaration, including any preceding numeric rows; a truncated
+prefix never becomes a ready dispatch table.
+
 The status **COMPLETE** means traversal finished within this static model. It
 requires source review of inferred table bounds and bank effects, and says
 nothing about Rust parity. Unknown computed transfers, unknown bank writes,

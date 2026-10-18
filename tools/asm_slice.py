@@ -75,12 +75,22 @@ class SourceIndex:
                 m = re.match(r'([\da-fA-F]+):([\da-fA-F]{4}) (\S+)', line)
                 if m and int(m[2], 16) < 0x8000:
                     symbols[m[3]] = rom_address(int(m[1], 16), int(m[2], 16))
+        sources = {name: (root / name).read_text().splitlines()
+                   for name in ('home.asm', 'main.asm')}
+        # Forward references with explicit ROM anchors need no symbol build.
+        # Their encoded CPU words are checked below before indexing a table.
+        for lines in sources.values():
+            for raw in lines:
+                label = re.match(r'\s*([\w.]+):', raw.split(';', 1)[0])
+                anchor = re.search(r'_0x([\da-fA-F]+)$', label[1]) if label else None
+                if anchor:
+                    symbols.setdefault(label[1], int(anchor[1], 16))
         locations, tables = {}, {}
-        for name in ('home.asm', 'main.asm'):
+        for name, lines in sources.items():
             cursor = None
             global_label = ''
             run_start, run_end, run_kind = None, None, None
-            for number, raw in enumerate((root / name).read_text().splitlines(), 1):
+            for number, raw in enumerate(lines, 1):
                 code = raw.split(';', 1)[0].strip()
                 if not code:
                     continue
@@ -110,13 +120,37 @@ class SourceIndex:
                 if cursor is None:
                     continue
                 if is_data:
-                    # Quoted strings/expressions are not used as inferred dispatch tables.
-                    values = is_data[2].split(',')
-                    if any(not re.fullmatch(r'\$[\da-fA-F]+|\d+', v.strip()) for v in values):
+                    # Support literal data and ROM-checked symbolic dw words.
+                    # Strings, expressions, unresolved names and mismatched
+                    # encodings invalidate the whole contiguous declaration.
+                    values = [v.strip() for v in is_data[2].split(',')]
+                    kind = is_data[1].lower()
+                    encoded = bytearray()
+                    symbolic = False
+                    valid = True
+                    for value in values:
+                        if re.fullmatch(r'\$[\da-fA-F]+|\d+', value):
+                            number_value = int(value[1:], 16) if value.startswith('$') else int(value)
+                        elif kind == 'dw' and re.fullmatch(r'[A-Za-z_.][\w.]*', value):
+                            symbol = global_label + value if value.startswith('.') else value
+                            if symbol not in symbols:
+                                valid = False
+                                break
+                            number_value = bank_cpu(symbols[symbol])[1]
+                            symbolic = True
+                        else:
+                            valid = False
+                            break
+                        width = 2 if kind == 'dw' else 1
+                        if not 0 <= number_value < 1 << (width * 8):
+                            valid = False
+                            break
+                        encoded.extend(number_value.to_bytes(width, 'little'))
+                    if (not valid or (symbolic and rom[cursor:cursor + len(encoded)] != encoded)):
+                        run_start = run_end = run_kind = None
                         cursor = None
                         continue
                     size = len(values) * (2 if is_data[1].lower() == 'dw' else 1)
-                    kind = is_data[1].lower()
                     if run_start is not None and (cursor != run_end or kind != run_kind):
                         tables[run_start] = run_end
                         run_start = run_end = run_kind = None
