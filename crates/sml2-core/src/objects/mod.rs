@@ -102,7 +102,7 @@ use helpers::bcd_add;
 
 mod staging;
 pub use staging::*;
-use staging::{BOUNCE_SPEED, DEATH_RISE_74AB, FALL_SPEED, HOVER_SPEED, SPIN_WOBBLE, STEP_74A1};
+use staging::{BOUNCE_SPEED, FALL_SPEED, HOVER_SPEED, SPIN_WOBBLE, STEP_74A1};
 mod boss;
 #[path = "handler_0x96FE.rs"]
 mod handler_0x96fe;
@@ -423,6 +423,8 @@ mod stream;
 mod stream_cursor;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod defeat_motion_tests;
 #[cfg(test)]
 mod stomp_morph_tests;
 mod mario_zone;

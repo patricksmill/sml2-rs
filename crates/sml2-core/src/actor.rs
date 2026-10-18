@@ -1,5 +1,9 @@
 //! Native actor state. Slot byte layout is confined to the conversion boundary.
 
+#[path = "actor_defeat_motion.rs"]
+mod defeat_motion;
+pub use defeat_motion::DEFEAT_RISE_STEPS;
+
 #[path = "actor_motion.rs"]
 mod motion;
 pub use motion::RiseProfile;

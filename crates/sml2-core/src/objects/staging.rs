@@ -91,10 +91,6 @@ pub(super) const STEP_74A1: [u8; 19] = [
     0x00, 0x00, 0x00,
 ];
 
-/// `$74AB` (`$5B465`'s table, c = 8): the defeated enemy's rise curve, 2× per
-/// frame in `$581CE`. `$74A1`/`$74A7` are its neighbours, used by the floaters.
-pub(super) const DEATH_RISE_74AB: [u8; 8] = [0x02, 0x01, 0x02, 0x01, 0x01, 0x01, 0x00, 0x00];
-
 #[inline]
 pub fn x_of(b: &[u8; 32]) -> u16 {
     ((b[B_XHI] as u16) << 8) | b[B_XLO] as u16

@@ -822,13 +822,11 @@ impl ObjectSim {
         match st.b[B_FSTATE] {
             // $581CE: rise on 2x the $74AB curve.
             1 => {
-                let (b, c) = self.step_picker(st, &DEATH_RISE_74AB, 8);
-                self.mv_y_sub(st, b.wrapping_mul(2));
-                if st.b[B_PHASE] != c {
-                    return;
+                let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+                if actor.advance_defeat_rise().is_err() {
+                    self.note_unported(0x581CE);
                 }
-                st.b[B_FSTATE] = 2;
-                st.b[B_PHASE] = 0;
+                st.b = actor.to_raw_slot();
             }
             // $581E2: fall on 2x the $5B451 curve; off the bottom of the
             // screen -> `$5B2D7` with remove-mode 2.
@@ -846,11 +844,9 @@ impl ObjectSim {
             }
             // $581B9: the hop + the flip.
             _ => {
-                self.mv_y_sub(st, 20);
-                st.b[B_FLIP] ^= 0x40;
-                st.b[B_PHASE] = 0;
-                st.b[B_TYPE] = 0;
-                st.b[B_FSTATE] = 1;
+                let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+                actor.begin_defeat_hop();
+                st.b = actor.to_raw_slot();
             }
         }
     }
