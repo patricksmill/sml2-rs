@@ -1,88 +1,56 @@
-//! Mario Zone / boss clear reward animation (anims 4 & 5), ROM `$9642` / `$9698`.
-
-use crate::object::ObjectTables;
-use crate::objects::{
-    ObjectSim, Staging, B_ANIMFRAME, B_FLIP, B_FSTATE, B_PHASE, B_SCRY, B_T28,
+//! Slot/world boundary for shared native boss reward motion.
+use super::reward_motion::{self, Part};
+use crate::{
+    actor::{Actor, FrameTick},
+    object::ObjectTables,
+    objects::{ObjectSim, Staging},
 };
 
 impl ObjectSim {
-    /// `$965E`: sprite animation helper for anim 4.
-    fn boss_reward_sprite_helper(&self, st: &mut Staging) {
-        if self.fff0 & 1 == 0 {
-            let f = st.b[B_ANIMFRAME].wrapping_add(1);
-            if f > 5 {
-                st.b[B_ANIMFRAME] = 1;
-            } else {
-                st.b[B_ANIMFRAME] = f;
-            }
-            if st.b[B_ANIMFRAME] == 3 {
-                st.b[B_FLIP] ^= 0x20;
-            }
-        }
+    pub(in crate::objects) fn handler_boss_anim4(
+        &mut self,
+        st: &mut Staging,
+        tables: &ObjectTables,
+    ) {
+        self.update_boss_reward(st, tables, Part::Main, 0x9642);
     }
-
-    /// `$9642` (boss anim 4): spawned by def-2 spawner or anim 13.
-    pub(in crate::objects) fn handler_boss_anim4(&mut self, st: &mut Staging, tables: &ObjectTables) {
-        if st.b[B_FSTATE] == 0 {
-            st.b[B_FSTATE] = 1;
-            self.spawn_anim = 5;
-            self.spawn_sprite = 0x0C;
-            self.boss_spawn_child(st); // $B224
-        }
-        if st.b[B_FSTATE] < 4 {
-            self.boss_reward_sprite_helper(st); // $965E
-        }
-        self.handler_boss_anim4_5_states(st, tables, 0x966A);
+    pub(in crate::objects) fn handler_boss_anim5(
+        &mut self,
+        st: &mut Staging,
+        tables: &ObjectTables,
+    ) {
+        self.update_boss_reward(st, tables, Part::Child, 0x9698);
     }
-
-    /// `$9698` (boss anim 5): the second part of the spawn chain.
-    pub(in crate::objects) fn handler_boss_anim5(&mut self, st: &mut Staging, tables: &ObjectTables) {
-        if st.b[B_FSTATE] == 0 {
-            st.b[B_T28] = st.b[B_T28].wrapping_add(1);
-            if st.b[B_T28] >= 8 {
-                self.scr_y_add(st, 0x18);
-                st.b[B_FSTATE] = 1;
-                st.b[B_T28] = 0;
-            }
-            return;
-        }
-        self.handler_boss_anim4_5_states(st, tables, 0x96BE);
-    }
-
-    fn handler_boss_anim4_5_states(&mut self, st: &mut Staging, tables: &ObjectTables, table_base: u32) {
-        match st.b[B_FSTATE] {
-            1 => {
-                let (dy, cap) = self.boss_reverse_picker_b1d6(st);
-                self.scr_y_add(st, dy);
-                if st.b[B_PHASE] == cap {
-                    st.b[B_PHASE] = 0;
-                    st.b[B_FSTATE] = 2;
-                    st.b[B_FLIP] ^= 0x40;
+    fn update_boss_reward(
+        &mut self,
+        st: &mut Staging,
+        tables: &ObjectTables,
+        part: Part,
+        handler: u32,
+    ) {
+        let mut actor = Actor::from_raw_slot(&st.b);
+        let result = reward_motion::update(
+            &mut actor,
+            part,
+            FrameTick(u64::from(self.fff0)),
+            &tables.boss_picker_profile,
+        );
+        st.b = actor.to_raw_slot();
+        match result {
+            Ok(effects) => {
+                if effects.spawn_child {
+                    self.spawn_anim = 5;
+                    self.spawn_sprite = 12;
+                    self.spawn_attr = actor.sprite_flip.bits();
+                    self.boss_spawn_child(st);
                 }
-            }
-            2 => {
-                let (dy, cap) = self.step_picker(st, &tables.boss_picker_profile, 21);
-                self.scr_y_add(st, dy);
-                if st.b[B_PHASE] == cap {
-                    st.b[B_PHASE] = 0;
-                    st.b[B_FSTATE] = 3;
-                    st.b[B_FLIP] ^= 0x40;
-                }
-            }
-            3 => {
-                // $9688: rise 4 px a frame until SCRY < 8 then level clear ($FF9B = 29)
-                self.scr_y_sub(st, 4);
-                if st.b[B_SCRY] < 8 {
+                if effects.clear {
                     self.boss_clear_flag = 1;
-                    st.b[B_FSTATE] = 4;
-                    self.done = 1;
                     self.boss_clear_handoff = true;
+                    self.done = 1;
                 }
             }
-            4 => {
-                self.done = 1;
-            }
-            s => self.note_unported(table_base + (s as u32) * 2),
+            Err(()) => self.note_unported(handler),
         }
     }
 }

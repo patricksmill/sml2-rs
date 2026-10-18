@@ -11,6 +11,7 @@ mod child;
 mod controller;
 mod part;
 mod reward;
+mod reward_motion;
 mod spawner;
 #[cfg(test)]
 mod tests;

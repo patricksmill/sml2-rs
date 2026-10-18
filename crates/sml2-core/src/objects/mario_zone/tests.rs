@@ -252,7 +252,7 @@ fn anim4_spawns_anim5_and_chain_reaches_win() {
     assert_eq!(obj.slots[2].b[B_DEF], 5);
     assert_eq!(obj.slots[2].b[B_SPRITE], 0x0C);
 
-    // Anim 4 state 1: descent with b1d6
+    // Anim 4 state 1: ascent with b1d6
     st.b[B_PHASE] = 21; // at cap
     obj.handler_boss_anim4(&mut st, &t);
     assert_eq!(st.b[B_FSTATE], 2);
@@ -270,16 +270,12 @@ fn anim4_spawns_anim5_and_chain_reaches_win() {
     obj.boss_clear_handoff = false;
     obj.handler_boss_anim4(&mut st, &t);
     assert_eq!(st.b[B_SCRY], 6);
-    assert_eq!(st.b[B_FSTATE], 4);
+    assert_eq!(st.b[B_FSTATE], 3);
     assert_eq!(obj.boss_clear_flag, 1, "win flag armed at SCRY < 8");
     assert!(obj.boss_clear_handoff, "level handoff armed at SCRY < 8");
     assert_eq!(obj.done, 1);
-    // State 4 parks: subsequent frames do not rise or wrap
-    obj.done = 0;
-    obj.handler_boss_anim4(&mut st, &t);
-    assert_eq!(st.b[B_SCRY], 6);
-    assert_eq!(st.b[B_FSTATE], 4);
-    assert_eq!(obj.done, 1);
+    // The source keeps state 3; game state 29 consumes the terminal event.
+
 }
 
 #[test]
