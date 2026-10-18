@@ -56,6 +56,7 @@ impl ObjectSim {
         self.door_phase = 0; // $AFC7
         self.door_sequence_active = 0; // $AFC8
         self.door_parity = 0; // $AFC9
+        self.scene_slot_parity = 0; // $AFCB
         self.boss_sprite = 0; // $AFCA
         self.saved_type = 0; // $AFCC
         self.boss_timer_reload = 0; // $AFCD
@@ -127,6 +128,7 @@ mod tests {
         sim.door_phase = 3;
         sim.door_sequence_active = 1;
         sim.door_parity = 1;
+        sim.scene_slot_parity = 0xA5;
         sim.boss_sprite = 0x4F;
         sim.saved_type = 0x41;
         sim.boss_timer_reload = 80;
@@ -197,6 +199,7 @@ mod tests {
             (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         );
         assert_eq!(sim.saved_power_state, 0);
+        assert_eq!(sim.scene_slot_parity, 0);
         assert_eq!((sim.door_phase, sim.door_sequence_active, sim.door_parity), (0, 0, 0));
         // $AF1E/$AF1F are zero, so the physical pointer is $0000 and the
         // public index is inactive — not the $AB06 of a live cursor.

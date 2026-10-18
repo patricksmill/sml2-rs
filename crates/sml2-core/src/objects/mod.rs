@@ -119,6 +119,8 @@ mod door_boss_flow_tests;
 mod boss_flash;
 mod boss_stun;
 mod boss_morph;
+mod patrol_boss;
+mod patrol_boss_adapter;
 #[cfg(test)]
 mod boss_flash_paths;
 mod boss_damage;
@@ -508,6 +510,8 @@ pub struct ObjectSim {
     pub door_phase: u8,
     pub door_sequence_active: u8,
     pub door_parity: u8,
+    /// `$AFCB`: selects one of the two boss child slots (zero / nonzero).
+    pub scene_slot_parity: u8,
     /// `$AFD0`: Wario's falling-child completion latch.
     pub boss_delay: u8,
     /// `$AFD1`: player power minus two, saved when final Wario begins a jump.
@@ -604,6 +608,7 @@ impl ObjectSim {
             door_phase: 0,
             door_sequence_active: 0,
             door_parity: 0,
+            scene_slot_parity: 0,
             boss_delay: 0,
             saved_power_state: 0,
             boss_transition: 0,
