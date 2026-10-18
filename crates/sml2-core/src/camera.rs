@@ -612,35 +612,14 @@ impl CameraSim {
         self.scene_state & 0xF0 != 0
     }
 
-    /// `$0EB0`'s scene branch, **deliberately not taken** — reported instead.
+    /// `$0EB0`'s arena entry: consume the transition request, park the camera
+    /// at `$F0`, and return the boss music and level song. The runtime then
+    /// calls `ObjectSim::spawn_boss` and switches to the boss driver.
     ///
-    /// The ROM, on a transition whose `sSceneState & $0F != 0`, sets
-    /// `sSceneState = $F0`, raises LCDC, starts the boss song and calls `$3C94`
-    /// (bank 2 `$8D9C`) to stage a boss fight. `$F0` is also what `$0B2A` reads
-    /// to park the camera and `$0652` reads to swap the frame's object pass for
-    /// the boss driver.
-    ///
-    /// Every writer that later *clears* that `$F0` — the six sites that store
-    /// `sSceneState` — is in the bank-15 `$3C000` map/screen handlers, which are
-    /// **unported** (see `map_zone_screen_loaders`). Taking the branch here
-    /// therefore parks the camera for good (`CameraSim::step` returns early
-    /// while `scene_state & $F0 != 0`) and switches the object pass to a boss
-    /// driver with no boss, which is exactly "the pipe does nothing" — a
-    /// play-test caught it. So this consumes the request and reports it, and
-    /// the scene VM (`$20A4`, which *is* ported) keeps handling the transition
-    /// the way it did before. Turn this into the real branch only once the
-    /// bank-15 handlers exist.
-    /// `$0EB0`'s scene branch, taken for real: sets the `$F0` park (what `$0652`
-    /// reads to swap the frame's object pass for the boss driver) and returns
-    /// the song `$0EB0` stores in `sMusicRequest`/`sLevelSong` — 32, or
-    /// `sBossFightPhase + 33` on level `$18`. The caller then runs `$3C94`'s
-    /// spawn (`ObjectSim::spawn_boss`).
-    ///
-    /// Only legal for a def whose handlers are all ported
-    /// ([`crate::scene::boss_def_portable`]): the fight ends by arming
-    /// `sBossClearFlag`, the level clear follows, and the level reload reseeds
-    /// `sSceneState` — which is what clears the park. For an unported def the
-    /// park would be permanent, so `take_blocked_scene_load` reports instead.
+    /// Callers check [`crate::scene::boss_def_portable`] before taking this
+    /// branch. Definitions 1/2 finish through the reward's level-clear event;
+    /// Wario definitions 6/7/8 finish through their phase/ending events.
+    /// Unsupported definitions use `take_blocked_scene_load` instead.
     ///
     /// Returns `(sMusicRequest, sLevelSong)`: `$0ECA` writes both, and the
     /// level-`$18` arm (`$0ED9`) then overrides **only** `sMusicRequest`.
@@ -717,6 +696,7 @@ mod tests {
     #[test]
     fn the_scene_branch_is_taken_for_a_portable_def() {
         use crate::scene::boss_def_portable;
+        assert!(boss_def_portable(1), "the door boss fight is ported");
         assert!(boss_def_portable(2), "the Mario Zone fight is ported");
         assert!(boss_def_portable(6), "Wario form 1 is ported");
         assert!(boss_def_portable(7), "Wario form 2 is ported");
