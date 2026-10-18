@@ -113,6 +113,7 @@ mod central_door_adapter;
 mod door_child;
 mod door_child_adapter;
 mod door_boss_mouth;
+mod side_door;
 mod boss_flash;
 mod boss_stun;
 #[cfg(test)]

@@ -16,6 +16,14 @@ impl ObjectSim {
             },
         );
         staging.b = actor.to_raw_slot();
+        self.apply_door_result(result, 0x98C8);
+    }
+
+    pub(super) fn apply_door_result(
+        &mut self,
+        result: Result<central_door::Effects, central_door::UpdateError>,
+        handler: u32,
+    ) {
         match result {
             Ok(effects) => {
                 if let Some(dy) = effects.carry_dy {
@@ -29,7 +37,7 @@ impl ObjectSim {
                     self.sfx2 = sound;
                 }
             }
-            Err(_) => self.note_unported(0x98C8),
+            Err(_) => self.note_unported(handler),
         }
     }
 }

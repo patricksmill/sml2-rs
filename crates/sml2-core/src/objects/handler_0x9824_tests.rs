@@ -42,7 +42,7 @@ fn handler_0x9824_arms_only_the_matching_side() {
     sim.boss_slot_ptr_lo = 0x20;
     sim.handler_0x9824(&mut st, &tables);
     assert_eq!(st.b[B_FSTATE], 1);
-    assert_eq!(st.b[B_HITREACT], 80);
+    assert_eq!(st.b[B_T24], 80);
     assert_eq!(st.b[B_T28], 64);
     assert_eq!(st.b[B_SPRITE], 25);
 
@@ -69,7 +69,7 @@ fn handler_0x9824_rises_with_a_rider_then_falls_to_the_sill() {
     assert_eq!(sim.sfx2, 5);
 
     st.b[B_SCRY] = 40;
-    st.b[B_HITREACT] = 2;
+    st.b[B_T24] = 2;
     st.b[B_FLAGS] = 0x08;
     sim.mario.y = 40;
     sim.handler_0x9824(&mut st, &tables);

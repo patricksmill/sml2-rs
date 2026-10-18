@@ -23,7 +23,7 @@ pub(super) enum UpdateError {
 }
 
 pub(super) fn update(actor: &mut Actor, input: Inputs<'_>) -> Result<Effects, UpdateError> {
-    let mut effects = Effects::default();
+    let effects = Effects::default();
     // This override precedes every state, including the waiting state.
     if input.remove_mode == 2 {
         actor.screen.y = 116;
@@ -35,17 +35,36 @@ pub(super) fn update(actor: &mut Actor, input: Inputs<'_>) -> Result<Effects, Up
         actor.contact_kind = ContactKind::NONE;
         return Ok(effects);
     }
-    match actor.state {
-        0 => {
-            if input.sequence_active && input.door_phase == 2 {
-                actor.state = 1;
-                actor.motion_leg = 64;
-                actor.timer = 64;
-                actor.sprite = 25;
-            }
+    if actor.state == 0 {
+        if input.sequence_active && input.door_phase == 2 {
+            actor.state = 1;
+            actor.motion_leg = 64;
+            actor.timer = 64;
+            actor.sprite = 25;
         }
+        return Ok(effects);
+    }
+    update_motion(
+        actor,
+        input.remove_mode,
+        input.frame,
+        input.fall_profile,
+        116,
+    )
+}
+
+/// Shared door states `$986C/$9883/$98A4` and the two sill-height tails.
+pub(super) fn update_motion(
+    actor: &mut Actor,
+    remove_mode: u8,
+    frame: FrameTick,
+    fall_profile: &[u8],
+    sill: u8,
+) -> Result<Effects, UpdateError> {
+    let mut effects = Effects::default();
+    match actor.state {
         1 => {
-            if input.frame.every(4) {
+            if frame.every(4) {
                 actor.sprite_flip.toggle_horizontal();
             }
             actor.timer = actor.timer.wrapping_sub(1);
@@ -56,7 +75,7 @@ pub(super) fn update(actor: &mut Actor, input: Inputs<'_>) -> Result<Effects, Up
             }
         }
         2 => {
-            if input.remove_mode != 0 {
+            if remove_mode != 0 {
                 actor.contact_kind = ContactKind::NONE;
             } else {
                 actor.screen.move_y(-2);
@@ -78,12 +97,12 @@ pub(super) fn update(actor: &mut Actor, input: Inputs<'_>) -> Result<Effects, Up
             }
         }
         4 => {
-            if actor.screen.y >= 116 {
-                actor.screen.y = 116;
+            if actor.screen.y >= sill {
+                actor.screen.y = sill;
                 actor.state = 0;
             } else {
                 let step = actor
-                    .motion_step(input.fall_profile, 21)
+                    .motion_step(fall_profile, 21)
                     .map_err(UpdateError::Motion)?;
                 actor.screen.move_y(i16::from(step));
             }
