@@ -110,6 +110,8 @@ mod handler_0x96fe;
 mod handler_0x9824;
 mod central_door;
 mod central_door_adapter;
+mod door_child;
+mod door_child_adapter;
 mod boss_flash;
 mod boss_stun;
 #[cfg(test)]

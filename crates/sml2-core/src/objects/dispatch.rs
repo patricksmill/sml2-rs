@@ -135,6 +135,7 @@ impl ObjectSim {
             0x96FE => self.handler_0x96fe(st),
             0x9824 => self.handler_0x9824(st, tables),
             0x98C8 => self.handler_central_door(st, tables),
+            0x9927 => self.handler_door_child(st),
             0x93A7 => self.handler_boss_def0_main(st, layout, tables),
             0x9C36 => self.handler_boss_def2_part(st, layout, tables, false),
             0x9D4F => self.handler_boss_def2_part(st, layout, tables, true),
