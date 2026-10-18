@@ -1439,6 +1439,7 @@ impl PlayerSim {
             // $30/$40: sideways — walls gate, walk timer ticks (`$14E3`, b=1).
             0x30 => {
                 self.x = self.x.wrapping_add(2);
+                self.x_sub = 1;
                 self.walk_anim_tick(1);
                 if self.right_wall(layout) || self.left_wall(layout) {
                     return;
@@ -1447,6 +1448,7 @@ impl PlayerSim {
             }
             0x40 => {
                 self.x = self.x.wrapping_sub(2);
+                self.x_sub = 0xFF;
                 self.walk_anim_tick(1);
                 if self.right_wall(layout) || self.left_wall(layout) {
                     return;
@@ -1488,9 +1490,8 @@ impl PlayerSim {
                 }
             }
             // $11FE/$120E: side pipe, right-hand wall (`$0C`-`$0F` tile on the
-            // right). RIGHT (`hKeysHeld` bit 4) starts the $30 travel — this is
-            // the arm level $0D's Mario Zone pipe needs, and it was testing LEFT
-            // (the two arms were swapped: `keys.left` here, `keys.right` below).
+            // right). RIGHT (`hKeysHeld` bit 4) starts the $30 travel.
+            // If RIGHT is not held, falls through to $1244: LEFT starts $40 travel.
             // (autoscroll + boss guards omitted — unused in non-boss levels)
             3 => {
                 if self.side_push_dir == 1 || (keys.right && self.on_ground) {
@@ -1498,14 +1499,23 @@ impl PlayerSim {
                     self.ducking = false;
                     self.hvel = 0x80;
                     self.sfx0 = 5;
+                } else if !keys.right
+                    && (self.side_push_dir == 0xFF || (keys.left && self.on_ground))
+                {
+                    self.pipe_dir = 0x40;
+                    self.ducking = false;
+                    self.hvel = 0x80;
+                    self.sfx0 = 5;
                 }
             }
             // $1244: side pipe, left-hand wall; LEFT (`hKeysHeld` bit 5) travels $40.
-            4 if self.side_push_dir == 0xFF || (keys.left && self.on_ground) => {
-                self.pipe_dir = 0x40;
-                self.sfx0 = 5;
-                self.ducking = false;
-                self.hvel = 0x80;
+            4 => {
+                if self.side_push_dir == 0xFF || (keys.left && self.on_ground) {
+                    self.pipe_dir = 0x40;
+                    self.sfx0 = 5;
+                    self.ducking = false;
+                    self.hvel = 0x80;
+                }
             }
             _ => {}
         }
@@ -6334,5 +6344,78 @@ mod tests {
         assert!(!sim.flutter_armed);
         assert_eq!(sim.flutter_charge, 0);
         assert_eq!(sim.invincibility, 128);
+    }
+
+    #[test]
+    fn side_pipe_entry_supports_both_right_and_left_facing_pipes() {
+        let mut sim = small_sim();
+        sim.on_ground = true;
+        sim.pipe_dir = 3;
+
+        // Pressing RIGHT enters rightward travel ($30)
+        let keys_right = PlayerKeys { right: true, ..Default::default() };
+        sim.pipe_entry(&keys_right);
+        assert_eq!(sim.pipe_dir, 0x30, "pressing right on side pipe mouth enters $30");
+        assert_eq!(sim.sfx0, 5, "pipe entry sfx requested");
+        assert_eq!(sim.hvel, 0x80);
+
+        // Reset and test pressing LEFT enters leftward travel ($40)
+        sim.pipe_dir = 3;
+        sim.sfx0 = 0;
+        let keys_left = PlayerKeys { left: true, ..Default::default() };
+        sim.pipe_entry(&keys_left);
+        assert_eq!(sim.pipe_dir, 0x40, "pressing left on side pipe mouth enters $40");
+        assert_eq!(sim.sfx0, 5, "pipe entry sfx requested");
+        assert_eq!(sim.hvel, 0x80);
+
+        // Neither direction held -> no entry
+        sim.pipe_dir = 3;
+        sim.sfx0 = 0;
+        sim.pipe_entry(&PlayerKeys::default());
+        assert_eq!(sim.pipe_dir, 3, "idle Mario stays armed at 3 without entering");
+
+        // Airborne Mario cannot enter pipe with button press
+        sim.on_ground = false;
+        sim.pipe_entry(&keys_right);
+        assert_eq!(sim.pipe_dir, 3, "airborne Mario cannot enter right pipe");
+        sim.pipe_entry(&keys_left);
+        assert_eq!(sim.pipe_dir, 3, "airborne Mario cannot enter left pipe");
+
+        // Side push conveyor force enters without key
+        sim.on_ground = true;
+        sim.side_push_dir = 0xFF;
+        sim.pipe_entry(&PlayerKeys::default());
+        assert_eq!(sim.pipe_dir, 0x40, "side push 0xFF enters $40 left travel");
+
+        sim.pipe_dir = 3;
+        sim.side_push_dir = 1;
+        sim.pipe_entry(&PlayerKeys::default());
+        assert_eq!(sim.pipe_dir, 0x30, "side push 1 enters $30 right travel");
+    }
+
+    #[test]
+    fn pipe_travel_horizontal_sets_x_sub_for_camera_follow() {
+        let mut layout_bytes = vec![0x60; 256 * 48];
+        // Surround x=100 with wall tiles at x=90..110 so pipe travel remains active
+        for y in 0..48 {
+            for x in 0..16 {
+                layout_bytes[y * 256 + x] = 0x18; // solid wall
+            }
+        }
+        let layout = LevelLayout::from_bytes(&layout_bytes).unwrap();
+
+        let mut sim = small_sim();
+        sim.x = 0x0080;
+        sim.y = 0x0080;
+        sim.pipe_dir = 0x30;
+        sim.step(&PlayerKeys::default(), false, false, &layout);
+        assert_eq!(sim.x, 0x0082, "pipe travel 0x30 moves +2");
+        assert_eq!(sim.x_sub, 1, "pipe travel 0x30 sets x_sub = 1 for camera follow");
+
+        sim.x = 0x0080;
+        sim.pipe_dir = 0x40;
+        sim.step(&PlayerKeys::default(), false, false, &layout);
+        assert_eq!(sim.x, 0x007E, "pipe travel 0x40 moves -2");
+        assert_eq!(sim.x_sub, 0xFF, "pipe travel 0x40 sets x_sub = 0xFF for camera follow");
     }
 }

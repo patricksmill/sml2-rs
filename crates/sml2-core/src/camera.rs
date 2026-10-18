@@ -391,6 +391,8 @@ impl CameraSim {
         }
         if self.transition != 0 {
             self.run_transition(sim);
+            self.prev_mario_y_lo = sim.y as u8;
+            self.update_scroll();
             return;
         }
         // Deltas published by the player update ($14BF) or platform carriers ($3CC0/$3CF1).
@@ -1607,5 +1609,50 @@ mod tests {
         c.step(&mut sim);
         assert_eq!(c.x, 87);
         assert_eq!(c.scroll_delta_right, 0);
+    }
+
+    #[test]
+    fn transition_updates_scroll_coordinates_and_prev_mario_y_each_frame() {
+        let mut c = CameraSim::new(0x00B0, 0x0048);
+        c.edge_map[0] = 0x01; // bit0: right edge
+        let mut sim = PlayerSim::new();
+        sim.x = 0x00B0 + 0x41; // sx >= $A1 -> triggers transition 1
+        sim.y = 0x0048;
+
+        c.step(&mut sim);
+        assert_eq!(c.transition, 1, "right transition started");
+
+        let initial_scroll_x = c.scroll_x;
+
+        // Step one transition frame
+        c.step(&mut sim);
+        assert_eq!(c.x, 0x00B4, "camera X advances +4 during transition");
+        assert_eq!(
+            c.scroll_x,
+            c.x.wrapping_sub(80) as u8,
+            "scroll_x is recomputed during transition frames"
+        );
+        assert_ne!(
+            c.scroll_x, initial_scroll_x,
+            "scroll_x updates rather than remaining frozen"
+        );
+        assert_eq!(
+            c.prev_mario_y_lo, sim.y as u8,
+            "prev_mario_y_lo tracks Mario Y during transition"
+        );
+
+        // Run transition to completion
+        while c.transition != 0 {
+            c.step(&mut sim);
+        }
+        assert_eq!(c.transition, 0, "transition completed");
+
+        // The first frame after transition completes should not experience a sudden camera jump
+        let cam_y_at_end = c.y;
+        c.step(&mut sim);
+        assert_eq!(
+            c.y, cam_y_at_end,
+            "camera Y does not snap because prev_mario_y_lo was maintained"
+        );
     }
 }
