@@ -168,13 +168,15 @@ impl ObjectSim {
     pub fn boss_engine(
         &mut self,
         cam_x: u16,
-        _cam_y: u16,
+        cam_y: u16,
         layout: &LevelLayout,
         tables: &ObjectTables,
     ) {
         // Bank 1 $54A7 projects the player before the boss pass; $A23C
         // retains the wrapped low byte even across world-coordinate pages.
         self.player_screen_x = self.mario.x.wrapping_sub(cam_x).wrapping_add(96) as u8;
+        // $54C8 stores $A23B before $54E9 applies pan only to draw staging.
+        self.player_screen_y = self.mario.y.wrapping_sub(cam_y).wrapping_add(98) as u8;
         // $8DA9's head: `ld hl,$FFF0 / inc [hl]` — unconditional, unlike
         // `$8000`'s phase-toggle increment (so the odd/even slot parity flips
         // every frame here).

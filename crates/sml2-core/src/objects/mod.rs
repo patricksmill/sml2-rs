@@ -475,6 +475,8 @@ pub struct ObjectSim {
     pub mario: MarioContact,
     /// Current player screen X, projected before boss targeting.
     pub player_screen_x: u8,
+    /// `$A23B`: player Y projection before the draw-only camera-pan nudge.
+    pub player_screen_y: u8,
     pub slot_done: [bool; SLOT_COUNT],
     pub action_latch: u8,
     pub object_hit_flag: u8,
@@ -578,6 +580,7 @@ impl ObjectSim {
             spawn_attr: 0,
             mario: MarioContact::default(),
             player_screen_x: 64,
+            player_screen_y: 64,
             slot_done: [false; SLOT_COUNT],
             action_latch: 0,
             object_hit_flag: 0,

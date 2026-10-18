@@ -11,6 +11,31 @@ fn tables() -> ObjectTables {
 #[test]
 fn boss_screen_input_starts_at_source_initial_value() {
     assert_eq!(ObjectSim::new(vec![], 80).player_screen_x, 64);
+    assert_eq!(ObjectSim::new(vec![], 80).player_screen_y, 64);
+}
+
+#[test]
+fn boss_screen_y_tracks_live_player_camera_and_wrap_without_draw_pan() {
+    let tables = tables();
+    let layout = LevelLayout::from_bytes(&[0x60; crate::level::LAYOUT_SIZE]).unwrap();
+    let mut obj = ObjectSim::new(vec![], 80);
+    for (player_y, camera_y, expected) in [
+        (100, 72, 126),
+        (100, 80, 118),
+        (104, 80, 122),
+        (0x0104, 0x00FC, 106),
+        (0x0004, 0x01FC, 106),
+        (0x0010, 0x0090, 226),
+        (0x0004, 0xFFFC, 106),
+        (0xFFFC, 0x0004, 90),
+    ] {
+        for pan in [0,1,2,3,255] {
+            let contact = MarioContact {x: 100,y: player_y,pan,scene_state: 0xF0,..Default::default()};
+            obj.step(80,camera_y,&layout,&tables,&contact,true);
+            assert_eq!(obj.player_screen_y,expected,"player={player_y}, camera={camera_y}, pan={pan}");
+            assert_eq!(obj.mario.y,player_y);
+        }
+    }
 }
 
 #[test]
