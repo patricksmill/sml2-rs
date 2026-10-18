@@ -13,6 +13,7 @@ fn patrol_boss_real_level_scene_entry_selects_portable_definition() {
             .unwrap();
     assert_eq!(manifest.level_id, 0x10);
     let mut player = PlayerSim::new();
+    seed_level_timer(&mut player, &manifest);
     // Direct placement at the source entrance cell: right edge of (11,1).
     player.x = 0x0BF1;
     player.y = 0x01D4;
@@ -47,33 +48,92 @@ fn patrol_boss_real_level_scene_entry_selects_portable_definition() {
         .unwrap();
     let mut ran = vec![];
     let mut entered = false;
+    let mut ending = EndingEntry::default();
+    let mut owned_frames = 0;
     for _ in 0..128 {
-        player.tick_fade_timer();
-        camera.step(&mut player);
-        if camera.scene_load_pending {
-            let definition = boss_def_index(manifest.level_id, camera.boss_fight_phase);
-            assert_eq!(definition, 3);
-            assert!(boss_def_portable(definition));
-            let (music, song) = camera.begin_scene_load(manifest.level_id).unwrap();
-            player.music_request = music;
-            player.level_song = song;
-            objects.spawn_boss(definition);
-            entered = true;
+        let owned = vm.owns_gameplay();
+        let before_motion = (player.x, player.y, camera.x, camera.y, camera.transition);
+        let before_timer = player.level_timer;
+        let before_fade = player.fade_timer;
+        let before_clock = (
+            objects.phase,
+            objects.odd,
+            objects.fff0,
+            objects.update_phase,
+        );
+        let before_slots = objects.slots.each_ref().map(|slot| slot.b);
+        let frame = scene_frame_head(
+            &mut vm,
+            &mut ending,
+            &mut player,
+            &mut camera,
+            EndingInput::default(),
+        );
+        assert_eq!(frame.is_none(), owned, "scene owns gameplay dispatch");
+        let gameplay = matches!(frame, Some(EndingFrame::Gameplay(_)));
+        if gameplay {
+            // This entry harness omits PlayerSim::step, which normally ticks fade.
+            player.tick_fade_timer();
+            camera.step(&mut player);
+            if camera.scene_load_pending {
+                let definition = boss_def_index(manifest.level_id, camera.boss_fight_phase);
+                assert_eq!(definition, 3);
+                assert!(boss_def_portable(definition));
+                let (music, song) = camera.begin_scene_load(manifest.level_id).unwrap();
+                player.music_request = music;
+                player.level_song = song;
+                objects.spawn_boss(definition);
+                entered = true;
+            }
+            if entered {
+                objects.sample_player_inputs(&player);
+                objects.step(
+                    camera.x,
+                    camera.y,
+                    &arena,
+                    &tables,
+                    &build_contact(&player, &PlayerKeys::default(), 0),
+                    camera.boss_mode(),
+                );
+                player.apply_object_result(&mut objects, false);
+                camera.apply_object_result(&mut objects);
+            }
         }
-        if entered {
-            objects.sample_player_inputs(&player);
-            objects.step(
-                camera.x,
-                camera.y,
-                &arena,
-                &tables,
-                &build_contact(&player, &PlayerKeys::default(), 0),
-                camera.boss_mode(),
+        // Check normal dispatch before scene opcodes intentionally move coordinates.
+        if owned {
+            owned_frames += 1;
+            assert_eq!(
+                (player.x, player.y, camera.x, camera.y, camera.transition),
+                before_motion,
+                "scene waits freeze normal motion and camera transition",
             );
-            player.apply_object_result(&mut objects, false);
-            camera.apply_object_result(&mut objects);
+            assert_eq!(
+                player.level_timer, before_timer,
+                "scene waits freeze countdown"
+            );
+            assert_eq!(
+                player.fade_timer,
+                before_fade.saturating_sub(1),
+                "VBlank ticks fade once"
+            );
+            assert_eq!(
+                (
+                    objects.phase,
+                    objects.odd,
+                    objects.fff0,
+                    objects.update_phase
+                ),
+                before_clock,
+                "scene waits freeze the object clock",
+            );
+            assert_eq!(objects.slots.each_ref().map(|slot| slot.b), before_slots);
         }
-        if let SceneStep::Ran(op) = vm.step(&mut player, &mut camera, &scripts) {
+        let step = if gameplay || frame.is_none() {
+            vm.step(&mut player, &mut camera, &scripts)
+        } else {
+            SceneStep::Idle
+        };
+        if let SceneStep::Ran(op) = step {
             ran.push(op);
         }
         assert!(vm.unported().is_empty());
@@ -82,6 +142,7 @@ fn patrol_boss_real_level_scene_entry_selects_portable_definition() {
             break;
         }
     }
+    assert!(owned_frames > 0, "entry must exercise scene-owned frames");
     assert!(entered, "source entrance did not reach arena");
     assert_eq!(ran, vec![0x65, 0x20, 0x30, 0x40]);
     assert_eq!(player.level_gfx_index, 5);

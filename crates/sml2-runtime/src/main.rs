@@ -33,15 +33,17 @@ mod patrol_boss_entry_tests;
 mod sweep_boss_entry_tests;
 #[cfg(test)]
 mod circuit_boss_entry_tests;
+#[cfg(test)]
+mod scene_pipe_tests;
 use divider_clock::{NativeDividerClock, VirtualDividerClock};
 
 use serde::Deserialize;
+use sml2_core::ending_entry::{EndingEntry, EndingEntryState, EndingFrame, EndingInput};
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest, LAYOUT_HEIGHT, LAYOUT_WIDTH};
 use sml2_core::map::MapNodes;
 use sml2_core::object::ObjectTables;
 use sml2_core::objects::FireHit;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
-use sml2_core::ending_entry::{EndingEntry, EndingEntryState, EndingFrame, EndingInput};
 use sml2_core::scene::{boss_def_index, boss_def_portable, SceneScripts, SceneStep, SceneVm};
 use sml2_core::tileset::Tilesets;
 use sml2_core::video;
@@ -1444,7 +1446,8 @@ fn run_replay(
         // $05E4/$0640: the frame loop's three branches. Dead (`$FF`) runs only
         // the arc + the object engine (the camera freezes); the death fade
         // (`$FF9B = 9`) leaves the level entirely, freezing everything.
-        let ending_frame = ending_frame_head(
+        let ending_frame = scene_frame_head(
+            &mut scene_vm,
             &mut ending_entry,
             &mut sim,
             &mut cam,
@@ -1457,9 +1460,9 @@ fn run_replay(
                 },
             },
         );
-        let gameplay = matches!(ending_frame, EndingFrame::Gameplay(_));
+        let gameplay = matches!(ending_frame, Some(EndingFrame::Gameplay(_)));
         let input = match ending_frame {
-            EndingFrame::Gameplay(input) => input,
+            Some(EndingFrame::Gameplay(input)) => input,
             _ => EndingInput::default(),
         };
         let keys = input.held;
@@ -1491,14 +1494,15 @@ fn run_replay(
         let exit_done_at_entry = sim.exit_completed;
         if !gameplay {
             // The shared frame head dispatched this ending-entry frame.
-            if let EndingFrame::SequencePending = ending_frame {
-                let res = ending_sequence.step(&mut sml2_core::ending_sequence::EndingStepContext {
-                    scene: &mut ending_scene,
-                    rom: None,
-                    credits_text: None,
-                    object_tables: Some(&tables),
-                    decrement_fade: true,
-                });
+            if let Some(EndingFrame::SequencePending) = ending_frame {
+                let res =
+                    ending_sequence.step(&mut sml2_core::ending_sequence::EndingStepContext {
+                        scene: &mut ending_scene,
+                        rom: None,
+                        credits_text: None,
+                        object_tables: Some(&tables),
+                        decrement_fade: true,
+                    });
                 if res.sfx_request_0 != 0 {
                     sim.sfx0 = res.sfx_request_0;
                 }
@@ -1638,21 +1642,9 @@ fn run_replay(
             sim.apply_object_result(&mut obj, keys.a);
             cam.apply_object_result(&mut obj);
         }
-        // $20A4: the scene VM. The main loop calls it once per pass *after* the
-        // in-level frame pass (home.asm:274), so a latched scene advances
-        // exactly one script byte per frame and a `$4x` teleport lands after
-        // this frame's physics rather than before it.
-        //
-        // It is *not* gated on the pipe travel. Console-measured on the level 13
-        // tape: `sPipeTravelDirection` stays `$30` from f28 to f74, yet the
-        // arena's script ops run at f67-f70 — inside the travel, eight frames
-        // before Mario is placed (f75). Gating on "is Mario travelling" (the
-        // port's `pipe_dir >= 0x10`) therefore runs the `$2x` arm *after* the
-        // placement instead of before it, which lands Mario at 1308 rather than
-        // the arena's 1561: the ROM's travelling phase is a sub-phase of the
-        // travel that ends before `sPipeTravelDirection` clears, and it is not
-        // modelled yet (see `boss_arena_phase_cascade` in PORT_QUEUE.json).
-        if gameplay {
+        // $20A4 owns the CPU across its HALT waits; the shared frame head
+        // parks gameplay until its END returns to the main loop.
+        if gameplay || ending_frame.is_none() {
             scene_vm.step(&mut sim, &mut cam, &scripts);
         }
         // The full-death-cycle gap: after the fade-trigger frame the game
@@ -2487,7 +2479,8 @@ fn run_play(
         sim.phase = (sim.phase + 1) & 7;
         sim.frame_counter = sim.frame_counter.wrapping_add(1);
         // $05E4/$0640: dead → the arc only; the death fade freezes everything.
-        let ending_frame = ending_frame_head(
+        let ending_frame = scene_frame_head(
+            &mut scene_vm,
             &mut ending_entry,
             &mut sim,
             &mut cam,
@@ -2502,9 +2495,9 @@ fn run_play(
                 },
             },
         );
-        let gameplay = matches!(ending_frame, EndingFrame::Gameplay(_));
+        let gameplay = matches!(ending_frame, Some(EndingFrame::Gameplay(_)));
         let input = match ending_frame {
-            EndingFrame::Gameplay(input) => input,
+            Some(EndingFrame::Gameplay(input)) => input,
             _ => EndingInput::default(),
         };
         let keys = input.held;
@@ -2527,14 +2520,15 @@ fn run_play(
         let exit_done_at_entry = sim.exit_completed;
         if !gameplay {
             // The shared frame head dispatched this ending-entry frame.
-            if let EndingFrame::SequencePending = ending_frame {
-                let res = ending_sequence.step(&mut sml2_core::ending_sequence::EndingStepContext {
-                    scene: &mut ending_scene,
-                    rom: None,
-                    credits_text: None,
-                    object_tables: obj_tables.as_ref(),
-                    decrement_fade: true,
-                });
+            if let Some(EndingFrame::SequencePending) = ending_frame {
+                let res =
+                    ending_sequence.step(&mut sml2_core::ending_sequence::EndingStepContext {
+                        scene: &mut ending_scene,
+                        rom: None,
+                        credits_text: None,
+                        object_tables: obj_tables.as_ref(),
+                        decrement_fade: true,
+                    });
                 if res.sfx_request_0 != 0 {
                     sim.sfx0 = res.sfx_request_0;
                 }
@@ -2630,10 +2624,8 @@ fn run_play(
                 cam.apply_object_result(&mut obj);
             }
         }
-        // $20A4: the scene VM, once per frame after the whole in-level pass —
-        // the same placement as the replay loop (home.asm:274). Not gated on the
-        // pipe travel; see the replay loop's note.
-        let stepped = if gameplay {
+        // Resume the blocking $20A4 call after gameplay, or its previous wait.
+        let stepped = if gameplay || ending_frame.is_none() {
             scene_vm.step(&mut sim, &mut cam, &scripts)
         } else {
             SceneStep::Idle
@@ -2821,6 +2813,22 @@ fn run_play(
         sim.x, sim.y, cam.x, cam.y
     );
     Ok(())
+}
+
+/// The dispatch boundary shared by live play, replay, and pipe integration tests.
+fn scene_frame_head(
+    scene: &mut SceneVm,
+    ending: &mut EndingEntry,
+    sim: &mut PlayerSim,
+    cam: &mut sml2_core::camera::CameraSim,
+    input: EndingInput,
+) -> Option<EndingFrame> {
+    if scene.owns_gameplay() {
+        sim.tick_fade_timer();
+        None
+    } else {
+        Some(ending_frame_head(ending, sim, cam, input))
+    }
 }
 
 /// Shared live/replay dispatch boundary. Gameplay keeps its existing fade tick

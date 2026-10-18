@@ -5,10 +5,10 @@
 //! Crossing a screen edge runs `$0B2A`'s trigger, which sets `sScreenTransition`
 //! and calls `$0F0B` — and `$0F0B` latches `sSceneId` from the level's
 //! `sSceneMap` cell under Mario (`(Yhi & $0F) * 16 + (Xhi & $0F)`). A nonzero
-//! `sSceneId` is what makes the level a *scene* level: the main loop then calls
-//! `$20A4` once per frame (home.asm:274, right after the in-level frame pass) and
-//! that VM runs **one script byte per frame** — every opcode ends at `$21E8`
-//! (`call $2728`, a VBlank wait) before the next fetch.
+//! `sSceneId` enters `$20A4` after the in-level frame pass (home.asm:274).
+//! The script owns execution through its VBlank waits until END returns;
+//! player, camera and object updates resume after the outer `$02FF` wait.
+//! Each opcode ends at `$21E8`; some handlers spend additional waits.
 //!
 //! ## The table
 //!
@@ -57,11 +57,9 @@
 //!
 //! `$Bx`/`$0x` (VRAM block transfers, recorded as unported) and the palette
 //! writers `$1x`/`$5x`/`$Ax`. `$2x`, `$3x` and `$6x` are ported (see below). The
-//! `$4x` direction streamers (`$2359`/`$23E4`/`$2524`/`$246F`) are deliberately
-//! not modelled, and not flagged: they fill the BG window at `$9800` with the
-//! incoming screen's strip data, which this port never needs — it renders from
-//! the fully resident decompressed layout instead, so they have no observable
-//! effect here.
+//! `$4x` direction streamers (`$2359`/`$23E4`/`$2524`/`$246F`) use the resident
+//! layout instead of copying strips into the hardware BG window. Their VBlank
+//! waits remain observable and are retained before gameplay resumes.
 //!
 //! ## The arena arm (`$2x`) and what it still does not reach
 //!
@@ -204,10 +202,10 @@ pub enum SceneStep {
 pub struct SceneVm {
     /// The script cursor, a bank-5 address inside the blob (the ROM's HL).
     pub pc: u16,
-    /// Prologue wait countdown: on console ($20A4 prologue $2CFF -> bank 1 $52E7,
-    /// $2728 = the one-byte wait opcode, call $FFA0), sSceneId is latched at f52
-    /// and the first script byte executes 15 frames later at f67.
+    /// The single $2728 HALT in the $20A4 prologue.
     enter_wait: u8,
+    /// Remaining HALT waits inside the current opcode after its first wait.
+    opcode_wait: u8,
     /// `$0F0B` latched a scene, so the script table has been claimed and the
     /// cursor is live. While unarmed the cursor is 0 — see `step`.
     armed: bool,
@@ -223,20 +221,23 @@ pub struct SceneVm {
 }
 
 impl SceneVm {
-    /// Prologue wait duration in frames between scene latch and the first script byte execution.
-    /// On console ($20A4 prologue $2CFF -> bank 1 $52E7, $2728 call $FFA0),
-    /// sSceneId is latched at f52 and first script opcode executes at f67 (15 frames).
-    pub const PROLOGUE_FRAMES: u8 = 15;
+    /// $20A4 calls $2728 once before fetching the first opcode.
+    pub const PROLOGUE_FRAMES: u8 = 1;
+
+    /// The ROM remains inside $20A4 until END; no gameplay dispatch occurs.
+    pub fn owns_gameplay(&self) -> bool {
+        self.armed
+    }
 
     pub fn new() -> Self {
         Self::default()
     }
 
     /// `$0F0B` latched a scene id: arm the VM. The ROM's prologue then spends
-    /// 15 frames (OAM latch, shadow close, VBlank wait, OAM DMA, bank select, table
-    /// lookup, $2728 wait opcode) before the first byte runs.
+    /// one VBlank wait before the first byte runs.
     pub fn start(&mut self) {
         self.enter_wait = Self::PROLOGUE_FRAMES;
+        self.opcode_wait = 0;
         self.armed = true;
         self.bad_cursor_scene = None;
         self.pc = 0;
@@ -252,6 +253,7 @@ impl SceneVm {
     /// `BadCursor`, ran NOTHING, and did it silently in BOTH frame loops.
     fn disarm(&mut self) {
         self.enter_wait = 0;
+        self.opcode_wait = 0;
         self.armed = false;
         self.pc = 0;
     }
@@ -264,8 +266,8 @@ impl SceneVm {
         self.bad_cursor_scene
     }
 
-    /// One main-loop pass of `$20A4`. The ROM calls it once per frame, after
-    /// the in-level frame pass, so a scene advances exactly one byte per frame.
+    /// Resume `$20A4` through its next HALT or END. The caller suspends
+    /// gameplay while this VM retains ownership across those waits.
     pub fn step(
         &mut self,
         sim: &mut PlayerSim,
@@ -296,6 +298,13 @@ impl SceneVm {
             self.enter_wait -= 1;
             return SceneStep::Entering;
         }
+        if self.opcode_wait > 0 {
+            self.opcode_wait -= 1;
+            if self.opcode_wait == 0 {
+                cam.scene_transition_flag = 1;
+            }
+            return SceneStep::Entering;
+        }
         let op = match scripts.byte_at(self.pc) {
             Some(b) => b,
             None => {
@@ -308,6 +317,7 @@ impl SceneVm {
             // the cursor ends one past the terminator.
             self.pc = self.pc.wrapping_add(1);
             cam.end_scene();
+            self.armed = false;
             return SceneStep::End;
         }
         let class = op >> 4;
@@ -324,7 +334,17 @@ impl SceneVm {
                 let second = scripts.byte_at(self.pc.wrapping_add(2)).unwrap_or(0);
                 self.op_3x(op, operand, second, sim, cam);
             }
-            0x4 => self.op_4x(operand, sim, cam),
+            0x4 => {
+                self.op_4x(operand, sim, cam);
+                // $2323 waits once before streaming; $21E8 waits once after.
+                // Right/left/up streamers wait twice; down waits three times.
+                let streamer_waits = match cam.transition {
+                    1 | 2 | 4 => 2,
+                    8 => 3,
+                    _ => 0,
+                };
+                self.opcode_wait = streamer_waits + 1;
+            }
             0x6 => sim.level_gfx_index = op & 0x0F,
             0x8 => cam.boss_defeated = 0xF0 | (op & 0x0F),
             _ => self.note_unported(op),
@@ -381,9 +401,8 @@ impl SceneVm {
     ///
     /// The handler also spends a frame and, *only while a screen transition is
     /// in progress*, runs the direction-specific destination-screen streamers.
-    /// Those are not modelled and need not be: they fill the BG window at
-    /// `$9800`, and this port renders from the resident layout (see the module
-    /// docs).
+    /// Resident layout data replaces their tile writes; `step` retains their
+    /// waits before running the dispatcher's transition-flag tail.
     fn op_4x(&mut self, operand: u8, sim: &mut PlayerSim, cam: &mut CameraSim) {
         let y_page = (operand >> 4) as u16;
         let x_page = (operand & 0x0F) as u16;
@@ -391,7 +410,6 @@ impl SceneVm {
         sim.y = (sim.y & 0x00FF) | (y_page << 8);
         cam.x = (cam.x & 0x00FF) | (x_page << 8);
         sim.x = (sim.x & 0x00FF) | (x_page << 8);
-        cam.scene_transition_flag = 1;
     }
 
     fn note_unported(&mut self, op: u8) {
@@ -632,7 +650,10 @@ mod tests {
         assert_eq!(sim.y, 0x00CD, "Mario Y page 0, low byte kept");
         assert_eq!(cam.x, 0x0334, "camera X page 3, low byte kept");
         assert_eq!(sim.x, 0x03AB, "Mario X page 3, low byte kept");
-        assert_eq!(cam.scene_transition_flag, 1, "the $4x tail sets it");
+        assert_eq!(
+            cam.scene_transition_flag, 0,
+            "the $4x tail runs after its waits"
+        );
 
         // Scene 7 = `40 16`: Y page 1, X page 6.
         let mut vm7 = SceneVm::new();
@@ -678,6 +699,7 @@ mod tests {
             (0x0060, 0x0400),
             "operand $04: Y page 0, X 4"
         );
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Entering);
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::End);
         assert!(vm.unported().is_empty(), "every byte of it is honoured");
     }
@@ -722,6 +744,7 @@ mod tests {
         latched(&mut cam, &mut vm, 6);
         step_prologue(&mut vm, &mut sim, &mut cam, &s);
         vm.step(&mut sim, &mut cam, &s); // the $40
+        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Entering);
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::End);
 
         assert_eq!(cam.scene_transition_latch, 1, "$A249 = $A24A");
@@ -931,11 +954,9 @@ mod tests {
         assert_eq!(vm.bad_cursor_scene(), Some(0x20));
     }
 
-    /// On console, $20A4's prologue spends exactly 15 frames between the scene
-    /// latch and the execution of the first script opcode ($2CFF -> $52E7, $2728
-    /// wait opcode, call $FFA0).
+    /// $20A4 calls $2728 once; OAM clear and DMA add no HALT waits.
     #[test]
-    fn scene_vm_prologue_waits_exact_fifteen_frames_before_first_opcode() {
+    fn scene_vm_prologue_waits_one_frame_before_first_opcode() {
         let s = scripts();
         let mut cam = CameraSim::new(0, 0);
         let mut sim = PlayerSim::new();
@@ -953,3 +974,7 @@ mod tests {
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Ran(0x40));
     }
 }
+
+#[cfg(test)]
+#[path = "scene_pipe_tests.rs"]
+mod pipe_tests;
