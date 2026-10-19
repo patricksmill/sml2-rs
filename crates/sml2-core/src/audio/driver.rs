@@ -16,8 +16,8 @@ mod tests;
 
 use crate::audio::music::{MusicSequencer, MusicWrite, SOUND_BANK04};
 use crate::audio::noise::{NoiseEffectState, NoiseMusicFlags, NoiseWrite};
-use crate::audio::pulse::{PulseEffectState, PulseMusicState, PulseWrite};
-use crate::audio::wave::{WaveEffectState, WaveMusicState, WaveWrite};
+use crate::audio::pulse::{PulseEffectState, PulseMusicFlags, PulseMusicState, PulseWrite};
+use crate::audio::wave::{WaveEffectState, WaveMusicFlags, WaveMusicState, WaveWrite};
 
 /// Master volume settings derived from sLowTimeFlag ($A264).
 pub const MASTER_VOLUME_NORMAL: u8 = 0x77; // 119
@@ -190,6 +190,13 @@ impl SoundDriver {
                 return;
             }
 
+            if matches!(req, 12 | 15 | 17) {
+                // $42E2/$43DC/$4465 open with `call $13F5E`: stop the song and
+                // run $13F6B's engine reset before the effect's own setup.
+                self.music_sequencer.stop();
+                self.reset_engine();
+            }
+
             self.pulse_effect.request = req;
             self.pulse_effect
                 .start(req, &mut self.pulse_music, self.stomp_chain, &mut self.pulse_writes);
@@ -235,6 +242,30 @@ impl SoundDriver {
         }
     }
 
+    /// `$13F6B`: the engine reset `StartMusic` runs and that the stop-all
+    /// (`$13F5E`) falls into. Clears every slot, takeover bit, slide/bend state
+    /// and the low-time flag. `sFastMusic`, the song id, the wave-pattern
+    /// pointer and `sSfx1Variant` are not in the ROM's list and survive here.
+    pub fn reset_engine(&mut self) {
+        let variant = self.wave_slot.variant;
+        self.pulse_effect = PulseEffectState::default();
+        self.wave_slot = WaveEffectState::default();
+        self.wave_slot.variant = variant;
+        self.noise_slot = NoiseEffectState::default();
+        self.pulse_music.flags = PulseMusicFlags::default();
+        self.pulse_music.vibrato_timer = 0;
+        self.wave_music.flags = WaveMusicFlags::default();
+        self.noise_music = NoiseMusicFlags::default();
+        self.sound_mode = 0;
+        self.low_time_flag = false;
+        self.music_sequencer.drum_mode = 0;
+        for ch in &mut self.music_sequencer.channels {
+            ch.slide_state = 0;
+            ch.slide_step = 0;
+            ch.bend_flag = 0;
+        }
+    }
+
     /// `$11510`: the `$9D` instrument command stores the channel-3 wave-pattern
     /// pointer, and the slot-1 stop (`$10E1D`) restores wave RAM through it.
     /// Keep the last pattern the music uploaded so that restore has the music's
@@ -275,9 +306,13 @@ impl SoundDriver {
         if self.music_request != 0 {
             let req = self.music_request;
             if req == 0xFF {
+                // $112DD -> $13F5E: stop the song, then $13F6B's reset.
                 self.music_sequencer.stop();
+                self.reset_engine();
                 self.active_song = 0;
             } else {
+                // StartMusic runs $13F6B before it reads the song header.
+                self.reset_engine();
                 self.music_sequencer.start_song(req, SOUND_BANK04);
                 self.active_song = self.music_sequencer.cur_song();
             }

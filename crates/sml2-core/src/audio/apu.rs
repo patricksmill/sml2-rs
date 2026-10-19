@@ -37,9 +37,61 @@ pub struct PulseChannel {
     pub freq: u16,
     pub duty_step: u8,
     pub timer: u32,
+    /// NR10: sweep pace (bits 6-4), direction (bit 3, 1 = decreasing) and shift.
+    pub sweep_pace: u8,
+    pub sweep_down: bool,
+    pub sweep_shift: u8,
+    pub sweep_timer: u8,
+    /// The sweep unit's shadow frequency, reloaded on every trigger.
+    pub sweep_shadow: u16,
 }
 
 impl PulseChannel {
+    /// NR10 write ($FF10).
+    pub fn set_sweep(&mut self, val: u8) {
+        self.sweep_pace = (val >> 4) & 0x07;
+        self.sweep_down = (val & 0x08) != 0;
+        self.sweep_shift = val & 0x07;
+    }
+
+    /// `shadow +/- (shadow >> shift)`.
+    fn sweep_calc(&self) -> u16 {
+        let delta = self.sweep_shadow >> self.sweep_shift;
+        if self.sweep_down {
+            self.sweep_shadow.wrapping_sub(delta)
+        } else {
+            self.sweep_shadow.wrapping_add(delta)
+        }
+    }
+
+    /// 128 Hz sweep clock: a pace of 0 disables the unit; an overflow past 2047
+    /// turns the channel off.
+    pub fn clock_sweep(&mut self) {
+        if self.sweep_pace == 0 {
+            return;
+        }
+        if self.sweep_timer > 0 {
+            self.sweep_timer -= 1;
+        }
+        if self.sweep_timer != 0 {
+            return;
+        }
+        self.sweep_timer = self.sweep_pace;
+        if self.sweep_shift == 0 {
+            return;
+        }
+        let next = self.sweep_calc();
+        if next > 2047 {
+            self.enabled = false;
+            return;
+        }
+        self.sweep_shadow = next;
+        self.freq = next;
+        if self.sweep_calc() > 2047 {
+            self.enabled = false;
+        }
+    }
+
     pub fn trigger(&mut self) {
         self.enabled = true;
         self.volume = self.env_initial;
@@ -48,6 +100,17 @@ impl PulseChannel {
         self.timer = self.period();
         if self.length_timer == 0 {
             self.length_timer = 64;
+        }
+        // Trigger reloads the sweep's shadow register and runs the overflow
+        // check once ($FF10 hardware behaviour).
+        self.sweep_shadow = self.freq & 0x07FF;
+        self.sweep_timer = if self.sweep_pace == 0 {
+            8
+        } else {
+            self.sweep_pace
+        };
+        if self.sweep_shift != 0 && self.sweep_calc() > 2047 {
+            self.enabled = false;
         }
     }
 
@@ -360,7 +423,7 @@ impl Apu {
 
     pub fn apply_pulse_write(&mut self, write: PulseWrite) {
         match write {
-            PulseWrite::Sweep(_) => {}
+            PulseWrite::Sweep(val) => self.ch1.set_sweep(val),
             PulseWrite::DutyLength(val) => {
                 self.ch1.duty = val >> 6;
                 self.ch1.length_timer = 64 - (val & 0x3F);
@@ -464,7 +527,7 @@ impl Apu {
 
     pub fn apply_music_write(&mut self, write: MusicWrite) {
         match write {
-            MusicWrite::Ch1Sweep(_) => {}
+            MusicWrite::Ch1Sweep(val) => self.ch1.set_sweep(val),
             MusicWrite::Ch1DutyLength(val) => {
                 self.ch1.duty = val >> 6;
                 self.ch1.length_timer = 64 - (val & 0x3F);
@@ -571,6 +634,10 @@ impl Apu {
             // Step 7: Clock Envelope (64 Hz)
             if self.frame_seq_step == 7 {
                 self.clock_envelope();
+            }
+            // Steps 2 and 6: Clock Sweep (128 Hz)
+            if self.frame_seq_step == 2 || self.frame_seq_step == 6 {
+                self.ch1.clock_sweep();
             }
         }
     }

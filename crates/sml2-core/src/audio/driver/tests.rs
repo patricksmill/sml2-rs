@@ -246,3 +246,76 @@ fn test_music_wave_pattern_is_kept_for_the_slot1_restore() {
         .music_writes
         .contains(&MusicWrite::Ch3WavePattern(pattern)));
 }
+
+#[test]
+fn test_reset_engine_clears_every_slot_and_flag() {
+    let mut driver = SoundDriver::new();
+    driver.music_request = 1;
+    driver.update_sound();
+    driver.update_sound();
+
+    // Dirty every byte $13F6B clears.
+    driver.pulse_effect.active_effect = 5;
+    driver.pulse_effect.busy = 1;
+    driver.pulse_effect.phase = 2;
+    driver.pulse_music.flags.claim_for_effect();
+    driver.pulse_music.vibrato_timer = 9;
+    driver.wave_slot.active_effect = 4;
+    driver.wave_slot.variant = 1;
+    driver.wave_music.flags.claim_for_effect();
+    driver.noise_slot.active_effect = 2;
+    driver.noise_music.claim_for_effect();
+    driver.sound_mode = 1;
+    driver.low_time_flag = true;
+    driver.music_sequencer.drum_mode = 1;
+    driver.music_sequencer.channels[0].slide_state = 1;
+    driver.music_sequencer.channels[0].slide_step = 3;
+    driver.music_sequencer.channels[0].bend_flag = 1;
+
+    driver.reset_engine();
+
+    assert_eq!(driver.pulse_effect.active_effect, 0);
+    assert_eq!(driver.pulse_effect.busy, 0);
+    assert_eq!(driver.pulse_effect.phase, 0);
+    assert!(!driver.pulse_music.flags.effect_owns_channel());
+    assert_eq!(driver.pulse_music.vibrato_timer, 0);
+    assert_eq!(driver.wave_slot.active_effect, 0);
+    assert!(!driver.wave_music.flags.effect_owns_channel());
+    assert_eq!(driver.noise_slot.active_effect, 0);
+    assert!(!driver.noise_music.effect_owns_channel());
+    assert_eq!(driver.sound_mode, 0);
+    assert!(!driver.low_time_flag);
+    assert_eq!(driver.music_sequencer.drum_mode, 0);
+    assert_eq!(
+        (
+            driver.music_sequencer.channels[0].slide_state,
+            driver.music_sequencer.channels[0].slide_step,
+            driver.music_sequencer.channels[0].bend_flag
+        ),
+        (0, 0, 0)
+    );
+    // Not in $13F6B's list: these survive, like the ROM's bytes.
+    assert_eq!(driver.wave_slot.variant, 1, "$A53E survives");
+    assert_ne!(driver.active_song, 0, "sCurSong is $13F5E's job");
+}
+
+#[test]
+fn test_slot0_reset_effects_stop_the_song() {
+    // $42E2: effect 12 starts with `call $13F5E`, so the song and every slot
+    // go away before the effect's own setup runs.
+    let mut driver = SoundDriver::new();
+    driver.music_request = 1;
+    driver.update_sound();
+    driver.update_sound();
+    assert_ne!(driver.active_song, 0, "song 1 is playing");
+
+    driver.wave_slot.active_effect = 4;
+    driver.low_time_flag = true;
+    driver.sfx_request_0 = 12;
+    driver.update_sound();
+
+    assert_eq!(driver.active_song, 0, "effect 12 stops the song");
+    assert_eq!(driver.wave_slot.active_effect, 0, "other slots are cleared");
+    assert!(!driver.low_time_flag);
+    assert_eq!(driver.pulse_effect.active_effect, 12);
+}

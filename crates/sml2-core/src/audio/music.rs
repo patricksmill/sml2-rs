@@ -89,14 +89,12 @@ impl MusicSequencer {
         self.cur_song != 0
     }
 
-    /// Stops music playback immediately and resets channels per ROM $13F5E.
+    /// Stops music playback per ROM $13F5E: only `sCurSong` clears here.
+    /// `sFastMusic`, the drum mode and the channel blocks belong to `$13F6B`
+    /// (`SoundDriver::reset_engine`) and survive a bare stop. A stopped
+    /// sequencer is inert because `tick` returns while `cur_song == 0`.
     pub fn stop(&mut self) {
         self.cur_song = 0;
-        self.fast_music = false;
-        self.drum_mode = 0;
-        for ch in &mut self.channels {
-            ch.active = false;
-        }
     }
 
     /// Starts playing a song by 1-based song ID (1..=42) per ROM $112E0 and $1145A.

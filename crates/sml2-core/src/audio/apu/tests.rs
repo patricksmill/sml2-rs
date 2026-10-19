@@ -183,3 +183,40 @@ fn test_ingest_driver_applies_master_volume() {
         (MASTER_VOLUME_LOW_TIME, 3, 3)
     );
 }
+
+#[test]
+fn test_ch1_sweep_glides_and_overflows() {
+    // NR10 = $14: pace 1, add, shift 4.
+    let mut apu = Apu::new();
+    apu.apply_music_write(MusicWrite::Ch1Sweep(0x14));
+    apu.apply_music_write(MusicWrite::Ch1FrequencyLow(0x00));
+    apu.apply_music_write(MusicWrite::Ch1FrequencyControl(0x86)); // freq $600
+    assert_eq!(apu.ch1.freq, 0x600);
+    assert_eq!(apu.ch1.sweep_shadow, 0x600);
+
+    // One 128 Hz sweep clock is four 512 Hz steps of 8192 cycles.
+    apu.advance_frame_sequencer(32_768);
+    assert_eq!(apu.ch1.freq, 0x660, "$600 + $600>>4");
+    apu.advance_frame_sequencer(32_768);
+    assert_eq!(apu.ch1.freq, 0x6C6, "$660 + $660>>4");
+
+    // An overflow past 2047 turns the channel off ($10E1D's stop writes 0, so
+    // only effects with a live sweep reach this).
+    let mut apu = Apu::new();
+    apu.apply_music_write(MusicWrite::Ch1Sweep(0x17)); // pace 1, add, shift 7
+    apu.apply_music_write(MusicWrite::Ch1FrequencyLow(0xE0));
+    apu.apply_music_write(MusicWrite::Ch1FrequencyControl(0x87)); // freq $7E0
+    for _ in 0..4 {
+        apu.advance_frame_sequencer(32_768);
+    }
+    assert!(!apu.ch1.enabled, "sweep overflow disables CH1");
+
+    // The music writes NR10 = 0 on every note; that must disable the sweep.
+    let mut apu = Apu::new();
+    apu.apply_music_write(MusicWrite::Ch1Sweep(0x14));
+    apu.apply_music_write(MusicWrite::Ch1Sweep(0));
+    apu.apply_music_write(MusicWrite::Ch1FrequencyLow(0x00));
+    apu.apply_music_write(MusicWrite::Ch1FrequencyControl(0x86));
+    apu.advance_frame_sequencer(32_768);
+    assert_eq!(apu.ch1.freq, 0x600, "NR10=0 keeps the note steady");
+}

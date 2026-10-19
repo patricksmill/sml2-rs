@@ -51,7 +51,7 @@ fn test_fast_music_acceleration() {
 }
 
 #[test]
-fn test_stop_clears_playback_and_channels() {
+fn test_stop_clears_the_song_id() {
     let mut seq = MusicSequencer::new();
     seq.start_song(1, SOUND_BANK04);
     assert!(seq.is_playing());
@@ -59,7 +59,12 @@ fn test_stop_clears_playback_and_channels() {
     seq.stop();
     assert_eq!(seq.cur_song(), 0);
     assert!(!seq.is_playing());
-    assert!(!seq.channels.iter().any(|c| c.active));
+
+    // $13F5E clears only sCurSong; the channel blocks are $13F6B's job, so the
+    // sequencer must simply go inert.
+    let mut writes = Vec::new();
+    seq.tick(SOUND_BANK04, [0, 0, 0], &mut writes);
+    assert!(writes.is_empty());
 }
 
 #[test]
