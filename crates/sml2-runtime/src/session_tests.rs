@@ -475,3 +475,45 @@ fn hub_frames_advance_the_wave_strips() {
     assert_eq!(later.phase, first.phase.wrapping_add(8), "one call per frame");
     let _ = fs::remove_file(&tmp_save);
 }
+
+#[test]
+fn pan_arrows_blink_on_the_console_period() {
+    let tmp_save = temp_save_path("test_probe_blink");
+    let _ = fs::remove_file(&tmp_save);
+    let assets = SessionAssets::load().expect("session assets must load");
+    let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
+    let _ = runner.step_frame(PlayerKeys::default());
+    // Frozen camera (no keys), latch forced on: only the arrows can change.
+    let mut runs: Vec<(bool, usize)> = Vec::new();
+    for _ in 0..48 {
+        if let SessionState::Overworld(m) = &mut runner.state {
+            m.scroll_only_latch = 0xFF;
+        }
+        let pan = runner.render_frame();
+        if let SessionState::Overworld(m) = &mut runner.state {
+            m.scroll_only_latch = 0;
+        }
+        let ctl = runner.render_frame();
+        let mut diff = 0;
+        for (cx, cy) in [(72usize, 8usize), (8, 68), (144, 68), (72, 124)] {
+            for y in cy..cy + 8 {
+                for x in cx..cx + 8 {
+                    if pan[y * 160 + x] != ctl[y * 160 + x] {
+                        diff += 1;
+                    }
+                }
+            }
+        }
+        let on = diff > 0;
+        match runs.last_mut() {
+            Some((cur, len)) if *cur == on => *len += 1,
+            _ => runs.push((on, 1)),
+        }
+        let _ = runner.step_frame(PlayerKeys::default());
+    }
+    // `$3C9F4` reads `$FF97` bit 4, so the border arrows run 16 frames on and
+    // 16 off; measured on the console, B+Right gave frames 30..45 of `$7E`.
+    let exp: Vec<(bool, usize)> = vec![(true, 15), (false, 16), (true, 16)];
+    assert_eq!(&runs[..3], &exp[..], "blink rhythm: {runs:?}");
+    let _ = fs::remove_file(&tmp_save);
+}

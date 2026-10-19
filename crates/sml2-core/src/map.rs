@@ -754,8 +754,11 @@ fn draw_obj_tile(
 
 /// `$4A11`: the four OAM entries `$3C9F4` stages while the hub pans its camera
 /// (B held, `$3C5B2`). Entry order and bytes are the ROM's: (y, x, tile, attr).
-/// `$4A21` is the same layout with tile `$7F`, so the border arrows blink on
-/// `$FF97` bit 7 and the cursor is not drawn at all while panning.
+/// `$4A21` is the same layout with tile `$7F`. The choice is
+/// `ldh a,[$FF97] / swap a / and $01`, i.e. **bit 4** of the frame counter, so
+/// the arrows show for 16 frames and blink for 16 - measured on the console:
+/// B+Right on the hub gave 16 frames of `$7F` then 16 of `$7E`. While panning
+/// the cursor is not drawn at all.
 pub const PAN_ARROWS: [(u8, u8, u8, u8); 4] = [
     (24, 80, 0x7E, 0x00),
     (140, 80, 0x7E, 0x40),
@@ -777,8 +780,9 @@ pub fn render_overworld_view(
     walk_frame: u8,
     cursor_pose: u8,
     // `sMapScrollOnlyLatch != 0`: B is panning the hub camera, which replaces
-    // the cursor with the `$4A11` border arrows. `frame_counter` is
-    // `sMapFrameCounter`, for the arrows' `$FF97` bit-7 blink.
+    // the cursor with the `$4A11` border arrows. `frame_counter` stands in for
+    // `$FF97`: bit 4 picks `$4A11` (visible) or `$4A21` (blank), a 16-frame
+    // half-period.
     camera_pan: bool,
     frame_counter: u8,
     tilemaps: &OverworldTilemaps,
@@ -856,7 +860,7 @@ pub fn render_overworld_view(
     if camera_pan {
         // `$3C9F4`: the whole cursor metasprite is replaced by the border arrows
         // (`$4A11` visible, `$4A21` all `$7F`), so no Mario while panning.
-        if frame_counter & 0x80 == 0 {
+        if frame_counter & 0x10 == 0 {
             for (oy, ox, tile, attr) in PAN_ARROWS {
                 draw_obj_tile(&mut img, tiles_vram, &obj_shades, ox as i32 - 8, oy as i32 - 16, tile, attr, vw, vh);
             }
@@ -1292,6 +1296,27 @@ mod cursor_render_tests {
         )
     }
 
+    /// The blink is `$FF97` bit 4 (`swap a / and $01`), so the arrows run for
+    /// sixteen frames and blank for sixteen: measured on the console, B+Right
+    /// on the hub gave frames 30..45 of `$7E` and 18..29 / 46..47 of `$7F`.
+    #[test]
+    fn the_pan_arrows_blink_every_sixteen_frames() {
+        let obj = crate::video::bgp_shades(0xD0);
+        let runs: Vec<bool> = (0..64u16)
+            .map(|f| draw_pan(0x00, 0, 0, true, f as u8)[8 * 160 + 72] == obj[2])
+            .collect();
+        let mut lengths: Vec<(bool, usize)> = Vec::new();
+        for &v in &runs {
+            match lengths.last_mut() {
+                Some((cur, len)) if *cur == v => *len += 1,
+                _ => lengths.push((v, 1)),
+            }
+        }
+        assert_eq!(lengths[0], (true, 16), "visible half: {lengths:?}");
+        assert_eq!(lengths[1], (false, 16), "blank half: {lengths:?}");
+        assert_eq!(lengths[2], (true, 16), "and it repeats: {lengths:?}");
+    }
+
     /// `$3C9F4`: while the hub pans (B held) OAM 0-3 becomes the `$4A11` border
     /// arrows - top (72,8), bottom (72,124), left (8,68), right (144,68) - and
     /// `$4A21` blanks them on `$FF97` bit 7. The cursor is not drawn at all.
@@ -1308,7 +1333,7 @@ mod cursor_render_tests {
         // The cursor's pose tiles sit at (0,0) for OAM (8,16); panning must not
         // draw them, and the blank half of the blink draws nothing.
         assert_eq!(panning[0], bg[0], "no cursor while panning");
-        let blank = draw_pan(0x00, 0, 0, true, 0x80);
+        let blank = draw_pan(0x00, 0, 0, true, 0x10);
         assert_eq!(blank[8 * 160 + 72], bg[0], "$4A21 blank frame");
         assert_eq!(blank[68 * 160 + 8], bg[0]);
         // Without panning the arrows are absent and the cursor is back.

@@ -24,6 +24,11 @@ Covers the walk cycle, the hidden case and the `$8x` walk-step arrows.
 so the four border arrows blink and the cursor disappears. This is the
 "blinking arrows when moving the camera" case.
 
+The blink is `ldh a,[$FF97] / swap a / and $01`, i.e. **bit 4** of the frame
+counter — a 16-frame half-period, measured on the console (B+Right on the hub:
+frames 18-29 blank, 30-45 visible, 46-47 blank). Reading bit 7 instead gives a
+2.1 s half-period, which is the wrong rhythm.
+
 ## Phase 2 — Hub wave strips (next)
 
 Goal: the hub's shoreline shimmer.
