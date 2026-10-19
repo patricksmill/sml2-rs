@@ -15,6 +15,7 @@ pub mod level;
 pub mod level_timer;
 pub mod map;
 pub mod map_sim;
+pub mod map_zone_decor;
 pub mod object;
 mod object_events;
 pub mod objects;

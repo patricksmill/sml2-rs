@@ -114,14 +114,16 @@ expansion exactly, one frame behind the slot sample (OAM is uploaded from the
 shadow): slot 0 `(0, 76, 16)` -> `(76,0,$30,0) (76,8,$30,$20)`; slot 1
 `(1, 15, 21)` -> `(15,9,$36,0) (23,4,$32,0) (23,12,$33,0)`.
 
-**Open question blocking the extractor.** The measured 16-slot table for screen
-1 carries ids 16, 21, 25, 9, 40, 127, 1, 96, 40, 17, 17 **and 200, 152**. A
-128-word table at `$62E6` cannot index those, and a 256-word one would run into
-the metasprite data at `$647A`. Either the table is longer/segmented or those
-slots are not read as ids in every case - resolve that before generating a
-constant table, or the extraction will silently read the wrong metasprites.
+**Resolved:** the `$62E6` table holds **188 entries** (`$62E6-$645D`; entry 0
+points at `$645E`, where the metasprite data starts), so id 152 is valid and the
+measured slot 12 id 200 is past it - `$509B` would follow metasprite bytes as if
+they were a pointer. The port skips ids >= 188 instead. The table and all 188
+metasprites are now in `crates/sml2-core/src/map_zone_decor.rs`, and
+`zone_decor_oam` reproduces the console's OAM 4+ for the measured Pumpkin slots
+(slot 0 and slot 1 exactly, slot 2 against the previous frame's coords, which is
+what the shadow upload shows).
 
-**Also needed:** the per-screen slot seeds. Zone loaders build them in code (the
+**Also needed:** the per-screen slot seeds and the handler writes. Zone loaders build them in code (the
 hub is the only 72-byte block copy), so each loader needs reading; the Pumpkin
 handler `$3D8E6` then drives slots 0/1/2 from `sMapAnimPhase` (`$5A21` Y,
 `$5A29` X, `$6227` id/Y drift, page `22 + $5A16`) and arms the patch/growth
