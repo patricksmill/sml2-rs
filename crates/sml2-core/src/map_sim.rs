@@ -523,6 +523,8 @@ pub struct MapEntry {
     /// A node screen transition ran (`$3E2F7`'s blocking walk-out/walk-in), with
     /// its direction argument.
     pub transition: Option<u8>,
+    /// `$3C518` called the hub loader after releasing the B camera pan.
+    pub hub_reload: bool,
     /// `$2934` ran: the save image was written.
     pub saved: bool,
     /// A ROM path this frame took that the port does not model, as a stable id.
@@ -1399,9 +1401,9 @@ impl MapSim {
             // cursor's node. $3EEA4 seeds the camera and cursor from the node's
             // record, and $3EA9A clears the anim byte and asks for music 6.
             if self.scroll_only_latch != 0 {
-                self.cursor_anim = 0;
-                out.music = Some(6);
-                self.load_node(self.node, records);
+                out.music = Some(self.load_screen(0, 0, records));
+                out.hub_reload = true;
+                return true;
             }
         }
         self.scroll_only_latch = 0;
@@ -2324,8 +2326,16 @@ mod tests {
         map.screen_id = 0;
         map.node = 0x23;
         map.scroll_only_latch = 0xFF;
+        map.rock_anim_timer = 19;
+        map.cloud_drift = 77;
         let out = map.tick(MapInput::default(), &n, &walk, &recs());
         assert_eq!(map.scroll_only_latch, 0);
+        assert!(
+            out.hub_reload,
+            "$3C518 must run the hub loader, not just re-centre"
+        );
+        assert_eq!(map.rock_anim_timer, 0, "$3F156 clears the rock animation");
+        assert_eq!(map.cloud_drift, 0, "$3CBE7 resets decoration drift");
         assert_eq!(out.music, Some(6), "$3EA9A asks for music 6");
         assert_eq!(map.cursor_anim, 0);
         assert_eq!(

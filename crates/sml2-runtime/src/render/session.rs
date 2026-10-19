@@ -80,8 +80,10 @@ impl Session {
                     Some(_) => 2,
                     None => 0,
                 };
-                let bg_pal = fade_palette(bg_pal, fade);
-                let obp = fade_palette(0xD0, fade);
+                let (bg_pal, obp) = match &self.map_pan_return {
+                    Some(pan) => pan.palettes(),
+                    None => (fade_palette(bg_pal, fade), fade_palette(0xD0, fade)),
+                };
                 // `$3F203` fills `sStatusBarOAM` from `$7251` on the hub; a zone
                 // screen's `$3E277` clears those nine entries first, so its bar
                 // has no counters.

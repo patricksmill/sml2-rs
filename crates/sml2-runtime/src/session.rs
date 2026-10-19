@@ -5,6 +5,9 @@ pub use crate::content::SessionAssets;
 // Compatibility facade for existing CLI and tests; new hosts can own Session directly.
 pub use crate::host::{AudioClock, SessionRunner};
 
+mod map_pan;
+pub use map_pan::{MapPanReturn, MAP_PAN_RELOAD_FRAMES, MAP_PAN_RETURN_FRAMES};
+
 use sml2_core::audio::driver::SoundDriver;
 use sml2_core::camera::CameraSim;
 use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
@@ -545,6 +548,8 @@ pub struct Session {
     pub map_wave: Option<sml2_core::map::MapWave>,
     /// Set while a map level entry runs its 37-frame transition.
     pub pending_level: Option<Box<MapTransition>>,
+    /// White-screen hub reload and palette return after releasing camera pan.
+    pub map_pan_return: Option<MapPanReturn>,
     pub assets: SessionAssets,
     pub lives: u8,
     pub powerup: u8,
@@ -571,6 +576,7 @@ impl Session {
             last_map_screen: None,
             map_wave: None,
             pending_level: None,
+            map_pan_return: None,
             assets,
             lives: 5,
             powerup: 0,
@@ -601,6 +607,7 @@ impl Session {
             self.level_tally = data[0x42];
             self.money_bag = data[0x44];
             self.state = SessionState::Overworld(map);
+            self.map_pan_return = None;
             true
         } else {
             false
@@ -647,6 +654,29 @@ impl Session {
                     t.frame += 1;
                     break 'map StepOutcome::Continue;
                 }
+                if let Some(pan) = self.map_pan_return.as_mut() {
+                    // Blocking loader/fade waits do not run map gameplay. Keep
+                    // the input edge baseline current so held keys do not fire
+                    // as new presses when the transition returns.
+                    self.prev_keys_held = pack_joypad(
+                        keys.right,
+                        keys.left,
+                        keys.up,
+                        keys.down,
+                        keys.a,
+                        keys.b,
+                        keys.select,
+                        keys.start,
+                    );
+                    let finished = pan.advance();
+                    if pan.frame == MAP_PAN_RELOAD_FRAMES {
+                        self.sound_driver.music_request = 6;
+                    }
+                    if finished {
+                        self.map_pan_return = None;
+                    }
+                    break 'map StepOutcome::Continue;
+                }
                 let keys_held = pack_joypad(
                     keys.right,
                     keys.left,
@@ -668,6 +698,16 @@ impl Session {
                     &self.assets.walk,
                     &self.assets.node_records,
                 );
+
+                if entry.hub_reload {
+                    // `$3F156` first stops sound and blanks the LCD; its final
+                    // song request is deferred until the loader interval ends.
+                    self.sound_driver.music_request = 0xFF;
+                    self.map_pan_return = Some(MapPanReturn::default());
+                    self.map_wave =
+                        sml2_core::map::MapWave::seed(self.assets.overworld_tiles.screen_raw(0));
+                    break 'map StepOutcome::Continue;
+                }
 
                 if let Some(music) = entry.music {
                     self.sound_driver.music_request = music;
