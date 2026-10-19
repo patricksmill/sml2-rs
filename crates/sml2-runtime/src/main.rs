@@ -27,6 +27,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 mod divider_clock;
+mod play_tape;
+use play_tape::PlayTape;
 #[cfg(test)]
 mod door_boss_entry_tests;
 #[cfg(test)]
@@ -329,7 +331,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             obj,
             edge_map,
             scene_map,
-            keys_tape.clone(),
+            keys_tape.map(PlayTape::Ascii),
             headless_frames,
         )
         .map(|_| ());
@@ -2434,7 +2436,7 @@ fn run_play(
     mut obj: sml2_core::objects::ObjectSim,
     edge_map: Option<Vec<u8>>,
     scene_map: Option<Vec<u8>>,
-    keys_tape: Option<String>,
+    keys_tape: Option<PlayTape>,
     headless_frames: Option<u64>,
 ) -> Result<PlayOutcome, Box<dyn std::error::Error>> {
     let (vw, vh) = view;
@@ -2545,26 +2547,15 @@ fn run_play(
             start: start_down,
             select: select_down,
         };
-        if let Some(tape) = keys_tape.as_deref() {
-            let k = match tape.as_bytes().get(tape_i) {
-                Some(&k) => k,
+        if let Some(tape) = keys_tape.as_ref() {
+            keys = match tape.frame(tape_i) {
+                Some(keys) => keys,
                 None => {
                     print_play_state("tape end", frame_n, &sim, &cam, &obj);
                     break;
                 }
             };
             tape_i += 1;
-            let d = k as char;
-            keys = PlayerKeys {
-                right: d == 'R',
-                left: d == 'L',
-                up: d == 'U',
-                down: d == 'D',
-                a: d == 'A',
-                b: d == 'B',
-                start: d == 'S',
-                select: d == 'E',
-            };
             a_down = keys.a;
             b_down = keys.b;
             start_down = keys.start;

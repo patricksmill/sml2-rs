@@ -6,52 +6,65 @@ use super::*;
 /// handoff all run through the same dispatch as interactive play.
 #[test]
 fn level28_header_spawn_to_bell_through_live_play() {
-    let outcome = run_header_route(28, "R".repeat(1400), |manifest, layout, sim, cam, nodes| {
-        assert_eq!(manifest.level_id, 27);
-        assert_eq!(layout.cells[30 * 256 + 78], 0x4A);
-        assert_eq!((sim.x, sim.y, cam.x, cam.y), (51, 260, 80, 246));
+    for tape in [
+        PlayTape::Ascii("R".repeat(1400)),
+        PlayTape::Buttons(vec![
+            PlayerKeys {
+                right: true,
+                ..Default::default()
+            };
+            1400
+        ]),
+    ] {
+        let outcome = run_header_route(28, tape, |manifest, layout, sim, cam, nodes| {
+            assert_eq!(manifest.level_id, 27);
+            assert_eq!(layout.cells[30 * 256 + 78], 0x4A);
+            assert_eq!((sim.x, sim.y, cam.x, cam.y), (51, 260, 80, 246));
+            assert_eq!(
+                (sim.map_node, nodes.progress_slot(sim.map_node)),
+                (120, Some(38))
+            );
+            assert_eq!(manifest.spawns.records.len(), 14);
+        });
+        let arm = outcome
+            .bell_arm
+            .expect("right-only approach must arm the bell");
+        assert_eq!(arm.frame, 1077, "deterministic native approach timing");
+        assert_eq!(arm.position, (1242, 468));
         assert_eq!(
-            (sim.map_node, nodes.progress_slot(sim.map_node)),
-            (120, Some(38))
+            (arm.fade_timer, arm.music_request, arm.exit_tile_flag),
+            (192, 3, 0)
         );
-        assert_eq!(manifest.spawns.records.len(), 14);
-    });
-    let arm = outcome
-        .bell_arm
-        .expect("right-only approach must arm the bell");
-    assert_eq!(arm.frame, 1077, "deterministic native approach timing");
-    assert_eq!(arm.position, (1242, 468));
-    assert_eq!(
-        (arm.fade_timer, arm.music_request, arm.exit_tile_flag),
-        (192, 3, 0)
-    );
-    assert_eq!(outcome.exit_completed_frame, Some(arm.frame + 192));
-    assert_eq!(outcome.map_handoff_frame, Some(arm.frame + 193));
-    assert_eq!(outcome.frames, 1400);
-    assert_eq!((outcome.sim.x, outcome.sim.y), arm.position);
-    assert_eq!((outcome.cam.x, outcome.cam.y), (1275, 448));
-    assert_eq!((outcome.sim.fade_timer, outcome.sim.level_tally), (0, 1));
-    assert!(outcome.sim.exit_phase && outcome.sim.exit_completed && outcome.sim.map_handoff_done);
-    assert_eq!(outcome.sim.dead, 0);
-    assert_eq!(outcome.sim.map_node, 46, "$3F104's node $78 rewrite");
-    assert_eq!(outcome.sim.level_progress[38], 0x80, "cleared gate byte");
-    assert_eq!(outcome.sim.save_record(0)[8 + 38], 0x80);
-    let handoff = outcome.map_handoff.expect("the live handoff must run");
-    assert_eq!(
-        (handoff.node, handoff.screen, handoff.music, handoff.saves),
-        (46, Some(1), Some(30), 2)
-    );
-    assert!(!handoff.cutscene);
-    assert!(outcome.obj.unported.is_empty());
-    assert!(
-        outcome.active_object_frames > 0,
-        "ordinary objects must run during the approach"
-    );
+        assert_eq!(outcome.exit_completed_frame, Some(arm.frame + 192));
+        assert_eq!(outcome.map_handoff_frame, Some(arm.frame + 193));
+        assert_eq!(outcome.frames, 1400);
+        assert_eq!((outcome.sim.x, outcome.sim.y), arm.position);
+        assert_eq!((outcome.cam.x, outcome.cam.y), (1275, 448));
+        assert_eq!((outcome.sim.fade_timer, outcome.sim.level_tally), (0, 1));
+        assert!(
+            outcome.sim.exit_phase && outcome.sim.exit_completed && outcome.sim.map_handoff_done
+        );
+        assert_eq!(outcome.sim.dead, 0);
+        assert_eq!(outcome.sim.map_node, 46, "$3F104's node $78 rewrite");
+        assert_eq!(outcome.sim.level_progress[38], 0x80, "cleared gate byte");
+        assert_eq!(outcome.sim.save_record(0)[8 + 38], 0x80);
+        let handoff = outcome.map_handoff.expect("the live handoff must run");
+        assert_eq!(
+            (handoff.node, handoff.screen, handoff.music, handoff.saves),
+            (46, Some(1), Some(30), 2)
+        );
+        assert!(!handoff.cutscene);
+        assert!(outcome.obj.unported.is_empty());
+        assert!(
+            outcome.active_object_frames > 0,
+            "ordinary objects must run during the approach"
+        );
+    }
 }
 
 fn run_header_route(
     level: u8,
-    tape: String,
+    tape: impl Into<PlayTape>,
     check_entry: impl FnOnce(
         &LevelManifest,
         &LevelLayout,
@@ -103,6 +116,7 @@ fn run_header_route(
     };
     let hud: HudStrip =
         serde_json::from_str(&fs::read_to_string(root.join("hud.json")).unwrap()).unwrap();
+    let tape = tape.into();
     let frames = tape.len() as u64;
     run_play(
         &manifest,

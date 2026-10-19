@@ -1043,6 +1043,19 @@
    ],
    "verification_gate": "PORTING.md; original entry/assets with input-only timed-float traversal through live objects/camera, mechanic observation, bell/fade/map byte assertions and sensitivity; full core/runtime suites and frozen sweep",
    "status": "done"
+  },
+  {
+   "id": "native_route_button_tapes",
+   "title": "Support simultaneous native button holds in live-play acceptance tapes",
+   "asm_refs": [
+    "home.asm:$0F7E",
+    "home.asm:$160A"
+   ],
+   "dependencies": [
+    "played_route_level29"
+   ],
+   "verification_gate": "Exact legacy ASCII tape decoding and edge/end tests, simultaneous PlayerKeys frames through same live loop, unchanged level28/29 acceptance; core/runtime suites",
+   "status": "done"
   }
  ]
 }

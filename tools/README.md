@@ -78,6 +78,13 @@ level28 walking route and level29 timed-float route from header spawn to bell
 through the actual live play loop, including float-budget consumption, exit
 fades, tallies, source node handoffs and save bytes.
 
+Native route fixtures also accept `PlayTape::Buttons(Vec<PlayerKeys>)` through
+the same live loop, allowing simultaneous movement/jump/run holds. CLI
+`--keys` retains its ASCII byte grammar. The level28 acceptance runs both
+representations and requires identical source-route timing and outcome bytes;
+`play_tape` tests cover legacy decoding, all simultaneous button masks and tape
+termination.
+
 ## Handler briefs
 
 ```bash
