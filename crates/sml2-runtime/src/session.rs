@@ -1228,33 +1228,7 @@ impl SessionRunner {
             if win_w == 0 || win_h == 0 {
                 continue;
             }
-            if buf.len() != win_w * win_h {
-                buf = vec![0; win_w * win_h];
-            } else {
-                buf.fill(0);
-            }
-
-            let s = (win_w / self.vw).min(win_h / self.vh).max(1);
-            let ox = win_w.saturating_sub(self.vw * s) / 2;
-            let oy = win_h.saturating_sub(self.vh * s) / 2;
-            for y in 0..self.vh {
-                let py0 = oy + y * s;
-                if py0 + s > win_h {
-                    break;
-                }
-                for x in 0..self.vw {
-                    let px0 = ox + x * s;
-                    if px0 + s > win_w {
-                        break;
-                    }
-                    let g = frame[y * self.vw + x] as u32;
-                    let px = g | (g << 8) | (g << 16);
-                    for dy in 0..s {
-                        let row = (py0 + dy) * win_w + px0;
-                        buf[row..row + s].fill(px);
-                    }
-                }
-            }
+            crate::present::letterbox_gray(&frame, (self.vw, self.vh), (win_w, win_h), &mut buf);
 
             window
                 .update_with_buffer(&buf, win_w, win_h)
