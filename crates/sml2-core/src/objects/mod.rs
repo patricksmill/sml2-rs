@@ -103,7 +103,7 @@ use helpers::bcd_add;
 mod staging;
 pub use staging::*;
 use staging::{BOUNCE_SPEED, FALL_SPEED, HOVER_SPEED, SPIN_WOBBLE, STEP_74A1};
-#[path = "handlers/boo/behavior.rs"]
+#[path = "enemies/boo.rs"]
 mod boo;
 #[path = "bosses/shared/handlers.rs"]
 mod boss;
@@ -129,15 +129,15 @@ mod boss_spawn;
 mod boss_sprite_cycle;
 #[path = "bosses/shared/stun.rs"]
 mod boss_stun;
-#[path = "handlers/cannon_ant/behavior.rs"]
+#[path = "enemies/cannon_ant.rs"]
 mod cannon_ant;
-#[path = "handlers/carrier/behavior.rs"]
+#[path = "platforms/carrier.rs"]
 mod carrier;
 #[path = "bosses/door/central/behavior.rs"]
 mod central_door;
 #[path = "bosses/door/central/adapter.rs"]
 mod central_door_adapter;
-#[path = "handlers/charging_enemy/behavior.rs"]
+#[path = "enemies/charging_enemy.rs"]
 mod charging_enemy;
 #[path = "bosses/circuit/behavior.rs"]
 mod circuit_boss;
@@ -148,7 +148,7 @@ mod circuit_boss_adapter;
 mod circuit_boss_flow_tests;
 #[path = "bosses/circuit/motion.rs"]
 mod circuit_boss_motion;
-#[path = "handlers/dashing_walker/behavior.rs"]
+#[path = "enemies/dashing_walker.rs"]
 mod dashing_walker;
 #[cfg(test)]
 #[path = "tests/defeat_motion.rs"]
@@ -163,369 +163,369 @@ mod door_boss_mouth;
 mod door_child;
 #[path = "bosses/door/child/adapter.rs"]
 mod door_child_adapter;
-#[path = "handlers/edge_walker/behavior.rs"]
+#[path = "enemies/edge_walker.rs"]
 mod edge_walker;
-#[path = "handlers/falling_dropper/behavior.rs"]
+#[path = "enemies/falling_dropper.rs"]
 mod falling_dropper;
-#[path = "handlers/fallwalker/behavior.rs"]
+#[path = "enemies/fallwalker.rs"]
 mod fallwalker;
-#[path = "handlers/fire_piranha/behavior.rs"]
+#[path = "enemies/fire_piranha.rs"]
 mod fire_piranha;
-#[path = "handlers/groundwalker/behavior.rs"]
+#[path = "enemies/groundwalker.rs"]
 mod groundwalker;
-#[path = "handlers/0x586e6/behavior.rs"]
+#[path = "items/contact_marker.rs"]
 mod handler_0x586e6;
-#[path = "handlers/0x586e6/adapter.rs"]
+#[path = "compat/items/contact_marker.rs"]
 mod handler_0x586e6_adapter;
-#[path = "handlers/0x586eb/behavior.rs"]
+#[path = "compat/items/animated_marker.rs"]
 mod handler_0x586eb;
-#[path = "handlers/0x587a1/behavior.rs"]
+#[path = "items/moneybag.rs"]
 mod handler_0x587a1;
-#[path = "handlers/0x587a1/adapter.rs"]
+#[path = "compat/items/moneybag.rs"]
 mod handler_0x587a1_adapter;
-#[path = "handlers/0x58804/behavior.rs"]
+#[path = "items/floating_pickup.rs"]
 mod handler_0x58804;
-#[path = "handlers/0x58804/adapter.rs"]
+#[path = "compat/items/floating_pickup.rs"]
 mod handler_0x58804_adapter;
-#[path = "handlers/0x58848/behavior.rs"]
+#[path = "enemies/hopping.rs"]
 mod handler_0x58848;
-#[path = "handlers/0x58848/adapter.rs"]
+#[path = "compat/enemies/hopping.rs"]
 mod handler_0x58848_adapter;
-#[path = "handlers/0x589a6/behavior.rs"]
+#[path = "enemies/buried.rs"]
 mod handler_0x589a6;
-#[path = "handlers/0x589a6/adapter.rs"]
+#[path = "compat/enemies/buried.rs"]
 mod handler_0x589a6_adapter;
-#[path = "handlers/0x58a6f/behavior.rs"]
+#[path = "enemies/resting_walker.rs"]
 mod handler_0x58a6f;
-#[path = "handlers/0x58a6f/adapter.rs"]
+#[path = "compat/enemies/resting_walker.rs"]
 mod handler_0x58a6f_adapter;
-#[path = "handlers/0x58b43/behavior.rs"]
+#[path = "enemies/diagonal_tracker.rs"]
 mod handler_0x58b43;
-#[path = "handlers/0x58b43/adapter.rs"]
+#[path = "compat/enemies/diagonal_tracker.rs"]
 mod handler_0x58b43_adapter;
-#[path = "handlers/0x58bba/behavior.rs"]
+#[path = "platforms/vertical.rs"]
 mod handler_0x58bba;
-#[path = "handlers/0x58bba/adapter.rs"]
+#[path = "compat/platforms/vertical.rs"]
 mod handler_0x58bba_adapter;
-#[path = "handlers/0x58bcb/behavior.rs"]
+#[path = "platforms/short_vertical.rs"]
 mod handler_0x58bcb;
-#[path = "handlers/0x58bcb/adapter.rs"]
+#[path = "compat/platforms/short_vertical.rs"]
 mod handler_0x58bcb_adapter;
-#[path = "handlers/0x58c41/behavior.rs"]
+#[path = "platforms/long_horizontal.rs"]
 mod handler_0x58c41;
-#[path = "handlers/0x58c41/adapter.rs"]
+#[path = "compat/platforms/long_horizontal.rs"]
 mod handler_0x58c41_adapter;
-#[path = "handlers/0x58c52/behavior.rs"]
+#[path = "platforms/horizontal_patrol.rs"]
 mod handler_0x58c52;
-#[path = "handlers/0x58c52/adapter.rs"]
+#[path = "compat/platforms/horizontal_patrol.rs"]
 mod handler_0x58c52_adapter;
-#[path = "handlers/0x58ce0/behavior.rs"]
+#[path = "platforms/diagonal_patrol.rs"]
 mod handler_0x58ce0;
-#[path = "handlers/0x58ce0/adapter.rs"]
+#[path = "compat/platforms/diagonal_patrol.rs"]
 mod handler_0x58ce0_adapter;
-#[path = "handlers/0x58d34/behavior.rs"]
+#[path = "platforms/diagonal.rs"]
 mod handler_0x58d34;
-#[path = "handlers/0x58d34/adapter.rs"]
+#[path = "compat/platforms/diagonal.rs"]
 mod handler_0x58d34_adapter;
-#[path = "handlers/0x58e7e/behavior.rs"]
+#[path = "platforms/raised_rectangular.rs"]
 mod handler_0x58e7e;
-#[path = "handlers/0x58e7e/adapter.rs"]
+#[path = "compat/platforms/raised_rectangular.rs"]
 mod handler_0x58e7e_adapter;
-#[path = "handlers/0x5902d/behavior.rs"]
+#[path = "enemies/emerging_tracker.rs"]
 mod handler_0x5902d;
-#[path = "handlers/0x5902d/adapter.rs"]
+#[path = "compat/enemies/emerging_tracker.rs"]
 mod handler_0x5902d_adapter;
-#[path = "handlers/0x5917a/behavior.rs"]
+#[path = "enemies/tracker_respawn.rs"]
 mod handler_0x5917a;
-#[path = "handlers/0x5917a/adapter.rs"]
+#[path = "compat/enemies/tracker_respawn.rs"]
 mod handler_0x5917a_adapter;
-#[path = "handlers/0x591a3/behavior.rs"]
+#[path = "platforms/rider_lift.rs"]
 mod handler_0x591a3;
-#[path = "handlers/0x591a3/adapter.rs"]
+#[path = "compat/platforms/rider_lift.rs"]
 mod handler_0x591a3_adapter;
-#[path = "handlers/0x591f9/behavior.rs"]
+#[path = "compat/enemies/vertical_bobber.rs"]
 mod handler_0x591f9;
-#[path = "handlers/0x59270/behavior.rs"]
+#[path = "platforms/rectangular.rs"]
 mod handler_0x59270;
-#[path = "handlers/0x59270/adapter.rs"]
+#[path = "compat/platforms/rectangular.rs"]
 mod handler_0x59270_adapter;
-#[path = "handlers/0x5934a/behavior.rs"]
+#[path = "enemies/emerging_tracker_variant.rs"]
 mod handler_0x5934a;
-#[path = "handlers/0x5934a/adapter.rs"]
+#[path = "compat/enemies/emerging_tracker_variant.rs"]
 mod handler_0x5934a_adapter;
-#[path = "handlers/0x59376/behavior.rs"]
+#[path = "enemies/flashing_respawn.rs"]
 mod handler_0x59376;
-#[path = "handlers/0x59376/adapter.rs"]
+#[path = "compat/enemies/flashing_respawn.rs"]
 mod handler_0x59376_adapter;
-#[path = "handlers/0x593da/behavior.rs"]
+#[path = "enemies/ceiling_dropper.rs"]
 mod handler_0x593da;
-#[path = "handlers/0x593da/adapter.rs"]
+#[path = "compat/enemies/ceiling_dropper.rs"]
 mod handler_0x593da_adapter;
-#[path = "handlers/0x59431/behavior.rs"]
+#[path = "enemies/landing_walker.rs"]
 mod handler_0x59431;
-#[path = "handlers/0x59431/adapter.rs"]
+#[path = "compat/enemies/landing_walker.rs"]
 mod handler_0x59431_adapter;
-#[path = "handlers/0x5945a/behavior.rs"]
+#[path = "enemies/flashing_landing_walker.rs"]
 mod handler_0x5945a;
-#[path = "handlers/0x5945a/adapter.rs"]
+#[path = "compat/enemies/flashing_landing_walker.rs"]
 mod handler_0x5945a_adapter;
-#[path = "handlers/0x59487/behavior.rs"]
+#[path = "enemies/resting_bobber.rs"]
 mod handler_0x59487;
-#[path = "handlers/0x59487/adapter.rs"]
+#[path = "compat/enemies/resting_bobber.rs"]
 mod handler_0x59487_adapter;
-#[path = "handlers/0x594fb/behavior.rs"]
+#[path = "enemies/timed_bomb.rs"]
 mod handler_0x594fb;
-#[path = "handlers/0x594fb/adapter.rs"]
+#[path = "compat/enemies/timed_bomb.rs"]
 mod handler_0x594fb_adapter;
-#[path = "handlers/0x595fe/behavior.rs"]
+#[path = "platforms/vertical_oscillator.rs"]
 mod handler_0x595fe;
-#[path = "handlers/0x595fe/adapter.rs"]
+#[path = "compat/platforms/vertical_oscillator.rs"]
 mod handler_0x595fe_adapter;
-#[path = "handlers/0x5966c/behavior.rs"]
+#[path = "enemies/flashing_patroller.rs"]
 mod handler_0x5966c;
-#[path = "handlers/0x5966c/adapter.rs"]
+#[path = "compat/enemies/flashing_patroller.rs"]
 mod handler_0x5966c_adapter;
-#[path = "handlers/0x596d9/behavior.rs"]
+#[path = "enemies/flyer_spawner.rs"]
 mod handler_0x596d9;
-#[path = "handlers/0x596d9/adapter.rs"]
+#[path = "compat/enemies/flyer_spawner.rs"]
 mod handler_0x596d9_adapter;
-#[path = "handlers/0x59728/behavior.rs"]
+#[path = "enemies/diagonal_flyer.rs"]
 mod handler_0x59728;
-#[path = "handlers/0x59728/adapter.rs"]
+#[path = "compat/enemies/diagonal_flyer.rs"]
 mod handler_0x59728_adapter;
-#[path = "handlers/0x59763/behavior.rs"]
+#[path = "enemies/animated_walker.rs"]
 mod handler_0x59763;
-#[path = "handlers/0x59763/adapter.rs"]
+#[path = "compat/enemies/animated_walker.rs"]
 mod handler_0x59763_adapter;
-#[path = "handlers/0x59774/behavior.rs"]
+#[path = "enemies/vertical_shuttle.rs"]
 mod handler_0x59774;
-#[path = "handlers/0x59774/adapter.rs"]
+#[path = "compat/enemies/vertical_shuttle.rs"]
 mod handler_0x59774_adapter;
-#[path = "handlers/0x597bd/behavior.rs"]
+#[path = "platforms/table_driven.rs"]
 mod handler_0x597bd;
-#[path = "handlers/0x597bd/adapter.rs"]
+#[path = "compat/platforms/table_driven.rs"]
 mod handler_0x597bd_adapter;
-#[path = "handlers/0x599a6/behavior.rs"]
+#[path = "enemies/hover_patroller.rs"]
 mod handler_0x599a6;
-#[path = "handlers/0x599a6/adapter.rs"]
+#[path = "compat/enemies/hover_patroller.rs"]
 mod handler_0x599a6_adapter;
-#[path = "handlers/0x59aad/behavior.rs"]
+#[path = "enemies/blinking_drifter.rs"]
 mod handler_0x59aad;
-#[path = "handlers/0x59aad/adapter.rs"]
+#[path = "compat/enemies/blinking_drifter.rs"]
 mod handler_0x59aad_adapter;
-#[path = "handlers/0x59b0e/behavior.rs"]
+#[path = "enemies/turning_crawler.rs"]
 mod handler_0x59b0e;
-#[path = "handlers/0x59b0e/adapter.rs"]
+#[path = "compat/enemies/turning_crawler.rs"]
 mod handler_0x59b0e_adapter;
-#[path = "handlers/0x59b1f/behavior.rs"]
+#[path = "enemies/wall_bouncer.rs"]
 mod handler_0x59b1f;
-#[path = "handlers/0x59b1f/adapter.rs"]
+#[path = "compat/enemies/wall_bouncer.rs"]
 mod handler_0x59b1f_adapter;
-#[path = "handlers/0x59be1/behavior.rs"]
+#[path = "effects/flash_removal.rs"]
 mod handler_0x59be1;
-#[path = "handlers/0x59be1/adapter.rs"]
+#[path = "compat/effects/flash_removal.rs"]
 mod handler_0x59be1_adapter;
-#[path = "handlers/0x59e5b/behavior.rs"]
+#[path = "enemies/rising_walker.rs"]
 mod handler_0x59e5b;
-#[path = "handlers/0x59e5b/adapter.rs"]
+#[path = "compat/enemies/rising_walker.rs"]
 mod handler_0x59e5b_adapter;
-#[path = "handlers/0x59eff/behavior.rs"]
+#[path = "enemies/proximity_bobber.rs"]
 mod handler_0x59eff;
-#[path = "handlers/0x59eff/adapter.rs"]
+#[path = "compat/enemies/proximity_bobber.rs"]
 mod handler_0x59eff_adapter;
-#[path = "handlers/0x59fb9/behavior.rs"]
+#[path = "enemies/flashing_walker.rs"]
 mod handler_0x59fb9;
-#[path = "handlers/0x59fb9/adapter.rs"]
+#[path = "compat/enemies/flashing_walker.rs"]
 mod handler_0x59fb9_adapter;
-#[path = "handlers/0x59fce/behavior.rs"]
+#[path = "enemies/sprite_bobbing_walker.rs"]
 mod handler_0x59fce;
-#[path = "handlers/0x59fce/adapter.rs"]
+#[path = "compat/enemies/sprite_bobbing_walker.rs"]
 mod handler_0x59fce_adapter;
-#[path = "handlers/0x59fdf/behavior.rs"]
+#[path = "enemies/bobbing_spawner.rs"]
 mod handler_0x59fdf;
-#[path = "handlers/0x59fdf/adapter.rs"]
+#[path = "compat/enemies/bobbing_spawner.rs"]
 mod handler_0x59fdf_adapter;
-#[path = "handlers/0x5a031/behavior.rs"]
+#[path = "enemies/side_wall_bouncer.rs"]
 mod handler_0x5a031;
-#[path = "handlers/0x5a031/adapter.rs"]
+#[path = "compat/enemies/side_wall_bouncer.rs"]
 mod handler_0x5a031_adapter;
-#[path = "handlers/0x5a0aa/behavior.rs"]
+#[path = "enemies/projectile_walker.rs"]
 mod handler_0x5a0aa;
-#[path = "handlers/0x5a0aa/adapter.rs"]
+#[path = "compat/enemies/projectile_walker.rs"]
 mod handler_0x5a0aa_adapter;
-#[path = "handlers/0x5a11e/behavior.rs"]
+#[path = "projectiles/drifting.rs"]
 mod handler_0x5a11e;
-#[path = "handlers/0x5a11e/adapter.rs"]
+#[path = "compat/projectiles/drifting.rs"]
 mod handler_0x5a11e_adapter;
-#[path = "handlers/0x5a179/behavior.rs"]
+#[path = "enemies/striking_patroller.rs"]
 mod handler_0x5a179;
-#[path = "handlers/0x5a179/adapter.rs"]
+#[path = "compat/enemies/striking_patroller.rs"]
 mod handler_0x5a179_adapter;
-#[path = "handlers/0x5a236/behavior.rs"]
+#[path = "platforms/conveyor.rs"]
 mod handler_0x5a236;
-#[path = "handlers/0x5a236/adapter.rs"]
+#[path = "compat/platforms/conveyor.rs"]
 mod handler_0x5a236_adapter;
-#[path = "handlers/0x5a258/behavior.rs"]
+#[path = "platforms/rider_drop.rs"]
 mod handler_0x5a258;
-#[path = "handlers/0x5a258/adapter.rs"]
+#[path = "compat/platforms/rider_drop.rs"]
 mod handler_0x5a258_adapter;
-#[path = "handlers/0x5a2d0/behavior.rs"]
+#[path = "enemies/rising_crawler.rs"]
 mod handler_0x5a2d0;
-#[path = "handlers/0x5a2d0/adapter.rs"]
+#[path = "compat/enemies/rising_crawler.rs"]
 mod handler_0x5a2d0_adapter;
-#[path = "handlers/0x5a30e/behavior.rs"]
+#[path = "enemies/horizontal_pacer.rs"]
 mod handler_0x5a30e;
-#[path = "handlers/0x5a30e/adapter.rs"]
+#[path = "compat/enemies/horizontal_pacer.rs"]
 mod handler_0x5a30e_adapter;
-#[path = "handlers/0x5a355/behavior.rs"]
+#[path = "platforms/curved.rs"]
 mod handler_0x5a355;
-#[path = "handlers/0x5a355/adapter.rs"]
+#[path = "compat/platforms/curved.rs"]
 mod handler_0x5a355_adapter;
-#[path = "handlers/0x5a545/behavior.rs"]
+#[path = "platforms/flying.rs"]
 mod handler_0x5a545;
-#[path = "handlers/0x5a545/adapter.rs"]
+#[path = "compat/platforms/flying.rs"]
 mod handler_0x5a545_adapter;
-#[path = "handlers/0x5a5c7/behavior.rs"]
+#[path = "enemies/parent_follower.rs"]
 mod handler_0x5a5c7;
-#[path = "handlers/0x5a5c7/adapter.rs"]
+#[path = "compat/enemies/parent_follower.rs"]
 mod handler_0x5a5c7_adapter;
-#[path = "handlers/0x5a5ec/behavior.rs"]
+#[path = "platforms/launching_diagonal.rs"]
 mod handler_0x5a5ec;
-#[path = "handlers/0x5a5ec/adapter.rs"]
+#[path = "compat/platforms/launching_diagonal.rs"]
 mod handler_0x5a5ec_adapter;
-#[path = "handlers/0x5a667/behavior.rs"]
+#[path = "enemies/bobbing_walker.rs"]
 mod handler_0x5a667;
-#[path = "handlers/0x5a667/adapter.rs"]
+#[path = "compat/enemies/bobbing_walker.rs"]
 mod handler_0x5a667_adapter;
-#[path = "handlers/0x5a683/behavior.rs"]
+#[path = "platforms/extending.rs"]
 mod handler_0x5a683;
-#[path = "handlers/0x5a683/adapter.rs"]
+#[path = "compat/platforms/extending.rs"]
 mod handler_0x5a683_adapter;
-#[path = "handlers/0x5a6e7/behavior.rs"]
+#[path = "enemies/ceiling_crawler.rs"]
 mod handler_0x5a6e7;
-#[path = "handlers/0x5a6e7/adapter.rs"]
+#[path = "compat/enemies/ceiling_crawler.rs"]
 mod handler_0x5a6e7_adapter;
-#[path = "handlers/0x5a721/behavior.rs"]
+#[path = "enemies/bobbing_pacer.rs"]
 mod handler_0x5a721;
-#[path = "handlers/0x5a721/adapter.rs"]
+#[path = "compat/enemies/bobbing_pacer.rs"]
 mod handler_0x5a721_adapter;
-#[path = "handlers/0x5a739/behavior.rs"]
+#[path = "enemies/ground_crawler.rs"]
 mod handler_0x5a739;
-#[path = "handlers/0x5a739/adapter.rs"]
+#[path = "compat/enemies/ground_crawler.rs"]
 mod handler_0x5a739_adapter;
-#[path = "handlers/0x5a816/behavior.rs"]
+#[path = "projectiles/cannon_ant.rs"]
 mod handler_0x5a816;
-#[path = "handlers/0x5a816/adapter.rs"]
+#[path = "compat/projectiles/cannon_ant.rs"]
 mod handler_0x5a816_adapter;
-#[path = "handlers/0x5a85c/behavior.rs"]
+#[path = "platforms/climbing.rs"]
 mod handler_0x5a85c;
-#[path = "handlers/0x5a85c/adapter.rs"]
+#[path = "compat/platforms/climbing.rs"]
 mod handler_0x5a85c_adapter;
-#[path = "handlers/0x5a8d2/behavior.rs"]
+#[path = "items/inert_marker.rs"]
 mod handler_0x5a8d2;
-#[path = "handlers/0x5a8d2/adapter.rs"]
+#[path = "compat/items/inert_marker.rs"]
 mod handler_0x5a8d2_adapter;
-#[path = "handlers/0x5a8e4/behavior.rs"]
+#[path = "enemies/splitter.rs"]
 mod handler_0x5a8e4;
-#[path = "handlers/0x5a8e4/adapter.rs"]
+#[path = "compat/enemies/splitter.rs"]
 mod handler_0x5a8e4_adapter;
-#[path = "handlers/0x5a969/behavior.rs"]
+#[path = "enemies/splitter_child.rs"]
 mod handler_0x5a969;
-#[path = "handlers/0x5a969/adapter.rs"]
+#[path = "compat/enemies/splitter_child.rs"]
 mod handler_0x5a969_adapter;
-#[path = "handlers/0x5a992/behavior.rs"]
+#[path = "enemies/vertical_patroller.rs"]
 mod handler_0x5a992;
-#[path = "handlers/0x5a992/adapter.rs"]
+#[path = "compat/enemies/vertical_patroller.rs"]
 mod handler_0x5a992_adapter;
-#[path = "handlers/0x5a9d3/behavior.rs"]
+#[path = "enemies/blinking_crawler.rs"]
 mod handler_0x5a9d3;
-#[path = "handlers/0x5a9d3/adapter.rs"]
+#[path = "compat/enemies/blinking_crawler.rs"]
 mod handler_0x5a9d3_adapter;
-#[path = "handlers/0x5aa68/behavior.rs"]
+#[path = "enemies/splitter_respawn.rs"]
 mod handler_0x5aa68;
-#[path = "handlers/0x5aa68/adapter.rs"]
+#[path = "compat/enemies/splitter_respawn.rs"]
 mod handler_0x5aa68_adapter;
-#[path = "handlers/0x5aa71/behavior.rs"]
+#[path = "enemies/waiting_bobber.rs"]
 mod handler_0x5aa71;
-#[path = "handlers/0x5aa71/adapter.rs"]
+#[path = "compat/enemies/waiting_bobber.rs"]
 mod handler_0x5aa71_adapter;
-#[path = "handlers/0x5aab9/behavior.rs"]
+#[path = "enemies/launched_shell.rs"]
 mod handler_0x5aab9;
-#[path = "handlers/0x5aab9/adapter.rs"]
+#[path = "compat/enemies/launched_shell.rs"]
 mod handler_0x5aab9_adapter;
-#[path = "handlers/0x5ab4b/behavior.rs"]
+#[path = "enemies/short_launched_shell.rs"]
 mod handler_0x5ab4b;
-#[path = "handlers/0x5ab4b/adapter.rs"]
+#[path = "compat/enemies/short_launched_shell.rs"]
 mod handler_0x5ab4b_adapter;
-#[path = "handlers/0x5ab79/behavior.rs"]
+#[path = "enemies/flying_ant.rs"]
 mod handler_0x5ab79;
-#[path = "handlers/0x5ab79/adapter.rs"]
+#[path = "compat/enemies/flying_ant.rs"]
 mod handler_0x5ab79_adapter;
-#[path = "handlers/0x5ac01/behavior.rs"]
+#[path = "effects/defeat_fade.rs"]
 mod handler_0x5ac01;
-#[path = "handlers/0x5ac01/adapter.rs"]
+#[path = "compat/effects/defeat_fade.rs"]
 mod handler_0x5ac01_adapter;
-#[path = "handlers/0x5ac3c/behavior.rs"]
+#[path = "enemies/proximity_dropper.rs"]
 mod handler_0x5ac3c;
-#[path = "handlers/0x5ac3c/adapter.rs"]
+#[path = "compat/enemies/proximity_dropper.rs"]
 mod handler_0x5ac3c_adapter;
-#[path = "handlers/0x5ac7d/behavior.rs"]
+#[path = "platforms/growing_block.rs"]
 mod handler_0x5ac7d;
-#[path = "handlers/0x5ac7d/adapter.rs"]
+#[path = "compat/platforms/growing_block.rs"]
 mod handler_0x5ac7d_adapter;
-#[path = "handlers/0x5ace4/behavior.rs"]
+#[path = "enemies/flashing_mine.rs"]
 mod handler_0x5ace4;
-#[path = "handlers/0x5ace4/adapter.rs"]
+#[path = "compat/enemies/flashing_mine.rs"]
 mod handler_0x5ace4_adapter;
-#[path = "handlers/0x5ad2d/behavior.rs"]
+#[path = "enemies/sliding_mine.rs"]
 mod handler_0x5ad2d;
-#[path = "handlers/0x5ad2d/adapter.rs"]
+#[path = "compat/enemies/sliding_mine.rs"]
 mod handler_0x5ad2d_adapter;
-#[path = "handlers/0x5ad4d/behavior.rs"]
+#[path = "platforms/pacing.rs"]
 mod handler_0x5ad4d;
-#[path = "handlers/0x5ad4d/adapter.rs"]
+#[path = "compat/platforms/pacing.rs"]
 mod handler_0x5ad4d_adapter;
-#[path = "handlers/0x5addd/behavior.rs"]
+#[path = "enemies/curved_flyer.rs"]
 mod handler_0x5addd;
-#[path = "handlers/0x5addd/adapter.rs"]
+#[path = "compat/enemies/curved_flyer.rs"]
 mod handler_0x5addd_adapter;
-#[path = "handlers/0x5aef4/behavior.rs"]
+#[path = "enemies/short_curved_flyer.rs"]
 mod handler_0x5aef4;
-#[path = "handlers/0x5aef4/adapter.rs"]
+#[path = "compat/enemies/short_curved_flyer.rs"]
 mod handler_0x5aef4_adapter;
-#[path = "handlers/0x5afd7/behavior.rs"]
+#[path = "enemies/hopping_ant.rs"]
 mod handler_0x5afd7;
-#[path = "handlers/0x5afd7/adapter.rs"]
+#[path = "compat/enemies/hopping_ant.rs"]
 mod handler_0x5afd7_adapter;
-#[path = "handlers/0x5b06d/behavior.rs"]
+#[path = "enemies/hardening_walker.rs"]
 mod handler_0x5b06d;
-#[path = "handlers/0x5b06d/adapter.rs"]
+#[path = "compat/enemies/hardening_walker.rs"]
 mod handler_0x5b06d_adapter;
-#[path = "handlers/0x5b0d5/behavior.rs"]
+#[path = "compat/enemies/square_patroller.rs"]
 mod handler_0x5b0d5;
-#[path = "handlers/0x5b177/behavior.rs"]
+#[path = "enemies/bobbing_flyer.rs"]
 mod handler_0x5b177;
-#[path = "handlers/0x5b177/adapter.rs"]
+#[path = "compat/enemies/bobbing_flyer.rs"]
 mod handler_0x5b177_adapter;
-#[path = "handlers/0x5b36d/behavior.rs"]
+#[path = "spawning/dynamic.rs"]
 mod handler_0x5b36d;
-#[path = "handlers/0x096fe/behavior.rs"]
+#[path = "bosses/door/adapter.rs"]
 mod handler_0x96fe;
-#[path = "handlers/0x09824/behavior.rs"]
+#[path = "bosses/door/side/adapter.rs"]
 mod handler_0x9824;
 mod helpers;
-#[path = "handlers/horizontal_platform/behavior.rs"]
+#[path = "platforms/horizontal.rs"]
 mod horizontal_platform;
 mod interaction;
-#[path = "handlers/items/behavior.rs"]
+#[path = "compat/items/dispatch.rs"]
 mod items;
-#[path = "handlers/left_marcher/behavior.rs"]
+#[path = "enemies/left_marcher.rs"]
 mod left_marcher;
 #[path = "bosses/mario_zone/mod.rs"]
 mod mario_zone;
-#[path = "handlers/moneybag_reward/behavior.rs"]
+#[path = "compat/items/moneybag_reward.rs"]
 mod moneybag_reward;
-#[path = "handlers/paced_walker/behavior.rs"]
+#[path = "enemies/paced_walker.rs"]
 mod paced_walker;
 #[path = "bosses/patrol/behavior.rs"]
 mod patrol_boss;
@@ -538,11 +538,11 @@ mod patrol_boss_flow_tests;
 mod patrol_child;
 #[path = "bosses/patrol/child/adapter.rs"]
 mod patrol_child_adapter;
-#[path = "handlers/perched_flyer/behavior.rs"]
+#[path = "enemies/perched_flyer.rs"]
 mod perched_flyer;
-#[path = "handlers/pipe_bobber/behavior.rs"]
+#[path = "enemies/pipe_bobber.rs"]
 mod pipe_bobber;
-#[path = "handlers/piranha_fireball/behavior.rs"]
+#[path = "projectiles/piranha_fireball.rs"]
 mod piranha_fireball;
 #[cfg(test)]
 #[path = "tests/record_marker.rs"]
@@ -553,15 +553,15 @@ mod record_reset;
 #[path = "tests/record_reset.rs"]
 mod record_reset_tests;
 mod reward_spawn;
-#[path = "handlers/rising_platform/behavior.rs"]
+#[path = "platforms/rising.rs"]
 mod rising_platform;
-#[path = "handlers/rising_platform/adapter.rs"]
+#[path = "compat/platforms/rising.rs"]
 mod rising_platform_adapter;
 mod scratch;
 mod shell;
 #[path = "bosses/door/side/behavior.rs"]
 mod side_door;
-#[path = "handlers/squashed/behavior.rs"]
+#[path = "effects/squashed.rs"]
 mod squashed;
 #[cfg(test)]
 #[path = "tests/stomp_morph.rs"]
@@ -594,19 +594,19 @@ mod tree_boss_adapter;
 #[cfg(test)]
 #[path = "bosses/tree/tests/flow.rs"]
 mod tree_boss_flow_tests;
-#[path = "handlers/vertical_bobber/behavior.rs"]
+#[path = "enemies/vertical_bobber.rs"]
 mod vertical_bobber;
-#[path = "handlers/vertical_pacer/behavior.rs"]
+#[path = "enemies/vertical_pacer.rs"]
 mod vertical_pacer;
-#[path = "handlers/walker/behavior.rs"]
+#[path = "enemies/walker.rs"]
 mod walker;
-#[path = "handlers/walkers/behavior.rs"]
+#[path = "compat/enemies/dispatch.rs"]
 mod walkers;
 #[path = "bosses/wario/mod.rs"]
 mod wario;
-#[path = "handlers/wave_flyer/behavior.rs"]
+#[path = "enemies/wave_flyer.rs"]
 mod wave_flyer;
-#[path = "handlers/winged_walker/behavior.rs"]
+#[path = "enemies/winged_walker.rs"]
 mod winged_walker;
 
 #[derive(Debug, Clone)]

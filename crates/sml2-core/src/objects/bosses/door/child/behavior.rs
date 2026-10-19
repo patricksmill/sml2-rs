@@ -1,7 +1,7 @@
 //! Door boss child, anim 9 (ROM `$9927`, bank 2 CPU `$5927`).
 use crate::actor::{Actor, ContactKind, FrameTick};
 
-#[path = "../../../handlers/door_child_profiles/behavior.rs"]
+#[path = "profiles.rs"]
 mod profiles;
 
 pub(super) struct Inputs {

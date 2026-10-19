@@ -71,13 +71,13 @@ do not extend byte-indexed handler logic or recreate HRAM scratch.
 
 Task: Port object handler ROM 0x{ADDR} using ONLY:
   - tasks/handlers/0x{ADDR}.md
-  - one named handler module under crates/sml2-core/src/objects/
+  - one named native file under objects/enemies/, platforms/, items/, or projectiles/
     (Wario-specific modules go under objects/bosses/wario/)
   - crates/sml2-core/src/actor.rs
-  - one named compatibility adapter sibling module
+  - one named compatibility adapter under objects/compat/ (or the boss family)
 Touch the named domain/adapter modules plus dispatch.rs (one arm) and the owning mod.rs
 (registrations only). Resolve missing native shared behavior as a prerequisite.
-Require a COMPLETE generated slice; place new tests in the named module.
+Require a COMPLETE generated slice; place new tests in the native category's tests/ directory.
 
 Do not read objects.rs monolith, DESIGN.md, PORT_QUEUE, or main.asm wholesale.
 

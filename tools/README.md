@@ -173,24 +173,28 @@ are outside the claim. Native helper parity remains separate work.
 ## Dispatch prompts
 
 ```bash
-python3 tools/dispatch_prompt.py --addr 0x58201
-python3 tools/dispatch_prompt.py --addr 0x58201 \
+python3 tools/dispatch_prompt.py --addr 0x58848
+python3 tools/dispatch_prompt.py --addr 0xAD93 \
   --module crates/sml2-core/src/objects/bosses/wario/form3.rs
 python3 tools/dispatch_prompt.py --queue boss_arena_phase_cascade
 ```
 
-Handler prompts always regenerate the brief and stop if it is incomplete. By
-default they name a new `handler_0xADDR.rs` domain module, a bounded
-`handler_0xADDR_adapter.rs` compatibility module, native tests with ROM-byte
-assertions at the conversion boundary, one dispatch arm, and module registrations.
+Handler prompts regenerate the brief and stop if it is incomplete. Existing
+addressed dispatch entries resolve their registered named files automatically;
+new entries require `--module` with a descriptive filename such as
+`crates/sml2-core/src/objects/enemies/boo.rs`. Adapters mirror the native filename
+under `objects/compat/`; tests live in the native category's `tests/` directory.
+Prompts name those bounded files, one dispatch arm, and the module registrations.
+
 Prompts require the native guide and `Actor` API; raw slot/register logic belongs
-outside domain handlers. Resolve missing native helpers first. Choose new modules
-when a family or adapter is already too large. Family subfolders are supported;
-Wario modules live in `objects/bosses/wario/`, and prompts register them in
-`objects/bosses/wario/mod.rs`. Coverage searches family subfolders recursively. `--dependency` and `--max-states` pass through to slicing. Queue prompts
-validate the named current files and include existing object integration tests
-when appropriate. Successful stdout is the worker message; generator diagnostics
-are written to stderr.
+in compatibility adapters. Resolve missing native helpers first. Choose new
+modules when a family or adapter is already too large. Boss family subfolders
+are supported: Wario files live in `objects/bosses/wario/`, with registrations in
+that directory's `mod.rs`. Coverage searches subfolders recursively.
+`--dependency` and `--max-states` pass through to slicing. Queue prompts validate
+the named current files and include existing object integration tests when
+appropriate. Successful stdout is the worker message; generator diagnostics are
+written to stderr.
 
 ## Regression gate
 

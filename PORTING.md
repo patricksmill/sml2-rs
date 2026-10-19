@@ -58,8 +58,8 @@ Never assign “port the object engine” or “fix DeepSeek’s mess in `object
 ### Handler ticket checklist
 
 1. Run `python3 tools/handler_task.py --addr 0x58201` (or `--anim 9` mode A) → writes `tasks/handlers/0x58201.md`. Require exit 0 and `Slice status: COMPLETE`; exit 2 requires source/dependency work. Bank `$16` is decimal 22.
-2. If no test exists: add `objects::tests::handler_0x58201_*` in the same PR as the handler (or `objects/tests/`).
-3. Implement in a focused module under `crates/sml2-core/src/objects/` (Wario in `objects/bosses/wario/`); wire **one line** in `objects/dispatch.rs`.
+2. If no test exists, add ROM-derived tests in the native category's `tests/` directory in the same PR as the behavior.
+3. Implement in a descriptive file under `objects/enemies/`, `platforms/`, `items/`, or `projectiles/`, with slot conversion under `objects/compat/` (bosses use their family directory); wire **one line** in `objects/dispatch.rs`.
 4. `cargo test -p sml2-core handler_0x58201` (or the test name you chose).
 5. Mark progress in `handler_coverage.json` (generated/manifest — see plan), not in a 2 KB `PORT_QUEUE` note.
 
@@ -72,18 +72,26 @@ Current module layout (keep the public facade stable):
 ```
 crates/sml2-core/src/objects/
   mod.rs                 # ObjectSim, slot loop, module registrations, public API
-  dispatch.rs            # handler ROM address → method
+  dispatch.rs            # ROM address → compatibility method
   staging.rs             # slot compatibility data
   helpers.rs             # shared engine helpers
   interaction.rs         # contact and projectile interactions
-  shell.rs               # carried shell behavior
-  stream.rs              # spawn stream
-  handlers/
-    walker/behavior.rs   # named behavior families
-    0x58848/
-      behavior.rs        # native actor behavior; ROM address retained for lookup
-      adapter.rs         # slot compatibility and world effects
-      tests/adapter.rs   # tests owned by this handler
+  enemies/
+    boo.rs               # one named native behavior per file
+    cannon_ant.rs
+    hopping.rs
+    tests/hopping.rs
+  platforms/             # named platform files and tests/
+  items/                 # named collectible and marker files and tests/
+  projectiles/           # named projectile files and tests/
+  effects/               # defeat, removal and other transient behavior
+  spawning/              # shared dynamic spawning
+  compat/
+    enemies/hopping.rs   # slot conversion and world input/effect mapping
+    platforms/           # platform adapters
+    items/               # item adapters and legacy dispatch
+    projectiles/         # projectile adapters
+    effects/             # effect adapters
   bosses/
     shared/              # damage, stun, flash, spawn and reward helpers
     circuit/             # behavior.rs, adapter.rs, motion.rs, tests/
@@ -96,13 +104,19 @@ crates/sml2-core/src/objects/
   tests/                 # cross-module engine regressions
 ```
 
-Group files by their owning behavior or boss family. Within that directory,
-use short names such as `behavior.rs`, `adapter.rs`, and `tests/motion.rs`.
-Keep ROM addresses in existing addressed handler directory names and source
-comments. Module registrations use explicit paths to preserve the existing Rust
-module ownership, private access, and dispatch facade during this layout change.
-Register ordinary handlers in `objects/mod.rs`; Wario and Mario Zone keep their
-own registrations. New tests belong in the owner's `tests/` directory.
+Use a descriptive enemy or behavior name as the filename. Keep each enemy's
+native behavior in its own file; share reusable movement and world operations.
+Place platforms, items and projectiles in their corresponding categories.
+Use source-derived behavior names when the canonical character identity is not
+established. ROM addresses belong in source references, dispatch and verification,
+not in domain filenames or directory names.
+
+Slot adapters mirror the domain filename under `compat/`. Tests belong in the
+category's `tests/` directory, such as `enemies/tests/hopping.rs`; a separate
+adapter suite can use `hopping_adapter.rs`. Boss families may keep subdirectories
+for their parts and phases. Module registrations use explicit paths to preserve
+existing private access and the dispatch facade. Ordinary object modules register
+in `objects/mod.rs`; Wario and Mario Zone keep their own registrations.
 
 **Rule:** No new handler bodies in a file over ~400 lines. Split before adding.
 

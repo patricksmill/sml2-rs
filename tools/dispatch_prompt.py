@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Print a Porter user message for Hermes / Cursor subagents.
 
-  python3 tools/dispatch_prompt.py --addr 0x58201
+  python3 tools/dispatch_prompt.py --addr 0x58848
   python3 tools/dispatch_prompt.py --queue camera_pan_timer
 """
 
@@ -44,26 +44,32 @@ def run_handler_task(addr: int, *, dependencies=(), budget=800, state_table_cont
 def handler_prompt(addr: int, *, module: str | None = None, dependencies=(), budget=800, state_table_contract=None) -> str:
     folder = (ROOT / "crates/sml2-core/src/objects").resolve()
     if module is None:
-        module = f"crates/sml2-core/src/objects/handlers/0x{addr:05x}/behavior.rs"
         registry = folder / 'mod.rs'
+        entry = None
         if registry.is_file():
             entry = re.search(
                 rf'#\[path = "([^"]+)"\]\s+mod handler_0x{addr:x};',
                 registry.read_text(),
             )
-            if entry:
-                module = str((folder / entry[1]).relative_to(ROOT))
+        if entry is None:
+            raise ValueError('choose a descriptive native file with --module, such as objects/enemies/boo.rs')
+        module = str((folder / entry[1]).relative_to(ROOT))
     path = (ROOT / module).resolve()
     if not path.is_relative_to(folder) or path.suffix != '.rs' or path.stem in {'mod', 'dispatch', 'staging', 'helpers', 'tests'}:
         raise ValueError('choose a handler module within crates/sml2-core/src/objects/')
     if path.exists() and len(path.read_text().splitlines()) >= 400:
         raise ValueError(f'{module} is already at least 400 lines; choose a new focused sibling module')
-    adapter = path.with_name('adapter.rs' if path.stem == 'behavior' else f'{path.stem}_adapter.rs')
+    category = path.relative_to(folder).parts[0]
+    native_categories = {'enemies', 'platforms', 'items', 'projectiles', 'effects', 'spawning'}
+    if category in native_categories:
+        adapter = folder / 'compat' / path.relative_to(folder)
+    else:
+        adapter = path.with_name('adapter.rs' if path.stem == 'behavior' else f'{path.stem}_adapter.rs')
     if adapter.exists() and len(adapter.read_text().splitlines()) >= 400:
         raise ValueError(f'{adapter.name} is already at least 400 lines; choose a focused adapter')
     registration = path.parent / "mod.rs"
     # Grouped files retain their established module ownership and visibility.
-    if path.stem == 'behavior':
+    if category in native_categories or path.stem == 'behavior':
         registration = folder / 'mod.rs'
     test_paths = set()
     for owner in (path, adapter):

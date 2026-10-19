@@ -493,12 +493,12 @@ class PromptTests(unittest.TestCase):
             (root / 'tasks/handlers').mkdir(parents=True)
             (root / 'tasks/handlers/0x58201.md').write_text('**Slice status: COMPLETE**')
             with patch.object(dispatch_prompt, 'ROOT', root), patch.object(dispatch_prompt, 'run_handler_task'):
-                prompt = dispatch_prompt.handler_prompt(0x58201)
+                prompt = dispatch_prompt.handler_prompt(0x58201, module='crates/sml2-core/src/objects/enemies/walker.rs')
             self.assertIn('docs/idiomatic-rust-porting.md', prompt)
             self.assertIn('crates/sml2-core/src/actor.rs', prompt)
-            self.assertIn('objects/handlers/0x58201/behavior.rs', prompt)
-            self.assertIn('objects/handlers/0x58201/adapter.rs', prompt)
-            self.assertIn('objects/handlers/0x58201/tests/behavior.rs', prompt)
+            self.assertIn('objects/enemies/walker.rs', prompt)
+            self.assertIn('objects/compat/enemies/walker.rs', prompt)
+            self.assertIn('objects/enemies/tests/walker.rs', prompt)
             self.assertIn('objects/mod.rs (module registrations only', prompt)
             self.assertIn('No slot offsets, register names or HRAM scratch', prompt)
             self.assertIn('Actor::from_raw_slot / Actor::to_raw_slot', prompt)
@@ -510,17 +510,18 @@ class PromptTests(unittest.TestCase):
             folder = root / 'crates/sml2-core/src/objects'
             folder.mkdir(parents=True)
             (folder / 'mod.rs').write_text(
-                '#[path = "handlers/hopping_enemy/behavior.rs"]\nmod handler_0x58848;\n')
-            owner = folder / 'handlers/hopping_enemy'
+                '#[path = "enemies/hopping.rs"]\nmod handler_0x58848;\n')
+            owner = folder / 'enemies'
             owner.mkdir(parents=True)
-            (owner / 'behavior.rs').write_text('')
-            (owner / 'adapter.rs').write_text(
-                '#[cfg(test)]\n#[path = "tests/adapter.rs"]\nmod tests;\n')
+            (owner / 'hopping.rs').write_text('')
+            (folder / 'compat/enemies').mkdir(parents=True)
+            (folder / 'compat/enemies/hopping.rs').write_text(
+                '#[cfg(test)]\n#[path = "../../enemies/tests/hopping_adapter.rs"]\nmod tests;\n')
             (root / 'tasks/handlers').mkdir(parents=True)
             (root / 'tasks/handlers/0x58848.md').write_text('**Slice status: COMPLETE**')
             with patch.object(dispatch_prompt, 'ROOT', root), patch.object(dispatch_prompt, 'run_handler_task'):
                 prompt = dispatch_prompt.handler_prompt(0x58848)
-            self.assertIn('objects/handlers/hopping_enemy/tests/adapter.rs', prompt)
+            self.assertIn('objects/enemies/tests/hopping_adapter.rs', prompt)
             self.assertNotIn('behavior_adapter.rs', prompt)
 
     def test_family_prompt_registers_owning_module_and_rejects_escape(self):
@@ -539,6 +540,12 @@ class PromptTests(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         dispatch_prompt.handler_prompt(0xAD93, module=module)
 
+    def test_new_handler_requires_a_descriptive_module(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(dispatch_prompt, 'ROOT', Path(directory)):
+                with self.assertRaisesRegex(ValueError, 'descriptive native file'):
+                    dispatch_prompt.handler_prompt(0x58848)
+
     def test_current_queue_files_exist(self):
         for files in dispatch_prompt.QUEUE_FILES.values():
             for file in files:
@@ -547,7 +554,7 @@ class PromptTests(unittest.TestCase):
     def test_incomplete_slices_cannot_be_dispatched(self):
         with patch.object(dispatch_prompt, 'run_handler_task', side_effect=subprocess.CalledProcessError(2, ['slice'])):
             with self.assertRaises(subprocess.CalledProcessError):
-                dispatch_prompt.handler_prompt(0x58201)
+                dispatch_prompt.handler_prompt(0x58201, module='crates/sml2-core/src/objects/enemies/future_enemy.rs')
 
     def test_prompt_rejects_arbitrary_modules(self):
         with self.assertRaises(ValueError):

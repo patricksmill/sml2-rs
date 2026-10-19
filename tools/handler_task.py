@@ -85,8 +85,9 @@ def make_brief(root: Path, decomp: Path, addr: int, *, bank=None, budget=800, de
 **Anims:** {', '.join(anims) or '(helper / no table entry)'}.
 **Policy:** [PORTING.md](../../PORTING.md).
 
-Implement under `objects/handlers/<family>/` with `behavior.rs`, `adapter.rs`,
-and a local `tests/` directory;
+Implement in a named native file such as `objects/enemies/boo.rs` or
+`objects/platforms/vertical.rs`, with an adapter at the matching path under
+`objects/compat/` and tests in the native category's `tests/` directory;
 register it in its owning `mod.rs` if new, and wire `objects/dispatch.rs`.
 Wario modules belong in `objects/bosses/wario/`; shared boss helpers belong in `objects/bosses/shared/`.
 Apply `docs/idiomatic-rust-porting.md`: use typed `Actor` state from `actor.rs`.
