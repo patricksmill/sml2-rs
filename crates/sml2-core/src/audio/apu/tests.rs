@@ -159,3 +159,27 @@ fn test_apu_sensitivity() {
 
     assert_ne!(samples1, samples2, "Mutating frequency must alter output waveform");
 }
+
+#[test]
+fn test_ingest_driver_applies_master_volume() {
+    use crate::audio::driver::{SoundDriver, MASTER_VOLUME_LOW_TIME, MASTER_VOLUME_NORMAL};
+
+    let mut driver = SoundDriver::new();
+    let mut apu = Apu::new();
+
+    apu.ingest_driver(&driver);
+    assert_eq!(
+        (apu.nr50, apu.left_volume, apu.right_volume),
+        (MASTER_VOLUME_NORMAL, 7, 7)
+    );
+
+    // $10044..$1005A rewrites rAUDVOL to $33 while sLowTimeFlag is set; the
+    // normal path only runs when no music request is pending.
+    driver.low_time_flag = true;
+    driver.update_sound();
+    apu.ingest_driver(&driver);
+    assert_eq!(
+        (apu.nr50, apu.left_volume, apu.right_volume),
+        (MASTER_VOLUME_LOW_TIME, 3, 3)
+    );
+}

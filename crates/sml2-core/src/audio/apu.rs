@@ -341,6 +341,9 @@ impl Apu {
 
     /// Ingest and apply all pending register writes from a SoundDriver instance.
     pub fn ingest_driver(&mut self, driver: &SoundDriver) {
+        // `$10044..$1005A`: `_UpdateSound` rewrites rAUDVOL every frame — $77
+        // normally, $33 while `sLowTimeFlag` is set.
+        self.set_nr50(driver.master_volume);
         for &w in &driver.pulse_writes {
             self.apply_pulse_write(w);
         }
