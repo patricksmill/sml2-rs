@@ -101,6 +101,8 @@ pub struct SessionAssets {
     pub tilesets: Tilesets,
     pub arena_layout: Option<LevelLayout>,
     pub object_tables: ObjectTables,
+    /// Title-screen and file-select VRAM/tilemaps (`frontend/*.bin`).
+    pub front_end: sml2_core::front_end::FrontEndAssets,
     levels: std::collections::BTreeMap<u8, Result<LevelContent, String>>,
 }
 
@@ -130,6 +132,13 @@ impl SessionAssets {
         let tilesets = load_tilesets_from(source);
         let arena_layout = load_arena_layout_from(source);
         let object_tables: ObjectTables = serde_json::from_str(&source.read_text("objects.json")?)?;
+        let front_end = sml2_core::front_end::FrontEndAssets::new(
+            source.read("frontend/title_vram.bin")?,
+            source.read("frontend/title_tilemap.bin")?,
+            source.read("frontend/file_select_vram.bin")?,
+            source.read("frontend/file_select_tilemap.bin")?,
+        )
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
         // Cache successes and failures: preserve per-level error reporting at
         // entry, while ensuring a tick never reads from the source.
@@ -155,6 +164,7 @@ impl SessionAssets {
             tilesets,
             arena_layout,
             object_tables,
+            front_end,
             levels,
         })
     }

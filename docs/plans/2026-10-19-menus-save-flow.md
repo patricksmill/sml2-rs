@@ -16,7 +16,7 @@ run `captures/sweep.sh` once per work package, and do not change the frozen
 - [x] Source inventory measured (state table, save layout, menu handlers)
 - [ ] Decision D1–D4 confirmed
 - [x] FE-1 save-slot core
-- [ ] FE-2 front-end assets
+- [x] FE-2 front-end assets
 - [ ] FE-3 title screen
 - [ ] FE-4 file select
 - [ ] FE-5 session/runtime integration

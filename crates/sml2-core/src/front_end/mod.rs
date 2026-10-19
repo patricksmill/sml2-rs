@@ -4,6 +4,8 @@
 //! and presentation; the ROM state handlers are the authority for every byte.
 //! See `docs/plans/2026-10-19-menus-save-flow.md`.
 
+pub mod assets;
 pub mod save_slots;
 
+pub use assets::{FrontEndAssets, TILEMAP_LEN, VRAM_LEN};
 pub use save_slots::{SaveSlots, SLOT_COUNT, SLOT_LEN};

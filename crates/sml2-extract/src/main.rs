@@ -15,6 +15,7 @@
 //!    `extracted/levels/levelNN.manifest.json` and `index.json`.
 
 mod ending;
+mod front_end;
 mod map;
 mod objects;
 mod parse;
@@ -256,6 +257,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let baserom = fs::read(decomp.join("baserom.gb"))?;
     ending::emit(&baserom, &extracted)?;
+    front_end::emit(&baserom, &decomp, &extracted)?;
     let main_src = fs::read_to_string(decomp.join("main.asm"))?;
     let home_src = fs::read_to_string(decomp.join("home.asm"))?;
     let secret_entries = parse::parse_secret_entries(&home_src, &baserom)?;
