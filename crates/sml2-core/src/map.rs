@@ -609,6 +609,56 @@ pub fn cursor_sprite(
     CursorSprite::Pose(cursor_pose & 0x0F)
 }
 
+/// Blit one 8x8 OBJ tile out of the map's VRAM block, honouring the attr flips
+/// (bit 5 = X, bit 6 = Y). Colour 0 is transparent, as on the console.
+#[allow(clippy::too_many_arguments)]
+fn draw_obj_tile(
+    img: &mut [u8],
+    tiles_vram: &[[u8; 64]],
+    obj_shades: &[u8; 4],
+    x0: i32,
+    y0: i32,
+    tile: u8,
+    attr: u8,
+    vw: usize,
+    vh: usize,
+) {
+    let Some(tile_data) = tiles_vram.get(tile as usize) else {
+        return;
+    };
+    for dy in 0..8 {
+        let py = y0 + dy;
+        if py < 0 || py >= vh as i32 {
+            continue;
+        }
+        let src_y = if attr & 0x40 != 0 { 7 - dy } else { dy };
+        for dx in 0..8 {
+            let px = x0 + dx;
+            if px < 0 || px >= vw as i32 {
+                continue;
+            }
+            let src_x = if attr & 0x20 != 0 { 7 - dx } else { dx };
+            let col = tile_data[src_y as usize * 8 + src_x as usize];
+            if col != 0 {
+                img[py as usize * vw + px as usize] = obj_shades[col as usize];
+            }
+        }
+    }
+}
+
+/// `$4A11`: the four OAM entries `$3C9F4` stages while the hub pans its camera
+/// (B held, `$3C5B2`). Entry order and bytes are the ROM's: (y, x, tile, attr).
+/// `$4A21` is the same layout with tile `$7F`, so the border arrows blink on
+/// `$FF97` bit 7 and the cursor is not drawn at all while panning.
+pub const PAN_ARROWS: [(u8, u8, u8, u8); 4] = [
+    (24, 80, 0x7E, 0x00),
+    (140, 80, 0x7E, 0x40),
+    (84, 16, 0x39, 0x00),
+    (84, 152, 0x39, 0x20),
+];
+/// `$4A21`'s tile: the blank half of the blink.
+pub const PAN_ARROW_BLANK: u8 = 0x7F;
+
 /// Render one overworld frame into a 160x144 (or custom vw x vh) grayscale pixel buffer.
 pub fn render_overworld_view(
     screen_id: u8,
@@ -620,6 +670,11 @@ pub fn render_overworld_view(
     cursor_walking: u8,
     walk_frame: u8,
     cursor_pose: u8,
+    // `sMapScrollOnlyLatch != 0`: B is panning the hub camera, which replaces
+    // the cursor with the `$4A11` border arrows. `frame_counter` is
+    // `sMapFrameCounter`, for the arrows' `$FF97` bit-7 blink.
+    camera_pan: bool,
+    frame_counter: u8,
     tilemaps: &OverworldTilemaps,
     manifest: &OverworldManifest,
     level_progress: &[u8],
@@ -692,6 +747,17 @@ pub fn render_overworld_view(
         }
     }
 
+    if camera_pan {
+        // `$3C9F4`: the whole cursor metasprite is replaced by the border arrows
+        // (`$4A11` visible, `$4A21` all `$7F`), so no Mario while panning.
+        if frame_counter & 0x80 == 0 {
+            for (oy, ox, tile, attr) in PAN_ARROWS {
+                draw_obj_tile(&mut img, tiles_vram, &obj_shades, ox as i32 - 8, oy as i32 - 16, tile, attr, vw, vh);
+            }
+        }
+        return img;
+    }
+
     // Cursor OAM (`$3C901`): four 8x8 cells from the metasprite the chain picks,
     // placed at (cursor_x, cursor_y) plus the (+4,+8) shift the walk stream adds
     // while `sMapCursorMove` has a direction and bit 5 set (`$3C9B5`).
@@ -724,28 +790,17 @@ pub fn render_overworld_view(
         if *tile == 0x7F {
             continue; // $7F is the metasprite's blank entry
         }
-        let tile_x0 = spr_x0 + (i as i32 & 1) * 8;
-        let tile_y0 = spr_y0 + (i as i32 >> 1) * 8;
-        for dy in 0..8 {
-            let py = tile_y0 + dy;
-            if py < 0 || py >= vh as i32 {
-                continue;
-            }
-            let src_y = if attr & 0x40 != 0 { 7 - dy } else { dy };
-            for dx in 0..8 {
-                let px = tile_x0 + dx;
-                if px < 0 || px >= vw as i32 {
-                    continue;
-                }
-                let src_x = if attr & 0x20 != 0 { 7 - dx } else { dx };
-                if let Some(tile_data) = tiles_vram.get(*tile as usize) {
-                    let col = tile_data[src_y as usize * 8 + src_x as usize];
-                    if col != 0 {
-                        img[py as usize * vw + px as usize] = obj_shades[col as usize];
-                    }
-                }
-            }
-        }
+        draw_obj_tile(
+            &mut img,
+            tiles_vram,
+            &obj_shades,
+            spr_x0 + (i as i32 & 1) * 8,
+            spr_y0 + (i as i32 >> 1) * 8,
+            *tile,
+            *attr,
+            vw,
+            vh,
+        );
     }
 
     img
@@ -992,7 +1047,7 @@ mod tests {
         // Render before unlock: progress byte at offset 2 is 0 -> tile is 0
         let progress = [0u8; 42];
         let frame_locked = render_overworld_view(
-            1, 0, 0, 0, 0, 0, 0, 0, 0,
+            1, 0, 0, 0, 0, 0, 0, 0, 0, false, 0,
             &tilemaps, &manifest, &progress,
             &vram, 0xE4, 0xD0, 160, 144,
         );
@@ -1002,7 +1057,7 @@ mod tests {
         let mut progress_unlocked = [0u8; 42];
         progress_unlocked[2] = 1;
         let frame_unlocked = render_overworld_view(
-            1, 0, 0, 8, 16, 0, 0, 0, 0, // cursor at hardware OAM (8, 16) -> screen pixel (0, 0)
+            1, 0, 0, 8, 16, 0, 0, 0, 0, false, 0, // OAM (8, 16) -> screen pixel (0, 0)
             &tilemaps, &manifest, &progress_unlocked,
             &vram, 0xE4, 0xD0, 160, 144,
         );
@@ -1118,11 +1173,42 @@ mod cursor_render_tests {
     }
 
     fn draw(move_: u8, walking: u8, walk_frame: u8) -> Vec<u8> {
-        let (tilemaps, manifest, vram) = assets();
+        draw_pan(move_, walking, walk_frame, false, 0)
+    }
+
+    fn draw_pan(move_: u8, walking: u8, walk_frame: u8, pan: bool, frame_counter: u8) -> Vec<u8> {
+        let (tilemaps, manifest, mut vram) = assets();
+        vram[0x7E] = [2u8; 64]; // $4A11's arrow tiles
+        vram[0x39] = [2u8; 64];
         render_overworld_view(
-            1, 0, 0, 8, 16, move_, walking, walk_frame, 0, &tilemaps, &manifest, &[], &vram, 0xE4,
-            0xD0, 32, 32,
+            1, 0, 0, 8, 16, move_, walking, walk_frame, 0, pan, frame_counter, &tilemaps, &manifest,
+            &[], &vram, 0xE4, 0xD0, 160, 144,
         )
+    }
+
+    /// `$3C9F4`: while the hub pans (B held) OAM 0-3 becomes the `$4A11` border
+    /// arrows - top (72,8), bottom (72,124), left (8,68), right (144,68) - and
+    /// `$4A21` blanks them on `$FF97` bit 7. The cursor is not drawn at all.
+    #[test]
+    fn panning_draws_the_border_arrows_and_hides_the_cursor() {
+        let obj = crate::video::bgp_shades(0xD0);
+        let bg = crate::video::bgp_shades(0xE4);
+        let panning = draw_pan(0x00, 0, 0, true, 0x00);
+        // Top arrow: OAM y 24, x 80 -> screen (72, 8).
+        assert_eq!(panning[8 * 160 + 72], obj[2], "top arrow");
+        assert_eq!(panning[68 * 160 + 8], obj[2], "left arrow");
+        assert_eq!(panning[68 * 160 + 144], obj[2], "right arrow");
+        assert_eq!(panning[124 * 160 + 72], obj[2], "bottom arrow");
+        // The cursor's pose tiles sit at (0,0) for OAM (8,16); panning must not
+        // draw them, and the blank half of the blink draws nothing.
+        assert_eq!(panning[0], bg[0], "no cursor while panning");
+        let blank = draw_pan(0x00, 0, 0, true, 0x80);
+        assert_eq!(blank[8 * 160 + 72], bg[0], "$4A21 blank frame");
+        assert_eq!(blank[68 * 160 + 8], bg[0]);
+        // Without panning the arrows are absent and the cursor is back.
+        let idle = draw_pan(0x00, 0, 0, false, 0x00);
+        assert_eq!(idle[8 * 160 + 72], bg[0], "no arrows when not panning");
+        assert_eq!(idle[0], obj[3], "cursor pose draws");
     }
 
     #[test]

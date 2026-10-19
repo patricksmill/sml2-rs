@@ -1112,6 +1112,8 @@ impl SessionRunner {
                     map_sim.cursor_walking,
                     map_sim.walk_frame,
                     map_sim.cursor_pose,
+                    map_sim.scroll_only_latch != 0,
+                    map_sim.frame_counter,
                     &self.assets.overworld_tilemaps,
                     &self.assets.overworld_manifest,
                     &map_sim.level_progress,
