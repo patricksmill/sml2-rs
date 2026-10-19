@@ -1,6 +1,7 @@
 //! Native sound sequencing, channel dispatch, and ordered channel-control outputs.
 
 pub mod driver;
+pub mod noise;
 pub mod pulse;
 
 pub use driver::{
@@ -9,4 +10,6 @@ pub use driver::{
     SLOT1_BUSY_EXCEPTION, SLOT1_START_TABLE, SLOT1_TICK_TABLE, SLOT2_START_TABLE,
     SLOT2_TICK_TABLE,
 };
+pub use noise::{NoiseEffectState, NoiseMusicFlags, NoiseWrite};
 pub use pulse::{PulseEffectState, PulseMusicFlags, PulseMusicState, PulseWrite};
+

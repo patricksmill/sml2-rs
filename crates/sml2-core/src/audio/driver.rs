@@ -14,6 +14,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::audio::noise::{NoiseEffectState, NoiseMusicFlags, NoiseWrite};
 use crate::audio::pulse::{PulseEffectState, PulseMusicState, PulseWrite};
 
 /// Master volume settings derived from sLowTimeFlag ($A264).
@@ -129,8 +130,10 @@ pub struct SoundDriver {
     pub pulse_effect: PulseEffectState,
     pub pulse_music: PulseMusicState,
     pub wave_slot: SfxSlotState,
-    pub noise_slot: SfxSlotState,
+    pub noise_slot: NoiseEffectState,
+    pub noise_music: NoiseMusicFlags,
     pub pulse_writes: Vec<PulseWrite>,
+    pub noise_writes: Vec<NoiseWrite>,
     pub update_count: u32,
 }
 
@@ -149,8 +152,10 @@ impl Default for SoundDriver {
             pulse_effect: PulseEffectState::default(),
             pulse_music: PulseMusicState::default(),
             wave_slot: SfxSlotState::default(),
-            noise_slot: SfxSlotState::default(),
+            noise_slot: NoiseEffectState::default(),
+            noise_music: NoiseMusicFlags::default(),
             pulse_writes: Vec::new(),
+            noise_writes: Vec::new(),
             update_count: 0,
         }
     }
@@ -236,9 +241,11 @@ impl SoundDriver {
             }
 
             self.noise_slot.request = req;
-            self.noise_slot.active_effect = req;
+            self.noise_slot
+                .start(req, &mut self.noise_music, &mut self.noise_writes);
         } else if self.noise_slot.active_effect != 0 {
-            // Tick target resolved via SLOT2_TICK_TABLE
+            self.noise_slot
+                .tick(&mut self.noise_music, &mut self.noise_writes);
         }
     }
 

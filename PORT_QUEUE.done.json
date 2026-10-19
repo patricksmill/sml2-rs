@@ -1185,6 +1185,22 @@
       ],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
       "status": "complete"
+    },
+    {
+      "id": "sfx_noise_effects",
+      "title": "Port SFX Slot 2 (Noise / Channel 4) 11 effects, state sequencer, and dispatch",
+      "asm_refs": [
+        "main.asm:$10E64-$10E8F",
+        "main.asm:$10E90-$10ECB",
+        "main.asm:$10ECC-$1115D",
+        "main.asm:$11163-$11199",
+        "main.asm:$111CD-$111EF"
+      ],
+      "dependencies": [
+        "native_sound_driver"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "complete"
     }
   ]
 }

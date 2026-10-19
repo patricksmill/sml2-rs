@@ -199,3 +199,31 @@ fn test_sound_modes_and_pause() {
     driver.update_sound();
     assert_eq!(driver.pulse_effect.active_effect, 7);
 }
+
+#[test]
+fn test_noise_dispatch_and_lifecycle_in_driver() {
+    let mut driver = SoundDriver::new();
+
+    // Frame 1: Request Noise Effect 1
+    driver.sfx_request_2 = 1;
+    driver.update_sound();
+    assert_eq!(driver.sfx_request_2, 0); // Request consumed per $10067
+    assert_eq!(driver.noise_slot.active_effect, 1);
+    assert_eq!(driver.noise_slot.timer, 2);
+    assert!(driver.noise_music.effect_owns_channel());
+    assert_eq!(driver.noise_writes.len(), 4);
+
+    // Frame 2: Tick (timer 2 -> 1)
+    driver.noise_writes.clear();
+    driver.update_sound();
+    assert_eq!(driver.noise_slot.active_effect, 1);
+    assert_eq!(driver.noise_slot.timer, 1);
+    assert!(driver.noise_writes.is_empty());
+
+    // Frame 3: Step advance to 1 (timer reloaded to 2)
+    driver.update_sound();
+    assert_eq!(driver.noise_slot.step, 1);
+    assert_eq!(driver.noise_slot.timer, 2);
+    assert_eq!(driver.noise_writes.len(), 4);
+}
+
