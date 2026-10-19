@@ -1125,6 +1125,14 @@ impl SessionRunner {
                 };
                 let bg_pal = fade_palette(bg_pal, fade);
                 let obp = fade_palette(0xD0, fade);
+                // `$3F203` fills `sStatusBarOAM` from `$7251` on the hub; a zone
+                // screen's `$3E277` clears those nine entries first, so its bar
+                // has no counters.
+                let status_bar = (map_sim.screen_id == 0).then(|| sml2_core::map::StatusBar {
+                    lives: self.lives,
+                    coins_low: map_sim.coins_low,
+                    coins_high: map_sim.coins_high,
+                });
                 sml2_core::map::render_overworld_view(
                     map_sim.screen_id,
                     map_sim.cam_x,
@@ -1146,6 +1154,7 @@ impl SessionRunner {
                     } else {
                         sml2_core::map_zone_decor::zone_decor_oam(&map_sim.zone_slots)
                     },
+                    status_bar.as_ref(),
                     map_sim.scroll_only_latch != 0,
                     // `$3C9F4` reads `$FF97`, a frame counter that free-runs from
                     // boot; the session's own frame count is the same shape.

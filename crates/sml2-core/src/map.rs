@@ -876,6 +876,46 @@ pub fn hub_decor_cells(slots: &[(u8, u8, u8, u8)], cam_x: u16, cam_y: u16) -> Ve
     out
 }
 
+/// `$7251`: the nine OAM entries `$3F203` copies into `sStatusBarOAM` (OAM 4-12)
+/// before patching the five digit tiles. `y = 152` is screen row 136, the last
+/// one; `x` is OAM space, so the bar starts at screen x = 80.
+pub const STATUS_BAR_TEMPLATE: [(u8, u8, u8, u8); 9] = [
+    (152, 88, 0x7C, 0x00),  // Mario head
+    (152, 96, 0x6F, 0x00),  // "x"
+    (152, 104, 0x70, 0x00), // lives tens
+    (152, 112, 0x70, 0x00), // lives ones
+    (152, 128, 0x7D, 0x00), // coin
+    (152, 136, 0x6F, 0x00), // "x"
+    (152, 144, 0x70, 0x00), // coins hundreds
+    (152, 152, 0x70, 0x00), // coins tens
+    (152, 160, 0x70, 0x00), // coins ones (screen x 152, half off the edge)
+];
+
+/// The overworld status bar's counters. `$3F203` builds it from `$7251` and then
+/// patches five tiles to `nibble | $70`.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct StatusBar {
+    pub lives: u8,
+    pub coins_low: u8,
+    pub coins_high: u8,
+}
+
+impl StatusBar {
+    /// `$3F203`'s digit patches: `sLives` nibbles into entries 6 and 7,
+    /// `sCoinHigh`'s low nibble into entry 10, `sCoinLow`'s nibbles into 11 and 12.
+    pub fn cells(&self) -> [(u8, u8, u8, u8); 9] {
+        let mut cells = STATUS_BAR_TEMPLATE;
+        cells[0].2 = 0x7C;
+        cells[2].2 = (self.lives >> 4) | 0x70;
+        cells[3].2 = (self.lives & 0x0F) | 0x70;
+        cells[4].2 = 0x7D;
+        cells[6].2 = (self.coins_high & 0x0F) | 0x70;
+        cells[7].2 = (self.coins_low >> 4) | 0x70;
+        cells[8].2 = (self.coins_low & 0x0F) | 0x70;
+        cells
+    }
+}
+
 /// `$4A11`: the four OAM entries `$3C9F4` stages while the hub pans its camera
 /// (B held, `$3C5B2`). Entry order and bytes are the ROM's: (y, x, tile, attr).
 /// `$4A21` is the same layout with tile `$7F`. The choice is
@@ -907,6 +947,9 @@ pub fn render_overworld_view(
     // the hub's `$3CFC8` starts at entry 13, a zone screen's `$3E277` at entry 4.
     // Either way they draw before the cursor, which owns entries 0-3.
     decor_cells: &[(u8, u8, u8, u8)],
+    // `$3F203`'s status bar, present on the hub and cleared by `$3E277` on the
+    // zone screens. `None` leaves the strip alone.
+    status_bar: Option<&StatusBar>,
     // `sMapScrollOnlyLatch != 0`: B is panning the hub camera, which replaces
     // the cursor with the `$4A11` border arrows. `frame_counter` stands in for
     // `$FF97`: bit 4 picks `$4A11` (visible) or `$4A21` (blank), a 16-frame
@@ -925,6 +968,7 @@ pub fn render_overworld_view(
     let bg_shades = crate::video::bgp_shades(bg_palette);
     let obj_shades = crate::video::bgp_shades(obj_palette);
     let mut img = vec![bg_shades[0]; vw * vh];
+    let _ = &img;
 
     if screen_id == 0 {
         // Hub 64x64 stitched map
@@ -1011,6 +1055,29 @@ pub fn render_overworld_view(
             }
         }
         return img;
+    }
+
+    // `$3F203` writes tile `$E1` over two rows at `$9C00`, which the map scroll
+    // shows as the bottom row: a black strip under the counters.
+    for py in vh.saturating_sub(8)..vh {
+        for px in 0..vw {
+            img[py * vw + px] = bg_shades[3];
+        }
+    }
+    if let Some(bar) = status_bar {
+        for (oy, ox, tile, attr) in bar.cells() {
+            draw_obj_tile(
+                &mut img,
+                tiles_vram,
+                &obj_shades,
+                ox as i32 - 8,
+                oy as i32 - 16,
+                tile,
+                attr,
+                vw,
+                vh,
+            );
+        }
     }
 
     // Cursor OAM (`$3C901`): four 8x8 cells from the metasprite the chain picks,
@@ -1302,7 +1369,7 @@ mod tests {
         // Render before unlock: progress byte at offset 2 is 0 -> tile is 0
         let progress = [0u8; 42];
         let frame_locked = render_overworld_view(
-            1, 0, 0, 0, 0, 0, 0, 0, 0, &[], false, 0,
+            1, 0, 0, 0, 0, 0, 0, 0, 0, &[], None, false, 0,
             &tilemaps, &manifest, &progress,
             &vram, 0xE4, 0xD0, 160, 144,
         );
@@ -1312,7 +1379,7 @@ mod tests {
         let mut progress_unlocked = [0u8; 42];
         progress_unlocked[2] = 1;
         let frame_unlocked = render_overworld_view(
-            1, 0, 0, 8, 16, 0, 0, 0, 0, &[], false, 0, // OAM (8,16) -> screen (0,0)
+            1, 0, 0, 8, 16, 0, 0, 0, 0, &[], None, false, 0, // OAM (8,16) -> screen (0,0)
             &tilemaps, &manifest, &progress_unlocked,
             &vram, 0xE4, 0xD0, 160, 144,
         );
@@ -1436,7 +1503,7 @@ mod cursor_render_tests {
         vram[0x7E] = [2u8; 64]; // $4A11's arrow tiles
         vram[0x39] = [2u8; 64];
         render_overworld_view(
-            1, 0, 0, 8, 16, move_, walking, walk_frame, 0, &[], pan, frame_counter, &tilemaps,
+            1, 0, 0, 8, 16, move_, walking, walk_frame, 0, &[], None, pan, frame_counter, &tilemaps,
             &manifest, &[], &vram, 0xE4, 0xD0, 160, 144,
         )
     }
@@ -1710,7 +1777,7 @@ mod decor_render_tests {
         let (tilemaps, manifest, vram) = scene();
         let cells = hub_decor_cells(slots, 0x0081, cam_y);
         render_overworld_view(
-            0, 0x0081, cam_y, 8, 16, 0, 0, 0, 0, &cells, false, 0, &tilemaps, &manifest, &[], &vram,
+            0, 0x0081, cam_y, 8, 16, 0, 0, 0, 0, &cells, None, false, 0, &tilemaps, &manifest, &[], &vram,
             0xE4, 0xD0, 160, 144,
         )
     }
@@ -1767,3 +1834,84 @@ pub const PUMPKIN_PAGE: [u8; 16] = [0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x
 /// `$6227`: the Pumpkin step table (`sMapAnimIndexA` walks it 0..$4F).
 pub const PUMPKIN_STEPS: [u8; 80] = [0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x10, 0x10, 0x19, 0x10, 0x10, 0x10, 0x11, 0x10, 0x11, 0x11, 0x11, 0x01, 0x11, 0x01, 0x81, 0x91, 0x81, 0x91, 0x91, 0x91, 0x90, 0x91, 0x90, 0x90, 0x90, 0x99, 0x90, 0x90, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x90, 0x90, 0x99, 0x90, 0x90, 0x90, 0x91, 0x90, 0x91, 0x91, 0x91, 0x81, 0x91, 0x81, 0x01, 0x11, 0x01, 0x11, 0x11, 0x11, 0x10, 0x11, 0x10, 0x10, 0x10, 0x19, 0x10, 0x10, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19];
 
+
+#[cfg(test)]
+mod status_bar_tests {
+    use super::*;
+
+    /// The console's OAM 4-12 on the hub with the default five lives and an empty
+    /// purse: (152,88,$7C) (152,96,$6F) (152,104,$70) (152,112,$75) (152,128,$7D)
+    /// (152,136,$6F) (152,144,$70) (152,152,$70) (152,160,$70).
+    #[test]
+    fn status_bar_matches_the_console_row() {
+        let bar = StatusBar {
+            lives: 0x05,
+            coins_low: 0x00,
+            coins_high: 0x00,
+        };
+        assert_eq!(
+            bar.cells(),
+            [
+                (152, 88, 0x7C, 0x00),
+                (152, 96, 0x6F, 0x00),
+                (152, 104, 0x70, 0x00),
+                (152, 112, 0x75, 0x00),
+                (152, 128, 0x7D, 0x00),
+                (152, 136, 0x6F, 0x00),
+                (152, 144, 0x70, 0x00),
+                (152, 152, 0x70, 0x00),
+                (152, 160, 0x70, 0x00),
+            ]
+        );
+    }
+
+    /// `$3F203` patches one nibble per tile, OR'd with `$70`: `sLives` high into
+    /// entry 6 and low into 7, `sCoinHigh`'s low nibble into 10, `sCoinLow`'s
+    /// nibbles into 11 and 12.
+    #[test]
+    fn status_bar_digits_are_nibbles_or_70() {
+        let bar = StatusBar {
+            lives: 0x07,
+            coins_low: 0x43,
+            coins_high: 0x01,
+        };
+        let c = bar.cells();
+        assert_eq!((c[2].2, c[3].2), (0x70, 0x77), "lives 07");
+        assert_eq!((c[6].2, c[7].2, c[8].2), (0x71, 0x74, 0x73), "coins 143");
+    }
+
+    /// The strip `$3F203` writes ($E1 over two rows at `$9C00`) is the bottom row,
+    /// and the counters draw over it.
+    #[test]
+    fn the_strip_and_counters_render() {
+        let (tilemaps, manifest, vram) = {
+            // The bar's tiles ($6F, $70-$77, $7C, $7D) get a non-transparent
+            // pattern so the counters are distinguishable from the strip.
+            let mut v = vec![[0u8; 64]; 256];
+            for t in [0x6Fu8, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x7C, 0x7D] {
+                v[t as usize] = [1u8; 64]; // decoded 2bpp: colour 1
+            }
+            (OverworldTilemaps::default(), OverworldManifest::default(), v)
+        };
+        let draw = |bar: Option<&StatusBar>| {
+            render_overworld_view(
+                0, 0, 0, 8, 16, 0, 0, 0, 0, &[], bar, false, 0, &tilemaps, &manifest, &[],
+                &vram, 0xE4, 0xD0, 160, 144,
+            )
+        };
+        let plain = draw(None);
+        let with_bar = draw(Some(&StatusBar {
+            lives: 0x07,
+            coins_low: 0x43,
+            coins_high: 0x00,
+        }));
+        let shades = crate::video::bgp_shades(0xE4);
+        for x in [0usize, 40, 79, 159] {
+            assert_eq!(plain[136 * 160 + x], shades[3], "strip at x {x}");
+        }
+        let band: Vec<usize> = (136 * 160..144 * 160)
+            .filter(|i| plain[*i] != with_bar[*i])
+            .collect();
+        assert!(!band.is_empty(), "the counters draw in the strip's row");
+    }
+}
