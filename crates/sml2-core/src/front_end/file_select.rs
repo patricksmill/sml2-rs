@@ -17,6 +17,11 @@ pub const CURSOR_START_Y: u8 = 16;
 /// The row the cursor settles on (`$7C`).
 pub const SLOT_ROW_Y: u8 = 0x7C;
 
+/// `$30000`: `BGP = $E4`, `OBP0 = $D0`, `OBP1 = $38`.
+pub const FILE_SELECT_BGP: u8 = 0xE4;
+pub const FILE_SELECT_OBP0: u8 = 0xD0;
+pub const FILE_SELECT_OBP1: u8 = 0x38;
+
 /// The state-6 erase animation's four sprite ids (`$41C2`).
 const ERASE_FRAMES: [u8; 4] = [0x10, 0x00, 0x11, 0x04];
 
@@ -50,6 +55,7 @@ pub struct FileSelect {
     cursor_hop_active: bool,
     cursor_anim_y: u8,
     erase_hop_y: u8,
+    erase_hop_frame: u8,
     erase_hop_active: bool,
     clear_mode: bool,
     easy_mode: bool,
@@ -78,6 +84,7 @@ impl FileSelect {
             cursor_hop_active: false,
             cursor_anim_y: 0,
             erase_hop_y: 0,
+            erase_hop_frame: 0,
             erase_hop_active: false,
             clear_mode: false,
             easy_mode: false,
@@ -120,10 +127,11 @@ impl FileSelect {
         self.cursor_anim_y
     }
 
-    /// The erase animation draws a second Mario sprite at `(x, hop_y)` while
-    /// the timer is in its upper half (`$30171`).
-    pub fn erase_hop(&self) -> Option<u8> {
-        self.erase_hop_active.then_some(self.erase_hop_y)
+    /// The erase animation draws a second metasprite at `(x, hop_y)` while the
+    /// timer is in its upper half (`$30171`): `(y, metasprite frame)`.
+    pub fn erase_hop(&self) -> Option<(u8, u8)> {
+        self.erase_hop_active
+            .then_some((self.erase_hop_y, self.erase_hop_frame))
     }
 
     pub fn clear_mode(&self) -> bool {
@@ -143,6 +151,9 @@ impl FileSelect {
     pub fn step(&mut self, slots: &mut SaveSlots, held: u8, pressed: u8) -> FileSelectOutput {
         self.frame = self.frame.wrapping_add(1);
         self.cursor_hop_active = false;
+        // `$3005F`: `$FFBB = 1` (in front of the background) every frame; the
+        // drop and erase animations clear it while the sprite is behind.
+        self.cursor_behind_bg = false;
         let action = match self.menu_state {
             0 => {
                 self.state_drop();
@@ -185,10 +196,10 @@ impl FileSelect {
     /// `$43D6`: the cursor drops from `$10` to the `$7C` row.
     fn state_drop(&mut self) {
         self.sprite = 16;
-        self.cursor_behind_bg = false;
+        self.cursor_behind_bg = true;
         if self.cursor_y >= 0x30 {
             self.sprite = 10;
-            self.cursor_behind_bg = true;
+            self.cursor_behind_bg = false;
         }
         if self.cursor_y >= SLOT_ROW_Y {
             self.menu_state = 1;
@@ -343,9 +354,10 @@ impl FileSelect {
             return;
         }
 
-        // `$30159`: the hop sprite id and position.
-        self.sprite = (((self.timer >> 1) & 0xF0) >> 4).wrapping_add(0xD3);
-        self.cursor_behind_bg = false;
+        // `$30159`: the hop metasprite id and position.
+        self.erase_hop_frame = (((self.timer >> 1) & 0xF0) >> 4).wrapping_add(0xD3);
+        self.sprite = self.erase_hop_frame;
+        self.cursor_behind_bg = true;
         if self.timer >= 0x40 {
             self.erase_hop_y = (self.timer >> 2).wrapping_add(0x70);
             self.erase_hop_active = true;

@@ -21,7 +21,7 @@ mod replay;
 mod viewer;
 
 pub use cli::run_cli;
-pub use session::{FrameEffects, FrameInput, Session};
+pub use session::{Boot, FrameEffects, FrameInput, Session};
 
 /// Native GB screen; the HUD strip and parity checks are anchored to it.
 pub const SCREEN_W: usize = 160;

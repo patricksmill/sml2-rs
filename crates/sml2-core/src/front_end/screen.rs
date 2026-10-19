@@ -12,6 +12,16 @@ pub const VRAM_LEN: usize = 0x1800;
 /// The 32x32 background map.
 pub const TILEMAP_LEN: usize = 0x400;
 
+/// LCDC bit 4: which tile-data base the background uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TileData {
+    /// `$8000 + tile * 16` (LCDC bit 4 = 0).
+    Unsigned,
+    /// `$9000 + tile * 16` for tile 0..127, `$8000 + tile * 16` above
+    /// (LCDC bit 4 = 1, the signed `$8800` method).
+    Signed,
+}
+
 /// Render a `view`-sized frame from the background map.
 #[allow(clippy::too_many_arguments)]
 pub fn render_bg(
@@ -20,6 +30,19 @@ pub fn render_bg(
     bgp: u8,
     scroll: (u8, u8),
     view: (usize, usize),
+) -> Result<Vec<u8>, String> {
+    render_bg_mode(vram, tilemap, bgp, scroll, view, TileData::Unsigned)
+}
+
+/// Render with an explicit tile-data base.
+#[allow(clippy::too_many_arguments)]
+pub fn render_bg_mode(
+    vram: &[u8],
+    tilemap: &[u8],
+    bgp: u8,
+    scroll: (u8, u8),
+    view: (usize, usize),
+    tile_data: TileData,
 ) -> Result<Vec<u8>, String> {
     if vram.len() < VRAM_LEN {
         return Err(format!(
@@ -44,8 +67,13 @@ pub fn render_bg(
         for x in 0..vw {
             let px = (x + scroll_x) & 0xFF;
             let col = (px >> 3) & 31;
-            let tile = tilemap[row * 32 + col] as usize;
-            let bytes: &[u8; 16] = vram[tile * 16..tile * 16 + 16]
+            let tile = tilemap[row * 32 + col];
+            let offset = match tile_data {
+                TileData::Unsigned => tile as usize * 16,
+                TileData::Signed if tile < 0x80 => 0x1000 + tile as usize * 16,
+                TileData::Signed => tile as usize * 16,
+            };
+            let bytes: &[u8; 16] = vram[offset..offset + 16]
                 .try_into()
                 .expect("16-byte tile slice");
             let colors = tile_colors(bytes);

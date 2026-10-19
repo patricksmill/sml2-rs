@@ -121,6 +121,7 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
     let mut export_sfx_pair: Option<(u8, u8)> = None;
     let mut export_seconds: f32 = 15.0;
     let mut view = (SCREEN_W, SCREEN_H);
+    let mut boot = crate::session::Boot::Overworld;
     let mut args = env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -234,6 +235,14 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
                 filmstrip = Some(PathBuf::from(args.next().ok_or("--filmstrip needs a dir")?));
             }
             "--play" => play_mode = true,
+            // `--boot title` starts the ROM's title -> file-select flow.
+            "--boot" => {
+                boot = match args.next().ok_or("--boot needs title or overworld")?.as_str() {
+                    "title" => crate::session::Boot::Title,
+                    "overworld" => crate::session::Boot::Overworld,
+                    other => return Err(format!("--boot must be title or overworld, got {other}").into()),
+                };
+            }
             "--window" => window_mode = true,
             other => return Err(format!("unknown argument {other}").into()),
         }
@@ -258,8 +267,14 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
     let tape = keys_tape.clone().map(PlayTape::Ascii);
     if map_mode || level.is_none() {
         let assets = session::SessionAssets::load()?;
-        let mut runner =
-            session::SessionRunner::new(assets, save_path, scale, view, headless_frames.is_some());
+        let mut runner = session::SessionRunner::new_with_boot(
+            assets,
+            save_path,
+            scale,
+            view,
+            headless_frames.is_some(),
+            boot,
+        );
         runner.audio_out_path = audio_out;
         if let Some(n) = headless_frames {
             runner.run_headless(n, tape)?;

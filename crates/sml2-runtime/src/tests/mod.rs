@@ -23,6 +23,7 @@ use std::{
 };
 
 mod boss_entry;
+mod front_end;
 mod game;
 mod played_routes;
 mod scene_pipe;

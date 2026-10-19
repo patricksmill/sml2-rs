@@ -3,7 +3,7 @@
 
 use crate::divider_clock::{NativeDividerClock, VirtualDividerClock};
 use crate::play_tape::PlayTape;
-use crate::session::{FrameInput, Session, SessionAssets, StepOutcome};
+use crate::session::{Boot, FrameInput, Session, SessionAssets, StepOutcome};
 use minifb::{Key, Window, WindowOptions};
 use sml2_core::{audio::apu::Apu, player_sim::PlayerKeys};
 use std::{
@@ -68,6 +68,17 @@ impl SessionRunner {
         view: (usize, usize),
         headless: bool,
     ) -> Self {
+        Self::new_with_boot(assets, save_path, scale, view, headless, Boot::Overworld)
+    }
+
+    pub fn new_with_boot(
+        assets: SessionAssets,
+        save_path: PathBuf,
+        scale: usize,
+        view: (usize, usize),
+        headless: bool,
+        boot: Boot,
+    ) -> Self {
         let mut runner = Self {
             session: Session::new(assets),
             save_path,
@@ -89,6 +100,9 @@ impl SessionRunner {
             },
         };
         runner.load_from_disk();
+        if boot == Boot::Title {
+            runner.session.enter_title();
+        }
         if let Some(out) = &runner.live_audio {
             runner.audio_sync = Some(AudioClock::new(out.sample_rate()));
         }
@@ -96,10 +110,23 @@ impl SessionRunner {
     }
 
     pub fn load_from_disk(&mut self) -> bool {
-        fs::read(&self.save_path).is_ok_and(|data| self.session.apply_save_record(&data))
+        let read = fs::read(&self.save_path);
+        read.is_ok_and(|data| {
+            let applied = self.session.apply_save_record(&data);
+            if applied {
+                // The legacy single-record file becomes slot 0 so a
+                // `--boot title` run shows the existing progress.
+                self.session.slots.write_slot(0, &data);
+                self.session.active_slot = Some(0);
+            }
+            applied
+        })
     }
 
     pub fn save_to_disk(&self) -> Result<(), std::io::Error> {
+        if !self.session.saveable() {
+            return Ok(());
+        }
         fs::write(&self.save_path, self.session.save_record())
     }
 

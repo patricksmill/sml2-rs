@@ -240,6 +240,24 @@ impl DesktopApp {
                                 ui.label(format!("Unported handlers: {:?}", level.obj.unported));
                             }
                         }
+                        SessionState::Title(title) => {
+                            ui.label("Title");
+                            ui.monospace(format!("Timer {:04X}", title.timer()));
+                        }
+                        SessionState::FileSelect(file_select) => {
+                            ui.label("File select");
+                            ui.monospace(format!(
+                                "State {}  cursor {},{}",
+                                file_select.menu_state(),
+                                file_select.cursor().0,
+                                file_select.cursor().1
+                            ));
+                            ui.monospace(format!(
+                                "Easy {}  erase {}",
+                                file_select.easy_mode(),
+                                file_select.clear_mode()
+                            ));
+                        }
                         SessionState::GameOver => {
                             ui.label("Game over");
                         }

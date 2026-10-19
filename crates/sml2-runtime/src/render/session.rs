@@ -54,6 +54,16 @@ impl Session {
     pub fn render_frame(&self, view: (usize, usize)) -> Vec<u8> {
         let (vw, vh) = view;
         match &self.state {
+            SessionState::Title(_) => {
+                sml2_core::front_end::render_title(&self.assets.front_end, (vw, vh))
+            }
+            SessionState::FileSelect(file_select) => sml2_core::front_end::render_file_select(
+                file_select,
+                &self.slots,
+                &self.assets.front_end,
+                &self.assets.object_tables,
+                (vw, vh),
+            ),
             SessionState::Overworld(map_sim) => {
                 let mut vram = self
                     .assets

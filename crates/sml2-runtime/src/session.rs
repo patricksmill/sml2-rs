@@ -13,6 +13,7 @@ use sml2_core::camera::CameraSim;
 use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
 use sml2_core::ending_scene::EndingScene;
 use sml2_core::ending_sequence::EndingSequenceController;
+use sml2_core::front_end::{FileSelect, FileSelectAction, SaveSlots, TitleAction, TitleScreen};
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest};
 use sml2_core::map::MapNodes;
 use sml2_core::map_sim::MapSim;
@@ -506,9 +507,22 @@ pub struct FrameEffects {
 
 /// The three major modes of the runtime session.
 pub enum SessionState {
+    /// `$00`/`$01`: the title screen.
+    Title(TitleScreen),
+    /// `$19`/`$1A`: the file select.
+    FileSelect(FileSelect),
     Overworld(MapSim),
     InLevel(Box<LevelContext>),
     GameOver,
+}
+
+/// Which state a fresh session starts in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Boot {
+    /// Straight to the overworld, for the existing `--play` path and saves.
+    Overworld,
+    /// The ROM's boot flow: title -> file select.
+    Title,
 }
 
 /// Outcome of a single stepped frame in `SessionRunner`.
@@ -572,6 +586,10 @@ pub struct Session {
     pub prev_select: bool,
     pub frame_n: u64,
     pub sound_driver: SoundDriver,
+    /// The three `$2913` save slots, validated when the file select opens.
+    pub slots: SaveSlots,
+    /// The slot the current game was loaded from, so saves update it in place.
+    pub active_slot: Option<u8>,
 }
 
 impl Session {
@@ -599,7 +617,26 @@ impl Session {
             prev_select: false,
             frame_n: 0,
             sound_driver,
+            slots: SaveSlots::new(),
+            active_slot: None,
         }
+    }
+
+    /// `$00`: enter the title screen instead of the overworld.
+    pub fn enter_title(&mut self) {
+        self.state = SessionState::Title(TitleScreen::new());
+        self.last_map_screen = None;
+        self.active_slot = None;
+        // `$14043` stops all sound while the logo holds.
+        self.sound_driver.music_request = 0xFF;
+    }
+
+    /// Front-end states have no progress to persist yet.
+    pub fn saveable(&self) -> bool {
+        matches!(
+            self.state,
+            SessionState::Overworld(_) | SessionState::InLevel(_) | SessionState::GameOver
+        )
     }
 
     /// Apply an already-read ROM-format progress record.
@@ -632,6 +669,12 @@ impl Session {
             SessionState::GameOver => {
                 let map = MapSim::new();
                 map.save_record(self.lives, self.level_tally, self.money_bag)
+            }
+            SessionState::Title(_) | SessionState::FileSelect(_) => {
+                match self.active_slot.and_then(|slot| self.slots.slot(slot as usize)) {
+                    Some(record) => *record,
+                    None => sml2_core::front_end::save_slots::fresh_template(),
+                }
             }
         }
     }
@@ -750,6 +793,9 @@ impl Session {
                 if map_sim.pending_save || entry.saved {
                     map_sim.pending_save = false;
                     let rec = map_sim.save_record(self.lives, self.level_tally, self.money_bag);
+                    if let Some(slot) = self.active_slot {
+                        self.slots.write_slot(slot as usize, &rec);
+                    }
                     saves.push(rec);
                 }
 
@@ -793,6 +839,77 @@ impl Session {
                 } else {
                     StepOutcome::Continue
                 }
+            }
+
+            SessionState::Title(ref mut title) => {
+                let keys_held = pack_joypad(
+                    keys.right,
+                    keys.left,
+                    keys.up,
+                    keys.down,
+                    keys.a,
+                    keys.b,
+                    keys.select,
+                    keys.start,
+                );
+                let keys_pressed = keys_held & !self.prev_keys_held;
+                self.prev_keys_held = keys_held;
+                match title.step(keys_held, keys_pressed) {
+                    TitleAction::OpenFileSelect => {
+                        // `$30000`: validate the three slots, request song 13.
+                        let mut file_select = FileSelect::new(&mut self.slots);
+                        self.sound_driver.music_request = file_select.take_music();
+                        self.state = SessionState::FileSelect(file_select);
+                    }
+                    TitleAction::StartDemo(index) => diagnostics.push(format!(
+                        "front end: attract demo {index} is not ported yet"
+                    )),
+                    TitleAction::None => {}
+                }
+                StepOutcome::Continue
+            }
+
+            SessionState::FileSelect(ref mut file_select) => {
+                let keys_held = pack_joypad(
+                    keys.right,
+                    keys.left,
+                    keys.up,
+                    keys.down,
+                    keys.a,
+                    keys.b,
+                    keys.select,
+                    keys.start,
+                );
+                let keys_pressed = keys_held & !self.prev_keys_held;
+                self.prev_keys_held = keys_held;
+                let out = file_select.step(&mut self.slots, keys_held, keys_pressed);
+                if out.sfx0 != 0 {
+                    self.sound_driver.sfx_request_0 = out.sfx0;
+                }
+                if out.sfx2 != 0 {
+                    self.sound_driver.sfx_request_2 = out.sfx2;
+                }
+                match out.action {
+                    FileSelectAction::Load { slot, record } => {
+                        self.active_slot = Some(slot as u8);
+                        // `$30227` copies the slot verbatim. An untouched slot
+                        // holds the invalid new-game template, which becomes a
+                        // valid fresh record for the map.
+                        let record = if sml2_core::map::save_record_valid(&record) {
+                            record
+                        } else {
+                            MapSim::new().save_record(5, 0, 0)
+                        };
+                        if self.apply_save_record(&record) {
+                            self.last_map_screen = None;
+                        } else {
+                            diagnostics
+                                .push("front end: the loaded record was rejected".to_string());
+                        }
+                    }
+                    FileSelectAction::Erased { .. } | FileSelectAction::None => {}
+                }
+                StepOutcome::Continue
             }
 
             SessionState::InLevel(ref mut ctx) => {
@@ -851,7 +968,11 @@ impl Session {
                             map_sim.load_node(target_node, &self.assets.node_records);
                             self.state = SessionState::Overworld(map_sim);
                             if handoff.saves > 0 {
-                                saves.push(self.save_record());
+                                let rec = self.save_record();
+                                if let Some(slot) = self.active_slot {
+                                    self.slots.write_slot(slot as usize, &rec);
+                                }
+                                saves.push(rec);
                             }
                             StepOutcome::LevelExited {
                                 node: target_node,
@@ -878,7 +999,11 @@ impl Session {
                         map_sim.load_node(target_node, &self.assets.node_records);
                         self.state = SessionState::Overworld(map_sim);
                         if handoff.saves > 0 {
-                            saves.push(self.save_record());
+                            let rec = self.save_record();
+                            if let Some(slot) = self.active_slot {
+                                self.slots.write_slot(slot as usize, &rec);
+                            }
+                            saves.push(rec);
                         }
                         StepOutcome::LevelExited {
                             node: target_node,
