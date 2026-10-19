@@ -550,6 +550,9 @@ impl MapSim {
         self.frame_counter = 0;
         // `$3CBE7` clears the drift counter and `$CBE7`'s tail reseeds the list.
         self.decor_slots = crate::map::HUB_DECOR_SLOTS;
+        if self.screen_id == 0 {
+            self.seed_hub_coin_icons();
+        }
         self.coin_icon_phase = 0;
         self.cloud_drift = 0;
         self.sparkle_timer = 0;
@@ -917,6 +920,15 @@ impl MapSim {
     /// and its two `$FF04`-seeded latches. `$3C13E` reads `$FF00+c` with `c = 4`,
     /// i.e. the divider, not the joypad, which is why nothing mechanical reads
     /// these bytes.
+    /// `$3CE43`: the six coin icons are live only where the matching
+    /// `sGoldenCoinN` byte (`$4E37`'s pointer table) has bit 7 set.
+    pub fn seed_hub_coin_icons(&mut self) {
+        for (i, index) in crate::map::HUB_COIN_FLAGS.iter().enumerate() {
+            let flag = self.level_progress.get(*index).copied().unwrap_or(0);
+            self.decor_slots[4 + i].3 = if flag & 0x80 != 0 { 2 } else { 0xFF };
+        }
+    }
+
     /// `$3CE6B`: the hub's decor updater, run every frame by `$3CFC8` just before
     /// it expands the 18 slots. Coins (slots 4-9) cycle their ids 2/3/4 every 8
     /// frames, the three drifting sprites (slots 1-3) move one pixel every 4
@@ -2605,8 +2617,8 @@ mod hub_decor_tests {
             m.bookkeeping(0x10);
         }
         assert_eq!(m.cloud_drift, 1);
-        for (i, slot) in (1..4).enumerate() {
-            assert_eq!(m.decor_slots[slot].1, start[i].wrapping_sub(1), "first step is left");
+        for (i, _slot) in (1..4).enumerate() {
+            assert_eq!(m.decor_slots[i + 1].1, start[i].wrapping_sub(1), "first step is left");
         }
         // Walk the counter to 0x40: 64 left steps, then the direction flips.
         while m.cloud_drift != 0x40 {
@@ -2615,9 +2627,9 @@ mod hub_decor_tests {
         let mid: [u8; 3] = [m.decor_slots[1].1, m.decor_slots[2].1, m.decor_slots[3].1];
         // The step is applied *after* the counter increments, so reaching 0x40
         // already took one rightward step: 63 left then 1 right.
-        for (i, slot) in (1..4).enumerate() {
+        for (i, _slot) in (1..4).enumerate() {
             assert_eq!(
-                mid[i],
+                m.decor_slots[i + 1].1,
                 start[i].wrapping_sub(63).wrapping_add(1),
                 "63 left, then bit 6 turns the last step around"
             );
@@ -2625,8 +2637,8 @@ mod hub_decor_tests {
         for _ in 0..4 {
             m.bookkeeping(0x10);
         }
-        for (i, slot) in (1..4).enumerate() {
-            assert_eq!(m.decor_slots[slot].1, mid[i].wrapping_add(1), "bit 6 flips it");
+        for (i, _slot) in (1..4).enumerate() {
+            assert_eq!(m.decor_slots[i + 1].1, mid[i].wrapping_add(1), "bit 6 flips it");
         }
     }
 
@@ -2652,5 +2664,32 @@ mod hub_decor_tests {
         }
         assert_eq!(n.sparkle_timer, 0);
         assert_eq!(n.decor_slots[16].3, 0xFF);
+    }
+}
+
+#[cfg(test)]
+mod hub_coin_tests {
+    use super::*;
+
+    /// `$3CE43`: a coin icon exists only where the matching `sGoldenCoinN` byte
+    /// has bit 7 set, and `$3CE6B` then animates the live ones through 2/3/4.
+    #[test]
+    fn coin_icons_follow_the_golden_coin_flags() {
+        let mut m = MapSim::new();
+        m.screen_id = 0;
+        m.level_progress[crate::map::HUB_COIN_FLAGS[0]] = 0x80;
+        m.level_progress[crate::map::HUB_COIN_FLAGS[3]] = 0x80;
+        m.seed_hub_coin_icons();
+        assert_eq!(m.decor_slots[4].3, 2, "coin 1 is live");
+        assert_eq!(m.decor_slots[7].3, 2, "coin 4 is live");
+        assert_eq!(m.decor_slots[5].3, 0xFF, "uncollected coins stay empty");
+        assert_eq!(m.decor_slots[6].3, 0xFF);
+        // The 8-frame phase moves live ids to 3 and leaves empty slots alone.
+        for _ in 0..8 {
+            m.bookkeeping(0x10);
+        }
+        assert_eq!(m.decor_slots[4].3, 3);
+        assert_eq!(m.decor_slots[7].3, 3);
+        assert_eq!(m.decor_slots[5].3, 0xFF);
     }
 }

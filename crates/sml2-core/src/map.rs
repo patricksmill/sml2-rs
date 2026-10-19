@@ -649,6 +649,11 @@ pub const SPARKLE_SLOT_17: [u8; 16] = [
     0xB4,
 ];
 
+/// `$4E37`: the six `sGoldenCoinN` bytes `$3CE43` reads for the coin icons, as
+/// offsets into `level_progress` (`$A848`; each address minus `$A848 + 0`).
+/// Slot 4 + n is live with id 2 when that byte has bit 7 set.
+pub const HUB_COIN_FLAGS: [usize; 6] = [0x09, 0x05, 0x0E, 0x11, 0x17, 0x1D];
+
 /// The hub's `sMapSprite0Page` list (`$4BFD`, copied by `$3CBE7`): `(A, X, Y, ID)`.
 /// `A`'s high nibble is the graphics bank offset and its low nibble tags the
 /// camera compare; `ID == $FF` is an empty slot, otherwise `ID` indexes
