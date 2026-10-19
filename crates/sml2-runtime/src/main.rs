@@ -72,7 +72,6 @@ fn export_song(
     let mut apu = sml2_core::audio::Apu::new();
 
     driver.music_request = song_id;
-    driver.update_sound(); // frame 1: load song
 
     let total_frames = (seconds * 60.0).max(60.0) as usize;
     let mut samples = Vec::with_capacity(total_frames * 1470);
@@ -122,7 +121,6 @@ fn export_sfx(
         }
         other => return Err(format!("invalid SFX slot {other} (must be 0, 1, or 2)").into()),
     }
-    driver.update_sound();
 
     let total_frames = 120;
     let mut samples = Vec::with_capacity(total_frames * 1470);
