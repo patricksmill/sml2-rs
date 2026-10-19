@@ -119,9 +119,13 @@ Tests: the node -> item row mapping, all four screens' staging, award-once
 ### ME-5 — Bell rooms 13/14 (M)
 Both room scripts and both loaders are ported (ME-3): `$4512` (screen 13),
 `$4028` (screen 14), `enter_bell_a` (three timer variants) and `enter_bell_b`.
-Left: wire the castle screen 8 bell nodes to the two entries, the `sCastleState
-== 3`/`10` return to screen 8, and the typed acceptance tape. Tests: all three
-timer variants and room B's node-bit variant, exact slot bytes, reward, return.
+
+The entry is **not** a castle-screen door: `$3EF2B` runs on the level-exit
+hand-off and, when `sGoalBell != 0`, picks screen 13/14 by `sMapNode` bit 0
+(even -> `$3F4B1`, odd -> `$3F5A4`) and sets `sGameState = 12`. The room ends
+when the script writes state `$0A`, and the screen handler calls `$3E9FB` /
+`$3EF2B`. Left: that exit path (it shares the `$1B-$21` hand-off with ME-6),
+the return landing and the typed acceptance tape.
 
 ### ME-6 — Golden-coin/castle chain (M)
 Port states `$1B-$1F/$20/$21` into `SessionState` (or the existing ending
