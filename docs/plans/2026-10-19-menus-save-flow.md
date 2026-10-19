@@ -17,7 +17,7 @@ run `captures/sweep.sh` once per work package, and do not change the frozen
 - [ ] Decision D1–D4 confirmed
 - [x] FE-1 save-slot core
 - [x] FE-2 front-end assets
-- [ ] FE-3 title screen
+- [x] FE-3 title screen
 - [ ] FE-4 file select
 - [ ] FE-5 session/runtime integration
 - [ ] FE-6 desktop launcher + persistence
