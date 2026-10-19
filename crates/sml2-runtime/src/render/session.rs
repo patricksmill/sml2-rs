@@ -138,6 +138,10 @@ impl Session {
                     vh,
                 )
             }
+            SessionState::Demo(demo) => demo
+                .ctx
+                .render_frame(vw, vh)
+                .unwrap_or_else(|_| vec![0u8; vw * vh]),
             SessionState::InLevel(ctx) => ctx
                 .render_frame(vw, vh)
                 .unwrap_or_else(|_| vec![0u8; vw * vh]),

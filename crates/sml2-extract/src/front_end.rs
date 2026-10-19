@@ -9,7 +9,7 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 
-use sml2_core::front_end::{FrontEndAssets, TILEMAP_LEN, VRAM_LEN};
+use sml2_core::front_end::{FrontEndAssets, DEMO_TAPES_LEN, TILEMAP_LEN, VRAM_LEN};
 
 /// Bank 5 `$41E5`, 0x1800 bytes (`GFX_TitleScreen`).
 const TITLE_VRAM_ROM: usize = 5 * 0x4000 + (0x41E5 - 0x4000);
@@ -17,6 +17,8 @@ const TITLE_VRAM_ROM: usize = 5 * 0x4000 + (0x41E5 - 0x4000);
 const TITLE_TILEMAP_ROM: usize = 5 * 0x4000 + (0x59E5 - 0x4000);
 /// Bank 12 `$4A52`, 0x400 bytes, copied to `$9800`.
 const FILE_SELECT_TILEMAP_ROM: usize = 12 * 0x4000 + (0x4A52 - 0x4000);
+/// Bank 5 `$7C00-$7FFF`: the four 256-byte attract-demo tapes.
+const DEMO_TAPES_ROM: usize = 5 * 0x4000 + (0x7C00 - 0x4000);
 
 /// The four slices `$2B8B` copies after `GFX_Mario`, as
 /// `(ROM offset, length, VRAM offset)`.
@@ -63,12 +65,14 @@ pub fn extract(rom: &[u8], mario: &[u8]) -> Result<FrontEndAssets, String> {
         "file-select tilemap",
     )?
     .to_vec();
+    let demo_tapes = take(rom, DEMO_TAPES_ROM, DEMO_TAPES_LEN, "demo tapes")?.to_vec();
 
     FrontEndAssets::new(
         title_vram,
         title_tilemap,
         file_select_vram,
         file_select_tilemap,
+        demo_tapes,
     )
 }
 
@@ -89,8 +93,9 @@ pub fn emit(rom: &[u8], decomp: &Path, extracted: &Path) -> Result<(), Box<dyn E
         dir.join("file_select_tilemap.bin"),
         assets.file_select_tilemap(),
     )?;
+    fs::write(dir.join("demo_tapes.bin"), assets.demo_tapes())?;
     println!(
-        "wrote frontend/: title {VRAM_LEN}+{TILEMAP_LEN}, file select {VRAM_LEN}+{TILEMAP_LEN} bytes"
+        "wrote frontend/: title {VRAM_LEN}+{TILEMAP_LEN}, file select {VRAM_LEN}+{TILEMAP_LEN}, demos {DEMO_TAPES_LEN} bytes"
     );
     Ok(())
 }
@@ -112,6 +117,7 @@ mod tests {
             (FILE_SELECT_BLOCKS[1].0, 0x380, 0x50),
             (FILE_SELECT_BLOCKS[2].0, 0x380, 0x60),
             (FILE_SELECT_BLOCKS[3].0, 0x600, 0x70),
+            (DEMO_TAPES_ROM, DEMO_TAPES_LEN, 0x80),
         ] {
             for (i, byte) in rom[offset..offset + len].iter_mut().enumerate() {
                 *byte = seed.wrapping_add(i as u8);

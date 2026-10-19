@@ -132,3 +132,95 @@ fn a_damaged_slot_start_a_fresh_game() {
     assert!(matches!(runner.state, SessionState::Overworld(_)));
     assert_eq!(runner.active_slot, Some(0));
 }
+
+fn demo_position(name: &str, live: PlayerKeys, frames: usize) -> (u16, u16) {
+    let mut runner = runner_with_boot(name);
+    assert!(runner.start_demo(0), "demo 0 loads");
+    for _ in 0..frames {
+        runner.step_frame(live);
+    }
+    match &runner.state {
+        SessionState::Demo(demo) => (demo.ctx.sim.x, demo.ctx.sim.y),
+        _ => panic!("the demo must still be running"),
+    }
+}
+
+#[test]
+fn the_demo_pages_are_the_rom_slices() {
+    let assets = SessionAssets::load().expect("session assets must load");
+    assert_eq!(assets.front_end.demo_tapes().len(), 0x400);
+    let tape0 = assets.front_end.demo_tape(0);
+    assert_eq!(tape0, &assets.front_end.demo_tapes()[0x300..]);
+    // Page 0 opens with two skipped pairs, then SELECT+UP for 3 frames.
+    assert_eq!(&tape0[..6], &[0x00, 0x00, 0x44, 0x03, 0x40, 0x08]);
+}
+
+#[test]
+fn the_title_countdown_starts_the_first_attract_demo() {
+    let mut runner = runner_with_boot("demo_countdown");
+    for _ in 0..1090 {
+        runner.step_frame(PlayerKeys::default());
+    }
+    match &runner.state {
+        SessionState::Demo(demo) => {
+            assert_eq!(demo.index, 0);
+            assert_eq!(demo.level_id, 0);
+        }
+        _ => panic!("the countdown must start demo 0"),
+    }
+}
+
+#[test]
+fn the_demo_tape_drives_the_player_and_live_input_does_not_leak() {
+    let idle = PlayerKeys::default();
+    let left = PlayerKeys {
+        left: true,
+        ..PlayerKeys::default()
+    };
+    let right = PlayerKeys {
+        right: true,
+        ..PlayerKeys::default()
+    };
+    let start = demo_position("demo_start", idle, 0);
+    let held_left = demo_position("demo_left", left, 30);
+    let held_right = demo_position("demo_right", right, 30);
+    assert_eq!(
+        held_left, held_right,
+        "live input must not change the demo"
+    );
+    assert_ne!(start, held_left, "the tape must move Mario");
+}
+
+#[test]
+fn start_ends_the_demo_and_advances_the_title_index() {
+    let mut runner = runner_with_boot("demo_start");
+    assert!(runner.start_demo(0));
+    runner.step_frame(PlayerKeys::default());
+    runner.step_frame(PlayerKeys {
+        start: true,
+        ..PlayerKeys::default()
+    });
+    match &runner.state {
+        SessionState::Title(title) => {
+            assert_eq!(title.demo_index(), 1);
+            assert_eq!(title.timer(), 1344, "Init resets the attract countdown");
+        }
+        _ => panic!("START must return to the title"),
+    }
+}
+
+#[test]
+fn the_tape_terminator_returns_to_the_title() {
+    let mut runner = runner_with_boot("demo_tape_end");
+    assert!(runner.start_demo(0));
+    for _ in 0..4000 {
+        runner.step_frame(PlayerKeys::default());
+        if matches!(runner.state, SessionState::Title(_)) {
+            break;
+        }
+    }
+    match &runner.state {
+        SessionState::Title(title) => assert_eq!(title.demo_index(), 1),
+        _ => panic!("the $FF terminator must return to the title"),
+    }
+}

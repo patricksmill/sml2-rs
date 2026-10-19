@@ -28,4 +28,11 @@ fn main() {
 
     step(&mut session, PlayerKeys { select: true, ..Default::default() });
     write_pgm("/tmp/fe_easy.pgm", &session.render_frame((160, 144)));
+
+    // `$0B`: run the first attract demo and capture a mid-level frame.
+    assert!(session.start_demo(0));
+    for _ in 0..180 {
+        step(&mut session, PlayerKeys::default());
+    }
+    write_pgm("/tmp/fe_demo.pgm", &session.render_frame((160, 144)));
 }

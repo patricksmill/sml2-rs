@@ -5,6 +5,7 @@
 //! See `docs/plans/2026-10-19-menus-save-flow.md`.
 
 pub mod assets;
+pub mod demo;
 pub mod file_select;
 pub mod keys;
 pub mod render;
@@ -12,7 +13,8 @@ pub mod save_slots;
 pub mod screen;
 pub mod title;
 
-pub use assets::{FrontEndAssets, TILEMAP_LEN, VRAM_LEN};
+pub use assets::{FrontEndAssets, DEMO_TAPE_LEN, DEMO_TAPES_LEN, TILEMAP_LEN, VRAM_LEN};
+pub use demo::{DemoTape, DEMO_LEVELS};
 pub use file_select::{FileSelect, FileSelectAction, FileSelectOutput};
 pub use render::{render_file_select, render_title};
 pub use save_slots::{SaveSlots, SAVE_IMAGE_LEN, SLOT_COUNT, SLOT_LEN};

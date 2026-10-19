@@ -36,7 +36,14 @@ fn assets() -> FrontEndAssets {
         paint(&mut vram, tile as usize * 16, 1);
     }
     let tilemap = vec![0u8; TILEMAP_LEN];
-    FrontEndAssets::new(title_vram, title_tilemap, vram, tilemap).unwrap()
+    FrontEndAssets::new(
+        title_vram,
+        title_tilemap,
+        vram,
+        tilemap,
+        vec![0u8; crate::front_end::DEMO_TAPES_LEN],
+    )
+    .unwrap()
 }
 
 fn dropped_file_select() -> (FileSelect, SaveSlots) {

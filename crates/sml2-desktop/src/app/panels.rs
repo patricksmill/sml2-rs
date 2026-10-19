@@ -248,6 +248,15 @@ impl DesktopApp {
                                 ));
                             }
                         }
+                        SessionState::Demo(demo) => {
+                            ui.label(format!("Attract demo {}", demo.index));
+                            ui.monospace(format!(
+                                "Level {}  tape {}  frame {}",
+                                demo.level_id,
+                                demo.tape.position(),
+                                demo.ctx.frame_n
+                            ));
+                        }
                         SessionState::InLevel(level) => {
                             ui.label(format!("Level {}", level.manifest.level_id));
                             ui.monospace(format!(

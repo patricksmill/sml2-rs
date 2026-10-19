@@ -8,6 +8,10 @@
 pub const VRAM_LEN: usize = 0x1800;
 /// One 32x32 background map.
 pub const TILEMAP_LEN: usize = 0x400;
+/// `$7C00-$7FFF` in the title bank: four 256-byte attract-demo tapes.
+pub const DEMO_TAPES_LEN: usize = 0x400;
+/// One attract-demo input page.
+pub const DEMO_TAPE_LEN: usize = 0x100;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FrontEndAssets {
@@ -15,6 +19,7 @@ pub struct FrontEndAssets {
     title_tilemap: Vec<u8>,
     file_select_vram: Vec<u8>,
     file_select_tilemap: Vec<u8>,
+    demo_tapes: Vec<u8>,
 }
 
 impl FrontEndAssets {
@@ -23,12 +28,14 @@ impl FrontEndAssets {
         title_tilemap: Vec<u8>,
         file_select_vram: Vec<u8>,
         file_select_tilemap: Vec<u8>,
+        demo_tapes: Vec<u8>,
     ) -> Result<Self, String> {
         for (name, blob, len) in [
             ("title_vram", &title_vram, VRAM_LEN),
             ("title_tilemap", &title_tilemap, TILEMAP_LEN),
             ("file_select_vram", &file_select_vram, VRAM_LEN),
             ("file_select_tilemap", &file_select_tilemap, TILEMAP_LEN),
+            ("demo_tapes", &demo_tapes, DEMO_TAPES_LEN),
         ] {
             if blob.len() != len {
                 return Err(format!(
@@ -42,6 +49,7 @@ impl FrontEndAssets {
             title_tilemap,
             file_select_vram,
             file_select_tilemap,
+            demo_tapes,
         })
     }
 
@@ -63,6 +71,17 @@ impl FrontEndAssets {
     /// `$4A52`'s 0x400 bytes, copied to `$9800` by `$30000`.
     pub fn file_select_tilemap(&self) -> &[u8] {
         &self.file_select_tilemap
+    }
+
+    /// The four pages at `$7C00-$7FFF`; page 3 is `$7C00`, page 0 is `$7F00`.
+    pub fn demo_tapes(&self) -> &[u8] {
+        &self.demo_tapes
+    }
+
+    /// `$140D6`: demo `index & 3` reads `$7F00 - index*$100`.
+    pub fn demo_tape(&self, index: u8) -> &[u8] {
+        let page = 3 - (index & 0x03) as usize;
+        &self.demo_tapes[page * DEMO_TAPE_LEN..(page + 1) * DEMO_TAPE_LEN]
     }
 }
 

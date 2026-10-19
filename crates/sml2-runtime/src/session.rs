@@ -13,7 +13,9 @@ use sml2_core::camera::CameraSim;
 use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
 use sml2_core::ending_scene::EndingScene;
 use sml2_core::ending_sequence::EndingSequenceController;
-use sml2_core::front_end::{FileSelect, FileSelectAction, SaveSlots, TitleAction, TitleScreen};
+use sml2_core::front_end::{
+    DemoTape, FileSelect, FileSelectAction, SaveSlots, TitleAction, TitleScreen, DEMO_LEVELS,
+};
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest};
 use sml2_core::map::MapNodes;
 use sml2_core::map_sim::MapSim;
@@ -511,6 +513,8 @@ pub enum SessionState {
     Title(TitleScreen),
     /// `$19`/`$1A`: the file select.
     FileSelect(FileSelect),
+    /// `$0B`: an attract demo level driven by a recorded tape.
+    Demo(Box<DemoContext>),
     Overworld(MapSim),
     InLevel(Box<LevelContext>),
     GameOver,
@@ -532,6 +536,14 @@ pub enum StepOutcome {
     LevelEntered(u8),
     LevelExited { node: u8, screen: u8, cleared: bool },
     GameOver,
+}
+
+/// `$0B`: a demo level plus its run-length input page.
+pub struct DemoContext {
+    pub ctx: Box<LevelContext>,
+    pub tape: DemoTape,
+    pub level_id: u8,
+    pub index: u8,
 }
 
 /// A level entry requested from the map, held for the console's own transition
@@ -622,12 +634,63 @@ impl Session {
         }
     }
 
+    /// `$00`: enter the title screen with a specific `sDemoIndex`.
+    pub fn enter_title_with_demo(&mut self, demo_index: u8) {
+        self.enter_title();
+        if let SessionState::Title(title) = &mut self.state {
+            title.set_demo_index(demo_index & 0x03);
+        }
+    }
+
     /// `$00`: enter the title screen instead of the overworld.
     pub fn enter_title(&mut self) {
         self.state = SessionState::Title(TitleScreen::new());
         self.last_map_screen = None;
         self.active_slot = None;
         // `$14043` stops all sound while the logo holds.
+        self.sound_driver.music_request = 0xFF;
+    }
+
+    /// `$140D6`/`$140A8`: load the demo's level and copy its tape page.
+    pub fn start_demo(&mut self, index: u8) -> bool {
+        let index = index & 0x03;
+        let level_id = DEMO_LEVELS[index as usize];
+        let Ok(content) = self.assets.level(level_id) else {
+            return false;
+        };
+        let ctx = LevelContext::from_content(
+            level_id,
+            content,
+            0,
+            5,
+            0,
+            0,
+            0,
+            0,
+            self.assets.scripts.clone(),
+            self.assets.tilesets.clone(),
+            self.assets.arena_layout.clone(),
+            self.assets.anim_rows.clone(),
+            self.assets.hud.clone(),
+            self.assets.object_tables.clone(),
+        );
+        self.state = SessionState::Demo(Box::new(DemoContext {
+            ctx: Box::new(ctx),
+            tape: DemoTape::new(self.assets.front_end.demo_tape(index)),
+            level_id,
+            index,
+        }));
+        // `$140D6`: `sMusicRequest = $FF` before state $0B.
+        self.sound_driver.music_request = 0xFF;
+        true
+    }
+
+    /// `$38CE`: start `(index + 1) & 3` on the next title loop.
+    fn finish_demo(&mut self, index: u8) {
+        let mut title = TitleScreen::new();
+        title.set_demo_index((index + 1) & 0x03);
+        self.state = SessionState::Title(title);
+        self.last_map_screen = None;
         self.sound_driver.music_request = 0xFF;
     }
 
@@ -670,7 +733,7 @@ impl Session {
                 let map = MapSim::new();
                 map.save_record(self.lives, self.level_tally, self.money_bag)
             }
-            SessionState::Title(_) | SessionState::FileSelect(_) => {
+            SessionState::Title(_) | SessionState::FileSelect(_) | SessionState::Demo(_) => {
                 match self.active_slot.and_then(|slot| self.slots.slot(slot as usize)) {
                     Some(record) => *record,
                     None => sml2_core::front_end::save_slots::fresh_template(),
@@ -861,9 +924,13 @@ impl Session {
                         self.sound_driver.music_request = file_select.take_music();
                         self.state = SessionState::FileSelect(file_select);
                     }
-                    TitleAction::StartDemo(index) => diagnostics.push(format!(
-                        "front end: attract demo {index} is not ported yet"
-                    )),
+                    TitleAction::StartDemo(index) => {
+                        if !self.start_demo(index) {
+                            diagnostics.push(format!(
+                                "front end: attract demo {index} could not load"
+                            ));
+                        }
+                    }
                     TitleAction::None => {}
                 }
                 StepOutcome::Continue
@@ -1014,6 +1081,55 @@ impl Session {
                 } else {
                     StepOutcome::Continue
                 }
+            }
+
+            SessionState::Demo(ref mut demo) => {
+                let mut finished = start_pressed;
+                if !finished {
+                    match demo.tape.step() {
+                        Some((held, pressed)) => {
+                            let keys = PlayerKeys {
+                                right: held & 0x10 != 0,
+                                left: held & 0x20 != 0,
+                                up: held & 0x40 != 0,
+                                down: held & 0x80 != 0,
+                                a: held & 0x01 != 0,
+                                b: held & 0x02 != 0,
+                                select: held & 0x04 != 0,
+                                start: held & 0x08 != 0,
+                            };
+                            demo.ctx.step_frame(
+                                keys,
+                                pressed & 0x01 != 0,
+                                pressed & 0x02 != 0,
+                                false,
+                                false,
+                                div,
+                                &self.assets.nodes,
+                            );
+                            if demo.ctx.sim.sfx0 != 0 {
+                                self.sound_driver.sfx_request_0 = demo.ctx.sim.sfx0;
+                                demo.ctx.sim.sfx0 = 0;
+                            }
+                            if demo.ctx.sim.sfx1 != 0 {
+                                self.sound_driver.sfx_request_1 = demo.ctx.sim.sfx1;
+                                demo.ctx.sim.sfx1 = 0;
+                            }
+                            if demo.ctx.sim.sfx2 != 0 {
+                                self.sound_driver.sfx_request_2 = demo.ctx.sim.sfx2;
+                                demo.ctx.sim.sfx2 = 0;
+                            }
+                            // The attract demo has no level music.
+                            demo.ctx.sim.music_request = 0;
+                        }
+                        None => finished = true,
+                    }
+                }
+                let index = demo.index;
+                if finished {
+                    self.finish_demo(index);
+                }
+                StepOutcome::Continue
             }
 
             SessionState::GameOver => {

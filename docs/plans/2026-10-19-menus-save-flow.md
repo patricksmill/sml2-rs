@@ -21,7 +21,7 @@ run `captures/sweep.sh` once per work package, and do not change the frozen
 - [x] FE-4 file select (state machine + OAM rendering)
 - [x] FE-5 session/runtime integration + rendering + `--boot title`
 - [x] FE-6 desktop launcher + persistence
-- [ ] FE-7 attract demos (can ship after FE-4)
+- [x] FE-7 attract demos
 - [ ] FE-8 acceptance, evidence, inventory row
 
 ## Definition of done
@@ -337,6 +337,15 @@ demo tapes; no live input may leak into the demo.
 
 **Exit**: each of the four demos runs N frames deterministically and returns to
 the title; START interrupts.
+
+**Status**: done. `front_end::DemoTape` ports `$38E5` (run-length pairs, zero
+counts skipped, `$FF` terminator) and `Session::start_demo` builds the level
+from `$4121` (`[0, $11, $0E, $14]`) with the `$7C00-$7FFF` page for the index.
+A demo ignores live held input, stops level music, and forwards SFX; START or
+the terminator calls `$38CE` (index + 1 & 3) and returns to the title with the
+countdown reset. The four pages are extracted as `frontend/demo_tapes.bin`.
+Tests cover the decoder, the ROM page bytes, the countdown trigger, the
+live-input isolation, START, and the full 3,745-frame terminator return.
 
 ### FE-8 — Acceptance, evidence, inventory (S)
 

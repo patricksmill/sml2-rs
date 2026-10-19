@@ -137,6 +137,7 @@ impl SessionAssets {
             source.read("frontend/title_tilemap.bin")?,
             source.read("frontend/file_select_vram.bin")?,
             source.read("frontend/file_select_tilemap.bin")?,
+            source.read("frontend/demo_tapes.bin")?,
         )
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
