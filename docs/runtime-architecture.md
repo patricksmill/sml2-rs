@@ -99,6 +99,7 @@ injected content reaches level entry without reopening its source; explicit DIV
 reaches map bookkeeping; autosaves emit ROM-format bytes; and game/sound state
 agrees when rendering runs at different frequencies and sizes.
 
-This extraction does not add window features, new desktop dependencies, binding
-logic, filters, DX support, complete snapshots, or multiplayer rules. Those build
-on these boundaries in the [feature roadmap](plans/2026-10-19-desktop-features-and-extensibility.md).
+The separate `sml2-desktop` crate now consumes these boundaries for its window,
+settings, bindings, controllers and debug tools; see [Desktop shell](desktop.md).
+Filters, DX support, complete snapshots and multiplayer rules remain future work
+in the [feature roadmap](plans/2026-10-19-desktop-features-and-extensibility.md).

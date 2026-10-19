@@ -11,6 +11,13 @@ source, and explicit session inputs/deferred host effects. The CLI adapters
 retain their existing behavior. See [Runtime boundaries](../runtime-architecture.md)
 for ownership, the public API, compatibility contracts, and verification.
 
+Package B's desktop shell is implemented in `sml2-desktop`: winit/wgpu/egui
+presentation, persisted settings, action-based keyboard/controller input,
+rebinding, integer zoom/fullscreen, and debug inspection/pause/step. Native
+rendering is checked on Linux/Wayland, including GPU screenshot pixel equality.
+Physical controller hotplug and other desktop platforms remain manual validation
+items. See [Desktop shell](../desktop.md) for build requirements and controls.
+
 ## Assessment from the current code
 
 The three-crate workspace already separates much native simulation from the

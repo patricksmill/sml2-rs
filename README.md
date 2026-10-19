@@ -13,6 +13,18 @@ cargo build --release
 cargo run -p sml2-extract                      # writes ./extracted/
 ```
 
+## Desktop app
+
+The desktop shell adds settings, rebinding, controllers, zoom/fullscreen and
+debug inspection/stepping around the native session:
+
+```sh
+cargo run -p sml2-desktop
+```
+
+See [Desktop shell](docs/desktop.md) for Linux build dependencies, controls,
+storage paths and validation commands. Original CLI commands remain available.
+
 ## Replay gate
 
 From this repo root, after extract (`cargo run --release -p sml2-extract` — it

@@ -4,4 +4,6 @@ members = [
     "crates/sml2-extract",
     "crates/sml2-core",
     "crates/sml2-runtime",
+    "crates/sml2-desktop",
 ]
+default-members = ["crates/sml2-extract", "crates/sml2-core", "crates/sml2-runtime"]
