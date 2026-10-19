@@ -14,6 +14,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::audio::music::{MusicSequencer, MusicWrite, SOUND_BANK04};
 use crate::audio::noise::{NoiseEffectState, NoiseMusicFlags, NoiseWrite};
 use crate::audio::pulse::{PulseEffectState, PulseMusicState, PulseWrite};
 use crate::audio::wave::{WaveEffectState, WaveMusicState, WaveWrite};
@@ -127,9 +128,11 @@ pub struct SoundDriver {
     pub wave_music: WaveMusicState,
     pub noise_slot: NoiseEffectState,
     pub noise_music: NoiseMusicFlags,
+    pub music_sequencer: MusicSequencer,
     pub pulse_writes: Vec<PulseWrite>,
     pub wave_writes: Vec<WaveWrite>,
     pub noise_writes: Vec<NoiseWrite>,
+    pub music_writes: Vec<MusicWrite>,
     pub update_count: u32,
 }
 
@@ -152,9 +155,11 @@ impl Default for SoundDriver {
             wave_music: WaveMusicState::default(),
             noise_slot: NoiseEffectState::default(),
             noise_music: NoiseMusicFlags::default(),
+            music_sequencer: MusicSequencer::default(),
             pulse_writes: Vec::new(),
             wave_writes: Vec::new(),
             noise_writes: Vec::new(),
+            music_writes: Vec::new(),
             update_count: 0,
         }
     }
@@ -252,7 +257,14 @@ impl SoundDriver {
         }
 
         if self.music_request != 0 {
-            self.active_song = self.music_request;
+            let req = self.music_request;
+            if req == 0xFF {
+                self.music_sequencer.stop();
+                self.active_song = 0;
+            } else {
+                self.music_sequencer.start_song(req, SOUND_BANK04);
+                self.active_song = self.music_sequencer.cur_song();
+            }
         } else {
             // Normal path: master volume derived from low_time_flag ($1004E..$1005A)
             self.master_volume = if self.low_time_flag {
@@ -265,6 +277,21 @@ impl SoundDriver {
             self.dispatch_slot_0();
             self.dispatch_slot_1();
             self.dispatch_slot_2();
+
+            // Process Music channels ($10062..$11638)
+            let sfx_active = [
+                self.pulse_effect.active_effect,
+                self.wave_slot.active_effect,
+                self.noise_slot.active_effect,
+            ];
+            self.music_sequencer.tick(SOUND_BANK04, sfx_active, &mut self.music_writes);
+            self.active_song = self.music_sequencer.cur_song();
+
+            // Handle drum trigger from music stream to Noise channel ($11788..$11790)
+            let has_drum_trigger = self.music_writes.iter().any(|w| *w == MusicWrite::DrumTrigger);
+            if has_drum_trigger && self.noise_slot.active_effect == 0 {
+                self.noise_slot.start(3, &mut self.noise_music, &mut self.noise_writes);
+            }
         }
 
         // Common exit $10067: clears request bytes

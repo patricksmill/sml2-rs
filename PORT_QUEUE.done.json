@@ -1233,6 +1233,22 @@
       ],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; in-memory state and register assertion unit tests for all 24 wave effects including wave RAM buffer staging and variant toggling; sensitivity check; cargo test -p sml2-core passes",
       "status": "verified"
+    },
+    {
+      "id": "music_sequencer",
+      "title": "Port native music sequencing engine, song playback, and 4-channel command processing",
+      "asm_refs": [
+        "main.asm:$112E0-$1137F",
+        "main.asm:$11380-$11637",
+        "main.asm:$11638-$118A0"
+      ],
+      "dependencies": [
+        "sfx_pulse_effects",
+        "sfx_wave_effects",
+        "sfx_noise_effects"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; in-memory song and channel sequencer unit tests asserting pitch, duration, loop, and envelope transitions; sensitivity check; cargo test -p sml2-core passes",
+      "status": "verified"
     }
   ]
 }
