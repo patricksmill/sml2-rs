@@ -128,11 +128,23 @@ comes from `sTimerHigh`), and when the script writes state `$0A` runs the
 deferred `$3EF2B` landing with the screen/node/exit-tile flag saved at entry.
 `$3E9FB`'s palette fade and the loaders' VRAM/OAM copies are render-side.
 
-### ME-6 — Golden-coin/castle chain (M)
-Port states `$1B-$1F/$20/$21` into `SessionState` (or the existing ending
-sequence controller) with the six-coin unlock and congratulations; verify the
-final castle entry from the map after six coins. Tests: each state's inputs
-and transitions, save/reload during the chain.
+### ME-6 — Golden-coin/castle chain (measured, not started)
+The state table at bank 0 `$02B0` maps `$1B`/`$1D` -> `$2AD3`, `$1C` ->
+`$2ADE`, `$1E` -> `$2AE9`, `$1F` -> `$2AF4`, `$20` -> `$2A80`, `$21` ->
+`$2A8B`; each stub switches to bank 12 and jumps:
+
+| state | bank 12 | measured behavior |
+|---|---|---|
+| `$1B`/`$1D` | `$45B6` | castle tiles `$4C92`(0x1800)->`$8000`, `$6492`->`$9800`; clear `sCastleCoinDone`; if all six `sGoldenCoin1..6` have bit 7, write tile `$74` into the five four-byte runs at `$9948/$9968/$9988/$99A8/$99C8`; BGP `$E4`, OBP1 `$D0`, OBP2 `$38`, scroll 0, `sMenuTimer=64`, `sMenuState=0`, `$FFC2=88`, stop music unless `$1D`, `$2B77`, LCDC `$C3`, state++ |
+| `$1C` | `$467A` | `$30693` reveal animation + `$3045B`'s OAM staging (`$FFC0/$FFC2` -> `$FFC4/$FFC5`, `$FFBB=1`), `$2B13` |
+| `$1E` | `$441D` | `sLevelTally+1` BCD unless `sLevelProgressFlags` bit 7; `sTileAnimConfig=0`; fade `$C0`; `$4985[sCurLevel]` -> `$FFC2`; `sMenuState=0`, `sWalkAnimTimer=0`; state++ |
+| `$1F` | `$4451` | `$446B` menu dispatcher (`$453B/$44AC/$4477/$44A1`), `$47BC`'s six-coin position walk (`$498A/$49A2/$49BA` per coin), `$2B63` |
+| `$20` | `$477B` | congratulations tilemap `$688A` -> `$9800`, `$0348`, `$2A63`, fade 4/`$FF`, state++ |
+| `$21` | `$47A9` | wait for the fade and START, then `jp $01E5` |
+
+Implement in a `castle_sequence` module driven by `SessionState`, with the
+six-coin check and the final-castle entry from the map; tests per state's
+byte writes and the save/reload path.
 
 ### ME-7 — Acceptance and inventory (S)
 End-to-end typed tapes: six coins → castle entry → Wario fight → ending/credits;
