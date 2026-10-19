@@ -383,12 +383,16 @@ fn map_screen_loader_music_reaches_the_driver() {
 }
 
 #[test]
-fn live_audio_clock_drops_a_stalls_surplus() {
-    // 100 ms of wall clock owes 4410 samples, but a stalled frame must not push
-    // them as one burst; the surplus is dropped rather than queued.
-    let mut clock = AudioClock::backdated(std::time::Duration::from_millis(100));
-    assert_eq!(clock.take(), 4 * 739);
-    assert_eq!(clock.take(), 0);
+fn live_audio_keeps_a_separate_pcm_interval_for_each_catch_up_tick() {
+    let mut clock = AudioClock;
+    let samples: Vec<_> = (0..8).map(|_| clock.take()).collect();
+    assert_eq!(
+        samples,
+        vec![735; 8],
+        "eight ticks retain eight audio intervals"
+    );
+    let mut clock = AudioClock;
+    assert_eq!((0..60).map(|_| clock.take()).sum::<usize>(), 44_100);
 }
 
 #[test]

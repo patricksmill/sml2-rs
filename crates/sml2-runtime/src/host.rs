@@ -13,32 +13,14 @@ use std::{
     path::PathBuf,
 };
 
-/// Wall-clock pacing for the live audio stream. The device consumes a fixed
-/// 44.1 kHz whatever the display refresh is, so production follows elapsed time
-/// instead of the frame count; a 60 Hz vsync loop otherwise feeds ~44,305
-/// samples/s into a 44,100 Hz sink and the queue drifts up to its full depth.
-pub struct AudioClock {
-    start: std::time::Instant,
-    produced: u64,
-}
+/// PCM duration of one live simulation tick. Catch-up ticks each retain their
+/// own audio interval instead of assigning a wall-clock deficit to the first.
+#[derive(Default)]
+pub struct AudioClock;
 
 impl AudioClock {
-    /// A clock whose epoch is `elapsed` in the past (tests only).
-    #[cfg(test)]
-    pub fn backdated(elapsed: std::time::Duration) -> Self {
-        Self {
-            start: std::time::Instant::now() - elapsed,
-            produced: 0,
-        }
-    }
-    /// Samples the wall clock owes since the last call, capped at four console
-    /// frames. `produced` is set to the elapsed-time total, so a frame that
-    /// stalls drops its surplus instead of pushing a burst into the stream.
     pub fn take(&mut self) -> usize {
-        let due = (self.start.elapsed().as_secs_f64() * 44_100.0) as u64;
-        let deficit = due.saturating_sub(self.produced).min(4 * 739);
-        self.produced = due;
-        deficit as usize
+        crate::audio_output::LIVE_FRAME_SAMPLES
     }
 }
 
@@ -103,10 +85,7 @@ impl SessionRunner {
         };
         runner.load_from_disk();
         if runner.live_audio.is_some() {
-            runner.audio_sync = Some(AudioClock {
-                start: std::time::Instant::now(),
-                produced: 0,
-            });
+            runner.audio_sync = Some(AudioClock);
         }
         runner
     }
@@ -140,7 +119,7 @@ impl SessionRunner {
         }
         self.audio_buffer.clear();
         self.apu.ingest_driver(&self.session.sound_driver);
-        // Preserve live wall-clock pacing and deterministic headless sample cadence.
+        // Match live PCM to the 60 Hz host; preserve console cadence for exports.
         let samples = match self.audio_sync.as_mut() {
             Some(clock) => clock.take(),
             None => self.apu.frame_sample_count(44100),

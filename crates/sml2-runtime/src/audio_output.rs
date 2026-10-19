@@ -7,11 +7,17 @@
 
 use std::io::Write;
 use std::process::{Command, Stdio};
-use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
+use std::sync::Arc;
+
+mod queue;
+use queue::SampleQueue;
+
+/// Stereo sample frames per tick for the live frontends' fixed 60 Hz simulation.
+pub const LIVE_FRAME_SAMPLES: usize = 44_100 / 60;
 use std::thread::{self, JoinHandle};
 
 pub struct AudioOutput {
-    sender: Option<SyncSender<Vec<f32>>>,
+    queue: Arc<SampleQueue>,
     worker: Option<JoinHandle<()>>,
 }
 
@@ -35,15 +41,14 @@ impl AudioOutput {
 
         let mut stdin = child.stdin.take()?;
 
-        // Bounded queue: enough to ride out a render hitch, shallow enough that
-        // the stream stays close to real time (6 frames = 100 ms).
-        let (tx, rx) = sync_channel::<Vec<f32>>(6);
+        let queue = Arc::new(SampleQueue::default());
+        let playback = Arc::clone(&queue);
 
         let worker = thread::Builder::new()
             .name("sml2-audio-output".into())
             .spawn(move || {
                 let mut byte_buf = Vec::with_capacity(4096);
-                while let Ok(samples) = rx.recv() {
+                while let Some(samples) = playback.pop() {
                     byte_buf.clear();
                     byte_buf.reserve(samples.len() * 4);
                     for &s in &samples {
@@ -57,6 +62,7 @@ impl AudioOutput {
                         break;
                     }
                 }
+                playback.close();
                 drop(stdin);
                 let _ = child.wait();
             })
@@ -64,7 +70,7 @@ impl AudioOutput {
 
         println!("Live audio enabled via {name}");
         Some(Self {
-            sender: Some(tx),
+            queue,
             worker: Some(worker),
         })
     }
@@ -101,21 +107,13 @@ impl AudioOutput {
 
     /// Enqueue a frame of stereo interleaved float32 samples to the audio stream.
     pub fn write_samples(&self, samples: &[f32]) {
-        if let Some(tx) = &self.sender {
-            match tx.try_send(samples.to_vec()) {
-                Ok(()) => {}
-                Err(TrySendError::Full(_)) => {
-                    // Buffer is full (e.g. game hitch or pause); drop to avoid latency drift
-                }
-                Err(TrySendError::Disconnected(_)) => {}
-            }
-        }
+        self.queue.push(samples.to_vec());
     }
 }
 
 impl Drop for AudioOutput {
     fn drop(&mut self) {
-        self.sender.take(); // Close channel
+        self.queue.close();
         if let Some(handle) = self.worker.take() {
             let _ = handle.join();
         }

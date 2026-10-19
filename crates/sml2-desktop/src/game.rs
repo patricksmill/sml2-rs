@@ -1,6 +1,10 @@
 use crate::settings::atomic_write;
 use sml2_core::{audio::Apu, divider::Divider, player_sim::PlayerKeys};
-use sml2_runtime::{audio_output::AudioOutput, content::SessionAssets, FrameInput, Session};
+use sml2_runtime::{
+    audio_output::{AudioOutput, LIVE_FRAME_SAMPLES},
+    content::SessionAssets,
+    FrameInput, Session,
+};
 use std::{fs, path::PathBuf, time::Instant};
 
 pub struct Game {
@@ -11,8 +15,6 @@ pub struct Game {
     output: Option<AudioOutput>,
     audio_enabled: bool,
     origin: Instant,
-    audio_origin: Instant,
-    produced: u64,
     pub diagnostics: Vec<String>,
 }
 
@@ -37,8 +39,6 @@ impl Game {
             output: None,
             audio_enabled,
             origin: Instant::now(),
-            audio_origin: Instant::now(),
-            produced: 0,
             diagnostics,
         }
     }
@@ -52,8 +52,6 @@ impl Game {
                 self.diagnostics
                     .push("Live audio output is unavailable on this system".into());
             }
-            self.audio_origin = Instant::now();
-            self.produced = 0;
         } else if !running {
             self.output = None;
         }
@@ -69,14 +67,9 @@ impl Game {
         }
         self.diagnostics.extend(effects.diagnostics);
         self.apu.ingest_driver(&self.session.sound_driver);
-        let samples = if self.output.is_some() {
-            let due = (self.audio_origin.elapsed().as_secs_f64() * 44100.0) as u64;
-            let samples = due.saturating_sub(self.produced).min(4 * 739) as usize;
-            self.produced = due;
-            samples
-        } else {
-            self.apu.frame_sample_count(44100)
-        };
+        // Each catch-up tick advances its own PCM interval before the next
+        // driver update, so short SFX cannot disappear into a zero-sample tick.
+        let samples = LIVE_FRAME_SAMPLES;
         self.buffer.clear();
         self.apu.generate_samples(44100, samples, &mut self.buffer);
         for sample in &mut self.buffer {
@@ -91,3 +84,6 @@ impl Game {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
