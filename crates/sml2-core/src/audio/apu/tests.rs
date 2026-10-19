@@ -127,10 +127,10 @@ fn test_ingest_driver_and_sample_generation() {
     apu.ingest_driver(&driver);
 
     let mut buffer = Vec::new();
-    // 735 stereo pairs ≈ 1 frame at 44.1 kHz
-    apu.generate_samples(44100, 735, &mut buffer);
+    // One console frame ≈ 738.35 stereo pairs at 44.1 kHz
+    apu.generate_samples(44100, 738, &mut buffer);
 
-    assert_eq!(buffer.len(), 1470);
+    assert_eq!(buffer.len(), 1476);
     let has_signal = buffer.iter().any(|&s| s.abs() > 0.0);
     assert!(has_signal, "Driver playback produced no audible APU signal");
 }
@@ -219,4 +219,20 @@ fn test_ch1_sweep_glides_and_overflows() {
     apu.apply_music_write(MusicWrite::Ch1FrequencyControl(0x86));
     apu.advance_frame_sequencer(32_768);
     assert_eq!(apu.ch1.freq, 0x600, "NR10=0 keeps the note steady");
+}
+
+#[test]
+fn test_frame_sample_count_matches_the_console_cadence() {
+    // 70,224 cycles per frame at 4,194,304 Hz is 738.3533 samples at 44.1 kHz.
+    let mut apu = Apu::new();
+    let first: Vec<usize> = (0..3).map(|_| apu.frame_sample_count(44100)).collect();
+    assert_eq!(first, vec![738, 738, 739]);
+
+    let mut apu = Apu::new();
+    let total: usize = (0..100).map(|_| apu.frame_sample_count(44100)).sum();
+    assert_eq!(total, 73_835, "100 frames = 73835.33 samples");
+    assert!(
+        total > 735 * 100,
+        "the fixed 735/frame count lost 0.456 % of every second"
+    );
 }

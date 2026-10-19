@@ -898,7 +898,8 @@ impl SessionRunner {
             ctx.sim.current_song = self.sound_driver.active_song;
         }
         self.apu.ingest_driver(&self.sound_driver);
-        self.apu.generate_samples(44100, 735, &mut self.audio_buffer);
+        let samples = self.apu.frame_sample_count(44100);
+        self.apu.generate_samples(44100, samples, &mut self.audio_buffer);
 
         if self.audio_out_path.is_some() {
             self.recorded_audio.extend_from_slice(&self.audio_buffer);

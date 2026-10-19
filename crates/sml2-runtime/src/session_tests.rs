@@ -267,9 +267,10 @@ fn session_audio_synthesis_during_gameplay() {
     let assets = SessionAssets::load().expect("session assets must load");
     let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
 
-    // Initial overworld frame generates 735 stereo samples (1470 f32s)
+    // Initial overworld frame generates one console frame of samples: 738
+    // stereo pairs on the first frame of the 738/738/739 cadence (1476 f32s).
     let _ = runner.step_frame(PlayerKeys::default());
-    assert_eq!(runner.audio_samples().len(), 1470);
+    assert_eq!(runner.audio_samples().len(), 1476);
 
     // Enter Level 1
     let outcome = runner.step_frame(PlayerKeys {
@@ -285,7 +286,12 @@ fn session_audio_synthesis_during_gameplay() {
             right: true,
             ..Default::default()
         });
-        assert_eq!(runner.audio_samples().len(), 1470);
+        // One console frame is 738 or 739 stereo pairs (738.3533 average).
+        let len = runner.audio_samples().len();
+        assert!(
+            len == 1476 || len == 1478,
+            "frame produced {len} floats, expected 1476 or 1478"
+        );
         for &s in runner.audio_samples() {
             assert!(s >= -1.0 && s <= 1.0, "Sample out of bounds: {s}");
         }

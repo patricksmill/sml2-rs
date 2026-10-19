@@ -344,6 +344,9 @@ pub struct Apu {
     pub cycle_acc: u32,
     pub frame_seq_cycle: u32,
     pub frame_seq_step: u8,
+    /// Remainder of `70224 * sample_rate` from the last `frame_sample_count`,
+    /// so a frame's sample count averages 738.3533 at 44.1 kHz and not 735.
+    pub sample_frame_acc: u64,
     pub cap_left: f32,  // High-pass DC-blocking filter state
     pub cap_right: f32,
 }
@@ -363,6 +366,7 @@ impl Default for Apu {
             cycle_acc: 0,
             frame_seq_cycle: 0,
             frame_seq_step: 0,
+            sample_frame_acc: 0,
             cap_left: 0.0,
             cap_right: 0.0,
         }
@@ -715,6 +719,17 @@ impl Apu {
                 }
             }
         }
+    }
+
+    /// Samples one console frame is worth at `sample_rate`: 70,224 cycles at
+    /// 4,194,304 Hz is 738.3533 samples at 44.1 kHz. The remainder carries, so
+    /// the sequence is 738/738/739/738/... and the audio clock stays locked to
+    /// the frame clock (a fixed 735 ran it 0.456 % fast, +7.88 cents).
+    pub fn frame_sample_count(&mut self, sample_rate: u32) -> usize {
+        self.sample_frame_acc += 70_224u64 * sample_rate as u64;
+        let samples = self.sample_frame_acc / 4_194_304;
+        self.sample_frame_acc %= 4_194_304;
+        samples as usize
     }
 
     /// Generates interleaved stereo f32 audio samples in `[-1.0, 1.0]`.

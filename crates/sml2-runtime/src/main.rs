@@ -79,7 +79,8 @@ fn export_song(
     for _ in 0..total_frames {
         driver.update_sound();
         apu.ingest_driver(&driver);
-        apu.generate_samples(44100, 735, &mut samples);
+        let frame_samples = apu.frame_sample_count(44100);
+        apu.generate_samples(44100, frame_samples, &mut samples);
     }
 
     sml2_core::audio::write_wav_file(out_path, &samples, 44100)?;
@@ -128,7 +129,8 @@ fn export_sfx(
     for _ in 0..total_frames {
         driver.update_sound();
         apu.ingest_driver(&driver);
-        apu.generate_samples(44100, 735, &mut samples);
+        let frame_samples = apu.frame_sample_count(44100);
+        apu.generate_samples(44100, frame_samples, &mut samples);
     }
 
     sml2_core::audio::write_wav_file(out_path, &samples, 44100)?;
