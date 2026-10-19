@@ -28,6 +28,7 @@ use std::path::{Path, PathBuf};
 
 mod divider_clock;
 mod play_tape;
+pub mod audio_output;
 pub mod session;
 use play_tape::PlayTape;
 #[cfg(test)]

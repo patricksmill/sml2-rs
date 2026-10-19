@@ -614,6 +614,7 @@ pub struct SessionRunner {
     pub audio_buffer: Vec<f32>,
     pub audio_out_path: Option<PathBuf>,
     pub recorded_audio: Vec<f32>,
+    pub live_audio: Option<crate::audio_output::AudioOutput>,
 }
 
 impl SessionRunner {
@@ -653,6 +654,11 @@ impl SessionRunner {
             audio_buffer: Vec::with_capacity(1470),
             audio_out_path: None,
             recorded_audio: Vec::new(),
+            live_audio: if headless {
+                None
+            } else {
+                crate::audio_output::AudioOutput::open()
+            },
         };
 
         if !runner.load_from_disk() {
@@ -660,6 +666,8 @@ impl SessionRunner {
             map_sim.load_screen(0, 0, &runner.assets.node_records);
             runner.state = SessionState::Overworld(map_sim);
         }
+        // $3EA9A / main.asm:7391: Overworld map theme (song 24)
+        runner.sound_driver.music_request = 24;
 
         runner
     }
@@ -745,6 +753,13 @@ impl SessionRunner {
                     &self.assets.walk,
                     &self.assets.node_records,
                 );
+
+                if let Some(music) = entry.music {
+                    self.sound_driver.music_request = music;
+                }
+                if let Some(sfx) = entry.sfx {
+                    self.sound_driver.sfx_request_1 = sfx;
+                }
 
                 if map_sim.pending_save || entry.saved {
                     map_sim.pending_save = false;
@@ -917,6 +932,10 @@ impl SessionRunner {
         self.apu.ingest_driver(&self.sound_driver);
         let samples = self.apu.frame_sample_count(44100);
         self.apu.generate_samples(44100, samples, &mut self.audio_buffer);
+
+        if let Some(audio) = &self.live_audio {
+            audio.write_samples(&self.audio_buffer);
+        }
 
         if self.audio_out_path.is_some() {
             self.recorded_audio.extend_from_slice(&self.audio_buffer);

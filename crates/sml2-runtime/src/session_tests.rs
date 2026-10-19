@@ -347,9 +347,9 @@ fn map_screen_loader_music_reaches_the_driver() {
     let assets = SessionAssets::load().expect("session assets must load");
     let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
 
-    // The hub loader ($3F156) requests $FF, i.e. stop.
+    // The hub screen (screen 0) plays the map theme (song 24, main.asm:7391).
     runner.step_frame(PlayerKeys::default());
-    assert_eq!(runner.sound_driver.active_song, 0);
+    assert_eq!(runner.sound_driver.active_song, 24, "hub screen map theme song 24");
 
     // Screen 1 is loaded by $3D208, which requests song 30.
     {
