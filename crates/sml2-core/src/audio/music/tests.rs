@@ -318,3 +318,103 @@ fn test_noise_note_01_reads_its_record_like_the_rom() {
     assert!(ch.rest, "the noise note must not clear or set the rest flag");
     assert_eq!(ch.note_timer, 0x18);
 }
+
+#[test]
+fn test_wave_drum_duck_steps_and_ends() {
+    // $1199A: while sMusicDrumMode is 1 the shared slide-step byte increments
+    // every frame; steps 3/5/7 write NR32 = $40/$60/$00 and step 13 writes $00
+    // once more and ends the duck (mode 2).
+    let mut ch = MusicChannel::new(3);
+    ch.active = true;
+    ch.note_timer = 40;
+    ch.note_duration = 0x40;
+    let bank = vec![0u8; 0x4000];
+    let mut drum = 1u8;
+    let mut transpose = 0i8;
+    let mut dur = 0x5C61u16;
+    let mut out = Vec::new();
+    let mut frames = Vec::new();
+    for _ in 0..14 {
+        out.clear();
+        ch.tick(&bank, &mut transpose, &mut dur, &mut drum, false, &mut out);
+        frames.push(out.clone());
+    }
+
+    assert_eq!(ch.slide_step, 13);
+    assert_eq!(drum, 2, "step 13 ends the duck");
+    assert_eq!(frames[2], vec![MusicWrite::Ch3Level(0x40)]);
+    assert_eq!(frames[4], vec![MusicWrite::Ch3Level(0x60)]);
+    assert_eq!(frames[6], vec![MusicWrite::Ch3Level(0x00)]);
+    assert_eq!(frames[12], vec![MusicWrite::Ch3Level(0x00)]);
+    for (i, writes) in frames.iter().enumerate() {
+        if ![2, 4, 6, 12].contains(&i) {
+            assert!(writes.is_empty(), "frame {i} wrote {writes:?}");
+        }
+    }
+}
+
+#[test]
+fn test_software_envelope_fires_on_the_scaled_timer() {
+    // $11899/$118E4: on the frame the channel's counter equals its timer, NR12
+    // takes $5CAC[(instrument & $0F) - 1] and NR14 retriggers the note.
+    let mut bank = vec![0u8; 0x4000];
+    bank[0x1CAC] = 0x10; // $5CAC[0], the nibble-1 instrument
+    let mut ch = MusicChannel::new(1);
+    ch.active = true;
+    ch.instrument = [0x01, 0x80, 0x00];
+    ch.env_timer = 4;
+    ch.freq_hi = 0x05;
+    ch.note_timer = 40;
+    let mut transpose = 0i8;
+    let mut dur = 0x5C61u16;
+    let mut drum = 0u8;
+    let mut out = Vec::new();
+    let mut fires = Vec::new();
+    for counter in 0..6u8 {
+        ch.env_counter = counter;
+        out.clear();
+        ch.tick(&bank, &mut transpose, &mut dur, &mut drum, false, &mut out);
+        if !out.is_empty() {
+            fires.push((counter, out.clone()));
+        }
+    }
+
+    assert_eq!(fires.len(), 1, "exactly one envelope frame per note");
+    assert_eq!(fires[0].0, 4);
+    assert_eq!(
+        fires[0].1,
+        vec![
+            MusicWrite::Ch1Envelope(0x10),
+            MusicWrite::Ch1FrequencyControl(0x85),
+        ]
+    );
+}
+
+#[test]
+fn test_duration_command_computes_the_envelope_timer() {
+    // $116B9: the $Ax duration command also stores the envelope fire value,
+    // scaled by instrument[1]'s high nibble (here $80 -> duration / 2).
+    let mut bank = vec![0u8; 0x4000];
+    bank[0x1C61..0x1C71].copy_from_slice(&[
+        0x03, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x12, 0x24, 0x48, 0x03, 0x08, 0x10, 0x02, 0x01, 0x90,
+        0x03,
+    ]);
+    bank[0x1000..0x1006].copy_from_slice(&[0x9D, 0x01, 0x80, 0x00, 0xA1, 0x40]);
+
+    let mut ch = MusicChannel::new(1);
+    ch.active = true;
+    ch.section_ptr = 0x5000;
+    ch.stream_ptr = 0x5000;
+    ch.note_timer = 1;
+    ch.env_counter = 99;
+    let mut transpose = 0i8;
+    let mut dur = 0x5C61u16;
+    let mut drum = 0u8;
+    let mut out = Vec::new();
+    ch.tick(&bank, &mut transpose, &mut dur, &mut drum, false, &mut out);
+
+    assert_eq!(ch.instrument, [0x01, 0x80, 0x00]);
+    assert_eq!(ch.note_duration, 0x06);
+    assert_eq!(ch.env_timer, 3, "6 with scale $80");
+    assert_eq!(ch.env_counter, 0, "$117D9 resets the counter on every note");
+}

@@ -103,12 +103,19 @@ impl MusicChannel {
 
         self.note_timer = self.note_timer.wrapping_sub(1);
         if self.note_timer != 0 {
-            // Mid-note modulation: Channel 3 level boost when 6 frames remain ($11565)
+            // $11565: with six frames left, a wave-channel instrument whose
+            // level byte has bit 7 set boosts NR32 to $40. The ROM checks this
+            // before the rest/takeover gates, so an SFX never masks it.
             if self.id == 3 && (self.instrument[2] & 0x80) != 0 && self.note_timer == 6 {
-                if !sfx_active {
-                    out.push(MusicWrite::Ch3Level(0x40));
-                }
+                out.push(MusicWrite::Ch3Level(0x40));
             }
+            // $1157C: a resting channel, and a channel an SFX has taken over,
+            // skip the modulation and envelope calls for this frame.
+            if self.rest || sfx_active {
+                return;
+            }
+            self.tick_modulation(drum_mode, out);
+            self.tick_software_envelope(bank, out);
             return;
         }
 
@@ -211,6 +218,24 @@ impl MusicChannel {
                         0x18
                     };
 
+                    // $116B9: the software envelope's fire value scales the note
+                    // duration by instrument[1]'s high nibble ($80 = half,
+                    // $40 = quarter, anything else = three quarters), with a
+                    // minimum of 2; a zero nibble keeps the raw duration.
+                    let scale = self.instrument[1] & 0xF0;
+                    self.env_timer = if scale == 0 {
+                        self.note_duration
+                    } else {
+                        let scaled = if scale & 0x80 != 0 {
+                            self.note_duration >> 1
+                        } else if scale & 0x40 != 0 {
+                            (self.note_duration >> 1) >> 1
+                        } else {
+                            (self.note_duration >> 1) + ((self.note_duration >> 1) >> 1)
+                        };
+                        scaled.max(2)
+                    };
+
                     // Next byte is the note pitch
                     let note = self.read_stream_byte(bank);
                     self.trigger_note(note, *transpose, sfx_active, bank, out);
@@ -222,6 +247,59 @@ impl MusicChannel {
                 }
                 _ => {}
             }
+        }
+    }
+
+    /// `$11817`/`$11839`: per-frame modulation while a note is held. A slide or
+    /// a bend consumes the frame first; with neither active, the wave channel
+    /// runs its drum duck (`$1199A`), whose counter shares `slide_step` with the
+    /// ch3 portamento (`ram.asm` documents the overlap).
+    fn tick_modulation(&mut self, drum_mode: &mut u8, out: &mut Vec<MusicWrite>) {
+        if self.slide_state != 0 || self.bend_flag != 0 {
+            return;
+        }
+        if self.id != 3 || *drum_mode == 0 || *drum_mode == 2 {
+            return;
+        }
+        self.slide_step = self.slide_step.wrapping_add(1);
+        let level = match self.slide_step {
+            3 => Some(0x40),
+            5 => Some(0x60),
+            7 => Some(0x00),
+            13 => {
+                *drum_mode = 2; // $1199A: the duck has ended
+                Some(0x00)
+            }
+            _ => None,
+        };
+        if let Some(level) = level {
+            out.push(MusicWrite::Ch3Level(level));
+        }
+    }
+
+    /// `$11899`/`$118E4`: when the channel's envelope counter reaches the value
+    /// the last duration command computed, write `$5CAC[(instrument & $0F) - 1]`
+    /// to NRx2 and retrigger the note (NRx4 = freq_hi | $80).
+    fn tick_software_envelope(&mut self, bank: &[u8], out: &mut Vec<MusicWrite>) {
+        if self.id > 2 || self.instrument[0] == 0 {
+            return;
+        }
+        if self.env_counter != self.env_timer {
+            return;
+        }
+        let index = (self.instrument[0] & 0x0F).wrapping_sub(1) as u16;
+        let off = bank4_offset(0x5CACu16.wrapping_add(index));
+        let envelope = bank.get(off).copied().unwrap_or(0);
+        match self.id {
+            1 => {
+                out.push(MusicWrite::Ch1Envelope(envelope));
+                out.push(MusicWrite::Ch1FrequencyControl(self.freq_hi | 0x80));
+            }
+            2 => {
+                out.push(MusicWrite::Ch2Envelope(envelope));
+                out.push(MusicWrite::Ch2FrequencyControl(self.freq_hi | 0x80));
+            }
+            _ => {}
         }
     }
 
@@ -244,6 +322,8 @@ impl MusicChannel {
         out: &mut Vec<MusicWrite>,
     ) {
         self.note_timer = self.note_duration;
+        // $117D9 zeroes block+14: every note restarts the envelope counter.
+        self.env_counter = 0;
 
         // $11728 takes the channel-4 branch BEFORE the note-$01 rest test, so a
         // noise note $01 reads its $5C06 record like any other note (and leaves
