@@ -238,6 +238,10 @@ impl SoundDriver {
     /// Complete per-frame sound update driver (_UpdateSound $10030).
     pub fn update_sound(&mut self) {
         self.update_count += 1;
+        self.pulse_writes.clear();
+        self.wave_writes.clear();
+        self.noise_writes.clear();
+        self.music_writes.clear();
 
         if self.sound_mode == 1 {
             self.sound_paused = true;
