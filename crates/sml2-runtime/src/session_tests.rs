@@ -301,3 +301,35 @@ fn session_audio_synthesis_during_gameplay() {
 
     let _ = fs::remove_file(&tmp_save);
 }
+
+#[test]
+fn level_entry_publishes_the_active_song_for_the_timer_gate() {
+    let tmp_save = temp_save_path("test_audio_song_sync");
+    let _ = fs::remove_file(&tmp_save);
+
+    let assets = SessionAssets::load().expect("session assets must load");
+    let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
+    let outcome = runner.step_frame(PlayerKeys {
+        a: true,
+        ..Default::default()
+    });
+    assert_eq!(outcome, StepOutcome::LevelEntered(0));
+
+    let song = match &runner.state {
+        SessionState::InLevel(ctx) => ctx.sim.level_song,
+        _ => panic!("expected in-level state"),
+    };
+    assert_eq!(song, 0x01, "level 1 header music");
+
+    // One in-level frame: the header's music request reaches the driver, and
+    // the driver's sCurSong is published back for $5DCB's `ld a,[sCurSong]`
+    // gate on the next frame's timer tick.
+    runner.step_frame(PlayerKeys::default());
+    assert_eq!(runner.sound_driver.active_song, song);
+    match &runner.state {
+        SessionState::InLevel(ctx) => assert_eq!(ctx.sim.current_song, song),
+        _ => panic!("expected in-level state"),
+    }
+
+    let _ = fs::remove_file(&tmp_save);
+}

@@ -891,6 +891,12 @@ impl SessionRunner {
         };
 
         self.sound_driver.update_sound();
+        // The ROM reads `sCurSong` from the level timer's music gate ($5DCB) on
+        // the frame AFTER `_UpdateSound` wrote it, so publish the driver's song
+        // id after the update, never before it.
+        if let SessionState::InLevel(ref mut ctx) = self.state {
+            ctx.sim.current_song = self.sound_driver.active_song;
+        }
         self.apu.ingest_driver(&self.sound_driver);
         self.apu.generate_samples(44100, 735, &mut self.audio_buffer);
 
