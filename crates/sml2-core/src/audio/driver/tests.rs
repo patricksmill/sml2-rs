@@ -238,13 +238,16 @@ fn test_music_wave_pattern_is_kept_for_the_slot1_restore() {
     assert_eq!(driver.wave_music.wave_pattern, [0u8; 16]);
 
     driver.music_request = 1;
-    driver.update_sound(); // start the song
-    driver.update_sound(); // first sequencer tick: song 1's ch3 $9D
+    driver.update_sound(); // start + first tick: song 1's ch3 $9D
     let pattern = driver.wave_music.wave_pattern;
     assert_ne!(pattern, [0u8; 16], "song 1 uploads a wave pattern");
     assert!(driver
         .music_writes
         .contains(&MusicWrite::Ch3WavePattern(pattern)));
+
+    // The pointer (and so the pattern) survives later frames.
+    driver.update_sound();
+    assert_eq!(driver.wave_music.wave_pattern, pattern);
 }
 
 #[test]
@@ -318,4 +321,21 @@ fn test_slot0_reset_effects_stop_the_song() {
     assert_eq!(driver.wave_slot.active_effect, 0, "other slots are cleared");
     assert!(!driver.low_time_flag);
     assert_eq!(driver.pulse_effect.active_effect, 12);
+}
+
+#[test]
+fn test_song_start_frame_runs_the_sequencer() {
+    // $10078 falls through to $10064 (call $11638): the frame that starts a
+    // song still ticks it, so its first note is not delayed by one frame.
+    let mut driver = SoundDriver::new();
+    driver.music_request = 1;
+    driver.update_sound();
+    assert_eq!(driver.active_song, 1);
+    assert!(
+        driver
+            .music_writes
+            .iter()
+            .any(|w| matches!(w, MusicWrite::Ch1FrequencyControl(_))),
+        "song 1's first note must reach the registers on the start frame"
+    );
 }

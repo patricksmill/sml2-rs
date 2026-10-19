@@ -266,6 +266,19 @@ impl SoundDriver {
         }
     }
 
+    /// `$11788`: a channel-4 note `$1F` starts noise effect 3 from inside the
+    /// sequencer's own dispatch, which is why it is not a `sfx_request_2` write.
+    fn start_music_drum(&mut self) {
+        let has_drum_trigger = self
+            .music_writes
+            .iter()
+            .any(|w| *w == MusicWrite::DrumTrigger);
+        if has_drum_trigger && self.noise_slot.active_effect == 0 {
+            self.noise_slot
+                .start(3, &mut self.noise_music, &mut self.noise_writes);
+        }
+    }
+
     /// `$11510`: the `$9D` instrument command stores the channel-3 wave-pattern
     /// pointer, and the slot-1 stop (`$10E1D`) restores wave RAM through it.
     /// Keep the last pattern the music uploaded so that restore has the music's
@@ -315,6 +328,13 @@ impl SoundDriver {
                 self.reset_engine();
                 self.music_sequencer.start_song(req, SOUND_BANK04);
                 self.active_song = self.music_sequencer.cur_song();
+                // $10078 falls through to $10064, so the start frame still runs
+                // the sequencer; the slots were just reset, so nothing masks.
+                self.music_sequencer
+                    .tick(SOUND_BANK04, [0, 0, 0], &mut self.music_writes);
+                self.active_song = self.music_sequencer.cur_song();
+                self.latch_ch3_pattern();
+                self.start_music_drum();
             }
         } else {
             // Normal path: master volume derived from low_time_flag ($1004E..$1005A)
@@ -338,12 +358,7 @@ impl SoundDriver {
             self.music_sequencer.tick(SOUND_BANK04, sfx_active, &mut self.music_writes);
             self.active_song = self.music_sequencer.cur_song();
             self.latch_ch3_pattern();
-
-            // Handle drum trigger from music stream to Noise channel ($11788..$11790)
-            let has_drum_trigger = self.music_writes.iter().any(|w| *w == MusicWrite::DrumTrigger);
-            if has_drum_trigger && self.noise_slot.active_effect == 0 {
-                self.noise_slot.start(3, &mut self.noise_music, &mut self.noise_writes);
-            }
+            self.start_music_drum();
         }
 
         // Common exit $10067: clears request bytes
