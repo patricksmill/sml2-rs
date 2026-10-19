@@ -1201,6 +1201,22 @@
       ],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
       "status": "complete"
+    },
+    {
+      "id": "sfx_pulse_effects",
+      "title": "Port SFX Slot 0 (Pulse 1 / Channel 1) 24 effects, pitch slide sequencer, and dispatch",
+      "asm_refs": [
+        "main.asm:$1007E-$100DD",
+        "main.asm:$100DE-$10126",
+        "main.asm:$10127-$1067F",
+        "main.asm:$10680-$106C5",
+        "main.asm:$111F9-$11243"
+      ],
+      "dependencies": [
+        "native_pulse_effects"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "complete"
     }
   ]
 }

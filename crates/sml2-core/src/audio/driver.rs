@@ -126,6 +126,7 @@ pub struct SoundDriver {
     pub sound_mode: u8,
     pub sound_paused: bool,
     pub low_time_flag: bool,
+    pub stomp_chain: u8,
     pub master_volume: u8,
     pub pulse_effect: PulseEffectState,
     pub pulse_music: PulseMusicState,
@@ -148,6 +149,7 @@ impl Default for SoundDriver {
             sound_mode: 0,
             sound_paused: false,
             low_time_flag: false,
+            stomp_chain: 0,
             master_volume: MASTER_VOLUME_NORMAL,
             pulse_effect: PulseEffectState::default(),
             pulse_music: PulseMusicState::default(),
@@ -187,31 +189,11 @@ impl SoundDriver {
             }
 
             self.pulse_effect.request = req;
-            self.pulse_effect.active_effect = req;
-
-            match req {
-                6 => self
-                    .pulse_effect
-                    .start_effect6(&mut self.pulse_music, &mut self.pulse_writes),
-                7 => self
-                    .pulse_effect
-                    .start_effect7(&mut self.pulse_music, &mut self.pulse_writes),
-                _ => {
-                    // Start target resolved via SLOT0_START_TABLE
-                }
-            }
+            self.pulse_effect
+                .start(req, &mut self.pulse_music, self.stomp_chain, &mut self.pulse_writes);
         } else if self.pulse_effect.active_effect != 0 {
-            match self.pulse_effect.active_effect {
-                6 => self
-                    .pulse_effect
-                    .tick_effect6(&mut self.pulse_music, &mut self.pulse_writes),
-                7 => self
-                    .pulse_effect
-                    .tick_effect7(&mut self.pulse_music, &mut self.pulse_writes),
-                _ => {
-                    // Tick target resolved via SLOT0_TICK_TABLE
-                }
-            }
+            self.pulse_effect
+                .tick(&mut self.pulse_music, self.stomp_chain, &mut self.pulse_writes);
         }
     }
 

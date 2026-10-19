@@ -3,19 +3,19 @@
   "milestone_note": "1 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
     {
-      "id": "sfx_pulse_effects",
-      "title": "Port SFX Slot 0 (Pulse 1 / Channel 1) 24 effects, pitch slide sequencer, and dispatch",
+      "id": "sfx_wave_effects",
+      "title": "Port SFX Slot 1 (Wave / Channel 3) 24 effects, wave pattern uploads, and dispatch",
       "asm_refs": [
-        "main.asm:$1007E-$100DD",
-        "main.asm:$100DE-$10126",
-        "main.asm:$10127-$1067F",
-        "main.asm:$10680-$106C5",
-        "main.asm:$111F9-$11243"
+        "main.asm:$106FA-$10759",
+        "main.asm:$106D3-$106F9",
+        "main.asm:$1075A-$10DF2",
+        "main.asm:$10DF3-$10E42",
+        "main.asm:$111C7-$111D8"
       ],
       "dependencies": [
-        "native_pulse_effects"
+        "native_sound_driver"
       ],
-      "verification_gate": "PORTING.md § What “done” means; in-memory state and register assertion unit tests for all 24 pulse effects including frequency slides and multi-phase sequences; sensitivity check; cargo test -p sml2-core passes",
+      "verification_gate": "PORTING.md § What “done” means; in-memory state and register assertion unit tests for all 24 wave effects including wave RAM buffer staging and variant toggling; sensitivity check; cargo test -p sml2-core passes",
       "status": "pending"
     }
   ],

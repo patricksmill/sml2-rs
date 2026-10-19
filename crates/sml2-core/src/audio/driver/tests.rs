@@ -58,6 +58,7 @@ fn test_busy_checks_and_exceptions() {
     for &id in &SLOT0_BUSY_EXCEPTIONS {
         driver.pulse_effect.busy = 1;
         driver.pulse_effect.active_effect = 0;
+        driver.stomp_chain = 1;
         driver.sfx_request_0 = id;
         driver.update_sound();
         assert_eq!(
