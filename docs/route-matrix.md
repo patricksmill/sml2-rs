@@ -1,7 +1,8 @@
 # Level route matrix
 
 **Status: all 32 rows measured 2026-10-18; the first slice (12, 19, 28, 29) is
-reviewed, and every exit cell in the game is test-pinned.** Tool:
+reviewed, every exit cell is test-pinned, and level 28 has a played header-spawn
+to bell route.** Tool:
 [`tools/route_matrix.py`](../tools/route_matrix.py); acceptance:
 `crates/sml2-core/src/route_matrix_tests.rs`.
 
@@ -166,8 +167,30 @@ the `$1BFF` probe samples it, and requires `exit_phase`, the 192-frame fade, the
 level-clear music request, and the `$4B` flag. The four named tests additionally
 assert the slice's exact source cells.
 
-This is the "exit" acceptance for the whole game. It does not yet play the
-approach — the smoke harness runs 1200 frames and never reaches a bell.
+This establishes exit-cell activation for the whole game. The smoke harness
+alone does not require a bell or a completed approach.
+
+### Played route: level 28
+
+`cargo test -p sml2-runtime played_route_tests` runs the same `run_play` loop as
+interactive and headless play, with the original level28 header, layout, object
+stream, edge map and scene map. Its fixed tape holds right for 1,400 frames.
+Mario starts small at (51,260), camera (80,246), without invincibility or later
+position writes. The route descends from the upper ledge to the lower corridor;
+normal objects are active during the approach.
+
+The test pins native bell arming on frame 1,077 at (1242,468), sampling the
+source `$4A` cell (78,30), fade 192, music 3 and exit flag 0. Fade completion is
+frame 1,269 and handoff frame 1,270; tally is 1 and Mario remains alive. The
+source node is 120 (progress slot 38): `$3F104` rewrites it to 46, selects screen
+1/music 30, and makes two saves. Progress and its serialized save byte are
+`$80`. Disabling bell arming makes this acceptance test fail.
+
+The live loop returns typed observations for these assertions; gameplay is not
+reimplemented in the test. Direct level selection now derives an overworld
+origin when the source table has exactly one matching node. Level id 17 has
+two nodes (5 and 26), and castle id 24 has none; the CLI cannot yet infer their
+route context. Full overworld entry remains separate work.
 
 ## Gaps
 
@@ -190,9 +213,10 @@ approach — the smoke harness runs 1200 frames and never reaches a bell.
    sweep states, collision-generated stomps, the appended reward, one golden
    coin, save serialization, map node `$20`/screen 2, and clean re-entry. These
    are direct-placement acceptance tests; played approaches remain pending.
-3. **The approach routes are unplayed.** Every bell arms when stood on, but no
-   test walks from a spawn (or secret entry) to a bell. Level 19's upper bell and
-   the castle/night levels' bells are the obvious first played routes.
+3. **Approaches beyond level 28 remain unplayed.** The header-spawn route for
+   level 28 now reaches its bell through native input. Other ordinary starts,
+   secret-entry approaches, and approaches to boss entrances still need played
+   tests. Level 19's upper bell and the castle/night levels are priorities.
 4. **The 28 unreviewed rows are tool-measured, not hand-checked.** Their zone,
    node, exit and secret columns are trustworthy by construction; the
    "required mechanic" summary and any route narrative still need a review pass.

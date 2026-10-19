@@ -39,6 +39,8 @@ mod sweep_boss_entry_tests;
 mod circuit_boss_entry_tests;
 #[cfg(test)]
 mod scene_pipe_tests;
+#[cfg(test)]
+mod played_route_tests;
 use divider_clock::{NativeDividerClock, VirtualDividerClock};
 
 use serde::Deserialize;
@@ -268,6 +270,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             level_entry.start.camera_y,
         );
         apply_level_entry(&mut sim, &mut cam, level_entry);
+        // Direct level selection can recover a unique overworld origin. The
+        // castle and level id 17 need route context from the overworld itself.
+        seed_unique_level_map_node(&mut sim, manifest.level_id, &load_map_nodes());
         cam.prev_mario_y_lo = sim.y as u8;
         // The two per-level property bytes the ROM loads at $04F1: sMapScrollLimit
         // from `LevelPropertiesUNK` and sAutoScroll from `LevelPropertiesScroll`
@@ -326,7 +331,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             scene_map,
             keys_tape.clone(),
             headless_frames,
-        );
+        )
+        .map(|_| ());
     }
     if window_mode {
         run_window(
@@ -425,7 +431,12 @@ fn apply_tile_anim(bg: &mut [u8], anim: &sml2_core::level::TileAnim, rows: &[u8]
 
 /// Locate `extracted/` whether run from the repo root or a crate dir.
 fn extracted_dir() -> PathBuf {
-    for cand in ["extracted", "../extracted", "sml2-rs/extracted"] {
+    for cand in [
+        "extracted",
+        "../extracted",
+        "../../extracted",
+        "sml2-rs/extracted",
+    ] {
         let p = PathBuf::from(cand);
         if p.join("levels").is_dir() {
             return p;
@@ -2367,6 +2378,30 @@ fn print_play_state(
     );
 }
 
+/// Final native play state, also used to accept input tapes through this exact
+/// dispatch loop rather than a test's copy of the gameplay frame ordering.
+#[allow(dead_code)]
+struct PlayOutcome {
+    sim: PlayerSim,
+    cam: sml2_core::camera::CameraSim,
+    obj: sml2_core::objects::ObjectSim,
+    frames: u64,
+    bell_arm: Option<BellArm>,
+    exit_completed_frame: Option<u64>,
+    map_handoff_frame: Option<u64>,
+    map_handoff: Option<sml2_core::player_sim::MapHandoffOutcome>,
+    active_object_frames: u64,
+}
+
+#[allow(dead_code)]
+struct BellArm {
+    frame: u64,
+    position: (u16, u16),
+    fade_timer: u16,
+    music_request: u8,
+    exit_tile_flag: u8,
+}
+
 /// Interactive play mode: the ported player physics + camera drive the
 /// viewport (arrows move, Z/Space = A, X/Shift = B, Q/ESC quits). With
 /// `--keys` the input comes from the tape instead, so the run is scriptable.
@@ -2388,7 +2423,7 @@ fn run_play(
     scene_map: Option<Vec<u8>>,
     keys_tape: Option<String>,
     headless_frames: Option<u64>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<PlayOutcome, Box<dyn std::error::Error>> {
     let (vw, vh) = view;
     if let Some(e) = edge_map.as_ref() {
         if e.len() == 48 {
@@ -2460,6 +2495,11 @@ fn run_play(
     let mut prev_select = false;
     let mut tape_i = 0usize;
     let mut frame_n: u64 = 0;
+    let mut bell_arm = None;
+    let mut exit_completed_frame = None;
+    let mut map_handoff_frame = None;
+    let mut map_handoff = None;
+    let mut active_object_frames = 0;
     obj.configure(manifest.level_id);
     let obj_tables = spr.as_ref().map(|s| s.tables.clone());
     loop {
@@ -2600,6 +2640,9 @@ fn run_play(
             if exit_done_at_entry {
                 let handoff = sim.map_handoff(&nodes);
                 note_handoff_screen(&handoff);
+                if map_handoff.is_none() {
+                    map_handoff = Some(handoff);
+                }
             }
         } else if was_dead {
             sim.death_arc(cam.y);
@@ -2676,6 +2719,13 @@ fn run_play(
                     &mario,
                     cam.boss_mode(), // `$0652`
                 );
+                if obj
+                    .slots
+                    .iter()
+                    .any(|slot| slot.state() == sml2_core::objects::SlotState::Active)
+                {
+                    active_object_frames += 1;
+                }
                 // Same call the replay loop makes. The copy that used to live
                 // here was missing `on_ground_cleared` and `on_ground_obj`, so
                 // play mode disagreed with every capture on both.
@@ -2797,6 +2847,21 @@ fn run_play(
                 sim.pause_select_exit();
             }
         }
+        if sim.exit_phase && bell_arm.is_none() {
+            bell_arm = Some(BellArm {
+                frame: frame_n,
+                position: (sim.x, sim.y),
+                fade_timer: sim.fade_timer,
+                music_request: sim.music_request,
+                exit_tile_flag: sim.exit_tile_flag,
+            });
+        }
+        if sim.exit_completed && exit_completed_frame.is_none() {
+            exit_completed_frame = Some(frame_n);
+        }
+        if sim.map_handoff_done && map_handoff_frame.is_none() {
+            map_handoff_frame = Some(frame_n);
+        }
         // $2756: a paused frame writes the flash byte to `sBGPalette` *and*
         // `sOAMPalette1`, so BG and OBJ0 flash together; `sOAMPalette2` (OBP1)
         // is never touched. Unpaused frames restore the level's OBJ0 value, so
@@ -2909,7 +2974,17 @@ fn run_play(
             return Err("headless run reported unported paths".into());
         }
     }
-    Ok(())
+    Ok(PlayOutcome {
+        sim,
+        cam,
+        obj,
+        frames: frame_n,
+        bell_arm,
+        exit_completed_frame,
+        map_handoff_frame,
+        map_handoff,
+        active_object_frames,
+    })
 }
 
 /// The dispatch boundary shared by live play, replay, and pipe integration tests.
@@ -2968,6 +3043,20 @@ fn apply_level_entry(
     sim.secret_route = entry.secret_route;
     sim.level_progress_flags = entry.progress_flags;
     cam.reset_level_start(entry.start.camera_x, entry.start.camera_y, sim.y as u8);
+}
+
+/// Recover a direct level selection's node only when the source table is
+/// unambiguous. Castle id 24 has no node, and id 17 occurs at nodes 5 and 26;
+/// those entries retain their caller's node until overworld entry supplies it.
+fn seed_unique_level_map_node(sim: &mut PlayerSim, level: u8, nodes: &MapNodes) -> Option<u8> {
+    let mut matches =
+        (0..MapNodes::NODES as u8).filter(|&node| nodes.level_for(node) == Some(level));
+    let node = matches.next()?;
+    if matches.next().is_some() {
+        return None;
+    }
+    sim.map_node = node;
+    Some(node)
 }
 
 /// `$04F1`: the header seeds the countdown and the level's music byte on load.

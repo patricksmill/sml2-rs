@@ -1012,6 +1012,21 @@
    ],
    "verification_gate": "PORTING.md \u00a7 What \"done\" means; runtime arena-flow test in the shape of definitions 3-5, then enable boss_def_portable(0)",
    "status": "done"
+  },
+  {
+   "id": "played_route_level28",
+   "title": "Accept level 28 header-spawn to bell through the native live play loop",
+   "asm_refs": [
+    "home.asm:$1BFF-$1CFB",
+    "home.asm:$3547-$356E",
+    "main.asm:$5579",
+    "main.asm:$3F104-$3F118"
+   ],
+   "dependencies": [
+    "secret_route_entry_overlay"
+   ],
+   "verification_gate": "PORTING.md; original header/layout/spawns, input-only traversal with live objects and camera, exact bell/fade/tally/map bytes, sensitivity check, full core/runtime suites and frozen sweep",
+   "status": "done"
   }
  ]
 }
