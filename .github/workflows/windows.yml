@@ -1,0 +1,67 @@
+name: Windows build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+
+jobs:
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install stable Rust
+        run: |
+          rustup toolchain install stable --profile minimal --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup default stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Full runtime/parity tests require local extracted game data. These
+      # desktop policy tests run in a clean checkout without ROM assets.
+      - name: Test desktop policies
+        run: cargo test --locked -p sml2-desktop --no-default-features --lib
+
+      - name: Build release executables
+        run: cargo build --locked --release -p sml2-desktop -p sml2-runtime -p sml2-extract
+
+      - name: Smoke test executable startup
+        run: ./target/x86_64-pc-windows-msvc/release/sml2-desktop.exe --help
+
+      - name: Stage download
+        run: |
+          $destination = "target/windows-package"
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+          foreach ($binary in @("sml2-desktop", "sml2-runtime", "sml2-extract")) {
+            Copy-Item "target/x86_64-pc-windows-msvc/release/$binary.exe" $destination
+          }
+          Copy-Item "docs/windows-builds.md" "$destination/README-Windows.md"
+          Copy-Item "docs/desktop.md" "$destination/Desktop.md"
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v7
+        with:
+          name: sml2-windows-x64
+          path: target/windows-package/
+          if-no-files-found: error
+          retention-days: 14

@@ -25,6 +25,10 @@ cargo run -p sml2-desktop
 See [Desktop shell](docs/desktop.md) for Linux build dependencies, controls,
 storage paths and validation commands. Original CLI commands remain available.
 
+GitHub Actions builds downloadable Windows x64 executables on pushes and pull
+requests. See [Windows builds](docs/windows-builds.md) for download and setup
+instructions. Game data is supplied separately.
+
 ## Replay gate
 
 From this repo root, after extract (`cargo run --release -p sml2-extract` — it
