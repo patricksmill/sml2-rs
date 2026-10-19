@@ -21,6 +21,9 @@ pub const SPRITE_BYTES: usize = 48;
 pub const POWERUP_PREVIEW_AT: usize = 0x4C4D - 0x4A81;
 pub const POWERUP_PREVIEW_LEN: usize = 12;
 
+/// `$4C51` (inside the `$4A81` blob): `sCastleItemIndex` -> preview tile.
+pub const ITEM_PREVIEW_AT: usize = 0x4C51 - 0x4A81;
+
 /// `$4F5A` table block (`coin_room_tables`).
 pub const TABLE_SPRITE3_PHASE: [usize; 4] = [0x00, 0x04, 0x08, 0x0C];
 pub const TABLE_ITEM_SFX: usize = 0x10;
@@ -128,10 +131,21 @@ pub struct CastleRoom {
     pub music: u8,
     /// `sGoalBell`.
     pub goal_bell: u8,
-    /// The `$4A81` blob and its two table blocks, copied at room entry.
+    /// The active script blob and its table blocks, copied at room entry.
     script: Vec<u8>,
+    /// The `$4A81` blob: the shared `$4C4D`/`$4C51` preview tables live there
+    /// for all three rooms.
+    shared: Vec<u8>,
     tables: Vec<u8>,
     items: Vec<u8>,
+    /// `sCastleScriptPtrLo/Hi` and its loop-back copy (bank-24 address).
+    pub script_ptr: u16,
+    pub script_ptr_copy: u16,
+    /// The `$4A1A`/`$4A2F`/`$4A58` slot tables.
+    bell_tables: [Vec<u8>; 3],
+    /// `sMapPatchList`/`sMapPatch1Id` for the five `$0D` slots.
+    pub patch_state: [u8; 5],
+    pub patch_id: [u8; 5],
 }
 
 impl CastleRoom {
@@ -164,9 +178,47 @@ impl CastleRoom {
             music: 0,
             goal_bell: 0,
             script: scripts.blob("coin_room_script").unwrap_or(&[]).to_vec(),
+            shared: scripts.blob("coin_room_script").unwrap_or(&[]).to_vec(),
             tables: scripts.blob("coin_room_tables").unwrap_or(&[]).to_vec(),
             items: scripts.blob("coin_room_items").unwrap_or(&[]).to_vec(),
+            script_ptr: 0x4A1A,
+            script_ptr_copy: 0x4A1A,
+            bell_tables: [
+                scripts.blob("bell_slots_0").unwrap_or(&[]).to_vec(),
+                scripts.blob("bell_slots_1").unwrap_or(&[]).to_vec(),
+                scripts.blob("bell_slots_2").unwrap_or(&[]).to_vec(),
+            ],
+            patch_state: [0; 5],
+            patch_id: [0; 5],
         }
+    }
+
+    /// A bell room as `$3F4B1`/`$3F5A4` stage it.
+    pub fn bell_a(scripts: &CastleScripts) -> Self {
+        let mut room = Self::coin(scripts);
+        room.kind = RoomKind::BellRoomA;
+        room.script = scripts.blob("bell_room_a_script").unwrap_or(&[]).to_vec();
+        room
+    }
+
+    /// The second bell room (`$4028`, screen 14).
+    pub fn bell_b(scripts: &CastleScripts) -> Self {
+        let mut room = Self::coin(scripts);
+        room.kind = RoomKind::BellRoomB;
+        room.script = scripts.blob("bell_room_b_script").unwrap_or(&[]).to_vec();
+        room
+    }
+
+    /// The `$4A1A`/`$4A2F`/`$4A58` byte at a bank-24 address.
+    fn table_byte(&self, addr: u16) -> u8 {
+        for (index, base) in [0x4A1Au16, 0x4A2F, 0x4A58].into_iter().enumerate() {
+            if addr >= base {
+                if let Some(byte) = self.bell_tables[index].get((addr - base) as usize) {
+                    return *byte;
+                }
+            }
+        }
+        0
     }
 
     /// One frame of the screen's bank-24 handler. `scripts` supplies the
@@ -175,7 +227,8 @@ impl CastleRoom {
         self.powerup = rewards.powerup;
         match self.kind {
             RoomKind::CoinRooms => self.coin_tick(input, rewards),
-            RoomKind::BellRoomA | RoomKind::BellRoomB => {}
+            RoomKind::BellRoomA => self.bell_a_tick(input, rewards),
+            RoomKind::BellRoomB => {}
         }
     }
 
@@ -542,6 +595,437 @@ impl CastleRoom {
         }
         self.coin_commit(input, tables);
     }
+
+    // ---- `$4512`: bell room A (screen 13) ---------------------------------
+
+    fn bell_a_tick(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if self.script.is_empty() {
+            return;
+        }
+        match self.state {
+            0 => self.bell_a_state0(input, rewards),
+            1 => self.bell_a_state1(input, rewards),
+            2 => self.bell_a_state2(input, rewards),
+            3 => self.bell_a_state3(input, rewards),
+            4 => self.bell_a_state4(input, rewards),
+            5 => self.bell_a_state5(input, rewards),
+            6 => self.bell_a_state6(input, rewards),
+            7 => self.bell_a_state7(input, rewards),
+            8 => self.bell_a_state8(input, rewards),
+            9 => self.bell_a_state9(input, rewards),
+            _ => self.bell_a_commit(input, rewards),
+        }
+    }
+
+    /// `$4539`: walk Mario up to `$20` and stage the preview tile.
+    fn bell_a_state0(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if input.frame & 0x01 != 0 {
+            self.bell_a_commit(input, rewards);
+            return;
+        }
+        if self.oam[1] == 0x20 {
+            self.state = 1;
+            self.oam[2] = self.bell_preview();
+            self.item_reached = 0;
+            self.bell_a_state1(input, rewards);
+            return;
+        }
+        self.oam[1] = self.oam[1].wrapping_add(1);
+        if input.frame & 0x02 != 0 {
+            self.walk_phase += 1;
+            if self.walk_phase >= 3 {
+                self.walk_phase = 0;
+            }
+        }
+        self.oam[2] = self
+            .bell_preview()
+            .wrapping_add(self.walk_phase)
+            .wrapping_add(1);
+        self.bell_a_commit(input, rewards);
+    }
+
+    /// `$60582`: A starts the countdown; otherwise `$60800`'s walk cycle.
+    fn bell_a_state1(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if input.keys_pressed & 0x01 != 0 {
+            self.state = 2;
+            self.timer = 24;
+            self.music = 8;
+            self.bell_a_state2(input, rewards);
+            return;
+        }
+        self.bell_a_walk_cycle(input.frame);
+        self.bell_a_commit(input, rewards);
+    }
+
+    /// `$60800`: the shared walk-cycle byte, complemented timer as direction.
+    fn bell_a_walk_cycle(&mut self, frame: u8) {
+        if frame & 0x03 != 0 {
+            return;
+        }
+        let mut e = self.sprite(0xA6B8);
+        if self.timer & 0x01 != 0 {
+            if e < 0x50 {
+                self.timer = !self.timer;
+            } else {
+                e = e.wrapping_sub(1);
+            }
+        } else if e >= 0x78 {
+            self.timer = !self.timer;
+        } else {
+            e = e.wrapping_add(1);
+        }
+        for addr in [0xA6B8, 0xA6BB, 0xA6BE, 0xA6C1, 0xA6C4, 0xA6C7] {
+            self.set_sprite(addr, e);
+        }
+    }
+
+    /// `$605A0`: the 24-frame countdown, one sprite-1 id step every four.
+    fn bell_a_state2(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if input.frame & 0x03 != 0 {
+            self.bell_a_commit(input, rewards);
+            return;
+        }
+        if self.timer == 0 {
+            self.state = 3;
+            self.timer = 0;
+            self.bell_a_state3(input, rewards);
+            return;
+        }
+        self.timer = self.timer.wrapping_sub(1);
+        self.set_sprite(0xA6BC, self.sprite(0xA6BC).wrapping_add(1));
+        self.bell_a_commit(input, rewards);
+    }
+
+    /// `$605CA`: step sprite 2's page to `$23`.
+    fn bell_a_state3(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if input.frame & 0x03 != 0 {
+            self.bell_a_commit(input, rewards);
+            return;
+        }
+        if self.sprite(0xA6BD) >= 0x23 {
+            self.state = 4;
+            self.timer = 32;
+            self.bell_a_state4(input, rewards);
+            return;
+        }
+        self.set_sprite(0xA6BD, self.sprite(0xA6BD).wrapping_add(1));
+        self.bell_a_commit(input, rewards);
+    }
+
+    /// `$605EE`: count the timer down, step sprite 1's id back and hand over to
+    /// state 9 at `$48` if no item was reached.
+    fn bell_a_state4(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if input.frame & 0x03 != 0 {
+            self.bell_a_commit(input, rewards);
+            return;
+        }
+        if self.timer == 0 {
+            self.state = 5;
+            self.bell_a_state5(input, rewards);
+            return;
+        }
+        self.timer = self.timer.wrapping_sub(1);
+        if self.timer == 0 && self.item_reached == 1 {
+            self.music = 22;
+        }
+        self.set_sprite(0xA6BC, self.sprite(0xA6BC).wrapping_sub(1));
+        if self.sprite(0xA6BC) == 0x48 && self.item_reached != 1 {
+            self.state = 9;
+            self.sfx[0] = 17;
+        }
+        self.bell_a_commit(input, rewards);
+    }
+
+    /// `$60639`: step sprite 0's id down below `$1D`.
+    fn bell_a_state5(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if input.frame & 0x01 != 0 {
+            self.bell_a_commit(input, rewards);
+            return;
+        }
+        if self.sprite(0xA6B8) < 0x1D {
+            self.state = 6;
+            self.bell_a_state6(input, rewards);
+            return;
+        }
+        self.set_sprite(0xA6B8, self.sprite(0xA6B8).wrapping_sub(1));
+        self.set_sprite(0xA6BB, self.sprite(0xA6B8));
+        self.bell_a_commit(input, rewards);
+    }
+
+    /// `$6065B`: step sprite 2's page down to `$21`.
+    fn bell_a_state6(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if input.frame & 0x03 != 0 {
+            self.bell_a_commit(input, rewards);
+            return;
+        }
+        if self.sprite(0xA6BD) == 0x21 {
+            self.state = 7;
+            self.timer = 25;
+            self.bell_a_state7(input, rewards);
+            return;
+        }
+        self.set_sprite(0xA6BD, self.sprite(0xA6BD).wrapping_sub(1));
+        self.bell_a_commit(input, rewards);
+    }
+
+    /// `$6067F`: a 25-frame hold, then the item reveal.
+    fn bell_a_state7(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if input.frame & 0x03 != 0 {
+            self.bell_a_commit(input, rewards);
+            return;
+        }
+        if self.timer != 0 {
+            self.timer = self.timer.wrapping_sub(1);
+        } else {
+            self.state = 9;
+        }
+        self.bell_a_commit(input, rewards);
+    }
+
+    /// `$469C` / `$606AA`: the preview flicker, then the award and the save.
+    fn bell_a_state8(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if input.frame & 0x03 == 0 {
+            self.bell_a_preview(input, rewards);
+        }
+        self.bell_a_commit(input, rewards);
+    }
+
+    fn bell_a_preview(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        let flicker = input.frame & 0x0C;
+        let preview = if self.item_index < 3 {
+            if flicker == 0 {
+                self.item_preview
+            } else {
+                match flicker {
+                    0x04 => 0,
+                    0x08 if self.saved_powerup != 0 => self.saved_powerup,
+                    0x08 => self.item_preview,
+                    _ => 0,
+                }
+            }
+        } else {
+            // `$60711`: slot 9 (or slot 11 on screen 14) carries the icon.
+            let c = if self.item_index == 3 { 29u8 } else { 30u8 };
+            if self.kind == RoomKind::BellRoomB {
+                self.set_sprite(0xA6E4, c);
+                if self.sprite(0xA6E3) >= 0x62 {
+                    self.set_sprite(0xA6E3, self.sprite(0xA6E3).wrapping_sub(1));
+                    self.set_sprite(0xA6E2, self.oam[1].wrapping_sub(4));
+                } else {
+                    self.set_sprite(0xA6E4, 255);
+                    self.set_sprite(0xA6E2, 176);
+                }
+            } else {
+                self.set_sprite(0xA6DB, c);
+                if self.sprite(0xA6DA) >= 0x60 {
+                    self.set_sprite(0xA6DA, self.sprite(0xA6DA).wrapping_sub(1));
+                } else {
+                    self.set_sprite(0xA6DB, 255);
+                }
+            }
+            self.item_preview
+        };
+        self.oam[2] = self.preview_for(preview);
+        self.timer = self.timer.wrapping_sub(1);
+        if self.timer != 0 {
+            return;
+        }
+        rewards.powerup = self.item_preview;
+        self.powerup = self.item_preview;
+        self.oam[2] = self.preview_for(self.item_preview);
+        self.state = 9;
+        self.timer = 20;
+        rewards.save = true;
+    }
+
+    /// `$4764` / `$4772`: walk Mario back down to `$E8`.
+    fn bell_a_state9(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if input.frame & 0x01 == 0 {
+            self.bell_a_commit(input, rewards);
+            return;
+        }
+        if self.oam[1] == 0xE8 {
+            self.state = 10;
+            return;
+        }
+        self.oam[1] = self.oam[1].wrapping_sub(1);
+        if input.frame & 0x02 != 0 {
+            self.walk_phase += 1;
+            if self.walk_phase >= 3 {
+                self.walk_phase = 0;
+            }
+        }
+        self.oam[2] = self
+            .bell_preview()
+            .wrapping_add(self.walk_phase)
+            .wrapping_add(5);
+        self.bell_a_commit(input, rewards);
+    }
+
+    /// `$607AA`: the slot sprites, five slot steps and the OAM build.
+    fn bell_a_commit(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        self.bell_a_slot_sprites();
+        for _ in 0..5 {
+            self.bell_a_slot_step(input, rewards);
+        }
+    }
+
+    /// `$607C5`: reveal the slot sprites as the walk byte passes each threshold.
+    fn bell_a_slot_sprites(&mut self) {
+        for addr in [0xA6C0, 0xA6C3, 0xA6C6, 0xA6C9] {
+            self.set_sprite(addr, 255);
+        }
+        let walk = self.sprite(0xA6BC);
+        for (threshold, addr) in [
+            (0x3Eu8, 0xA6C0u16),
+            (0x46, 0xA6C3),
+            (0x4E, 0xA6C6),
+            (0x56, 0xA6C9),
+        ] {
+            if walk < threshold {
+                return;
+            }
+            self.set_sprite(addr, 32);
+        }
+    }
+
+    /// `$6083C`: one of the five `$0D` slots.
+    fn bell_a_slot_step(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if self.slot_index >= 5 {
+            self.slot_index = 0;
+        }
+        let s = self.slot_index as usize;
+        match self.patch_state[s] {
+            0 => {
+                if input.frame & 0x01 != 0 {
+                    self.bell_a_slot_commit();
+                    return;
+                }
+                self.patch_id[s] = self.patch_id[s].wrapping_sub(1);
+                if self.patch_id[s] < 0x32 {
+                    self.patch_id[s] = 142;
+                    self.patch_state[s] = 3;
+                    self.slots[s].delay = 28;
+                    self.bell_a_slot_patch(s, input);
+                    return;
+                }
+                if self.state == 3 && self.slots[s].value < 5 {
+                    let y = self.sprite(0xA6BB).wrapping_sub(12);
+                    if y < self.patch_id[s] && y.wrapping_add(16) >= self.patch_id[s] {
+                        self.patch_state[s] = 1;
+                        self.item_reached = 1;
+                    }
+                }
+                self.bell_a_slot_commit();
+            }
+            1 => {
+                self.patch_id[s] = self.sprite(0xA6BB).wrapping_sub(4);
+                self.slots[s].counter = self.sprite(0xA6BC).wrapping_add(8);
+                if self.state == 7 {
+                    self.patch_state[s] = 2;
+                }
+                self.bell_a_slot_commit();
+            }
+            2 => {
+                self.slots[s].counter = self.slots[s].counter.wrapping_add(1);
+                if self.slots[s].counter >= 0x68 {
+                    self.patch_state[s] = 3;
+                    self.slots[s].delay = 255;
+                    self.state = 8;
+                    self.timer = 20;
+                    self.item_index = self.sprite(0xA6CCu16 + 3 * s as u16).wrapping_sub(24);
+                    self.bell_a_award_preview(rewards);
+                }
+                self.bell_a_slot_commit();
+            }
+            3 => self.bell_a_slot_patch(s, input),
+            _ => self.bell_a_slot_commit(),
+        }
+    }
+
+    /// `$60965`: a slot's patch entry, gated on the `$4A1A`-family table.
+    fn bell_a_slot_patch(&mut self, s: usize, input: RoomInput) {
+        self.patch_id[s] = 142;
+        self.slots[s].counter = 96;
+        let mut byte = self.table_byte(self.script_ptr);
+        if byte >= 6 {
+            self.script_ptr = self.script_ptr_copy;
+            byte = self.table_byte(self.script_ptr);
+        }
+        self.slots[s].value = byte;
+        let sprite = 0xA6CCu16 + 3 * s as u16;
+        self.set_sprite(sprite, 255);
+        if input.frame & 0x01 != 0 {
+            self.bell_a_slot_commit();
+            return;
+        }
+        let delay = self.slots[s].delay;
+        if delay == 255 {
+            self.bell_a_slot_commit();
+            return;
+        }
+        if delay != 0 {
+            self.slots[s].delay = delay.wrapping_sub(1);
+            self.bell_a_slot_commit();
+            return;
+        }
+        if self.slots[s].value != 5 {
+            self.set_sprite(sprite, self.slots[s].value.wrapping_add(24));
+        }
+        self.patch_state[s] = 0;
+        self.script_ptr = self.script_ptr.wrapping_add(1);
+        self.bell_a_slot_commit();
+    }
+
+    /// `$609E4`: copy the five slot bytes into sprites 5-8 and rotate.
+    fn bell_a_slot_commit(&mut self) {
+        for (s, addr) in [0xA6CAu16, 0xA6CD, 0xA6D0, 0xA6D3, 0xA6D6]
+            .into_iter()
+            .enumerate()
+        {
+            self.set_sprite(addr, self.patch_id[s]);
+        }
+        for (s, addr) in [0xA6CBu16, 0xA6CE, 0xA6D1, 0xA6D4, 0xA6D7]
+            .into_iter()
+            .enumerate()
+        {
+            self.set_sprite(addr, self.slots[s].counter);
+        }
+        self.slot_index = self.slot_index.wrapping_add(1);
+    }
+
+    /// `$60917`: the slot award, before the room's own preview plays.
+    fn bell_a_award_preview(&mut self, rewards: &mut RoomRewards) {
+        self.saved_powerup = rewards.powerup;
+        self.item_preview = rewards.powerup;
+        if self.item_index < 3 {
+            self.item_preview = self
+                .shared
+                .get(ITEM_PREVIEW_AT + self.item_index as usize)
+                .copied()
+                .unwrap_or(0);
+            self.sfx[1] = 20;
+            return;
+        }
+        self.sfx[0] = 9;
+        let amount = if self.item_index == 3 { 1 } else { 3 };
+        let (value, carry) = bcd_add(rewards.lives, amount);
+        rewards.lives = if carry { 153 } else { value };
+    }
+
+    fn bell_preview(&self) -> u8 {
+        self.shared
+            .get(POWERUP_PREVIEW_AT + self.powerup as usize)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    fn preview_for(&self, index: u8) -> u8 {
+        self.shared
+            .get(POWERUP_PREVIEW_AT + index as usize)
+            .copied()
+            .unwrap_or(0)
+    }
 }
 
 /// `add`/`daa`: BCD byte add with the carry the ROM's `daa` produces.
@@ -649,6 +1133,92 @@ mod tests {
             &table[TABLE_WALK_OFFSETS..TABLE_WALK_OFFSETS + 4],
             &[0xFC; 4]
         );
+    }
+
+    /// `$60582`: A starts bell room A's countdown.
+    #[test]
+    fn bell_room_a_starts_its_countdown_on_a() {
+        let scripts = scripts();
+        let mut room = CastleRoom::bell_a(&scripts);
+        let mut rewards = RoomRewards::default();
+        room.state = 1;
+        room.tick(input(0, 0x01), &mut rewards);
+        assert_eq!(room.state, 2);
+        assert_eq!(room.timer, 23, "state 2 decrements in the same frame");
+        assert_eq!(room.music, 8);
+        assert_eq!(room.sfx[0], 0, "no sfx on the start");
+    }
+
+    /// `$6065B`: the page walk reaches `$21` and hands over to the 25-frame
+    /// hold in state 7.
+    #[test]
+    fn bell_room_a_page_walk_reaches_state_seven() {
+        let scripts = scripts();
+        let mut room = CastleRoom::bell_a(&scripts);
+        let mut rewards = RoomRewards::default();
+        room.state = 6;
+        room.set_sprite(0xA6BD, 0x21);
+        room.tick(input(0, 0), &mut rewards);
+        assert_eq!(room.state, 7);
+        assert_eq!(room.timer, 24, "state 7 decrements in the same frame");
+    }
+
+    /// `$60965`: a patch slot in state 3 with the delay expired writes the
+    /// slot value (`$4A1A[0] = 3`) into sprite 5's id and advances the pointer.
+    #[test]
+    fn bell_room_a_slot_patch_advances_the_script() {
+        let scripts = scripts();
+        let mut room = CastleRoom::bell_a(&scripts);
+        let mut rewards = RoomRewards::default();
+        room.state = 3;
+        room.patch_state[0] = 3;
+        room.slots[0].delay = 0;
+        room.slot_index = 0;
+        room.script_ptr = 0x4A1A;
+        room.tick(input(0, 0), &mut rewards);
+        assert_eq!(room.slots[0].value, 3, "$4A1A[0]");
+        assert_eq!(room.sprite(0xA6CC), 3 + 24, "sprite 5 id");
+        assert_eq!(room.patch_state[0], 0);
+        assert_eq!(room.script_ptr, 0x4A1B);
+    }
+
+    /// `$60917`: the slot award maps item 0-2 through `$4C51` and adds BCD
+    /// lives for the higher ids.
+    #[test]
+    fn bell_room_a_awards_preview_and_lives() {
+        let scripts = scripts();
+        let mut room = CastleRoom::bell_a(&scripts);
+        let mut rewards = RoomRewards {
+            lives: 0x05,
+            ..Default::default()
+        };
+        room.item_index = 1;
+        room.state = 3;
+        room.patch_state[0] = 2;
+        room.slot_index = 0;
+        room.slots[0].counter = 0x67;
+        room.set_sprite(0xA6CC, 25); // item index 1
+        room.tick(input(0, 0), &mut rewards);
+        assert_eq!(room.state, 8);
+        assert_eq!(room.timer, 20);
+        assert_eq!(room.item_index, 1);
+        assert_eq!(room.item_preview, 3, "$4C51[1]");
+        assert_eq!(room.sfx[1], 20);
+
+        let mut room = CastleRoom::bell_a(&scripts);
+        let mut rewards = RoomRewards {
+            lives: 0x05,
+            ..Default::default()
+        };
+        room.item_index = 3;
+        room.state = 3;
+        room.patch_state[0] = 2;
+        room.slot_index = 0;
+        room.slots[0].counter = 0x67;
+        room.set_sprite(0xA6CC, 27);
+        room.tick(input(0, 0), &mut rewards);
+        assert_eq!(room.sfx[0], 9);
+        assert_eq!(rewards.lives, 0x06, "item 3 is +1 life, BCD");
     }
 
     /// `$60D32` reads the node's ten-byte row in the `$4000` item table.

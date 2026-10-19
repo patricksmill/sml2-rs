@@ -87,7 +87,7 @@ mod tests {
         let cases: &[(&str, u8, &str, usize, &[u8])] = &[
             // `$4028`: state table at +$0F, keyed by sCastleState.
             (
-                "castle_screen",
+                "bell_room_b_script",
                 24,
                 "$4028",
                 0x4EA,

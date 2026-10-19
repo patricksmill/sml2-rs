@@ -2,8 +2,8 @@
 //!
 //! `$3E00` is only a far entry (`ld [sCurROMBank], a; jp hl`), so each bonus
 //! room "script" is ordinary bank-24 code reached by an entry address:
-//! `$4028` (castle screen 8 walk/return), `$4512` (bell room A) and `$4A81`
-//! (coin rooms 9-12). The bell rooms index three `$FF`-terminated byte tables
+//! `$4028` (bell room B, screen 14), `$4512` (bell room A, screen 13) and
+//! `$4A81` (coin rooms 9-12). The bell rooms index three `$FF`-terminated byte tables
 //! at `$4A1A`/`$4A2F`/`$4A58`; `$3E2A2` loads the bank-15 sprite and patch
 //! lists at `$6734` (room 13) and `$6761` (room 14).
 //!
@@ -58,7 +58,7 @@ pub const BLOBS: &[BlobSpec] = &[
         kind: BlobKind::Fixed,
     },
     BlobSpec {
-        name: "castle_screen",
+        name: "bell_room_b_script",
         bank: 24,
         addr: 0x4028,
         end: 0x4512,
@@ -360,7 +360,7 @@ mod tests {
         let by_name = |name: &str| entries.iter().find(|e| e.name == name).unwrap();
         assert_eq!(entries[0].offset, 0);
         assert_eq!(by_name("coin_room_items").len, 40);
-        assert_eq!(by_name("castle_screen").len, 0x4EA);
+        assert_eq!(by_name("bell_room_b_script").len, 0x4EA);
         assert_eq!(by_name("bell_room_a_script").len, 0x508);
         assert_eq!(by_name("coin_room_script").len, 0x4D9);
         assert_eq!(by_name("coin_room_tables").len, 0x113);

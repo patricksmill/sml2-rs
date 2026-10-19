@@ -55,11 +55,11 @@ tiles) is emitted as `map/bell_room_tiles.bin` and both screens render to
 keep the $E4 of screen 8.
 
 `map/castle_scripts.bin` (+ `.json`) carries eight measured blobs (4,028
-bytes): `castle_screen` $4028 (1,258 B), `bell_room_a_script` $4512 (1,288 B),
+bytes): `bell_room_b_script` $4028 (1,258 B), `bell_room_a_script` $4512 (1,288 B),
 `bell_slots_0/1/2` $4A1A/$4A2F/$4A58 (21/41/41 B, `$FF`-terminated),
 `coin_room_script` $4A81 (1,241 B) and the bank-15 sprite/patch lists
 `bell_room_a_sprites` $6734 (45 B) and `bell_room_b_sprites` $6761 (93 B).
-Each code end is a `ret`; `castle_screen`/`bell_room_a_script` end where the
+Each code end is a `ret`; `bell_room_b_script`/`bell_room_a_script` end where the
 next entry starts, `coin_room_script` at the $4F5A lookup tables. The sprite
 lists are `$3E2A2`'s two 3-byte record runs, each closed by an `$FF` record.
 `CastleScripts` and `BellRoomTiles` in `sml2-core` pin the emitted bytes.
@@ -85,8 +85,17 @@ preview tiles live inside the coin blob.
 
 Tests: five byte-level room traces (preview table, state-0 gate, award +
 100-frame hold + state 3, reveal/walk tables, item rows) and a `MapSim`
-dispatch test. The two bell state machines `$4512`/`$4028` land with ME-5 on
-this engine.
+dispatch test.
+
+Bell room A `$4512` (screen 13) is ported on the same engine: states 0-11
+(the `$20` walk-in, the A gate, the sprite-1/2/0 id walks, the `$4E` item
+crossing, `$469C`'s preview flicker, the `$4764` walk-out) plus `$6083C`'s
+five-slot engine (`$60965` patch entries from `$4A1A`/`$4A2F`/`$4A58`,
+`$60917` preview/lives award, `$609E4` slot commit). Four tests pin the A
+gate, the `$21` page walk, a slot patch step and both award arms.
+
+Bell room B `$4028` and both entry loaders (`$3F4B1`/`$3F5A4`, which pick the
+timer-variant table and stage the sprite lists) are ME-5.
 
 ### ME-4 — Coin-door rooms 9-12 (M)
 `$3F4A0`/`$4A81`: free-walk Mario from OAM `(40,156)`, collect the room's
@@ -95,9 +104,13 @@ screen 8. Prices and the unpayable path are already modelled. Tests: each of
 the four rooms, reward byte, no duplicate award, return screen.
 
 ### ME-5 — Bell rooms 13/14 (M)
-`$3F4B1`/`$3F5A4`: timer-variant script selection, six castle slots, SFX 5,
-music 21, reward (power-up/lives), return to screen 8. Tests: all three timer
-variants and the node-bit variant, exact slot bytes, reward, return.
+Room A `$4512` is ported (ME-3). Left: room B `$4028` (its own `$60269`/
+`$60290` helpers, patch records `$A7xx`, sprite 10/11, `sCastleSpriteAnimState`,
+the `$421A` timer table) and both entry loaders `$3F4B1`/`$3F5A4`
+(timer-variant script selection, the `$6734`/`$6761` sprite lists, five slot
+counters at 2/26/50/74/98, SFX 5, music 21, return to screen 8). Tests: all
+three timer variants and room B's node-bit variant, exact slot bytes, reward,
+return.
 
 ### ME-6 — Golden-coin/castle chain (M)
 Port states `$1B-$1F/$20/$21` into `SessionState` (or the existing ending
