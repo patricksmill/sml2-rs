@@ -200,11 +200,11 @@ impl MusicChannel {
 
                     // Next byte is the note pitch
                     let note = self.read_stream_byte(bank);
-                    self.trigger_note(note, *transpose, sfx_active, out);
+                    self.trigger_note(note, *transpose, sfx_active, bank, out);
                     break;
                 }
                 note @ 0x01..=0x94 => {
-                    self.trigger_note(note, *transpose, sfx_active, out);
+                    self.trigger_note(note, *transpose, sfx_active, bank, out);
                     break;
                 }
                 _ => {}
@@ -227,13 +227,43 @@ impl MusicChannel {
         note: u8,
         transpose: i8,
         sfx_active: bool,
+        bank: &[u8],
         out: &mut Vec<MusicWrite>,
     ) {
         self.note_timer = self.note_duration;
 
         if note == 0x01 {
-            // Rest
+            // Rest ($11765 / $117D0): sets channel rest flag and silences envelope
             self.rest = true;
+            if !sfx_active {
+                match self.id {
+                    1 => {
+                        out.push(MusicWrite::Ch1Sweep(0));
+                        out.push(MusicWrite::Ch1DutyLength(self.instrument[2] & 0xC0));
+                        out.push(MusicWrite::Ch1Envelope(0x08)); // Volume 0
+                        out.push(MusicWrite::Ch1FrequencyLow(self.freq_lo));
+                        out.push(MusicWrite::Ch1FrequencyControl(self.freq_hi | 0x80));
+                    }
+                    2 => {
+                        out.push(MusicWrite::Ch2DutyLength(self.instrument[2] & 0xC0));
+                        out.push(MusicWrite::Ch2Envelope(0x08)); // Volume 0
+                        out.push(MusicWrite::Ch2FrequencyLow(self.freq_lo));
+                        out.push(MusicWrite::Ch2FrequencyControl(self.freq_hi | 0x80));
+                    }
+                    3 => {
+                        out.push(MusicWrite::Ch3Enable(0x80));
+                        out.push(MusicWrite::Ch3Length(0));
+                        out.push(MusicWrite::Ch3Level(0)); // Volume 0
+                        out.push(MusicWrite::Ch3FrequencyLow(self.freq_lo));
+                        out.push(MusicWrite::Ch3FrequencyControl(self.freq_hi | 0x80));
+                    }
+                    4 => {
+                        out.push(MusicWrite::Ch4Envelope(0x08)); // Volume 0
+                        out.push(MusicWrite::Ch4Control(0x80));
+                    }
+                    _ => {}
+                }
+            }
             return;
         }
 
@@ -245,21 +275,37 @@ impl MusicChannel {
                     out.push(MusicWrite::DrumTrigger);
                 }
             } else {
-                let inst_idx = (note as usize).min(NOISE_INSTRUMENTS.len() - 1);
-                let rec = NOISE_INSTRUMENTS[inst_idx];
-                if !sfx_active {
-                    out.push(MusicWrite::Ch4Length(rec[0]));
-                    out.push(MusicWrite::Ch4Envelope(rec[1]));
-                    out.push(MusicWrite::Ch4Polynomial(rec[3]));
-                    out.push(MusicWrite::Ch4Control(rec[4] | 0x80));
+                // ROM $11876: bc = note is byte offset into table $5C06; copies 5 bytes
+                let off = bank4_offset(0x5C06) + (note as usize);
+                if off + 5 <= bank.len() {
+                    let rec = &bank[off..off + 5];
+                    if !sfx_active {
+                        // ROM $11777..$117E8:
+                        // rec[2] -> rAUD4LEN ($FF20)
+                        // rec[0] -> rAUD4ENV ($FF21)
+                        // rec[3] -> rAUD4POLY ($FF22)
+                        // rec[4] | 0x80 -> rAUD4CONTR ($FF23)
+                        out.push(MusicWrite::Ch4Length(rec[2]));
+                        out.push(MusicWrite::Ch4Envelope(rec[0]));
+                        out.push(MusicWrite::Ch4Polynomial(rec[3]));
+                        out.push(MusicWrite::Ch4Control(rec[4] | 0x80));
+                    }
                 }
             }
             return;
         }
 
-        // Channels 1, 2, 3: pitch calculation
-        let idx = ((note as i16) + (transpose as i16)).clamp(0, (PITCH_TABLE.len() - 1) as i16) as usize;
-        let freq = PITCH_TABLE[idx];
+        // Channels 1, 2, 3: pitch calculation per ROM $11755..$11762
+        // Stream note bytes are byte offsets into table $5AF4.
+        // Signed transpose is added directly to the byte offset in SM83:
+        // hl = $5AF4 + (note as i16) + (transpose as i16)
+        let byte_offset = ((note as i32) + (transpose as i32)).clamp(0, 144) as usize;
+        let off = bank4_offset(0x5AF4) + byte_offset;
+        let freq = if off + 1 < bank.len() {
+            (bank[off] as u16) | ((bank[off + 1] as u16) << 8)
+        } else {
+            0
+        };
         self.freq_lo = (freq & 0xFF) as u8;
         self.freq_hi = (freq >> 8) as u8;
 

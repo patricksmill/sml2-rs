@@ -247,7 +247,7 @@ impl NoiseChannel {
 }
 
 /// Complete 4-channel Game Boy APU synthesizer.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Apu {
     pub ch1: PulseChannel,
     pub ch2: PulseChannel,
@@ -259,6 +259,8 @@ pub struct Apu {
     pub left_volume: u8,
     pub right_volume: u8,
     pub cycle_acc: u32,
+    pub cap_left: f32,  // High-pass DC-blocking filter state
+    pub cap_right: f32,
 }
 
 impl Default for Apu {
@@ -274,6 +276,8 @@ impl Default for Apu {
             left_volume: 7,
             right_volume: 7,
             cycle_acc: 0,
+            cap_left: 0.0,
+            cap_right: 0.0,
         }
     }
 }
@@ -500,10 +504,10 @@ impl Apu {
     ) {
         out.reserve(num_frames * 2);
 
-        // Scaling constants
+        // Scaling constants (4 channels, max combined magnitude 4.0)
         let master_l = ((self.left_volume as f32) + 1.0) / 8.0;
         let master_r = ((self.right_volume as f32) + 1.0) / 8.0;
-        let norm = 1.0 / (15.0 * 4.0); // 4 channels, max volume 15 each
+        let norm = 0.25f32;
 
         let pan_ch1_r = (self.nr51 & 0x01) != 0;
         let pan_ch2_r = (self.nr51 & 0x02) != 0;
@@ -527,10 +531,33 @@ impl Apu {
             self.ch3.advance_cycles(cycles);
             self.ch4.advance_cycles(cycles);
 
-            let s1 = self.ch1.sample() as f32;
-            let s2 = self.ch2.sample() as f32;
-            let s3 = self.ch3.sample() as f32;
-            let s4 = self.ch4.sample() as f32;
+            // Bipolar channel DAC outputs in [-1.0, 1.0] centered around 0.0
+            let s1 = if self.ch1.enabled && self.ch1.volume > 0 {
+                let vol = (self.ch1.volume as f32) / 15.0;
+                if self.ch1.sample() > 0 { vol } else { -vol }
+            } else {
+                0.0
+            };
+
+            let s2 = if self.ch2.enabled && self.ch2.volume > 0 {
+                let vol = (self.ch2.volume as f32) / 15.0;
+                if self.ch2.sample() > 0 { vol } else { -vol }
+            } else {
+                0.0
+            };
+
+            let s3 = if self.ch3.enabled && self.ch3.dac_enabled && self.ch3.volume_code > 0 {
+                (self.ch3.sample() as f32 - 7.5) / 7.5
+            } else {
+                0.0
+            };
+
+            let s4 = if self.ch4.enabled && self.ch4.volume > 0 {
+                let vol = (self.ch4.volume as f32) / 15.0;
+                if self.ch4.sample() > 0 { vol } else { -vol }
+            } else {
+                0.0
+            };
 
             let mut left = 0.0f32;
             let mut right = 0.0f32;
@@ -548,8 +575,15 @@ impl Apu {
             if pan_ch4_r { right += s4; }
 
             // Normalize and scale with master volume
-            let out_l = (left * norm * master_l).clamp(-1.0, 1.0);
-            let out_r = (right * norm * master_r).clamp(-1.0, 1.0);
+            let raw_l = (left * norm * master_l).clamp(-1.0, 1.0);
+            let raw_r = (right * norm * master_r).clamp(-1.0, 1.0);
+
+            // High-pass DC-blocking filter (simulates Game Boy AC-coupling capacitors)
+            self.cap_left += (raw_l - self.cap_left) * 0.002;
+            self.cap_right += (raw_r - self.cap_right) * 0.002;
+
+            let out_l = (raw_l - self.cap_left).clamp(-1.0, 1.0);
+            let out_r = (raw_r - self.cap_right).clamp(-1.0, 1.0);
 
             out.push(out_l);
             out.push(out_r);

@@ -104,7 +104,11 @@ impl MusicSequencer {
         }
 
         self.cur_song = song_id;
-        self.fast_music = FAST_MUSIC_SONGS.contains(&song_id);
+        if song_id == 9 {
+            self.fast_music = true;
+        } else if [2, 3, 12, 15, 24].contains(&song_id) {
+            self.fast_music = false;
+        }
 
         let ptr = SONG_POINTERS[(song_id - 1) as usize];
         let off = bank4_offset(ptr);

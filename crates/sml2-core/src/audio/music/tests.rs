@@ -34,10 +34,15 @@ fn test_song1_start_and_channel_initialization() {
 fn test_fast_music_acceleration() {
     let mut seq = MusicSequencer::new();
 
-    // Song 2 is in FAST_MUSIC_SONGS: activates fast_music and adds 4 to transpose
-    seq.start_song(2, SOUND_BANK04);
+    // Song 9 is in FAST_MUSIC_SONGS: activates fast_music and adds 4 to transpose
+    seq.start_song(9, SOUND_BANK04);
     assert!(seq.fast_music);
-    assert_eq!(seq.transpose, 8); // base 4 + 4
+    assert_eq!(seq.transpose, 20); // base 16 + 4
+
+    // Song 2 explicitly resets fast_music to normal speed
+    seq.start_song(2, SOUND_BANK04);
+    assert!(!seq.fast_music);
+    assert_eq!(seq.transpose, 4);
 
     // Song 1 is normal speed
     seq.start_song(1, SOUND_BANK04);

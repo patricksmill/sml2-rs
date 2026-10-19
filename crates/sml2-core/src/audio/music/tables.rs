@@ -9,7 +9,8 @@
 //! - Software envelope table: ROM $11CAC (`main.asm:12000`)
 
 /// Song IDs that activate fast music speed ($A50D = 1 per ROM $1146B..$1147B).
-pub const FAST_MUSIC_SONGS: [u8; 6] = [2, 3, 9, 12, 15, 24];
+/// Note: Songs 2, 3, 12, 15, and 24 clear fast music back to normal speed.
+pub const FAST_MUSIC_SONGS: [u8; 1] = [9];
 
 /// Song pointer table ($5244 in Bank 4, 42 songs).
 pub const SONG_POINTERS: [u16; 42] = [
