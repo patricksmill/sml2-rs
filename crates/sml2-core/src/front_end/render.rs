@@ -10,7 +10,7 @@
 use super::assets::FrontEndAssets;
 use super::file_select::{FileSelect, FILE_SELECT_BGP, FILE_SELECT_OBP0, FILE_SELECT_OBP1};
 use super::save_slots::{SaveSlots, SLOT_COUNT};
-use super::screen::{render_bg, render_bg_mode, TileData};
+use super::screen::{render_bg_mode, TileData};
 use super::title::BGP as TITLE_BGP;
 use crate::actor::ScreenPosition;
 use crate::object::ObjectTables;
@@ -28,12 +28,16 @@ const EASY_FRAME: u8 = 241;
 
 /// `$1407C`'s palette and `$59E5`'s map.
 pub fn render_title(assets: &FrontEndAssets, view: (usize, usize)) -> Vec<u8> {
-    render_bg(
+    // The title sign also resolves tile 0..127 through the signed `$8800`
+    // method: the logo's upper tiles live at `$9000+tile*16`. The unsigned
+    // lookup renders a shifted, cropped logo.
+    render_bg_mode(
         assets.title_vram(),
         assets.title_tilemap(),
         TITLE_BGP,
         (0, 0),
         view,
+        TileData::Signed,
     )
     .unwrap_or_else(|_| vec![0u8; view.0 * view.1])
 }

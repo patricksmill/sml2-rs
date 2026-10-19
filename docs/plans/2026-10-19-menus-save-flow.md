@@ -301,7 +301,9 @@ background resolves tiles through the signed `$8800` method (the A/B/C letters
 live at `$9000 + tile*16`; a `$8000` lookup renders the Mario tiles), the cursor
 is the `$5297` player metasprite (16x32 frame 0..23; Easy mode adds 32 and draws
 the 6-cell small frame), the tally digits are the `$5267` two-cell row, and the
-Easy banner is frame 241 at OAM (68, 48). The runtime keeps `SaveSlots`, marks
+Easy banner is frame 241 at OAM (68, 48). The title screen uses the same signed
+`$8800` lookup for the logo (its upper tiles are at `$9000+tile*16`); the
+unsigned base rendered a shifted, cropped logo. The runtime keeps `SaveSlots`, marks
 the loaded slot active, and writes in-level saves into it.
 
 ### FE-6 — Desktop launcher + persistence (S/M)

@@ -27,7 +27,7 @@ fn tables() -> ObjectTables {
 /// `$9000` (offset 0x1000), while its sprite tiles live at `$8000` (offset 0).
 fn assets() -> FrontEndAssets {
     let mut title_vram = vec![0u8; VRAM_LEN];
-    paint(&mut title_vram, 0, 3);
+    paint(&mut title_vram, 0x1000, 3);
     let title_tilemap = vec![0u8; TILEMAP_LEN];
 
     let mut vram = vec![0u8; VRAM_LEN];
@@ -54,7 +54,7 @@ fn the_title_renders_its_tilemap_through_the_palette() {
     assert_eq!(frame.len(), 160 * 144);
     assert!(
         frame.iter().all(|&p| p == 0),
-        "the synthetic title is a solid colour-3 screen"
+        "the synthetic title is a solid colour-3 screen (signed tile 0)"
     );
 }
 
