@@ -20,6 +20,7 @@ fn app() -> (DesktopApp, Context, PathBuf) {
         },
         audio: false,
         play: false,
+        boot_title: false,
         scale: None,
         fullscreen: false,
         smoke_frames: None,
@@ -64,6 +65,10 @@ fn key(key: egui::Key, down: bool) -> egui::Event {
 fn controller_can_open_settings_and_confirm_play_without_leaking_a_jump() {
     let (mut app, ctx, path) = app();
     frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::Pad(PadButton::Down), true);
+    frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::Pad(PadButton::Down), false);
+    // Row 1 is Title / File Select; Settings is row 2.
     app.input.event(Button::Pad(PadButton::Down), true);
     frame(&mut app, &ctx, vec![]);
     app.input.event(Button::Pad(PadButton::Down), false);

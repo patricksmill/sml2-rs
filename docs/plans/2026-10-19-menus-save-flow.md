@@ -20,7 +20,7 @@ run `captures/sweep.sh` once per work package, and do not change the frozen
 - [x] FE-3 title screen
 - [x] FE-4 file select (state machine + OAM rendering)
 - [x] FE-5 session/runtime integration + rendering + `--boot title`
-- [ ] FE-6 desktop launcher + persistence
+- [x] FE-6 desktop launcher + persistence
 - [ ] FE-7 attract demos (can ship after FE-4)
 - [ ] FE-8 acceptance, evidence, inventory row
 
@@ -315,6 +315,15 @@ active slot, `--no-audio` unaffected; save file written atomically.
 
 **Exit**: launcher opens the original flow; legacy save loads into slot 0;
 relaunch restores the selected slot.
+
+**Status**: done. The Home launcher keeps Play/Resume and adds `Title / File
+Select`; `--title` starts the desktop on `$00`. `saves/default.sav` is now the
+`$F0` three-pipe image (atomic write through the existing temp-and-rename
+helper); a legacy `$50` record migrates into pipe A and is rewritten
+immediately, an unknown length is reported and left alone. The Home panel lists
+each pipe's BCD tally, and the debug panel shows the active slot. Five Game
+tests cover migration, first-valid-slot resume, the wrong-length case and the
+full-image write; the desktop smoke screenshot confirms the title frame.
 
 ### FE-7 — Attract demos (M, after FE-4)
 

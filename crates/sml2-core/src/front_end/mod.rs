@@ -15,5 +15,5 @@ pub mod title;
 pub use assets::{FrontEndAssets, TILEMAP_LEN, VRAM_LEN};
 pub use file_select::{FileSelect, FileSelectAction, FileSelectOutput};
 pub use render::{render_file_select, render_title};
-pub use save_slots::{SaveSlots, SLOT_COUNT, SLOT_LEN};
+pub use save_slots::{SaveSlots, SAVE_IMAGE_LEN, SLOT_COUNT, SLOT_LEN};
 pub use title::{TitleAction, TitleScreen};

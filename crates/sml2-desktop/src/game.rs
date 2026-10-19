@@ -1,5 +1,10 @@
 use crate::settings::atomic_write;
-use sml2_core::{audio::Apu, divider::Divider, player_sim::PlayerKeys};
+use sml2_core::{
+    audio::Apu,
+    divider::Divider,
+    front_end::{SaveSlots, SAVE_IMAGE_LEN, SLOT_LEN},
+    player_sim::PlayerKeys,
+};
 use sml2_runtime::{audio_output::AudioOutput, content::SessionAssets, FrameInput, Session};
 use std::{fs, path::PathBuf, time::Instant};
 
@@ -18,16 +23,42 @@ impl Game {
     pub fn new(assets: SessionAssets, save: PathBuf, audio_enabled: bool) -> Self {
         let mut session = Session::new(assets);
         let mut diagnostics = Vec::new();
+        let mut slots = SaveSlots::new();
+        let mut migrated = false;
+
         match fs::read(&save) {
-            Ok(data) if !session.apply_save_record(&data) => {
-                diagnostics.push("Save data could not be loaded".into())
+            Ok(data) if data.len() == SAVE_IMAGE_LEN => {
+                slots = SaveSlots::from_image(&data);
+                let valid = slots.validate_and_init();
+                if let Some(slot) = valid.iter().position(|&v| v) {
+                    if let Some(record) = slots.load_slot(slot) {
+                        if session.apply_save_record(&record) {
+                            session.active_slot = Some(slot as u8);
+                        }
+                    }
+                }
             }
+            Ok(data) if data.len() == SLOT_LEN => {
+                // Pre-slot single-record saves migrate into pipe A.
+                if slots.write_slot(0, &data) && session.apply_save_record(&data) {
+                    session.active_slot = Some(0);
+                    migrated = true;
+                } else {
+                    diagnostics.push("Save data could not be loaded".into());
+                }
+            }
+            Ok(data) => diagnostics.push(format!(
+                "Save: {} bytes is not a {SAVE_IMAGE_LEN}-byte slot image",
+                data.len()
+            )),
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
                 diagnostics.push(format!("Save: {e}"))
             }
             _ => {}
         }
-        Self {
+        session.slots = slots;
+
+        let mut game = Self {
             session,
             save,
             apu: Apu::new(),
@@ -36,7 +67,20 @@ impl Game {
             audio_enabled,
             origin: Instant::now(),
             diagnostics,
+        };
+        // Rewrite a migrated legacy save in the slot image immediately, so the
+        // next launch and the file select see the same three pipes.
+        if migrated {
+            if let Err(e) = game.persist_slots() {
+                game.diagnostics.push(format!("Save: {e}"));
+            }
         }
+        game
+    }
+
+    /// Write the three-slot image (`$F0` bytes) atomically.
+    fn persist_slots(&self) -> Result<(), std::io::Error> {
+        atomic_write(&self.save, &self.session.slots.image())
     }
 
     pub fn audio_running(&mut self, running: bool) {
@@ -56,8 +100,11 @@ impl Game {
     pub fn tick(&mut self, keys: PlayerKeys, volume: f32) {
         let div = Divider::from_elapsed(0, self.origin.elapsed()).sample();
         let effects = self.session.advance(FrameInput { keys, div });
-        for record in effects.saves {
-            if let Err(e) = atomic_write(&self.save, &record) {
+        let saved = !effects.saves.is_empty();
+        if saved {
+            // The session already wrote the record into `active_slot`; persist
+            // the complete image so the other pipes survive.
+            if let Err(e) = self.persist_slots() {
                 self.diagnostics.push(format!("Save: {e}"));
             }
         }

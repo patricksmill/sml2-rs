@@ -27,12 +27,42 @@ impl DesktopApp {
                 self.navigate(ctx, Screen::Game);
             }
         }
+        if self.menu.button(ui, "Title / File Select") {
+            if self.game.is_none() {
+                self.load_game();
+            }
+            if let Some(game) = &mut self.game {
+                // `$00`: the original boot flow; START opens the three pipes.
+                game.session.enter_title();
+            }
+            if self.game.is_some() {
+                self.navigate(ctx, Screen::Game);
+            }
+        }
         if self.menu.button(ui, "Settings") {
             self.return_screen = Screen::Home;
             self.navigate(ctx, Screen::Settings);
         }
         if self.menu.button(ui, "Quit") {
             ctx.send_viewport_cmd(ViewportCommand::Close);
+        }
+        if let Some(game) = &self.game {
+            ui.add_space(14.0);
+            ui.label("Save pipes");
+            for (slot, label) in ["A", "B", "C"].iter().enumerate() {
+                let text = if game.session.slots.valid(slot) {
+                    let tally = game
+                        .session
+                        .slots
+                        .load_slot(slot)
+                        .map(|r| (r[0x42] >> 4) as u16 * 10 + (r[0x42] & 0x0F) as u16)
+                        .unwrap_or(0);
+                    format!("Pipe {label}: {tally} stages")
+                } else {
+                    format!("Pipe {label}: empty")
+                };
+                ui.label(text);
+            }
         }
         ui.add_space(20.0);
         ui.label("Arrows / D-pad: navigate · Enter / South: confirm");
@@ -194,8 +224,8 @@ impl DesktopApp {
                         session.frame_n, self.effective_scale
                     ));
                     ui.monospace(format!(
-                        "Song {}  |  lives {:02X}",
-                        session.sound_driver.active_song, session.lives
+                        "Song {}  |  lives {:02X}  |  slot {:?}",
+                        session.sound_driver.active_song, session.lives, session.active_slot
                     ));
                     match &session.state {
                         SessionState::Overworld(map) => {

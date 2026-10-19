@@ -70,7 +70,7 @@ impl DesktopApp {
             ColorImage::from_gray([160, 144], &[0; 160 * 144]),
             TextureOptions::NEAREST,
         );
-        let screen = if options.play {
+        let screen = if options.play || options.boot_title {
             Screen::Game
         } else {
             Screen::Home
@@ -104,6 +104,11 @@ impl DesktopApp {
             validation_error: Default::default(),
         };
         app.load_game();
+        if app.options.boot_title {
+            if let Some(game) = &mut app.game {
+                game.session.enter_title();
+            }
+        }
         if let Some(scale) = app.options.scale {
             app.zoom(ctx, Some(scale));
         }
