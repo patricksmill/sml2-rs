@@ -16,6 +16,7 @@ mod tests;
 
 use crate::audio::noise::{NoiseEffectState, NoiseMusicFlags, NoiseWrite};
 use crate::audio::pulse::{PulseEffectState, PulseMusicState, PulseWrite};
+use crate::audio::wave::{WaveEffectState, WaveMusicState, WaveWrite};
 
 /// Master volume settings derived from sLowTimeFlag ($A264).
 pub const MASTER_VOLUME_NORMAL: u8 = 0x77; // 119
@@ -104,16 +105,8 @@ pub fn lookup_sfx_pointer(table: &[u16], id: u8) -> Result<u16, SfxLookupError> 
     Ok(table[idx])
 }
 
-/// Channel/slot state for Wave (Slot 1) and Noise (Slot 2) effects.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct SfxSlotState {
-    pub request: u8,
-    pub active_effect: u8,
-    pub timer: u8,
-    pub step: u8,
-    pub duration: u8,
-    pub busy: u8,
-}
+/// Channel/slot state for Wave (Slot 1).
+pub type SfxSlotState = WaveEffectState;
 
 /// Complete native sound driver state.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,10 +123,12 @@ pub struct SoundDriver {
     pub master_volume: u8,
     pub pulse_effect: PulseEffectState,
     pub pulse_music: PulseMusicState,
-    pub wave_slot: SfxSlotState,
+    pub wave_slot: WaveEffectState,
+    pub wave_music: WaveMusicState,
     pub noise_slot: NoiseEffectState,
     pub noise_music: NoiseMusicFlags,
     pub pulse_writes: Vec<PulseWrite>,
+    pub wave_writes: Vec<WaveWrite>,
     pub noise_writes: Vec<NoiseWrite>,
     pub update_count: u32,
 }
@@ -153,10 +148,12 @@ impl Default for SoundDriver {
             master_volume: MASTER_VOLUME_NORMAL,
             pulse_effect: PulseEffectState::default(),
             pulse_music: PulseMusicState::default(),
-            wave_slot: SfxSlotState::default(),
+            wave_slot: WaveEffectState::default(),
+            wave_music: WaveMusicState::default(),
             noise_slot: NoiseEffectState::default(),
             noise_music: NoiseMusicFlags::default(),
             pulse_writes: Vec::new(),
+            wave_writes: Vec::new(),
             noise_writes: Vec::new(),
             update_count: 0,
         }
@@ -197,7 +194,7 @@ impl SoundDriver {
         }
     }
 
-    /// Dispatch Slot 1 (Wave / Channel 2) per ROM $106D3.
+    /// Dispatch Slot 1 (Wave / Channel 3) per ROM $106D3.
     fn dispatch_slot_1(&mut self) {
         if self.sfx_request_1 != 0 {
             let req = self.sfx_request_1;
@@ -208,9 +205,11 @@ impl SoundDriver {
             }
 
             self.wave_slot.request = req;
-            self.wave_slot.active_effect = req;
+            self.wave_slot
+                .start(req, &mut self.wave_music, &mut self.wave_writes);
         } else if self.wave_slot.active_effect != 0 {
-            // Tick target resolved via SLOT1_TICK_TABLE
+            self.wave_slot
+                .tick(&mut self.wave_music, &mut self.wave_writes);
         }
     }
 

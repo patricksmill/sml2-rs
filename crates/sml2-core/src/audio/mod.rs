@@ -3,6 +3,7 @@
 pub mod driver;
 pub mod noise;
 pub mod pulse;
+pub mod wave;
 
 pub use driver::{
     lookup_sfx_pointer, SfxLookupError, SfxSlotState, SoundDriver, MASTER_VOLUME_LOW_TIME,
@@ -12,4 +13,5 @@ pub use driver::{
 };
 pub use noise::{NoiseEffectState, NoiseMusicFlags, NoiseWrite};
 pub use pulse::{PulseEffectState, PulseMusicFlags, PulseMusicState, PulseWrite};
+pub use wave::{WaveEffectState, WaveMusicFlags, WaveMusicState, WaveWrite};
 
