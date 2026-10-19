@@ -638,6 +638,17 @@ pub const DECOR_METASPRITES: [&[(i8, i8, u8, u8)]; 17] = [
     &[(0, 0, 0x00, 0x00)],  // $ 4e2f - 1 cells
 ];
 
+/// `$4FA8`: the X/Y pairs the first sparkle slot (`sMapSprite16`) picks from,
+/// indexed by `rDIV & $0E`; `$4FB8` is the same for the second (`$3CEC1`).
+pub const SPARKLE_SLOT_16: [u8; 16] = [
+    0xD8, 0xAA, 0xDC, 0xB0, 0xE0, 0xAC, 0xDC, 0xAA, 0xD8, 0xAA, 0xD5, 0xB2, 0xD6, 0xB4, 0xD8,
+    0xB1,
+];
+pub const SPARKLE_SLOT_17: [u8; 16] = [
+    0x02, 0xB0, 0x00, 0xB2, 0x04, 0xAC, 0x03, 0xAE, 0x01, 0xB0, 0x00, 0xB2, 0x02, 0xAA, 0x00,
+    0xB4,
+];
+
 /// The hub's `sMapSprite0Page` list (`$4BFD`, copied by `$3CBE7`): `(A, X, Y, ID)`.
 /// `A`'s high nibble is the graphics bank offset and its low nibble tags the
 /// camera compare; `ID == $FF` is an empty slot, otherwise `ID` indexes
@@ -669,12 +680,15 @@ pub const HUB_DECOR_SLOTS: [(u8, u8, u8, u8); 18] = [
 /// both axes. Anything outside that 208-pixel window is flagged
 /// `sMapSpriteOffscreen` and skipped.
 fn decor_offscreen(slot_a: u8, slot_x: u8, slot_y: u8, cam_x: u16, cam_y: u16) -> bool {
-    let inside = |cam: u16, value: u8, nibble: u8| {
+    // X allows `-$30 .. +$D0`, Y allows `-$38 .. +$C8` (`$3D044`'s `$FFD0`/`$00D0`
+    // and `$FFC8`/`$00C8` biases); the two axes are not symmetric.
+    let inside = |cam: u16, value: u8, nibble: u8, lo: u16, hi: u16| {
         let cam_side = (((0x06 | (cam >> 8) as u8) as u16) << 8) | (cam as u8) as u16;
         let slot_side = (((0x06 | nibble) as u16) << 8) | value as u16;
-        slot_side > cam_side.wrapping_sub(0x30) && slot_side < cam_side.wrapping_add(0xD0)
+        slot_side > cam_side.wrapping_sub(lo) && slot_side < cam_side.wrapping_add(hi)
     };
-    !(inside(cam_x, slot_x, slot_a >> 4) && inside(cam_y, slot_y, slot_a & 0x0F))
+    !(inside(cam_x, slot_x, slot_a >> 4, 0x30, 0xD0)
+        && inside(cam_y, slot_y, slot_a & 0x0F, 0x38, 0xC8))
 }
 
 /// One expanded decor slot: the OAM bytes `$3D001` would stage for it, or `None`
@@ -873,6 +887,9 @@ pub fn render_overworld_view(
     cursor_walking: u8,
     walk_frame: u8,
     cursor_pose: u8,
+    // The screen's `$3CFC8` slot list: cells expand through `decor_oam` and draw
+    // from OAM index 13, i.e. behind the cursor's 0-3 and the HUD's 4-12.
+    decor_slots: &[(u8, u8, u8, u8)],
     // `sMapScrollOnlyLatch != 0`: B is panning the hub camera, which replaces
     // the cursor with the `$4A11` border arrows. `frame_counter` stands in for
     // `$FF97`: bit 4 picks `$4A11` (visible) or `$4A21` (blank), a 16-frame
@@ -948,6 +965,28 @@ pub fn render_overworld_view(
                     img[py * vw + px] = bg_shades[col as usize];
                 }
             }
+        }
+    }
+
+    for slot in decor_slots {
+        let Some(cells) = decor_oam(*slot, cam_x, cam_y) else {
+            continue;
+        };
+        for (oy, ox, tile, attr) in cells {
+            if tile == 0x7F {
+                continue;
+            }
+            draw_obj_tile(
+                &mut img,
+                tiles_vram,
+                &obj_shades,
+                ox as i32 - 8,
+                oy as i32 - 16,
+                tile,
+                attr,
+                vw,
+                vh,
+            );
         }
     }
 
@@ -1251,7 +1290,7 @@ mod tests {
         // Render before unlock: progress byte at offset 2 is 0 -> tile is 0
         let progress = [0u8; 42];
         let frame_locked = render_overworld_view(
-            1, 0, 0, 0, 0, 0, 0, 0, 0, false, 0,
+            1, 0, 0, 0, 0, 0, 0, 0, 0, &[], false, 0,
             &tilemaps, &manifest, &progress,
             &vram, 0xE4, 0xD0, 160, 144,
         );
@@ -1261,7 +1300,7 @@ mod tests {
         let mut progress_unlocked = [0u8; 42];
         progress_unlocked[2] = 1;
         let frame_unlocked = render_overworld_view(
-            1, 0, 0, 8, 16, 0, 0, 0, 0, false, 0, // OAM (8, 16) -> screen pixel (0, 0)
+            1, 0, 0, 8, 16, 0, 0, 0, 0, &[], false, 0, // OAM (8,16) -> screen (0,0)
             &tilemaps, &manifest, &progress_unlocked,
             &vram, 0xE4, 0xD0, 160, 144,
         );
@@ -1385,8 +1424,8 @@ mod cursor_render_tests {
         vram[0x7E] = [2u8; 64]; // $4A11's arrow tiles
         vram[0x39] = [2u8; 64];
         render_overworld_view(
-            1, 0, 0, 8, 16, move_, walking, walk_frame, 0, pan, frame_counter, &tilemaps, &manifest,
-            &[], &vram, 0xE4, 0xD0, 160, 144,
+            1, 0, 0, 8, 16, move_, walking, walk_frame, 0, &[], pan, frame_counter, &tilemaps,
+            &manifest, &[], &vram, 0xE4, 0xD0, 160, 144,
         )
     }
 
@@ -1636,5 +1675,68 @@ mod decor_idle_probe {
             !kept.is_empty(),
             "if this ever becomes empty the static list could be rendered as-is"
         );
+    }
+}
+
+#[cfg(test)]
+mod decor_render_tests {
+    use super::*;
+
+    fn scene() -> (OverworldTilemaps, OverworldManifest, Vec<[u8; 64]>) {
+        let mut vram = vec![[0u8; 64]; 384];
+        for t in 0x20..=0x27 {
+            vram[t] = [2u8; 64]; // ID 9's tiles, all colour 2
+        }
+        let manifest = OverworldManifest::from_json_str(
+            r#"{"cursor_poses":[],"dynamic_unlocks":[],"patches":[],"screens":[]}"#,
+        )
+        .expect("manifest");
+        (OverworldTilemaps::default(), manifest, vram)
+    }
+
+    fn draw(slots: &[(u8, u8, u8, u8)], cam_y: u16) -> Vec<u8> {
+        let (tilemaps, manifest, vram) = scene();
+        render_overworld_view(
+            0, 0x0081, cam_y, 8, 16, 0, 0, 0, 0, slots, false, 0, &tilemaps, &manifest, &[], &vram,
+            0xE4, 0xD0, 160, 144,
+        )
+    }
+
+    /// Measured on PyBoy at the hub's idle camera: the expansion is exactly these
+    /// eight cells (slot 3, ID 9), all staged just above the top edge at y=246/254.
+    #[test]
+    fn the_idle_hub_expands_the_eight_cells_the_console_stages() {
+        let mut all = Vec::new();
+        for slot in HUB_DECOR_SLOTS {
+            if let Some(cells) = decor_oam(slot, 0x0081, 0x0142) {
+                all.extend(cells);
+            }
+        }
+        assert_eq!(
+            all,
+            vec![
+                (246, 71, 0x20, 0x00),
+                (246, 79, 0x21, 0x00),
+                (246, 87, 0x22, 0x00),
+                (246, 95, 0x23, 0x00),
+                (254, 71, 0x24, 0x00),
+                (254, 79, 0x25, 0x00),
+                (254, 87, 0x26, 0x00),
+                (254, 95, 0x27, 0x00),
+            ]
+        );
+    }
+
+    /// The same slot with the camera raised so the sprite is on screen: the
+    /// decor pass paints it, and it is painted before the cursor.
+    #[test]
+    fn decor_paints_when_the_camera_brings_it_on_screen() {
+        let obj = crate::video::bgp_shades(0xD0);
+        let with = draw(&HUB_DECOR_SLOTS, 0x0100);
+        let without = draw(&[], 0x0100);
+        assert_ne!(with, without, "the slot must paint something");
+        // Slot 3 at cam (0x81, 0x100): screen (63, 40).
+        assert_eq!(with[40 * 160 + 63], obj[2]);
+        assert_ne!(without[40 * 160 + 63], obj[2]);
     }
 }

@@ -377,6 +377,15 @@ pub struct MapSim {
     pub special_node_latch: u8,
     /// `sMapKeysXor` (`$A6B2`) — a census-only byte with no reader in the ROM.
     pub keys_xor: u8,
+    /// `sMapSprite*Page/X/Y/Id` (`$A6B5`, 18 x 4): the decor slot list `$3CFC8`
+    /// expands into OAM from index 13.
+    pub decor_slots: [(u8, u8, u8, u8); 18],
+    /// `sMapCoinIconPhase` (`$A780`): 0-2, cycled every 8 frames.
+    pub coin_icon_phase: u8,
+    /// `sMapCloudDriftCounter` (`$A781`): bit 6 is the drift direction.
+    pub cloud_drift: u8,
+    /// `sMapSparkleTimer` (`$A7A9`): the two random sparkle slots' countdown.
+    pub sparkle_timer: u8,
     /// `sMapFrameCounter` (`$A69A`).
     pub frame_counter: u8,
     /// `sMapTickTimer` (`$A697`) — 40-frame countdown.
@@ -429,6 +438,10 @@ impl MapSim {
             rock_anim_timer: 0,
             special_node_latch: 0,
             keys_xor: 0,
+            decor_slots: crate::map::HUB_DECOR_SLOTS,
+            coin_icon_phase: 0,
+            cloud_drift: 0,
+            sparkle_timer: 0,
             frame_counter: 0,
             tick_timer: 40,
             rand_latch: 0,
@@ -535,6 +548,11 @@ impl MapSim {
         self.cursor_walking = 0;
         self.scroll_only_latch = 0;
         self.frame_counter = 0;
+        // `$3CBE7` clears the drift counter and `$CBE7`'s tail reseeds the list.
+        self.decor_slots = crate::map::HUB_DECOR_SLOTS;
+        self.coin_icon_phase = 0;
+        self.cloud_drift = 0;
+        self.sparkle_timer = 0;
 
         match screen_id {
             0 => {
@@ -899,9 +917,63 @@ impl MapSim {
     /// and its two `$FF04`-seeded latches. `$3C13E` reads `$FF00+c` with `c = 4`,
     /// i.e. the divider, not the joypad, which is why nothing mechanical reads
     /// these bytes.
+    /// `$3CE6B`: the hub's decor updater, run every frame by `$3CFC8` just before
+    /// it expands the 18 slots. Coins (slots 4-9) cycle their ids 2/3/4 every 8
+    /// frames, the three drifting sprites (slots 1-3) move one pixel every 4
+    /// frames with the direction on the counter's bit 6, and the two sparkle
+    /// slots (16/17) re-arm from `rDIV` on the same 4-frame beat.
+    fn hub_decor_tick(&mut self, div: u8) {
+        if self.screen_id != 0 {
+            return;
+        }
+        let fc = self.frame_counter;
+        if fc & 0x07 == 0 {
+            self.coin_icon_phase = (self.coin_icon_phase + 1) % 3;
+            for slot in 4..10 {
+                if self.decor_slots[slot].3 != 0xFF {
+                    self.decor_slots[slot].3 = self.coin_icon_phase + 2;
+                }
+            }
+        }
+        if fc & 0x03 == 0 {
+            self.cloud_drift = self.cloud_drift.wrapping_add(1);
+            let step = if self.cloud_drift & 0x40 != 0 { 1u8 } else { 0xFF };
+            for slot in 1..4 {
+                self.decor_slots[slot].1 = self.decor_slots[slot].1.wrapping_add(step);
+            }
+            if self.sparkle_timer != 0 {
+                self.sparkle_timer = self.sparkle_timer.wrapping_sub(1);
+                let visible = self.sparkle_timer & 1 != 0;
+                self.set_sparkles(div, visible);
+            } else if div & 0x72 == 0 {
+                // `$3CF09` arms four and falls into `$3CEC4`, which decrements.
+                self.sparkle_timer = 4u8.wrapping_sub(1);
+                let visible = self.sparkle_timer & 1 != 0;
+                self.set_sparkles(div, visible);
+            }
+        }
+    }
+
+    /// `$3CEC4`: hide both sparkle slots, then show them at positions out of
+    /// `$4FA8`/`$4FB8` when the countdown is odd.
+    fn set_sparkles(&mut self, div: u8, visible: bool) {
+        let id = if visible { 0x0Au8 } else { 0xFF };
+        self.decor_slots[16].3 = id;
+        self.decor_slots[17].3 = id;
+        if visible {
+            let i = (div & 0x0E) as usize;
+            self.decor_slots[16].1 = crate::map::SPARKLE_SLOT_16[i];
+            self.decor_slots[16].2 = crate::map::SPARKLE_SLOT_16[i + 1];
+            let j = ((div & 0xE0) >> 4) as usize;
+            self.decor_slots[17].1 = crate::map::SPARKLE_SLOT_17[j];
+            self.decor_slots[17].2 = crate::map::SPARKLE_SLOT_17[j + 1];
+        }
+    }
+
     pub fn bookkeeping(&mut self, div: u8) {
         self.keys_xor ^= div;
         self.frame_counter = self.frame_counter.wrapping_add(1);
+        self.hub_decor_tick(div);
         self.tick_timer = self.tick_timer.wrapping_sub(1);
         if self.tick_timer == 0 {
             self.tick_timer = 40;
@@ -2490,5 +2562,95 @@ mod tests {
         map.load_screen_tree_a(0x80, &r);
         assert_eq!(map.node, 0x23, "dead mario does not retarget");
         assert_eq!(map.level_progress[po::TREE_A_PATH_1], 0, "path 1 bit 0 not set");
+    }
+}
+
+#[cfg(test)]
+mod hub_decor_tests {
+    use super::*;
+
+    fn map() -> MapSim {
+        let mut m = MapSim::new();
+        m.screen_id = 0;
+        m
+    }
+
+    /// `$3CE6B`: every 8 frames the coin phase advances and rewrites the ids of
+    /// the six coin slots (4-9) that are live; `$FF` slots stay empty.
+    #[test]
+    fn coin_ids_cycle_two_three_four_every_eight_frames() {
+        let mut m = map();
+        m.decor_slots[4].3 = 2; // a collected golden coin
+        for slot in 5..10 {
+            m.decor_slots[slot].3 = 0xFF;
+        }
+        let mut seen = Vec::new();
+        for _ in 0..24 {
+            m.bookkeeping(0x10); // div chosen so no sparkle re-arm
+            seen.push((m.frame_counter, m.decor_slots[4].3, m.decor_slots[5].3));
+        }
+        // Frame 8 -> phase 1 -> id 3; 16 -> 4; 24 -> 2.
+        assert_eq!(seen[7], (8, 3, 0xFF));
+        assert_eq!(seen[15], (16, 4, 0xFF));
+        assert_eq!(seen[23], (24, 2, 0xFF));
+    }
+
+    /// `$3CE93`: slots 1-3 move one pixel every 4th frame, and the direction
+    /// flips with bit 6 of `sMapCloudDriftCounter`.
+    #[test]
+    fn cloud_slots_drift_and_reverse_on_counter_bit_six() {
+        let mut m = map();
+        let start: [u8; 3] = [m.decor_slots[1].1, m.decor_slots[2].1, m.decor_slots[3].1];
+        for _ in 0..4 {
+            m.bookkeeping(0x10);
+        }
+        assert_eq!(m.cloud_drift, 1);
+        for (i, slot) in (1..4).enumerate() {
+            assert_eq!(m.decor_slots[slot].1, start[i].wrapping_sub(1), "first step is left");
+        }
+        // Walk the counter to 0x40: 64 left steps, then the direction flips.
+        while m.cloud_drift != 0x40 {
+            m.bookkeeping(0x10);
+        }
+        let mid: [u8; 3] = [m.decor_slots[1].1, m.decor_slots[2].1, m.decor_slots[3].1];
+        // The step is applied *after* the counter increments, so reaching 0x40
+        // already took one rightward step: 63 left then 1 right.
+        for (i, slot) in (1..4).enumerate() {
+            assert_eq!(
+                mid[i],
+                start[i].wrapping_sub(63).wrapping_add(1),
+                "63 left, then bit 6 turns the last step around"
+            );
+        }
+        for _ in 0..4 {
+            m.bookkeeping(0x10);
+        }
+        for (i, slot) in (1..4).enumerate() {
+            assert_eq!(m.decor_slots[slot].1, mid[i].wrapping_add(1), "bit 6 flips it");
+        }
+    }
+
+    /// `$3CEC4`: `rDIV & $72 == 0` arms the sparkles, which then show on odd
+    /// countdown values at the `$4FA8`/`$4FB8` positions.
+    #[test]
+    fn sparkles_arm_from_the_divider() {
+        let mut m = map();
+        assert_eq!(m.decor_slots[16].3, 0xFF, "starts hidden");
+        // div 0x00 satisfies `& $72 == 0`.
+        for _ in 0..4 {
+            m.bookkeeping(0x00);
+        }
+        assert_eq!(m.sparkle_timer, 3, "armed 4, then the body decremented");
+        assert_eq!(m.decor_slots[16].3, 0x0A);
+        assert_eq!(m.decor_slots[17].3, 0x0A);
+        assert_eq!(m.decor_slots[16].1, crate::map::SPARKLE_SLOT_16[0]);
+        assert_eq!(m.decor_slots[16].2, crate::map::SPARKLE_SLOT_16[1]);
+        // A divider that never matches leaves them hidden.
+        let mut n = map();
+        for _ in 0..16 {
+            n.bookkeeping(0x72);
+        }
+        assert_eq!(n.sparkle_timer, 0);
+        assert_eq!(n.decor_slots[16].3, 0xFF);
     }
 }
