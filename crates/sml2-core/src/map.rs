@@ -430,6 +430,13 @@ impl OverworldTiles {
         self.bytes.is_empty()
     }
 
+    /// The screen's raw 384-tile 2bpp block, for the wave strips' byte writes.
+    pub fn screen_raw(&self, screen_id: u8) -> &[u8] {
+        let sid = (screen_id as usize).min(Self::SCREEN_COUNT - 1);
+        let start = sid * Self::BYTES_PER_SCREEN;
+        self.bytes.get(start..start + Self::BYTES_PER_SCREEN).unwrap_or(&[])
+    }
+
     /// Decode the 384 2bpp tiles for a given screen into 8x8 pixel color arrays (0..=3).
     pub fn screen_vram_tiles(&self, screen_id: u8) -> Vec<[u8; 64]> {
         let sid = (screen_id as usize).min(Self::SCREEN_COUNT - 1);
@@ -607,6 +614,105 @@ pub fn cursor_sprite(
         return CursorSprite::Stump(STUMP_ORDER[((walk_frame & 0x18) >> 3) as usize]);
     }
     CursorSprite::Pose(cursor_pose & 0x0F)
+}
+
+/// The eight tiles the hub's wave strips write into, in strip order: strip `n`
+/// owns `WAVE_TILES[2n]` (`$88E0`-style base) and `WAVE_TILES[2n+1]` (`$88F0`).
+pub const WAVE_TILES: [u8; 8] = [0x8E, 0x8F, 0x9E, 0x9F, 0xCE, 0xCF, 0xDE, 0xDF];
+
+/// `$3E7BE` + `$3E853`: the hub's shoreline shimmer.
+///
+/// `$3E7BE` seeds four 32-byte strips from the tile bytes at `$88E0`, `$89E0`,
+/// `$8CE0` and `$8DE0` (so strip `n` byte `e` is tile `2n`'s byte `e` and byte
+/// `e + $10` is tile `2n+1`'s byte `e`). Each frame `$3E853` rotates one 16-bit
+/// window per strip by a bit and writes the two bytes back into the two tiles,
+/// 0x10 apart. An even phase rotates all four strips **left** at
+/// `(phase & 7)*2`, an odd phase rotates them **right**; either way it then
+/// repeats strips 2 and 3 at `((phase & 7)*2) | 1`, so a phase writes eight
+/// bytes (four strips at `e`, two strips at `e|1`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MapWave {
+    /// `sMapRasterPhase` (`$A689`): incremented before the rotation is chosen.
+    pub phase: u8,
+    /// `sMapWaveStrip0..3` (`$A700`/`$A720`/`$A740`/`$A760`).
+    pub strips: [[u8; 32]; 4],
+    /// The eight affected tiles' raw 2bpp bytes, keyed by [`WAVE_TILES`], so the
+    /// renderer can re-decode after a write.
+    pub raw: [[u8; 16]; 8],
+}
+
+impl MapWave {
+    /// `$3E7BE`: seed the strips from a screen's raw 384-tile block.
+    pub fn seed(raw_block: &[u8]) -> Option<Self> {
+        let mut raw = [[0u8; 16]; 8];
+        for (i, tile) in WAVE_TILES.iter().enumerate() {
+            let off = *tile as usize * 16;
+            raw[i].copy_from_slice(raw_block.get(off..off + 16)?);
+        }
+        let mut strips = [[0u8; 32]; 4];
+        for (n, strip) in strips.iter_mut().enumerate() {
+            strip[..16].copy_from_slice(&raw[2 * n]);
+            strip[16..].copy_from_slice(&raw[2 * n + 1]);
+        }
+        Some(Self {
+            phase: 0,
+            strips,
+            raw,
+        })
+    }
+
+    /// One `$3E853` call.
+    pub fn tick(&mut self) {
+        self.phase = self.phase.wrapping_add(1);
+        let e = ((self.phase & 7) as usize) * 2;
+        let left = self.phase & 1 == 0;
+        for strip in 0..4 {
+            self.pass(strip, e, left);
+        }
+        // Both paths end with `set 0, e` and repeat strips 2 and 3 at the odd
+        // byte offset, so every phase writes eight bytes.
+        for strip in 2..4 {
+            self.pass(strip, e | 1, left);
+        }
+    }
+
+    /// One strip's rotate-and-write. `$3E853`'s left variant is
+    /// `sla a / rl d / rra / rlca`, the right variant `srl a / rr d / rla / rrca`,
+    /// where `a` is the strip's `e + $10` byte and `d` its `e` byte.
+    fn pass(&mut self, strip_index: usize, e: usize, left: bool) {
+        let e = e & 0x0F;
+        let (d1, a1) = (self.strips[strip_index][e], self.strips[strip_index][e + 0x10]);
+        let (d, a) = if left {
+            let a = a1 << 1;
+            let carry = a1 >> 7;
+            let d = (d1 << 1) | carry;
+            let carry = d1 >> 7;
+            // `rra`: the carry comes from `rl d`, i.e. bit 7 of the old d.
+            let a = (a >> 1) | (carry << 7);
+            (d, a.rotate_left(1))
+        } else {
+            let carry = a1 & 1;
+            let a = a1 >> 1;
+            let d = (d1 >> 1) | (carry << 7);
+            // `rla`: the carry comes from `rr d`, i.e. bit 0 of the old d.
+            let a = (a << 1) | (d1 & 1);
+            (d, a.rotate_right(1))
+        };
+        // `ld [hl], a` -> the $..F0 tile, then `ld [hl], d` -> the $..E0 tile.
+        self.raw[2 * strip_index + 1][e] = a;
+        self.raw[2 * strip_index][e] = d;
+        self.strips[strip_index][e] = d;
+        self.strips[strip_index][e + 0x10] = a;
+    }
+
+    /// Re-decode the affected tiles into a screen VRAM block.
+    pub fn apply(&self, vram: &mut [[u8; 64]]) {
+        for (i, tile) in WAVE_TILES.iter().enumerate() {
+            if let Some(slot) = vram.get_mut(*tile as usize) {
+                *slot = crate::video::tile_colors(&self.raw[i]);
+            }
+        }
+    }
 }
 
 /// Blit one 8x8 OBJ tile out of the map's VRAM block, honouring the attr flips
@@ -1226,5 +1332,90 @@ mod cursor_render_tests {
         assert_eq!(draw(0x80, 0, 0x08)[0], obj[1], "frame 1 still an arrow");
         assert_eq!(draw(0x80, 0, 0x08)[8], obj[1], "second cell of the pair");
         assert_ne!(scroll[0], idle[0]);
+    }
+}
+
+#[cfg(test)]
+mod wave_tests {
+    use super::*;
+
+    fn bytes(s: &str) -> Vec<u8> {
+        s.split_whitespace()
+            .map(|h| u8::from_str_radix(h, 16).expect("hex"))
+            .collect()
+    }
+
+    const STRIP0: &str = "0f 00 00 00 70 00 7c 00 ff 00 0f 00 f8 00 ff 00 \
+                          ff 00 0f 00 7e 00 7c 00 01 00 fc 00 7f 00 f7 00";
+    const STRIP1: &str = "fc 00 f1 00 1f 00 1b 00 f1 00 ff 00 1f 00 e0 00 \
+                          07 00 ff 00 c0 00 8c 00 e7 00 8f 00 fc 00 ff 00";
+    const STRIP2: &str = "00 1f 00 00 00 70 54 28 f3 0c 00 0f 80 78 f1 0e \
+                          00 ff 09 06 02 7c 70 0c 01 00 9c 60 00 7f f0 07";
+    const STRIP3: &str = "00 fc 31 c0 13 0c 02 19 70 81 60 9f 15 0a e0 00 \
+                          00 07 28 d7 c0 00 8c 00 00 e7 80 0f 04 f8 9f 60";
+    const AFTER0: &str = "0f 00 00 00 70 00 7c 00 ff 00 0f 00 f0 00 ff 00 \
+                          ff 00 0f 00 7e 00 7c 00 01 00 fc 00 ff 00 fb 00";
+    const AFTER1: &str = "fc 00 f1 00 1f 00 1b 00 f1 00 ff 00 3f 00 f0 00 \
+                          07 00 ff 00 c0 00 8c 00 e7 00 8f 00 f8 00 7f 00";
+    const AFTER2: &str = "00 1f 00 00 00 70 54 28 f3 0c 00 0f 00 f0 78 87 \
+                          00 ff 09 06 02 7c 70 0c 01 00 9c 60 01 fe f8 03";
+    const AFTER3: &str = "00 fc 31 c0 13 0c 02 19 70 81 60 9f 2a 15 f0 00 \
+                          00 07 28 d7 c0 00 8c 00 00 e7 80 0f 08 f0 4f 30";
+    /// Tile `$8E` after the two frames, i.e. the `$88E0` half of strip 0.
+    const AFTER_TILE_8E: &str = "0f 00 00 00 70 00 7c 00 ff 00 0f 00 f0 00 ff 00";
+
+    /// Measured on PyBoy (hub, `sMapRasterPhase = $DD`): two console frames later
+    /// ($DE then $DF) the four `sMapWaveStrip` buffers hold exactly this. The
+    /// pair covers both passes - `$DE` is even and rotates left at `e = 12`,
+    /// `$DF` is odd and rotates right at `e = 14` and again at `e = 15` for
+    /// strips 2 and 3.
+    #[test]
+    fn wave_rotation_matches_the_console() {
+        let mut wave = MapWave {
+            phase: 0xDD,
+            strips: [[0u8; 32]; 4],
+            raw: [[0u8; 16]; 8],
+        };
+        for (n, hex) in [STRIP0, STRIP1, STRIP2, STRIP3].iter().enumerate() {
+            wave.strips[n].copy_from_slice(&bytes(hex));
+        }
+        // Tile $8E is strip 0's first half, so seeding the raw block from the
+        // strips keeps the two views consistent for `apply`.
+        wave.raw[0].copy_from_slice(&bytes(STRIP0)[..16]);
+
+        wave.tick();
+        wave.tick();
+
+        assert_eq!(wave.phase, 0xDF);
+        for (n, hex) in [AFTER0, AFTER1, AFTER2, AFTER3].iter().enumerate() {
+            assert_eq!(wave.strips[n].to_vec(), bytes(hex), "strip {n}");
+        }
+        assert_eq!(wave.raw[0].to_vec(), bytes(AFTER_TILE_8E), "tile $8E bytes");
+        // Every phase writes eight bytes: four strips at `e`, strips 2/3 at `e|1`.
+        assert_eq!(wave.strips[0][0x0F], bytes(AFTER0)[0x0F]);
+        assert_eq!(wave.strips[2][0x0F], bytes(AFTER2)[0x0F]);
+    }
+
+    /// `$3E7BE`: each strip is the sixteen bytes of its even tile followed by the
+    /// sixteen of its odd tile.
+    #[test]
+    fn seeding_copies_the_tile_pairs() {
+        let mut block = vec![0u8; 384 * 16];
+        for (i, tile) in WAVE_TILES.iter().enumerate() {
+            for b in 0..16 {
+                block[*tile as usize * 16 + b] = (i as u8) * 16 + b as u8;
+            }
+        }
+        let wave = MapWave::seed(&block).expect("384-tile block");
+        for n in 0..4 {
+            assert_eq!(wave.strips[n][..16], wave.raw[2 * n][..], "strip {n} even tile");
+            assert_eq!(wave.strips[n][16..], wave.raw[2 * n + 1][..], "strip {n} odd tile");
+        }
+        assert_eq!(wave.raw[0][0], 0x00);
+        assert_eq!(wave.raw[7][15], 7 * 16 + 15);
+        // `apply` writes the rotated bytes back through the tile decoder.
+        let mut vram = vec![[0u8; 64]; 384];
+        wave.apply(&mut vram);
+        assert_eq!(vram[0x8E], crate::video::tile_colors(&wave.raw[0]));
     }
 }

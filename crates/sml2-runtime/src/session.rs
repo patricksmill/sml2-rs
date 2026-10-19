@@ -661,6 +661,8 @@ pub struct SessionRunner {
     /// Screen whose loader-run music request was last applied, so a screen's
     /// song is requested once per load instead of every frame.
     pub last_map_screen: Option<u8>,
+    /// `$3E853`'s hub shimmer, seeded when the hub screen loads.
+    pub map_wave: Option<sml2_core::map::MapWave>,
     /// Set while a map level entry runs its 37-frame transition.
     pub pending_level: Option<Box<MapTransition>>,
     /// `Some` only while a live audio device is open (never in headless runs,
@@ -706,6 +708,7 @@ impl SessionRunner {
         let mut runner = Self {
             state: SessionState::GameOver,
             last_map_screen: None,
+            map_wave: None,
             pending_level: None,
             audio_sync: None,
             assets,
@@ -850,6 +853,21 @@ impl SessionRunner {
                 }
                 if let Some(sfx) = entry.sfx {
                     self.sound_driver.sfx_request_1 = sfx;
+                }
+
+                // `$3EAFF`: only the hub runs the wave strips, and `$3E7BE`
+                // seeds them from the tiles the loader just copied.
+                if map_sim.screen_id == 0 {
+                    if self.map_wave.is_none() {
+                        self.map_wave = sml2_core::map::MapWave::seed(
+                            self.assets.overworld_tiles.screen_raw(0),
+                        );
+                    }
+                    if let Some(wave) = self.map_wave.as_mut() {
+                        wave.tick();
+                    }
+                } else {
+                    self.map_wave = None;
                 }
 
                 if map_sim.pending_save || entry.saved {
@@ -1080,10 +1098,15 @@ impl SessionRunner {
     pub fn render_frame(&self) -> Vec<u8> {
         match &self.state {
             SessionState::Overworld(map_sim) => {
-                let vram = self
+                let mut vram = self
                     .assets
                     .overworld_tiles
                     .screen_vram_tiles(map_sim.screen_id);
+                if map_sim.screen_id == 0 {
+                    if let Some(wave) = &self.map_wave {
+                        wave.apply(&mut vram);
+                    }
+                }
                 let bg_pal = self
                     .assets
                     .overworld_manifest

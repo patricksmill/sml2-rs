@@ -456,3 +456,22 @@ fn pipe_travel_draws_mario_behind_the_background() {
         assert!(crate::session::player_behind_bg(travelling), "{travelling:#04x}");
     }
 }
+
+#[test]
+fn hub_frames_advance_the_wave_strips() {
+    // `$3EAFF` runs `$3E853` once per frame on the hub only; the strips must move
+    // and the phase must advance with the frame count.
+    let tmp_save = temp_save_path("test_wave");
+    let _ = fs::remove_file(&tmp_save);
+    let assets = SessionAssets::load().expect("session assets must load");
+    let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
+    let _ = runner.step_frame(PlayerKeys::default());
+    let first = runner.map_wave.clone().expect("seeded on the hub");
+    for _ in 0..8 {
+        let _ = runner.step_frame(PlayerKeys::default());
+    }
+    let later = runner.map_wave.clone().expect("still seeded");
+    assert_ne!(first.strips, later.strips, "the strips rotate");
+    assert_eq!(later.phase, first.phase.wrapping_add(8), "one call per frame");
+    let _ = fs::remove_file(&tmp_save);
+}
