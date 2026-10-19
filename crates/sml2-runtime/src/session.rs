@@ -19,10 +19,11 @@ use sml2_core::player_sim::{MapHandoffOutcome, PlayerKeys, PlayerSim};
 use sml2_core::scene::{boss_def_index, boss_def_portable, SceneScripts, SceneStep, SceneVm};
 use sml2_core::tileset::Tilesets;
 
-use crate::{
+use crate::game::{
     apply_level_entry, build_contact, note_handoff_screen, sample_level_player_inputs,
-    scene_frame_head, seed_level_timer, BellArm, SpriteCtx, SpriteInst,
+    scene_frame_head, seed_level_timer, BellArm,
 };
+use crate::render::{SpriteCtx, SpriteInst};
 
 /// Pack boolean keyboard inputs into the Game Boy hardware joypad register format
 /// consumed by `sml2_core::map_sim::MapInput`.

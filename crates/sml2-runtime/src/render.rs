@@ -2,7 +2,7 @@
 
 use crate::{SCREEN_H, SCREEN_W};
 use serde::Deserialize;
-use sml2_core::level::{LevelLayout, LevelManifest, LAYOUT_HEIGHT, LAYOUT_WIDTH};
+use sml2_core::level::{HudStrip, LevelLayout, LevelManifest, LAYOUT_HEIGHT, LAYOUT_WIDTH};
 use sml2_core::object::ObjectTables;
 use sml2_core::video;
 
@@ -401,3 +401,55 @@ fn blit_obj_cell(
 }
 
 mod session;
+
+/// Build the 20-tile HUD row: ROM template + optional digit substitution
+/// (ten digits in column order: lives, coins, money, time; tile = $80 + digit).
+pub(crate) fn hud_row(hud: &HudStrip, digits: Option<&str>) -> Vec<u8> {
+    let mut row = hud.template.clone();
+    if let Some(d) = digits {
+        for (i, col) in hud.digit_columns.iter().enumerate() {
+            if let Some(v) = d.chars().nth(i).and_then(|c| c.to_digit(10)) {
+                if let Some(slot) = row.get_mut(*col as usize) {
+                    *slot = 0x80 + v as u8;
+                }
+            }
+        }
+    }
+    row
+}
+
+/// The HUD row with the coin digits taken from the live sim. The engine's
+/// `$076B` patches the status bar every in-level frame: `$9C07 = sCoinHigh &
+/// $0F`, `$9C08 = sCoinLow >> 4`, `$9C09 = sCoinLow & $0F` (tile = `$80 +
+/// digit`). `digit_columns` is in display order (lives, coins, money, time),
+/// so the coin group is entries 2..5; everything else keeps the template.
+pub(crate) fn hud_row_coins(hud: &HudStrip, coins_high: u8, coins_low: u8) -> Vec<u8> {
+    let mut row = hud.template.clone();
+    for (k, v) in [coins_high & 0x0F, coins_low >> 4, coins_low & 0x0F]
+        .iter()
+        .enumerate()
+    {
+        if let Some(col) = hud.digit_columns.get(2 + k) {
+            if let Some(slot) = row.get_mut(*col as usize) {
+                *slot = 0x80 + v;
+            }
+        }
+    }
+    row
+}
+
+/// Overlay the level's animated tiles (VRAM `$9200`..`$923F`) at the given
+/// phase onto the composed BG block (offset `$A00` = tile 32). No-op when the
+/// level's animation is disabled.
+pub(crate) fn apply_tile_anim(
+    bg: &mut [u8],
+    anim: &sml2_core::level::TileAnim,
+    rows: &[u8],
+    phase: u8,
+) {
+    if !anim.enabled {
+        return;
+    }
+    let off = anim.row as usize * 0x100 + (phase & 3) as usize * 0x40;
+    bg[0xA00..0xA40].copy_from_slice(&rows[off..off + 0x40]);
+}

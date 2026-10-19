@@ -5,6 +5,12 @@ claim these features are implemented or change the active port queue. Original
 game completion still follows [the completion workflow](2026-10-15-rust-completion-workflow.md).
 Implement each architectural move as a bounded, independently verified step.
 
+Package A's runtime boundaries are implemented: a reusable library, separate
+CPU rendering and window-buffer presentation, an injectable preloaded content
+source, and explicit session inputs/deferred host effects. The CLI adapters
+retain their existing behavior. See [Runtime boundaries](../runtime-architecture.md)
+for ownership, the public API, compatibility contracts, and verification.
+
 ## Assessment from the current code
 
 The three-crate workspace already separates much native simulation from the

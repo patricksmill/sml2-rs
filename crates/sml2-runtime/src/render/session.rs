@@ -1,8 +1,8 @@
 //! Read-only session presentation; view dimensions never enter simulation state.
 
 use super::render_view;
+use super::{apply_tile_anim, hud_row_coins};
 use crate::session::{LevelContext, Session, SessionState, MAP_FADE_STEP};
-use crate::{apply_tile_anim, hud_row_coins};
 use std::error::Error;
 
 /// `rBGP`/`rOBP` fade step: subtract `steps` from each 2-bit shade field,
