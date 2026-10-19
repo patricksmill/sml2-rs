@@ -26,6 +26,8 @@ fn flat(bank: u8, addr: u16) -> Result<usize, String> {
 pub enum BlobKind {
     /// Contiguous code/handler region.
     Code,
+    /// Fixed-length table (`end` is exclusive, like `Code`).
+    Fixed,
     /// Byte table terminated by `$FF` (the terminator is part of the blob).
     FfTable,
     /// Two lists of 3-byte records (sprites, then patches), each terminated by
@@ -46,6 +48,15 @@ pub struct BlobSpec {
 /// Source order is ROM order; `code` ends were taken from the disassembly's
 /// next data block or next entry point.
 pub const BLOBS: &[BlobSpec] = &[
+    // The coin room's item table at the bank base: `$60D49` indexes
+    // `$4F76[node-110] + column` into ten-byte rows.
+    BlobSpec {
+        name: "coin_room_items",
+        bank: 24,
+        addr: 0x4000,
+        end: 0x4028,
+        kind: BlobKind::Fixed,
+    },
     BlobSpec {
         name: "castle_screen",
         bank: 24,
@@ -88,6 +99,17 @@ pub const BLOBS: &[BlobSpec] = &[
         // `$4F5A` starts the packed lookup tables the script reads.
         end: 0x4F5A,
         kind: BlobKind::Code,
+    },
+    // `$60D08` reads the walk offsets at `$4FA8`, `$60D32` the item columns at
+    // `$4F7E`, `$60D45` the repeat table at `$4FCD` and `$60EB5` the per-node
+    // sprite ids at `$4F5A..$4F69`. (`$4C4D`'s twelve preview bytes live inside
+    // `coin_room_script`; the port slices them out by offset.)
+    BlobSpec {
+        name: "coin_room_tables",
+        bank: 24,
+        addr: 0x4F5A,
+        end: 0x506D,
+        kind: BlobKind::Fixed,
     },
     BlobSpec {
         name: "bell_room_a_sprites",
@@ -144,6 +166,7 @@ pub struct BlobEntry {
 fn kind_name(kind: BlobKind) -> &'static str {
     match kind {
         BlobKind::Code => "code",
+        BlobKind::Fixed => "fixed",
         BlobKind::FfTable => "ff_table",
         BlobKind::SpriteList => "sprite_list",
     }
@@ -156,7 +179,7 @@ pub fn build_castle_scripts_binary(baserom: &[u8]) -> Result<(Vec<u8>, Vec<BlobE
     for spec in BLOBS {
         let start = flat(spec.bank, spec.addr)?;
         let len = match spec.kind {
-            BlobKind::Code => {
+            BlobKind::Code | BlobKind::Fixed => {
                 let end = flat(spec.bank, spec.end)?;
                 if end <= start {
                     return Err(format!(
@@ -321,7 +344,10 @@ mod tests {
             rom[at] = i as u8 + 1;
         }
         // Terminators for the scanned blobs.
-        for spec in BLOBS.iter().filter(|s| s.kind != BlobKind::Code) {
+        for spec in BLOBS
+            .iter()
+            .filter(|s| matches!(s.kind, BlobKind::FfTable | BlobKind::SpriteList))
+        {
             let at = flat(spec.bank, spec.addr).unwrap();
             rom[at] = 0xFF;
             if spec.kind == BlobKind::SpriteList {
@@ -331,10 +357,13 @@ mod tests {
         }
         let (blob, entries) = build_castle_scripts_binary(&rom).unwrap();
         assert_eq!(entries.len(), BLOBS.len());
+        let by_name = |name: &str| entries.iter().find(|e| e.name == name).unwrap();
         assert_eq!(entries[0].offset, 0);
-        assert_eq!(entries[0].len, 0x4EA);
-        assert_eq!(entries[1].offset, 0x4EA);
-        assert_eq!(entries[5].len, 0x4D9);
+        assert_eq!(by_name("coin_room_items").len, 40);
+        assert_eq!(by_name("castle_screen").len, 0x4EA);
+        assert_eq!(by_name("bell_room_a_script").len, 0x508);
+        assert_eq!(by_name("coin_room_script").len, 0x4D9);
+        assert_eq!(by_name("coin_room_tables").len, 0x113);
         assert_eq!(
             blob.len(),
             entries.last().unwrap().offset + entries.last().unwrap().len

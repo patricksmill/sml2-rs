@@ -64,11 +64,29 @@ next entry starts, `coin_room_script` at the $4F5A lookup tables. The sprite
 lists are `$3E2A2`'s two 3-byte record runs, each closed by an `$FF` record.
 `CastleScripts` and `BellRoomTiles` in `sml2-core` pin the emitted bytes.
 
-### ME-3 — Port the bank-24 map-script VM subset (L)
-Implement the commands the three scripts use: far entry, waits, sprite/patch
-writes, input gates, screen state writes and returns. Drive it from
-`MapSim`'s screen 9-14 handlers. Tests: byte-level script traces for `$4A81`
-(coin room), `$4512`/`$4028` (bell rooms), mutation-rejected opcodes.
+### ME-3 — Port the bank-24 script engine and coin script (done)
+The three entries are not bytecode: `$3E00` is a bank switch plus `jp hl`, and
+`$4028`/`$4512`/`$4A81` are per-screen state machines dispatched on
+`sCastleState`. They share the helper set in the `$4A81` region: `$60C41`
+preview tile, `$60D08` walk, `$60D32` reveal decode, `$60D80` marker, `$60DC7`
+award, `$60CF9` commit.
+
+`CastleRoom` models the RAM block (sprite table at `$A6B5` as 3-byte records —
+the `sMapSpriteN*` names describe the hub's 4-byte view; five `$0D` slots; OAM
+entry 0) and ports the coin script `$4A81` (states 0-6). `MapSim` screens 9-14
+now tick the room instead of `$3C38C`, and skip `$3C169` (the ROM returns
+without it).
+
+New inputs: `coin_room_items` (bank 24 `$4000`, the 40-byte item table `$60D49`
+reads through `$4F76`'s `$4000/$400A/$4014/$401E` row pointers) and
+`coin_room_tables` (`$4F5A`: per-node sprite-3 frames, item sfx, columns, the
+`$4FA8` walk offsets and the `$4FCD` reveal amounts). `$4C4D`'s twelve
+preview tiles live inside the coin blob.
+
+Tests: five byte-level room traces (preview table, state-0 gate, award +
+100-frame hold + state 3, reveal/walk tables, item rows) and a `MapSim`
+dispatch test. The two bell state machines `$4512`/`$4028` land with ME-5 on
+this engine.
 
 ### ME-4 — Coin-door rooms 9-12 (M)
 `$3F4A0`/`$4A81`: free-walk Mario from OAM `(40,156)`, collect the room's

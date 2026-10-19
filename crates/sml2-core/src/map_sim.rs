@@ -641,6 +641,12 @@ pub struct MapSim {
     pub coins_high: u8,
     /// `$2934` was called: the caller must persist the save image and clear it.
     pub pending_save: bool,
+    /// The active bank-24 room script (screens 9-14), started by the loader.
+    pub room: Option<crate::castle_room::CastleRoom>,
+    /// `sLives` (BCD) as the room scripts read and write it.
+    pub lives: u8,
+    /// `sCurPowerup`.
+    pub powerup: u8,
 }
 
 impl Default for MapSim {
@@ -688,6 +694,9 @@ impl MapSim {
             coins_low: 0,
             coins_high: 0,
             pending_save: false,
+            room: None,
+            lives: 0,
+            powerup: 0,
         }
     }
 
@@ -701,6 +710,8 @@ impl MapSim {
         me.node = sim.map_node;
         me.coins_low = sim.coins_low;
         me.coins_high = sim.coins_high;
+        me.lives = sim.lives;
+        me.powerup = sim.powerup;
         let n = me.level_progress.len().min(sim.level_progress.len());
         me.level_progress[..n].copy_from_slice(&sim.level_progress[..n]);
         me
@@ -712,6 +723,8 @@ impl MapSim {
         sim.map_node = self.node;
         sim.coins_low = self.coins_low;
         sim.coins_high = self.coins_high;
+        sim.lives = self.lives;
+        sim.powerup = self.powerup;
         let n = self.level_progress.len().min(sim.level_progress.len());
         sim.level_progress[..n].copy_from_slice(&self.level_progress[..n]);
     }
@@ -1332,6 +1345,12 @@ impl MapSim {
             let c = self.cursor_chain(input, nodes, walk, records, &mut out);
             self.bookkeeping(input.div);
             c
+        } else if (9..=14).contains(&self.screen_id) {
+            // `$3C0C3`..`$3C10E`: the bonus screens run the bank-24 room
+            // script instead of the cursor chain.
+            self.bookkeeping(input.div);
+            self.room_tick(input, &mut out);
+            false
         } else {
             self.bookkeeping(input.div);
             // The screen routine itself ($3D8E6 and friends) is tiles, sprites and the
@@ -1350,8 +1369,48 @@ impl MapSim {
         } else {
             input
         };
-        self.enter_check(entry_input, nodes, &mut out);
+        // `$3C0C3`..`$3C10E` return without `$3C169`: a bonus screen's A press
+        // never re-enters a level.
+        if self.screen_id < 9 {
+            self.enter_check(entry_input, nodes, &mut out);
+        }
         out
+    }
+
+    /// One frame of the bank-24 room script (`$3C0C3`..`$3C10E`).
+    fn room_tick(&mut self, input: MapInput, out: &mut MapEntry) {
+        let mut rewards = crate::castle_room::RoomRewards {
+            powerup: self.powerup,
+            lives: self.lives,
+            coins_low: self.coins_low,
+            coins_high: self.coins_high,
+            save: false,
+        };
+        let room_input = crate::castle_room::RoomInput {
+            keys_pressed: input.keys_pressed,
+            frame: self.frame_counter,
+            node: self.node,
+        };
+        let Some(room) = self.room.as_mut() else {
+            return;
+        };
+        room.tick(room_input, &mut rewards);
+        if room.music != 0 {
+            out.music = Some(room.music);
+            room.music = 0;
+        }
+        if room.sfx[0] != 0 {
+            out.sfx = Some(room.sfx[0]);
+            room.sfx[0] = 0;
+        }
+        self.powerup = rewards.powerup;
+        self.lives = rewards.lives;
+        self.coins_low = rewards.coins_low;
+        self.coins_high = rewards.coins_high;
+        if rewards.save {
+            self.pending_save = true;
+            out.saved = true;
+        }
     }
 
     /// `$3C38C`'s tail: the cursor, `$3C4CC` onward. Returns whether the frame's
@@ -2672,6 +2731,41 @@ mod tests {
         assert_eq!(map.node, 0x70);
         assert_eq!(map.cursor_pose, 12, "the idle block");
         assert!(!out.saved);
+    }
+
+    /// Screens 9-14 dispatch to the bank-24 room script (`$3C0C3`..`$3C10E`),
+    /// not to `$3C38C`'s cursor chain: A starts the coin room's walk-in and the
+    /// cursor never moves.
+    #[test]
+    fn bonus_screens_run_the_room_script() {
+        let (n, walk) = (nodes(), walk_blob());
+        let scripts = crate::castle::CastleScripts::from_parts(
+            include_bytes!("../../../extracted/map/castle_scripts.bin").to_vec(),
+            include_str!("../../../extracted/map/castle_scripts.json"),
+        )
+        .expect("castle scripts asset");
+        let mut map = MapSim::new();
+        map.screen_id = 9;
+        map.node = 0x70;
+        map.cursor_x = 40;
+        let mut room = crate::castle_room::CastleRoom::coin(&scripts);
+        room.set_sprite(crate::castle_room::SPRITES_AT + 8, 7); // sprite 2 page
+        map.room = Some(room);
+        let before = map.cursor_x;
+        let out = map.tick(
+            MapInput {
+                keys_pressed: 0x01,
+                ..Default::default()
+            },
+            &n,
+            &walk,
+            &recs(),
+        );
+        assert_eq!(map.cursor_x, before, "no cursor chain on a bonus screen");
+        let room = map.room.as_ref().unwrap();
+        assert_eq!(room.state, 5, "$4A81 started the walk-in");
+        assert_eq!(out.sfx, Some(1), "the start sfx reaches MapEntry");
+        assert_eq!(room.sfx[0], 0, "and is cleared in the room");
     }
 
     /// `$3F38F`'s arithmetic, checked directly: BCD with a borrow, and a `None` — the

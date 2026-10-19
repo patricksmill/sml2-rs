@@ -4,6 +4,7 @@ pub mod actor;
 pub mod audio;
 pub mod camera;
 pub mod castle;
+pub mod castle_room;
 pub mod collision;
 pub mod credits_text;
 pub mod divider;
