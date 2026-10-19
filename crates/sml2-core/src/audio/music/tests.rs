@@ -157,3 +157,122 @@ fn test_music_sensitivity() {
     assert!(mutated_freq.is_some());
     assert_ne!(Some(original_freq), mutated_freq);
 }
+
+use super::rom_model::RomSeq;
+
+const ROM_WALK_FRAMES: usize = 600;
+
+/// `$7F52` is a real section (`$7F52 -> $7F58`, the shared `$9B $20 / $A5 $01 /
+/// $9C` silent rest loop), not a "no channel" sentinel, so these songs' headers
+/// point a channel at a stream the port currently refuses to start. Every other
+/// song must match the ROM walk frame for frame; fixing `init_section` shrinks
+/// this list, and the constant is updated with it.
+const KNOWN_DIVERGENT: [u8; 7] = [8, 13, 27, 28, 30, 31, 40];
+
+fn walk_mismatch(song: u8, frames: usize) -> Option<String> {
+    let mut rom = RomSeq::new(song, song == 9);
+    let mut port = MusicSequencer::new();
+    port.start_song(song, SOUND_BANK04);
+    let mut writes = Vec::new();
+    for frame in 0..frames {
+        rom.tick();
+        writes.clear();
+        port.tick(SOUND_BANK04, [0, 0, 0], &mut writes);
+        if rom.cur != port.cur_song() {
+            return Some(format!(
+                "song {song} frame {frame}: sCurSong {} vs {}",
+                rom.cur,
+                port.cur_song()
+            ));
+        }
+        if rom.transpose != port.transpose as u8 || rom.dur != port.dur_table_ptr {
+            return Some(format!(
+                "song {song} frame {frame}: transpose/dur {:02x}/{:04x} vs {:02x}/{:04x}",
+                rom.transpose, rom.dur, port.transpose as u8, port.dur_table_ptr
+            ));
+        }
+        for (i, (rc, pc)) in rom.channels.iter().zip(port.channels.iter()).enumerate() {
+            if rc.active() != pc.active
+                || rc.stream != pc.stream_ptr
+                || rc.timer != pc.note_timer
+                || rc.duration != pc.note_duration
+                || rc.freq_lo != pc.freq_lo
+                || rc.freq_hi != pc.freq_hi
+                || rc.rest != u8::from(pc.rest)
+            {
+                return Some(format!(
+                    "song {song} frame {frame} ch{}: rom active={} stream={:#06x} timer={} dur={} freq={:02x}{:02x} rest={} | port active={} stream={:#06x} timer={} dur={} freq={:02x}{:02x} rest={}",
+                    i + 1,
+                    u8::from(rc.active()), rc.stream, rc.timer, rc.duration, rc.freq_lo, rc.freq_hi, rc.rest,
+                    u8::from(pc.active), pc.stream_ptr, pc.note_timer, pc.note_duration, pc.freq_lo, pc.freq_hi, u8::from(pc.rest),
+                ));
+            }
+        }
+    }
+    None
+}
+
+#[test]
+fn test_song_walk_matches_rom_except_known_silent_channel_songs() {
+    let mut divergent = Vec::new();
+    let mut details = Vec::new();
+    for song in 1..=42u8 {
+        if let Some(msg) = walk_mismatch(song, ROM_WALK_FRAMES) {
+            divergent.push(song);
+            details.push(msg);
+        }
+    }
+    assert_eq!(
+        divergent,
+        KNOWN_DIVERGENT.to_vec(),
+        "divergent songs {divergent:?} (expected {KNOWN_DIVERGENT:?}):\n{}",
+        details.join("\n")
+    );
+    for &song in KNOWN_DIVERGENT.iter() {
+        assert!(
+            walk_mismatch(song, ROM_WALK_FRAMES).is_some(),
+            "song {song} now matches the ROM walk; drop it from KNOWN_DIVERGENT"
+        );
+    }
+}
+
+/// Frames on which the console's `$115CD` fires: the ending channel's section
+/// word has a zero high byte. Measured from the ROM walk over the real song
+/// data; song 12 is the one the port used to never stop.
+const ROM_END_FRAMES: [(u8, usize); 10] = [
+    (2, 126),
+    (3, 240),
+    (4, 864),
+    (8, 4000),
+    (9, 168),
+    (12, 3060),
+    (15, 411),
+    (22, 580),
+    (25, 165),
+    (26, 1095),
+];
+
+#[test]
+fn test_song_end_frames_match_rom() {
+    let mut writes = Vec::new();
+    for (song, expected) in ROM_END_FRAMES {
+        let mut rom = RomSeq::new(song, song == 9);
+        let mut port = MusicSequencer::new();
+        port.start_song(song, SOUND_BANK04);
+        let mut rom_end = None;
+        let mut port_end = None;
+        for frame in 0..expected + 40 {
+            rom.tick();
+            writes.clear();
+            port.tick(SOUND_BANK04, [0, 0, 0], &mut writes);
+            if rom_end.is_none() && rom.cur == 0 {
+                rom_end = Some(frame);
+            }
+            if port_end.is_none() && port.cur_song() == 0 {
+                port_end = Some(frame);
+            }
+        }
+        assert_eq!(rom_end, Some(expected), "song {song}: ROM walk end frame drifted");
+        assert_eq!(port_end, Some(expected), "song {song}: port end frame");
+    }
+}

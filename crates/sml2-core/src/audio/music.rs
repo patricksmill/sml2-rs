@@ -4,6 +4,8 @@ pub mod channel;
 pub mod tables;
 
 #[cfg(test)]
+mod rom_model;
+#[cfg(test)]
 mod tests;
 
 pub use channel::MusicChannel;
@@ -153,6 +155,9 @@ impl MusicSequencer {
             sfx_active[0] != 0,
             out,
         );
+        if self.song_ended_on(0) {
+            return;
+        }
 
         // Channel 2: Pulse 2 (unmasked)
         self.channels[1].tick(
@@ -163,6 +168,9 @@ impl MusicSequencer {
             false,
             out,
         );
+        if self.song_ended_on(1) {
+            return;
+        }
 
         // Channel 3: Wave (masked if Slot 1 SFX is active)
         self.channels[2].tick(
@@ -173,6 +181,9 @@ impl MusicSequencer {
             sfx_active[1] != 0,
             out,
         );
+        if self.song_ended_on(2) {
+            return;
+        }
 
         // Channel 4: Noise (masked if Slot 2 SFX is active)
         self.channels[3].tick(
@@ -183,15 +194,25 @@ impl MusicSequencer {
             sfx_active[2] != 0,
             out,
         );
-
-        // Check if all channels have completed
-        if !self.channels.iter().any(|c| c.active) {
-            self.cur_song = 0;
+        if self.song_ended_on(3) {
+            return;
         }
 
         // Increment software envelope counter per frame for Ch1, Ch2, Ch3 ($11808)
         self.channels[0].env_counter = self.channels[0].env_counter.wrapping_add(1);
         self.channels[1].env_counter = self.channels[1].env_counter.wrapping_add(1);
         self.channels[2].env_counter = self.channels[2].env_counter.wrapping_add(1);
+    }
+
+    /// `$115CD`: a channel whose section word has a zero high byte ends the
+    /// whole song; the sequencer returns immediately, so the channels after it
+    /// are not ticked this frame and the `$11808` envelope counters do not run.
+    fn song_ended_on(&mut self, idx: usize) -> bool {
+        if self.channels[idx].song_ended {
+            self.cur_song = 0;
+            true
+        } else {
+            false
+        }
     }
 }

@@ -25,6 +25,10 @@ pub struct MusicChannel {
     pub slide_state: u8,
     pub slide_step: u8,
     pub bend_flag: u8,
+    /// Set when a section word with a zero high byte ended the song ($115CD).
+    /// The sequencer clears `sCurSong` and returns before the remaining channels
+    /// or the envelope counters run, so the caller must stop the walk.
+    pub song_ended: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,7 +46,10 @@ impl MusicChannel {
             section_ptr: 0,
             stream_ptr: 0,
             note_timer: 1,
-            note_duration: 0x18,
+            // `$10000`'s reset zeroes the whole `$A400-$A4FF` block, so a
+            // channel that has not seen a `$Ax` duration command keeps 0 here,
+            // not an invented default.
+            note_duration: 0,
             loop_ptr: 0,
             loop_count: 0,
             instrument: [0; 3],
@@ -57,12 +64,14 @@ impl MusicChannel {
             slide_state: 0,
             slide_step: 0,
             bend_flag: 0,
+            song_ended: false,
         }
     }
 
     /// Reset channel for a new section starting at `section_ptr`.
     pub fn init_section(&mut self, section_ptr: u16, bank: &[u8]) {
         self.active = section_ptr != 0 && section_ptr != 0x7F52;
+        self.song_ended = false;
         self.section_ptr = section_ptr;
         self.loop_ptr = 0;
         self.loop_count = 0;
@@ -108,14 +117,18 @@ impl MusicChannel {
             let cmd = self.read_stream_byte(bank);
             match cmd {
                 0x00 => {
-                    // Section end: read next section pointer
+                    // Section end: read next section pointer ($1159B). The ROM
+                    // tests the HIGH byte only: $00 -> song end ($115CD),
+                    // $FF -> section-list jump ($115B6), anything else is the
+                    // next stream pointer.
                     let next_sec = word_at(bank, self.section_ptr);
                     self.section_ptr = self.section_ptr.wrapping_add(2);
 
-                    if next_sec == 0 {
-                        self.active = false;
+                    if next_sec >> 8 == 0x00 {
+                        // $115CD: sCurSong = 0; call $13F5E (stop all); ret.
+                        self.song_ended = true;
                         break;
-                    } else if next_sec == 0xFFFF {
+                    } else if next_sec >> 8 == 0xFF {
                         // Loop section
                         let target = word_at(bank, self.section_ptr);
                         self.section_ptr = target;
