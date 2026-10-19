@@ -30,8 +30,12 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Effe
     let idx = usize::from(actor.hit_reaction.min(20));
     let dy = i16::from(TABLE_Y[idx].min(3));
     let dx = i16::from(TABLE_X[idx].min(3));
-    actor.position.move_y(if actor.state & 1 == 0 { dy } else { -dy });
-    actor.position.move_x(if actor.state & 2 == 0 { dx } else { -dx });
+    actor
+        .position
+        .move_y(if actor.state & 1 == 0 { dy } else { -dy });
+    actor
+        .position
+        .move_x(if actor.state & 2 == 0 { dx } else { -dx });
     actor.motion_leg = actor.motion_leg.wrapping_add(1);
     if actor.motion_leg >= 0x15 {
         actor.motion_leg = 1;

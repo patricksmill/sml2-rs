@@ -42,7 +42,9 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick) -> Effect {
                 return Effect::Waiting;
             }
             actor.position.move_y(if actor.state == 7 { 1 } else { -1 });
-            Effect::Moved { dy: if actor.state == 7 { 1 } else { -1 } }
+            Effect::Moved {
+                dy: if actor.state == 7 { 1 } else { -1 },
+            }
         }
         _ => {
             actor.contact_kind = ContactKind::from_raw(CONTACT);

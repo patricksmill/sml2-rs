@@ -42,18 +42,10 @@ pub struct EdgeWalkerContext {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EdgeWalkerEffect {
     None,
-    Initialized {
-        facing: u8,
-    },
-    Turned {
-        state: EdgeWalkerState,
-    },
-    Moved {
-        state: EdgeWalkerState,
-    },
-    LedgeReversed {
-        state: EdgeWalkerState,
-    },
+    Initialized { facing: u8 },
+    Turned { state: EdgeWalkerState },
+    Moved { state: EdgeWalkerState },
+    LedgeReversed { state: EdgeWalkerState },
 }
 
 pub trait EdgeWalkerWorld {
@@ -63,11 +55,7 @@ pub trait EdgeWalkerWorld {
 }
 
 /// Domain update for EdgeWalker (ROM $59BAF).
-pub fn update<W>(
-    actor: &mut Actor,
-    context: EdgeWalkerContext,
-    world: &mut W,
-) -> EdgeWalkerEffect
+pub fn update<W>(actor: &mut Actor, context: EdgeWalkerContext, world: &mut W) -> EdgeWalkerEffect
 where
     W: EdgeWalkerWorld,
 {
@@ -238,7 +226,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, EdgeWalkerEffect::Moved { state: EdgeWalkerState::WalkLeft });
+        assert_eq!(
+            eff,
+            EdgeWalkerEffect::Moved {
+                state: EdgeWalkerState::WalkLeft
+            }
+        );
         assert_eq!(actor.position.x, 99);
 
         // Frame 1 (odd): ground probe passes, no position change
@@ -263,7 +256,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, EdgeWalkerEffect::Turned { state: EdgeWalkerState::WalkRight });
+        assert_eq!(
+            eff,
+            EdgeWalkerEffect::Turned {
+                state: EdgeWalkerState::WalkRight
+            }
+        );
         assert_eq!(actor.state, EdgeWalkerState::WalkRight.to_raw());
         assert!(actor.sprite_flip.horizontal());
     }
@@ -296,7 +294,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, EdgeWalkerEffect::LedgeReversed { state: EdgeWalkerState::WalkLeft });
+        assert_eq!(
+            eff,
+            EdgeWalkerEffect::LedgeReversed {
+                state: EdgeWalkerState::WalkLeft
+            }
+        );
         assert_eq!(actor.state, EdgeWalkerState::WalkLeft.to_raw());
         assert!(!actor.sprite_flip.horizontal());
     }
@@ -309,18 +312,39 @@ mod tests {
         actor.sprite = 90;
 
         // Frame 0: advances bob (period 4)
-        update(&mut actor, EdgeWalkerContext { frame: FrameTick(0), mario_ref_x: 100 }, &mut world);
+        update(
+            &mut actor,
+            EdgeWalkerContext {
+                frame: FrameTick(0),
+                mario_ref_x: 100,
+            },
+            &mut world,
+        );
         assert_eq!(actor.animation_frame, 1);
         assert_eq!(actor.sprite, 91); // 90 + (+1) = 91
 
         // Frames 1..=3: no bob advance
         for f in 1..=3 {
-            update(&mut actor, EdgeWalkerContext { frame: FrameTick(f), mario_ref_x: 100 }, &mut world);
+            update(
+                &mut actor,
+                EdgeWalkerContext {
+                    frame: FrameTick(f),
+                    mario_ref_x: 100,
+                },
+                &mut world,
+            );
             assert_eq!(actor.animation_frame, 1);
         }
 
         // Frame 4: advances bob
-        update(&mut actor, EdgeWalkerContext { frame: FrameTick(4), mario_ref_x: 100 }, &mut world);
+        update(
+            &mut actor,
+            EdgeWalkerContext {
+                frame: FrameTick(4),
+                mario_ref_x: 100,
+            },
+            &mut world,
+        );
         assert_eq!(actor.animation_frame, 2);
         assert_eq!(actor.sprite, 90); // 91 + (-1) = 90
     }

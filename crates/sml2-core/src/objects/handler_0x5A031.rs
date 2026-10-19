@@ -7,8 +7,8 @@
 //! toggles at phase 8; otherwise it falls on the `$7488` curve (also capped at 8)
 //! until the own-Y ground probe lands it.
 use super::staging::FALL_SPEED;
-use crate::actor::{Actor, AnimationFrameError, ContactKind, FrameTick, MotionProfileError};
 use crate::actor::DEFEAT_RISE_STEPS;
+use crate::actor::{Actor, AnimationFrameError, ContactKind, FrameTick, MotionProfileError};
 
 const CONTACT: u8 = 72;
 /// ROM `$75D3`: the three sprite deltas for `$5B5B6`.

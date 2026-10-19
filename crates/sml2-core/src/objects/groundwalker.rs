@@ -228,7 +228,12 @@ mod tests {
                 },
                 &mut world,
             );
-            assert_eq!(eff, GroundWalkerEffect::Moved { state: GroundWalkerState::WalkLeft });
+            assert_eq!(
+                eff,
+                GroundWalkerEffect::Moved {
+                    state: GroundWalkerState::WalkLeft
+                }
+            );
         }
         assert_eq!(actor.position.x, 53);
         assert_eq!(actor.travel_direction.raw(), 1);
@@ -269,7 +274,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, GroundWalkerEffect::Turned { state: GroundWalkerState::WalkRight });
+        assert_eq!(
+            eff,
+            GroundWalkerEffect::Turned {
+                state: GroundWalkerState::WalkRight
+            }
+        );
         assert_eq!(actor.state, 2);
         assert!(actor.sprite_flip.horizontal());
         assert_eq!(actor.position.x, 100);
@@ -289,7 +299,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, GroundWalkerEffect::Turned { state: GroundWalkerState::WalkLeft });
+        assert_eq!(
+            eff,
+            GroundWalkerEffect::Turned {
+                state: GroundWalkerState::WalkLeft
+            }
+        );
         assert_eq!(actor.state, 1);
         assert!(!actor.sprite_flip.horizontal());
         assert_eq!(actor.position.x, 100);

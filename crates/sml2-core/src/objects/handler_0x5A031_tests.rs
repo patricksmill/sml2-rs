@@ -143,7 +143,12 @@ fn handler_0x5a031_only_the_leading_side_wall_removes() {
     let tables = tables();
     let left = layout_at(&[(0x0F, 7, 0x00)]);
     let right = layout_at(&[(0x10, 7, 0x00)]);
-    for (state, lay, removed) in [(1u8, &left, true), (1, &right, false), (2, &right, true), (2, &left, false)] {
+    for (state, lay, removed) in [
+        (1u8, &left, true),
+        (1, &right, false),
+        (2, &right, true),
+        (2, &left, false),
+    ] {
         let mut sim = ObjectSim::new(vec![], 0);
         sim.fff0 = 1;
         sim.active = 1;
@@ -177,12 +182,22 @@ fn handler_0x5a031_real_mode_b_anim36_step() {
     sim.configure(0x0A);
     sim.fff0 = 1;
     let mut actor = Actor::default();
-    actor.position = Position { x: 0x0100, y: 0x0080 };
+    actor.position = Position {
+        x: 0x0100,
+        y: 0x0080,
+    };
     actor.activity = 2;
     actor.definition = 36;
     actor.state = 0;
     sim.slots[1].b = actor.to_raw_slot();
-    sim.step(0x0080, 0x0080, &lay, &tables, &MarioContact::default(), false);
+    sim.step(
+        0x0080,
+        0x0080,
+        &lay,
+        &tables,
+        &MarioContact::default(),
+        false,
+    );
     assert_eq!(sim.slots[1].b[18], 72);
     assert_eq!(sim.slots[1].b[15], 1);
     assert_eq!(x_of(&sim.slots[1].b), 0x00F0);

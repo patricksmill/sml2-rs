@@ -47,7 +47,10 @@ fn handler_0x5a8e4_init_faces_away_and_spawns_the_child_before_the_lift() {
         assert_eq!(&child[0..5], &[0x01, 0x00, 0x00, 0x00, 0x80][..]);
         assert_eq!(child[6..8], [0xAD, 0x20]);
         assert_eq!(sim.standby, 1);
-        assert_eq!((sim.spawn_anim, sim.spawn_sprite, sim.spawn_attr), (0, 0, 0));
+        assert_eq!(
+            (sim.spawn_anim, sim.spawn_sprite, sim.spawn_attr),
+            (0, 0, 0)
+        );
         assert_eq!(sim.sfx1, 18);
         assert!(sim.unported.is_empty());
     }
@@ -75,12 +78,7 @@ fn handler_0x5a8e4_walking_states_move_three_on_even_frames() {
 
 #[test]
 fn handler_0x5a8e4_walking_states_switch_to_fall_only_in_air() {
-    for (state, air, next) in [
-        (1u8, false, 1u8),
-        (1, true, 3),
-        (2, false, 2),
-        (2, true, 4),
-    ] {
+    for (state, air, next) in [(1u8, false, 1u8), (1, true, 3), (2, false, 2), (2, true, 4)] {
         let mut sim = ObjectSim::new(vec![], 0);
         sim.fff0 = 1;
         let mut st = staging(state, 0x0100, 0x0080);
@@ -147,7 +145,10 @@ fn handler_0x5a8e4_real_mode_b_anim54_step() {
     sim.slot_ptr_hi = 0xAD;
     sim.boss_slot_ptr_lo = 0x20;
     let mut actor = Actor::default();
-    actor.position = Position { x: 0x0100, y: 0x0080 };
+    actor.position = Position {
+        x: 0x0100,
+        y: 0x0080,
+    };
     actor.activity = 2;
     actor.definition = 54;
     actor.state = 0;

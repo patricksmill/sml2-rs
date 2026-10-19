@@ -415,7 +415,10 @@ fn map_level_entry_runs_the_console_transition() {
 
     // Pressing A queues the entry: the map stays on screen and its theme stops
     // ($3C1A2 requests $FF before the load), but the level is not live yet.
-    let _ = runner.step_frame(PlayerKeys { a: true, ..Default::default() });
+    let _ = runner.step_frame(PlayerKeys {
+        a: true,
+        ..Default::default()
+    });
     assert!(matches!(runner.state, SessionState::Overworld(_)));
     assert!(runner.pending_level.is_some(), "entry queued");
     assert_eq!(runner.sound_driver.active_song, 0, "map theme stopped");
@@ -453,7 +456,10 @@ fn pipe_travel_draws_mario_behind_the_background() {
         assert!(!crate::session::player_behind_bg(armed), "{armed:#04x}");
     }
     for travelling in [0x10u8, 0x20, 0x30, 0x40] {
-        assert!(crate::session::player_behind_bg(travelling), "{travelling:#04x}");
+        assert!(
+            crate::session::player_behind_bg(travelling),
+            "{travelling:#04x}"
+        );
     }
 }
 
@@ -472,7 +478,11 @@ fn hub_frames_advance_the_wave_strips() {
     }
     let later = runner.map_wave.clone().expect("still seeded");
     assert_ne!(first.strips, later.strips, "the strips rotate");
-    assert_eq!(later.phase, first.phase.wrapping_add(8), "one call per frame");
+    assert_eq!(
+        later.phase,
+        first.phase.wrapping_add(8),
+        "one call per frame"
+    );
     let _ = fs::remove_file(&tmp_save);
 }
 

@@ -13,8 +13,8 @@
 //! Common exit ($5B3AE):
 //! - Unconditionally clears `sObjectSpawnAnim`, `sObjectSpawnSprite`, `sObjectSpawnAttr`.
 
-use crate::actor::{Actor, SpriteFlipFlags};
 use super::{ObjectSim, Staging, SLOT_COUNT};
+use crate::actor::{Actor, SpriteFlipFlags};
 
 /// Parameters for spawning a dynamic object via ROM `$5B36D`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -50,10 +50,8 @@ pub fn spawn_dynamic_object(
         child.position = parent.position;
         child.marker = parent.marker;
         child.definition = request.anim;
-        child.spawn_record = u16::from_be_bytes([
-            parent_slot_address.0,
-            parent_slot_address.1 & 0xF0,
-        ]);
+        child.spawn_record =
+            u16::from_be_bytes([parent_slot_address.0, parent_slot_address.1 & 0xF0]);
         child.activity = 1;
         child.sprite = request.sprite;
         child.sprite_flip = request.flip;
@@ -81,7 +79,11 @@ impl ObjectSim {
             sprite: self.spawn_sprite,
             flip: SpriteFlipFlags::from_bits(self.spawn_attr),
         };
-        let slot_hi = if self.slot_ptr_hi == 0 { 0xAD } else { self.slot_ptr_hi };
+        let slot_hi = if self.slot_ptr_hi == 0 {
+            0xAD
+        } else {
+            self.slot_ptr_hi
+        };
         let parent_ptr = (slot_hi, self.boss_slot_ptr_lo);
         let result = spawn_dynamic_object(
             &parent,
@@ -129,7 +131,10 @@ mod tests {
     #[test]
     fn spawn_dynamic_object_into_first_available_slot() {
         let mut parent = Actor::default();
-        parent.position = Position { x: 0x0154, y: 0x028A };
+        parent.position = Position {
+            x: 0x0154,
+            y: 0x028A,
+        };
         parent.marker = 0x42;
         let mut slots = [Actor::default(); SLOT_COUNT];
         slots[0].activity = 2; // active
@@ -141,13 +146,8 @@ mod tests {
             flip: SpriteFlipFlags::from_bits(0x20),
         };
 
-        let spawned = spawn_dynamic_object(
-            &parent,
-            (0xAD, 0x20),
-            &mut slots,
-            &mut standby,
-            &mut req,
-        );
+        let spawned =
+            spawn_dynamic_object(&parent, (0xAD, 0x20), &mut slots, &mut standby, &mut req);
 
         assert_eq!(spawned, Some(2), "placed in first inactive slot (index 2)");
         assert_eq!(standby, 6, "standby count incremented");
@@ -196,13 +196,8 @@ mod tests {
             flip: SpriteFlipFlags::from_bits(0x40),
         };
 
-        let result = spawn_dynamic_object(
-            &parent,
-            (0xAE, 0x00),
-            &mut slots,
-            &mut standby,
-            &mut req,
-        );
+        let result =
+            spawn_dynamic_object(&parent, (0xAE, 0x00), &mut slots, &mut standby, &mut req);
 
         assert_eq!(result, None, "capacity abort returns None");
         assert_eq!(standby, 10, "standby count unmodified");
@@ -223,13 +218,8 @@ mod tests {
         };
 
         // Pass unaligned lo byte 0x2F; should mask to 0x20
-        let result = spawn_dynamic_object(
-            &parent,
-            (0xAD, 0x2F),
-            &mut slots,
-            &mut standby,
-            &mut req,
-        );
+        let result =
+            spawn_dynamic_object(&parent, (0xAD, 0x2F), &mut slots, &mut standby, &mut req);
 
         assert_eq!(result, Some(0));
         assert_eq!(slots[0].spawn_record, 0xAD20);
@@ -249,13 +239,8 @@ mod tests {
             flip: SpriteFlipFlags::default(),
         };
 
-        let result = spawn_dynamic_object(
-            &parent,
-            (0xAD, 0x00),
-            &mut slots,
-            &mut standby,
-            &mut req,
-        );
+        let result =
+            spawn_dynamic_object(&parent, (0xAD, 0x00), &mut slots, &mut standby, &mut req);
 
         assert_eq!(result, Some(0));
         assert_eq!(standby, 0, "standby count wrapped 255 -> 0");
@@ -308,7 +293,11 @@ mod tests {
         sim.spawn_anim = 0x04;
         sim.spawn_sprite = 0x05;
         sim.dispatch_handler(0x5B36D, &mut st, &layout, &tables);
-        assert_eq!(sim.unported, Vec::<u32>::new(), "0x5B36D handled without unported note");
+        assert_eq!(
+            sim.unported,
+            Vec::<u32>::new(),
+            "0x5B36D handled without unported note"
+        );
         assert_eq!(sim.standby, 5);
         assert_eq!(sim.slots[1].b[B_STATE], 1);
         assert_eq!(sim.slots[1].b[B_DEF], 0x04);

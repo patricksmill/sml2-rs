@@ -227,7 +227,10 @@ fn pipe_travel_puts_every_player_cell_behind_the_background() {
     // travels through it ($530D clears $FFBB for sPipeTravelDirection >= $10).
     let t = tables();
     let front = draw_cells(&t, 0, 100, 100, 0, 0, false).expect("frame 0");
-    assert!(front.iter().all(|c| c.attr & 0x80 == 0), "walking is in front");
+    assert!(
+        front.iter().all(|c| c.attr & 0x80 == 0),
+        "walking is in front"
+    );
 
     let behind = draw_cells_styled(
         &t,

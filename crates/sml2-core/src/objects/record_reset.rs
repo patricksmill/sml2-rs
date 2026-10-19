@@ -19,9 +19,13 @@ impl ObjectSim {
             } else {
                 &tables.anim_to_sprite_b
             };
-            let sprite = sprite_map.get(usize::from(actor.definition)).copied().ok_or(
-                RecordResetError::MissingSprite { level: self.level_id, definition: actor.definition },
-            )?;
+            let sprite = sprite_map
+                .get(usize::from(actor.definition))
+                .copied()
+                .ok_or(RecordResetError::MissingSprite {
+                    level: self.level_id,
+                    definition: actor.definition,
+                })?;
             SpriteReset::Rebuild { sprite }
         };
         self.spawn_attr = actor.reset_to_spawn(origin, visuals).bits();

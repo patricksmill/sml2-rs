@@ -19,11 +19,7 @@ pub(super) enum Effect {
     Walk,
 }
 
-pub(super) fn update(
-    actor: &mut Actor,
-    frame: FrameTick,
-    player_x: u16,
-) -> Result<Effect, Error> {
+pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Result<Effect, Error> {
     if actor.state == 0 {
         actor.contact_kind = ContactKind::from_raw(CONTACT);
         return Ok(Effect::Initialized {

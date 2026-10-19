@@ -164,7 +164,10 @@ mod tests {
         player.respawn(100, 200);
         let mut objects = sml2_core::objects::ObjectSim::new(vec![], 0);
         objects.reset_level_start();
-        assert_eq!(vclock.ticks, ticks_before, "game transitions do not reset clock");
+        assert_eq!(
+            vclock.ticks, ticks_before,
+            "game transitions do not reset clock"
+        );
 
         // Native clock map input produces valid MapInput and samples without mutating origin
         let nclock = NativeDividerClock::new(0x3412);

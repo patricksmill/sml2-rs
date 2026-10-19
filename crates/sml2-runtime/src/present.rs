@@ -50,7 +50,10 @@ mod tests {
         assert_eq!(pixels.len(), 35);
         assert_eq!(&pixels[..7], &[0; 7]);
         for row in pixels[7..28].chunks_exact(7) {
-            assert_eq!(row, &[0x121212, 0x121212, 0x121212, 0xABABAB, 0xABABAB, 0xABABAB, 0]);
+            assert_eq!(
+                row,
+                &[0x121212, 0x121212, 0x121212, 0xABABAB, 0xABABAB, 0xABABAB, 0]
+            );
         }
         assert_eq!(&pixels[28..], &[0; 7]);
     }

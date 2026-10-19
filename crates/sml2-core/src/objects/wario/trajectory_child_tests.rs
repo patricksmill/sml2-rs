@@ -1,6 +1,6 @@
 use super::trajectory_child::{
-    update_trajectory_child, TrajectoryChildContext, TrajectoryChildEffects,
-    HORIZONTAL_PROFILE, VERTICAL_PROFILE,
+    update_trajectory_child, TrajectoryChildContext, TrajectoryChildEffects, HORIZONTAL_PROFILE,
+    VERTICAL_PROFILE,
 };
 use crate::actor::{Actor, ContactKind, FrameTick};
 use crate::level::LevelLayout;
@@ -24,10 +24,9 @@ fn tables() -> ObjectTables {
 
 fn dirty_slot() -> [u8; 32] {
     [
-        0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0,
-        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
-        0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x01,
-        0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+        0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+        0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09,
     ]
 }
 
@@ -91,7 +90,11 @@ fn every_trajectory_pair_and_restart_sentinel() {
             let expected_y = 100u8.wrapping_add(dy as u8);
             assert_eq!(actor.screen.x, expected_x, "state {state} phase {phase} X");
             assert_eq!(actor.screen.y, expected_y, "state {state} phase {phase} Y");
-            assert_eq!(actor.motion_phase, phase + 1, "state {state} phase {phase} advance");
+            assert_eq!(
+                actor.motion_phase,
+                phase + 1,
+                "state {state} phase {phase} advance"
+            );
         }
 
         // Phase 68: sentinel 0x80 -> phase reset to 58, no movement
@@ -158,7 +161,7 @@ fn adapter_counted_removal_decrements_def_count_with_underflow_sets_done_and_cle
         ..Default::default()
     };
     st.b[B_FSTATE] = 2; // state 2: move right
-    st.b[B_PHASE] = 0;  // dx = 1
+    st.b[B_PHASE] = 0; // dx = 1
     st.b[B_SCRX] = 175; // 175 + 1 = 176 -> >= 176 triggers CountedRemove
 
     sim.handler_wario27(&mut st);
@@ -177,12 +180,22 @@ fn frame_cadence_sequential_sprite_advance() {
     actor.animation_frame = 0;
 
     // Odd tick: no advance
-    let _ = update_trajectory_child(&mut actor, TrajectoryChildContext { frame: FrameTick(1) });
+    let _ = update_trajectory_child(
+        &mut actor,
+        TrajectoryChildContext {
+            frame: FrameTick(1),
+        },
+    );
     assert_eq!(actor.animation_frame, 0);
     assert_eq!(actor.sprite, 104);
 
     // Even tick: advances
-    let _ = update_trajectory_child(&mut actor, TrajectoryChildContext { frame: FrameTick(2) });
+    let _ = update_trajectory_child(
+        &mut actor,
+        TrajectoryChildContext {
+            frame: FrameTick(2),
+        },
+    );
     assert_eq!(actor.animation_frame, 1);
     assert_eq!(actor.sprite, 105);
 }

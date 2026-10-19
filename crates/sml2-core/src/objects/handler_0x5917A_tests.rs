@@ -151,7 +151,14 @@ fn handler_0x5917a_real_mode_a_anim54_step() {
     actor.definition = 54;
     actor.state = 0;
     sim.slots[1].b = actor.to_raw_slot();
-    sim.step(0x90, 0x0090, &layout, &tables, &MarioContact::default(), false);
+    sim.step(
+        0x90,
+        0x0090,
+        &layout,
+        &tables,
+        &MarioContact::default(),
+        false,
+    );
     assert_eq!(sim.slots[1].b[14], 16);
     assert_eq!(sim.slots[1].b[15], 1);
     assert_eq!(sim.slots[1].b[13], 0x40);

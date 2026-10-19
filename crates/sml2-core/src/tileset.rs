@@ -205,7 +205,11 @@ mod tests {
             &bg[..0x800],
             "the OBJ block's high half shares the BG block's first $800"
         );
-        assert_eq!(objblock[..OBJ_BLOCK_HIGH], [0x22; 0x800], "Mario's half stays");
+        assert_eq!(
+            objblock[..OBJ_BLOCK_HIGH],
+            [0x22; 0x800],
+            "Mario's half stays"
+        );
         assert_eq!(
             metatiles.get(0).unwrap().tiles,
             [0x40, 0x41, 0x42, 0x43],
@@ -237,7 +241,10 @@ mod tests {
         let mut bg = vec![0x11u8; 0x1000];
         let mut objblock = vec![0x22u8; 0x1000];
         let mut metatiles = MetatileTable::from_bytes(&vec![0x33; 512]).unwrap();
-        assert!(!ts.apply(3, &mut bg, &mut objblock, &mut metatiles), "no index 3");
+        assert!(
+            !ts.apply(3, &mut bg, &mut objblock, &mut metatiles),
+            "no index 3"
+        );
         assert_eq!(bg, vec![0x11u8; 0x1000]);
 
         // A truncated block is refused as well: a half-pasted arena would look

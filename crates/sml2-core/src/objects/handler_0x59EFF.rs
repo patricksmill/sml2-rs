@@ -23,11 +23,7 @@ pub(super) trait World {
     fn mario_distance_x(&self, actor_x: u16) -> u8;
 }
 
-pub(super) fn update(
-    actor: &mut Actor,
-    frame: FrameTick,
-    world: &impl World,
-) -> Result<(), Error> {
+pub(super) fn update(actor: &mut Actor, frame: FrameTick, world: &impl World) -> Result<(), Error> {
     if actor.state == 0 {
         actor.flash = FlashFlags::from_bits(16);
         actor.contact_kind = ContactKind::from_raw(72);

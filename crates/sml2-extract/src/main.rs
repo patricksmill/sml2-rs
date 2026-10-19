@@ -375,7 +375,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             || !(0x4000..0x8000).contains(&obj_addr)
             || !(0x4000..0x8000).contains(&map_addr)
         {
-            return Err(format!("$25AF index {idx}: a source address is outside $4000-$7FFF").into());
+            return Err(
+                format!("$25AF index {idx}: a source address is outside $4000-$7FFF").into(),
+            );
         }
         let bg_rom = bg_bank * 0x4000 + (bg_addr - 0x4000);
         let obj_rom = obj_bank * 0x4000 + (obj_addr - 0x4000);
@@ -383,7 +385,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         let label = main_facts
             .rom_to_label
             .get(&(map_rom as u32))
-            .ok_or_else(|| format!("$26B5[{idx}] = ${map_addr:04X}: no label at ROM ${map_rom:05X}"))?
+            .ok_or_else(|| {
+                format!("$26B5[{idx}] = ${map_addr:04X}: no label at ROM ${map_rom:05X}")
+            })?
             .clone();
         let map_index: u8 = label
             .strip_prefix("Level_TileMap_")

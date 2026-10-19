@@ -23,11 +23,7 @@ pub(super) enum Effect {
     Continue,
 }
 
-pub(super) fn update(
-    actor: &mut Actor,
-    frame: FrameTick,
-    player_x: u16,
-) -> Result<Effect, Error> {
+pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Result<Effect, Error> {
     match actor.state {
         0 => {
             actor.contact_kind = ContactKind::from_raw(77);

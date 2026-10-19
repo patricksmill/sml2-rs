@@ -104,11 +104,16 @@ fn every_source_exit_cell_arms_the_bell() {
             sim.step(&PlayerKeys::default(), false, false, &layout);
             checked += 1;
             if !sim.exit_phase {
-                failures.push(format!("level{level:02} ({col},{row}) ${tile:02X}: not armed"));
+                failures.push(format!(
+                    "level{level:02} ({col},{row}) ${tile:02X}: not armed"
+                ));
                 continue;
             }
             if sim.fade_timer != 192 {
-                failures.push(format!("level{level:02} ({col},{row}): fade {}", sim.fade_timer));
+                failures.push(format!(
+                    "level{level:02} ({col},{row}): fade {}",
+                    sim.fade_timer
+                ));
             }
             let want = if tile == 0x4B { 0xFF } else { 0 };
             if sim.exit_tile_flag != want {

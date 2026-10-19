@@ -213,7 +213,10 @@ mod tests {
         );
         assert_eq!(sim.saved_power_state, 0);
         assert_eq!(sim.scene_slot_parity, 0);
-        assert_eq!((sim.door_phase, sim.door_sequence_active, sim.door_parity), (0, 0, 0));
+        assert_eq!(
+            (sim.door_phase, sim.door_sequence_active, sim.door_parity),
+            (0, 0, 0)
+        );
         // $AF1E/$AF1F are zero, so the physical pointer is $0000 and the
         // public index is inactive — not the $AB06 of a live cursor.
         assert_eq!(sim.stream_index, 0);
@@ -233,8 +236,15 @@ mod tests {
             sim.door_parity = 1;
             sim.fff0 = 0xA5;
             sim.div = 0x5A;
-            if reload { sim.reset_level_start(); } else { sim.spawn_boss(1); }
-            assert_eq!((sim.door_phase, sim.door_sequence_active, sim.door_parity), (0, 0, 0));
+            if reload {
+                sim.reset_level_start();
+            } else {
+                sim.spawn_boss(1);
+            }
+            assert_eq!(
+                (sim.door_phase, sim.door_sequence_active, sim.door_parity),
+                (0, 0, 0)
+            );
             assert_eq!((sim.fff0, sim.div), (0xA5, 0x5A));
             if !reload {
                 assert_eq!(sim.slots[0].b[B_DEF], 6);
@@ -342,7 +352,10 @@ mod tests {
         assert_eq!(sim.done, 0);
         assert_eq!(sim.saved_power_state, 0);
         // Outside the page nothing moved.
-        assert_eq!((sim.fff0, sim.fade_timer, sim.pending_item), (0, 0x1234, 0x42));
+        assert_eq!(
+            (sim.fff0, sim.fade_timer, sim.pending_item),
+            (0, 0x1234, 0x42)
+        );
         assert_eq!(sim.spawned, vec![true, true]);
         assert_eq!(sim.records, vec![record(), record()]);
 

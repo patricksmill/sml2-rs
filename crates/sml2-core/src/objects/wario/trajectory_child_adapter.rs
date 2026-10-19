@@ -1,6 +1,8 @@
 //! Compatibility boundary between legacy object staging and native trajectory child actor.
 
-use super::trajectory_child::{update_trajectory_child, TrajectoryChildContext, TrajectoryChildEffects};
+use super::trajectory_child::{
+    update_trajectory_child, TrajectoryChildContext, TrajectoryChildEffects,
+};
 use crate::actor::{Actor, FrameTick};
 use crate::objects::{ObjectSim, Staging};
 

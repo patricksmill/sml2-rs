@@ -10,8 +10,8 @@
 use crate::actor::{Actor, ContactKind, FlashFlags, FrameTick};
 
 pub const TRAVEL_BUDGET_PX: u8 = 48; // ROM $59E1A / $59E40: ld a, 48
-pub const PAUSE_FRAMES: u8 = 16;     // ROM $59E0E / $59E44: ld a, 16
-pub const CONTACT_KIND: u8 = 76;     // ROM $59E12: ld a, 76 (0x4C)
+pub const PAUSE_FRAMES: u8 = 16; // ROM $59E0E / $59E44: ld a, 16
+pub const CONTACT_KIND: u8 = 76; // ROM $59E12: ld a, 76 (0x4C)
 
 /// Vertical pacer movement state ($59E09 / $5E2C / $5E4B: states 0..=2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,10 +48,7 @@ pub enum VerticalPacerEffect {
 }
 
 /// Domain update for VerticalPacer (ROM $59E06).
-pub fn update(
-    actor: &mut Actor,
-    context: VerticalPacerContext,
-) -> VerticalPacerEffect {
+pub fn update(actor: &mut Actor, context: VerticalPacerContext) -> VerticalPacerEffect {
     // ROM $5B51A: toggle low bit of sprite every fourth frame
     actor.animate_two_frame_toggle(context.frame, 4);
 
@@ -126,7 +123,12 @@ mod tests {
         let mut actor = Actor::default();
         actor.position.y = 200;
 
-        let eff = update(&mut actor, VerticalPacerContext { frame: FrameTick(1) });
+        let eff = update(
+            &mut actor,
+            VerticalPacerContext {
+                frame: FrameTick(1),
+            },
+        );
         assert_eq!(eff, VerticalPacerEffect::Initialized);
         assert_eq!(actor.state, VerticalPacerState::MoveUp.to_raw());
         assert_eq!(actor.flash.bits(), 0x10);
@@ -139,17 +141,37 @@ mod tests {
     fn vertical_pacer_odd_frame_gate_skips_movement() {
         let mut actor = Actor::default();
         actor.position.y = 200;
-        update(&mut actor, VerticalPacerContext { frame: FrameTick(1) });
+        update(
+            &mut actor,
+            VerticalPacerContext {
+                frame: FrameTick(1),
+            },
+        );
 
         // Odd frame 1 -> skipped
-        let eff = update(&mut actor, VerticalPacerContext { frame: FrameTick(1) });
+        let eff = update(
+            &mut actor,
+            VerticalPacerContext {
+                frame: FrameTick(1),
+            },
+        );
         assert_eq!(eff, VerticalPacerEffect::None);
         assert_eq!(actor.position.y, 200);
         assert_eq!(actor.motion_leg, 48);
 
         // Even frame 2 -> steps Y
-        let eff = update(&mut actor, VerticalPacerContext { frame: FrameTick(2) });
-        assert_eq!(eff, VerticalPacerEffect::Moved { state: VerticalPacerState::MoveUp });
+        let eff = update(
+            &mut actor,
+            VerticalPacerContext {
+                frame: FrameTick(2),
+            },
+        );
+        assert_eq!(
+            eff,
+            VerticalPacerEffect::Moved {
+                state: VerticalPacerState::MoveUp
+            }
+        );
         assert_eq!(actor.position.y, 199);
         assert_eq!(actor.motion_leg, 47);
     }
@@ -160,15 +182,30 @@ mod tests {
         actor.sprite = 20;
 
         // Frame 0 -> toggles
-        update(&mut actor, VerticalPacerContext { frame: FrameTick(0) });
+        update(
+            &mut actor,
+            VerticalPacerContext {
+                frame: FrameTick(0),
+            },
+        );
         assert_eq!(actor.sprite, 21);
 
         // Frame 1 -> no toggle
-        update(&mut actor, VerticalPacerContext { frame: FrameTick(1) });
+        update(
+            &mut actor,
+            VerticalPacerContext {
+                frame: FrameTick(1),
+            },
+        );
         assert_eq!(actor.sprite, 21);
 
         // Frame 4 -> toggles back
-        update(&mut actor, VerticalPacerContext { frame: FrameTick(4) });
+        update(
+            &mut actor,
+            VerticalPacerContext {
+                frame: FrameTick(4),
+            },
+        );
         assert_eq!(actor.sprite, 20);
     }
 
@@ -178,20 +215,45 @@ mod tests {
         actor.position.y = 200;
 
         // Init
-        update(&mut actor, VerticalPacerContext { frame: FrameTick(1) });
+        update(
+            &mut actor,
+            VerticalPacerContext {
+                frame: FrameTick(1),
+            },
+        );
 
         // Move Up for 47 steps
         for step in 1..=47 {
             let frame = u64::from(step) * 2; // even frames
-            let eff = update(&mut actor, VerticalPacerContext { frame: FrameTick(frame) });
-            assert_eq!(eff, VerticalPacerEffect::Moved { state: VerticalPacerState::MoveUp });
+            let eff = update(
+                &mut actor,
+                VerticalPacerContext {
+                    frame: FrameTick(frame),
+                },
+            );
+            assert_eq!(
+                eff,
+                VerticalPacerEffect::Moved {
+                    state: VerticalPacerState::MoveUp
+                }
+            );
             assert_eq!(actor.position.y, 200 - step);
             assert_eq!(actor.motion_leg, 48 - step as u8);
         }
 
         // 48th step: reaches 0, reloads budget to 48, sets pause timer = 16, state = MoveDown
-        let eff = update(&mut actor, VerticalPacerContext { frame: FrameTick(96) });
-        assert_eq!(eff, VerticalPacerEffect::Turned { state: VerticalPacerState::MoveDown });
+        let eff = update(
+            &mut actor,
+            VerticalPacerContext {
+                frame: FrameTick(96),
+            },
+        );
+        assert_eq!(
+            eff,
+            VerticalPacerEffect::Turned {
+                state: VerticalPacerState::MoveDown
+            }
+        );
         assert_eq!(actor.position.y, 200 - 48);
         assert_eq!(actor.motion_leg, 48);
         assert_eq!(actor.timer, 16);
@@ -200,15 +262,30 @@ mod tests {
         // 16 pause steps on even frames: timer decrements 16 -> 0
         for p in 1u64..=16 {
             let frame = 96 + p * 2;
-            let eff = update(&mut actor, VerticalPacerContext { frame: FrameTick(frame) });
+            let eff = update(
+                &mut actor,
+                VerticalPacerContext {
+                    frame: FrameTick(frame),
+                },
+            );
             assert_eq!(eff, VerticalPacerEffect::None);
             assert_eq!(actor.position.y, 200 - 48);
             assert_eq!(actor.timer, (16 - p) as u8);
         }
 
         // Now timer is 0: next even frame begins moving Down
-        let eff = update(&mut actor, VerticalPacerContext { frame: FrameTick(130) });
-        assert_eq!(eff, VerticalPacerEffect::Moved { state: VerticalPacerState::MoveDown });
+        let eff = update(
+            &mut actor,
+            VerticalPacerContext {
+                frame: FrameTick(130),
+            },
+        );
+        assert_eq!(
+            eff,
+            VerticalPacerEffect::Moved {
+                state: VerticalPacerState::MoveDown
+            }
+        );
         assert_eq!(actor.position.y, 200 - 48 + 1);
         assert_eq!(actor.motion_leg, 47);
     }

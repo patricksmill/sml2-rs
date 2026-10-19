@@ -240,7 +240,10 @@ impl LevelStart {
     pub fn to_bytes(self) -> [u8; 8] {
         let mut bytes = [0; 8];
         for (dest, value) in bytes.as_chunks_mut::<2>().0.iter_mut().zip([
-            self.mario_y, self.mario_x, self.camera_y, self.camera_x,
+            self.mario_y,
+            self.mario_x,
+            self.camera_y,
+            self.camera_x,
         ]) {
             dest.copy_from_slice(&value.to_le_bytes());
         }
@@ -262,8 +265,10 @@ mod entry_tests {
 
     #[test]
     fn secret_route_entry_overwrites_only_a800_a807_and_resets_from_progress() {
-        let raw = [0x10, 1, 0x20, 2, 0x30, 3, 0x40, 4, 0xA8, 0xA9,
-            11, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0xA8, 0x19];
+        let raw = [
+            0x10, 1, 0x20, 2, 0x30, 3, 0x40, 4, 0xA8, 0xA9, 11, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16,
+            0x17, 0xA8, 0x19,
+        ];
         let header = LevelHeader::from_bytes(&raw);
         // home.asm $377B + 11*8, byte-for-byte ROM witness.
         let overlay_bytes = [0x94, 0x01, 0x31, 0x08, 0xBA, 0x01, 0x52, 0x08];
@@ -272,15 +277,37 @@ mod entry_tests {
             let entry = header.entry(progress, Some(overlay));
             assert_eq!(entry.progress_flags, progress);
             assert_eq!(entry.secret_route, if progress & 8 != 0 { 255 } else { 0 });
-            assert_eq!(entry.start.to_bytes().as_slice(), if progress & 8 != 0 { &overlay_bytes } else { &raw[..8] });
+            assert_eq!(
+                entry.start.to_bytes().as_slice(),
+                if progress & 8 != 0 {
+                    &overlay_bytes
+                } else {
+                    &raw[..8]
+                }
+            );
         }
         // The overlay must not replace the remainder of the selected header.
         assert_eq!(header, LevelHeader::from_bytes(&raw));
         assert_eq!(header.unknown, [0xA8, 0xA9]);
-        assert_eq!((header.level_id, header.music_track, header.time_limit), (11, 0x14, 0x19));
-        assert_eq!(header.entry(8, Some(LevelStart::from_bytes([0; 8]))).start.to_bytes(), [0; 8]);
+        assert_eq!(
+            (header.level_id, header.music_track, header.time_limit),
+            (11, 0x14, 0x19)
+        );
+        assert_eq!(
+            header
+                .entry(8, Some(LevelStart::from_bytes([0; 8])))
+                .start
+                .to_bytes(),
+            [0; 8]
+        );
         let padding = [0xFA, 0x99, 0xA2, 0xA7, 0xC8, 0x3D, 0xE6, 0x0F];
-        assert_eq!(header.entry(8, Some(LevelStart::from_bytes(padding))).start.to_bytes(), padding);
+        assert_eq!(
+            header
+                .entry(8, Some(LevelStart::from_bytes(padding)))
+                .start
+                .to_bytes(),
+            padding
+        );
     }
 }
 

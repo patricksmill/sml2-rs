@@ -20,11 +20,11 @@ pub mod object;
 mod object_events;
 pub mod objects;
 pub mod player;
-pub mod player_sim;
-#[cfg(test)]
-mod player_jump_input_tests;
 #[cfg(test)]
 mod player_hidden_block_tests;
+#[cfg(test)]
+mod player_jump_input_tests;
+pub mod player_sim;
 #[cfg(test)]
 #[path = "route_matrix_tests.rs"]
 mod route_matrix_tests;

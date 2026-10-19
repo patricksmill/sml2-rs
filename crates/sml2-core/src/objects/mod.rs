@@ -103,72 +103,116 @@ use helpers::bcd_add;
 mod staging;
 pub use staging::*;
 use staging::{BOUNCE_SPEED, FALL_SPEED, HOVER_SPEED, SPIN_WOBBLE, STEP_74A1};
+mod boo;
 mod boss;
-#[path = "handler_0x96FE.rs"]
-mod handler_0x96fe;
-#[path = "handler_0x9824.rs"]
-mod handler_0x9824;
-mod central_door;
-mod central_door_adapter;
-mod door_child;
-mod door_child_adapter;
-mod door_boss_mouth;
-mod side_door;
-#[cfg(test)]
-mod door_boss_flow_tests;
+mod boss_damage;
 mod boss_flash;
-mod boss_stun;
-mod boss_morph;
-mod tree_boss;
-mod tree_boss_adapter;
-#[cfg(test)]
-mod tree_boss_flow_tests;
-mod patrol_boss;
-mod patrol_boss_adapter;
-mod sweep_boss;
-mod sweep_boss_adapter;
-mod sweep_child;
-mod sweep_child_adapter;
-mod sweep_drop_child;
-mod sweep_drop_child_adapter;
-mod circuit_boss;
-mod circuit_boss_motion;
-mod circuit_boss_adapter;
-mod patrol_child;
-mod patrol_child_adapter;
-#[cfg(test)]
-mod patrol_boss_flow_tests;
-#[cfg(test)]
-mod sweep_boss_flow_tests;
-#[cfg(test)]
-mod circuit_boss_flow_tests;
-mod boss_reward;
 #[cfg(test)]
 mod boss_flash_paths;
-mod boss_damage;
+mod boss_morph;
+mod boss_reverse_picker;
+mod boss_reward;
+#[cfg(test)]
+mod boss_screen_input_tests;
 mod boss_spawn;
-mod reward_spawn;
-mod moneybag_reward;
+mod boss_sprite_cycle;
+mod boss_stun;
+mod cannon_ant;
+mod carrier;
+mod central_door;
+mod central_door_adapter;
+mod charging_enemy;
+mod circuit_boss;
+mod circuit_boss_adapter;
+#[cfg(test)]
+mod circuit_boss_flow_tests;
+mod circuit_boss_motion;
+mod dashing_walker;
+#[cfg(test)]
+mod defeat_motion_tests;
+mod dispatch;
+#[cfg(test)]
+mod door_boss_flow_tests;
+mod door_boss_mouth;
+mod door_child;
+mod door_child_adapter;
+mod edge_walker;
+mod falling_dropper;
+mod fallwalker;
+mod fire_piranha;
+mod groundwalker;
+#[path = "handler_0x586E6.rs"]
+mod handler_0x586e6;
+#[path = "handler_0x586E6_adapter.rs"]
+mod handler_0x586e6_adapter;
+mod handler_0x586eb;
 #[path = "handler_0x587A1.rs"]
 mod handler_0x587a1;
 #[path = "handler_0x587A1_adapter.rs"]
 mod handler_0x587a1_adapter;
-mod boss_sprite_cycle;
-mod boss_reverse_picker;
-#[cfg(test)]
-mod boss_screen_input_tests;
-mod dispatch;
-mod terrain_probes;
+#[path = "handler_0x58804.rs"]
+mod handler_0x58804;
+#[path = "handler_0x58804_adapter.rs"]
+mod handler_0x58804_adapter;
 mod handler_0x58848;
 mod handler_0x58848_adapter;
+#[path = "handler_0x589A6.rs"]
+mod handler_0x589a6;
+#[path = "handler_0x589A6_adapter.rs"]
+mod handler_0x589a6_adapter;
+#[path = "handler_0x58A6F.rs"]
+mod handler_0x58a6f;
+#[path = "handler_0x58A6F_adapter.rs"]
+mod handler_0x58a6f_adapter;
 #[path = "handler_0x58B43.rs"]
 mod handler_0x58b43;
 #[path = "handler_0x58B43_adapter.rs"]
 mod handler_0x58b43_adapter;
+#[path = "handler_0x58BBA.rs"]
+mod handler_0x58bba;
+#[path = "handler_0x58BBA_adapter.rs"]
+mod handler_0x58bba_adapter;
+#[path = "handler_0x58BCB.rs"]
+mod handler_0x58bcb;
+#[path = "handler_0x58BCB_adapter.rs"]
+mod handler_0x58bcb_adapter;
+#[path = "handler_0x58C41.rs"]
+mod handler_0x58c41;
+#[path = "handler_0x58C41_adapter.rs"]
+mod handler_0x58c41_adapter;
+#[path = "handler_0x58C52.rs"]
+mod handler_0x58c52;
+#[path = "handler_0x58C52_adapter.rs"]
+mod handler_0x58c52_adapter;
+#[path = "handler_0x58CE0.rs"]
+mod handler_0x58ce0;
+#[path = "handler_0x58CE0_adapter.rs"]
+mod handler_0x58ce0_adapter;
+#[path = "handler_0x58D34.rs"]
+mod handler_0x58d34;
+#[path = "handler_0x58D34_adapter.rs"]
+mod handler_0x58d34_adapter;
+#[path = "handler_0x58E7E.rs"]
+mod handler_0x58e7e;
+#[path = "handler_0x58E7E_adapter.rs"]
+mod handler_0x58e7e_adapter;
 #[path = "handler_0x5902D.rs"]
 mod handler_0x5902d;
 #[path = "handler_0x5902D_adapter.rs"]
 mod handler_0x5902d_adapter;
+#[path = "handler_0x5917A.rs"]
+mod handler_0x5917a;
+#[path = "handler_0x5917A_adapter.rs"]
+mod handler_0x5917a_adapter;
+#[path = "handler_0x591A3.rs"]
+mod handler_0x591a3;
+#[path = "handler_0x591A3_adapter.rs"]
+mod handler_0x591a3_adapter;
+mod handler_0x591f9;
+#[path = "handler_0x59270.rs"]
+mod handler_0x59270;
+#[path = "handler_0x59270_adapter.rs"]
+mod handler_0x59270_adapter;
 #[path = "handler_0x5934A.rs"]
 mod handler_0x5934a;
 #[path = "handler_0x5934A_adapter.rs"]
@@ -197,54 +241,6 @@ mod handler_0x59487_adapter;
 mod handler_0x594fb;
 #[path = "handler_0x594FB_adapter.rs"]
 mod handler_0x594fb_adapter;
-#[path = "handler_0x589A6.rs"]
-mod handler_0x589a6;
-#[path = "handler_0x589A6_adapter.rs"]
-mod handler_0x589a6_adapter;
-#[path = "handler_0x58A6F.rs"]
-mod handler_0x58a6f;
-#[path = "handler_0x58A6F_adapter.rs"]
-mod handler_0x58a6f_adapter;
-#[path = "handler_0x58BBA.rs"]
-mod handler_0x58bba;
-#[path = "handler_0x58BBA_adapter.rs"]
-mod handler_0x58bba_adapter;
-#[path = "handler_0x58BCB.rs"]
-mod handler_0x58bcb;
-#[path = "handler_0x58BCB_adapter.rs"]
-mod handler_0x58bcb_adapter;
-#[path = "handler_0x58C41.rs"]
-mod handler_0x58c41;
-#[path = "handler_0x58C41_adapter.rs"]
-mod handler_0x58c41_adapter;
-#[path = "handler_0x58CE0.rs"]
-mod handler_0x58ce0;
-#[path = "handler_0x58CE0_adapter.rs"]
-mod handler_0x58ce0_adapter;
-#[path = "handler_0x58D34.rs"]
-mod handler_0x58d34;
-#[path = "handler_0x58D34_adapter.rs"]
-mod handler_0x58d34_adapter;
-#[path = "handler_0x58C52.rs"]
-mod handler_0x58c52;
-#[path = "handler_0x58C52_adapter.rs"]
-mod handler_0x58c52_adapter;
-#[path = "handler_0x58E7E.rs"]
-mod handler_0x58e7e;
-#[path = "handler_0x58E7E_adapter.rs"]
-mod handler_0x58e7e_adapter;
-#[path = "handler_0x5917A.rs"]
-mod handler_0x5917a;
-#[path = "handler_0x5917A_adapter.rs"]
-mod handler_0x5917a_adapter;
-#[path = "handler_0x591A3.rs"]
-mod handler_0x591a3;
-#[path = "handler_0x591A3_adapter.rs"]
-mod handler_0x591a3_adapter;
-#[path = "handler_0x59270.rs"]
-mod handler_0x59270;
-#[path = "handler_0x59270_adapter.rs"]
-mod handler_0x59270_adapter;
 #[path = "handler_0x595FE.rs"]
 mod handler_0x595fe;
 #[path = "handler_0x595FE_adapter.rs"]
@@ -285,14 +281,14 @@ mod handler_0x59aad_adapter;
 mod handler_0x59b0e;
 #[path = "handler_0x59B0E_adapter.rs"]
 mod handler_0x59b0e_adapter;
-#[path = "handler_0x59BE1.rs"]
-mod handler_0x59be1;
-#[path = "handler_0x59BE1_adapter.rs"]
-mod handler_0x59be1_adapter;
 #[path = "handler_0x59B1F.rs"]
 mod handler_0x59b1f;
 #[path = "handler_0x59B1F_adapter.rs"]
 mod handler_0x59b1f_adapter;
+#[path = "handler_0x59BE1.rs"]
+mod handler_0x59be1;
+#[path = "handler_0x59BE1_adapter.rs"]
+mod handler_0x59be1_adapter;
 #[path = "handler_0x59E5B.rs"]
 mod handler_0x59e5b;
 #[path = "handler_0x59E5B_adapter.rs"]
@@ -313,12 +309,12 @@ mod handler_0x59fce_adapter;
 mod handler_0x59fdf;
 #[path = "handler_0x59FDF_adapter.rs"]
 mod handler_0x59fdf_adapter;
-#[path = "handler_0x5A0AA.rs"]
-mod handler_0x5a0aa;
 #[path = "handler_0x5A031.rs"]
 mod handler_0x5a031;
 #[path = "handler_0x5A031_adapter.rs"]
 mod handler_0x5a031_adapter;
+#[path = "handler_0x5A0AA.rs"]
+mod handler_0x5a0aa;
 #[path = "handler_0x5A0AA_adapter.rs"]
 mod handler_0x5a0aa_adapter;
 #[path = "handler_0x5A11E.rs"]
@@ -381,10 +377,34 @@ mod handler_0x5a721_adapter;
 mod handler_0x5a739;
 #[path = "handler_0x5A739_adapter.rs"]
 mod handler_0x5a739_adapter;
+#[path = "handler_0x5A816.rs"]
+mod handler_0x5a816;
+#[path = "handler_0x5A816_adapter.rs"]
+mod handler_0x5a816_adapter;
+#[path = "handler_0x5A85C.rs"]
+mod handler_0x5a85c;
+#[path = "handler_0x5A85C_adapter.rs"]
+mod handler_0x5a85c_adapter;
+#[path = "handler_0x5A8D2.rs"]
+mod handler_0x5a8d2;
+#[path = "handler_0x5A8D2_adapter.rs"]
+mod handler_0x5a8d2_adapter;
+#[path = "handler_0x5A8E4.rs"]
+mod handler_0x5a8e4;
+#[path = "handler_0x5A8E4_adapter.rs"]
+mod handler_0x5a8e4_adapter;
+#[path = "handler_0x5A969.rs"]
+mod handler_0x5a969;
+#[path = "handler_0x5A969_adapter.rs"]
+mod handler_0x5a969_adapter;
 #[path = "handler_0x5A992.rs"]
 mod handler_0x5a992;
 #[path = "handler_0x5A992_adapter.rs"]
 mod handler_0x5a992_adapter;
+#[path = "handler_0x5A9D3.rs"]
+mod handler_0x5a9d3;
+#[path = "handler_0x5A9D3_adapter.rs"]
+mod handler_0x5a9d3_adapter;
 #[path = "handler_0x5AA68.rs"]
 mod handler_0x5aa68;
 #[path = "handler_0x5AA68_adapter.rs"]
@@ -445,86 +465,66 @@ mod handler_0x5afd7_adapter;
 mod handler_0x5b06d;
 #[path = "handler_0x5B06D_adapter.rs"]
 mod handler_0x5b06d_adapter;
+mod handler_0x5b0d5;
 #[path = "handler_0x5B177.rs"]
 mod handler_0x5b177;
 #[path = "handler_0x5B177_adapter.rs"]
 mod handler_0x5b177_adapter;
-#[path = "handler_0x586E6.rs"]
-mod handler_0x586e6;
-#[path = "handler_0x586E6_adapter.rs"]
-mod handler_0x586e6_adapter;
-#[path = "handler_0x58804.rs"]
-mod handler_0x58804;
-#[path = "handler_0x58804_adapter.rs"]
-mod handler_0x58804_adapter;
-mod handler_0x586eb;
-mod handler_0x591f9;
-mod vertical_bobber;
-mod handler_0x5b0d5;
 mod handler_0x5b36d;
-#[path = "handler_0x5A85C.rs"]
-mod handler_0x5a85c;
-#[path = "handler_0x5A85C_adapter.rs"]
-mod handler_0x5a85c_adapter;
-#[path = "handler_0x5A8D2.rs"]
-mod handler_0x5a8d2;
-#[path = "handler_0x5A8D2_adapter.rs"]
-mod handler_0x5a8d2_adapter;
-#[path = "handler_0x5A8E4.rs"]
-mod handler_0x5a8e4;
-#[path = "handler_0x5A8E4_adapter.rs"]
-mod handler_0x5a8e4_adapter;
-#[path = "handler_0x5A969.rs"]
-mod handler_0x5a969;
-#[path = "handler_0x5A969_adapter.rs"]
-mod handler_0x5a969_adapter;
-#[path = "handler_0x5A9D3.rs"]
-mod handler_0x5a9d3;
-#[path = "handler_0x5A9D3_adapter.rs"]
-mod handler_0x5a9d3_adapter;
+#[path = "handler_0x96FE.rs"]
+mod handler_0x96fe;
+#[path = "handler_0x9824.rs"]
+mod handler_0x9824;
 mod helpers;
+mod horizontal_platform;
 mod interaction;
 mod items;
-mod scratch;
-mod shell;
-mod stream;
-mod stream_cursor;
+mod left_marcher;
+mod mario_zone;
+mod moneybag_reward;
+mod paced_walker;
+mod patrol_boss;
+mod patrol_boss_adapter;
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
-mod defeat_motion_tests;
-#[cfg(test)]
-mod stomp_morph_tests;
+mod patrol_boss_flow_tests;
+mod patrol_child;
+mod patrol_child_adapter;
+mod perched_flyer;
+mod pipe_bobber;
+mod piranha_fireball;
 #[cfg(test)]
 mod record_marker_tests;
 mod record_origin;
 mod record_reset;
 #[cfg(test)]
 mod record_reset_tests;
-mod mario_zone;
-mod boo;
-mod carrier;
-mod cannon_ant;
-#[path = "handler_0x5A816.rs"]
-mod handler_0x5a816;
-#[path = "handler_0x5A816_adapter.rs"]
-mod handler_0x5a816_adapter;
-mod charging_enemy;
-mod dashing_walker;
-mod edge_walker;
-mod falling_dropper;
-mod fallwalker;
-mod fire_piranha;
-mod groundwalker;
-mod horizontal_platform;
-mod left_marcher;
-mod paced_walker;
-mod perched_flyer;
-mod pipe_bobber;
-mod piranha_fireball;
+mod reward_spawn;
 mod rising_platform;
 mod rising_platform_adapter;
+mod scratch;
+mod shell;
+mod side_door;
 mod squashed;
+#[cfg(test)]
+mod stomp_morph_tests;
+mod stream;
+mod stream_cursor;
+mod sweep_boss;
+mod sweep_boss_adapter;
+#[cfg(test)]
+mod sweep_boss_flow_tests;
+mod sweep_child;
+mod sweep_child_adapter;
+mod sweep_drop_child;
+mod sweep_drop_child_adapter;
+mod terrain_probes;
+#[cfg(test)]
+mod tests;
+mod tree_boss;
+mod tree_boss_adapter;
+#[cfg(test)]
+mod tree_boss_flow_tests;
+mod vertical_bobber;
 mod vertical_pacer;
 mod walker;
 mod walkers;

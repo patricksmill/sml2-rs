@@ -3,9 +3,9 @@
 //! Follows the idiomatic Rust porting guide: typed actor state, domain methods,
 //! zero raw hex offsets or register plumbing.
 
-use crate::actor::{Actor, ContactKind};
 use super::pipe_bobber::dist_mario_x;
 use super::staging::FALL_SPEED;
+use crate::actor::{Actor, ContactKind};
 
 /// Falling Dropper state machine (ROM $595B2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,10 +62,7 @@ pub fn step_fall_speed(actor: &mut Actor) -> u8 {
 }
 
 /// Domain update for Falling Dropper (ROM $595B2, anim 78).
-pub fn update(
-    actor: &mut Actor,
-    context: FallingDropperContext,
-) -> FallingDropperEffect {
+pub fn update(actor: &mut Actor, context: FallingDropperContext) -> FallingDropperEffect {
     let state = FallingDropperState::from_raw(actor.state);
     match state {
         FallingDropperState::Waiting => {
@@ -168,7 +165,10 @@ mod tests {
             update(&mut actor, FallingDropperContext { mario_ref_x: 200 });
         }
         assert_eq!(actor.timer, 1);
-        assert_eq!(actor.position.x, 203, "after odd number of wobbles (15), x is 203");
+        assert_eq!(
+            actor.position.x, 203,
+            "after odd number of wobbles (15), x is 203"
+        );
         assert_eq!(actor.state, FallingDropperState::Wobbling.to_raw());
 
         // Frame 16: timer becomes 0 -> transitions to Falling (no X shift)

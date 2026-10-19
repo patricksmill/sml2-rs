@@ -76,13 +76,55 @@ const E1_START: NoiseFrame = NoiseFrame {
     ticks: 2,
 };
 const E1_FRAMES: [NoiseFrame; 7] = [
-    NoiseFrame { length: 0x3A, envelope: 0x90, polynomial: 0x50, control: 0xC0, ticks: 2 },
-    NoiseFrame { length: 0x3A, envelope: 0xE0, polynomial: 0x30, control: 0xC0, ticks: 2 },
-    NoiseFrame { length: 0x3A, envelope: 0xE0, polynomial: 0x30, control: 0xC0, ticks: 2 },
-    NoiseFrame { length: 0x3A, envelope: 0x90, polynomial: 0x50, control: 0xC0, ticks: 2 },
-    NoiseFrame { length: 0x3A, envelope: 0x90, polynomial: 0x50, control: 0xC0, ticks: 2 },
-    NoiseFrame { length: 0x3A, envelope: 0x40, polynomial: 0x70, control: 0xC0, ticks: 2 },
-    NoiseFrame { length: 0x3A, envelope: 0x40, polynomial: 0x70, control: 0xC0, ticks: 2 },
+    NoiseFrame {
+        length: 0x3A,
+        envelope: 0x90,
+        polynomial: 0x50,
+        control: 0xC0,
+        ticks: 2,
+    },
+    NoiseFrame {
+        length: 0x3A,
+        envelope: 0xE0,
+        polynomial: 0x30,
+        control: 0xC0,
+        ticks: 2,
+    },
+    NoiseFrame {
+        length: 0x3A,
+        envelope: 0xE0,
+        polynomial: 0x30,
+        control: 0xC0,
+        ticks: 2,
+    },
+    NoiseFrame {
+        length: 0x3A,
+        envelope: 0x90,
+        polynomial: 0x50,
+        control: 0xC0,
+        ticks: 2,
+    },
+    NoiseFrame {
+        length: 0x3A,
+        envelope: 0x90,
+        polynomial: 0x50,
+        control: 0xC0,
+        ticks: 2,
+    },
+    NoiseFrame {
+        length: 0x3A,
+        envelope: 0x40,
+        polynomial: 0x70,
+        control: 0xC0,
+        ticks: 2,
+    },
+    NoiseFrame {
+        length: 0x3A,
+        envelope: 0x40,
+        polynomial: 0x70,
+        control: 0xC0,
+        ticks: 2,
+    },
 ];
 
 const E2_START: NoiseFrame = NoiseFrame {
@@ -144,11 +186,41 @@ const E6_START: NoiseFrame = NoiseFrame {
     ticks: 2,
 };
 const E6_FRAMES: [NoiseFrame; 5] = [
-    NoiseFrame { length: 0x00, envelope: 0x30, polynomial: 0x17, control: 0x80, ticks: 2 },
-    NoiseFrame { length: 0x00, envelope: 0x50, polynomial: 0x25, control: 0x80, ticks: 2 },
-    NoiseFrame { length: 0x00, envelope: 0x70, polynomial: 0x27, control: 0x80, ticks: 3 },
-    NoiseFrame { length: 0x00, envelope: 0xA0, polynomial: 0x35, control: 0x80, ticks: 3 },
-    NoiseFrame { length: 0x00, envelope: 0xD1, polynomial: 0x37, control: 0x80, ticks: 12 },
+    NoiseFrame {
+        length: 0x00,
+        envelope: 0x30,
+        polynomial: 0x17,
+        control: 0x80,
+        ticks: 2,
+    },
+    NoiseFrame {
+        length: 0x00,
+        envelope: 0x50,
+        polynomial: 0x25,
+        control: 0x80,
+        ticks: 2,
+    },
+    NoiseFrame {
+        length: 0x00,
+        envelope: 0x70,
+        polynomial: 0x27,
+        control: 0x80,
+        ticks: 3,
+    },
+    NoiseFrame {
+        length: 0x00,
+        envelope: 0xA0,
+        polynomial: 0x35,
+        control: 0x80,
+        ticks: 3,
+    },
+    NoiseFrame {
+        length: 0x00,
+        envelope: 0xD1,
+        polynomial: 0x37,
+        control: 0x80,
+        ticks: 12,
+    },
 ];
 
 const E7_START: NoiseFrame = NoiseFrame {
@@ -174,10 +246,34 @@ const E8_START: NoiseFrame = NoiseFrame {
     ticks: 3,
 };
 const E8_STEPS_1_TO_4: [NoiseFrame; 4] = [
-    NoiseFrame { length: 0x00, envelope: 0x70, polynomial: 0x3D, control: 0x80, ticks: 3 },
-    NoiseFrame { length: 0x00, envelope: 0x60, polynomial: 0x3E, control: 0x80, ticks: 3 },
-    NoiseFrame { length: 0x00, envelope: 0x50, polynomial: 0x3F, control: 0x80, ticks: 3 },
-    NoiseFrame { length: 0x00, envelope: 0x40, polynomial: 0x4C, control: 0x80, ticks: 3 },
+    NoiseFrame {
+        length: 0x00,
+        envelope: 0x70,
+        polynomial: 0x3D,
+        control: 0x80,
+        ticks: 3,
+    },
+    NoiseFrame {
+        length: 0x00,
+        envelope: 0x60,
+        polynomial: 0x3E,
+        control: 0x80,
+        ticks: 3,
+    },
+    NoiseFrame {
+        length: 0x00,
+        envelope: 0x50,
+        polynomial: 0x3F,
+        control: 0x80,
+        ticks: 3,
+    },
+    NoiseFrame {
+        length: 0x00,
+        envelope: 0x40,
+        polynomial: 0x4C,
+        control: 0x80,
+        ticks: 3,
+    },
 ];
 const E8_STEPS_5_TO_9_POLY: [u8; 5] = [0x3C, 0x3D, 0x3E, 0x3F, 0x4C];
 
@@ -228,13 +324,55 @@ const E11_START: NoiseFrame = NoiseFrame {
     ticks: 4,
 };
 const E11_FRAMES: [NoiseFrame; 7] = [
-    NoiseFrame { length: 0x2F, envelope: 0x09, polynomial: 0x45, control: 0xC0, ticks: 5 },
-    NoiseFrame { length: 0x2F, envelope: 0x0A, polynomial: 0x34, control: 0xC0, ticks: 4 },
-    NoiseFrame { length: 0x2F, envelope: 0x09, polynomial: 0x45, control: 0xC0, ticks: 5 },
-    NoiseFrame { length: 0x2F, envelope: 0x0A, polynomial: 0x33, control: 0xC0, ticks: 4 },
-    NoiseFrame { length: 0x2F, envelope: 0x09, polynomial: 0x45, control: 0xC0, ticks: 5 },
-    NoiseFrame { length: 0x2F, envelope: 0x0A, polynomial: 0x32, control: 0xC0, ticks: 4 },
-    NoiseFrame { length: 0x2F, envelope: 0x09, polynomial: 0x45, control: 0xC0, ticks: 5 },
+    NoiseFrame {
+        length: 0x2F,
+        envelope: 0x09,
+        polynomial: 0x45,
+        control: 0xC0,
+        ticks: 5,
+    },
+    NoiseFrame {
+        length: 0x2F,
+        envelope: 0x0A,
+        polynomial: 0x34,
+        control: 0xC0,
+        ticks: 4,
+    },
+    NoiseFrame {
+        length: 0x2F,
+        envelope: 0x09,
+        polynomial: 0x45,
+        control: 0xC0,
+        ticks: 5,
+    },
+    NoiseFrame {
+        length: 0x2F,
+        envelope: 0x0A,
+        polynomial: 0x33,
+        control: 0xC0,
+        ticks: 4,
+    },
+    NoiseFrame {
+        length: 0x2F,
+        envelope: 0x09,
+        polynomial: 0x45,
+        control: 0xC0,
+        ticks: 5,
+    },
+    NoiseFrame {
+        length: 0x2F,
+        envelope: 0x0A,
+        polynomial: 0x32,
+        control: 0xC0,
+        ticks: 4,
+    },
+    NoiseFrame {
+        length: 0x2F,
+        envelope: 0x09,
+        polynomial: 0x45,
+        control: 0xC0,
+        ticks: 5,
+    },
 ];
 
 impl NoiseEffectState {

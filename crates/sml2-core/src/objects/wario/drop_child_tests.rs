@@ -134,7 +134,10 @@ fn drop_child_state3_rise_then_fall_to_ground_state4() {
         picker_profile: &DUMMY_PICKER_PROFILE,
     };
     update_drop_child(&mut actor, ctx).expect("fall step");
-    assert_eq!(actor.screen.y, 143, "first step added picker[0]=0 -> y=143 < 144");
+    assert_eq!(
+        actor.screen.y, 143,
+        "first step added picker[0]=0 -> y=143 < 144"
+    );
 
     actor.screen.y = 144;
     let ctx2 = DropChildContext {

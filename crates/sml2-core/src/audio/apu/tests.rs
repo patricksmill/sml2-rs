@@ -27,7 +27,7 @@ fn test_pulse_channel_synthesis() {
     let mut apu = Apu::new();
     // Configure Ch1: 50% duty (index 2), volume 15, trigger with freq 0x600
     apu.apply_pulse_write(PulseWrite::DutyLength(0x80)); // 50% duty
-    apu.apply_pulse_write(PulseWrite::Envelope(0xF0));   // Initial volume 15
+    apu.apply_pulse_write(PulseWrite::Envelope(0xF0)); // Initial volume 15
     apu.apply_pulse_write(PulseWrite::FrequencyLow(0x00));
     apu.apply_pulse_write(PulseWrite::FrequencyControl(0x86)); // Trigger with high freq 6
 
@@ -51,8 +51,8 @@ fn test_pulse_channel_synthesis() {
 fn test_wave_channel_synthesis() {
     let mut apu = Apu::new();
     let pattern = [
-        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
-        0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10,
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32,
+        0x10,
     ];
     apu.apply_wave_write(WaveWrite::Enable(0x80));
     apu.apply_wave_write(WaveWrite::Level(0x20)); // 100% volume
@@ -157,7 +157,10 @@ fn test_apu_sensitivity() {
     apu1.generate_samples(44100, 100, &mut samples1);
     apu2.generate_samples(44100, 100, &mut samples2);
 
-    assert_ne!(samples1, samples2, "Mutating frequency must alter output waveform");
+    assert_ne!(
+        samples1, samples2,
+        "Mutating frequency must alter output waveform"
+    );
 }
 
 #[test]

@@ -222,17 +222,35 @@ mod tests {
         actor.state = WaveFlyerState::FlyRight.to_raw();
 
         // Frame 0: toggles
-        update(&mut actor, WaveFlyerContext { frame: FrameTick(0), mario_ref_x: 100 });
+        update(
+            &mut actor,
+            WaveFlyerContext {
+                frame: FrameTick(0),
+                mario_ref_x: 100,
+            },
+        );
         assert_eq!(actor.sprite, 151);
 
         // Frame 1, 2, 3: no toggle
         for f in 1..=3 {
-            update(&mut actor, WaveFlyerContext { frame: FrameTick(f), mario_ref_x: 100 });
+            update(
+                &mut actor,
+                WaveFlyerContext {
+                    frame: FrameTick(f),
+                    mario_ref_x: 100,
+                },
+            );
             assert_eq!(actor.sprite, 151);
         }
 
         // Frame 4: toggles
-        update(&mut actor, WaveFlyerContext { frame: FrameTick(4), mario_ref_x: 100 });
+        update(
+            &mut actor,
+            WaveFlyerContext {
+                frame: FrameTick(4),
+                mario_ref_x: 100,
+            },
+        );
         assert_eq!(actor.sprite, 150);
     }
 
@@ -266,7 +284,13 @@ mod tests {
         actor.motion_leg = VerticalDirection::Climbing.to_raw();
 
         // Step 1 (frame 4): X += 2, Y -= 1, budget = 46
-        let eff = update(&mut actor, WaveFlyerContext { frame: FrameTick(4), mario_ref_x: 100 });
+        let eff = update(
+            &mut actor,
+            WaveFlyerContext {
+                frame: FrameTick(4),
+                mario_ref_x: 100,
+            },
+        );
         assert_eq!(
             eff,
             WaveFlyerEffect::Moved {
@@ -281,7 +305,13 @@ mod tests {
         // Steps 2..=23: 22 more climbing steps
         for step in 2..=23 {
             let f = step * 4;
-            let eff = update(&mut actor, WaveFlyerContext { frame: FrameTick(f), mario_ref_x: 100 });
+            let eff = update(
+                &mut actor,
+                WaveFlyerContext {
+                    frame: FrameTick(f),
+                    mario_ref_x: 100,
+                },
+            );
             assert!(matches!(eff, WaveFlyerEffect::Moved { .. }));
         }
         assert_eq!(actor.position.x, 100 + 23 * 2); // 146
@@ -291,7 +321,13 @@ mod tests {
         // Step 24 (frame 96): Apex reached!
         // X moves +2 to 148, budget hits 0 and resets to 48, motion_leg becomes Diving.
         // Y does NOT move (remains 77).
-        let eff = update(&mut actor, WaveFlyerContext { frame: FrameTick(96), mario_ref_x: 100 });
+        let eff = update(
+            &mut actor,
+            WaveFlyerContext {
+                frame: FrameTick(96),
+                mario_ref_x: 100,
+            },
+        );
         assert_eq!(eff, WaveFlyerEffect::ClimbCompleted);
         assert_eq!(actor.position.x, 148);
         assert_eq!(actor.position.y, 77);
@@ -299,7 +335,13 @@ mod tests {
         assert_eq!(actor.motion_leg, VerticalDirection::Diving.to_raw());
 
         // Step 25 (diving step 1, frame 100): X += 2 to 150, Y += 1 to 78, budget = 46
-        let eff = update(&mut actor, WaveFlyerContext { frame: FrameTick(100), mario_ref_x: 100 });
+        let eff = update(
+            &mut actor,
+            WaveFlyerContext {
+                frame: FrameTick(100),
+                mario_ref_x: 100,
+            },
+        );
         assert_eq!(
             eff,
             WaveFlyerEffect::Moved {
@@ -314,7 +356,13 @@ mod tests {
         // Steps 26..=47: 22 more diving steps
         for step in 26..=47 {
             let f = step * 4;
-            let eff = update(&mut actor, WaveFlyerContext { frame: FrameTick(f), mario_ref_x: 100 });
+            let eff = update(
+                &mut actor,
+                WaveFlyerContext {
+                    frame: FrameTick(f),
+                    mario_ref_x: 100,
+                },
+            );
             assert!(matches!(eff, WaveFlyerEffect::Moved { .. }));
         }
         assert_eq!(actor.position.x, 148 + 23 * 2); // 194
@@ -328,8 +376,19 @@ mod tests {
         // state flips to FlyLeft.
         // sprite_flip flips to false.
         // Y does NOT move (remains 100).
-        let eff = update(&mut actor, WaveFlyerContext { frame: FrameTick(192), mario_ref_x: 100 });
-        assert_eq!(eff, WaveFlyerEffect::TurnedAround { state: WaveFlyerState::FlyLeft });
+        let eff = update(
+            &mut actor,
+            WaveFlyerContext {
+                frame: FrameTick(192),
+                mario_ref_x: 100,
+            },
+        );
+        assert_eq!(
+            eff,
+            WaveFlyerEffect::TurnedAround {
+                state: WaveFlyerState::FlyLeft
+            }
+        );
         assert_eq!(actor.position.x, 196);
         assert_eq!(actor.position.y, 100);
         assert_eq!(actor.travel_direction.raw(), 48);
@@ -338,7 +397,13 @@ mod tests {
         assert!(!actor.sprite_flip.horizontal());
 
         // Step 49 (climbing left, frame 196): X -= 2 to 194, Y -= 1 to 99, budget = 46
-        let eff = update(&mut actor, WaveFlyerContext { frame: FrameTick(196), mario_ref_x: 100 });
+        let eff = update(
+            &mut actor,
+            WaveFlyerContext {
+                frame: FrameTick(196),
+                mario_ref_x: 100,
+            },
+        );
         assert_eq!(
             eff,
             WaveFlyerEffect::Moved {
@@ -359,7 +424,7 @@ mod tests {
         slot[3] = 0x00; // Y hi
         slot[4] = 0x50; // Y lo (80)
         slot[11] = 140; // sprite
-        slot[15] = 0;   // state = Init
+        slot[15] = 0; // state = Init
 
         let mut actor = Actor::from_raw_slot(&slot);
         let ctx = WaveFlyerContext {

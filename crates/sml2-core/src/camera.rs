@@ -1517,12 +1517,18 @@ mod tests {
         c.pan_timer = 3;
         c.update_scroll();
         let latched_scroll = c.scroll_y;
-        assert_eq!(latched_scroll, 0x0140u16.wrapping_sub(72).wrapping_sub(3) as u8);
+        assert_eq!(
+            latched_scroll,
+            0x0140u16.wrapping_sub(72).wrapping_sub(3) as u8
+        );
 
         // $54E9 ticks pan_timer from 3 -> 2; latched scroll_y remains unchanged until update_scroll
         c.tick_pan_timer();
         assert_eq!(c.pan_timer, 2);
-        assert_eq!(c.scroll_y, latched_scroll, "$2F72 reads previous frame latched scroll");
+        assert_eq!(
+            c.scroll_y, latched_scroll,
+            "$2F72 reads previous frame latched scroll"
+        );
 
         // Next frame's $2062 update re-latches scroll with pan_timer 2
         c.update_scroll();

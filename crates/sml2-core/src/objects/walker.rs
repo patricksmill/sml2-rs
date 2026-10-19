@@ -54,11 +54,7 @@ pub trait WalkerWorld {
 }
 
 /// Domain update for Walker (ROM $58201).
-pub fn update<W>(
-    actor: &mut Actor,
-    context: WalkerContext,
-    world: &mut W,
-) -> WalkerEffect
+pub fn update<W>(actor: &mut Actor, context: WalkerContext, world: &mut W) -> WalkerEffect
 where
     W: WalkerWorld,
 {
@@ -280,23 +276,58 @@ mod tests {
         actor.sprite = 10;
 
         // Frame 0: 0 % 4 == 0 -> toggles
-        update(&mut actor, WalkerContext { frame: FrameTick(0), mario_ref_x: 0 }, &mut world);
+        update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(0),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
         assert_eq!(actor.sprite, 11);
 
         // Frame 1: 1 % 4 != 0 -> no toggle
-        update(&mut actor, WalkerContext { frame: FrameTick(1), mario_ref_x: 0 }, &mut world);
+        update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(1),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
         assert_eq!(actor.sprite, 11);
 
         // Frame 2: 2 % 4 != 0 -> no toggle
-        update(&mut actor, WalkerContext { frame: FrameTick(2), mario_ref_x: 0 }, &mut world);
+        update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(2),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
         assert_eq!(actor.sprite, 11);
 
         // Frame 3: 3 % 4 != 0 -> no toggle
-        update(&mut actor, WalkerContext { frame: FrameTick(3), mario_ref_x: 0 }, &mut world);
+        update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(3),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
         assert_eq!(actor.sprite, 11);
 
         // Frame 4: 4 % 4 == 0 -> toggles back
-        update(&mut actor, WalkerContext { frame: FrameTick(4), mario_ref_x: 0 }, &mut world);
+        update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(4),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
         assert_eq!(actor.sprite, 10);
     }
 
@@ -308,13 +339,32 @@ mod tests {
         actor.position.x = 100;
 
         // Odd frame: movement does not run
-        let eff = update(&mut actor, WalkerContext { frame: FrameTick(1), mario_ref_x: 0 }, &mut world);
+        let eff = update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(1),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
         assert_eq!(eff, WalkerEffect::None);
         assert_eq!(actor.position.x, 100);
 
         // Even frame: movement runs
-        let eff = update(&mut actor, WalkerContext { frame: FrameTick(2), mario_ref_x: 0 }, &mut world);
-        assert_eq!(eff, WalkerEffect::Moved { state: WalkerState::WalkLeft });
+        let eff = update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(2),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
+        assert_eq!(
+            eff,
+            WalkerEffect::Moved {
+                state: WalkerState::WalkLeft
+            }
+        );
         assert_eq!(actor.position.x, 99);
     }
 
@@ -325,9 +375,24 @@ mod tests {
         actor.position.x = 100;
 
         // Wall hit: turns to WalkRight, toggles flip, does not move X
-        let mut world = MockWorld { left_wall: true, ..MockWorld::default() };
-        let eff = update(&mut actor, WalkerContext { frame: FrameTick(2), mario_ref_x: 0 }, &mut world);
-        assert_eq!(eff, WalkerEffect::Turned { state: WalkerState::WalkRight });
+        let mut world = MockWorld {
+            left_wall: true,
+            ..MockWorld::default()
+        };
+        let eff = update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(2),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
+        assert_eq!(
+            eff,
+            WalkerEffect::Turned {
+                state: WalkerState::WalkRight
+            }
+        );
         assert_eq!(actor.state, 2);
         assert!(actor.sprite_flip.horizontal());
         assert_eq!(actor.position.x, 100);
@@ -336,9 +401,24 @@ mod tests {
         let mut actor = Actor::default();
         actor.state = 1;
         actor.position.x = 100;
-        let mut world = MockWorld { ground: false, ..MockWorld::default() };
-        let eff = update(&mut actor, WalkerContext { frame: FrameTick(2), mario_ref_x: 0 }, &mut world);
-        assert_eq!(eff, WalkerEffect::StartedFalling { state: WalkerState::FallLeft });
+        let mut world = MockWorld {
+            ground: false,
+            ..MockWorld::default()
+        };
+        let eff = update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(2),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
+        assert_eq!(
+            eff,
+            WalkerEffect::StartedFalling {
+                state: WalkerState::FallLeft
+            }
+        );
         assert_eq!(actor.state, 3);
         assert_eq!(actor.position.x, 99);
     }
@@ -351,9 +431,24 @@ mod tests {
         actor.position.x = 100;
 
         // Wall hit: turns to WalkLeft, toggles flip, does not move X
-        let mut world = MockWorld { right_wall: true, ..MockWorld::default() };
-        let eff = update(&mut actor, WalkerContext { frame: FrameTick(2), mario_ref_x: 0 }, &mut world);
-        assert_eq!(eff, WalkerEffect::Turned { state: WalkerState::WalkLeft });
+        let mut world = MockWorld {
+            right_wall: true,
+            ..MockWorld::default()
+        };
+        let eff = update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(2),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
+        assert_eq!(
+            eff,
+            WalkerEffect::Turned {
+                state: WalkerState::WalkLeft
+            }
+        );
         assert_eq!(actor.state, 1);
         assert!(!actor.sprite_flip.horizontal());
         assert_eq!(actor.position.x, 100);
@@ -362,9 +457,24 @@ mod tests {
         let mut actor = Actor::default();
         actor.state = 2;
         actor.position.x = 100;
-        let mut world = MockWorld { ground: false, ..MockWorld::default() };
-        let eff = update(&mut actor, WalkerContext { frame: FrameTick(2), mario_ref_x: 0 }, &mut world);
-        assert_eq!(eff, WalkerEffect::StartedFalling { state: WalkerState::FallRight });
+        let mut world = MockWorld {
+            ground: false,
+            ..MockWorld::default()
+        };
+        let eff = update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(2),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
+        assert_eq!(
+            eff,
+            WalkerEffect::StartedFalling {
+                state: WalkerState::FallRight
+            }
+        );
         assert_eq!(actor.state, 4);
         assert_eq!(actor.position.x, 101);
     }
@@ -375,9 +485,24 @@ mod tests {
         let mut actor = Actor::default();
         actor.state = 3;
         actor.position.x = 100;
-        let mut world = MockWorld { left_wall: true, ..MockWorld::default() };
-        let eff = update(&mut actor, WalkerContext { frame: FrameTick(2), mario_ref_x: 0 }, &mut world);
-        assert_eq!(eff, WalkerEffect::Turned { state: WalkerState::FallRight });
+        let mut world = MockWorld {
+            left_wall: true,
+            ..MockWorld::default()
+        };
+        let eff = update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(2),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
+        assert_eq!(
+            eff,
+            WalkerEffect::Turned {
+                state: WalkerState::FallRight
+            }
+        );
         assert_eq!(actor.state, 4);
         assert!(actor.sprite_flip.horizontal());
 
@@ -386,9 +511,25 @@ mod tests {
         actor.state = 3;
         actor.position.x = 100;
         actor.position.y = 50;
-        let mut world = MockWorld { ground: false, fall_dy: 3, ..MockWorld::default() };
-        let eff = update(&mut actor, WalkerContext { frame: FrameTick(2), mario_ref_x: 0 }, &mut world);
-        assert_eq!(eff, WalkerEffect::Moved { state: WalkerState::FallLeft });
+        let mut world = MockWorld {
+            ground: false,
+            fall_dy: 3,
+            ..MockWorld::default()
+        };
+        let eff = update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(2),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
+        assert_eq!(
+            eff,
+            WalkerEffect::Moved {
+                state: WalkerState::FallLeft
+            }
+        );
         assert_eq!(actor.state, 3);
         assert_eq!(actor.position.x, 99);
         assert_eq!(actor.position.y, 53);
@@ -398,9 +539,25 @@ mod tests {
         actor.state = 3;
         actor.position.x = 100;
         actor.position.y = 50;
-        let mut world = MockWorld { ground: true, fall_dy: 2, ..MockWorld::default() };
-        let eff = update(&mut actor, WalkerContext { frame: FrameTick(2), mario_ref_x: 0 }, &mut world);
-        assert_eq!(eff, WalkerEffect::Landed { state: WalkerState::WalkLeft });
+        let mut world = MockWorld {
+            ground: true,
+            fall_dy: 2,
+            ..MockWorld::default()
+        };
+        let eff = update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(2),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
+        assert_eq!(
+            eff,
+            WalkerEffect::Landed {
+                state: WalkerState::WalkLeft
+            }
+        );
         assert_eq!(actor.state, 1);
         assert_eq!(actor.position.x, 99);
         assert_eq!(actor.position.y, 52);
@@ -410,9 +567,25 @@ mod tests {
         actor.state = 4;
         actor.position.x = 100;
         actor.position.y = 50;
-        let mut world = MockWorld { ground: true, fall_dy: 4, ..MockWorld::default() };
-        let eff = update(&mut actor, WalkerContext { frame: FrameTick(2), mario_ref_x: 0 }, &mut world);
-        assert_eq!(eff, WalkerEffect::Landed { state: WalkerState::WalkRight });
+        let mut world = MockWorld {
+            ground: true,
+            fall_dy: 4,
+            ..MockWorld::default()
+        };
+        let eff = update(
+            &mut actor,
+            WalkerContext {
+                frame: FrameTick(2),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
+        assert_eq!(
+            eff,
+            WalkerEffect::Landed {
+                state: WalkerState::WalkRight
+            }
+        );
         assert_eq!(actor.state, 2);
         assert_eq!(actor.position.x, 101);
         assert_eq!(actor.position.y, 54);

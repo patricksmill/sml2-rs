@@ -86,13 +86,23 @@ fn handler_0x5a9d3_real_mode_b_anim82_step() {
     sim.configure(0x0A);
     sim.fff0 = 2;
     let mut actor = Actor::default();
-    actor.position = Position { x: 0x0100, y: 0x0080 };
+    actor.position = Position {
+        x: 0x0100,
+        y: 0x0080,
+    };
     actor.activity = 2;
     actor.definition = 82;
     actor.state = 0;
     actor.sprite_flip = crate::actor::SpriteFlipFlags::from_bits(0x20);
     sim.slots[1].b = actor.to_raw_slot();
-    sim.step(0x0080, 0x0080, &lay, &tables, &MarioContact::default(), false);
+    sim.step(
+        0x0080,
+        0x0080,
+        &lay,
+        &tables,
+        &MarioContact::default(),
+        false,
+    );
     assert_eq!(sim.slots[1].b[18], 77);
     assert_eq!(sim.slots[1].b[15], 1);
     assert_eq!(sim.slots[1].b[13], 0);

@@ -141,11 +141,18 @@ fn boss_clear_handoff_transitions_to_exit_completed_and_saves_coin() {
     assert!(sim.exit_completed, "handoff completed");
     assert_eq!(sim.music_request, 15, "ROM line 16765 boss cutscene track");
     assert_eq!(sim.level_tally, 0x06, "BCD tally incremented");
-    assert_eq!(sim.level_progress[29] & 0x80, 0x80, "coin 6 bit set at offset 29");
+    assert_eq!(
+        sim.level_progress[29] & 0x80,
+        0x80,
+        "coin 6 bit set at offset 29"
+    );
     assert_eq!(sim.golden_coin_count(), 1);
 
     sim.apply_object_result(&mut obj, false);
-    assert_eq!(sim.level_tally, 0x06, "consumed reward is applied only once");
+    assert_eq!(
+        sim.level_tally, 0x06,
+        "consumed reward is applied only once"
+    );
     assert_eq!(sim.golden_coin_count(), 1);
 
     let handoff = sim.map_handoff(&nodes);

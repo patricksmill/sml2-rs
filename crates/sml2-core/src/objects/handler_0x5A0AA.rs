@@ -26,7 +26,9 @@ pub(super) enum Error {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Effect {
-    Initialized { facing: Ordering },
+    Initialized {
+        facing: Ordering,
+    },
     Spawn {
         sprite: u8,
         anim: u8,
@@ -72,7 +74,11 @@ pub(super) fn update(
             if !timer_elapsed(actor) {
                 return Ok(Effect::Continue);
             }
-            let dx = if actor.sprite_flip.bits() == 0 { HOP } else { -HOP };
+            let dx = if actor.sprite_flip.bits() == 0 {
+                HOP
+            } else {
+                -HOP
+            };
             actor.position.move_x(dx);
             actor.set_travel_span(HOP_SPAN);
             actor.state = actor.state.wrapping_sub(2);

@@ -107,7 +107,10 @@ fn handler_0x58804_real_mode_b_anim24_step() {
     sim.phase = false;
     sim.mario_ref_x = 0x0064;
     let mut actor = Actor::default();
-    actor.position = Position { x: 0x0060, y: 0x0100 };
+    actor.position = Position {
+        x: 0x0060,
+        y: 0x0100,
+    };
     actor.activity = 2;
     actor.definition = 24;
     actor.state = 0;

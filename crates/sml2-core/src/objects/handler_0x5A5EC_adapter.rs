@@ -14,8 +14,7 @@ impl ObjectSim {
                 let y = self.mario_y_adjust.unwrap_or(self.mario.y);
                 self.mario_y_adjust = Some(y.wrapping_add_signed(dy));
             }
-            Ok(handler_0x5a5ec::Effect::Moved { .. })
-            | Ok(handler_0x5a5ec::Effect::Continue) => {}
+            Ok(handler_0x5a5ec::Effect::Moved { .. }) | Ok(handler_0x5a5ec::Effect::Continue) => {}
             Ok(handler_0x5a5ec::Effect::Respawn) => self.respawn_object_5b2bf(st, tables),
             Err(_) => self.note_unported(0x5A5EC),
         }

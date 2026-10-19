@@ -19,8 +19,13 @@ const CURVE_B: [u8; 22] = [
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Effect {
-    Initialized { facing: Ordering },
-    Moved { carry_dx: Option<i16>, carry_dy: Option<i16> },
+    Initialized {
+        facing: Ordering,
+    },
+    Moved {
+        carry_dx: Option<i16>,
+        carry_dy: Option<i16>,
+    },
     Idle,
 }
 
@@ -55,7 +60,11 @@ fn step_y(actor: &mut Actor) -> i16 {
         _ => (&CURVE_A, false, false),
     };
     let step = sample(curve, actor.hit_reaction);
-    let dy = if down { i16::from(step) } else { -i16::from(step) };
+    let dy = if down {
+        i16::from(step)
+    } else {
+        -i16::from(step)
+    };
     actor.position.move_y(dy);
     if advance {
         actor.hit_reaction = actor.hit_reaction.wrapping_add(1);
@@ -84,7 +93,11 @@ fn step_x(actor: &mut Actor) -> i16 {
         _ => (&CURVE_B, true, true),
     };
     let step = sample(curve, index);
-    let dx = if right { i16::from(step) } else { -i16::from(step) };
+    let dx = if right {
+        i16::from(step)
+    } else {
+        -i16::from(step)
+    };
     actor.position.move_x(dx);
     if retreat {
         let next = index.wrapping_sub(1);

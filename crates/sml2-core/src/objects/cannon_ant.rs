@@ -12,18 +12,18 @@
 use crate::actor::{Actor, ContactKind, Facing, FrameTick};
 
 pub const INITIAL_WALK_BUDGET: u8 = 24; // ROM $5A77F: ld a, 24
-pub const FULL_WALK_BUDGET: u8 = 48;    // ROM $5A783: add a (48)
-pub const AIM_PAUSE_FRAMES: u8 = 16;    // ROM $5A7B3: ld a, 16
-pub const RECOVERY_FRAMES: u8 = 32;     // ROM $5A7F7: ld a, 32
-pub const CONTACT_KIND: u8 = 77;        // ROM $5A778: ld a, 77 (0x4D)
+pub const FULL_WALK_BUDGET: u8 = 48; // ROM $5A783: add a (48)
+pub const AIM_PAUSE_FRAMES: u8 = 16; // ROM $5A7B3: ld a, 16
+pub const RECOVERY_FRAMES: u8 = 32; // ROM $5A7F7: ld a, 32
+pub const CONTACT_KIND: u8 = 77; // ROM $5A778: ld a, 77 (0x4D)
 
 pub const SPRITE_PROJECTILE: u8 = 145; // ROM $5A7D4: ld a, 145
-pub const SPRITE_WALK: u8 = 146;       // ROM $5A807: ld a, 146
-pub const SPRITE_AIM_HORIZ: u8 = 147;  // ROM $5A7C1: ld a, 147
-pub const SPRITE_AIM_UP: u8 = 148;     // ROM $5A7C6: ld a, 148
+pub const SPRITE_WALK: u8 = 146; // ROM $5A807: ld a, 146
+pub const SPRITE_AIM_HORIZ: u8 = 147; // ROM $5A7C1: ld a, 147
+pub const SPRITE_AIM_UP: u8 = 148; // ROM $5A7C6: ld a, 148
 
-pub const PROJECTILE_ANIM: u8 = 78;    // ROM $5A7EB: ld a, 78
-pub const FIRE_SFX: u8 = 17;           // ROM $5A7FB: ld a, 17 (sSfxRequest1)
+pub const PROJECTILE_ANIM: u8 = 78; // ROM $5A7EB: ld a, 78
+pub const FIRE_SFX: u8 = 17; // ROM $5A7FB: ld a, 17 (sSfxRequest1)
 
 /// Cannon ant movement state ($5A773 / $6793 / $679D / $67CB / $6801: states 0..=4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,18 +60,28 @@ pub struct CannonAntContext {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CannonAntEffect {
     None,
-    Initialized { facing: u8 },
-    Walking { state: CannonAntState },
-    Aiming { sprite: u8 },
-    FireProjectile { anim: u8, sprite: u8, attr: u8, sfx: u8 },
-    Turned { state: CannonAntState },
+    Initialized {
+        facing: u8,
+    },
+    Walking {
+        state: CannonAntState,
+    },
+    Aiming {
+        sprite: u8,
+    },
+    FireProjectile {
+        anim: u8,
+        sprite: u8,
+        attr: u8,
+        sfx: u8,
+    },
+    Turned {
+        state: CannonAntState,
+    },
 }
 
 /// Domain update for CannonAnt (ROM $5A773).
-pub fn update(
-    actor: &mut Actor,
-    context: CannonAntContext,
-) -> CannonAntEffect {
+pub fn update(actor: &mut Actor, context: CannonAntContext) -> CannonAntEffect {
     let state = CannonAntState::from_raw(actor.state);
     match state {
         CannonAntState::Init => {
@@ -121,7 +131,8 @@ pub fn update(
                 CannonAntEffect::None
             } else {
                 // ROM $5A7D4..$5A7EB: spawn projectile
-                let attr = actor.sprite_flip.bits() | if actor.sprite == SPRITE_AIM_UP { 1 } else { 0 };
+                let attr =
+                    actor.sprite_flip.bits() | if actor.sprite == SPRITE_AIM_UP { 1 } else { 0 };
                 actor.state = CannonAntState::Recovery.to_raw();
                 actor.timer = RECOVERY_FRAMES;
                 CannonAntEffect::FireProjectile {
@@ -237,7 +248,12 @@ mod tests {
                 mario_ref_y: 40,
             },
         );
-        assert_eq!(eff, CannonAntEffect::Aiming { sprite: SPRITE_AIM_UP });
+        assert_eq!(
+            eff,
+            CannonAntEffect::Aiming {
+                sprite: SPRITE_AIM_UP
+            }
+        );
         assert_eq!(actor.state, CannonAntState::Aim.to_raw());
         assert_eq!(actor.sprite, SPRITE_AIM_UP);
         assert_eq!(actor.timer, 16);
@@ -261,7 +277,12 @@ mod tests {
                 mario_ref_y: 100,
             },
         );
-        assert_eq!(eff, CannonAntEffect::Aiming { sprite: SPRITE_AIM_HORIZ });
+        assert_eq!(
+            eff,
+            CannonAntEffect::Aiming {
+                sprite: SPRITE_AIM_HORIZ
+            }
+        );
         assert_eq!(actor.sprite, SPRITE_AIM_HORIZ);
         assert_eq!(actor.timer, 16);
     }
@@ -336,7 +357,12 @@ mod tests {
                 mario_ref_y: 40,
             },
         );
-        assert_eq!(eff, CannonAntEffect::Turned { state: CannonAntState::WalkRight });
+        assert_eq!(
+            eff,
+            CannonAntEffect::Turned {
+                state: CannonAntState::WalkRight
+            }
+        );
         assert_eq!(actor.state, CannonAntState::WalkRight.to_raw());
         assert_eq!(actor.sprite, SPRITE_WALK);
         assert!(actor.sprite_flip.horizontal());

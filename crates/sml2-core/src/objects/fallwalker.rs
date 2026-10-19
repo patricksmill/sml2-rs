@@ -51,11 +51,7 @@ pub trait FallWalkerWorld {
 }
 
 /// Domain update for FallWalker (ROM $582D1 / $594EB).
-pub fn update<W>(
-    actor: &mut Actor,
-    context: FallWalkerContext,
-    world: &mut W,
-) -> FallWalkerEffect
+pub fn update<W>(actor: &mut Actor, context: FallWalkerContext, world: &mut W) -> FallWalkerEffect
 where
     W: FallWalkerWorld,
 {
@@ -353,7 +349,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, FallWalkerEffect::Moved { state: FallWalkerState::WalkLeft });
+        assert_eq!(
+            eff,
+            FallWalkerEffect::Moved {
+                state: FallWalkerState::WalkLeft
+            }
+        );
         assert_eq!(actor.position.x, 99);
         assert_eq!(actor.state, 1);
 
@@ -371,7 +372,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, FallWalkerEffect::Turned { state: FallWalkerState::WalkRight });
+        assert_eq!(
+            eff,
+            FallWalkerEffect::Turned {
+                state: FallWalkerState::WalkRight
+            }
+        );
         assert_eq!(actor.state, 2);
         assert!(actor.sprite_flip.horizontal());
     }
@@ -397,7 +403,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, FallWalkerEffect::Moved { state: FallWalkerState::WalkRight });
+        assert_eq!(
+            eff,
+            FallWalkerEffect::Moved {
+                state: FallWalkerState::WalkRight
+            }
+        );
         assert_eq!(actor.position.x, 101);
         assert_eq!(actor.state, 2);
 
@@ -415,7 +426,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, FallWalkerEffect::Turned { state: FallWalkerState::WalkLeft });
+        assert_eq!(
+            eff,
+            FallWalkerEffect::Turned {
+                state: FallWalkerState::WalkLeft
+            }
+        );
         assert_eq!(actor.state, 1);
         assert!(!actor.sprite_flip.horizontal());
     }
@@ -439,7 +455,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, FallWalkerEffect::LedgeReversed { state: FallWalkerState::WalkRight });
+        assert_eq!(
+            eff,
+            FallWalkerEffect::LedgeReversed {
+                state: FallWalkerState::WalkRight
+            }
+        );
         assert_eq!(actor.state, 2);
         assert!(actor.sprite_flip.horizontal());
         assert_eq!(actor.position.x, 100, "does not change X on ledge reverse");
@@ -458,7 +479,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, FallWalkerEffect::LedgeReversed { state: FallWalkerState::WalkLeft });
+        assert_eq!(
+            eff,
+            FallWalkerEffect::LedgeReversed {
+                state: FallWalkerState::WalkLeft
+            }
+        );
         assert_eq!(actor.state, 1);
         assert!(!actor.sprite_flip.horizontal());
         assert_eq!(actor.position.x, 100);

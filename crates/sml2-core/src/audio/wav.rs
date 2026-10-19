@@ -23,12 +23,12 @@ pub fn encode_wav_pcm16(samples: &[f32], sample_rate: u32) -> Vec<u8> {
     // fmt subchunk
     buf.extend_from_slice(b"fmt ");
     buf.extend_from_slice(&16u32.to_le_bytes()); // Subchunk1Size (16 for PCM)
-    buf.extend_from_slice(&1u16.to_le_bytes());  // AudioFormat (1 for PCM)
-    buf.extend_from_slice(&2u16.to_le_bytes());  // NumChannels (2 for stereo)
+    buf.extend_from_slice(&1u16.to_le_bytes()); // AudioFormat (1 for PCM)
+    buf.extend_from_slice(&2u16.to_le_bytes()); // NumChannels (2 for stereo)
     buf.extend_from_slice(&sample_rate.to_le_bytes());
     let byte_rate = sample_rate * 2 * 2;
     buf.extend_from_slice(&byte_rate.to_le_bytes());
-    buf.extend_from_slice(&4u16.to_le_bytes());  // BlockAlign (channels * 2)
+    buf.extend_from_slice(&4u16.to_le_bytes()); // BlockAlign (channels * 2)
     buf.extend_from_slice(&16u16.to_le_bytes()); // BitsPerSample
 
     // data subchunk
@@ -44,7 +44,11 @@ pub fn encode_wav_pcm16(samples: &[f32], sample_rate: u32) -> Vec<u8> {
 }
 
 /// Write interleaved stereo floating-point samples to a WAV file at `path`.
-pub fn write_wav_file(path: impl AsRef<Path>, samples: &[f32], sample_rate: u32) -> std::io::Result<()> {
+pub fn write_wav_file(
+    path: impl AsRef<Path>,
+    samples: &[f32],
+    sample_rate: u32,
+) -> std::io::Result<()> {
     let bytes = encode_wav_pcm16(samples, sample_rate);
     let mut file = File::create(path)?;
     file.write_all(&bytes)?;

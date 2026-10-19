@@ -2424,7 +2424,10 @@ fn the_def0_boss_wakes_up_then_moves_and_banks_a_hit() {
     let old_y = st.b[B_SCRY];
     obj.dispatch_handler(0x93A7, &mut st, &layout, &real);
     assert_eq!(st.b[B_PHASE], 1);
-    assert_eq!(st.b[B_SCRY], old_y.wrapping_add(real.boss_picker_profile[0]));
+    assert_eq!(
+        st.b[B_SCRY],
+        old_y.wrapping_add(real.boss_picker_profile[0])
+    );
     assert!(obj.unported.is_empty());
     // A hit banks the slot and parks it in the hit-stun.
     obj.done = 0;
@@ -3308,7 +3311,11 @@ fn handler_fire_piranha_0x58541_full_lifecycle_and_projectile_spawn() {
     assert_eq!(st.b[B_FSTATE], 2);
     assert_eq!(st.b[B_SPRITE], 19);
     assert_eq!(st.b[B_T28], 48);
-    assert_eq!(obj.standby, standby_before + 1, "spawned standby projectile slot");
+    assert_eq!(
+        obj.standby,
+        standby_before + 1,
+        "spawned standby projectile slot"
+    );
     // Find the spawned slot
     let spawned_child = obj.slots.iter().find(|s| s.b[B_DEF] == 14);
     assert!(spawned_child.is_some(), "child slot with anim 14 exists");
@@ -3872,7 +3879,10 @@ fn handler_edge_walker_0x59baf_dispatch_and_movement() {
     assert_eq!(st.b[B_TYPE], 77, "contact kind 77 (0x4D)");
     assert_eq!(st.b[B_FLIP] & 0x20, 0x20, "faces right (flip_h)");
     assert_eq!(obj.facing, 1);
-    assert_eq!(st.b[B_SPRITE], 91, "four-step bob delta (+1) applied to sprite 90 -> 91");
+    assert_eq!(
+        st.b[B_SPRITE], 91,
+        "four-step bob delta (+1) applied to sprite 90 -> 91"
+    );
 
     // Frame 0 (even): steps right 1 px (100 -> 101)
     obj.dispatch_handler(0x59BAF, &mut st, &l, &t);
@@ -3882,7 +3892,10 @@ fn handler_edge_walker_0x59baf_dispatch_and_movement() {
     // Frame 1 (odd): blank_layout has no ground under (101, 80) -> reverses at ledge to WalkLeft (1)!
     obj.fff0 = 1;
     obj.dispatch_handler(0x59BAF, &mut st, &l, &t);
-    assert_eq!(st.b[B_FSTATE], 1, "ledge reverse toggles state to WalkLeft (1)");
+    assert_eq!(
+        st.b[B_FSTATE], 1,
+        "ledge reverse toggles state to WalkLeft (1)"
+    );
     assert_eq!(st.b[B_FLIP] & 0x20, 0, "faces left (no flip_h)");
 
     // Frame 2 (even): steps left 1 px (101 -> 100)
@@ -3908,7 +3921,10 @@ fn handler_left_marcher_0x591de_dispatch_and_movement() {
     // Frame 1: Init frame
     obj.dispatch_handler(0x591DE, &mut st, &l, &t);
     assert_eq!(st.b[B_FSTATE], 1, "state is Marching (1)");
-    assert_eq!(st.b[B_TYPE], 77, "contact kind 77 (0x4D standard stompable)");
+    assert_eq!(
+        st.b[B_TYPE], 77,
+        "contact kind 77 (0x4D standard stompable)"
+    );
     assert_eq!(st.x(), 200, "init frame does not move");
     assert_eq!(st.b[B_SPRITE], 104, "sprite untouched on odd frame");
 

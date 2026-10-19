@@ -20,11 +20,7 @@ pub(super) enum Effect {
     Carried { dx: i16 },
 }
 
-pub(super) fn update(
-    actor: &mut Actor,
-    frame: FrameTick,
-    easy: bool,
-) -> Result<Effect, Error> {
+pub(super) fn update(actor: &mut Actor, frame: FrameTick, easy: bool) -> Result<Effect, Error> {
     match actor.state {
         0 => {
             actor.contact_kind = ContactKind::from_raw(32);
@@ -60,7 +56,11 @@ fn slide(actor: &mut Actor, frame: FrameTick, easy: bool, right: bool) -> Result
     }
     actor.motion_phase ^= 1;
     let step = actor.motion_phase.wrapping_add(1);
-    let dx = if right { i16::from(step) } else { -i16::from(step) };
+    let dx = if right {
+        i16::from(step)
+    } else {
+        -i16::from(step)
+    };
     actor.position.move_x(dx);
     let carried = actor.interactions.stood_on();
     let span = actor.travel_span().wrapping_sub(step);

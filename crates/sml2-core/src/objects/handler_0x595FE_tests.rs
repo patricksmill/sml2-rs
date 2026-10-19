@@ -37,7 +37,10 @@ fn handler_0x595fe_alternates_vertical_legs_and_toggles_state() {
     actor.contact_kind = crate::actor::ContactKind::from_raw(handler_0x595fe::CONTACT);
     st.b = actor.to_raw_slot();
     sim.handler_0x595fe(&mut st);
-    assert_eq!((y_of(&st.b), st.b[27], st.b[15]), (102, handler_0x595fe::LEG, 2));
+    assert_eq!(
+        (y_of(&st.b), st.b[27], st.b[15]),
+        (102, handler_0x595fe::LEG, 2)
+    );
     assert_eq!(st.b[28], handler_0x595fe::SPRITE_TIMER);
     st.b[28] = 0;
     st.b[27] = 2;

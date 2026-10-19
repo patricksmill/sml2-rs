@@ -434,7 +434,9 @@ impl OverworldTiles {
     pub fn screen_raw(&self, screen_id: u8) -> &[u8] {
         let sid = (screen_id as usize).min(Self::SCREEN_COUNT - 1);
         let start = sid * Self::BYTES_PER_SCREEN;
-        self.bytes.get(start..start + Self::BYTES_PER_SCREEN).unwrap_or(&[])
+        self.bytes
+            .get(start..start + Self::BYTES_PER_SCREEN)
+            .unwrap_or(&[])
     }
 
     /// Decode the 384 2bpp tiles for a given screen into 8x8 pixel color arrays (0..=3).
@@ -619,34 +621,140 @@ pub fn cursor_sprite(
 /// `$4C4D`: the seventeen decor metasprites, `(dy, dx, tile, attr)` cells
 /// terminated by a `$FF` tile (not a `$FF` dy - `$3D01D` tests the tile byte).
 pub const DECOR_METASPRITES: [&[(i8, i8, u8, u8)]; 17] = [
-    &[],  // $ 4c6f - 0 cells
-    &[(0, 8, 0x54, 0x00), (0, 16, 0x55, 0x00), (0, 24, 0x54, 0x20), (8, 0, 0x56, 0x00), (8, 8, 0x57, 0x00), (8, 16, 0x58, 0x00), (8, 24, 0x6D, 0x00), (8, 32, 0x7A, 0x00), (16, 0, 0x59, 0x00), (16, 8, 0x5A, 0x00), (16, 16, 0x5B, 0x00), (16, 24, 0x5A, 0x20), (16, 32, 0x7B, 0x00), (24, 0, 0x5C, 0x00), (24, 8, 0x5D, 0x00), (24, 16, 0x6C, 0x00), (24, 24, 0x5D, 0x20), (24, 32, 0x5C, 0x20)],  // $ 4c73 - 18 cells
-    &[(0, 0, 0x60, 0x00), (0, 8, 0x61, 0x00), (8, 0, 0x62, 0x00), (8, 8, 0x63, 0x00)],  // $ 4cbf - 4 cells
-    &[(0, 0, 0x64, 0x00), (0, 8, 0x65, 0x00), (8, 0, 0x66, 0x00), (8, 8, 0x67, 0x00)],  // $ 4cd3 - 4 cells
-    &[(0, 0, 0x68, 0x00), (0, 8, 0x69, 0x00), (8, 0, 0x6A, 0x00), (8, 8, 0x6B, 0x00)],  // $ 4ce7 - 4 cells
-    &[(0, 0, 0x3A, 0x00), (0, 8, 0x3B, 0x00), (0, 16, 0x3C, 0x00), (8, 0, 0x3D, 0x00), (8, 8, 0x3E, 0x00), (8, 16, 0x3F, 0x00), (16, 0, 0x40, 0x00), (16, 8, 0x41, 0x00), (16, 16, 0x42, 0x00)],  // $ 4cfb - 9 cells
-    &[(0, 0, 0x45, 0x00), (0, 8, 0x3B, 0x00), (0, 16, 0x3C, 0x00), (8, 0, 0x46, 0x00), (8, 8, 0x47, 0x00), (8, 16, 0x3F, 0x00), (16, 0, 0x48, 0x00), (16, 8, 0x49, 0x00), (16, 16, 0x42, 0x00)],  // $ 4d23 - 9 cells
-    &[(0, 0, 0x4A, 0x00), (0, 8, 0x3B, 0x00), (0, 16, 0x3C, 0x00), (8, 0, 0x4B, 0x00), (8, 8, 0x4C, 0x00), (8, 16, 0x3F, 0x00), (16, 0, 0x4D, 0x00), (16, 8, 0x4E, 0x00), (16, 16, 0x42, 0x00)],  // $ 4d4b - 9 cells
-    &[(0, 0, 0x4F, 0x00), (0, 8, 0x3B, 0x00), (0, 16, 0x3C, 0x00), (8, 0, 0x50, 0x00), (8, 8, 0x51, 0x00), (8, 16, 0x3F, 0x00), (16, 0, 0x52, 0x00), (16, 8, 0x53, 0x00), (16, 16, 0x42, 0x00)],  // $ 4d73 - 9 cells
-    &[(0, 0, 0x20, 0x00), (0, 8, 0x21, 0x00), (0, 16, 0x22, 0x00), (0, 24, 0x23, 0x00), (8, 0, 0x24, 0x00), (8, 8, 0x25, 0x00), (8, 16, 0x26, 0x00), (8, 24, 0x27, 0x00)],  // $ 4d9b - 8 cells
-    &[(0, 0, 0x36, 0x00), (0, 8, 0x36, 0x20), (0, 16, 0x36, 0x00), (0, 24, 0x36, 0x20)],  // $ 4dbf - 4 cells
-    &[(0, 0, 0x43, 0x00), (8, 0, 0x44, 0x00)],  // $ 4dd3 - 2 cells
-    &[(0, 0, 0x7C, 0x00), (0, 8, 0x7C, 0x20), (8, 0, 0x7D, 0x00), (8, 8, 0x7D, 0x20)],  // $ 4ddf - 4 cells
-    &[(0, 0, 0x37, 0x00), (0, 8, 0x38, 0x00), (8, 0, 0x37, 0x40), (8, 8, 0x38, 0x40)],  // $ 4df3 - 4 cells
-    &[(0, 0, 0x38, 0x20), (0, 8, 0x37, 0x20), (8, 0, 0x38, 0x60), (8, 8, 0x37, 0x60)],  // $ 4e07 - 4 cells
-    &[(0, 0, 0x7D, 0x40), (0, 8, 0x7D, 0x60), (8, 0, 0x7C, 0x40), (8, 8, 0x7C, 0x60)],  // $ 4e1b - 4 cells
-    &[(0, 0, 0x00, 0x00)],  // $ 4e2f - 1 cells
+    &[], // $ 4c6f - 0 cells
+    &[
+        (0, 8, 0x54, 0x00),
+        (0, 16, 0x55, 0x00),
+        (0, 24, 0x54, 0x20),
+        (8, 0, 0x56, 0x00),
+        (8, 8, 0x57, 0x00),
+        (8, 16, 0x58, 0x00),
+        (8, 24, 0x6D, 0x00),
+        (8, 32, 0x7A, 0x00),
+        (16, 0, 0x59, 0x00),
+        (16, 8, 0x5A, 0x00),
+        (16, 16, 0x5B, 0x00),
+        (16, 24, 0x5A, 0x20),
+        (16, 32, 0x7B, 0x00),
+        (24, 0, 0x5C, 0x00),
+        (24, 8, 0x5D, 0x00),
+        (24, 16, 0x6C, 0x00),
+        (24, 24, 0x5D, 0x20),
+        (24, 32, 0x5C, 0x20),
+    ], // $ 4c73 - 18 cells
+    &[
+        (0, 0, 0x60, 0x00),
+        (0, 8, 0x61, 0x00),
+        (8, 0, 0x62, 0x00),
+        (8, 8, 0x63, 0x00),
+    ], // $ 4cbf - 4 cells
+    &[
+        (0, 0, 0x64, 0x00),
+        (0, 8, 0x65, 0x00),
+        (8, 0, 0x66, 0x00),
+        (8, 8, 0x67, 0x00),
+    ], // $ 4cd3 - 4 cells
+    &[
+        (0, 0, 0x68, 0x00),
+        (0, 8, 0x69, 0x00),
+        (8, 0, 0x6A, 0x00),
+        (8, 8, 0x6B, 0x00),
+    ], // $ 4ce7 - 4 cells
+    &[
+        (0, 0, 0x3A, 0x00),
+        (0, 8, 0x3B, 0x00),
+        (0, 16, 0x3C, 0x00),
+        (8, 0, 0x3D, 0x00),
+        (8, 8, 0x3E, 0x00),
+        (8, 16, 0x3F, 0x00),
+        (16, 0, 0x40, 0x00),
+        (16, 8, 0x41, 0x00),
+        (16, 16, 0x42, 0x00),
+    ], // $ 4cfb - 9 cells
+    &[
+        (0, 0, 0x45, 0x00),
+        (0, 8, 0x3B, 0x00),
+        (0, 16, 0x3C, 0x00),
+        (8, 0, 0x46, 0x00),
+        (8, 8, 0x47, 0x00),
+        (8, 16, 0x3F, 0x00),
+        (16, 0, 0x48, 0x00),
+        (16, 8, 0x49, 0x00),
+        (16, 16, 0x42, 0x00),
+    ], // $ 4d23 - 9 cells
+    &[
+        (0, 0, 0x4A, 0x00),
+        (0, 8, 0x3B, 0x00),
+        (0, 16, 0x3C, 0x00),
+        (8, 0, 0x4B, 0x00),
+        (8, 8, 0x4C, 0x00),
+        (8, 16, 0x3F, 0x00),
+        (16, 0, 0x4D, 0x00),
+        (16, 8, 0x4E, 0x00),
+        (16, 16, 0x42, 0x00),
+    ], // $ 4d4b - 9 cells
+    &[
+        (0, 0, 0x4F, 0x00),
+        (0, 8, 0x3B, 0x00),
+        (0, 16, 0x3C, 0x00),
+        (8, 0, 0x50, 0x00),
+        (8, 8, 0x51, 0x00),
+        (8, 16, 0x3F, 0x00),
+        (16, 0, 0x52, 0x00),
+        (16, 8, 0x53, 0x00),
+        (16, 16, 0x42, 0x00),
+    ], // $ 4d73 - 9 cells
+    &[
+        (0, 0, 0x20, 0x00),
+        (0, 8, 0x21, 0x00),
+        (0, 16, 0x22, 0x00),
+        (0, 24, 0x23, 0x00),
+        (8, 0, 0x24, 0x00),
+        (8, 8, 0x25, 0x00),
+        (8, 16, 0x26, 0x00),
+        (8, 24, 0x27, 0x00),
+    ], // $ 4d9b - 8 cells
+    &[
+        (0, 0, 0x36, 0x00),
+        (0, 8, 0x36, 0x20),
+        (0, 16, 0x36, 0x00),
+        (0, 24, 0x36, 0x20),
+    ], // $ 4dbf - 4 cells
+    &[(0, 0, 0x43, 0x00), (8, 0, 0x44, 0x00)], // $ 4dd3 - 2 cells
+    &[
+        (0, 0, 0x7C, 0x00),
+        (0, 8, 0x7C, 0x20),
+        (8, 0, 0x7D, 0x00),
+        (8, 8, 0x7D, 0x20),
+    ], // $ 4ddf - 4 cells
+    &[
+        (0, 0, 0x37, 0x00),
+        (0, 8, 0x38, 0x00),
+        (8, 0, 0x37, 0x40),
+        (8, 8, 0x38, 0x40),
+    ], // $ 4df3 - 4 cells
+    &[
+        (0, 0, 0x38, 0x20),
+        (0, 8, 0x37, 0x20),
+        (8, 0, 0x38, 0x60),
+        (8, 8, 0x37, 0x60),
+    ], // $ 4e07 - 4 cells
+    &[
+        (0, 0, 0x7D, 0x40),
+        (0, 8, 0x7D, 0x60),
+        (8, 0, 0x7C, 0x40),
+        (8, 8, 0x7C, 0x60),
+    ], // $ 4e1b - 4 cells
+    &[(0, 0, 0x00, 0x00)], // $ 4e2f - 1 cells
 ];
 
 /// `$4FA8`: the X/Y pairs the first sparkle slot (`sMapSprite16`) picks from,
 /// indexed by `rDIV & $0E`; `$4FB8` is the same for the second (`$3CEC1`).
 pub const SPARKLE_SLOT_16: [u8; 16] = [
-    0xD8, 0xAA, 0xDC, 0xB0, 0xE0, 0xAC, 0xDC, 0xAA, 0xD8, 0xAA, 0xD5, 0xB2, 0xD6, 0xB4, 0xD8,
-    0xB1,
+    0xD8, 0xAA, 0xDC, 0xB0, 0xE0, 0xAC, 0xDC, 0xAA, 0xD8, 0xAA, 0xD5, 0xB2, 0xD6, 0xB4, 0xD8, 0xB1,
 ];
 pub const SPARKLE_SLOT_17: [u8; 16] = [
-    0x02, 0xB0, 0x00, 0xB2, 0x04, 0xAC, 0x03, 0xAE, 0x01, 0xB0, 0x00, 0xB2, 0x02, 0xAA, 0x00,
-    0xB4,
+    0x02, 0xB0, 0x00, 0xB2, 0x04, 0xAC, 0x03, 0xAE, 0x01, 0xB0, 0x00, 0xB2, 0x02, 0xAA, 0x00, 0xB4,
 ];
 
 /// `$4E37`: the six `sGoldenCoinN` bytes `$3CE43` reads for the coin icons, as
@@ -794,7 +902,10 @@ impl MapWave {
     /// where `a` is the strip's `e + $10` byte and `d` its `e` byte.
     fn pass(&mut self, strip_index: usize, e: usize, left: bool) {
         let e = e & 0x0F;
-        let (d1, a1) = (self.strips[strip_index][e], self.strips[strip_index][e + 0x10]);
+        let (d1, a1) = (
+            self.strips[strip_index][e],
+            self.strips[strip_index][e + 0x10],
+        );
         let (d, a) = if left {
             let a = a1 << 1;
             let carry = a1 >> 7;
@@ -866,7 +977,11 @@ fn draw_obj_tile(
 }
 
 /// Expand a screen's decor slots into the OAM cells the renderer takes.
-pub fn hub_decor_cells(slots: &[(u8, u8, u8, u8)], cam_x: u16, cam_y: u16) -> Vec<(u8, u8, u8, u8)> {
+pub fn hub_decor_cells(
+    slots: &[(u8, u8, u8, u8)],
+    cam_x: u16,
+    cam_y: u16,
+) -> Vec<(u8, u8, u8, u8)> {
     let mut out = Vec::new();
     for slot in slots {
         if let Some(cells) = decor_oam(*slot, cam_x, cam_y) {
@@ -1006,7 +1121,10 @@ pub fn render_overworld_view(
         }
         for unlock in &manifest.dynamic_unlocks {
             if unlock.screen_id == screen_id {
-                let prog = level_progress.get(unlock.progress_offset).copied().unwrap_or(0);
+                let prog = level_progress
+                    .get(unlock.progress_offset)
+                    .copied()
+                    .unwrap_or(0);
                 if prog & unlock.mask != 0 {
                     for placement in &unlock.patches {
                         for &patch_id in &placement.patch_ids {
@@ -1060,7 +1178,17 @@ pub fn render_overworld_view(
         // (`$4A11` visible, `$4A21` all `$7F`), so no Mario while panning.
         if frame_counter & 0x10 == 0 {
             for (oy, ox, tile, attr) in PAN_ARROWS {
-                draw_obj_tile(&mut img, tiles_vram, &obj_shades, ox as i32 - 8, oy as i32 - 16, tile, attr, vw, vh);
+                draw_obj_tile(
+                    &mut img,
+                    tiles_vram,
+                    &obj_shades,
+                    ox as i32 - 8,
+                    oy as i32 - 16,
+                    tile,
+                    attr,
+                    vw,
+                    vh,
+                );
             }
         }
         return img;
@@ -1291,7 +1419,7 @@ mod tests {
         blob[0] = 42; // Hub (0, 0)
         blob[63] = 43; // Hub (63, 0)
         blob[63 * 64 + 63] = 44; // Hub (63, 63)
-        // Screen 1 (Pumpkin)
+                                 // Screen 1 (Pumpkin)
         let s1_off = OverworldTilemaps::HUB_LEN;
         blob[s1_off] = 77;
         blob[s1_off + 31] = 78;
@@ -1381,9 +1509,27 @@ mod tests {
         // Render before unlock: progress byte at offset 2 is 0 -> tile is 0
         let progress = [0u8; 42];
         let frame_locked = render_overworld_view(
-            1, 0, 0, 0, 0, 0, 0, 0, 0, &[], None, false, 0,
-            &tilemaps, &manifest, &progress,
-            &vram, 0xE4, 0xD0, 160, 144,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            &[],
+            None,
+            false,
+            0,
+            &tilemaps,
+            &manifest,
+            &progress,
+            &vram,
+            0xE4,
+            0xD0,
+            160,
+            144,
         );
         assert_eq!(frame_locked.len(), 160 * 144);
 
@@ -1391,14 +1537,35 @@ mod tests {
         let mut progress_unlocked = [0u8; 42];
         progress_unlocked[2] = 1;
         let frame_unlocked = render_overworld_view(
-            1, 0, 0, 8, 16, 0, 0, 0, 0, &[], None, false, 0, // OAM (8,16) -> screen (0,0)
-            &tilemaps, &manifest, &progress_unlocked,
-            &vram, 0xE4, 0xD0, 160, 144,
+            1,
+            0,
+            0,
+            8,
+            16,
+            0,
+            0,
+            0,
+            0,
+            &[],
+            None,
+            false,
+            0, // OAM (8,16) -> screen (0,0)
+            &tilemaps,
+            &manifest,
+            &progress_unlocked,
+            &vram,
+            0xE4,
+            0xD0,
+            160,
+            144,
         );
         assert_eq!(frame_unlocked.len(), 160 * 144);
         // At (0, 0), cursor tile 1 (color 3) should be drawn on top
         let obj_shades = crate::video::bgp_shades(0xD0);
-        assert_eq!(frame_unlocked[0], obj_shades[3], "cursor sprite draws over background");
+        assert_eq!(
+            frame_unlocked[0], obj_shades[3],
+            "cursor sprite draws over background"
+        );
     }
 
     #[test]
@@ -1413,7 +1580,10 @@ mod tests {
 
         let vram = tiles.screen_vram_tiles(1);
         assert_eq!(vram.len(), OverworldTiles::TILES_PER_SCREEN);
-        assert_eq!(vram[0], [3u8; 64], "tile 0 should be decoded to color 3 pixels");
+        assert_eq!(
+            vram[0], [3u8; 64],
+            "tile 0 should be decoded to color 3 pixels"
+        );
         assert_eq!(vram[1], [0u8; 64], "tile 1 should be zero");
 
         // Invalid blob size rejected
@@ -1429,16 +1599,28 @@ mod cursor_tests {
     /// `$4B77` arrow pair that blinks on `walk_frame` bit 3.
     #[test]
     fn camera_scroll_draws_the_blinking_arrows_not_the_cursor() {
-        assert_eq!(cursor_sprite(0x80, 0, 0x00, 0), CursorSprite::ScrollArrows(0));
-        assert_eq!(cursor_sprite(0x80, 0, 0x08, 0), CursorSprite::ScrollArrows(1));
-        assert_eq!(cursor_sprite(0x80, 0, 0x10, 0), CursorSprite::ScrollArrows(0));
+        assert_eq!(
+            cursor_sprite(0x80, 0, 0x00, 0),
+            CursorSprite::ScrollArrows(0)
+        );
+        assert_eq!(
+            cursor_sprite(0x80, 0, 0x08, 0),
+            CursorSprite::ScrollArrows(1)
+        );
+        assert_eq!(
+            cursor_sprite(0x80, 0, 0x10, 0),
+            CursorSprite::ScrollArrows(0)
+        );
         assert_eq!(SCROLL_ARROWS[0][0], (0x14, 0x00));
         assert_eq!(SCROLL_ARROWS[1][3], (0x16, 0x20));
         // The comparison is the whole nibble ($3C901's `cp $08`), so bit 7 with
         // bit 5 set is NOT the scroll case: $A0 keeps the pose metasprite
         // (`cp $0A`), while $82 still reaches the arrows.
         assert_eq!(cursor_sprite(0xA2, 1, 0x04, 3), CursorSprite::Pose(3));
-        assert_eq!(cursor_sprite(0x82, 1, 0x04, 3), CursorSprite::ScrollArrows(0));
+        assert_eq!(
+            cursor_sprite(0x82, 1, 0x04, 3),
+            CursorSprite::ScrollArrows(0)
+        );
     }
 
     /// `$3C92A`: bit 6 of the high nibble blanks the cursor ($4B87).
@@ -1515,8 +1697,27 @@ mod cursor_render_tests {
         vram[0x7E] = [2u8; 64]; // $4A11's arrow tiles
         vram[0x39] = [2u8; 64];
         render_overworld_view(
-            1, 0, 0, 8, 16, move_, walking, walk_frame, 0, &[], None, pan, frame_counter, &tilemaps,
-            &manifest, &[], &vram, 0xE4, 0xD0, 160, 144,
+            1,
+            0,
+            0,
+            8,
+            16,
+            move_,
+            walking,
+            walk_frame,
+            0,
+            &[],
+            None,
+            pan,
+            frame_counter,
+            &tilemaps,
+            &manifest,
+            &[],
+            &vram,
+            0xE4,
+            0xD0,
+            160,
+            144,
         )
     }
 
@@ -1657,8 +1858,16 @@ mod wave_tests {
         }
         let wave = MapWave::seed(&block).expect("384-tile block");
         for n in 0..4 {
-            assert_eq!(wave.strips[n][..16], wave.raw[2 * n][..], "strip {n} even tile");
-            assert_eq!(wave.strips[n][16..], wave.raw[2 * n + 1][..], "strip {n} odd tile");
+            assert_eq!(
+                wave.strips[n][..16],
+                wave.raw[2 * n][..],
+                "strip {n} even tile"
+            );
+            assert_eq!(
+                wave.strips[n][16..],
+                wave.raw[2 * n + 1][..],
+                "strip {n} odd tile"
+            );
         }
         assert_eq!(wave.raw[0][0], 0x00);
         assert_eq!(wave.raw[7][15], 7 * 16 + 15);
@@ -1789,8 +1998,27 @@ mod decor_render_tests {
         let (tilemaps, manifest, vram) = scene();
         let cells = hub_decor_cells(slots, 0x0081, cam_y);
         render_overworld_view(
-            0, 0x0081, cam_y, 8, 16, 0, 0, 0, 0, &cells, None, false, 0, &tilemaps, &manifest, &[], &vram,
-            0xE4, 0xD0, 160, 144,
+            0,
+            0x0081,
+            cam_y,
+            8,
+            16,
+            0,
+            0,
+            0,
+            0,
+            &cells,
+            None,
+            false,
+            0,
+            &tilemaps,
+            &manifest,
+            &[],
+            &vram,
+            0xE4,
+            0xD0,
+            160,
+            144,
         )
     }
 
@@ -1841,11 +2069,18 @@ pub const PUMPKIN_ID_X: [u8; 4] = [0x12, 0x13, 0x14, 0x15];
 
 /// `$5A16`: `sMapSprite2Page` - slot 2's id - is `22 + this[index]`, plus 3 unless
 /// the step value has bit 7 set.
-pub const PUMPKIN_PAGE: [u8; 16] = [0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x02, 0x01, 0x03, 0x0F, 0x0F, 0x0F, 0x10, 0x11];
+pub const PUMPKIN_PAGE: [u8; 16] = [
+    0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x02, 0x01, 0x03, 0x0F, 0x0F, 0x0F, 0x10, 0x11,
+];
 
 /// `$6227`: the Pumpkin step table (`sMapAnimIndexA` walks it 0..$4F).
-pub const PUMPKIN_STEPS: [u8; 80] = [0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x10, 0x10, 0x19, 0x10, 0x10, 0x10, 0x11, 0x10, 0x11, 0x11, 0x11, 0x01, 0x11, 0x01, 0x81, 0x91, 0x81, 0x91, 0x91, 0x91, 0x90, 0x91, 0x90, 0x90, 0x90, 0x99, 0x90, 0x90, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x90, 0x90, 0x99, 0x90, 0x90, 0x90, 0x91, 0x90, 0x91, 0x91, 0x91, 0x81, 0x91, 0x81, 0x01, 0x11, 0x01, 0x11, 0x11, 0x11, 0x10, 0x11, 0x10, 0x10, 0x10, 0x19, 0x10, 0x10, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19];
-
+pub const PUMPKIN_STEPS: [u8; 80] = [
+    0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x10, 0x10, 0x19, 0x10, 0x10, 0x10, 0x11, 0x10, 0x11, 0x11,
+    0x11, 0x01, 0x11, 0x01, 0x81, 0x91, 0x81, 0x91, 0x91, 0x91, 0x90, 0x91, 0x90, 0x90, 0x90, 0x99,
+    0x90, 0x90, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x90, 0x90,
+    0x99, 0x90, 0x90, 0x90, 0x91, 0x90, 0x91, 0x91, 0x91, 0x81, 0x91, 0x81, 0x01, 0x11, 0x01, 0x11,
+    0x11, 0x11, 0x10, 0x11, 0x10, 0x10, 0x10, 0x19, 0x10, 0x10, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19,
+];
 
 #[cfg(test)]
 mod status_bar_tests {
@@ -1900,15 +2135,40 @@ mod status_bar_tests {
             // The bar's tiles ($6F, $70-$77, $7C, $7D) get a non-transparent
             // pattern so the counters are distinguishable from the strip.
             let mut v = vec![[0u8; 64]; 256];
-            for t in [0x6Fu8, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x7C, 0x7D] {
+            for t in [
+                0x6Fu8, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x7C, 0x7D,
+            ] {
                 v[t as usize] = [3u8; 64]; // decoded 2bpp: colour 3
             }
-            (OverworldTilemaps::default(), OverworldManifest::default(), v)
+            (
+                OverworldTilemaps::default(),
+                OverworldManifest::default(),
+                v,
+            )
         };
         let draw = |bar: Option<&StatusBar>| {
             render_overworld_view(
-                0, 0, 0, 8, 16, 0, 0, 0, 0, &[], bar, false, 0, &tilemaps, &manifest, &[],
-                &vram, 0xE4, 0xD0, 160, 144,
+                0,
+                0,
+                0,
+                8,
+                16,
+                0,
+                0,
+                0,
+                0,
+                &[],
+                bar,
+                false,
+                0,
+                &tilemaps,
+                &manifest,
+                &[],
+                &vram,
+                0xE4,
+                0xD0,
+                160,
+                144,
             )
         };
         let plain = draw(None);

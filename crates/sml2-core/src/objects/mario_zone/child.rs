@@ -12,7 +12,7 @@ impl ObjectSim {
         }
         st.b[B_SCRY] = 0x90; // $9EE9
         st.b[B_SCRX] = 0x58; // $9EED
-        // $9EF1 -> $98F8: become anim 4 / sprite 9, state, phase and type cleared.
+                             // $9EF1 -> $98F8: become anim 4 / sprite 9, state, phase and type cleared.
         st.b[B_DEF] = 0x04;
         st.b[B_SPRITE] = 0x09;
         st.b[B_FSTATE] = 0;

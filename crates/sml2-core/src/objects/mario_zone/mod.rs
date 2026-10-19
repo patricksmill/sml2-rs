@@ -15,4 +15,3 @@ mod reward_motion;
 mod spawner;
 #[cfg(test)]
 mod tests;
-

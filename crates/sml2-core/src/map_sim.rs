@@ -164,34 +164,255 @@ struct NodeDoor {
 /// `$67`/`$0D` pair) run the same handler.
 const NODE_DOORS: &[(u8, NodeDoor)] = &[
     // $3D0D7: Tree Zone screen A. Cursor 48/158, node $23, screen 2.
-    (0x02, NodeDoor { cursor_x: 48, cursor_y: 158, node: 0x23, screen_id: 2, dir: Some(4), move_: None, mask_move_nibble: false, music: 255, price: None }),
-    (0x19, NodeDoor { cursor_x: 48, cursor_y: 158, node: 0x23, screen_id: 2, dir: Some(4), move_: None, mask_move_nibble: false, music: 255, price: None }),
+    (
+        0x02,
+        NodeDoor {
+            cursor_x: 48,
+            cursor_y: 158,
+            node: 0x23,
+            screen_id: 2,
+            dir: Some(4),
+            move_: None,
+            mask_move_nibble: false,
+            music: 255,
+            price: None,
+        },
+    ),
+    (
+        0x19,
+        NodeDoor {
+            cursor_x: 48,
+            cursor_y: 158,
+            node: 0x23,
+            screen_id: 2,
+            dir: Some(4),
+            move_: None,
+            mask_move_nibble: false,
+            music: 255,
+            price: None,
+        },
+    ),
     // $3D1E0: Pumpkin Zone screen A. Cursor 83/137, node $28, screen 1.
-    (0x09, NodeDoor { cursor_x: 83, cursor_y: 137, node: 0x28, screen_id: 1, dir: Some(4), move_: None, mask_move_nibble: false, music: 255, price: None }),
-    (0x1C, NodeDoor { cursor_x: 83, cursor_y: 137, node: 0x28, screen_id: 1, dir: Some(4), move_: None, mask_move_nibble: false, music: 255, price: None }),
+    (
+        0x09,
+        NodeDoor {
+            cursor_x: 83,
+            cursor_y: 137,
+            node: 0x28,
+            screen_id: 1,
+            dir: Some(4),
+            move_: None,
+            mask_move_nibble: false,
+            music: 255,
+            price: None,
+        },
+    ),
+    (
+        0x1C,
+        NodeDoor {
+            cursor_x: 83,
+            cursor_y: 137,
+            node: 0x28,
+            screen_id: 1,
+            dir: Some(4),
+            move_: None,
+            mask_move_nibble: false,
+            music: 255,
+            price: None,
+        },
+    ),
     // $3D33A: Macro Zone. Cursor 226/118, move $21, node $32, screen 3.
-    (0x06, NodeDoor { cursor_x: 226, cursor_y: 118, node: 0x32, screen_id: 3, dir: Some(1), move_: Some(0x21), mask_move_nibble: false, music: 255, price: None }),
-    (0x1B, NodeDoor { cursor_x: 226, cursor_y: 118, node: 0x32, screen_id: 3, dir: Some(1), move_: Some(0x21), mask_move_nibble: false, music: 255, price: None }),
+    (
+        0x06,
+        NodeDoor {
+            cursor_x: 226,
+            cursor_y: 118,
+            node: 0x32,
+            screen_id: 3,
+            dir: Some(1),
+            move_: Some(0x21),
+            mask_move_nibble: false,
+            music: 255,
+            price: None,
+        },
+    ),
+    (
+        0x1B,
+        NodeDoor {
+            cursor_x: 226,
+            cursor_y: 118,
+            node: 0x32,
+            screen_id: 3,
+            dir: Some(1),
+            move_: Some(0x21),
+            mask_move_nibble: false,
+            music: 255,
+            price: None,
+        },
+    ),
     // $3D477: Space Zone. Cursor 16/100, node $3C, screen 4.
-    (0x12, NodeDoor { cursor_x: 16, cursor_y: 100, node: 0x3C, screen_id: 4, dir: Some(1), move_: None, mask_move_nibble: false, music: 255, price: None }),
+    (
+        0x12,
+        NodeDoor {
+            cursor_x: 16,
+            cursor_y: 100,
+            node: 0x3C,
+            screen_id: 4,
+            dir: Some(1),
+            move_: None,
+            mask_move_nibble: false,
+            music: 255,
+            price: None,
+        },
+    ),
     // $3D5D0/$3D5EC share the $3D606 tail: move nibble masked, screen 5, music 18.
-    (0x67, NodeDoor { cursor_x: 146, cursor_y: 234, node: 0x4B, screen_id: 5, dir: Some(8), move_: None, mask_move_nibble: true, music: 18, price: None }),
-    (0x0D, NodeDoor { cursor_x: 75, cursor_y: 242, node: 0x46, screen_id: 5, dir: Some(8), move_: None, mask_move_nibble: true, music: 18, price: None }),
+    (
+        0x67,
+        NodeDoor {
+            cursor_x: 146,
+            cursor_y: 234,
+            node: 0x4B,
+            screen_id: 5,
+            dir: Some(8),
+            move_: None,
+            mask_move_nibble: true,
+            music: 18,
+            price: None,
+        },
+    ),
+    (
+        0x0D,
+        NodeDoor {
+            cursor_x: 75,
+            cursor_y: 242,
+            node: 0x46,
+            screen_id: 5,
+            dir: Some(8),
+            move_: None,
+            mask_move_nibble: true,
+            music: 18,
+            price: None,
+        },
+    ),
     // $3D6C3: Turtle Zone — hub screen 0 only, which the caller already checked.
-    (0x11, NodeDoor { cursor_x: 129, cursor_y: 137, node: 0x5A, screen_id: 7, dir: Some(2), move_: None, mask_move_nibble: false, music: 255, price: None }),
+    (
+        0x11,
+        NodeDoor {
+            cursor_x: 129,
+            cursor_y: 137,
+            node: 0x5A,
+            screen_id: 7,
+            dir: Some(2),
+            move_: None,
+            mask_move_nibble: false,
+            music: 255,
+            price: None,
+        },
+    ),
     // $3D760: Mario Zone. Cursor 12/112, node $50, screen 6.
-    (0x0B, NodeDoor { cursor_x: 12, cursor_y: 112, node: 0x50, screen_id: 6, dir: Some(1), move_: None, mask_move_nibble: false, music: 255, price: None }),
-    (0x1D, NodeDoor { cursor_x: 12, cursor_y: 112, node: 0x50, screen_id: 6, dir: Some(1), move_: None, mask_move_nibble: false, music: 255, price: None }),
+    (
+        0x0B,
+        NodeDoor {
+            cursor_x: 12,
+            cursor_y: 112,
+            node: 0x50,
+            screen_id: 6,
+            dir: Some(1),
+            move_: None,
+            mask_move_nibble: false,
+            music: 255,
+            price: None,
+        },
+    ),
+    (
+        0x1D,
+        NodeDoor {
+            cursor_x: 12,
+            cursor_y: 112,
+            node: 0x50,
+            screen_id: 6,
+            dir: Some(1),
+            move_: None,
+            mask_move_nibble: false,
+            music: 255,
+            price: None,
+        },
+    ),
     // $3D848: screen 8. Cursor 212/131, node $72, move nibble masked.
-    (0x15, NodeDoor { cursor_x: 212, cursor_y: 131, node: 0x72, screen_id: 8, dir: Some(1), move_: None, mask_move_nibble: true, music: 255, price: None }),
+    (
+        0x15,
+        NodeDoor {
+            cursor_x: 212,
+            cursor_y: 131,
+            node: 0x72,
+            screen_id: 8,
+            dir: Some(1),
+            move_: None,
+            mask_move_nibble: true,
+            music: 255,
+            price: None,
+        },
+    ),
     // The four coin-operated doors ($3F3B9/$3F3F0/$3F427/$3F45E). They do not move
     // the cursor or the node — $3F307/$3F35A only clear the scroll, the walk state
     // and the key byte, load the bonus screen and set the window registers — so the
     // cursor fields here are the loader's own no-ops.
-    (0x71, NodeDoor { cursor_x: 0, cursor_y: 0, node: 0, screen_id: 9, dir: None, move_: None, mask_move_nibble: false, music: 21, price: Some(0x0999) }),
-    (0x70, NodeDoor { cursor_x: 0, cursor_y: 0, node: 0, screen_id: 10, dir: None, move_: None, mask_move_nibble: false, music: 21, price: Some(0x0200) }),
-    (0x6F, NodeDoor { cursor_x: 0, cursor_y: 0, node: 0, screen_id: 11, dir: None, move_: None, mask_move_nibble: false, music: 21, price: Some(0x0050) }),
-    (0x6E, NodeDoor { cursor_x: 0, cursor_y: 0, node: 0, screen_id: 12, dir: None, move_: None, mask_move_nibble: false, music: 21, price: Some(0x0030) }),
+    (
+        0x71,
+        NodeDoor {
+            cursor_x: 0,
+            cursor_y: 0,
+            node: 0,
+            screen_id: 9,
+            dir: None,
+            move_: None,
+            mask_move_nibble: false,
+            music: 21,
+            price: Some(0x0999),
+        },
+    ),
+    (
+        0x70,
+        NodeDoor {
+            cursor_x: 0,
+            cursor_y: 0,
+            node: 0,
+            screen_id: 10,
+            dir: None,
+            move_: None,
+            mask_move_nibble: false,
+            music: 21,
+            price: Some(0x0200),
+        },
+    ),
+    (
+        0x6F,
+        NodeDoor {
+            cursor_x: 0,
+            cursor_y: 0,
+            node: 0,
+            screen_id: 11,
+            dir: None,
+            move_: None,
+            mask_move_nibble: false,
+            music: 21,
+            price: Some(0x0050),
+        },
+    ),
+    (
+        0x6E,
+        NodeDoor {
+            cursor_x: 0,
+            cursor_y: 0,
+            node: 0,
+            screen_id: 12,
+            dir: None,
+            move_: None,
+            mask_move_nibble: false,
+            music: 21,
+            price: Some(0x0030),
+        },
+    ),
 ];
 
 /// `$3F38F`: the coin-door price check — a 16-bit **BCD** subtraction of the price
@@ -271,7 +492,11 @@ impl MapInput {
     }
 
     /// Construct map input using a sampled hardware divider register ($FF04).
-    pub fn with_divider(keys_held: u8, keys_pressed: u8, divider: &crate::divider::Divider) -> Self {
+    pub fn with_divider(
+        keys_held: u8,
+        keys_pressed: u8,
+        divider: &crate::divider::Divider,
+    ) -> Self {
         Self {
             keys_held,
             keys_pressed,
@@ -328,10 +553,7 @@ pub const SCREEN_MUSIC: [u8; 13] = [6, 30, 16, 5, 28, 18, 27, 14, 13, 21, 21, 21
 /// `sMusicRequest` value a screen's loader writes; 0 for a screen with no
 /// modelled loader.
 pub fn screen_music(screen_id: u8) -> u8 {
-    SCREEN_MUSIC
-        .get(screen_id as usize)
-        .copied()
-        .unwrap_or(0)
+    SCREEN_MUSIC.get(screen_id as usize).copied().unwrap_or(0)
 }
 
 /// The overworld's live state: the `$A840` block (the save image's first 64 bytes)
@@ -784,9 +1006,7 @@ impl MapSim {
                             self.node = 0x36;
                             p = 0x10;
                         }
-                    } else if p & 0x20 != 0
-                        && self.block(progress_offset::GATE_MACRO) & 0x80 != 0
-                    {
+                    } else if p & 0x20 != 0 && self.block(progress_offset::GATE_MACRO) & 0x80 != 0 {
                         self.node = 0x37;
                         p = 0x20;
                     }
@@ -819,10 +1039,7 @@ impl MapSim {
         // auto-walks it next frame. The node change happens *after* the chain, so
         // `$14`'s own class does not fire this frame; the ROM jumps straight to the
         // gate (`$3C4D3`), skipping the walking check.
-        if self.node == 0
-            && self.cursor_walking == 0
-            && self.level_progress[0] & 0x80 != 0
-        {
+        if self.node == 0 && self.cursor_walking == 0 && self.level_progress[0] & 0x80 != 0 {
             self.node = 0x14;
         }
         p
@@ -973,7 +1190,11 @@ impl MapSim {
         let e = ((self.anim_phase & 0x0C) >> 2) as usize;
         self.zone_slots[1].2 = crate::map::PUMPKIN_ID_X[e];
         if self.frame_counter & 0x07 == 0 {
-            let step = if self.frame_counter & 0x20 != 0 { 0xFFu8 } else { 1 };
+            let step = if self.frame_counter & 0x20 != 0 {
+                0xFFu8
+            } else {
+                1
+            };
             self.zone_slots[1].1 = self.zone_slots[1].1.wrapping_add(step);
         }
         if self.tick_timer & 0x01 != 0 {
@@ -1001,7 +1222,14 @@ impl MapSim {
         if v & 0x80 == 0 {
             id = id.wrapping_add(3);
         }
-        if self.level_progress.get(crate::map::HUB_COIN_FLAGS[2]).copied().unwrap_or(0) & 0x80 != 0 {
+        if self
+            .level_progress
+            .get(crate::map::HUB_COIN_FLAGS[2])
+            .copied()
+            .unwrap_or(0)
+            & 0x80
+            != 0
+        {
             id = 0xFF;
         }
         self.zone_slots[2].2 = id;
@@ -1027,7 +1255,11 @@ impl MapSim {
         }
         if fc & 0x03 == 0 {
             self.cloud_drift = self.cloud_drift.wrapping_add(1);
-            let step = if self.cloud_drift & 0x40 != 0 { 1u8 } else { 0xFF };
+            let step = if self.cloud_drift & 0x40 != 0 {
+                1u8
+            } else {
+                0xFF
+            };
             for slot in 1..4 {
                 self.decor_slots[slot].1 = self.decor_slots[slot].1.wrapping_add(step);
             }
@@ -1654,7 +1886,7 @@ mod tests {
         map.screen_id = 1;
 
         let input = MapInput {
-            keys_held: 0x10, // the gate reads the *held* byte for directions...
+            keys_held: 0x10,    // the gate reads the *held* byte for directions...
             keys_pressed: 0x10, // ...and the walk reads the pressed one
             ..Default::default()
         };
@@ -1663,7 +1895,10 @@ mod tests {
         assert_eq!(map.cursor_move, 0x01, "the stream's first move byte");
         // The walk-start frame *is* a move frame ($3C588 jumps into $3C7EC), so
         // the 9 it loads is already one down by the time the frame ends.
-        assert_eq!(map.walk_step_timer, 8, "9 frames when bit 4 is clear, less this one");
+        assert_eq!(
+            map.walk_step_timer, 8,
+            "9 frames when bit 4 is clear, less this one"
+        );
         assert_eq!(map.walk_ptr, NODE1_R);
         assert_eq!(map.cursor_x, 9, "and the frame moves the cursor too");
         assert_eq!(out.level, None, "A was not pressed");
@@ -1800,7 +2035,10 @@ mod tests {
         assert_eq!(map.cursor_walking, 0xFF, "the stream walk started");
         assert_eq!(map.walk_ptr, 0x5BF6);
         assert_eq!(map.cursor_move, 0xA0, "the hardcoded stream's first byte");
-        assert_eq!(map.walk_step_timer, 8, "$A0 has no bit 4: 9, less the start frame");
+        assert_eq!(
+            map.walk_step_timer, 8,
+            "$A0 has no bit 4: 9, less the start frame"
+        );
         assert_eq!(out.level, None, "nothing was entered");
 
         // Walking it out lands on the stream's arrival node, $0D.
@@ -2181,7 +2419,11 @@ mod tests {
         assert!(odd_count > 0, "odd parity sampled");
         assert_eq!(map.frame_counter, 40);
         assert_eq!(map.tick_timer, 40, "tick timer reloads to 40");
-        assert_eq!(map.rand_latch, divider.sample(), "40th frame latches divider sample");
+        assert_eq!(
+            map.rand_latch,
+            divider.sample(),
+            "40th frame latches divider sample"
+        );
     }
 
     /// A truncated graph starts no walk rather than reading past its blob.
@@ -2238,7 +2480,10 @@ mod tests {
         assert_eq!(map.screen_id, 2, "$3D0D7 loads Tree Zone screen A");
         assert_eq!(map.node, 0x23, "the node the set-piece lands on");
         assert_eq!((map.cursor_x, map.cursor_y), (48, 158));
-        assert_eq!(map.mario_dead, 0xFF, "which is what blocks the arrival walk");
+        assert_eq!(
+            map.mario_dead, 0xFF,
+            "which is what blocks the arrival walk"
+        );
         assert_eq!(map.cursor_move, 0x2F, "the door leaves the move byte alone");
         assert_eq!(out.transition, Some(4), "$3E3BA walks out Up");
         assert_eq!(out.music, Some(255));
@@ -2348,7 +2593,10 @@ mod tests {
         // And the next frame the chain auto-walks the cursor off node $14 with no
         // input at all: its Up stream is `14 44 44 44 14 04 00 -> node $13`.
         let out = map.tick(MapInput::default(), &n, &walk, &recs());
-        assert_eq!(map.cursor_walking, 0xFF, "the map pressed Up for the player");
+        assert_eq!(
+            map.cursor_walking, 0xFF,
+            "the map pressed Up for the player"
+        );
         assert_eq!(map.cursor_move, 0x14, "the stream's first byte");
         assert_eq!(out.level, None);
         let idle = MapInput::default();
@@ -2404,7 +2652,11 @@ mod tests {
             &walk,
             &recs(),
         );
-        assert_eq!(out.sfx, Some(2), "$3C201's click overwrites the refusal's 19");
+        assert_eq!(
+            out.sfx,
+            Some(2),
+            "$3C201's click overwrites the refusal's 19"
+        );
         assert_eq!((map.coins_low, map.coins_high), (0x50, 0x01), "left alone");
         assert_eq!(map.screen_id, 0);
         assert_eq!(map.node, 0x70);
@@ -2416,11 +2668,19 @@ mod tests {
     /// ROM's `jr c` — whenever the price is above the purse.
     #[test]
     fn the_coin_price_check_is_bcd_with_a_borrow() {
-        assert_eq!(bcd_sub_u16(0x00, 0x20, 0x0999), Some((0x01, 0x10)), "2000-999");
+        assert_eq!(
+            bcd_sub_u16(0x00, 0x20, 0x0999),
+            Some((0x01, 0x10)),
+            "2000-999"
+        );
         assert_eq!(bcd_sub_u16(0x50, 0x01, 0x0200), None, "150 < 200");
         assert_eq!(bcd_sub_u16(0x00, 0x00, 0x0000), Some((0x00, 0x00)));
         assert_eq!(bcd_sub_u16(0x99, 0x00, 0x0099), Some((0x00, 0x00)), "exact");
-        assert_eq!(bcd_sub_u16(0x00, 0x01, 0x0050), Some((0x50, 0x00)), "100-50");
+        assert_eq!(
+            bcd_sub_u16(0x00, 0x01, 0x0050),
+            Some((0x50, 0x00)),
+            "100-50"
+        );
         assert_eq!(bcd_sub_u16(0x30, 0x00, 0x0030), Some((0x00, 0x00)));
         assert_eq!(bcd_sub_u16(0x29, 0x00, 0x0030), None, "29 < 30");
     }
@@ -2473,7 +2733,11 @@ mod tests {
         assert_eq!((n23.cursor_x, n23.cursor_y), (48, 110));
         let n0 = r.record(0).expect("node 0");
         assert_eq!((n0.cam_x, n0.cam_y), (0x0081, 0x0142));
-        assert_eq!((n0.cursor_x, n0.cursor_y), (75, 76), "the hub's default cursor");
+        assert_eq!(
+            (n0.cursor_x, n0.cursor_y),
+            (75, 76),
+            "the hub's default cursor"
+        );
         assert_eq!(r.record(128), None, "past the table");
 
         // `$3EEA4` writes all four bytes.
@@ -2488,7 +2752,10 @@ mod tests {
         map.cursor_x = 9;
         map.load_node(0x23, &MapNodeRecords::default());
         assert_eq!(map.cursor_x, 9);
-        assert!(MapNodeRecords::from_bytes(&[0u8; 8]).is_none(), "a short blob");
+        assert!(
+            MapNodeRecords::from_bytes(&[0u8; 8]).is_none(),
+            "a short blob"
+        );
     }
 
     /// The graph's shape, from the ROM: the table covers 128 nodes and an entry
@@ -2535,7 +2802,11 @@ mod tests {
         assert_eq!(map.screen_id, 0);
         assert_eq!(map.rock_anim_timer, 0);
         assert_eq!(map.cursor_anim, 0);
-        assert_eq!((map.cam_x, map.cam_y), (0x0011, 0x00F2), "seeded from record");
+        assert_eq!(
+            (map.cam_x, map.cam_y),
+            (0x0011, 0x00F2),
+            "seeded from record"
+        );
         assert_eq!(music, 6, "hub music track 6");
 
         // Screen 1: Pumpkin Zone ($3D208)
@@ -2548,14 +2819,22 @@ mod tests {
         assert_eq!((map.cam_x, map.cam_y), (0, 0), "scroll reset to 0");
         assert_eq!(map.cursor_anim, 0x92);
         assert_eq!(map.node, 44, "node $2C secret clear retargets to 44");
-        assert_eq!(map.level_progress[po::PUMPKIN_PATH_1] & 1, 1, "pumpkin path 1 bit 0");
+        assert_eq!(
+            map.level_progress[po::PUMPKIN_PATH_1] & 1,
+            1,
+            "pumpkin path 1 bit 0"
+        );
         assert_eq!(music, 30, "pumpkin zone music track 30");
 
         let mut map = MapSim::new();
         map.node = 0x2F;
         map.load_screen_pumpkin(0x80, &r);
         assert_eq!(map.node, 47, "node $2F secret clear retargets to 47");
-        assert_eq!(map.level_progress[po::PUMPKIN_PATH_2] & 1, 1, "pumpkin path 2 bit 0");
+        assert_eq!(
+            map.level_progress[po::PUMPKIN_PATH_2] & 1,
+            1,
+            "pumpkin path 2 bit 0"
+        );
 
         // Screen 2: Tree Zone screen A ($3D0FF)
         let mut map = MapSim::new();
@@ -2591,7 +2870,11 @@ mod tests {
         map.node = 0x6A;
         map.load_screen_macro(0, &r);
         assert_eq!(map.node, 108, "node $6A retargets to 108");
-        assert_eq!(map.level_progress[po::GATE_MACRO] & 0x80, 0x80, "macro gate bit 7");
+        assert_eq!(
+            map.level_progress[po::GATE_MACRO] & 0x80,
+            0x80,
+            "macro gate bit 7"
+        );
         assert_eq!(map.mario_dead, 0xFF);
 
         // Screen 4: Space Zone ($3D49F)
@@ -2654,7 +2937,11 @@ mod tests {
         map.mario_dead = 0xFF;
         map.load_screen_tree_a(0x80, &r);
         assert_eq!(map.node, 0x23, "dead mario does not retarget");
-        assert_eq!(map.level_progress[po::TREE_A_PATH_1], 0, "path 1 bit 0 not set");
+        assert_eq!(
+            map.level_progress[po::TREE_A_PATH_1],
+            0,
+            "path 1 bit 0 not set"
+        );
     }
 }
 
@@ -2699,7 +2986,11 @@ mod hub_decor_tests {
         }
         assert_eq!(m.cloud_drift, 1);
         for (i, _slot) in (1..4).enumerate() {
-            assert_eq!(m.decor_slots[i + 1].1, start[i].wrapping_sub(1), "first step is left");
+            assert_eq!(
+                m.decor_slots[i + 1].1,
+                start[i].wrapping_sub(1),
+                "first step is left"
+            );
         }
         // Walk the counter to 0x40: 64 left steps, then the direction flips.
         while m.cloud_drift != 0x40 {
@@ -2719,7 +3010,11 @@ mod hub_decor_tests {
             m.bookkeeping(0x10);
         }
         for (i, _slot) in (1..4).enumerate() {
-            assert_eq!(m.decor_slots[i + 1].1, mid[i].wrapping_add(1), "bit 6 flips it");
+            assert_eq!(
+                m.decor_slots[i + 1].1,
+                mid[i].wrapping_add(1),
+                "bit 6 flips it"
+            );
         }
     }
 
@@ -2782,7 +3077,24 @@ mod pumpkin_decor_tests {
     fn map() -> MapSim {
         let mut m = MapSim::new();
         m.screen_id = 1;
-        m.zone_slots = [(0, 76, 0x4F), (1, 16, 0x78), (54, 255, 16), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF)];
+        m.zone_slots = [
+            (0, 76, 0x4F),
+            (1, 16, 0x78),
+            (54, 255, 16),
+            (0, 0, 0xFF),
+            (0, 0, 0xFF),
+            (0, 0, 0xFF),
+            (0, 0, 0xFF),
+            (0, 0, 0xFF),
+            (0, 0, 0xFF),
+            (0, 0, 0xFF),
+            (0, 0, 0xFF),
+            (0, 0, 0xFF),
+            (0, 0, 0xFF),
+            (0, 0, 0xFF),
+            (0, 0, 0xFF),
+            (0, 0, 0xFF),
+        ];
         m
     }
 
@@ -2811,7 +3123,10 @@ mod pumpkin_decor_tests {
             m.frame_counter = 1; // not a multiple of 8, so no drift
             m.pumpkin_decor_tick();
             assert_eq!(
-                (m.zone_slots[2].0 as i32 - 0x40, m.zone_slots[2].1 as i32 - 0x40),
+                (
+                    m.zone_slots[2].0 as i32 - 0x40,
+                    m.zone_slots[2].1 as i32 - 0x40
+                ),
                 (dx, dy),
                 "v = {idx_value:#04x}"
             );
@@ -2832,9 +3147,19 @@ mod pumpkin_decor_tests {
             seen0.insert(m.zone_slots[0].2);
             seen1.insert(m.zone_slots[1].2);
         }
-        assert_eq!(seen0.into_iter().collect::<Vec<_>>(), vec![0x0F, 0x10, 0x11]);
-        assert_eq!(seen1.into_iter().collect::<Vec<_>>(), vec![0x12, 0x13, 0x14, 0x15]);
-        assert!((22..=0x1A).contains(&m.zone_slots[2].2), "slot 2 id {}", m.zone_slots[2].2);
+        assert_eq!(
+            seen0.into_iter().collect::<Vec<_>>(),
+            vec![0x0F, 0x10, 0x11]
+        );
+        assert_eq!(
+            seen1.into_iter().collect::<Vec<_>>(),
+            vec![0x12, 0x13, 0x14, 0x15]
+        );
+        assert!(
+            (22..=0x1A).contains(&m.zone_slots[2].2),
+            "slot 2 id {}",
+            m.zone_slots[2].2
+        );
     }
 
     /// `sMapSprite1Page` is slot 1's y and drifts one pixel every 8 frames, the

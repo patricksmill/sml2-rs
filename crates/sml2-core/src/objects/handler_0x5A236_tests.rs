@@ -158,5 +158,8 @@ fn mario_can_walk_freely_after_stepping_off_platform() {
     assert_eq!(obj.mario_x_adjust, None);
 
     player.apply_object_result(&mut obj, false);
-    assert_eq!(player.x, moved_x, "Mario's position was preserved after getting off platform");
+    assert_eq!(
+        player.x, moved_x,
+        "Mario's position was preserved after getting off platform"
+    );
 }

@@ -64,10 +64,38 @@ pub const FRAME_SILENCE: PulseFrame = PulseFrame {
 };
 
 pub const E5_FRAMES: [PulseFrame; 4] = [
-    PulseFrame { sweep: 0x1D, duty_length: 0xAF, envelope: 0xC0, frequency_low: 0x90, frequency_control: 0xC7, ticks: 3 },
-    PulseFrame { sweep: 0x1D, duty_length: 0xAF, envelope: 0xC0, frequency_low: 0x90, frequency_control: 0xC7, ticks: 4 },
-    PulseFrame { sweep: 0x1D, duty_length: 0xAF, envelope: 0x40, frequency_low: 0x90, frequency_control: 0xC7, ticks: 3 },
-    PulseFrame { sweep: 0x1D, duty_length: 0xAF, envelope: 0x40, frequency_low: 0x90, frequency_control: 0xC7, ticks: 6 },
+    PulseFrame {
+        sweep: 0x1D,
+        duty_length: 0xAF,
+        envelope: 0xC0,
+        frequency_low: 0x90,
+        frequency_control: 0xC7,
+        ticks: 3,
+    },
+    PulseFrame {
+        sweep: 0x1D,
+        duty_length: 0xAF,
+        envelope: 0xC0,
+        frequency_low: 0x90,
+        frequency_control: 0xC7,
+        ticks: 4,
+    },
+    PulseFrame {
+        sweep: 0x1D,
+        duty_length: 0xAF,
+        envelope: 0x40,
+        frequency_low: 0x90,
+        frequency_control: 0xC7,
+        ticks: 3,
+    },
+    PulseFrame {
+        sweep: 0x1D,
+        duty_length: 0xAF,
+        envelope: 0x40,
+        frequency_low: 0x90,
+        frequency_control: 0xC7,
+        ticks: 6,
+    },
 ];
 
 pub const E6_FIRST: PulseFrame = PulseFrame {
@@ -105,9 +133,30 @@ pub const E8_START: PulseFrame = PulseFrame {
     ticks: 8,
 };
 pub const E8_FRAMES: [PulseFrame; 3] = [
-    PulseFrame { sweep: 0x25, duty_length: 0x9F, envelope: 0xA0, frequency_low: 0x5A, frequency_control: 0xC5, ticks: 8 },
-    PulseFrame { sweep: 0x25, duty_length: 0x9F, envelope: 0xC0, frequency_low: 0x72, frequency_control: 0xC5, ticks: 8 },
-    PulseFrame { sweep: 0x25, duty_length: 0x9F, envelope: 0xE0, frequency_low: 0x8A, frequency_control: 0xC5, ticks: 8 },
+    PulseFrame {
+        sweep: 0x25,
+        duty_length: 0x9F,
+        envelope: 0xA0,
+        frequency_low: 0x5A,
+        frequency_control: 0xC5,
+        ticks: 8,
+    },
+    PulseFrame {
+        sweep: 0x25,
+        duty_length: 0x9F,
+        envelope: 0xC0,
+        frequency_low: 0x72,
+        frequency_control: 0xC5,
+        ticks: 8,
+    },
+    PulseFrame {
+        sweep: 0x25,
+        duty_length: 0x9F,
+        envelope: 0xE0,
+        frequency_low: 0x8A,
+        frequency_control: 0xC5,
+        ticks: 8,
+    },
 ];
 
 pub const E9_INIT: PulseFrame = PulseFrame {
@@ -128,11 +177,7 @@ pub const E11_START: PulseFrame = PulseFrame {
     frequency_control: 0xC5,
     ticks: 1,
 };
-pub const E11_FREQS: [(u8, u8, u8); 3] = [
-    (0xB2, 0xC6, 1),
-    (0x59, 0xC7, 1),
-    (0xAC, 0xC7, 2),
-];
+pub const E11_FREQS: [(u8, u8, u8); 3] = [(0xB2, 0xC6, 1), (0x59, 0xC7, 1), (0xAC, 0xC7, 2)];
 
 pub const E12_START: PulseFrame = PulseFrame {
     sweep: 0x00,
@@ -189,10 +234,38 @@ pub const E15_INIT: PulseFrame = PulseFrame {
 };
 
 pub const E16_START_FRAMES: [PulseFrame; 4] = [
-    PulseFrame { sweep: 0x00, duty_length: 0xAF, envelope: 0x80, frequency_low: 0x06, frequency_control: 0xC7, ticks: 2 },
-    PulseFrame { sweep: 0x00, duty_length: 0xAF, envelope: 0x80, frequency_low: 0x21, frequency_control: 0xC7, ticks: 2 },
-    PulseFrame { sweep: 0x00, duty_length: 0xAF, envelope: 0x80, frequency_low: 0x39, frequency_control: 0xC7, ticks: 2 },
-    PulseFrame { sweep: 0x00, duty_length: 0xAF, envelope: 0x80, frequency_low: 0x4F, frequency_control: 0xC7, ticks: 2 },
+    PulseFrame {
+        sweep: 0x00,
+        duty_length: 0xAF,
+        envelope: 0x80,
+        frequency_low: 0x06,
+        frequency_control: 0xC7,
+        ticks: 2,
+    },
+    PulseFrame {
+        sweep: 0x00,
+        duty_length: 0xAF,
+        envelope: 0x80,
+        frequency_low: 0x21,
+        frequency_control: 0xC7,
+        ticks: 2,
+    },
+    PulseFrame {
+        sweep: 0x00,
+        duty_length: 0xAF,
+        envelope: 0x80,
+        frequency_low: 0x39,
+        frequency_control: 0xC7,
+        ticks: 2,
+    },
+    PulseFrame {
+        sweep: 0x00,
+        duty_length: 0xAF,
+        envelope: 0x80,
+        frequency_low: 0x4F,
+        frequency_control: 0xC7,
+        ticks: 2,
+    },
 ];
 pub const E16_TICK_FREQS: [(u8, u8, u8); 4] = [
     (0x44, 0xC7, 2),
@@ -210,8 +283,22 @@ pub const E18_INIT: PulseFrame = PulseFrame {
     ticks: 8,
 };
 pub const E18_FRAMES: [PulseFrame; 2] = [
-    PulseFrame { sweep: 0x37, duty_length: 0xA6, envelope: 0x09, frequency_low: 0xC0, frequency_control: 0xC6, ticks: 8 },
-    PulseFrame { sweep: 0x37, duty_length: 0xA6, envelope: 0x0A, frequency_low: 0xC0, frequency_control: 0xC6, ticks: 8 },
+    PulseFrame {
+        sweep: 0x37,
+        duty_length: 0xA6,
+        envelope: 0x09,
+        frequency_low: 0xC0,
+        frequency_control: 0xC6,
+        ticks: 8,
+    },
+    PulseFrame {
+        sweep: 0x37,
+        duty_length: 0xA6,
+        envelope: 0x0A,
+        frequency_low: 0xC0,
+        frequency_control: 0xC6,
+        ticks: 8,
+    },
 ];
 
 pub const E19_INIT: PulseFrame = PulseFrame {
@@ -281,7 +368,6 @@ pub const E24_INIT: PulseFrame = PulseFrame {
     ticks: 1,
 };
 pub const E24_DELTAS: [i16; 20] = [
-    -128, -128, -128, -128, -128, -128, -128, -128,
-    384, -192, 384, -192, 384, -192,
-    -384, 192, -384, 192, -384, 192,
+    -128, -128, -128, -128, -128, -128, -128, -128, 384, -192, 384, -192, 384, -192, -384, 192,
+    -384, 192, -384, 192,
 ];

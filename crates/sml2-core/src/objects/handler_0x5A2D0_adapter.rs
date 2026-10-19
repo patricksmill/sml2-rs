@@ -10,8 +10,7 @@ impl ObjectSim {
         let result = handler_0x5a2d0::update(&mut actor, frame, self.mario_ref_x);
         st.b = actor.to_raw_slot();
         match result {
-            Ok(handler_0x5a2d0::Effect::Initialized)
-            | Ok(handler_0x5a2d0::Effect::Continue) => {}
+            Ok(handler_0x5a2d0::Effect::Initialized) | Ok(handler_0x5a2d0::Effect::Continue) => {}
             Ok(handler_0x5a2d0::Effect::Faced { facing }) => {
                 self.facing = match facing {
                     Ordering::Less => 255,

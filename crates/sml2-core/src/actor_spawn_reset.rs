@@ -52,8 +52,18 @@ mod tests {
         let dirty = std::array::from_fn(|i| 0x80 + i as u8);
         for rebuild in [false, true] {
             let mut actor = Actor::from_raw_slot(&dirty);
-            let origin = SpawnOrigin { position: Position { x: 0x1234, y: 0x5678 }, marker: 2 };
-            let visuals = if rebuild { SpriteReset::Rebuild { sprite: 0x42 } } else { SpriteReset::Preserve };
+            let origin = SpawnOrigin {
+                position: Position {
+                    x: 0x1234,
+                    y: 0x5678,
+                },
+                marker: 2,
+            };
+            let visuals = if rebuild {
+                SpriteReset::Rebuild { sprite: 0x42 }
+            } else {
+                SpriteReset::Preserve
+            };
             let attr = actor.reset_to_spawn(origin, visuals);
             let mut expected = dirty;
             expected[..5].copy_from_slice(&[0x12, 0x34, 2, 0x56, 0x78]);

@@ -309,7 +309,10 @@ fn pulse_effect7_zero_timer_and_step_wrap_and_equality_only_stop() {
 
 #[test]
 fn test_pulse_effect1_lifecycle() {
-    let mut effect = PulseEffectState { request: 1, ..Default::default() };
+    let mut effect = PulseEffectState {
+        request: 1,
+        ..Default::default()
+    };
     let mut music = PulseMusicState::default();
     let mut out = Vec::new();
 
@@ -346,7 +349,10 @@ fn test_pulse_effect1_lifecycle() {
 
 #[test]
 fn test_pulse_effect2_two_steps() {
-    let mut effect = PulseEffectState { request: 2, ..Default::default() };
+    let mut effect = PulseEffectState {
+        request: 2,
+        ..Default::default()
+    };
     let mut music = PulseMusicState::default();
     let mut out = Vec::new();
 
@@ -381,7 +387,10 @@ fn test_pulse_effect2_two_steps() {
 
 #[test]
 fn test_pulse_effect3_retrigger_guard() {
-    let mut effect = PulseEffectState { request: 3, ..Default::default() };
+    let mut effect = PulseEffectState {
+        request: 3,
+        ..Default::default()
+    };
     let mut music = PulseMusicState::default();
     let mut out = Vec::new();
 
@@ -397,7 +406,10 @@ fn test_pulse_effect3_retrigger_guard() {
 
 #[test]
 fn test_pulse_effect9_frequency_slide() {
-    let mut effect = PulseEffectState { request: 9, ..Default::default() };
+    let mut effect = PulseEffectState {
+        request: 9,
+        ..Default::default()
+    };
     let mut music = PulseMusicState::default();
     let mut out = Vec::new();
 
@@ -448,7 +460,10 @@ fn test_pulse_effect10_noop() {
 
 #[test]
 fn test_pulse_effect11_silence_stop() {
-    let mut effect = PulseEffectState { request: 11, ..Default::default() };
+    let mut effect = PulseEffectState {
+        request: 11,
+        ..Default::default()
+    };
     let mut music = PulseMusicState::default();
     let mut out = Vec::new();
 
@@ -479,7 +494,10 @@ fn test_pulse_effect11_silence_stop() {
 
 #[test]
 fn test_pulse_effect12_dual_channel() {
-    let mut effect = PulseEffectState { request: 12, ..Default::default() };
+    let mut effect = PulseEffectState {
+        request: 12,
+        ..Default::default()
+    };
     let mut music = PulseMusicState::default();
     let mut out = Vec::new();
 
@@ -514,7 +532,10 @@ fn test_pulse_effect12_dual_channel() {
 
 #[test]
 fn test_pulse_effect16_stomp_chain() {
-    let mut effect = PulseEffectState { request: 16, ..Default::default() };
+    let mut effect = PulseEffectState {
+        request: 16,
+        ..Default::default()
+    };
     let mut music = PulseMusicState::default();
     let mut out = Vec::new();
 
@@ -546,7 +567,10 @@ fn test_pulse_effect16_stomp_chain() {
 
 #[test]
 fn test_pulse_effect19_fast_slide() {
-    let mut effect = PulseEffectState { request: 19, ..Default::default() };
+    let mut effect = PulseEffectState {
+        request: 19,
+        ..Default::default()
+    };
     let mut music = PulseMusicState::default();
     let mut out = Vec::new();
 
@@ -570,7 +594,6 @@ fn test_pulse_effect19_fast_slide() {
         ]
     );
 }
-
 
 #[test]
 fn test_pulse_effect14_frame_table() {

@@ -1,8 +1,6 @@
 //! Mario Zone boss spawner (anim 2), ROM `$9606`.
 
-use crate::objects::{
-    ObjectSim, Staging, B_FSTATE, B_SPRITE, B_TYPE,
-};
+use crate::objects::{ObjectSim, Staging, B_FSTATE, B_SPRITE, B_TYPE};
 
 impl ObjectSim {
     /// `$9606` (boss anim 2): the def-2 spawner. While its remove-mode is 2 it

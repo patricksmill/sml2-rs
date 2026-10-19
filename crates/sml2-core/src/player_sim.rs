@@ -1296,7 +1296,11 @@ impl PlayerSim {
         let mut x = (s[F_XHI] as u16) << 8 | s[F_XLO] as u16;
         let mut phase = s[F_PHASE];
         // `sla a / cp $80`: only $FF (left, -> $FE) takes the negative arm.
-        x = x.wrapping_add(if s[F_DIR].wrapping_shl(1) >= 0x80 { -3i16 } else { 3 } as u16);
+        x = x.wrapping_add(if s[F_DIR].wrapping_shl(1) >= 0x80 {
+            -3i16
+        } else {
+            3
+        } as u16);
         let t = self.tile(layout, x, y);
         self.collision_tile = t;
         if t < 0x38 {
@@ -1837,7 +1841,11 @@ impl PlayerSim {
                         // $154E: moon extra decrement and apex parity snap
                         self.vvel = self.vvel.saturating_sub(1);
                         if self.vvel < 0x19 {
-                            self.vvel = if (self.frame_counter & 1) != 0 { 24 } else { 23 };
+                            self.vvel = if (self.frame_counter & 1) != 0 {
+                                24
+                            } else {
+                                23
+                            };
                         }
                     }
                 }
@@ -2923,9 +2931,17 @@ impl PlayerSim {
                 self.moon_jump_pose_timer -= 1;
             }
             if self.dir_right {
-                if timer_active { 19 } else { 18 }
+                if timer_active {
+                    19
+                } else {
+                    18
+                }
             } else {
-                if timer_active { 21 } else { 20 }
+                if timer_active {
+                    21
+                } else {
+                    20
+                }
             }
         } else if self.ducking {
             if self.dir_right {
@@ -3003,16 +3019,16 @@ impl PlayerSim {
 /// Fast unit coverage for the coin touch, the level-map overlay and the BCD
 /// credit — the semantics the `traj16` replay verifies against the console,
 /// pinned here so a regression fails in `cargo test` without PyBoy.
-    /// The flag reaches the sim from the object pass the way the sfx/fade bytes
-    /// do (`$9285` -> `$A2E3` -> this).
-    #[test]
-    fn the_boss_clear_flag_crosses_from_the_object_pass() {
-        let mut sim = PlayerSim::new();
-        let mut obj = crate::objects::ObjectSim::new(Vec::new(), 0);
-        obj.boss_clear_flag = 1;
-        sim.apply_object_result(&mut obj, false);
-        assert!(sim.boss_clear);
-    }
+/// The flag reaches the sim from the object pass the way the sfx/fade bytes
+/// do (`$9285` -> `$A2E3` -> this).
+#[test]
+fn the_boss_clear_flag_crosses_from_the_object_pass() {
+    let mut sim = PlayerSim::new();
+    let mut obj = crate::objects::ObjectSim::new(Vec::new(), 0);
+    obj.boss_clear_flag = 1;
+    sim.apply_object_result(&mut obj, false);
+    assert!(sim.boss_clear);
+}
 
 #[cfg(test)]
 #[path = "player_boss_clear_tests.rs"]
@@ -3068,7 +3084,10 @@ mod tests {
         sim.fade_timer = 5;
         sim.pipe_dir = 0x30;
         sim.step(&keys, false, false, &layout);
-        assert_eq!(sim.fade_timer, 4, "the decrement runs before the early return");
+        assert_eq!(
+            sim.fade_timer, 4,
+            "the decrement runs before the early return"
+        );
 
         // tick_fade_timer decrements independently and clamps to 0
         sim.tick_fade_timer();
@@ -3316,7 +3335,10 @@ mod tests {
         let mut sim = PlayerSim::new(); // $0F2A default: big, not ducking
         sim.x = 100;
         sim.y = 200;
-        assert_eq!(sim.environment_probe(&layout, &PlayerKeys::default()), Some(15));
+        assert_eq!(
+            sim.environment_probe(&layout, &PlayerKeys::default()),
+            Some(15)
+        );
         assert!(!sim.exit_phase);
         assert_eq!(sim.exit_tile_flag, 0);
     }
@@ -3331,7 +3353,10 @@ mod tests {
         let mut sim = PlayerSim::new();
         sim.x = 100;
         sim.y = 200;
-        assert_eq!(sim.environment_probe(&layout, &PlayerKeys::default()), Some(15));
+        assert_eq!(
+            sim.environment_probe(&layout, &PlayerKeys::default()),
+            Some(15)
+        );
         assert!(!sim.exit_phase);
     }
 
@@ -3681,7 +3706,10 @@ mod tests {
         let out_high = high.map_handoff(&nodes);
         assert!(out_high.cutscene);
         assert!(!high.goal_bell);
-        assert_eq!(out_high.saves, 0, "the bell branch returns before any $2934");
+        assert_eq!(
+            out_high.saves, 0,
+            "the bell branch returns before any $2934"
+        );
         assert_eq!(high.map_node, 0x48, "the node is left alone");
         assert_eq!(out_high.screen, None);
     }
@@ -4445,7 +4473,10 @@ mod tests {
         sim.vvel = 10;
         sim.moon_jump_extension(&held, true);
         assert_eq!(sim.vvel, 52, "a second press re-launches");
-        assert_eq!(sim.moon_jump_pose_timer, 8, "but the pose timer is one-shot");
+        assert_eq!(
+            sim.moon_jump_pose_timer, 8,
+            "but the pose timer is one-shot"
+        );
     }
 
     /// `$1008` — the bit-2-only arm (the moon item is held, not in a zone): the
@@ -4464,7 +4495,10 @@ mod tests {
         sim.vvel = 40;
         sim.moon_jump_extension(&held, true);
         assert_eq!(sim.vvel, 42, "$1025's +2");
-        assert_eq!(sim.moon_float_timer, 30, "the budget belongs to the $08 arm");
+        assert_eq!(
+            sim.moon_float_timer, 30,
+            "the budget belongs to the $08 arm"
+        );
         assert_eq!(sim.sfx0, 18, "$1018");
         sim.vvel = 0x4A;
         sim.moon_jump_extension(&held, false);
@@ -4516,8 +4550,15 @@ mod tests {
         sim.environment_probe(&layout, &PlayerKeys::default());
 
         assert_eq!(sim.moon & 0x02, 0x02, "bit 1 set on entering moon zone");
-        assert_eq!(sim.moon & 0x04, 0, "bit 2 moon shield cleared on entering moon zone");
-        assert!(!sim.flutter_armed, "flutter_armed cleared on entering moon zone");
+        assert_eq!(
+            sim.moon & 0x04,
+            0,
+            "bit 2 moon shield cleared on entering moon zone"
+        );
+        assert!(
+            !sim.flutter_armed,
+            "flutter_armed cleared on entering moon zone"
+        );
         assert_eq!(sim.hvel, 191, "hvel clamped from 0xC5 to 191 ($BF)");
         assert_eq!(sim.vvel, 24, "entry transition does not alter vvel");
         assert!(!sim.in_air, "entry transition does not set in_air");
@@ -4538,7 +4579,10 @@ mod tests {
         sim.moon = 0x02; // already in moon zone
         sim.hvel = 200;
         sim.environment_probe(&layout, &PlayerKeys::default());
-        assert_eq!(sim.hvel, 200, "no state change on bit 1 means no transition clamp");
+        assert_eq!(
+            sim.hvel, 200,
+            "no state change on bit 1 means no transition clamp"
+        );
     }
 
     /// `$1D48`–`$1D71`: exiting the bit-1 moon zone launches Mario with vvel 70 ($46),
@@ -4564,11 +4608,17 @@ mod tests {
         // Exiting with UP held:
         let mut sim_up = small_sim();
         sim_up.moon = 0x02;
-        let keys_up = PlayerKeys { up: true, ..Default::default() };
+        let keys_up = PlayerKeys {
+            up: true,
+            ..Default::default()
+        };
         sim_up.environment_probe(&layout, &keys_up);
         assert_eq!(sim_up.vvel, 70);
         assert!(sim_up.in_air);
-        assert!(sim_up.no_jump_cut, "$1D64: UP sets no_jump_cut on moon zone exit");
+        assert!(
+            sim_up.no_jump_cut,
+            "$1D64: UP sets no_jump_cut on moon zone exit"
+        );
     }
 
     /// `$1C82`/`$1CAA`: water tile clears moon bit 1 directly and jumps to $1D71
@@ -4615,7 +4665,10 @@ mod tests {
         sim_moon.vvel = 10;
         sim_moon.y = 100;
         sim_moon.step(&PlayerKeys::default(), false, false, &moon_layout);
-        assert_eq!(sim_moon.flutter, 5, "flutter timer bypassed under moon physics bit 1");
+        assert_eq!(
+            sim_moon.flutter, 5,
+            "flutter timer bypassed under moon physics bit 1"
+        );
         assert_ne!(sim_moon.y, 100, "gravity ran");
     }
 
@@ -4624,7 +4677,10 @@ mod tests {
     #[test]
     fn walk_anim_cadence_under_moon_physics() {
         let layout = blank_layout();
-        let keys_b = PlayerKeys { b: true, ..Default::default() };
+        let keys_b = PlayerKeys {
+            b: true,
+            ..Default::default()
+        };
 
         // Normal Mario with B: advances by 2
         let mut sim_normal = small_sim();
@@ -4972,7 +5028,10 @@ mod tests {
         sim.powerup = 1;
         sim.probe_point = (360, 479);
         sim.block_bonk(0x00);
-        assert_eq!(sim.sfx2, 1, "$19B0's big arm requests the destruction sound");
+        assert_eq!(
+            sim.sfx2, 1,
+            "$19B0's big arm requests the destruction sound"
+        );
         assert_eq!(sim.sfx0, 2, "the shared tail's rattle sfx still fires");
         assert_eq!(sim.spin_jump_bounce, 0xFF);
         assert_eq!(
@@ -5036,12 +5095,20 @@ mod tests {
         assert_eq!(big.sfx2, 1, "$19C1's big arm: the destruction sound");
         assert_eq!(big.block_slots[0][0], 5);
         big.block_update();
-        assert_eq!(big.layout_writes, vec![(7190, 127)], "$5A7A: the `$7F` used tile");
+        assert_eq!(
+            big.layout_writes,
+            vec![(7190, 127)],
+            "$5A7A: the `$7F` used tile"
+        );
         while big.block_slots[0][0] != 0 {
             big.block_update();
         }
         assert_eq!(big.block_slots[0][1], 0x28, "type 5 lives 40 ticks");
-        assert_eq!(big.layout_writes, vec![(7190, 127)], "written at 2 and at $28");
+        assert_eq!(
+            big.layout_writes,
+            vec![(7190, 127)],
+            "written at 2 and at $28"
+        );
 
         // The `$00` control: small Mario's brick only rattles (type 2, the brick
         // tile itself returns at 8).
@@ -5074,7 +5141,11 @@ mod tests {
         assert_eq!(sim.layout_writes, vec![(7190, 24)]);
         sim.block_update(); // timer 3: the 66 draw, `$5BB4[3] = -4`
         assert_eq!(sim.block_frame, Some(66));
-        assert_eq!(sim.block_draw, vec![(352, 442, 66)], "368 - 16, 472 - 4 - 26");
+        assert_eq!(
+            sim.block_draw,
+            vec![(352, 442, 66)],
+            "368 - 16, 472 - 4 - 26"
+        );
         // A later slot's coin cycle draws AFTER it and wins `$FFC6` — which is
         // why the capture's two-slot bump shows the coin cycle and not 66.
         sim.block_slots[1] = [4, 1, 0xD8, 0x01, 0x70, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -5689,7 +5760,10 @@ mod tests {
         sim.fire_spawn(true);
         assert_eq!(sim.fireballs[0][..7], [1, 0x14, 2, 0x08, 1, 0x01, 0]);
         assert_eq!(sim.fireballs[0][7..], [0; 9], "+7..+15 stay untouched");
-        assert_eq!(sim.fireballs[1], [0; 16], "the scan took the first free slot");
+        assert_eq!(
+            sim.fireballs[1], [0; 16],
+            "the scan took the first free slot"
+        );
         assert_eq!(sim.throw_timer, 8);
         assert_eq!(sim.sfx0, 11);
     }
@@ -5794,7 +5868,10 @@ mod tests {
         fireball(&mut sim, 100, 0x0140, 0xFF, 0);
         sim.fire_move(&layout);
         assert_eq!(sim.fireballs[0][F_XLO], 97, "left: X - 3");
-        assert_eq!(sim.fireballs[0][F_DIR], 0xFF, "the facing byte is never rewritten");
+        assert_eq!(
+            sim.fireballs[0][F_DIR], 0xFF,
+            "the facing byte is never rewritten"
+        );
 
         let mut sim = PlayerSim::new();
         fireball(&mut sim, 100, 0x0140, 1, 0x0F);
@@ -5847,7 +5924,11 @@ mod tests {
             [1, 1, 0x48, 1, 0x60, 0],
             "type 1, timer 1, the ball's cell"
         );
-        assert_eq!(sim.fire_below_bonk, Some((0x40, 103)), "the $2F72 pass is armed");
+        assert_eq!(
+            sim.fire_below_bonk,
+            Some((0x40, 103)),
+            "the $2F72 pass is armed"
+        );
         assert_eq!(sim.fireballs[0][F_ACTIVE], 0, "the ball dies on the break");
         assert_eq!(
             sim.fireballs[0][F_XLO], 100,
@@ -6163,7 +6244,10 @@ mod tests {
             false,
             &layout,
         );
-        assert_eq!(sim.flutter, 7, "flutter decremented by 1 in gravity step (8 - 1)");
+        assert_eq!(
+            sim.flutter, 7,
+            "flutter decremented by 1 in gravity step (8 - 1)"
+        );
         assert!(sim.flutter_armed, "flutter armed latch set");
         assert_eq!(sim.flutter_charge, 0);
         assert_eq!(sim.y, 200, "gravity bypassed during flutter");
@@ -6226,7 +6310,10 @@ mod tests {
             &layout,
         );
         assert_eq!(sim.flutter_charge, 0, "charge counter resets to 0");
-        assert_eq!(sim.flutter, 7, "flutter resets to 8, decremented to 7 in gravity");
+        assert_eq!(
+            sim.flutter, 7,
+            "flutter resets to 8, decremented to 7 in gravity"
+        );
         assert_eq!(sim.vvel, 24, "vvel resets to 24");
         assert_eq!(sim.y, y_before, "gravity bypassed on re-flutter frame");
     }
@@ -6269,7 +6356,10 @@ mod tests {
             false,
             &layout,
         );
-        assert_eq!(sim.flutter_charge, 5, "charge cannot accumulate when pan_timer != 0");
+        assert_eq!(
+            sim.flutter_charge, 5,
+            "charge cannot accumulate when pan_timer != 0"
+        );
     }
 
     #[test]
@@ -6283,7 +6373,15 @@ mod tests {
         sim_bell.in_air = true;
         sim_bell.vvel = 24;
         sim_bell.goal_bell = true;
-        sim_bell.step(&PlayerKeys { a: true, ..Default::default() }, true, false, &layout);
+        sim_bell.step(
+            &PlayerKeys {
+                a: true,
+                ..Default::default()
+            },
+            true,
+            false,
+            &layout,
+        );
         assert_eq!(sim_bell.flutter, 0, "goal bell blocks flutter");
 
         // 2. Gated by moon physics
@@ -6293,7 +6391,15 @@ mod tests {
         sim_moon.in_air = true;
         sim_moon.vvel = 24;
         sim_moon.moon = 1;
-        sim_moon.step(&PlayerKeys { a: true, ..Default::default() }, true, false, &layout);
+        sim_moon.step(
+            &PlayerKeys {
+                a: true,
+                ..Default::default()
+            },
+            true,
+            false,
+            &layout,
+        );
         assert_eq!(sim_moon.flutter, 0, "moon physics blocks flutter");
 
         // 3. Gated by ascending vvel >= 0x48
@@ -6302,7 +6408,15 @@ mod tests {
         sim_asc.on_ground = false;
         sim_asc.in_air = true;
         sim_asc.vvel = 75; // ascending jump
-        sim_asc.step(&PlayerKeys { a: true, ..Default::default() }, true, false, &layout);
+        sim_asc.step(
+            &PlayerKeys {
+                a: true,
+                ..Default::default()
+            },
+            true,
+            false,
+            &layout,
+        );
         assert_eq!(sim_asc.flutter, 0, "ascending vvel >= 72 blocks flutter");
 
         // 4. Non-bunny powerup (e.g. fire/super)
@@ -6311,7 +6425,15 @@ mod tests {
         sim_fire.on_ground = false;
         sim_fire.in_air = true;
         sim_fire.vvel = 24;
-        sim_fire.step(&PlayerKeys { a: true, ..Default::default() }, true, false, &layout);
+        sim_fire.step(
+            &PlayerKeys {
+                a: true,
+                ..Default::default()
+            },
+            true,
+            false,
+            &layout,
+        );
         assert_eq!(sim_fire.flutter, 0, "non-bunny cannot flutter");
     }
 
@@ -6341,7 +6463,15 @@ mod tests {
         sim.flutter_charge = 3;
         sim.on_ground = true;
         sim.on_ground_obj = true;
-        sim.step(&PlayerKeys { a: true, ..Default::default() }, true, false, &layout);
+        sim.step(
+            &PlayerKeys {
+                a: true,
+                ..Default::default()
+            },
+            true,
+            false,
+            &layout,
+        );
         assert!(!sim.flutter_armed, "ground jump clears flutter_armed");
         assert_eq!(sim.flutter_charge, 0, "ground jump clears flutter_charge");
 
@@ -6365,18 +6495,30 @@ mod tests {
         sim.pipe_dir = 3;
 
         // Pressing RIGHT enters rightward travel ($30)
-        let keys_right = PlayerKeys { right: true, ..Default::default() };
+        let keys_right = PlayerKeys {
+            right: true,
+            ..Default::default()
+        };
         sim.pipe_entry(&keys_right);
-        assert_eq!(sim.pipe_dir, 0x30, "pressing right on side pipe mouth enters $30");
+        assert_eq!(
+            sim.pipe_dir, 0x30,
+            "pressing right on side pipe mouth enters $30"
+        );
         assert_eq!(sim.sfx0, 5, "pipe entry sfx requested");
         assert_eq!(sim.hvel, 0x80);
 
         // Reset and test pressing LEFT enters leftward travel ($40)
         sim.pipe_dir = 3;
         sim.sfx0 = 0;
-        let keys_left = PlayerKeys { left: true, ..Default::default() };
+        let keys_left = PlayerKeys {
+            left: true,
+            ..Default::default()
+        };
         sim.pipe_entry(&keys_left);
-        assert_eq!(sim.pipe_dir, 0x40, "pressing left on side pipe mouth enters $40");
+        assert_eq!(
+            sim.pipe_dir, 0x40,
+            "pressing left on side pipe mouth enters $40"
+        );
         assert_eq!(sim.sfx0, 5, "pipe entry sfx requested");
         assert_eq!(sim.hvel, 0x80);
 
@@ -6384,7 +6526,10 @@ mod tests {
         sim.pipe_dir = 3;
         sim.sfx0 = 0;
         sim.pipe_entry(&PlayerKeys::default());
-        assert_eq!(sim.pipe_dir, 3, "idle Mario stays armed at 3 without entering");
+        assert_eq!(
+            sim.pipe_dir, 3,
+            "idle Mario stays armed at 3 without entering"
+        );
 
         // Airborne Mario cannot enter pipe with button press
         sim.on_ground = false;
@@ -6422,12 +6567,18 @@ mod tests {
         sim.pipe_dir = 0x30;
         sim.step(&PlayerKeys::default(), false, false, &layout);
         assert_eq!(sim.x, 0x0082, "pipe travel 0x30 moves +2");
-        assert_eq!(sim.x_sub, 1, "pipe travel 0x30 sets x_sub = 1 for camera follow");
+        assert_eq!(
+            sim.x_sub, 1,
+            "pipe travel 0x30 sets x_sub = 1 for camera follow"
+        );
 
         sim.x = 0x0080;
         sim.pipe_dir = 0x40;
         sim.step(&PlayerKeys::default(), false, false, &layout);
         assert_eq!(sim.x, 0x007E, "pipe travel 0x40 moves -2");
-        assert_eq!(sim.x_sub, 0xFF, "pipe travel 0x40 sets x_sub = 0xFF for camera follow");
+        assert_eq!(
+            sim.x_sub, 0xFF,
+            "pipe travel 0x40 sets x_sub = 0xFF for camera follow"
+        );
     }
 }

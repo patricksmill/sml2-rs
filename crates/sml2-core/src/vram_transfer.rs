@@ -21,7 +21,10 @@ pub enum TransferError {
 impl std::fmt::Display for TransferError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::SourceOutOfBounds { required, available } => {
+            Self::SourceOutOfBounds {
+                required,
+                available,
+            } => {
                 write!(
                     f,
                     "transfer source out of bounds: needed {required} bytes, available {available}"
@@ -34,7 +37,10 @@ impl std::fmt::Display for TransferError {
                 )
             }
             Self::SceneAssetsMissing => {
-                write!(f, "cannot apply transfer: ending scene has no loaded assets")
+                write!(
+                    f,
+                    "cannot apply transfer: ending scene has no loaded assets"
+                )
             }
         }
     }
@@ -205,7 +211,9 @@ impl VramTransfer {
         }
 
         let dest_addr = self.dest_addr;
-        let assets = scene.assets_mut().ok_or(TransferError::SceneAssetsMissing)?;
+        let assets = scene
+            .assets_mut()
+            .ok_or(TransferError::SceneAssetsMissing)?;
 
         if dest_addr >= VRAM_TILES_BASE && dest_addr + (chunk as u16) <= VRAM_TILES_END {
             let offset = (dest_addr - VRAM_TILES_BASE) as usize;

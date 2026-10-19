@@ -21,13 +21,19 @@ pub enum CreditsTextError {
 impl std::fmt::Display for CreditsTextError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::TextTruncated { required, available } => {
+            Self::TextTruncated {
+                required,
+                available,
+            } => {
                 write!(
                     f,
                     "credits text truncated: needed {required} bytes, had {available}"
                 )
             }
-            Self::TilemapOutOfBounds { required, available } => {
+            Self::TilemapOutOfBounds {
+                required,
+                available,
+            } => {
                 write!(
                     f,
                     "tilemap out of bounds: needed {required} bytes, had {available}"

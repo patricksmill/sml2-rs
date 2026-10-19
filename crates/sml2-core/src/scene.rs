@@ -467,12 +467,16 @@ pub fn boss_def_index(level_id: u8, phase: u8) -> u8 {
 pub fn lookup_boss_spawn_def(def_index: u8) -> (u8, u8, u8, [u8; 18], Vec<[u8; 18]>) {
     match def_index {
         0 => (
-            1, 6, 1,
+            1,
+            6,
+            1,
             [1, 0, 0, 0, 124, 88, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             vec![[2, 0, 0, 0, 129, 88, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
         ),
         1 => (
-            3, 6, 18,
+            3,
+            6,
+            18,
             [6, 0, 0, 0, 112, 152, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             vec![
                 [7, 0, 0, 0, 132, 56, 19, 0, 0, 0, 0, 0, 0, 32, 0, 0, 0, 0],
@@ -481,7 +485,9 @@ pub fn lookup_boss_spawn_def(def_index: u8) -> (u8, u8, u8, [u8; 18], Vec<[u8; 1
             ],
         ),
         2 => (
-            2, 6, 42,
+            2,
+            6,
+            42,
             [12, 0, 0, 0, 64, 88, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             vec![
                 [11, 0, 0, 6, 96, 136, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -489,7 +495,9 @@ pub fn lookup_boss_spawn_def(def_index: u8) -> (u8, u8, u8, [u8; 18], Vec<[u8; 1
             ],
         ),
         3 => (
-            2, 6, 48,
+            2,
+            6,
+            48,
             [14, 0, 0, 0, 144, 88, 44, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             vec![
                 [15, 0, 0, 0, 80, 208, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -497,7 +505,9 @@ pub fn lookup_boss_spawn_def(def_index: u8) -> (u8, u8, u8, [u8; 18], Vec<[u8; 1
             ],
         ),
         4 => (
-            2, 6, 54,
+            2,
+            6,
+            54,
             [16, 0, 0, 0, 48, 144, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             vec![
                 [17, 0, 0, 0, 48, 144, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -505,17 +515,23 @@ pub fn lookup_boss_spawn_def(def_index: u8) -> (u8, u8, u8, [u8; 18], Vec<[u8; 1
             ],
         ),
         5 => (
-            1, 6, 72,
+            1,
+            6,
+            72,
             [19, 0, 0, 0, 64, 176, 66, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             vec![[13, 0, 0, 0, 208, 208, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
         ),
         6 => (
-            1, 6, 82,
+            1,
+            6,
+            82,
             [20, 0, 0, 0, 104, 144, 80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             vec![[21, 0, 0, 0, 56, 160, 96, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
         ),
         7 => (
-            1, 6, 82,
+            1,
+            6,
+            82,
             [23, 0, 0, 0, 136, 144, 76, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             vec![[24, 0, 0, 0, 56, 160, 96, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
         ),
@@ -524,31 +540,33 @@ pub fn lookup_boss_spawn_def(def_index: u8) -> (u8, u8, u8, [u8; 18], Vec<[u8; 1
         // `$4F4C`; `sObjectDefCount` 0 means `$8E6C` returns before it ever
         // reads the `$4EAC` table, so there are no sub-objects to return.
         _ => (
-            0, 6, 99,
+            0,
+            6,
+            99,
             [26, 0, 0, 0, 136, 144, 83, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             Vec::new(),
         ),
     }
 }
 
-    /// `$8DFD`'s ladder keys the fight def by the level: `$05` -> 0, `$09` -> 1,
-    /// `$0D` -> 2, `$10` -> 3, `$13` -> 4, `$17` -> 5, anything else -> 6
-    /// (including `$18`, the Wario castle), plus `sBossFightPhase`.
-    #[test]
-    fn the_boss_def_index_follows_the_roms_level_ladder() {
-        assert_eq!(boss_def_index(0x05, 0), 0);
-        assert_eq!(boss_def_index(0x09, 0), 1);
-        assert_eq!(boss_def_index(0x0D, 0), 2);
-        assert_eq!(boss_def_index(0x10, 0), 3);
-        assert_eq!(boss_def_index(0x13, 0), 4);
-        assert_eq!(boss_def_index(0x17, 0), 5);
-        assert_eq!(boss_def_index(0x18, 0), 6);
-        assert_eq!(boss_def_index(0x01, 0), 6);
-        // The ladder is checked in ROM order, so $05 stays 0 and the rest step
-        // up by one; a level that is *not* in it lands on 6.
-        assert_eq!(boss_def_index(0x13, 1), 5, "phase adds on top");
-        assert_eq!(boss_def_index(0x18, 2), 8);
-    }
+/// `$8DFD`'s ladder keys the fight def by the level: `$05` -> 0, `$09` -> 1,
+/// `$0D` -> 2, `$10` -> 3, `$13` -> 4, `$17` -> 5, anything else -> 6
+/// (including `$18`, the Wario castle), plus `sBossFightPhase`.
+#[test]
+fn the_boss_def_index_follows_the_roms_level_ladder() {
+    assert_eq!(boss_def_index(0x05, 0), 0);
+    assert_eq!(boss_def_index(0x09, 0), 1);
+    assert_eq!(boss_def_index(0x0D, 0), 2);
+    assert_eq!(boss_def_index(0x10, 0), 3);
+    assert_eq!(boss_def_index(0x13, 0), 4);
+    assert_eq!(boss_def_index(0x17, 0), 5);
+    assert_eq!(boss_def_index(0x18, 0), 6);
+    assert_eq!(boss_def_index(0x01, 0), 6);
+    // The ladder is checked in ROM order, so $05 stays 0 and the rest step
+    // up by one; a level that is *not* in it lands on 6.
+    assert_eq!(boss_def_index(0x13, 1), 5, "phase adds on top");
+    assert_eq!(boss_def_index(0x18, 2), 8);
+}
 
 #[cfg(test)]
 mod tests {
@@ -870,12 +888,28 @@ mod tests {
         };
         let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         let arr = json.as_array().unwrap();
-        assert_eq!(arr.len(), 9, "9 records ($4E51..$4E6B) -- see the extractor");
+        assert_eq!(
+            arr.len(),
+            9,
+            "9 records ($4E51..$4E6B) -- see the extractor"
+        );
         for (i, entry) in arr.iter().enumerate() {
             let (count, hits, spr, obj0, subs) = lookup_boss_spawn_def(i as u8);
-            assert_eq!(entry["count"].as_u64().unwrap() as u8, count, "entry {i} count");
-            assert_eq!(entry["hits"].as_u64().unwrap() as u8, hits, "entry {i} hits");
-            assert_eq!(entry["sprite"].as_u64().unwrap() as u8, spr, "entry {i} sprite");
+            assert_eq!(
+                entry["count"].as_u64().unwrap() as u8,
+                count,
+                "entry {i} count"
+            );
+            assert_eq!(
+                entry["hits"].as_u64().unwrap() as u8,
+                hits,
+                "entry {i} hits"
+            );
+            assert_eq!(
+                entry["sprite"].as_u64().unwrap() as u8,
+                spr,
+                "entry {i} sprite"
+            );
             let obj0_json: Vec<u8> = entry["obj0_def"]
                 .as_array()
                 .unwrap()
@@ -909,13 +943,19 @@ mod tests {
         let mut vm = SceneVm::new();
         let mut cam = CameraSim::new(0x0320, 0x01C0);
         let mut sim = PlayerSim::new();
-        sim.x = 0x0311;                     // Mario's X page 3; low byte must survive
+        sim.x = 0x0311; // Mario's X page 3; low byte must survive
         sim.y = 0x00D4;
-        cam.scene_id = 7;                   // level 3's cell i4 latches scene 7
+        cam.scene_id = 7; // level 3's cell i4 latches scene 7
 
-        assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Entering,
-                   "the prologue claims the cursor on the pass after the latch");
-        assert_ne!(vm.pc, 0, "the cursor comes from the script table, not from zero");
+        assert_eq!(
+            vm.step(&mut sim, &mut cam, &s),
+            SceneStep::Entering,
+            "the prologue claims the cursor on the pass after the latch"
+        );
+        assert_ne!(
+            vm.pc, 0,
+            "the cursor comes from the script table, not from zero"
+        );
 
         let mut ran = Vec::new();
         for _ in 0..20 {
@@ -926,7 +966,11 @@ mod tests {
                 other => panic!("unexpected {other:?} before the terminator"),
             }
         }
-        assert_eq!(ran, vec![0x40], "scene 7 is `40 16 FF`: one $4x, then the end");
+        assert_eq!(
+            ran,
+            vec![0x40],
+            "scene 7 is `40 16 FF`: one $4x, then the end"
+        );
         assert_eq!(sim.x >> 8, 6, "$4x $16 -> Mario X page 6");
         assert_eq!(sim.y >> 8, 1, "$4x $16 -> Mario Y page 1");
         assert_eq!(sim.x & 0xFF, 0x11, "the low byte is untouched");
@@ -942,7 +986,7 @@ mod tests {
         let mut vm = SceneVm::new();
         let mut cam = CameraSim::new(0, 0);
         let mut sim = PlayerSim::new();
-        cam.scene_id = 0x20;                // past the 32-entry table
+        cam.scene_id = 0x20; // past the 32-entry table
         step_prologue(&mut vm, &mut sim, &mut cam, &s);
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::BadCursor);
         assert_eq!(vm.bad_cursor_scene(), Some(0x20));

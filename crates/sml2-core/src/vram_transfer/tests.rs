@@ -118,7 +118,10 @@ fn test_ending_request_1_full_run() {
 
     assert_eq!(transfer.source_addr, 0x4656 + 2048);
     assert_eq!(transfer.dest_addr, 0x8000 + 2048);
-    assert_eq!(&dest[0x8000..0x8000 + 2048], &source[0x68656..0x68656 + 2048]);
+    assert_eq!(
+        &dest[0x8000..0x8000 + 2048],
+        &source[0x68656..0x68656 + 2048]
+    );
 }
 
 #[test]
@@ -151,7 +154,10 @@ fn test_ending_request_2_full_run() {
 
     assert_eq!(transfer.source_addr, 0x5096 + 1024);
     assert_eq!(transfer.dest_addr, 0x9800 + 1024);
-    assert_eq!(&dest[0x9800..0x9800 + 1024], &source[0x69096..0x69096 + 1024]);
+    assert_eq!(
+        &dest[0x9800..0x9800 + 1024],
+        &source[0x69096..0x69096 + 1024]
+    );
 }
 
 #[test]

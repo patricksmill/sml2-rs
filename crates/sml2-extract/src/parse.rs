@@ -16,14 +16,22 @@ pub fn parse_secret_entries(
     source: &str,
     rom: &[u8],
 ) -> Result<[sml2_core::level::LevelStart; 32], String> {
-    let bytes = rom.get(0x377B..0x387B).ok_or("short secret-entry ROM table")?;
-    let tail = source.split_once("UnknownData_0x377B:")
-        .ok_or("missing UnknownData_0x377B")?.1;
+    let bytes = rom
+        .get(0x377B..0x387B)
+        .ok_or("short secret-entry ROM table")?;
+    let tail = source
+        .split_once("UnknownData_0x377B:")
+        .ok_or("missing UnknownData_0x377B")?
+        .1;
     let mut declared = Vec::new();
     for line in tail.lines().skip(1) {
         let code = code_part(line);
-        if code.is_empty() { continue; }
-        let Some(words) = code.strip_prefix("dw ") else { break; };
+        if code.is_empty() {
+            continue;
+        }
+        let Some(words) = code.strip_prefix("dw ") else {
+            break;
+        };
         for word in words.split(',') {
             declared.extend_from_slice(&hex_word(word)?.to_le_bytes());
         }
@@ -42,7 +50,10 @@ mod secret_entry_tests {
 
     #[test]
     fn secret_entries_cross_check_source_and_keep_zero_and_code_rows() {
-        let source = format!("UnknownData_0x377B: ;table\n{}\nNext:\n", "dw $0000, $0000, $0000, $0000\n".repeat(31));
+        let source = format!(
+            "UnknownData_0x377B: ;table\n{}\nNext:\n",
+            "dw $0000, $0000, $0000, $0000\n".repeat(31)
+        );
         let mut rom = vec![0; 0x387B];
         let padding = [0xFA, 0x99, 0xA2, 0xA7, 0xC8, 0x3D, 0xE6, 0x0F];
         rom[0x3873..0x387B].copy_from_slice(&padding);

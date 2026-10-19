@@ -10,8 +10,8 @@
 use crate::actor::{Actor, ContactKind, Facing, FlashFlags, FrameTick};
 
 pub const WALK_BUDGET_PX: u8 = 48; // ROM $59D18 / $59D55: ld a, 48
-pub const PAUSE_FRAMES: u8 = 16;   // ROM $59CEF / $59D28: ld a, 16
-pub const CONTACT_KIND: u8 = 76;   // ROM $59CF3: ld a, 76 (0x4C)
+pub const PAUSE_FRAMES: u8 = 16; // ROM $59CEF / $59D28: ld a, 16
+pub const CONTACT_KIND: u8 = 76; // ROM $59CF3: ld a, 76 (0x4C)
 
 /// Paced walker movement state ($59CD / $5D05 / $5D41: states 0..=2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,11 +55,7 @@ pub trait PacedWalkerWorld {
 }
 
 /// Domain update for PacedWalker (ROM $59CE7).
-pub fn update<W>(
-    actor: &mut Actor,
-    context: PacedWalkerContext,
-    world: &mut W,
-) -> PacedWalkerEffect
+pub fn update<W>(actor: &mut Actor, context: PacedWalkerContext, world: &mut W) -> PacedWalkerEffect
 where
     W: PacedWalkerWorld,
 {
@@ -220,23 +216,58 @@ mod tests {
         };
 
         // Frame 0 (multiple of 4) -> toggles
-        update(&mut actor, PacedWalkerContext { frame: FrameTick(0), mario_ref_x: 0 }, &mut world);
+        update(
+            &mut actor,
+            PacedWalkerContext {
+                frame: FrameTick(0),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
         assert_eq!(actor.sprite, 11);
 
         // Frame 1 -> no toggle
-        update(&mut actor, PacedWalkerContext { frame: FrameTick(1), mario_ref_x: 0 }, &mut world);
+        update(
+            &mut actor,
+            PacedWalkerContext {
+                frame: FrameTick(1),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
         assert_eq!(actor.sprite, 11);
 
         // Frame 2 -> no toggle
-        update(&mut actor, PacedWalkerContext { frame: FrameTick(2), mario_ref_x: 0 }, &mut world);
+        update(
+            &mut actor,
+            PacedWalkerContext {
+                frame: FrameTick(2),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
         assert_eq!(actor.sprite, 11);
 
         // Frame 3 -> no toggle
-        update(&mut actor, PacedWalkerContext { frame: FrameTick(3), mario_ref_x: 0 }, &mut world);
+        update(
+            &mut actor,
+            PacedWalkerContext {
+                frame: FrameTick(3),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
         assert_eq!(actor.sprite, 11);
 
         // Frame 4 -> toggles back
-        update(&mut actor, PacedWalkerContext { frame: FrameTick(4), mario_ref_x: 0 }, &mut world);
+        update(
+            &mut actor,
+            PacedWalkerContext {
+                frame: FrameTick(4),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
         assert_eq!(actor.sprite, 10);
     }
 

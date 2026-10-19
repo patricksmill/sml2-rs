@@ -29,8 +29,8 @@ impl ObjectSim {
 mod tests {
     use super::*;
     use crate::objects::{
-        ObjectTables, SpawnRecord, Staging, B_DEF, B_MARKER, B_RECHI, B_RECLO, B_SCRX,
-        B_STATE, B_XHI, B_XLO, B_YHI, B_YLO,
+        ObjectTables, SpawnRecord, Staging, B_DEF, B_MARKER, B_RECHI, B_RECLO, B_SCRX, B_STATE,
+        B_XHI, B_XLO, B_YHI, B_YLO,
     };
 
     fn tables() -> ObjectTables {
@@ -105,7 +105,14 @@ mod tests {
         sim.scan(&tables);
         let b = sim.slots[0].b;
         assert_eq!(
-            [b[B_XHI], b[B_XLO], b[B_MARKER], b[B_YHI], b[B_YLO], b[B_DEF]],
+            [
+                b[B_XHI],
+                b[B_XLO],
+                b[B_MARKER],
+                b[B_YHI],
+                b[B_YLO],
+                b[B_DEF]
+            ],
             [7, 0xC8, 0, 0, 0xB0, 0x1D]
         );
         assert_eq!([b[B_RECHI], b[B_RECLO], b[B_STATE]], [0xAB, 8, 1]);
@@ -135,7 +142,12 @@ mod tests {
     #[test]
     fn stream_cursor_physical_address_wraps_at_sixteen_bits() {
         let mut sim = ObjectSim::new(vec![], 0);
-        for (offset, pointer) in [(0x54F9, 0xFFFF), (0x54FA, 0), (0x54FB, 1), (0x10006, 0xAB0C)] {
+        for (offset, pointer) in [
+            (0x54F9, 0xFFFF),
+            (0x54FA, 0),
+            (0x54FB, 1),
+            (0x10006, 0xAB0C),
+        ] {
             sim.stream_index = offset;
             assert_eq!(sim.stream_ptr(), pointer);
         }

@@ -39,10 +39,7 @@ pub struct FireballContext {
 }
 
 /// Domain update for Fire Piranha Plant Fireball (ROM $585ED, anim 14).
-pub fn update(
-    actor: &mut Actor,
-    context: FireballContext,
-) -> FireballEffect {
+pub fn update(actor: &mut Actor, context: FireballContext) -> FireballEffect {
     // $585ED: toggle sprite bit 0 on every even frame (period 2).
     actor.animate_two_frame_toggle(context.frame, 2);
 
@@ -107,7 +104,12 @@ mod tests {
         actor.sprite_flip.set_horizontal(false);
         actor.sprite_flip.set_vertical(false);
 
-        let eff = update(&mut actor, FireballContext { frame: FrameTick(0) });
+        let eff = update(
+            &mut actor,
+            FireballContext {
+                frame: FrameTick(0),
+            },
+        );
         assert_eq!(eff, FireballEffect::Initialized);
         assert_eq!(actor.state, FireballState::MovingLeft.to_raw());
         assert_eq!(actor.contact_kind.raw(), 0x40);
@@ -125,7 +127,12 @@ mod tests {
         actor.sprite_flip.set_horizontal(true);
         actor.sprite_flip.set_vertical(true);
 
-        let eff = update(&mut actor, FireballContext { frame: FrameTick(1) });
+        let eff = update(
+            &mut actor,
+            FireballContext {
+                frame: FrameTick(1),
+            },
+        );
         assert_eq!(eff, FireballEffect::Initialized);
         assert_eq!(actor.state, FireballState::MovingRight.to_raw());
         assert_eq!(actor.contact_kind.raw(), 0x40);
@@ -143,7 +150,12 @@ mod tests {
         actor.state = FireballState::MovingLeft.to_raw();
         actor.motion_leg = 0; // upward
 
-        let eff = update(&mut actor, FireballContext { frame: FrameTick(1) });
+        let eff = update(
+            &mut actor,
+            FireballContext {
+                frame: FrameTick(1),
+            },
+        );
         assert_eq!(eff, FireballEffect::Moving);
         assert_eq!(actor.position.x, 98, "moved 2 px left");
         assert_eq!(actor.position.y, 187, "moved 1 px up");
@@ -157,7 +169,12 @@ mod tests {
         actor.state = FireballState::MovingRight.to_raw();
         actor.motion_leg = 1; // downward
 
-        let eff = update(&mut actor, FireballContext { frame: FrameTick(1) });
+        let eff = update(
+            &mut actor,
+            FireballContext {
+                frame: FrameTick(1),
+            },
+        );
         assert_eq!(eff, FireballEffect::Moving);
         assert_eq!(actor.position.x, 102, "moved 2 px right");
         assert_eq!(actor.position.y, 189, "moved 1 px down");
@@ -169,16 +186,36 @@ mod tests {
         actor.sprite = 22;
         actor.state = FireballState::MovingRight.to_raw();
 
-        update(&mut actor, FireballContext { frame: FrameTick(1) });
+        update(
+            &mut actor,
+            FireballContext {
+                frame: FrameTick(1),
+            },
+        );
         assert_eq!(actor.sprite, 22, "odd frame: no toggle");
 
-        update(&mut actor, FireballContext { frame: FrameTick(2) });
+        update(
+            &mut actor,
+            FireballContext {
+                frame: FrameTick(2),
+            },
+        );
         assert_eq!(actor.sprite, 23, "even frame: toggled");
 
-        update(&mut actor, FireballContext { frame: FrameTick(3) });
+        update(
+            &mut actor,
+            FireballContext {
+                frame: FrameTick(3),
+            },
+        );
         assert_eq!(actor.sprite, 23, "odd frame: no toggle");
 
-        update(&mut actor, FireballContext { frame: FrameTick(4) });
+        update(
+            &mut actor,
+            FireballContext {
+                frame: FrameTick(4),
+            },
+        );
         assert_eq!(actor.sprite, 22, "even frame: toggled back");
     }
 }

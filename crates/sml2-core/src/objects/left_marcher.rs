@@ -59,10 +59,7 @@ pub fn advance_three_step_crawl(actor: &mut Actor, frame: FrameTick) {
 }
 
 /// Domain update for Left Marcher (ROM $591DE, anim 57).
-pub fn update(
-    actor: &mut Actor,
-    context: LeftMarcherContext,
-) -> LeftMarcherEffect {
+pub fn update(actor: &mut Actor, context: LeftMarcherContext) -> LeftMarcherEffect {
     // $5B5B6: 3-step crawl bob on even frames
     advance_three_step_crawl(actor, context.frame);
 

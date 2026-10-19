@@ -312,7 +312,12 @@ impl ObjectSim {
             cannon_ant::CannonAntEffect::Initialized { facing } => {
                 self.facing = facing;
             }
-            cannon_ant::CannonAntEffect::FireProjectile { anim, sprite, attr, sfx } => {
+            cannon_ant::CannonAntEffect::FireProjectile {
+                anim,
+                sprite,
+                attr,
+                sfx,
+            } => {
                 self.spawn_anim = anim;
                 self.spawn_sprite = sprite;
                 self.spawn_attr = attr;
@@ -443,11 +448,7 @@ impl ObjectSim {
         st.b = actor.to_raw_slot();
     }
 
-    pub(super) fn handler_winged_walker(
-        &mut self,
-        st: &mut Staging,
-        layout: &LevelLayout,
-    ) {
+    pub(super) fn handler_winged_walker(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = winged_walker::WingedWalkerContext {
             frame: crate::actor::FrameTick(u64::from(self.fff0)),
@@ -506,11 +507,7 @@ impl ObjectSim {
         st.b = actor.to_raw_slot();
     }
 
-    pub(super) fn handler_edge_walker(
-        &mut self,
-        st: &mut Staging,
-        layout: &LevelLayout,
-    ) {
+    pub(super) fn handler_edge_walker(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = edge_walker::EdgeWalkerContext {
             frame: crate::actor::FrameTick(u64::from(self.fff0)),
@@ -662,11 +659,7 @@ impl ObjectSim {
         }
     }
 
-    pub(super) fn handler_fire_piranha(
-        &mut self,
-        st: &mut Staging,
-        tables: &ObjectTables,
-    ) {
+    pub(super) fn handler_fire_piranha(&mut self, st: &mut Staging, tables: &ObjectTables) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = fire_piranha::FirePiranhaContext {
             frame: crate::actor::FrameTick(u64::from(self.fff0)),

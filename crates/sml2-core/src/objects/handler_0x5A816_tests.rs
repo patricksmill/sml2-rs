@@ -13,7 +13,10 @@ fn dirty(state: u8, flip: u8) -> Staging {
     let mut b = std::array::from_fn(|i| (i as u8).wrapping_mul(29).wrapping_add(0x81));
     b[15] = state;
     b[13] = flip;
-    Staging { b, ..Default::default() }
+    Staging {
+        b,
+        ..Default::default()
+    }
 }
 
 fn position(slot: &mut [u8; 32], x: u16, y: u16) {
@@ -64,10 +67,7 @@ fn handler_0x5a816_diagonal_states_move_up_one_and_sideways() {
 
 #[test]
 fn handler_0x5a816_straight_states_move_two_without_y() {
-    for (state, x, expected) in [
-        (3u8, 0x0001u16, 0xFFFFu16),
-        (4, 0xFFFE, 0x0000),
-    ] {
+    for (state, x, expected) in [(3u8, 0x0001u16, 0xFFFFu16), (4, 0xFFFE, 0x0000)] {
         let mut sim = ObjectSim::new(vec![], 0);
         let mut st = dirty(state, 0x00);
         position(&mut st.b, x, 0x0050);
@@ -97,14 +97,27 @@ fn handler_0x5a816_real_mode_b_anim78_step() {
     let mut sim = ObjectSim::new(vec![], 0);
     sim.configure(0x0A);
     let mut actor = Actor::default();
-    actor.position = Position { x: 0x0090, y: 0x0090 };
+    actor.position = Position {
+        x: 0x0090,
+        y: 0x0090,
+    };
     actor.activity = 2;
     actor.definition = 78;
     actor.state = 0;
     sim.slots[1].b = actor.to_raw_slot();
-    sim.step(0x90, 0x0090, &layout, &tables, &MarioContact::default(), false);
+    sim.step(
+        0x90,
+        0x0090,
+        &layout,
+        &tables,
+        &MarioContact::default(),
+        false,
+    );
     assert_eq!(sim.slots[1].b[15], 3);
     assert_eq!(sim.slots[1].b[18], 73);
-    assert_eq!(u16::from_be_bytes([sim.slots[1].b[0], sim.slots[1].b[1]]), 0x0090);
+    assert_eq!(
+        u16::from_be_bytes([sim.slots[1].b[0], sim.slots[1].b[1]]),
+        0x0090
+    );
     assert!(sim.unported.is_empty());
 }

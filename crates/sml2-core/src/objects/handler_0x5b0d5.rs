@@ -303,7 +303,12 @@ mod tests {
         expect_step(
             &mut sim,
             &mut st,
-            &[(B_YLO, 0x35), (B_T25, 0x30), (B_SPRITE, 0x74), (B_FSTATE, 1)],
+            &[
+                (B_YLO, 0x35),
+                (B_T25, 0x30),
+                (B_SPRITE, 0x74),
+                (B_FSTATE, 1),
+            ],
         );
         // $715D state 4: y -= 1 with a borrow through the high byte.
         let (mut sim, mut st) = fixture(4);
@@ -323,7 +328,12 @@ mod tests {
         expect_step(
             &mut sim,
             &mut st,
-            &[(B_YLO, 0x33), (B_T25, 0x30), (B_SPRITE, 0x74), (B_FSTATE, 1)],
+            &[
+                (B_YLO, 0x33),
+                (B_T25, 0x30),
+                (B_SPRITE, 0x74),
+                (B_FSTATE, 1),
+            ],
         );
         let (mut sim, mut st) = fixture(4);
         st.b[B_T25] = 1;

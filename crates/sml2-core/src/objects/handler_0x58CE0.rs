@@ -20,7 +20,9 @@ pub(super) enum Error {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Effect {
-    Initialized { facing: Ordering },
+    Initialized {
+        facing: Ordering,
+    },
     Moved {
         carry_dx: Option<i16>,
         carry_dy: Option<i16>,
@@ -28,11 +30,7 @@ pub(super) enum Effect {
     Idle,
 }
 
-pub(super) fn update(
-    actor: &mut Actor,
-    frame: FrameTick,
-    player_x: u16,
-) -> Result<Effect, Error> {
+pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Result<Effect, Error> {
     if actor.state != 0 && !frame.every(2) {
         return Ok(Effect::Idle);
     }
@@ -58,15 +56,9 @@ fn step(actor: &mut Actor, dx: i16, dy: i16) -> Result<Effect, Error> {
     let carry_dy = riding.then_some(dy);
     actor.hit_reaction = actor.hit_reaction.wrapping_sub(1);
     if actor.hit_reaction != 0 {
-        return Ok(Effect::Moved {
-            carry_dx,
-            carry_dy,
-        });
+        return Ok(Effect::Moved { carry_dx, carry_dy });
     }
     actor.hit_reaction = actor.timer;
     actor.state ^= 3;
-    Ok(Effect::Moved {
-        carry_dx,
-        carry_dy,
-    })
+    Ok(Effect::Moved { carry_dx, carry_dy })
 }

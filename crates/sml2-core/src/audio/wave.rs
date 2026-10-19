@@ -22,11 +22,11 @@ use tables::*;
 /// Ordered register and buffer writes for Wave Channel 3 (NR30..NR34 and Wave RAM $FF30..$FF3F).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WaveWrite {
-    Enable(u8),           // NR30 ($FF1A)
-    Length(u8),           // NR31 ($FF1B)
-    Level(u8),            // NR32 ($FF1C)
-    FrequencyLow(u8),     // NR33 ($FF1D)
-    FrequencyControl(u8), // NR34 ($FF1E)
+    Enable(u8),            // NR30 ($FF1A)
+    Length(u8),            // NR31 ($FF1B)
+    Level(u8),             // NR32 ($FF1C)
+    FrequencyLow(u8),      // NR33 ($FF1D)
+    FrequencyControl(u8),  // NR34 ($FF1E)
     WavePattern([u8; 16]), // Wave RAM ($FF30..$FF3F)
 }
 
@@ -386,7 +386,12 @@ impl WaveEffectState {
     }
 
     // Effect 10 & 11: ROM $10346 / $10351
-    pub fn start_effect10_11(&mut self, id: u8, music: &mut WaveMusicState, out: &mut Vec<WaveWrite>) {
+    pub fn start_effect10_11(
+        &mut self,
+        id: u8,
+        music: &mut WaveMusicState,
+        out: &mut Vec<WaveWrite>,
+    ) {
         self.upload_pattern(PATTERN_5B96, out);
         self.start_slide(id, music, E10_INIT, out);
     }

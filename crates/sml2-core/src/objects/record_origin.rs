@@ -34,23 +34,35 @@ pub(super) enum RecordResetError {
 }
 
 impl ObjectSim {
-    pub(super) fn resolve_spawn_origin(&self, pointer: u16) -> Result<SpawnOrigin, RecordResetError> {
+    pub(super) fn resolve_spawn_origin(
+        &self,
+        pointer: u16,
+    ) -> Result<SpawnOrigin, RecordResetError> {
         // Six prefix bytes + 84 records + two terminal bytes fill $AB00..$ACFF.
         if self.records.len() > 84 {
-            return Err(RecordResetError::OversizedStream { records: self.records.len() });
+            return Err(RecordResetError::OversizedStream {
+                records: self.records.len(),
+            });
         }
         let read = |address: u16| -> Result<u8, RecordResetError> {
             match address {
                 0xAB00..=0xACFF => {
-                    if address < STREAM_BASE { return Ok(0xFF); }
+                    if address < STREAM_BASE {
+                        return Ok(0xFF);
+                    }
                     let offset = usize::from(address - STREAM_BASE);
                     let index = offset / RECORD_LEN;
                     if let Some(record) = self.records.get(index) {
                         let [xh, xl] = record.x.to_be_bytes();
                         let [yh, yl] = record.y.to_be_bytes();
-                        Ok([xh, xl, record.mode_flag, yh, yl, record.anim_index][offset % RECORD_LEN])
+                        Ok([xh, xl, record.mode_flag, yh, yl, record.anim_index]
+                            [offset % RECORD_LEN])
                     } else {
-                        Ok(if offset - self.records.len() * RECORD_LEN < 2 { 0xFF } else { 0 })
+                        Ok(if offset - self.records.len() * RECORD_LEN < 2 {
+                            0xFF
+                        } else {
+                            0
+                        })
                     }
                 }
                 0xAD00..=0xAEFF => {
@@ -67,7 +79,10 @@ impl ObjectSim {
             *byte = read(start.wrapping_add(i as u16))?;
         }
         Ok(SpawnOrigin {
-            position: Position { x: u16::from_be_bytes([bytes[0], bytes[1]]), y: u16::from_be_bytes([bytes[3], bytes[4]]) },
+            position: Position {
+                x: u16::from_be_bytes([bytes[0], bytes[1]]),
+                y: u16::from_be_bytes([bytes[3], bytes[4]]),
+            },
             marker: bytes[2],
         })
     }

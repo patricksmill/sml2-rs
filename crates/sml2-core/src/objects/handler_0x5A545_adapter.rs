@@ -18,10 +18,7 @@ impl Inputs<'_> {
         [19u16, 4].into_iter().any(|dy| {
             let y = actor.position.y.wrapping_sub(dy);
             self.layout
-                .get(
-                    usize::from((x >> 4) & 255),
-                    usize::from((y >> 4) & 255),
-                )
+                .get(usize::from((x >> 4) & 255), usize::from((y >> 4) & 255))
                 .unwrap_or(0)
                 < 0x38
         })

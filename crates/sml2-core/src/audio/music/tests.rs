@@ -75,7 +75,10 @@ fn test_all_42_songs_start_and_tick_without_panic() {
 
         assert_eq!(seq.cur_song(), song_id, "Song {song_id} failed to start");
         assert!(seq.is_playing(), "Song {song_id} should be playing");
-        assert!(seq.channels.iter().any(|c| c.active), "Song {song_id} has no active channels");
+        assert!(
+            seq.channels.iter().any(|c| c.active),
+            "Song {song_id} has no active channels"
+        );
 
         // Tick several frames through the sequencer
         let mut writes = Vec::new();
@@ -263,7 +266,11 @@ fn test_song_end_frames_match_rom() {
                 port_end = Some(frame);
             }
         }
-        assert_eq!(rom_end, Some(expected), "song {song}: ROM walk end frame drifted");
+        assert_eq!(
+            rom_end,
+            Some(expected),
+            "song {song}: ROM walk end frame drifted"
+        );
         assert_eq!(port_end, Some(expected), "song {song}: port end frame");
     }
 }
@@ -301,7 +308,10 @@ fn test_noise_note_01_reads_its_record_like_the_rom() {
             MusicWrite::Ch4Control(0xD5),
         ]
     );
-    assert!(ch.rest, "the noise note must not clear or set the rest flag");
+    assert!(
+        ch.rest,
+        "the noise note must not clear or set the rest flag"
+    );
     assert_eq!(ch.note_timer, 0x18);
 }
 

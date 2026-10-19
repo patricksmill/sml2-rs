@@ -4,14 +4,11 @@ use super::*;
 fn test_raster_sine_table_exact_bytes() {
     // Exact byte definitions from ROM $6844F
     let rom_raw_bytes: [u8; 16] = [
-        0x00, 0x05, 0x09, 0x0C, 0x0D, 0x0C, 0x09, 0x05,
-        0x00, 0xFB, 0xF7, 0xF4, 0xF3, 0xF4, 0xF7, 0xFB,
+        0x00, 0x05, 0x09, 0x0C, 0x0D, 0x0C, 0x09, 0x05, 0x00, 0xFB, 0xF7, 0xF4, 0xF3, 0xF4, 0xF7,
+        0xFB,
     ];
 
-    let expected_signed: [i8; 16] = [
-        0, 5, 9, 12, 13, 12, 9, 5,
-        0, -5, -9, -12, -13, -12, -9, -5,
-    ];
+    let expected_signed: [i8; 16] = [0, 5, 9, 12, 13, 12, 9, 5, 0, -5, -9, -12, -13, -12, -9, -5];
 
     assert_eq!(RASTER_SINE_TABLE, expected_signed);
 
@@ -189,7 +186,10 @@ fn test_scanline_projection_and_project_frame() {
 
     for (y, proj) in frame_no_split.iter().enumerate() {
         assert_eq!(proj.scanline, y as u8);
-        assert!(!proj.unsigned_bg_tiles, "split disabled must keep all lines signed");
+        assert!(
+            !proj.unsigned_bg_tiles,
+            "split disabled must keep all lines signed"
+        );
         if y <= 16 || y > 139 {
             assert_eq!(proj.scroll_x, 0);
         } else {

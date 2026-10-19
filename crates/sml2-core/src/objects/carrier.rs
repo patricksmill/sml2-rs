@@ -43,10 +43,7 @@ pub trait CarrierWorld {
 }
 
 /// Domain update for Carrier platform (ROM $58DD1, anim 46).
-pub fn update<W>(
-    actor: &mut Actor,
-    world: &mut W,
-) -> CarrierEffect
+pub fn update<W>(actor: &mut Actor, world: &mut W) -> CarrierEffect
 where
     W: CarrierWorld,
 {
@@ -107,7 +104,10 @@ mod tests {
 
     #[test]
     fn carrier_init_configures_contact_kind_and_waiting_state() {
-        let mut world = MockWorld { fall_dy: 0, ground: false };
+        let mut world = MockWorld {
+            fall_dy: 0,
+            ground: false,
+        };
         let mut actor = Actor::default();
 
         let eff = update(&mut actor, &mut world);
@@ -118,7 +118,10 @@ mod tests {
 
     #[test]
     fn carrier_waiting_transitions_on_stood_on_interaction() {
-        let mut world = MockWorld { fall_dy: 0, ground: false };
+        let mut world = MockWorld {
+            fall_dy: 0,
+            ground: false,
+        };
         let mut actor = Actor::default();
         actor.state = 2;
 
@@ -142,7 +145,10 @@ mod tests {
         actor.timer = 2;
         actor.position.y = 100;
 
-        let mut world = MockWorld { fall_dy: 3, ground: false };
+        let mut world = MockWorld {
+            fall_dy: 3,
+            ground: false,
+        };
 
         // Tick 1: timer 2 -> 1, no motion
         let eff = update(&mut actor, &mut world);

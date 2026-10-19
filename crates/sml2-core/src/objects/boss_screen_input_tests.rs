@@ -29,11 +29,20 @@ fn boss_screen_y_tracks_live_player_camera_and_wrap_without_draw_pan() {
         (0x0004, 0xFFFC, 106),
         (0xFFFC, 0x0004, 90),
     ] {
-        for pan in [0,1,2,3,255] {
-            let contact = MarioContact {x: 100,y: player_y,pan,scene_state: 0xF0,..Default::default()};
-            obj.step(80,camera_y,&layout,&tables,&contact,true);
-            assert_eq!(obj.player_screen_y,expected,"player={player_y}, camera={camera_y}, pan={pan}");
-            assert_eq!(obj.mario.y,player_y);
+        for pan in [0, 1, 2, 3, 255] {
+            let contact = MarioContact {
+                x: 100,
+                y: player_y,
+                pan,
+                scene_state: 0xF0,
+                ..Default::default()
+            };
+            obj.step(80, camera_y, &layout, &tables, &contact, true);
+            assert_eq!(
+                obj.player_screen_y, expected,
+                "player={player_y}, camera={camera_y}, pan={pan}"
+            );
+            assert_eq!(obj.mario.y, player_y);
         }
     }
 }

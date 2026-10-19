@@ -14,11 +14,11 @@
 use crate::actor::{Actor, ContactKind, Facing};
 
 pub const DISTANCE_THRESHOLD_X: u8 = 40; // ROM $5AA0D: cp $28 (40)
-pub const INITIAL_CREEP_BUDGET: u8 = 24;  // ROM $5A9FD: ld a, 24
-pub const INITIAL_PAUSE_FRAMES: u8 = 24;  // ROM $5AA01: ld a, 24
-pub const CONTACT_KIND: u8 = 74;          // ROM $5A9F9: ld a, 74 (0x4A)
-pub const CHARGE_SFX: u8 = 16;            // ROM $5AA4D: ld a, 16 (sSfxRequest1)
-pub const OFFSCREEN_SCREEN_X: u8 = 184;   // ROM $5AA61: cp $B8 (184)
+pub const INITIAL_CREEP_BUDGET: u8 = 24; // ROM $5A9FD: ld a, 24
+pub const INITIAL_PAUSE_FRAMES: u8 = 24; // ROM $5AA01: ld a, 24
+pub const CONTACT_KIND: u8 = 74; // ROM $5A9F9: ld a, 74 (0x4A)
+pub const CHARGE_SFX: u8 = 16; // ROM $5AA4D: ld a, 16 (sSfxRequest1)
+pub const OFFSCREEN_SCREEN_X: u8 = 184; // ROM $5AA61: cp $B8 (184)
 
 /// Charging enemy movement state ($5A9E8 / $6A20 / $6A30 / $6A53 / $6A5A / $6A0A: states 0..=5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,10 +64,7 @@ pub enum ChargingEnemyEffect {
 }
 
 /// Domain update for ChargingEnemy (ROM $5A9E8).
-pub fn update(
-    actor: &mut Actor,
-    context: ChargingEnemyContext,
-) -> ChargingEnemyEffect {
+pub fn update(actor: &mut Actor, context: ChargingEnemyContext) -> ChargingEnemyEffect {
     let state = ChargingEnemyState::from_raw(actor.state);
     match state {
         ChargingEnemyState::Init => {
@@ -238,7 +235,12 @@ mod tests {
         // 23 creep steps
         for step in 1..=23 {
             let eff = update(&mut actor, ChargingEnemyContext { mario_ref_x: 0 });
-            assert_eq!(eff, ChargingEnemyEffect::Creeping { state: ChargingEnemyState::CreepLeft });
+            assert_eq!(
+                eff,
+                ChargingEnemyEffect::Creeping {
+                    state: ChargingEnemyState::CreepLeft
+                }
+            );
             assert_eq!(actor.position.x, 100 - step);
             assert_eq!(actor.travel_direction.raw(), 24 - step as u8);
         }
@@ -252,12 +254,20 @@ mod tests {
                 state: ChargingEnemyState::ChargeLeft,
             }
         );
-        assert_eq!(actor.defeat_mode, 0, "defeat mode cleared to 0 (vulnerable)");
+        assert_eq!(
+            actor.defeat_mode, 0,
+            "defeat mode cleared to 0 (vulnerable)"
+        );
         assert_eq!(actor.state, ChargingEnemyState::ChargeLeft.to_raw());
 
         // Charge step 1: moves X by -3
         let eff = update(&mut actor, ChargingEnemyContext { mario_ref_x: 0 });
-        assert_eq!(eff, ChargingEnemyEffect::Charging { state: ChargingEnemyState::ChargeLeft });
+        assert_eq!(
+            eff,
+            ChargingEnemyEffect::Charging {
+                state: ChargingEnemyState::ChargeLeft
+            }
+        );
         assert_eq!(actor.position.x, 100 - 24 - 3);
 
         // When offscreen (screen.x >= 184 / 0xB8): returns OffscreenReset

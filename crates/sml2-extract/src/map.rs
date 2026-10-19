@@ -9,18 +9,102 @@ pub const OVERWORLD_1X2_ROM: usize = 0x37800;
 pub const OVERWORLD_2X2_ROM: usize = 0x37C00;
 
 pub const SCREEN_TILEMAP_SPECS: &[(u8, &str, usize, usize, &str, u8)] = &[
-    (1, "pumpkin", 0x3B000, 576, "gfx/overworld/pumpkinzone.png", 0xE4),
-    (2, "tree_a", 0x3B240, 576, "gfx/overworld/treezone.png", 0xE4),
-    (3, "macro", 0x3B6C0, 576, "gfx/overworld/macrozone.png", 0xE4),
-    (4, "space", 0x3B480, 576, "gfx/overworld/spacezone.png", 0xE4),
-    (5, "tree_b", 0x3B900, 576, "gfx/overworld/treezone.png", 0xE4),
-    (6, "mario", 0x3BB40, 576, "gfx/overworld/mariozone.png", 0xE4),
-    (7, "turtle", 0x3BD80, 576, "gfx/overworld/wariocastle.png", 0xE1),
-    (8, "castle", 0x43000, 576, "gfx/overworld/mariocastle.png", 0xE4),
-    (9, "bonus_30", 0x43240, 576, "gfx/overworld/mariocastle.png", 0xE4),
-    (10, "bonus_200", 0x43480, 576, "gfx/overworld/mariocastle.png", 0xE4),
-    (11, "bonus_50", 0x436C0, 576, "gfx/overworld/mariocastle.png", 0xE4),
-    (12, "bonus_999", 0x43900, 576, "gfx/overworld/mariocastle.png", 0xE4),
+    (
+        1,
+        "pumpkin",
+        0x3B000,
+        576,
+        "gfx/overworld/pumpkinzone.png",
+        0xE4,
+    ),
+    (
+        2,
+        "tree_a",
+        0x3B240,
+        576,
+        "gfx/overworld/treezone.png",
+        0xE4,
+    ),
+    (
+        3,
+        "macro",
+        0x3B6C0,
+        576,
+        "gfx/overworld/macrozone.png",
+        0xE4,
+    ),
+    (
+        4,
+        "space",
+        0x3B480,
+        576,
+        "gfx/overworld/spacezone.png",
+        0xE4,
+    ),
+    (
+        5,
+        "tree_b",
+        0x3B900,
+        576,
+        "gfx/overworld/treezone.png",
+        0xE4,
+    ),
+    (
+        6,
+        "mario",
+        0x3BB40,
+        576,
+        "gfx/overworld/mariozone.png",
+        0xE4,
+    ),
+    (
+        7,
+        "turtle",
+        0x3BD80,
+        576,
+        "gfx/overworld/wariocastle.png",
+        0xE1,
+    ),
+    (
+        8,
+        "castle",
+        0x43000,
+        576,
+        "gfx/overworld/mariocastle.png",
+        0xE4,
+    ),
+    (
+        9,
+        "bonus_30",
+        0x43240,
+        576,
+        "gfx/overworld/mariocastle.png",
+        0xE4,
+    ),
+    (
+        10,
+        "bonus_200",
+        0x43480,
+        576,
+        "gfx/overworld/mariocastle.png",
+        0xE4,
+    ),
+    (
+        11,
+        "bonus_50",
+        0x436C0,
+        576,
+        "gfx/overworld/mariocastle.png",
+        0xE4,
+    ),
+    (
+        12,
+        "bonus_999",
+        0x43900,
+        576,
+        "gfx/overworld/mariocastle.png",
+        0xE4,
+    ),
 ];
 
 /// Table of 58 patch pointers at bank 24 $63EA (flat $623EA).
@@ -90,7 +174,9 @@ pub fn extract_patches(baserom: &[u8]) -> Result<Vec<serde_json::Value>, String>
         let mut curr = flat;
         while baserom[curr] != 0xFF {
             if curr + 3 > baserom.len() {
-                return Err(format!("patch {i}: stream truncated before $FF at ${curr:05X}"));
+                return Err(format!(
+                    "patch {i}: stream truncated before $FF at ${curr:05X}"
+                ));
             }
             tiles.push(serde_json::json!({
                 "dx": baserom[curr],
@@ -116,7 +202,9 @@ pub fn extract_cursor_poses(baserom: &[u8]) -> Result<Vec<serde_json::Value>, St
         let at = CURSOR_TABLE_ROM + i * 2;
         let ptr = baserom[at] as usize | ((baserom[at + 1] as usize) << 8);
         if !(0x4000..0x8000).contains(&ptr) {
-            return Err(format!("cursor pose {i}: pointer ${ptr:04X} outside bank window"));
+            return Err(format!(
+                "cursor pose {i}: pointer ${ptr:04X} outside bank window"
+            ));
         }
         let flat = 15 * 0x4000 + (ptr - 0x4000);
         let b = baserom
@@ -143,16 +231,16 @@ pub const COMMON_CURSOR_LEN: usize = 512;
 pub const ZONE_GFX_LEN: usize = 5632;
 
 pub const SCREEN_TILES_SPECS: &[(u8, Option<usize>)] = &[
-    (0, None), // Hub: all 6144 bytes from OVERWORLD_GFX_ROM
-    (1, Some(0x38200)), // Pumpkin
-    (2, Some(0x39A00)), // Tree A
-    (3, Some(0x35A00)), // Macro
-    (4, Some(0x40200)), // Space
-    (5, Some(0x39A00)), // Tree B
-    (6, Some(0x44200)), // Mario
-    (7, Some(0x45A00)), // Turtle
-    (8, Some(0x38200)), // Castle / Minigame hill
-    (9, Some(0x64000)), // Bonus 30
+    (0, None),           // Hub: all 6144 bytes from OVERWORLD_GFX_ROM
+    (1, Some(0x38200)),  // Pumpkin
+    (2, Some(0x39A00)),  // Tree A
+    (3, Some(0x35A00)),  // Macro
+    (4, Some(0x40200)),  // Space
+    (5, Some(0x39A00)),  // Tree B
+    (6, Some(0x44200)),  // Mario
+    (7, Some(0x45A00)),  // Turtle
+    (8, Some(0x38200)),  // Castle / Minigame hill
+    (9, Some(0x64000)),  // Bonus 30
     (10, Some(0x64000)), // Bonus 200
     (11, Some(0x64000)), // Bonus 50
     (12, Some(0x64000)), // Bonus 999
@@ -176,7 +264,9 @@ pub fn build_tiles_binary(baserom: &[u8]) -> Result<Vec<u8>, String> {
             Some(zone_addr) => {
                 let zone_gfx = baserom
                     .get(zone_addr..zone_addr + ZONE_GFX_LEN)
-                    .ok_or_else(|| format!("screen {id}: truncated zone gfx at ${zone_addr:05X}"))?;
+                    .ok_or_else(|| {
+                        format!("screen {id}: truncated zone gfx at ${zone_addr:05X}")
+                    })?;
                 out.extend_from_slice(common_cursor);
                 out.extend_from_slice(zone_gfx);
             }

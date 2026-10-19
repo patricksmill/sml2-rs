@@ -388,8 +388,7 @@ impl MusicChannel {
         // Stream note bytes are byte offsets into table $5AF4.
         // Signed transpose is added directly to the byte offset in SM83:
         // hl = $5AF4 + (note as i16) + (transpose as i16)
-        let addr = 0x5AF4u16
-            .wrapping_add((note as u16).wrapping_add(transpose as i16 as u16));
+        let addr = 0x5AF4u16.wrapping_add((note as u16).wrapping_add(transpose as i16 as u16));
         let off = bank4_offset(addr);
         let freq = if off + 1 < bank.len() {
             (bank[off] as u16) | ((bank[off + 1] as u16) << 8)

@@ -14,19 +14,13 @@ const H_DIVE: &[u8] = &[
     128,
 ];
 const V_CLIMB: &[u8] = &[
-    0, 1, 1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 2, 1, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
-    0, 0,
+    0, 1, 1, 1, 1, 1, 1, 1, 2, 1, 2, 1, 2, 1, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
 ];
 const V_DIVE: &[u8] = &[
-    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 1, 2, 1, 1, 1, 1, 1, 1,
-    1, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 1, 2, 1, 1, 1, 1, 1, 1, 1, 0,
 ];
 
-pub(super) fn update(
-    actor: &mut Actor,
-    frame: FrameTick,
-    player_x: u16,
-) -> Result<Effect, Error> {
+pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Result<Effect, Error> {
     handler_0x5addd::update(
         actor,
         frame,

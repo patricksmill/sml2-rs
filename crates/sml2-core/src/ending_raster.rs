@@ -14,9 +14,8 @@ mod tests;
 
 /// Exact 16-entry sine displacement table from ROM `$6844F`.
 /// Values represent horizontal pixel offsets written to `SCX` ($FF43).
-pub const RASTER_SINE_TABLE: [i8; 16] = [
-    0, 5, 9, 12, 13, 12, 9, 5, 0, -5, -9, -12, -13, -12, -9, -5,
-];
+pub const RASTER_SINE_TABLE: [i8; 16] =
+    [0, 5, 9, 12, 13, 12, 9, 5, 0, -5, -9, -12, -13, -12, -9, -5];
 
 /// Frame counter cadence mask: bits [5:2] select wave phase (advances every 4 frames).
 pub const FRAME_CADENCE_MASK: u8 = 0x3C;

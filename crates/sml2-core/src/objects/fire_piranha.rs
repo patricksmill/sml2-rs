@@ -3,8 +3,8 @@
 //! Follows the idiomatic Rust porting guide: typed actor state, domain methods,
 //! zero raw hex offsets or register plumbing.
 
-use crate::actor::{Actor, ContactKind, Facing, FrameTick, SpriteFlipFlags};
 use super::pipe_bobber::dist_mario_x;
+use crate::actor::{Actor, ContactKind, Facing, FrameTick, SpriteFlipFlags};
 
 /// Fire Piranha Plant state machine ($58541).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,10 +62,7 @@ pub fn update_vertical_aim_sprite(actor: &mut Actor, mario_ref_y: u16) {
 }
 
 /// Domain update for Fire Piranha Plant (ROM $58541, anim 13).
-pub fn update(
-    actor: &mut Actor,
-    context: FirePiranhaContext,
-) -> FirePiranhaEffect {
+pub fn update(actor: &mut Actor, context: FirePiranhaContext) -> FirePiranhaEffect {
     // ROM $58541: pipe travel check.
     if context.mario_travelling {
         return FirePiranhaEffect::Despawn;
@@ -76,7 +73,9 @@ pub fn update(
         FirePiranhaState::Waiting => {
             // $5854E: face toward Mario in X.
             // If Mario is to the right (mario_ref_x >= actor.x), set horizontal flip bit ($20).
-            actor.sprite_flip.set_horizontal(context.mario_ref_x >= actor.position.x);
+            actor
+                .sprite_flip
+                .set_horizontal(context.mario_ref_x >= actor.position.x);
 
             // $584F3: defeat mode $80 (invulnerable/inactive) while waiting in pipe.
             actor.defeat_mode = 0x80;
@@ -264,7 +263,10 @@ mod tests {
         assert_eq!(actor.state, FirePiranhaState::Shooting.to_raw());
         assert_eq!(actor.timer, 48);
         if let FirePiranhaEffect::SpawnProjectile { flip } = eff {
-            assert!(flip.vertical(), "aiming down sets vertical flip on projectile");
+            assert!(
+                flip.vertical(),
+                "aiming down sets vertical flip on projectile"
+            );
         } else {
             panic!("expected SpawnProjectile effect");
         }
@@ -345,11 +347,35 @@ mod tests {
         assert_eq!(actor.timer, 3);
 
         // Frames 96, 104, 112: timer becomes 2, 1, 0 -> transitions to Waiting!
-        update(&mut actor, FirePiranhaContext { frame: FrameTick(96), mario_travelling: false, mario_ref_x: 150, mario_ref_y: 150 });
+        update(
+            &mut actor,
+            FirePiranhaContext {
+                frame: FrameTick(96),
+                mario_travelling: false,
+                mario_ref_x: 150,
+                mario_ref_y: 150,
+            },
+        );
         assert_eq!(actor.timer, 2);
-        update(&mut actor, FirePiranhaContext { frame: FrameTick(104), mario_travelling: false, mario_ref_x: 150, mario_ref_y: 150 });
+        update(
+            &mut actor,
+            FirePiranhaContext {
+                frame: FrameTick(104),
+                mario_travelling: false,
+                mario_ref_x: 150,
+                mario_ref_y: 150,
+            },
+        );
         assert_eq!(actor.timer, 1);
-        let eff = update(&mut actor, FirePiranhaContext { frame: FrameTick(112), mario_travelling: false, mario_ref_x: 150, mario_ref_y: 150 });
+        let eff = update(
+            &mut actor,
+            FirePiranhaContext {
+                frame: FrameTick(112),
+                mario_travelling: false,
+                mario_ref_x: 150,
+                mario_ref_y: 150,
+            },
+        );
         assert_eq!(eff, FirePiranhaEffect::Waiting);
         assert_eq!(actor.state, FirePiranhaState::Waiting.to_raw());
     }

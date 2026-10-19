@@ -80,7 +80,10 @@ fn handler_0x5afd7_mouth_spawns_then_the_pause_restores_the_walk() {
     assert_eq!(sim.slots[0].b[5], 89);
     assert_eq!(sim.slots[0].b[8], 1);
     assert_eq!(sim.slots[0].b[11], 112);
-    assert_eq!(u16::from_be_bytes([sim.slots[0].b[0], sim.slots[0].b[1]]), 100);
+    assert_eq!(
+        u16::from_be_bytes([sim.slots[0].b[0], sim.slots[0].b[1]]),
+        100
+    );
     assert_eq!(sim.standby, 1);
 
     sim.fff0 = 1;

@@ -3,9 +3,9 @@
 //! Follows the idiomatic Rust porting guide: typed actor state, domain methods,
 //! zero raw hex offsets or register plumbing.
 
-use crate::actor::{Actor, ContactKind, Facing, FlashFlags, FrameTick};
 use super::pipe_bobber::dist_mario_x;
 use super::staging::{BOUNCE_SPEED, FALL_SPEED};
+use crate::actor::{Actor, ContactKind, Facing, FlashFlags, FrameTick};
 
 /// Dashing Walker state machine (ROM $59D5A).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -218,10 +218,20 @@ mod tests {
         actor.position.y = 80;
         actor.sprite = 14;
 
-        let mut world = MockWorld { hit_left: false, hit_right: false };
+        let mut world = MockWorld {
+            hit_left: false,
+            hit_right: false,
+        };
 
         // Mario is to the right (x = 150 > 100) -> facing 1, PatrolRight (2)
-        let eff = update(&mut actor, DashingWalkerContext { frame: FrameTick(1), mario_ref_x: 150 }, &mut world);
+        let eff = update(
+            &mut actor,
+            DashingWalkerContext {
+                frame: FrameTick(1),
+                mario_ref_x: 150,
+            },
+            &mut world,
+        );
         assert_eq!(eff, DashingWalkerEffect::Initialized { facing: 1 });
         assert_eq!(actor.state, DashingWalkerState::PatrolRight.to_raw());
         assert!(actor.sprite_flip.horizontal());
@@ -230,14 +240,28 @@ mod tests {
 
         // Mario is to the left (x = 50 < 100) -> facing 0xFF, PatrolLeft (1)
         actor.state = 0;
-        let eff_left = update(&mut actor, DashingWalkerContext { frame: FrameTick(1), mario_ref_x: 50 }, &mut world);
+        let eff_left = update(
+            &mut actor,
+            DashingWalkerContext {
+                frame: FrameTick(1),
+                mario_ref_x: 50,
+            },
+            &mut world,
+        );
         assert_eq!(eff_left, DashingWalkerEffect::Initialized { facing: 0xFF });
         assert_eq!(actor.state, DashingWalkerState::PatrolLeft.to_raw());
         assert!(!actor.sprite_flip.horizontal());
 
         // Mario at same X (x = 100) -> facing 0, PatrolLeft (1)
         actor.state = 0;
-        let eff_eq = update(&mut actor, DashingWalkerContext { frame: FrameTick(1), mario_ref_x: 100 }, &mut world);
+        let eff_eq = update(
+            &mut actor,
+            DashingWalkerContext {
+                frame: FrameTick(1),
+                mario_ref_x: 100,
+            },
+            &mut world,
+        );
         assert_eq!(eff_eq, DashingWalkerEffect::Initialized { facing: 0 });
         assert_eq!(actor.state, DashingWalkerState::PatrolLeft.to_raw());
         assert!(!actor.sprite_flip.horizontal());
@@ -251,16 +275,33 @@ mod tests {
         actor.state = DashingWalkerState::PatrolLeft.to_raw();
         actor.sprite_flip.set_horizontal(false);
 
-        let mut world = MockWorld { hit_left: false, hit_right: false };
+        let mut world = MockWorld {
+            hit_left: false,
+            hit_right: false,
+        };
 
         // Mario far away: x = 200 (dx = 100 >= 36) -> steps 1 px left
-        let eff = update(&mut actor, DashingWalkerContext { frame: FrameTick(1), mario_ref_x: 200 }, &mut world);
+        let eff = update(
+            &mut actor,
+            DashingWalkerContext {
+                frame: FrameTick(1),
+                mario_ref_x: 200,
+            },
+            &mut world,
+        );
         assert_eq!(eff, DashingWalkerEffect::Patrolling);
         assert_eq!(actor.position.x, 99);
 
         // Hits left wall -> turns around to PatrolRight (2) and sets horizontal flip
         world.hit_left = true;
-        let eff2 = update(&mut actor, DashingWalkerContext { frame: FrameTick(2), mario_ref_x: 200 }, &mut world);
+        let eff2 = update(
+            &mut actor,
+            DashingWalkerContext {
+                frame: FrameTick(2),
+                mario_ref_x: 200,
+            },
+            &mut world,
+        );
         assert_eq!(eff2, DashingWalkerEffect::Turnaround);
         assert_eq!(actor.state, DashingWalkerState::PatrolRight.to_raw());
         assert!(actor.sprite_flip.horizontal());
@@ -274,10 +315,20 @@ mod tests {
         actor.position.y = 80;
         actor.state = DashingWalkerState::PatrolLeft.to_raw();
 
-        let mut world = MockWorld { hit_left: false, hit_right: false };
+        let mut world = MockWorld {
+            hit_left: false,
+            hit_right: false,
+        };
 
         // Mario within 30 px (< 36) -> steps left and transitions to ChargeLeft (3)
-        let eff = update(&mut actor, DashingWalkerContext { frame: FrameTick(1), mario_ref_x: 130 }, &mut world);
+        let eff = update(
+            &mut actor,
+            DashingWalkerContext {
+                frame: FrameTick(1),
+                mario_ref_x: 130,
+            },
+            &mut world,
+        );
         assert_eq!(eff, DashingWalkerEffect::Patrolling);
         assert_eq!(actor.position.x, 99);
         assert_eq!(actor.state, DashingWalkerState::ChargeLeft.to_raw());
@@ -294,25 +345,52 @@ mod tests {
         actor.motion_phase = 0;
         actor.travel_direction = Facing::from_raw(0);
 
-        let mut world = MockWorld { hit_left: false, hit_right: false };
+        let mut world = MockWorld {
+            hit_left: false,
+            hit_right: false,
+        };
 
         // Leg 1 (Accel): 15 steps (phases 0..14; at step 15 phase reaches 15, resets to 0, flips direction)
         for phase in 0..15 {
-            let eff = update(&mut actor, DashingWalkerContext { frame: FrameTick(phase as u64), mario_ref_x: 0 }, &mut world);
+            let eff = update(
+                &mut actor,
+                DashingWalkerContext {
+                    frame: FrameTick(phase as u64),
+                    mario_ref_x: 0,
+                },
+                &mut world,
+            );
             assert_eq!(eff, DashingWalkerEffect::Charging);
         }
-        assert_eq!(actor.motion_phase, 0, "resets phase to 0 on finishing accel leg");
+        assert_eq!(
+            actor.motion_phase, 0,
+            "resets phase to 0 on finishing accel leg"
+        );
         assert_eq!(actor.travel_direction.raw(), 1, "flips direction to decel");
         assert_eq!(actor.state, DashingWalkerState::ChargeLeft.to_raw());
 
         // Leg 2 (Decel): 15 steps
         for step in 0..15 {
-            let eff = update(&mut actor, DashingWalkerContext { frame: FrameTick(15 + step), mario_ref_x: 0 }, &mut world);
+            let eff = update(
+                &mut actor,
+                DashingWalkerContext {
+                    frame: FrameTick(15 + step),
+                    mario_ref_x: 0,
+                },
+                &mut world,
+            );
             assert_eq!(eff, DashingWalkerEffect::Charging);
         }
-        assert_eq!(actor.motion_phase, 0, "resets phase to 0 on finishing decel leg");
+        assert_eq!(
+            actor.motion_phase, 0,
+            "resets phase to 0 on finishing decel leg"
+        );
         assert_eq!(actor.travel_direction.raw(), 0, "flips direction back to 0");
-        assert_eq!(actor.state, DashingWalkerState::PatrolLeft.to_raw(), "resumed patrol after full charge cycle");
+        assert_eq!(
+            actor.state,
+            DashingWalkerState::PatrolLeft.to_raw(),
+            "resumed patrol after full charge cycle"
+        );
     }
 
     #[test]
@@ -323,10 +401,20 @@ mod tests {
         actor.state = DashingWalkerState::ChargeLeft.to_raw();
         actor.sprite_flip.set_horizontal(false);
 
-        let mut world = MockWorld { hit_left: true, hit_right: false };
+        let mut world = MockWorld {
+            hit_left: true,
+            hit_right: false,
+        };
 
         // Hits wall while charging left -> bounces to ChargeRight (4) and flips horizontally
-        let eff = update(&mut actor, DashingWalkerContext { frame: FrameTick(1), mario_ref_x: 0 }, &mut world);
+        let eff = update(
+            &mut actor,
+            DashingWalkerContext {
+                frame: FrameTick(1),
+                mario_ref_x: 0,
+            },
+            &mut world,
+        );
         assert_eq!(eff, DashingWalkerEffect::Turnaround);
         assert_eq!(actor.state, DashingWalkerState::ChargeRight.to_raw());
         assert!(actor.sprite_flip.horizontal());

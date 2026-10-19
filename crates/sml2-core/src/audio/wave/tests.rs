@@ -50,10 +50,13 @@ fn test_wave_effect1_lifecycle() {
 
     state.tick(&mut music, &mut writes); // timer 1 -> 0, step 0 -> 1
     assert_eq!(state.step, 1);
-    assert_eq!(writes, vec![
-        WaveWrite::FrequencyLow(0x98),
-        WaveWrite::FrequencyControl(0x86),
-    ]);
+    assert_eq!(
+        writes,
+        vec![
+            WaveWrite::FrequencyLow(0x98),
+            WaveWrite::FrequencyControl(0x86),
+        ]
+    );
     assert_eq!(state.timer, 2);
 }
 
@@ -164,8 +167,8 @@ fn test_wave_effect24_gating() {
 fn test_wave_pattern_restored_on_stop() {
     let mut state = WaveEffectState::default();
     let custom_pattern = [
-        0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0,
-        0x0F, 0xED, 0xCB, 0xA9, 0x87, 0x65, 0x43, 0x21,
+        0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x0F, 0xED, 0xCB, 0xA9, 0x87, 0x65, 0x43,
+        0x21,
     ];
     let mut music = WaveMusicState {
         flags: WaveMusicFlags::default(),
@@ -205,9 +208,18 @@ fn test_all_24_wave_effects_start_and_progress() {
         }
 
         let expected_active = if id == 24 { 24 } else { id };
-        assert_eq!(state.active_effect, expected_active, "Effect {id} failed to activate");
-        assert!(music.flags.effect_owns_channel(), "Effect {id} failed to claim channel");
-        assert!(!writes.is_empty(), "Effect {id} produced no writes on start");
+        assert_eq!(
+            state.active_effect, expected_active,
+            "Effect {id} failed to activate"
+        );
+        assert!(
+            music.flags.effect_owns_channel(),
+            "Effect {id} failed to claim channel"
+        );
+        assert!(
+            !writes.is_empty(),
+            "Effect {id} produced no writes on start"
+        );
 
         // Tick once
         writes.clear();
@@ -231,10 +243,13 @@ fn test_wave_slides_exact_arithmetic() {
     // 0x0100 + 80 = 0x0150
     assert_eq!(state.freq_lo, 0x50);
     assert_eq!(state.freq_hi, 0x01);
-    assert_eq!(writes, vec![
-        WaveWrite::FrequencyLow(0x50),
-        WaveWrite::FrequencyControl(0x01),
-    ]);
+    assert_eq!(
+        writes,
+        vec![
+            WaveWrite::FrequencyLow(0x50),
+            WaveWrite::FrequencyControl(0x01),
+        ]
+    );
 
     // Effect 16: start freq is 0x0500, delta is -160 (0xFF60)
     writes.clear();
@@ -247,10 +262,13 @@ fn test_wave_slides_exact_arithmetic() {
     // 0x0500 - 160 = 0x0460
     assert_eq!(state.freq_lo, 0x60);
     assert_eq!(state.freq_hi, 0x04);
-    assert_eq!(writes, vec![
-        WaveWrite::FrequencyLow(0x60),
-        WaveWrite::FrequencyControl(0x04),
-    ]);
+    assert_eq!(
+        writes,
+        vec![
+            WaveWrite::FrequencyLow(0x60),
+            WaveWrite::FrequencyControl(0x04),
+        ]
+    );
 }
 
 #[test]
@@ -298,12 +316,11 @@ fn test_wave_driver_dispatch_and_execution() {
     }
     assert_eq!(driver.wave_slot.active_effect, 0);
     assert!(!driver.wave_music.flags.effect_owns_channel());
-    assert_eq!(driver.wave_writes, vec![
-        WaveWrite::Enable(0),
-        WaveWrite::WavePattern([0; 16]),
-    ]);
+    assert_eq!(
+        driver.wave_writes,
+        vec![WaveWrite::Enable(0), WaveWrite::WavePattern([0; 16]),]
+    );
 }
-
 
 /// (level, frequency_low) of the single frame a tick's writes carry.
 fn level_and_freq(writes: &[WaveWrite]) -> (u8, u8) {

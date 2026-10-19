@@ -173,7 +173,9 @@ where
                 actor.state = swoop_state.to_raw();
                 actor.sprite_flip.set_horizontal(flip);
                 actor.timer = HOVER_FRAMES;
-                WingedWalkerEffect::Hovering { timer: HOVER_FRAMES }
+                WingedWalkerEffect::Hovering {
+                    timer: HOVER_FRAMES,
+                }
             } else {
                 WingedWalkerEffect::FlyingUp {
                     altitude: actor.motion_leg,
@@ -388,7 +390,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, WingedWalkerEffect::Walked { state: WingedWalkerState::WalkLeft });
+        assert_eq!(
+            eff,
+            WingedWalkerEffect::Walked {
+                state: WingedWalkerState::WalkLeft
+            }
+        );
         assert_eq!(actor.position.x, 99);
 
         // Frame 1 (odd): ground probe passes, no position change
@@ -400,7 +407,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, WingedWalkerEffect::Walked { state: WingedWalkerState::WalkLeft });
+        assert_eq!(
+            eff,
+            WingedWalkerEffect::Walked {
+                state: WingedWalkerState::WalkLeft
+            }
+        );
         assert_eq!(actor.position.x, 99);
 
         // Frame 2 (even): encounters wall -> triggers takeoff
@@ -514,7 +526,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, WingedWalkerEffect::Swooping { state: WingedWalkerState::SwoopRight });
+        assert_eq!(
+            eff,
+            WingedWalkerEffect::Swooping {
+                state: WingedWalkerState::SwoopRight
+            }
+        );
         assert_eq!(actor.position.x, 102);
 
         // Frame 75 (odd): moves down by 1 (60 -> 61)
@@ -526,7 +543,12 @@ mod tests {
             },
             &mut world,
         );
-        assert_eq!(eff, WingedWalkerEffect::Swooping { state: WingedWalkerState::SwoopRight });
+        assert_eq!(
+            eff,
+            WingedWalkerEffect::Swooping {
+                state: WingedWalkerState::SwoopRight
+            }
+        );
         assert_eq!(actor.position.y, 61);
 
         // Next odd frame, hits ground -> lands!

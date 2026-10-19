@@ -17,14 +17,18 @@ pub(super) enum Error {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Effect {
-    Initialized { facing: Ordering },
+    Initialized {
+        facing: Ordering,
+    },
     Waiting,
     Spawn {
         sprite: u8,
         anim: u8,
         flip: SpriteFlipFlags,
     },
-    Refaced { facing: Ordering },
+    Refaced {
+        facing: Ordering,
+    },
 }
 
 pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Result<Effect, Error> {

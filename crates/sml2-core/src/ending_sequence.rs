@@ -184,20 +184,12 @@ impl EndingSequenceController {
             match mode {
                 EndingSpriteMode::None => {}
                 EndingSpriteMode::Walk => {
-                    let _ = append_walk(
-                        t,
-                        &mut self.walk_timer,
-                        scene.credits_sprite_y,
-                        &mut cells,
-                    );
+                    let _ =
+                        append_walk(t, &mut self.walk_timer, scene.credits_sprite_y, &mut cells);
                 }
                 EndingSpriteMode::Pair => {
-                    let _ = append_pair(
-                        t,
-                        &mut self.walk_timer,
-                        scene.credits_sprite_y,
-                        &mut cells,
-                    );
+                    let _ =
+                        append_pair(t, &mut self.walk_timer, scene.credits_sprite_y, &mut cells);
                 }
                 EndingSpriteMode::Secondary => {
                     let _ = append_secondary(t, scene.credits_sprite_y, false, &mut cells);
@@ -270,8 +262,7 @@ impl EndingSequenceController {
             6 => {
                 // Substate 6 ($42BA): Move credits Y on fade & 3 == 0, walk draw, sound
                 if (self.fade_timer as u8) & 0x03 == 0 {
-                    context.scene.credits_sprite_y =
-                        context.scene.credits_sprite_y.wrapping_add(1);
+                    context.scene.credits_sprite_y = context.scene.credits_sprite_y.wrapping_add(1);
                 }
                 self.draw_sprites(EndingSpriteMode::Walk, context.object_tables, context.scene);
                 sound_updated = true;
@@ -341,7 +332,11 @@ impl EndingSequenceController {
                 // Substate 12 ($41D2): Sound, burst cycle, odd frame SFX1=24
                 sound_updated = true;
                 self.sound_update_ticks += 1;
-                self.draw_sprites(EndingSpriteMode::Burst, context.object_tables, context.scene);
+                self.draw_sprites(
+                    EndingSpriteMode::Burst,
+                    context.object_tables,
+                    context.scene,
+                );
                 if self.fade_timer == 0 {
                     self.fade_timer = 0x0040;
                     self.sfx_request_0 = 7;

@@ -136,10 +136,28 @@ fn handler_0x5a969_real_mode_b_anim55_step() {
     actor.state = 0;
     actor.sprite = 10;
     sim.slots[1].b = actor.to_raw_slot();
-    sim.step(0x0080, 0x0080, &lay, &tables, &MarioContact::default(), false);
+    sim.step(
+        0x0080,
+        0x0080,
+        &lay,
+        &tables,
+        &MarioContact::default(),
+        false,
+    );
     assert_eq!(sim.slots[1].b[15], 1);
-    sim.step(0x0080, 0x0080, &lay, &tables, &MarioContact::default(), false);
-    assert_eq!(&sim.slots[1].b[..19], &[0; 19], "parent standby removes the child");
+    sim.step(
+        0x0080,
+        0x0080,
+        &lay,
+        &tables,
+        &MarioContact::default(),
+        false,
+    );
+    assert_eq!(
+        &sim.slots[1].b[..19],
+        &[0; 19],
+        "parent standby removes the child"
+    );
     assert_eq!(&sim.slots[1].b[23..], &[0; 9]);
     assert!(sim.unported.is_empty());
 }

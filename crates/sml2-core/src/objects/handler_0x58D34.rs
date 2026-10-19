@@ -18,7 +18,9 @@ pub(super) enum Error {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Effect {
-    Initialized { facing: Ordering },
+    Initialized {
+        facing: Ordering,
+    },
     Moved {
         carry_dx: Option<i16>,
         carry_dy: Option<i16>,
@@ -26,11 +28,7 @@ pub(super) enum Effect {
     Idle,
 }
 
-pub(super) fn update(
-    actor: &mut Actor,
-    frame: FrameTick,
-    player_x: u16,
-) -> Result<Effect, Error> {
+pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Result<Effect, Error> {
     if actor.state == 0 {
         actor.contact_kind = ContactKind::from_raw(32);
         let relation = actor.face_toward(player_x);

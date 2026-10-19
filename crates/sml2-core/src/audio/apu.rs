@@ -203,10 +203,10 @@ impl WaveChannel {
         };
 
         match self.volume_code {
-            1 => raw,          // 100%
-            2 => raw >> 1,     // 50%
-            3 => raw >> 2,     // 25%
-            _ => 0,            // Mute
+            1 => raw,      // 100%
+            2 => raw >> 1, // 50%
+            3 => raw >> 2, // 25%
+            _ => 0,        // Mute
         }
     }
 
@@ -331,7 +331,7 @@ pub struct Apu {
     /// Remainder of `70224 * sample_rate` from the last `frame_sample_count`,
     /// so a frame's sample count averages 738.3533 at 44.1 kHz and not 735.
     pub sample_frame_acc: u64,
-    pub cap_left: f32,  // High-pass DC-blocking filter state
+    pub cap_left: f32, // High-pass DC-blocking filter state
     pub cap_right: f32,
 }
 
@@ -718,12 +718,7 @@ impl Apu {
 
     /// Generates interleaved stereo f32 audio samples in `[-1.0, 1.0]`.
     /// `num_frames` is the number of stereo pairs (so `2 * num_frames` floats are appended to `out`).
-    pub fn generate_samples(
-        &mut self,
-        _sample_rate: u32,
-        num_frames: usize,
-        out: &mut Vec<f32>,
-    ) {
+    pub fn generate_samples(&mut self, _sample_rate: u32, num_frames: usize, out: &mut Vec<f32>) {
         out.reserve(num_frames * 2);
 
         // Scaling constants (4 channels, max combined magnitude 4.0)
@@ -783,17 +778,33 @@ impl Apu {
             let mut left = 0.0f32;
             let mut right = 0.0f32;
 
-            if pan_ch1_l { left += s1; }
-            if pan_ch1_r { right += s1; }
+            if pan_ch1_l {
+                left += s1;
+            }
+            if pan_ch1_r {
+                right += s1;
+            }
 
-            if pan_ch2_l { left += s2; }
-            if pan_ch2_r { right += s2; }
+            if pan_ch2_l {
+                left += s2;
+            }
+            if pan_ch2_r {
+                right += s2;
+            }
 
-            if pan_ch3_l { left += s3; }
-            if pan_ch3_r { right += s3; }
+            if pan_ch3_l {
+                left += s3;
+            }
+            if pan_ch3_r {
+                right += s3;
+            }
 
-            if pan_ch4_l { left += s4; }
-            if pan_ch4_r { right += s4; }
+            if pan_ch4_l {
+                left += s4;
+            }
+            if pan_ch4_r {
+                right += s4;
+            }
 
             // Normalize and scale with master volume
             let raw_l = left * norm * master_l;

@@ -183,7 +183,7 @@ fn pig2_hops_left_preserves_state5_and_turns_at_boundary() {
     st.b[B_SCRY] = 0x8E;
     st.b[B_T24] = 1;
     st.b[B_FSTATE] = 3; // intro drop from chimney
-    // Step until descent completes at 0x90: lands into state 5 (facing left) with crouch pose
+                        // Step until descent completes at 0x90: lands into state 5 (facing left) with crouch pose
     for _ in 0..20 {
         obj.handler_boss_def2_pig2(&mut st, &layout, &t);
         if st.b[B_SCRY] >= 0x90 {
@@ -275,7 +275,6 @@ fn anim4_spawns_anim5_and_chain_reaches_win() {
     assert!(obj.boss_clear_handoff, "level handoff armed at SCRY < 8");
     assert_eq!(obj.done, 1);
     // The source keeps state 3; game state 29 consumes the terminal event.
-
 }
 
 #[test]
@@ -316,7 +315,10 @@ fn pig3_crouches_then_leaps_high_and_lands_into_crouch() {
 
     for i in (1..=7).rev() {
         obj.handler_boss_def2_controller(&mut st, &layout, &t);
-        assert_eq!((st.b[B_T28], st.b[B_SPRITE], st.b[B_SCRY]), (i as u8, 0x28, 0x90));
+        assert_eq!(
+            (st.b[B_T28], st.b[B_SPRITE], st.b[B_SCRY]),
+            (i as u8, 0x28, 0x90)
+        );
     }
     obj.fff0 = 1;
     obj.handler_boss_def2_controller(&mut st, &layout, &t);
@@ -338,7 +340,10 @@ fn pig3_crouches_then_leaps_high_and_lands_into_crouch() {
         obj.fff0 = 6;
         obj.handler_boss_def2_controller(&mut st, &layout, &t);
     }
-    assert_eq!((st.b[B_SCRY], st.b[B_T24], st.b[B_T28], obj.sfx1), (0x90, 0, 8, 12));
+    assert_eq!(
+        (st.b[B_SCRY], st.b[B_T24], st.b[B_T28], obj.sfx1),
+        (0x90, 0, 8, 12)
+    );
 }
 
 #[test]
@@ -377,4 +382,3 @@ fn pig3_speed_escalates_and_bounces_between_walls() {
     obj.handler_boss_def2_controller(&mut st, &layout, &t);
     assert_eq!((st.b[B_FSTATE], st.b[B_FLIP]), (4, 0x20));
 }
-

@@ -62,10 +62,7 @@ pub enum HorizontalPlatformEffect {
 }
 
 /// Domain update for HorizontalPlatform (ROM $58C6A).
-pub fn update(
-    actor: &mut Actor,
-    context: HorizontalPlatformContext,
-) -> HorizontalPlatformEffect {
+pub fn update(actor: &mut Actor, context: HorizontalPlatformContext) -> HorizontalPlatformEffect {
     let state = HorizontalPlatformState::from_raw(actor.state);
     if state == HorizontalPlatformState::Init {
         // ROM $58C6F: ld a, 32 ; ldh [$FFE2], a (contact_kind = 0x20)

@@ -17,7 +17,13 @@ pub trait World {
     fn probe_floor(&mut self, actor: &Actor) -> bool;
 }
 
-pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16, dist_x: u8, world: &mut impl World) -> Effect {
+pub(super) fn update(
+    actor: &mut Actor,
+    frame: FrameTick,
+    player_x: u16,
+    dist_x: u8,
+    world: &mut impl World,
+) -> Effect {
     let _ = actor.animate_four_step_bob_cadence(frame, 2);
     match actor.state {
         0 => {

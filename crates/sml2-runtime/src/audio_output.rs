@@ -92,13 +92,7 @@ impl AudioOutput {
         // Try pw-play (PipeWire)
         if let Ok(path) = which("pw-play") {
             let mut cmd = Command::new(path);
-            cmd.args([
-                "-",
-                "-p",
-                "--rate=44100",
-                "--channels=2",
-                "--format=f32",
-            ]);
+            cmd.args(["-", "-p", "--rate=44100", "--channels=2", "--format=f32"]);
             return Some((cmd, "PipeWire (pw-play)"));
         }
 
