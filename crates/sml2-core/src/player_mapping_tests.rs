@@ -219,3 +219,39 @@ fn native_metasprite_append_legacy_draw_cells_projects_and_styles_real_player_fr
         ]
     );
 }
+
+#[test]
+fn pipe_travel_puts_every_player_cell_behind_the_background() {
+    // $52D5-$52DD: with $FFBB cleared the expander sets attr bit 7 on every
+    // entry, which is what lets a pipe's solid BG tiles cover Mario while he
+    // travels through it ($530D clears $FFBB for sPipeTravelDirection >= $10).
+    let t = tables();
+    let front = draw_cells(&t, 0, 100, 100, 0, 0, false).expect("frame 0");
+    assert!(front.iter().all(|c| c.attr & 0x80 == 0), "walking is in front");
+
+    let behind = draw_cells_styled(
+        &t,
+        0,
+        100,
+        100,
+        0,
+        0,
+        CellStyle {
+            force_palette_one: false,
+            behind_background: true,
+        },
+    )
+    .expect("frame 0");
+    assert!(!behind.is_empty());
+    assert!(
+        behind.iter().all(|c| c.attr & 0x80 != 0),
+        "every cell carries the priority bit: {:?}",
+        behind.iter().map(|c| c.attr).collect::<Vec<_>>()
+    );
+    // The mapping's own bits survive alongside it.
+    assert_eq!(behind.len(), front.len());
+    for (a, b) in front.iter().zip(behind.iter()) {
+        assert_eq!((a.tile, a.x, a.y), (b.tile, b.x, b.y));
+        assert_eq!(b.attr, a.attr | 0x80);
+    }
+}

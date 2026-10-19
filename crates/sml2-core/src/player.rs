@@ -177,21 +177,40 @@ pub fn draw_cells(
     cam_y: u16,
     star_flash: bool,
 ) -> Option<Vec<Cell>> {
+    draw_cells_styled(
+        tables,
+        frame,
+        mario_x,
+        mario_y,
+        cam_x,
+        cam_y,
+        CellStyle {
+            force_palette_one: star_flash,
+            behind_background: false,
+        },
+    )
+}
+
+/// `$5297` with an explicit style. The expander sets attr bit 7 on every entry
+/// when `$FFBB` is 0 (`$52D5-$52DD`), which is how the console puts Mario
+/// behind solid background tiles such as a pipe he is travelling through:
+/// pipe travel sets `$FFBB` to 0 at `$530D` and restores 1 for the in-front
+/// states.
+pub fn draw_cells_styled(
+    tables: &ObjectTables,
+    frame: u8,
+    mario_x: u16,
+    mario_y: u16,
+    cam_x: u16,
+    cam_y: u16,
+    style: CellStyle,
+) -> Option<Vec<Cell>> {
     let base = ScreenPosition {
         x: (mario_x as u8).wrapping_sub(cam_x as u8).wrapping_add(96),
         y: (mario_y as u8).wrapping_sub(cam_y as u8).wrapping_add(98),
     };
     let mut cells = Vec::new();
-    append_cells(
-        tables,
-        frame,
-        base,
-        CellStyle {
-            force_palette_one: star_flash,
-            behind_background: false,
-        },
-        &mut cells,
-    )?;
+    append_cells(tables, frame, base, style, &mut cells)?;
     Some(cells)
 }
 

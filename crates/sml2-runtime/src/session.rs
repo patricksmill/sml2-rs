@@ -154,6 +154,7 @@ impl LevelContext {
             obp0: manifest.header.palettes[1],
             obp1: manifest.header.palettes[2],
             player: Some((sim.x, sim.y, 0)),
+            player_behind_bg: false,
             player_shield: None,
             player_pan: 0,
             scroll_pan: 0,
@@ -389,6 +390,10 @@ impl LevelContext {
 
         if let Some(s) = self.spr.as_mut() {
             s.player = Some((self.sim.x, self.sim.y, f));
+            // `$530D`: pipe travel ($A221 >= $10) clears `$FFBB`, so the
+            // `$5297` expander sets attr bit 7 and the pipe's BG tiles cover
+            // Mario instead of him being drawn over them.
+            s.player_behind_bg = player_behind_bg(self.sim.pipe_dir);
             s.player_shield = if was_dead {
                 None
             } else {
@@ -629,6 +634,14 @@ pub const MAP_ENTRY_FRAMES: u16 = 37;
 /// Frames the map spends in the first fade step before the palette reaches
 /// white: `rBGP` $90 -> $40 at the fade start and -> $00 twelve frames later.
 pub const MAP_FADE_STEP: u16 = 12;
+
+/// `$530D`: `sPipeTravelDirection >= $10` clears `$FFBB`, which makes the
+/// `$5297` expander set attr bit 7 on every player entry - Mario goes behind
+/// the background, so the pipe he is travelling through covers him. Every
+/// other state leaves `$FFBB` set (or restores it) and draws him in front.
+pub(crate) fn player_behind_bg(pipe_dir: u8) -> bool {
+    pipe_dir >= 0x10
+}
 
 /// `rBGP`/`rOBP` fade step: subtract `steps` from each 2-bit shade field,
 /// clamped at 0. The console's map-to-level fade runs `$90` -> `$40` -> `$00`.
@@ -1096,6 +1109,8 @@ impl SessionRunner {
                     map_sim.cursor_x,
                     map_sim.cursor_y,
                     map_sim.cursor_move,
+                    map_sim.cursor_walking,
+                    map_sim.walk_frame,
                     map_sim.cursor_pose,
                     &self.assets.overworld_tilemaps,
                     &self.assets.overworld_manifest,

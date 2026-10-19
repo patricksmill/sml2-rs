@@ -533,6 +533,82 @@ impl OverworldManifest {
     }
 }
 
+/// Cursor OAM metasprites that bank 15 keeps outside the pose table, byte for
+/// byte: the camera-scroll arrows at `$4B77` (two blink frames, tiles $14-$17),
+/// the hidden block at `$4B87`, the screen-edge arrows at `$4B8F` (right) and
+/// `$4BAF` (left), and the walk stump at `$4BCF`/`$4BD7`/`$4BDF`.
+pub const SCROLL_ARROWS: [[(u8, u8); 4]; 2] = [
+    [(0x14, 0x00), (0x15, 0x20), (0x16, 0x00), (0x17, 0x20)],
+    [(0x15, 0x00), (0x14, 0x20), (0x17, 0x00), (0x16, 0x20)],
+];
+pub const HIDDEN_CELLS: [(u8, u8); 4] = [(0x7F, 0x00); 4];
+pub const EDGE_RIGHT: [[(u8, u8); 4]; 4] = [
+    [(0x10, 0x00), (0x7F, 0x00), (0x7F, 0x00), (0x7F, 0x00)],
+    [(0x11, 0x00), (0x7F, 0x00), (0x7F, 0x00), (0x7F, 0x00)],
+    [(0x12, 0x00), (0x7F, 0x00), (0x7F, 0x00), (0x7F, 0x00)],
+    [(0x13, 0x00), (0x7F, 0x00), (0x7F, 0x00), (0x7F, 0x00)],
+];
+pub const EDGE_LEFT: [[(u8, u8); 4]; 4] = [
+    [(0x10, 0x20), (0x7F, 0x00), (0x7F, 0x00), (0x7F, 0x00)],
+    [(0x11, 0x20), (0x7F, 0x00), (0x7F, 0x00), (0x7F, 0x00)],
+    [(0x12, 0x20), (0x7F, 0x00), (0x7F, 0x00), (0x7F, 0x00)],
+    [(0x13, 0x20), (0x7F, 0x00), (0x7F, 0x00), (0x7F, 0x00)],
+];
+pub const WALK_STUMP: [[(u8, u8); 4]; 3] = [
+    [(0x18, 0x20), (0x7F, 0x00), (0x7F, 0x00), (0x7F, 0x00)],
+    [(0x19, 0x20), (0x7F, 0x00), (0x7F, 0x00), (0x7F, 0x00)],
+    [(0x1A, 0x20), (0x7F, 0x00), (0x7F, 0x00), (0x7F, 0x00)],
+];
+/// `$498C`: the four-entry order the stump cycles through (`00 08 00 10`).
+pub const STUMP_ORDER: [usize; 4] = [0, 1, 0, 2];
+
+/// Which metasprite the map cursor draws this frame, chosen exactly like the
+/// bank-15 chain at `$3C901`:
+///
+/// - `$3C901`: high nibble of `sMapCursorMove` equal to 8 (move bit 7) is the
+///   camera scroll, drawn as the blinking `$4B77` arrows instead of the cursor.
+/// - `$3C92A`: bit 2 of that nibble (`$40`) hides the cursor (`$4B87`, all `$7F`).
+/// - `$3C92E`/`$3C933`: nibble `$0A`, or bit 1 clear, keeps the pose table entry.
+/// - otherwise, while a walk stream runs, move bit 1 picks `$4B8F` and bit 0
+///   `$4BAF` (four frames each, indexed by `walk_frame & $0C`); with neither the
+///   stump at `$4BCF` cycles through `$498C` on `walk_frame & $18`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorSprite {
+    Pose(u8),
+    ScrollArrows(usize),
+    Hidden,
+    EdgeRight(usize),
+    EdgeLeft(usize),
+    Stump(usize),
+}
+
+pub fn cursor_sprite(
+    cursor_move: u8,
+    cursor_walking: u8,
+    walk_frame: u8,
+    cursor_pose: u8,
+) -> CursorSprite {
+    let hi = (cursor_move & 0xF0) >> 4;
+    if hi == 0x08 {
+        return CursorSprite::ScrollArrows(((walk_frame & 0x08) >> 3) as usize);
+    }
+    if hi & 0x04 != 0 {
+        return CursorSprite::Hidden;
+    }
+    if hi != 0x0A && hi & 0x02 != 0 {
+        if cursor_walking != 0 {
+            if cursor_move & 0x02 != 0 {
+                return CursorSprite::EdgeRight(((walk_frame & 0x0C) >> 2) as usize);
+            }
+            if cursor_move & 0x01 != 0 {
+                return CursorSprite::EdgeLeft(((walk_frame & 0x0C) >> 2) as usize);
+            }
+        }
+        return CursorSprite::Stump(STUMP_ORDER[((walk_frame & 0x18) >> 3) as usize]);
+    }
+    CursorSprite::Pose(cursor_pose & 0x0F)
+}
+
 /// Render one overworld frame into a 160x144 (or custom vw x vh) grayscale pixel buffer.
 pub fn render_overworld_view(
     screen_id: u8,
@@ -541,6 +617,8 @@ pub fn render_overworld_view(
     cursor_x: u8,
     cursor_y: u8,
     cursor_move: u8,
+    cursor_walking: u8,
+    walk_frame: u8,
     cursor_pose: u8,
     tilemaps: &OverworldTilemaps,
     manifest: &OverworldManifest,
@@ -614,37 +692,56 @@ pub fn render_overworld_view(
         }
     }
 
-    // Mario cursor metasprite
-    let mut cur_x = cursor_x as i32;
-    let mut cur_y = cursor_y as i32;
-    if cursor_move & 0x20 != 0 {
-        cur_x += 4;
-        cur_y += 8;
-    }
-    let spr_x0 = cur_x - 8;
-    let spr_y0 = cur_y - 16;
-
-    if let Some(pose_def) = manifest.cursor_pose(cursor_pose) {
-        for tile in &pose_def.tiles {
-            let tile_x0 = spr_x0 + tile.dx as i32;
-            let tile_y0 = spr_y0 + tile.dy as i32;
-            for dy in 0..8 {
-                let py = tile_y0 + dy;
-                if py < 0 || py >= vh as i32 {
+    // Cursor OAM (`$3C901`): four 8x8 cells from the metasprite the chain picks,
+    // placed at (cursor_x, cursor_y) plus the (+4,+8) shift the walk stream adds
+    // while `sMapCursorMove` has a direction and bit 5 set (`$3C9B5`).
+    let (shift_x, shift_y) = if cursor_move & 0x0F != 0 && cursor_move & 0x20 != 0 {
+        (4i32, 8i32)
+    } else {
+        (0, 0)
+    };
+    let cells: [(u8, u8); 4] =
+        match cursor_sprite(cursor_move, cursor_walking, walk_frame, cursor_pose) {
+            CursorSprite::Pose(pose) => match manifest.cursor_pose(pose) {
+                Some(def) => {
+                    let mut arr = HIDDEN_CELLS;
+                    for (i, tile) in def.tiles.iter().take(4).enumerate() {
+                        arr[i] = (tile.tile, tile.attr);
+                    }
+                    arr
+                }
+                None => HIDDEN_CELLS,
+            },
+            CursorSprite::ScrollArrows(frame) => SCROLL_ARROWS[frame & 1],
+            CursorSprite::Hidden => HIDDEN_CELLS,
+            CursorSprite::EdgeRight(frame) => EDGE_RIGHT[frame & 3],
+            CursorSprite::EdgeLeft(frame) => EDGE_LEFT[frame & 3],
+            CursorSprite::Stump(frame) => WALK_STUMP[frame % WALK_STUMP.len()],
+        };
+    let spr_x0 = cursor_x as i32 - 8 + shift_x;
+    let spr_y0 = cursor_y as i32 - 16 + shift_y;
+    for (i, (tile, attr)) in cells.iter().enumerate() {
+        if *tile == 0x7F {
+            continue; // $7F is the metasprite's blank entry
+        }
+        let tile_x0 = spr_x0 + (i as i32 & 1) * 8;
+        let tile_y0 = spr_y0 + (i as i32 >> 1) * 8;
+        for dy in 0..8 {
+            let py = tile_y0 + dy;
+            if py < 0 || py >= vh as i32 {
+                continue;
+            }
+            let src_y = if attr & 0x40 != 0 { 7 - dy } else { dy };
+            for dx in 0..8 {
+                let px = tile_x0 + dx;
+                if px < 0 || px >= vw as i32 {
                     continue;
                 }
-                let src_y = if tile.attr & 0x40 != 0 { 7 - dy } else { dy };
-                for dx in 0..8 {
-                    let px = tile_x0 + dx;
-                    if px < 0 || px >= vw as i32 {
-                        continue;
-                    }
-                    let src_x = if tile.attr & 0x20 != 0 { 7 - dx } else { dx };
-                    if let Some(tile_data) = tiles_vram.get(tile.tile as usize) {
-                        let col = tile_data[src_y as usize * 8 + src_x as usize];
-                        if col != 0 {
-                            img[py as usize * vw + px as usize] = obj_shades[col as usize];
-                        }
+                let src_x = if attr & 0x20 != 0 { 7 - dx } else { dx };
+                if let Some(tile_data) = tiles_vram.get(*tile as usize) {
+                    let col = tile_data[src_y as usize * 8 + src_x as usize];
+                    if col != 0 {
+                        img[py as usize * vw + px as usize] = obj_shades[col as usize];
                     }
                 }
             }
@@ -895,7 +992,7 @@ mod tests {
         // Render before unlock: progress byte at offset 2 is 0 -> tile is 0
         let progress = [0u8; 42];
         let frame_locked = render_overworld_view(
-            1, 0, 0, 0, 0, 0, 0,
+            1, 0, 0, 0, 0, 0, 0, 0, 0,
             &tilemaps, &manifest, &progress,
             &vram, 0xE4, 0xD0, 160, 144,
         );
@@ -905,7 +1002,7 @@ mod tests {
         let mut progress_unlocked = [0u8; 42];
         progress_unlocked[2] = 1;
         let frame_unlocked = render_overworld_view(
-            1, 0, 0, 8, 16, 0, 0, // cursor placed at hardware OAM (8, 16) -> screen pixel (0, 0)
+            1, 0, 0, 8, 16, 0, 0, 0, 0, // cursor at hardware OAM (8, 16) -> screen pixel (0, 0)
             &tilemaps, &manifest, &progress_unlocked,
             &vram, 0xE4, 0xD0, 160, 144,
         );
@@ -932,5 +1029,116 @@ mod tests {
 
         // Invalid blob size rejected
         assert!(OverworldTiles::from_bytes(&blob[..100]).is_none());
+    }
+}
+
+#[cfg(test)]
+mod cursor_tests {
+    use super::*;
+
+    /// `$3C901`: move bit 7 is the camera scroll, drawn as the two-frame
+    /// `$4B77` arrow pair that blinks on `walk_frame` bit 3.
+    #[test]
+    fn camera_scroll_draws_the_blinking_arrows_not_the_cursor() {
+        assert_eq!(cursor_sprite(0x80, 0, 0x00, 0), CursorSprite::ScrollArrows(0));
+        assert_eq!(cursor_sprite(0x80, 0, 0x08, 0), CursorSprite::ScrollArrows(1));
+        assert_eq!(cursor_sprite(0x80, 0, 0x10, 0), CursorSprite::ScrollArrows(0));
+        assert_eq!(SCROLL_ARROWS[0][0], (0x14, 0x00));
+        assert_eq!(SCROLL_ARROWS[1][3], (0x16, 0x20));
+        // The comparison is the whole nibble ($3C901's `cp $08`), so bit 7 with
+        // bit 5 set is NOT the scroll case: $A0 keeps the pose metasprite
+        // (`cp $0A`), while $82 still reaches the arrows.
+        assert_eq!(cursor_sprite(0xA2, 1, 0x04, 3), CursorSprite::Pose(3));
+        assert_eq!(cursor_sprite(0x82, 1, 0x04, 3), CursorSprite::ScrollArrows(0));
+    }
+
+    /// `$3C92A`: bit 6 of the high nibble blanks the cursor ($4B87).
+    #[test]
+    fn move_bit_6_hides_the_cursor() {
+        assert_eq!(cursor_sprite(0x40, 0, 0, 12), CursorSprite::Hidden);
+        assert_eq!(cursor_sprite(0x44, 1, 0x0C, 1), CursorSprite::Hidden);
+        assert_eq!(HIDDEN_CELLS[0].0, 0x7F);
+    }
+
+    /// `$3C959`/`$3C933`: while a walk stream runs, move bits 1/0 pick the
+    /// four-frame edge arrows; without them the stump cycles `$498C` = 0,8,0,16.
+    #[test]
+    fn walk_stream_picks_the_edge_arrows_and_the_stump() {
+        assert_eq!(cursor_sprite(0x22, 1, 0x00, 0), CursorSprite::EdgeRight(0));
+        assert_eq!(cursor_sprite(0x22, 1, 0x04, 0), CursorSprite::EdgeRight(1));
+        assert_eq!(cursor_sprite(0x22, 1, 0x08, 0), CursorSprite::EdgeRight(2));
+        assert_eq!(cursor_sprite(0x22, 1, 0x0C, 0), CursorSprite::EdgeRight(3));
+        assert_eq!(cursor_sprite(0x21, 1, 0x0C, 0), CursorSprite::EdgeLeft(3));
+        assert_eq!(EDGE_LEFT[3][0], (0x13, 0x20));
+        // walking == 0 goes straight to the stump, and so does walking with
+        // neither direction bit.
+        assert_eq!(cursor_sprite(0x20, 0, 0x00, 0), CursorSprite::Stump(0));
+        assert_eq!(cursor_sprite(0x20, 1, 0x08, 0), CursorSprite::Stump(1));
+        assert_eq!(cursor_sprite(0x20, 1, 0x10, 0), CursorSprite::Stump(0));
+        assert_eq!(cursor_sprite(0x20, 1, 0x18, 0), CursorSprite::Stump(2));
+        assert_eq!(WALK_STUMP[2][0], (0x1A, 0x20));
+    }
+
+    /// `$3C92E`/`$3C933`: the nibble-$0A case and a clear bit 1 both keep the
+    /// pose metasprite the $4AD7 table picked.
+    #[test]
+    fn pose_table_cases_keep_the_cursor_metasprite() {
+        assert_eq!(cursor_sprite(0x00, 0, 0, 12), CursorSprite::Pose(12));
+        assert_eq!(cursor_sprite(0x0A, 1, 0, 3), CursorSprite::Pose(3));
+        assert_eq!(cursor_sprite(0xA0, 1, 0x0C, 5), CursorSprite::Pose(5));
+        assert_eq!(cursor_sprite(0x01, 0, 0, 0x1C), CursorSprite::Pose(0x0C));
+    }
+}
+
+#[cfg(test)]
+mod cursor_render_tests {
+    use super::*;
+
+    /// A 2x2 pose metasprite (tiles 0,1,4,5) and the scroll arrows (tiles
+    /// $14-$17) are drawn from the same VRAM block; give each tile a distinct
+    /// shade so the test can tell which one reached the screen.
+    fn assets() -> (OverworldTilemaps, OverworldManifest, Vec<[u8; 64]>) {
+        let mut vram = vec![[0u8; 64]; 384];
+        vram[0x00] = [3u8; 64]; // pose top-left
+        vram[0x01] = [3u8; 64];
+        vram[0x04] = [3u8; 64];
+        vram[0x05] = [3u8; 64];
+        vram[0x14] = [1u8; 64]; // scroll arrow, colour 1
+        vram[0x15] = [1u8; 64];
+        vram[0x16] = [1u8; 64];
+        vram[0x17] = [1u8; 64];
+        let manifest = OverworldManifest::from_json_str(
+            r#"{"cursor_poses":[{"direction":"Left","pose":0,"step":0,"tiles":[
+                {"attr":0,"dx":0,"dy":0,"tile":0},{"attr":0,"dx":8,"dy":0,"tile":1},
+                {"attr":0,"dx":0,"dy":8,"tile":4},{"attr":0,"dx":8,"dy":8,"tile":5}]}],
+                "dynamic_unlocks":[],"patches":[],"screens":[]}"#,
+        )
+        .expect("manifest");
+        (OverworldTilemaps::default(), manifest, vram)
+    }
+
+    fn draw(move_: u8, walking: u8, walk_frame: u8) -> Vec<u8> {
+        let (tilemaps, manifest, vram) = assets();
+        render_overworld_view(
+            1, 0, 0, 8, 16, move_, walking, walk_frame, 0, &tilemaps, &manifest, &[], &vram, 0xE4,
+            0xD0, 32, 32,
+        )
+    }
+
+    #[test]
+    fn the_camera_scroll_arrows_replace_the_cursor_metasprite() {
+        let obj = crate::video::bgp_shades(0xD0);
+        let bg = crate::video::bgp_shades(0xE4);
+        let idle = draw(0x00, 0, 0);
+        let scroll = draw(0x80, 0, 0);
+        let hidden = draw(0x40, 0, 0);
+
+        assert_eq!(idle[0], obj[3], "idle draws the pose tiles");
+        assert_eq!(scroll[0], obj[1], "camera scroll draws the $4B77 arrow");
+        assert_eq!(hidden[0], bg[0], "bit 6 blanks the cursor entirely");
+        // The second blink frame is a different arrow tile, so the pair blinks.
+        assert_eq!(draw(0x80, 0, 0x08)[0], obj[1], "frame 1 still an arrow");
+        assert_eq!(draw(0x80, 0, 0x08)[8], obj[1], "second cell of the pair");
+        assert_ne!(scroll[0], idle[0]);
     }
 }

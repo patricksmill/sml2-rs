@@ -376,6 +376,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 obp1: manifest.header.palettes[2],
                 player: mario,
                 player_shield: None,
+                player_behind_bg: false,
                 player_pan: 0,
                 scroll_pan: 0,
                 bumpers: Vec::new(),
@@ -791,6 +792,9 @@ pub(crate) struct SpriteCtx {
     pub(crate) player: Option<(u16, u16, u8)>,
     /// Optional 3-up moon shield ($54FB): world position + frame 220/221.
     pub(crate) player_shield: Option<(u16, u16, u8)>,
+    /// `$530D`'s `$FFBB` in draw order: true while pipe travel has set it to 0,
+    /// which makes the `$5297` expander set attr bit 7 (Mario behind BG).
+    pub(crate) player_behind_bg: bool,
     /// Brick-bump sprites for this frame (`PlayerSim::block_draw`): the engine
     /// stages `$FFC4`/`$FFC5`/`$FFC6` and enqueues them (`$5297`), so they are
     /// extra OAM sprites drawn at the block — through the same player-sprite
@@ -1054,9 +1058,19 @@ pub(crate) fn render_view(
         let pal1 = video::bgp_shades(s.obp1);
         let mut taken = vec![false; vw * vh];
         if let Some((mx, my, frame)) = s.player {
-            let cells =
-                sml2_core::player::draw_cells(&s.tables, frame, mx, my, cam_x, cam_y, false)
-                    .ok_or_else(|| format!("player frame {frame} has no mapping"))?;
+            let cells = sml2_core::player::draw_cells_styled(
+                &s.tables,
+                frame,
+                mx,
+                my,
+                cam_x,
+                cam_y,
+                sml2_core::player::CellStyle {
+                    force_palette_one: false,
+                    behind_background: s.player_behind_bg,
+                },
+            )
+            .ok_or_else(|| format!("player frame {frame} has no mapping"))?;
             // The player base already contains the camera (+96/+98 is world -
             // cam), so these cells are in final screen space: no `sx/sy`.
             for c in cells {
@@ -3886,6 +3900,7 @@ mod tests {
             obp1: 0xE4,
             player,
             player_shield: None,
+            player_behind_bg: false,
             bumpers: Vec::new(),
             fireballs: Vec::new(),
             boss_oam: Vec::new(),

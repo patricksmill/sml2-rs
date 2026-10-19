@@ -52,7 +52,7 @@ fn hub_navigation_to_level_1_entry_and_clear_bell_return() {
     assert_eq!(runner.lives, 5);
 
     // Press A to enter Level 1 (level index 0).
-    let outcome = press_a_and_wait_for_level(&mut runner);
+    let _ = press_a_and_wait_for_level(&mut runner);
 
     // Session is now in level 0.
     match &mut runner.state {
@@ -112,7 +112,7 @@ fn in_level_hazard_death_and_fade_returns_to_hub_with_decremented_lives() {
     let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
 
     // Enter level 0.
-    let outcome = press_a_and_wait_for_level(&mut runner);
+    let _ = press_a_and_wait_for_level(&mut runner);
     assert_eq!(runner.lives, 5);
 
     // Trigger death: dead = 0xFF, dead_fade = true, fade_timer = 3 for fast deterministic test.
@@ -169,7 +169,7 @@ fn save_file_persistence_writes_disk_record_and_reloads_accurately() {
     let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
 
     // Entering a level triggers $2934 save.
-    let outcome = press_a_and_wait_for_level(&mut runner);
+    let _ = press_a_and_wait_for_level(&mut runner);
     assert!(tmp_save.exists(), "save file must be written to disk");
 
     let rec = fs::read(&tmp_save).expect("save file must exist");
@@ -225,7 +225,7 @@ fn game_over_when_lives_exhausted() {
     let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
     runner.lives = 0; // Will become game over on death
 
-    let outcome = press_a_and_wait_for_level(&mut runner);
+    let _ = press_a_and_wait_for_level(&mut runner);
 
     match &mut runner.state {
         SessionState::InLevel(ctx) => {
@@ -276,7 +276,7 @@ fn session_audio_synthesis_during_gameplay() {
     assert_eq!(runner.audio_samples().len(), 1476);
 
     // Enter Level 1
-    let outcome = press_a_and_wait_for_level(&mut runner);
+    let _ = press_a_and_wait_for_level(&mut runner);
 
     // Step several frames of in-level gameplay to advance music sequencer and SFX
     let mut audible_frames = 0;
@@ -314,7 +314,7 @@ fn level_entry_publishes_the_active_song_for_the_timer_gate() {
 
     let assets = SessionAssets::load().expect("session assets must load");
     let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
-    let outcome = press_a_and_wait_for_level(&mut runner);
+    let _ = press_a_and_wait_for_level(&mut runner);
 
     let song = match &runner.state {
         SessionState::InLevel(ctx) => ctx.sim.level_song,
@@ -441,4 +441,18 @@ fn map_level_entry_runs_the_console_transition() {
     assert_eq!(entered, Some((37, 0)));
     assert!(matches!(runner.state, SessionState::InLevel(_)));
     let _ = fs::remove_file(&tmp_save);
+}
+
+#[test]
+fn pipe_travel_draws_mario_behind_the_background() {
+    // $530D: `sPipeTravelDirection >= $10` clears `$FFBB`, and $52D5-$52DD then
+    // sets attr bit 7 on every player OAM entry, so the pipe's BG covers Mario.
+    // Arming values 1/2 and "no pipe" stay in front (a measured walk keeps OAM
+    // attr $20, bit 7 clear).
+    for armed in [0u8, 1, 2, 0x0E, 0x0F] {
+        assert!(!crate::session::player_behind_bg(armed), "{armed:#04x}");
+    }
+    for travelling in [0x10u8, 0x20, 0x30, 0x40] {
+        assert!(crate::session::player_behind_bg(travelling), "{travelling:#04x}");
+    }
 }
