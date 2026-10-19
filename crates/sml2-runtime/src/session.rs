@@ -607,6 +607,8 @@ pub struct Session {
 impl Session {
     pub fn new(assets: SessionAssets) -> Self {
         let mut map = MapSim::new();
+        map.set_castle_scripts(assets.castle_scripts.clone());
+        map.lives = 5;
         map.load_screen(0, 0, &assets.node_records);
         let sound_driver = SoundDriver::with_music_bank(assets.music_bank.clone());
         Self {
@@ -715,6 +717,8 @@ impl Session {
             return false;
         }
         let mut map = MapSim::new();
+        map.set_castle_scripts(self.assets.castle_scripts.clone());
+        map.lives = data[0x43];
         if map.apply_save_record(data, &self.assets.node_records) {
             self.lives = data[0x43];
             self.coins_low = data[0x40];
@@ -820,6 +824,15 @@ impl Session {
                     &self.assets.walk,
                     &self.assets.node_records,
                 );
+
+                // A bonus room writes `sLives`/`sCurPowerup`/`sCoin*`; mirror
+                // them back while the room owns the screen.
+                if map_sim.room.is_some() {
+                    self.lives = map_sim.lives;
+                    self.powerup = map_sim.powerup;
+                    self.coins_low = map_sim.coins_low;
+                    self.coins_high = map_sim.coins_high;
+                }
 
                 if entry.hub_reload {
                     // `$3F156` first stops sound and blanks the LCD; its final
@@ -1032,6 +1045,7 @@ impl Session {
                             let target_node = handoff.node;
                             let target_screen = handoff.screen.unwrap_or(0);
                             let mut map_sim = MapSim::from_player(&ctx.sim);
+                            map_sim.set_castle_scripts(self.assets.castle_scripts.clone());
                             map_sim.mario_dead = 0xFF;
                             map_sim.load_screen(
                                 target_screen,
@@ -1064,6 +1078,7 @@ impl Session {
                         let target_node = handoff.node;
                         let target_screen = handoff.screen.unwrap_or(0);
                         let mut map_sim = MapSim::from_player(&ctx.sim);
+                        map_sim.set_castle_scripts(self.assets.castle_scripts.clone());
                         map_sim.load_screen(
                             target_screen,
                             ctx.sim.exit_tile_flag,
@@ -1143,6 +1158,8 @@ impl Session {
                 self.lives = 5;
                 self.powerup = 0;
                 let mut map_sim = MapSim::new();
+                map_sim.set_castle_scripts(self.assets.castle_scripts.clone());
+                map_sim.lives = 5;
                 map_sim.load_screen(0, 0, &self.assets.node_records);
                 self.state = SessionState::Overworld(map_sim);
                 StepOutcome::Continue

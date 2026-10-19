@@ -101,11 +101,20 @@ Both loaders are `CastleRoom::enter_bell_a` (timer nibble -> `$4A1A`/`$4A2F`/
 `$4A58`, slots 2/26/50/74/98, `$6734`) and `enter_bell_b` (`$6761`). The map
 entry from screen 8 and the return landing stay with ME-5's acceptance work.
 
-### ME-4 — Coin-door rooms 9-12 (M)
-`$3F4A0`/`$4A81`: free-walk Mario from OAM `(40,156)`, collect the room's
-sprites, award coins/power-ups, set `sCastleState == 3` and return to castle
-screen 8. Prices and the unpayable path are already modelled. Tests: each of
-the four rooms, reward byte, no duplicate award, return screen.
+### ME-4 — Coin-door rooms 9-12 (done)
+`$3F3B9`..`$3F45E` stage screens 9-12 from `$66D4` (the four lists are
+identical) through `$3E2A2`, `$3F35A`'s OAM entry (156,40) and `$3F495`'s SFX
+5. `MapSim`'s coin door builds `CastleRoom::enter_coin` from
+`castle_scripts`, and `$3F4A0` returns through `$3D880` (screen 8, music 13)
+when the script writes state 3.
+
+The room's item comes from the door node's ten-byte row in the `$4000` table
+(`$4F76` -> `$4000/$400A/$4014/$401E`), so nodes `$6E`/`$6F`/`$70`/`$71` give
+rows 0-3. The session mirrors the room's `sLives`/`sCurPowerup`/`sCoin*` while
+it owns the screen.
+
+Tests: the node -> item row mapping, all four screens' staging, award-once
+(state 6 only counts down), and the state-3 return to screen 8.
 
 ### ME-5 — Bell rooms 13/14 (M)
 Both room scripts and both loaders are ported (ME-3): `$4512` (screen 13),

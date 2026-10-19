@@ -275,6 +275,47 @@ impl CastleRoom {
         room
     }
 
+    /// `$3F3B9`..`$3F45E`: stage a coin room (screens 9-12). `$3F35A` sets
+    /// Mario's OAM entry to `(156, 40)`; `$3F495` asks for SFX 5 (the door's
+    /// music 21 comes from `MapSim`'s door entry).
+    pub fn enter_coin(scripts: &CastleScripts, screen: u8) -> Self {
+        let mut room = Self::coin(scripts);
+        room.oam = [156, 40, 0, 0];
+        room.sfx[0] = 5;
+        let name = format!("coin_room_{screen}_sprites");
+        room.stage_list(scripts.blob(&name).unwrap_or(&[]));
+        room
+    }
+
+    /// `$3E2A2`: clear the sprite and patch tables, then load the two 3-byte
+    /// record runs that follow the list's `$FF` terminator.
+    fn stage_list(&mut self, list: &[u8]) {
+        self.sprites = [0xFF; SPRITE_BYTES];
+        self.patches = [0xFF; 48];
+        let mut at = 0;
+        for index in 0..16 {
+            let Some(record) = list.get(at..at + 3) else {
+                return;
+            };
+            if record[0] == 0xFF {
+                at += 3;
+                break;
+            }
+            self.sprites[index * 3..index * 3 + 3].copy_from_slice(record);
+            at += 3;
+        }
+        for index in 0..16 {
+            let Some(record) = list.get(at..at + 3) else {
+                return;
+            };
+            if record[0] == 0xFF {
+                break;
+            }
+            self.patches[index * 3..index * 3 + 3].copy_from_slice(record);
+            at += 3;
+        }
+    }
+
     /// `$3E2A2`'s sprite list: 3-byte records until an `$FF` record.
     fn load_sprite_list(&mut self, which: usize) {
         let list = self.sprite_lists[which].clone();
@@ -1726,6 +1767,56 @@ mod tests {
         assert_eq!(&b.sprites[..3], &[0x20, 0xA0, 0x00], "$6761 record 0");
         assert_eq!(b.music, 21);
         assert_eq!(b.sfx[0], 5);
+    }
+
+    /// The four coin doors share `$66D4`'s sprite list; the door node picks the
+    /// ten-byte row in the `$4000` item table (`$4F76` -> `$4000/$400A/$4014/
+    /// $401E`).
+    #[test]
+    fn the_coin_room_item_comes_from_the_door_node() {
+        let scripts = scripts();
+        for (node, expect) in [(0x6E, 2u8), (0x6F, 5), (0x70, 6), (0x71, 7)] {
+            let mut room = CastleRoom::enter_coin(&scripts, 10);
+            let mut rewards = RoomRewards::default();
+            room.state = 1;
+            room.timer = 1;
+            room.set_sprite(0xA6B9, 40); // reveal column 0
+            room.tick(
+                RoomInput {
+                    keys_pressed: 0,
+                    keys_held: 0,
+                    frame: 0,
+                    node,
+                    div: 0,
+                },
+                &mut rewards,
+            );
+            assert_eq!(room.item_index, expect, "node {node:#04X}");
+        }
+        for screen in 9..=12 {
+            let room = CastleRoom::enter_coin(&scripts, screen);
+            assert_eq!(&room.sprites[..3], &[0x20, 0xA0, 0x00], "screen {screen}");
+            assert_eq!(room.oam, [156, 40, 0, 0]);
+        }
+    }
+
+    /// The award runs once, in state 2: the state-6 hold only counts down.
+    #[test]
+    fn the_coin_room_awards_once() {
+        let scripts = scripts();
+        let mut room = CastleRoom::enter_coin(&scripts, 10);
+        let mut rewards = RoomRewards {
+            lives: 0x05,
+            ..Default::default()
+        };
+        room.item_index = 4;
+        room.state = 2;
+        room.timer = 1;
+        room.tick(input(0, 0), &mut rewards);
+        assert_eq!(rewards.lives, 0x06);
+        let after = rewards.lives;
+        room.tick(input(1, 0), &mut rewards);
+        assert_eq!(rewards.lives, after, "no second award in state 6");
     }
 
     /// `$60D32` reads the node's ten-byte row in the `$4000` item table.

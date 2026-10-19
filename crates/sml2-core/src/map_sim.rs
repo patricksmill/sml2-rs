@@ -647,6 +647,8 @@ pub struct MapSim {
     pub lives: u8,
     /// `sCurPowerup`.
     pub powerup: u8,
+    /// The extracted bank-24 room blobs; a coin door builds its room from them.
+    pub castle_scripts: Option<crate::castle::CastleScripts>,
 }
 
 impl Default for MapSim {
@@ -697,7 +699,14 @@ impl MapSim {
             room: None,
             lives: 0,
             powerup: 0,
+            castle_scripts: None,
         }
+    }
+
+    /// Attach the extracted room blobs (`extracted/map/castle_scripts.*`), so a
+    /// coin door can stage its room.
+    pub fn set_castle_scripts(&mut self, scripts: crate::castle::CastleScripts) {
+        self.castle_scripts = Some(scripts);
     }
 
     /// Seed the map's persistent block from the player's save image.
@@ -1350,6 +1359,11 @@ impl MapSim {
             // script instead of the cursor chain.
             self.bookkeeping(input.div);
             self.room_tick(input, &mut out);
+            if self.screen_id <= 12 && self.room.as_ref().is_some_and(|r| r.state == 3) {
+                // `$3F4A0`: state 3 calls `$3D880`, the castle screen loader.
+                self.room = None;
+                out.music = Some(self.load_screen(8, 0, records));
+            }
             false
         } else {
             self.bookkeeping(input.div);
@@ -1684,6 +1698,12 @@ impl MapSim {
             self.mario_dead = 0xFF;
         }
         self.screen_id = d.screen_id;
+        if (9..=12).contains(&self.screen_id) {
+            self.room = self
+                .castle_scripts
+                .as_ref()
+                .map(|scripts| crate::castle_room::CastleRoom::enter_coin(scripts, d.screen_id));
+        }
         self.scroll_only_latch = 0;
         self.cursor_anim = 0;
         // $3E3BA's walk-out (the zone doors); the coin doors load without one.
@@ -2768,6 +2788,46 @@ mod tests {
         assert_eq!(room.state, 5, "$4A81 started the walk-in");
         assert_eq!(out.sfx, Some(1), "the start sfx reaches MapEntry");
         assert_eq!(room.sfx[0], 0, "and is cleared in the room");
+    }
+
+    /// `$3F3F0` stages a coin room; `$3F4A0` returns to the castle loader once
+    /// the script writes state 3.
+    #[test]
+    fn a_coin_door_stages_its_room_and_returns_to_the_castle() {
+        let (n, walk) = (nodes(), walk_blob());
+        let scripts = crate::castle::CastleScripts::from_parts(
+            include_bytes!("../../../extracted/map/castle_scripts.bin").to_vec(),
+            include_str!("../../../extracted/map/castle_scripts.json"),
+        )
+        .expect("castle scripts asset");
+        let mut map = MapSim::new();
+        map.set_castle_scripts(scripts);
+        map.screen_id = 0;
+        map.node = 0x70; // $0200, screen 10
+        map.coins_low = 0x00;
+        map.coins_high = 0x20;
+        map.tick(
+            MapInput {
+                keys_pressed: 0x01,
+                ..Default::default()
+            },
+            &n,
+            &walk,
+            &recs(),
+        );
+        assert_eq!(map.screen_id, 10);
+        let room = map.room.as_ref().expect("the door staged a room");
+        assert_eq!(room.kind, crate::castle_room::RoomKind::CoinRooms);
+        assert_eq!(room.oam, [156, 40, 0, 0], "$3F35A's OAM entry");
+        assert_eq!(room.sfx[0], 5, "$3F495's SFX request");
+        assert_eq!(&room.sprites[..3], &[0x20, 0xA0, 0x00], "$671C record 0");
+
+        // The script reaching state 3 returns through `$3D880`.
+        map.room.as_mut().unwrap().state = 3;
+        let out = map.tick(MapInput::default(), &n, &walk, &recs());
+        assert_eq!(map.screen_id, 8);
+        assert!(map.room.is_none(), "the room is done");
+        assert_eq!(out.music, Some(13), "$3D880 asks for music 13");
     }
 
     /// `$3F38F`'s arithmetic, checked directly: BCD with a borrow, and a `None` — the

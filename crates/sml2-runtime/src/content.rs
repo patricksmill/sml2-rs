@@ -95,6 +95,8 @@ pub struct SessionAssets {
     pub overworld_tilemaps: OverworldTilemaps,
     pub overworld_manifest: OverworldManifest,
     pub overworld_tiles: OverworldTiles,
+    /// The bank-24 room blobs (`map/castle_scripts.*`).
+    pub castle_scripts: sml2_core::castle::CastleScripts,
     /// Bank 25 `$5000` tiles for the bell-bonus rooms (screens 13/14).
     pub bell_room_tiles: sml2_core::map::BellRoomTiles,
     pub hud: HudStrip,
@@ -128,6 +130,7 @@ impl SessionAssets {
         let overworld_tilemaps = load_overworld_tilemaps_from(source);
         let overworld_manifest = load_overworld_manifest_from(source);
         let overworld_tiles = load_overworld_tiles_from(source);
+        let castle_scripts = load_castle_scripts_from(source);
         let bell_room_tiles = load_bell_room_tiles_from(source);
         let hud: HudStrip = serde_json::from_str(&source.read_text("hud.json")?)?;
         let anim_rows = source.read("tileanim.bin")?;
@@ -162,6 +165,7 @@ impl SessionAssets {
             overworld_tilemaps,
             overworld_manifest,
             overworld_tiles,
+            castle_scripts,
             bell_room_tiles,
             hud,
             anim_rows,
@@ -315,6 +319,28 @@ pub(crate) fn load_overworld_tiles_from(
         None => {
             println!("note: map tiles.bin missing");
             sml2_core::map::OverworldTiles::default()
+        }
+    }
+}
+
+pub(crate) fn load_castle_scripts_from(
+    source: &dyn ContentSource,
+) -> sml2_core::castle::CastleScripts {
+    let bytes = source.read("map/castle_scripts.bin").ok();
+    let manifest = source.read_text("map/castle_scripts.json").ok();
+    match (bytes, manifest) {
+        (Some(bytes), Some(manifest)) => {
+            match sml2_core::castle::CastleScripts::from_parts(bytes, &manifest) {
+                Ok(s) => s,
+                Err(e) => {
+                    println!("note: map castle_scripts: {e}");
+                    sml2_core::castle::CastleScripts::default()
+                }
+            }
+        }
+        _ => {
+            println!("note: map castle_scripts missing");
+            sml2_core::castle::CastleScripts::default()
         }
     }
 }

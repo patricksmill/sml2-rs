@@ -118,6 +118,36 @@ pub const BLOBS: &[BlobSpec] = &[
         end: 0,
         kind: BlobKind::SpriteList,
     },
+    // The four coin-room sprite/patch lists `$3F3B9/$3F3F0/$3F427/$3F45E` pass
+    // to `$3E2A2` (screens 9-12).
+    BlobSpec {
+        name: "coin_room_9_sprites",
+        bank: 15,
+        addr: 0x66D4,
+        end: 0,
+        kind: BlobKind::SpriteList,
+    },
+    BlobSpec {
+        name: "coin_room_10_sprites",
+        bank: 15,
+        addr: 0x671C,
+        end: 0,
+        kind: BlobKind::SpriteList,
+    },
+    BlobSpec {
+        name: "coin_room_11_sprites",
+        bank: 15,
+        addr: 0x6704,
+        end: 0,
+        kind: BlobKind::SpriteList,
+    },
+    BlobSpec {
+        name: "coin_room_12_sprites",
+        bank: 15,
+        addr: 0x66EC,
+        end: 0,
+        kind: BlobKind::SpriteList,
+    },
     BlobSpec {
         name: "bell_room_b_sprites",
         bank: 15,
