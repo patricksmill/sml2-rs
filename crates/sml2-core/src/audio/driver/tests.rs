@@ -228,3 +228,21 @@ fn test_noise_dispatch_and_lifecycle_in_driver() {
     assert_eq!(driver.noise_writes.len(), 4);
 }
 
+
+#[test]
+fn test_music_wave_pattern_is_kept_for_the_slot1_restore() {
+    // $9D on channel 3 stores the wave-pattern pointer; the slot-1 stop
+    // ($10E1D) restores wave RAM from it, so the driver must keep the music's
+    // bytes or the restore silences the wave channel.
+    let mut driver = SoundDriver::new();
+    assert_eq!(driver.wave_music.wave_pattern, [0u8; 16]);
+
+    driver.music_request = 1;
+    driver.update_sound(); // start the song
+    driver.update_sound(); // first sequencer tick: song 1's ch3 $9D
+    let pattern = driver.wave_music.wave_pattern;
+    assert_ne!(pattern, [0u8; 16], "song 1 uploads a wave pattern");
+    assert!(driver
+        .music_writes
+        .contains(&MusicWrite::Ch3WavePattern(pattern)));
+}

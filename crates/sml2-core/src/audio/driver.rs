@@ -235,6 +235,18 @@ impl SoundDriver {
         }
     }
 
+    /// `$11510`: the `$9D` instrument command stores the channel-3 wave-pattern
+    /// pointer, and the slot-1 stop (`$10E1D`) restores wave RAM through it.
+    /// Keep the last pattern the music uploaded so that restore has the music's
+    /// bytes instead of zeros.
+    fn latch_ch3_pattern(&mut self) {
+        for w in &self.music_writes {
+            if let MusicWrite::Ch3WavePattern(pattern) = w {
+                self.wave_music.wave_pattern = *pattern;
+            }
+        }
+    }
+
     /// Complete per-frame sound update driver (_UpdateSound $10030).
     pub fn update_sound(&mut self) {
         self.update_count += 1;
@@ -290,6 +302,7 @@ impl SoundDriver {
             ];
             self.music_sequencer.tick(SOUND_BANK04, sfx_active, &mut self.music_writes);
             self.active_song = self.music_sequencer.cur_song();
+            self.latch_ch3_pattern();
 
             // Handle drum trigger from music stream to Noise channel ($11788..$11790)
             let has_drum_trigger = self.music_writes.iter().any(|w| *w == MusicWrite::DrumTrigger);
