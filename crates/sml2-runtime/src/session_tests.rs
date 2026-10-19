@@ -258,3 +258,46 @@ fn game_over_when_lives_exhausted() {
 
     let _ = fs::remove_file(&tmp_save);
 }
+
+#[test]
+fn session_audio_synthesis_during_gameplay() {
+    let tmp_save = temp_save_path("test_session_audio");
+    let _ = fs::remove_file(&tmp_save);
+
+    let assets = SessionAssets::load().expect("session assets must load");
+    let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
+
+    // Initial overworld frame generates 735 stereo samples (1470 f32s)
+    let _ = runner.step_frame(PlayerKeys::default());
+    assert_eq!(runner.audio_samples().len(), 1470);
+
+    // Enter Level 1
+    let outcome = runner.step_frame(PlayerKeys {
+        a: true,
+        ..Default::default()
+    });
+    assert_eq!(outcome, StepOutcome::LevelEntered(0));
+
+    // Step several frames of in-level gameplay to advance music sequencer and SFX
+    let mut audible_frames = 0;
+    for _ in 0..10 {
+        runner.step_frame(PlayerKeys {
+            right: true,
+            ..Default::default()
+        });
+        assert_eq!(runner.audio_samples().len(), 1470);
+        for &s in runner.audio_samples() {
+            assert!(s >= -1.0 && s <= 1.0, "Sample out of bounds: {s}");
+        }
+        if runner.audio_samples().iter().any(|&s| s.abs() > 0.0) {
+            audible_frames += 1;
+        }
+    }
+
+    assert!(
+        audible_frames > 0,
+        "In-level gameplay must generate audible audio samples"
+    );
+
+    let _ = fs::remove_file(&tmp_save);
+}

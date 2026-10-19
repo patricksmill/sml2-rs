@@ -1,0 +1,558 @@
+//! 4-Channel Game Boy Audio Processing Unit (APU) synthesizer.
+//!
+//! Synthesizes stereo PCM floating-point audio from native sound driver events.
+//! Channels:
+//! - Channel 1: Pulse 1 with sweep, duty, envelope, frequency (NR10..NR14)
+//! - Channel 2: Pulse 2 with duty, envelope, frequency (NR21..NR24)
+//! - Channel 3: Custom 32-nibble 4-bit Wave channel with volume shift (NR30..NR34)
+//! - Channel 4: Noise channel with linear feedback shift register (NR41..NR44)
+
+#[cfg(test)]
+mod tests;
+
+use crate::audio::driver::SoundDriver;
+use crate::audio::music::MusicWrite;
+use crate::audio::noise::NoiseWrite;
+use crate::audio::pulse::PulseWrite;
+use crate::audio::wave::WaveWrite;
+
+const DUTY_TABLE: [[u8; 8]; 4] = [
+    [0, 0, 0, 0, 0, 0, 0, 1], // 12.5%
+    [1, 0, 0, 0, 0, 0, 0, 1], // 25.0%
+    [1, 0, 0, 0, 0, 1, 1, 1], // 50.0%
+    [0, 1, 1, 1, 1, 1, 1, 0], // 75.0%
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PulseChannel {
+    pub enabled: bool,
+    pub duty: u8,
+    pub volume: u8,
+    pub env_initial: u8,
+    pub env_direction: bool,
+    pub env_period: u8,
+    pub freq: u16,
+    pub duty_step: u8,
+    pub timer: u32,
+}
+
+impl PulseChannel {
+    pub fn trigger(&mut self) {
+        self.enabled = true;
+        self.volume = self.env_initial;
+        self.duty_step = 0;
+        self.timer = self.period();
+    }
+
+    #[inline]
+    pub fn period(&self) -> u32 {
+        (2048 - (self.freq as u32).min(2047)) * 4
+    }
+
+    pub fn advance_cycles(&mut self, mut cycles: u32) {
+        if !self.enabled || self.volume == 0 {
+            return;
+        }
+        if cycles < self.timer {
+            self.timer -= cycles;
+        } else {
+            cycles -= self.timer;
+            let period = self.period().max(1);
+            let steps = 1 + cycles / period;
+            self.duty_step = ((self.duty_step as u32 + steps) & 7) as u8;
+            self.timer = period - (cycles % period);
+        }
+    }
+
+    pub fn sample(&self) -> u8 {
+        if !self.enabled || self.volume == 0 {
+            return 0;
+        }
+        let duty_pattern = DUTY_TABLE[(self.duty as usize) & 3];
+        if duty_pattern[self.duty_step as usize] != 0 {
+            self.volume
+        } else {
+            0
+        }
+    }
+
+    pub fn clock(&mut self) -> u8 {
+        self.advance_cycles(1);
+        self.sample()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WaveChannel {
+    pub enabled: bool,
+    pub dac_enabled: bool,
+    pub volume_code: u8,
+    pub freq: u16,
+    pub wave_ram: [u8; 16],
+    pub sample_step: u8,
+    pub timer: u32,
+}
+
+impl Default for WaveChannel {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            dac_enabled: false,
+            volume_code: 0,
+            freq: 0,
+            wave_ram: [0; 16],
+            sample_step: 0,
+            timer: 0,
+        }
+    }
+}
+
+impl WaveChannel {
+    pub fn trigger(&mut self) {
+        self.enabled = self.dac_enabled;
+        self.sample_step = 0;
+        self.timer = self.period();
+    }
+
+    #[inline]
+    pub fn period(&self) -> u32 {
+        (2048 - (self.freq as u32).min(2047)) * 2
+    }
+
+    pub fn advance_cycles(&mut self, mut cycles: u32) {
+        if !self.enabled || !self.dac_enabled || self.volume_code == 0 {
+            return;
+        }
+        if cycles < self.timer {
+            self.timer -= cycles;
+        } else {
+            cycles -= self.timer;
+            let period = self.period().max(1);
+            let steps = 1 + cycles / period;
+            self.sample_step = ((self.sample_step as u32 + steps) & 31) as u8;
+            self.timer = period - (cycles % period);
+        }
+    }
+
+    pub fn sample(&self) -> u8 {
+        if !self.enabled || !self.dac_enabled || self.volume_code == 0 {
+            return 0;
+        }
+        let byte = self.wave_ram[(self.sample_step as usize) / 2];
+        let raw = if self.sample_step & 1 == 0 {
+            byte >> 4
+        } else {
+            byte & 0x0F
+        };
+
+        match self.volume_code {
+            1 => raw,          // 100%
+            2 => raw >> 1,     // 50%
+            3 => raw >> 2,     // 25%
+            _ => 0,            // Mute
+        }
+    }
+
+    pub fn clock(&mut self) -> u8 {
+        self.advance_cycles(1);
+        self.sample()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NoiseChannel {
+    pub enabled: bool,
+    pub volume: u8,
+    pub env_initial: u8,
+    pub env_direction: bool,
+    pub env_period: u8,
+    pub shift_clock: u8,
+    pub width_mode_7bit: bool,
+    pub divisor_code: u8,
+    pub lfsr: u16,
+    pub timer: u32,
+}
+
+impl Default for NoiseChannel {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            volume: 0,
+            env_initial: 0,
+            env_direction: false,
+            env_period: 0,
+            shift_clock: 0,
+            width_mode_7bit: false,
+            divisor_code: 0,
+            lfsr: 0x7FFF,
+            timer: 0,
+        }
+    }
+}
+
+impl NoiseChannel {
+    pub fn trigger(&mut self) {
+        self.enabled = true;
+        self.volume = self.env_initial;
+        self.lfsr = 0x7FFF;
+        self.timer = self.period();
+    }
+
+    #[inline]
+    pub fn period(&self) -> u32 {
+        let divisor: u32 = match self.divisor_code {
+            0 => 8,
+            n => (n as u32) * 16,
+        };
+        divisor << (self.shift_clock as u32)
+    }
+
+    pub fn advance_cycles(&mut self, mut cycles: u32) {
+        if !self.enabled || self.volume == 0 {
+            return;
+        }
+        let period = self.period().max(1);
+        while cycles > 0 {
+            if cycles < self.timer {
+                self.timer -= cycles;
+                break;
+            }
+            cycles -= self.timer;
+            self.timer = period;
+            let b0 = self.lfsr & 1;
+            let b1 = (self.lfsr >> 1) & 1;
+            let feedback = b0 ^ b1;
+            self.lfsr = (self.lfsr >> 1) | (feedback << 14);
+            if self.width_mode_7bit {
+                self.lfsr = (self.lfsr & !(1 << 6)) | (feedback << 6);
+            }
+        }
+    }
+
+    pub fn sample(&self) -> u8 {
+        if !self.enabled || self.volume == 0 {
+            return 0;
+        }
+        if (self.lfsr & 1) == 0 {
+            self.volume
+        } else {
+            0
+        }
+    }
+
+    pub fn clock(&mut self) -> u8 {
+        self.advance_cycles(1);
+        self.sample()
+    }
+}
+
+/// Complete 4-channel Game Boy APU synthesizer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Apu {
+    pub ch1: PulseChannel,
+    pub ch2: PulseChannel,
+    pub ch3: WaveChannel,
+    pub ch4: NoiseChannel,
+    pub nr50: u8, // Master volume / routing
+    pub nr51: u8, // Stereo panning
+    pub nr52: u8, // Sound enable
+    pub left_volume: u8,
+    pub right_volume: u8,
+    pub cycle_acc: u32,
+}
+
+impl Default for Apu {
+    fn default() -> Self {
+        Self {
+            ch1: PulseChannel::default(),
+            ch2: PulseChannel::default(),
+            ch3: WaveChannel::default(),
+            ch4: NoiseChannel::default(),
+            nr50: 0x77, // Normal master volume
+            nr51: 0xFF, // All channels panned to left & right
+            nr52: 0x80, // APU powered on
+            left_volume: 7,
+            right_volume: 7,
+            cycle_acc: 0,
+        }
+    }
+}
+
+impl Apu {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Reset all sound channels and control registers.
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    /// Set master volume / routing byte ($FF24 / NR50).
+    pub fn set_nr50(&mut self, val: u8) {
+        self.nr50 = val;
+        self.left_volume = (val >> 4) & 7;
+        self.right_volume = val & 7;
+    }
+
+    /// Set stereo sound selection byte ($FF25 / NR51).
+    pub fn set_nr51(&mut self, val: u8) {
+        self.nr51 = val;
+    }
+
+    /// Set sound enable register ($FF26 / NR52).
+    pub fn set_nr52(&mut self, val: u8) {
+        self.nr52 = val & 0x80;
+        if self.nr52 == 0 {
+            self.ch1.enabled = false;
+            self.ch2.enabled = false;
+            self.ch3.enabled = false;
+            self.ch4.enabled = false;
+        }
+    }
+
+    /// Ingest and apply all pending register writes from a SoundDriver instance.
+    pub fn ingest_driver(&mut self, driver: &SoundDriver) {
+        for &w in &driver.pulse_writes {
+            self.apply_pulse_write(w);
+        }
+        for &w in &driver.wave_writes {
+            self.apply_wave_write(w);
+        }
+        for &w in &driver.noise_writes {
+            self.apply_noise_write(w);
+        }
+        for &w in &driver.music_writes {
+            self.apply_music_write(w);
+        }
+    }
+
+    pub fn apply_pulse_write(&mut self, write: PulseWrite) {
+        match write {
+            PulseWrite::Sweep(_) => {}
+            PulseWrite::DutyLength(val) => {
+                self.ch1.duty = val >> 6;
+            }
+            PulseWrite::Envelope(val) => {
+                self.ch1.env_initial = val >> 4;
+                self.ch1.env_direction = (val & 0x08) != 0;
+                self.ch1.env_period = val & 0x07;
+                self.ch1.volume = self.ch1.env_initial;
+            }
+            PulseWrite::FrequencyLow(lo) => {
+                self.ch1.freq = (self.ch1.freq & 0x0700) | (lo as u16);
+            }
+            PulseWrite::FrequencyControl(ctl) => {
+                self.ch1.freq = (self.ch1.freq & 0x00FF) | (((ctl & 0x07) as u16) << 8);
+                if (ctl & 0x80) != 0 {
+                    self.ch1.trigger();
+                }
+            }
+            PulseWrite::Ch2DutyLength(val) => {
+                self.ch2.duty = val >> 6;
+            }
+            PulseWrite::Ch2Envelope(val) => {
+                self.ch2.env_initial = val >> 4;
+                self.ch2.env_direction = (val & 0x08) != 0;
+                self.ch2.env_period = val & 0x07;
+                self.ch2.volume = self.ch2.env_initial;
+            }
+            PulseWrite::Ch2FrequencyLow(lo) => {
+                self.ch2.freq = (self.ch2.freq & 0x0700) | (lo as u16);
+            }
+            PulseWrite::Ch2FrequencyControl(ctl) => {
+                self.ch2.freq = (self.ch2.freq & 0x00FF) | (((ctl & 0x07) as u16) << 8);
+                if (ctl & 0x80) != 0 {
+                    self.ch2.trigger();
+                }
+            }
+        }
+    }
+
+    pub fn apply_wave_write(&mut self, write: WaveWrite) {
+        match write {
+            WaveWrite::Enable(val) => {
+                self.ch3.dac_enabled = (val & 0x80) != 0;
+                if !self.ch3.dac_enabled {
+                    self.ch3.enabled = false;
+                }
+            }
+            WaveWrite::Length(_) => {}
+            WaveWrite::Level(val) => {
+                self.ch3.volume_code = (val >> 5) & 3;
+            }
+            WaveWrite::FrequencyLow(lo) => {
+                self.ch3.freq = (self.ch3.freq & 0x0700) | (lo as u16);
+            }
+            WaveWrite::FrequencyControl(ctl) => {
+                self.ch3.freq = (self.ch3.freq & 0x00FF) | (((ctl & 0x07) as u16) << 8);
+                if (ctl & 0x80) != 0 {
+                    self.ch3.trigger();
+                }
+            }
+            WaveWrite::WavePattern(pat) => {
+                self.ch3.wave_ram = pat;
+            }
+        }
+    }
+
+    pub fn apply_noise_write(&mut self, write: NoiseWrite) {
+        match write {
+            NoiseWrite::Length(_) => {}
+            NoiseWrite::Envelope(val) => {
+                self.ch4.env_initial = val >> 4;
+                self.ch4.env_direction = (val & 0x08) != 0;
+                self.ch4.env_period = val & 0x07;
+                self.ch4.volume = self.ch4.env_initial;
+            }
+            NoiseWrite::Polynomial(val) => {
+                self.ch4.shift_clock = val >> 4;
+                self.ch4.width_mode_7bit = (val & 0x08) != 0;
+                self.ch4.divisor_code = val & 0x07;
+            }
+            NoiseWrite::Control(ctl) => {
+                if (ctl & 0x80) != 0 {
+                    self.ch4.trigger();
+                }
+            }
+        }
+    }
+
+    pub fn apply_music_write(&mut self, write: MusicWrite) {
+        match write {
+            MusicWrite::Ch1Sweep(_) => {}
+            MusicWrite::Ch1DutyLength(val) => self.ch1.duty = val >> 6,
+            MusicWrite::Ch1Envelope(val) => {
+                self.ch1.env_initial = val >> 4;
+                self.ch1.volume = self.ch1.env_initial;
+            }
+            MusicWrite::Ch1FrequencyLow(lo) => {
+                self.ch1.freq = (self.ch1.freq & 0x0700) | (lo as u16);
+            }
+            MusicWrite::Ch1FrequencyControl(ctl) => {
+                self.ch1.freq = (self.ch1.freq & 0x00FF) | (((ctl & 0x07) as u16) << 8);
+                if (ctl & 0x80) != 0 {
+                    self.ch1.trigger();
+                }
+            }
+            MusicWrite::Ch2DutyLength(val) => self.ch2.duty = val >> 6,
+            MusicWrite::Ch2Envelope(val) => {
+                self.ch2.env_initial = val >> 4;
+                self.ch2.volume = self.ch2.env_initial;
+            }
+            MusicWrite::Ch2FrequencyLow(lo) => {
+                self.ch2.freq = (self.ch2.freq & 0x0700) | (lo as u16);
+            }
+            MusicWrite::Ch2FrequencyControl(ctl) => {
+                self.ch2.freq = (self.ch2.freq & 0x00FF) | (((ctl & 0x07) as u16) << 8);
+                if (ctl & 0x80) != 0 {
+                    self.ch2.trigger();
+                }
+            }
+            MusicWrite::Ch3Enable(val) => {
+                self.ch3.dac_enabled = (val & 0x80) != 0;
+                if !self.ch3.dac_enabled {
+                    self.ch3.enabled = false;
+                }
+            }
+            MusicWrite::Ch3Length(_) => {}
+            MusicWrite::Ch3Level(val) => {
+                self.ch3.volume_code = (val >> 5) & 3;
+            }
+            MusicWrite::Ch3FrequencyLow(lo) => {
+                self.ch3.freq = (self.ch3.freq & 0x0700) | (lo as u16);
+            }
+            MusicWrite::Ch3FrequencyControl(ctl) => {
+                self.ch3.freq = (self.ch3.freq & 0x00FF) | (((ctl & 0x07) as u16) << 8);
+                if (ctl & 0x80) != 0 {
+                    self.ch3.trigger();
+                }
+            }
+            MusicWrite::Ch3WavePattern(pat) => {
+                self.ch3.wave_ram = pat;
+            }
+            MusicWrite::Ch4Length(_) => {}
+            MusicWrite::Ch4Envelope(val) => {
+                self.ch4.env_initial = val >> 4;
+                self.ch4.volume = self.ch4.env_initial;
+            }
+            MusicWrite::Ch4Polynomial(val) => {
+                self.ch4.shift_clock = val >> 4;
+                self.ch4.width_mode_7bit = (val & 0x08) != 0;
+                self.ch4.divisor_code = val & 0x07;
+            }
+            MusicWrite::Ch4Control(ctl) => {
+                if (ctl & 0x80) != 0 {
+                    self.ch4.trigger();
+                }
+            }
+            MusicWrite::DrumTrigger => {}
+        }
+    }
+
+    /// Generates interleaved stereo f32 audio samples in `[-1.0, 1.0]`.
+    /// `num_frames` is the number of stereo pairs (so `2 * num_frames` floats are appended to `out`).
+    pub fn generate_samples(
+        &mut self,
+        _sample_rate: u32,
+        num_frames: usize,
+        out: &mut Vec<f32>,
+    ) {
+        out.reserve(num_frames * 2);
+
+        // Scaling constants
+        let master_l = ((self.left_volume as f32) + 1.0) / 8.0;
+        let master_r = ((self.right_volume as f32) + 1.0) / 8.0;
+        let norm = 1.0 / (15.0 * 4.0); // 4 channels, max volume 15 each
+
+        let pan_ch1_r = (self.nr51 & 0x01) != 0;
+        let pan_ch2_r = (self.nr51 & 0x02) != 0;
+        let pan_ch3_r = (self.nr51 & 0x04) != 0;
+        let pan_ch4_r = (self.nr51 & 0x08) != 0;
+
+        let pan_ch1_l = (self.nr51 & 0x10) != 0;
+        let pan_ch2_l = (self.nr51 & 0x20) != 0;
+        let pan_ch3_l = (self.nr51 & 0x40) != 0;
+        let pan_ch4_l = (self.nr51 & 0x80) != 0;
+
+        let safe_sample_rate = _sample_rate.max(1);
+
+        for _ in 0..num_frames {
+            self.cycle_acc += 4_194_304;
+            let cycles = self.cycle_acc / safe_sample_rate;
+            self.cycle_acc %= safe_sample_rate;
+
+            self.ch1.advance_cycles(cycles);
+            self.ch2.advance_cycles(cycles);
+            self.ch3.advance_cycles(cycles);
+            self.ch4.advance_cycles(cycles);
+
+            let s1 = self.ch1.sample() as f32;
+            let s2 = self.ch2.sample() as f32;
+            let s3 = self.ch3.sample() as f32;
+            let s4 = self.ch4.sample() as f32;
+
+            let mut left = 0.0f32;
+            let mut right = 0.0f32;
+
+            if pan_ch1_l { left += s1; }
+            if pan_ch1_r { right += s1; }
+
+            if pan_ch2_l { left += s2; }
+            if pan_ch2_r { right += s2; }
+
+            if pan_ch3_l { left += s3; }
+            if pan_ch3_r { right += s3; }
+
+            if pan_ch4_l { left += s4; }
+            if pan_ch4_r { right += s4; }
+
+            // Normalize and scale with master volume
+            let out_l = (left * norm * master_l).clamp(-1.0, 1.0);
+            let out_r = (right * norm * master_r).clamp(-1.0, 1.0);
+
+            out.push(out_l);
+            out.push(out_r);
+        }
+    }
+}

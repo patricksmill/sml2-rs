@@ -1249,6 +1249,22 @@
       ],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; in-memory song and channel sequencer unit tests asserting pitch, duration, loop, and envelope transitions; sensitivity check; cargo test -p sml2-core passes",
       "status": "verified"
+    },
+    {
+      "id": "apu_synthesis_and_runtime",
+      "title": "Port 4-channel Game Boy APU synthesizer generating stereo PCM and integrate audio into sml2-runtime",
+      "asm_refs": [
+        "hardware.inc:rAUD1SWEEP-rAUD4GO",
+        "hardware.inc:rAUDVOL-rAUDENA"
+      ],
+      "dependencies": [
+        "music_sequencer",
+        "sfx_pulse_effects",
+        "sfx_wave_effects",
+        "sfx_noise_effects"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; in-memory audio buffer generation asserting PCM sample generation for pulse, wave, and noise channels; runtime audio callback / stream integration; cargo test -p sml2-core passes",
+      "status": "verified"
     }
   ]
 }

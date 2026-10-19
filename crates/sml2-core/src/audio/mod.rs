@@ -1,11 +1,13 @@
 //! Native sound sequencing, channel dispatch, and ordered channel-control outputs.
 
+pub mod apu;
 pub mod driver;
 pub mod music;
 pub mod noise;
 pub mod pulse;
 pub mod wave;
 
+pub use apu::Apu;
 pub use driver::{
     lookup_sfx_pointer, SfxLookupError, SfxSlotState, SoundDriver, MASTER_VOLUME_LOW_TIME,
     MASTER_VOLUME_NORMAL, SLOT0_BUSY_EXCEPTIONS, SLOT0_START_TABLE, SLOT0_TICK_TABLE,

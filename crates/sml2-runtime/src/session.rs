@@ -7,6 +7,8 @@ use std::path::PathBuf;
 
 use minifb::{Key, Window, WindowOptions};
 
+use sml2_core::audio::apu::Apu;
+use sml2_core::audio::driver::SoundDriver;
 use sml2_core::camera::CameraSim;
 use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
 use sml2_core::ending_scene::EndingScene;
@@ -119,6 +121,8 @@ impl LevelContext {
         sim.powerup = player_powerup;
         sim.map_node = map_node;
         sim.seed_moon_physics(manifest.properties.space_physics);
+        sim.level_song = manifest.header.music_track;
+        sim.music_request = manifest.header.music_track;
 
         let level_entry = manifest.header.entry(level_progress, manifest.secret_entry);
         let mut cam = CameraSim::new(level_entry.start.camera_x, level_entry.start.camera_y);
@@ -602,6 +606,9 @@ pub struct SessionRunner {
     pub vh: usize,
     pub scale: usize,
     pub headless: bool,
+    pub sound_driver: SoundDriver,
+    pub apu: Apu,
+    pub audio_buffer: Vec<f32>,
 }
 
 impl SessionRunner {
@@ -635,6 +642,9 @@ impl SessionRunner {
             vh,
             scale,
             headless,
+            sound_driver: SoundDriver::new(),
+            apu: Apu::new(),
+            audio_buffer: Vec::with_capacity(1470),
         };
 
         if !runner.load_from_disk() {
@@ -686,6 +696,7 @@ impl SessionRunner {
     /// Advance the session simulation by exactly one frame.
     pub fn step_frame(&mut self, keys: PlayerKeys) -> StepOutcome {
         self.frame_n += 1;
+        self.audio_buffer.clear();
         if self.headless {
             self.virtual_clock.advance_tick();
         }
@@ -699,7 +710,7 @@ impl SessionRunner {
         let select_pressed = keys.select && !self.prev_select;
         self.prev_select = keys.select;
 
-        match &mut self.state {
+        let outcome = match &mut self.state {
             SessionState::Overworld(ref mut map_sim) => {
                 let keys_held = pack_joypad(
                     keys.right,
@@ -751,15 +762,16 @@ impl SessionRunner {
                     ) {
                         Ok(ctx) => {
                             self.state = SessionState::InLevel(Box::new(ctx));
-                            return StepOutcome::LevelEntered(level_id);
+                            StepOutcome::LevelEntered(level_id)
                         }
                         Err(e) => {
                             eprintln!("failed to load level {level_id}: {e}");
+                            StepOutcome::Continue
                         }
                     }
+                } else {
+                    StepOutcome::Continue
                 }
-
-                StepOutcome::Continue
             }
 
             SessionState::InLevel(ref mut ctx) => {
@@ -779,6 +791,25 @@ impl SessionRunner {
                     &self.assets.nodes,
                 );
 
+                if ctx.sim.sfx0 != 0 {
+                    self.sound_driver.sfx_request_0 = ctx.sim.sfx0;
+                    ctx.sim.sfx0 = 0;
+                }
+                if ctx.sim.sfx1 != 0 {
+                    self.sound_driver.sfx_request_1 = ctx.sim.sfx1;
+                    ctx.sim.sfx1 = 0;
+                }
+                if ctx.sim.sfx2 != 0 {
+                    self.sound_driver.sfx_request_2 = ctx.sim.sfx2;
+                    ctx.sim.sfx2 = 0;
+                }
+                if ctx.sim.music_request != 0 {
+                    self.sound_driver.music_request = ctx.sim.music_request;
+                    ctx.sim.music_request = 0;
+                }
+                self.sound_driver.stomp_chain = ctx.obj.stomp_chain;
+                self.sound_driver.low_time_flag = ctx.sim.low_time_flag != 0;
+
                 if ctx.is_finished() {
                     let handoff = ctx.map_handoff.unwrap_or_else(|| {
                         ctx.sim.map_handoff(&self.assets.nodes)
@@ -788,30 +819,31 @@ impl SessionRunner {
                         // Player died in level
                         if ctx.sim.lives == 0 || ctx.sim.game_over || ctx.sim.lives == 0x99 {
                             self.state = SessionState::GameOver;
-                            return StepOutcome::GameOver;
+                            StepOutcome::GameOver
+                        } else {
+                            self.lives = ctx.sim.lives;
+                            self.powerup = 0; // Death resets powerup
+                            let target_node = handoff.node;
+                            let target_screen = handoff.screen.unwrap_or(0);
+                            let mut map_sim = MapSim::from_player(&ctx.sim);
+                            map_sim.mario_dead = 0xFF;
+                            map_sim.load_screen(
+                                target_screen,
+                                ctx.sim.exit_tile_flag,
+                                &self.assets.node_records,
+                            );
+                            map_sim.node = target_node;
+                            map_sim.load_node(target_node, &self.assets.node_records);
+                            self.state = SessionState::Overworld(map_sim);
+                            if handoff.saves > 0 {
+                                let _ = self.save_to_disk();
+                            }
+                            StepOutcome::LevelExited {
+                                node: target_node,
+                                screen: target_screen,
+                                cleared: false,
+                            }
                         }
-                        self.lives = ctx.sim.lives;
-                        self.powerup = 0; // Death resets powerup
-                        let target_node = handoff.node;
-                        let target_screen = handoff.screen.unwrap_or(0);
-                        let mut map_sim = MapSim::from_player(&ctx.sim);
-                        map_sim.mario_dead = 0xFF;
-                        map_sim.load_screen(
-                            target_screen,
-                            ctx.sim.exit_tile_flag,
-                            &self.assets.node_records,
-                        );
-                        map_sim.node = target_node;
-                        map_sim.load_node(target_node, &self.assets.node_records);
-                        self.state = SessionState::Overworld(map_sim);
-                        if handoff.saves > 0 {
-                            let _ = self.save_to_disk();
-                        }
-                        return StepOutcome::LevelExited {
-                            node: target_node,
-                            screen: target_screen,
-                            cleared: false,
-                        };
                     } else {
                         // Player cleared level
                         self.lives = ctx.sim.lives;
@@ -833,15 +865,15 @@ impl SessionRunner {
                         if handoff.saves > 0 {
                             let _ = self.save_to_disk();
                         }
-                        return StepOutcome::LevelExited {
+                        StepOutcome::LevelExited {
                             node: target_node,
                             screen: target_screen,
                             cleared: true,
-                        };
+                        }
                     }
+                } else {
+                    StepOutcome::Continue
                 }
-
-                StepOutcome::Continue
             }
 
             SessionState::GameOver => {
@@ -852,7 +884,19 @@ impl SessionRunner {
                 self.state = SessionState::Overworld(map_sim);
                 StepOutcome::Continue
             }
-        }
+        };
+
+        self.sound_driver.update_sound();
+        self.apu.ingest_driver(&self.sound_driver);
+        self.apu.generate_samples(44100, 735, &mut self.audio_buffer);
+
+        outcome
+    }
+
+    /// Returns the stereo audio buffer generated during the most recent stepped frame.
+    #[inline]
+    pub fn audio_samples(&self) -> &[f32] {
+        &self.audio_buffer
     }
 
     /// Render current view to an 8-bit grey buffer.

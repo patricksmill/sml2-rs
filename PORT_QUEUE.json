@@ -1,24 +1,7 @@
 {
   "active_milestone": "presentation_and_audio",
-  "milestone_note": "1 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
-  "queue": [
-    {
-      "id": "apu_synthesis_and_runtime",
-      "title": "Port 4-channel Game Boy APU synthesizer generating stereo PCM and integrate audio into sml2-runtime",
-      "asm_refs": [
-        "hardware.inc:rAUD1SWEEP-rAUD4GO",
-        "hardware.inc:rAUDVOL-rAUDENA"
-      ],
-      "dependencies": [
-        "music_sequencer",
-        "sfx_pulse_effects",
-        "sfx_wave_effects",
-        "sfx_noise_effects"
-      ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; in-memory audio buffer generation asserting PCM sample generation for pulse, wave, and noise channels; runtime audio callback / stream integration; cargo test -p sml2-core passes",
-      "status": "pending"
-    }
-  ],
+  "milestone_note": "All 5 audio engine tickets verified. Milestone complete.",
+  "queue": [],
   "workflow_rules": {
     "set": "2026-10-15",
     "rules": [

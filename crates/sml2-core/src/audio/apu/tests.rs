@@ -1,0 +1,161 @@
+use super::*;
+
+#[test]
+fn test_apu_initialization_and_registers() {
+    let mut apu = Apu::new();
+    assert_eq!(apu.nr50, 0x77);
+    assert_eq!(apu.nr51, 0xFF);
+    assert_eq!(apu.nr52, 0x80);
+    assert_eq!(apu.left_volume, 7);
+    assert_eq!(apu.right_volume, 7);
+
+    apu.set_nr50(0x32);
+    assert_eq!(apu.left_volume, 3);
+    assert_eq!(apu.right_volume, 2);
+
+    apu.set_nr51(0x11);
+    assert_eq!(apu.nr51, 0x11);
+
+    // Disabling APU disables channels
+    apu.ch1.enabled = true;
+    apu.set_nr52(0x00);
+    assert!(!apu.ch1.enabled);
+}
+
+#[test]
+fn test_pulse_channel_synthesis() {
+    let mut apu = Apu::new();
+    // Configure Ch1: 50% duty (index 2), volume 15, trigger with freq 0x600
+    apu.apply_pulse_write(PulseWrite::DutyLength(0x80)); // 50% duty
+    apu.apply_pulse_write(PulseWrite::Envelope(0xF0));   // Initial volume 15
+    apu.apply_pulse_write(PulseWrite::FrequencyLow(0x00));
+    apu.apply_pulse_write(PulseWrite::FrequencyControl(0x86)); // Trigger with high freq 6
+
+    assert!(apu.ch1.enabled);
+    assert_eq!(apu.ch1.volume, 15);
+    assert_eq!(apu.ch1.duty, 2);
+
+    let mut samples = Vec::new();
+    apu.generate_samples(44100, 100, &mut samples);
+    assert_eq!(samples.len(), 200); // 100 stereo pairs
+
+    // Buffer must contain non-zero samples within [-1.0, 1.0]
+    let non_zero = samples.iter().any(|&s| s.abs() > 0.0);
+    assert!(non_zero, "Pulse channel generated only silence");
+    for &s in &samples {
+        assert!(s >= -1.0 && s <= 1.0, "Sample out of bounds: {s}");
+    }
+}
+
+#[test]
+fn test_wave_channel_synthesis() {
+    let mut apu = Apu::new();
+    let pattern = [
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
+        0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10,
+    ];
+    apu.apply_wave_write(WaveWrite::Enable(0x80));
+    apu.apply_wave_write(WaveWrite::Level(0x20)); // 100% volume
+    apu.apply_wave_write(WaveWrite::WavePattern(pattern));
+    apu.apply_wave_write(WaveWrite::FrequencyLow(0xC0));
+    apu.apply_wave_write(WaveWrite::FrequencyControl(0x86)); // Trigger
+
+    assert!(apu.ch3.enabled);
+    assert_eq!(apu.ch3.volume_code, 1);
+
+    let mut samples = Vec::new();
+    apu.generate_samples(44100, 100, &mut samples);
+    assert_eq!(samples.len(), 200);
+
+    let non_zero = samples.iter().any(|&s| s.abs() > 0.0);
+    assert!(non_zero, "Wave channel generated only silence");
+}
+
+#[test]
+fn test_noise_channel_synthesis() {
+    let mut apu = Apu::new();
+    apu.apply_noise_write(NoiseWrite::Envelope(0xF0)); // Volume 15
+    apu.apply_noise_write(NoiseWrite::Polynomial(0x30)); // Shift clock 3, divisor 0
+    apu.apply_noise_write(NoiseWrite::Control(0x80)); // Trigger
+
+    assert!(apu.ch4.enabled);
+    assert_eq!(apu.ch4.volume, 15);
+
+    let mut samples = Vec::new();
+    apu.generate_samples(44100, 100, &mut samples);
+    assert_eq!(samples.len(), 200);
+
+    let non_zero = samples.iter().any(|&s| s.abs() > 0.0);
+    assert!(non_zero, "Noise channel generated only silence");
+}
+
+#[test]
+fn test_stereo_panning_routing() {
+    let mut apu = Apu::new();
+
+    // Pan Ch1 exclusively to Left ($10), Ch2 exclusively to Right ($02)
+    apu.set_nr51(0x12);
+
+    apu.apply_pulse_write(PulseWrite::DutyLength(0x80));
+    apu.apply_pulse_write(PulseWrite::Envelope(0xF0));
+    apu.apply_pulse_write(PulseWrite::FrequencyLow(0x00));
+    apu.apply_pulse_write(PulseWrite::FrequencyControl(0x86)); // Trigger Ch1
+
+    let mut samples = Vec::new();
+    apu.generate_samples(44100, 50, &mut samples);
+
+    // Left channel has audio, Right channel has zero (since Ch2 is inactive)
+    let left_active = samples.iter().step_by(2).any(|&s| s.abs() > 0.0);
+    let right_active = samples.iter().skip(1).step_by(2).any(|&s| s.abs() > 0.0);
+
+    assert!(left_active, "Left channel should contain Ch1 audio");
+    assert!(!right_active, "Right channel should be silent without Ch2");
+}
+
+#[test]
+fn test_ingest_driver_and_sample_generation() {
+    let mut driver = SoundDriver::new();
+    let mut apu = Apu::new();
+
+    // Start a song on frame 1, tick music and start SFX on frame 2 per ROM $10030
+    driver.music_request = 1;
+    driver.update_sound();
+    driver.sfx_request_0 = 1;
+    driver.update_sound();
+
+    // Ingest events into APU
+    apu.ingest_driver(&driver);
+
+    let mut buffer = Vec::new();
+    // 735 stereo pairs ≈ 1 frame at 44.1 kHz
+    apu.generate_samples(44100, 735, &mut buffer);
+
+    assert_eq!(buffer.len(), 1470);
+    let has_signal = buffer.iter().any(|&s| s.abs() > 0.0);
+    assert!(has_signal, "Driver playback produced no audible APU signal");
+}
+
+#[test]
+fn test_apu_sensitivity() {
+    let mut apu1 = Apu::new();
+    let mut apu2 = Apu::new();
+
+    apu1.apply_pulse_write(PulseWrite::DutyLength(0x80));
+    apu1.apply_pulse_write(PulseWrite::Envelope(0xF0));
+    apu1.apply_pulse_write(PulseWrite::FrequencyLow(0x50));
+    apu1.apply_pulse_write(PulseWrite::FrequencyControl(0x86));
+
+    // Mutated frequency in apu2
+    apu2.apply_pulse_write(PulseWrite::DutyLength(0x80));
+    apu2.apply_pulse_write(PulseWrite::Envelope(0xF0));
+    apu2.apply_pulse_write(PulseWrite::FrequencyLow(0x80));
+    apu2.apply_pulse_write(PulseWrite::FrequencyControl(0x86));
+
+    let mut samples1 = Vec::new();
+    let mut samples2 = Vec::new();
+
+    apu1.generate_samples(44100, 100, &mut samples1);
+    apu2.generate_samples(44100, 100, &mut samples2);
+
+    assert_ne!(samples1, samples2, "Mutating frequency must alter output waveform");
+}
