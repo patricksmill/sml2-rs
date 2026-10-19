@@ -29,7 +29,9 @@
 //! * `$52-$57` — **moon / low gravity**: sets the `sMoonPhysics` bit
 //!   (`cp $52` .. `cp $58` window).
 //! * `$58-$7F` — **passable decor** (air, backgrounds, structures). `$7E`
-//!   is additionally the spin-jump tile (`$1DFE`), and the surface row ids
+//!   is a hidden block: the ceiling probe (`$1DFE`) hits it, and its type-3
+//!   bump eventually writes the solid `$07` foothold (`$5B3C`). It is passable
+//!   from above until revealed. The surface row ids
 //!   like `$7A` are decor drawn over the solid fill below them. Verified:
 //!   `$60`/`$7A` neither block nor stand.
 //!

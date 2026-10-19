@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "level19_alternate_route_tests.rs"]
+mod level19_alternate_route_tests;
+
 /// Extracted level28 (decimal CLI id 27), ordinary header entry. The fixed
 /// right-only tape descends from the upper starting ledge and walks the lower
 /// corridor to the source $4A cell (78,30). Objects, scenes, camera, fade and
@@ -248,7 +251,7 @@ fn level29_timed_float_header_spawn_to_bell_through_live_play() {
 
 /// First played secret-entry route. These frozen held-button spans use ordinary
 /// moon jumps and the source Up+A high jump to cross the lower spike corridors.
-/// The upper $4B bell remains a separate, unaccepted approach.
+/// The upper $4B bell is covered by the separate hidden ladder route test.
 #[test]
 fn level19_secret_entry_to_plain_bell_through_live_play() {
     let right = PlayerKeys {
