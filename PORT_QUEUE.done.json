@@ -1027,6 +1027,22 @@
    ],
    "verification_gate": "PORTING.md; original header/layout/spawns, input-only traversal with live objects and camera, exact bell/fade/tally/map bytes, sensitivity check, full core/runtime suites and frozen sweep",
    "status": "done"
+  },
+  {
+   "id": "played_route_level29",
+   "title": "Accept the level 29 timed-float route from header spawn to bell through native live play",
+   "asm_refs": [
+    "home.asm:$0FF2-$108F",
+    "home.asm:$1BFF-$1CFB",
+    "home.asm:$3547-$356E",
+    "main.asm:$5579",
+    "main.asm:$3D56B-$3D58C"
+   ],
+   "dependencies": [
+    "played_route_level28"
+   ],
+   "verification_gate": "PORTING.md; original entry/assets with input-only timed-float traversal through live objects/camera, mechanic observation, bell/fade/map byte assertions and sensitivity; full core/runtime suites and frozen sweep",
+   "status": "done"
   }
  ]
 }

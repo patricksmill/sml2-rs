@@ -1,8 +1,8 @@
 # Level route matrix
 
 **Status: all 32 rows measured 2026-10-18; the first slice (12, 19, 28, 29) is
-reviewed, every exit cell is test-pinned, and level 28 has a played header-spawn
-to bell route.** Tool:
+reviewed, every exit cell is test-pinned, and levels 28/29 have played
+header-spawn to bell routes.** Tool:
 [`tools/route_matrix.py`](../tools/route_matrix.py); acceptance:
 `crates/sml2-core/src/route_matrix_tests.rs`.
 
@@ -192,6 +192,27 @@ origin when the source table has exactly one matching node. Level id 17 has
 two nodes (5 and 26), and castle id 24 has none; the CLI cannot yet infer their
 route context. Full overworld entry remains separate work.
 
+### Played route: level 29
+
+`level29_timed_float_header_spawn_to_bell_through_live_play` uses the same live
+loop and original level29 assets. Its 3,400-frame tape is 100 right-held frames,
+then 22 repetitions of 50 A-held frames and 100 right-held frames. Horizontal
+inertia persists during the A-only spans; there is no new input syntax or
+position/physics rewrite. Mario starts small at (40,452), camera (80,438), with
+the source `$08` moon property and node 68/progress slot 41.
+
+The first observed airborne float use is frame 102: the budget changes from
+50 to 49 while A is held. The run consumes 784 budget frames and processes
+active objects during the approach. It arms the source `$4A` cell (94,28) on
+frame 2,584 at (1507,436), alive, with fade 192/music 3/exit flag 0. Fade ends on
+2,776 and the map handoff runs on 2,777; tally and serialized progress are 1
+and `$80`. The return selects node 69, screen 4/music 28, and two saves.
+`$3D56B/$3D573` intentionally sets `sMarioDead = $FF` after rewriting node 68;
+the test separately requires zero gameplay death frames and `dead = 0` at the
+bell, so that post-clear map latch cannot conceal a failed approach. Removing
+only the timed-float velocity extension makes this tape stall before the bell
+and fails the test; the original behavior is restored afterward.
+
 ## Gaps
 
 1. **Secret-route entries are implemented; live overworld integration remains.**
@@ -213,8 +234,8 @@ route context. Full overworld entry remains separate work.
    sweep states, collision-generated stomps, the appended reward, one golden
    coin, save serialization, map node `$20`/screen 2, and clean re-entry. These
    are direct-placement acceptance tests; played approaches remain pending.
-3. **Approaches beyond level 28 remain unplayed.** The header-spawn route for
-   level 28 now reaches its bell through native input. Other ordinary starts,
+3. **Approaches beyond levels 28/29 remain unplayed.** Both header-spawn routes
+   now reach their bells through native input. Other ordinary starts,
    secret-entry approaches, and approaches to boss entrances still need played
    tests. Level 19's upper bell and the castle/night levels are priorities.
 4. **The 28 unreviewed rows are tool-measured, not hand-checked.** Their zone,

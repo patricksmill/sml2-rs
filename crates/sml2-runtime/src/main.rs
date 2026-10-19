@@ -2391,6 +2391,9 @@ struct PlayOutcome {
     map_handoff_frame: Option<u64>,
     map_handoff: Option<sml2_core::player_sim::MapHandoffOutcome>,
     active_object_frames: u64,
+    timed_float_use: Option<TimedFloatUse>,
+    timed_float_frames: u64,
+    gameplay_death_frames: u64,
 }
 
 #[allow(dead_code)]
@@ -2400,6 +2403,16 @@ struct BellArm {
     fade_timer: u16,
     music_request: u8,
     exit_tile_flag: u8,
+    dead: u8,
+}
+
+#[allow(dead_code)]
+struct TimedFloatUse {
+    frame: u64,
+    timer_before: u8,
+    timer_after: u8,
+    vvel_before: u8,
+    vvel_after: u8,
 }
 
 /// Interactive play mode: the ported player physics + camera drive the
@@ -2500,6 +2513,9 @@ fn run_play(
     let mut map_handoff_frame = None;
     let mut map_handoff = None;
     let mut active_object_frames = 0;
+    let mut timed_float_use = None;
+    let mut timed_float_frames = 0;
+    let mut gameplay_death_frames = 0;
     obj.configure(manifest.level_id);
     let obj_tables = spr.as_ref().map(|s| s.tables.clone());
     loop {
@@ -2650,7 +2666,24 @@ fn run_play(
             if cam.transition == 0 {
                 // $307D — `$0F71`'s first call; see the replay loop above.
                 cam.crouch_pan(&sim, &keys);
+                let float_before = (!sim.on_ground && sim.moon & 0x08 != 0 && keys.a
+                    && sim.moon_float_timer != 0)
+                    .then_some((sim.moon_float_timer, sim.vvel));
                 sim.step(&keys, a_pressed, b_pressed, &layout_live);
+                if let Some((timer, vvel)) = float_before {
+                    if sim.moon_float_timer == timer - 1 {
+                        timed_float_frames += 1;
+                        if timed_float_use.is_none() {
+                            timed_float_use = Some(TimedFloatUse {
+                                frame: frame_n,
+                                timer_before: timer,
+                                timer_after: sim.moon_float_timer,
+                                vvel_before: vvel,
+                                vvel_after: sim.vvel,
+                            });
+                        }
+                    }
+                }
             } else {
                 // home.asm ~115: VBlank decrements sFadeTimer unconditionally.
                 sim.tick_fade_timer();
@@ -2854,7 +2887,11 @@ fn run_play(
                 fade_timer: sim.fade_timer,
                 music_request: sim.music_request,
                 exit_tile_flag: sim.exit_tile_flag,
+                dead: sim.dead,
             });
+        }
+        if gameplay && !frozen && sim.dead == 0xFF {
+            gameplay_death_frames += 1;
         }
         if sim.exit_completed && exit_completed_frame.is_none() {
             exit_completed_frame = Some(frame_n);
@@ -2984,6 +3021,9 @@ fn run_play(
         map_handoff_frame,
         map_handoff,
         active_object_frames,
+        timed_float_use,
+        timed_float_frames,
+        gameplay_death_frames,
     })
 }
 
