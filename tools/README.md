@@ -73,7 +73,7 @@ It reads `baserom.gb` for the overlay, so `SML2_DECOMP_ROOT` must point at the
 disassembly. Exit **0** on success; **2** when an input is missing. A level's
 exit cell is accepted when `route_matrix_tests` arms its bell from the source
 cell (`cargo test -p sml2-core route_matrix`). Played approaches are a separate
-claim: `cargo test -p sml2-runtime played_route_tests` currently verifies the
+claim: `cargo test -p sml2-runtime played_routes` currently verifies the
 level28 walking and level29 timed-float header routes, plus both level19 starts
 to both bells, through the actual live play loop. These
 checks include source entry bytes, float-budget consumption, exit fades,

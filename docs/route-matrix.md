@@ -179,7 +179,7 @@ alone does not require a bell or a completed approach.
 
 ### Played route: level 28
 
-`cargo test -p sml2-runtime played_route_tests` runs the same `run_play` loop as
+`cargo test -p sml2-runtime played_routes` runs the same `run_play` loop as
 interactive and headless play, with the original level28 header, layout, object
 stream, edge map and scene map. Its fixed tape holds right for 1,400 frames.
 Mario starts small at (51,260), camera (80,246), without invincibility or later
