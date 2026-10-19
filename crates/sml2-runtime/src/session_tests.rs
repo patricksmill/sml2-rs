@@ -5,7 +5,26 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use sml2_core::map::save_record_valid;
 use sml2_core::player_sim::PlayerKeys;
 
-use crate::session::{SessionAssets, SessionRunner, SessionState, StepOutcome};
+use crate::session::{
+    AudioClock, SessionAssets, SessionRunner, SessionState, StepOutcome, MAP_ENTRY_FRAMES,
+};
+
+/// Press A on the map and run out the console's entry transition: the map
+/// freezes, the palettes fade to white, and the level goes live 37 frames in.
+fn press_a_and_wait_for_level(runner: &mut SessionRunner) -> StepOutcome {
+    runner.step_frame(PlayerKeys {
+        a: true,
+        ..Default::default()
+    });
+    let mut outcome = StepOutcome::Continue;
+    for _ in 0..MAP_ENTRY_FRAMES + 8 {
+        outcome = runner.step_frame(PlayerKeys::default());
+        if matches!(outcome, StepOutcome::LevelEntered(_)) {
+            break;
+        }
+    }
+    outcome
+}
 
 fn temp_save_path(name: &str) -> PathBuf {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -33,11 +52,7 @@ fn hub_navigation_to_level_1_entry_and_clear_bell_return() {
     assert_eq!(runner.lives, 5);
 
     // Press A to enter Level 1 (level index 0).
-    let outcome = runner.step_frame(PlayerKeys {
-        a: true,
-        ..Default::default()
-    });
-    assert_eq!(outcome, StepOutcome::LevelEntered(0));
+    let outcome = press_a_and_wait_for_level(&mut runner);
 
     // Session is now in level 0.
     match &mut runner.state {
@@ -97,11 +112,7 @@ fn in_level_hazard_death_and_fade_returns_to_hub_with_decremented_lives() {
     let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
 
     // Enter level 0.
-    let outcome = runner.step_frame(PlayerKeys {
-        a: true,
-        ..Default::default()
-    });
-    assert_eq!(outcome, StepOutcome::LevelEntered(0));
+    let outcome = press_a_and_wait_for_level(&mut runner);
     assert_eq!(runner.lives, 5);
 
     // Trigger death: dead = 0xFF, dead_fade = true, fade_timer = 3 for fast deterministic test.
@@ -158,11 +169,7 @@ fn save_file_persistence_writes_disk_record_and_reloads_accurately() {
     let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
 
     // Entering a level triggers $2934 save.
-    let outcome = runner.step_frame(PlayerKeys {
-        a: true,
-        ..Default::default()
-    });
-    assert_eq!(outcome, StepOutcome::LevelEntered(0));
+    let outcome = press_a_and_wait_for_level(&mut runner);
     assert!(tmp_save.exists(), "save file must be written to disk");
 
     let rec = fs::read(&tmp_save).expect("save file must exist");
@@ -218,11 +225,7 @@ fn game_over_when_lives_exhausted() {
     let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
     runner.lives = 0; // Will become game over on death
 
-    let outcome = runner.step_frame(PlayerKeys {
-        a: true,
-        ..Default::default()
-    });
-    assert_eq!(outcome, StepOutcome::LevelEntered(0));
+    let outcome = press_a_and_wait_for_level(&mut runner);
 
     match &mut runner.state {
         SessionState::InLevel(ctx) => {
@@ -273,11 +276,7 @@ fn session_audio_synthesis_during_gameplay() {
     assert_eq!(runner.audio_samples().len(), 1476);
 
     // Enter Level 1
-    let outcome = runner.step_frame(PlayerKeys {
-        a: true,
-        ..Default::default()
-    });
-    assert_eq!(outcome, StepOutcome::LevelEntered(0));
+    let outcome = press_a_and_wait_for_level(&mut runner);
 
     // Step several frames of in-level gameplay to advance music sequencer and SFX
     let mut audible_frames = 0;
@@ -315,11 +314,7 @@ fn level_entry_publishes_the_active_song_for_the_timer_gate() {
 
     let assets = SessionAssets::load().expect("session assets must load");
     let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
-    let outcome = runner.step_frame(PlayerKeys {
-        a: true,
-        ..Default::default()
-    });
-    assert_eq!(outcome, StepOutcome::LevelEntered(0));
+    let outcome = press_a_and_wait_for_level(&mut runner);
 
     let song = match &runner.state {
         SessionState::InLevel(ctx) => ctx.sim.level_song,
@@ -347,9 +342,10 @@ fn map_screen_loader_music_reaches_the_driver() {
     let assets = SessionAssets::load().expect("session assets must load");
     let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
 
-    // The hub screen (screen 0) plays the map theme (song 24, main.asm:7391).
+    // The hub loader $3F156 stops music at $3F160 and ends with `ld a,6 /
+    // ld [sMusicRequest],a` at $3F1FE; $3EA9C requests the same 6.
     runner.step_frame(PlayerKeys::default());
-    assert_eq!(runner.sound_driver.active_song, 24, "hub screen map theme song 24");
+    assert_eq!(runner.sound_driver.active_song, 6, "hub theme");
 
     // Screen 1 is loaded by $3D208, which requests song 30.
     {
@@ -383,5 +379,66 @@ fn map_screen_loader_music_reaches_the_driver() {
     assert_eq!(runner.sound_driver.active_song, 18);
     assert_eq!(runner.sound_driver.update_count, before + 1);
 
+    let _ = fs::remove_file(&tmp_save);
+}
+
+#[test]
+fn live_audio_clock_drops_a_stalls_surplus() {
+    // 100 ms of wall clock owes 4410 samples, but a stalled frame must not push
+    // them as one burst; the surplus is dropped rather than queued.
+    let mut clock = AudioClock::backdated(std::time::Duration::from_millis(100));
+    assert_eq!(clock.take(), 4 * 739);
+    assert_eq!(clock.take(), 0);
+}
+
+#[test]
+fn headless_runs_keep_the_frame_clock() {
+    // The capture sweeps compare sample-for-sample, so headless sessions must
+    // never take the wall-clock path.
+    let tmp_save = temp_save_path("test_headless_clock");
+    let _ = fs::remove_file(&tmp_save);
+    let assets = SessionAssets::load().expect("session assets must load");
+    let runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
+    assert!(runner.audio_sync.is_none());
+    let _ = fs::remove_file(&tmp_save);
+}
+
+#[test]
+fn map_level_entry_runs_the_console_transition() {
+    let tmp_save = temp_save_path("test_map_transition");
+    let _ = fs::remove_file(&tmp_save);
+    let assets = SessionAssets::load().expect("session assets must load");
+    let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
+    let _ = runner.step_frame(PlayerKeys::default());
+
+    let plain_mean = runner.render_frame().iter().map(|&p| p as u32).sum::<u32>() / (160 * 144);
+
+    // Pressing A queues the entry: the map stays on screen and its theme stops
+    // ($3C1A2 requests $FF before the load), but the level is not live yet.
+    let _ = runner.step_frame(PlayerKeys { a: true, ..Default::default() });
+    assert!(matches!(runner.state, SessionState::Overworld(_)));
+    assert!(runner.pending_level.is_some(), "entry queued");
+    assert_eq!(runner.sound_driver.active_song, 0, "map theme stopped");
+
+    // The first transition frame is one fade step brighter than the map; the
+    // second step lands at the boundary of the hold, and the level goes live
+    // MAP_ENTRY_FRAMES frames after the press.
+    let faded_mean = runner.render_frame().iter().map(|&p| p as u32).sum::<u32>() / (160 * 144);
+    assert!(
+        faded_mean > plain_mean,
+        "fade step lightens the map ({faded_mean} vs {plain_mean})"
+    );
+
+    let mut entered = None;
+    for i in 1..=64 {
+        if let StepOutcome::LevelEntered(id) = runner.step_frame(PlayerKeys::default()) {
+            entered = Some((i, id));
+            break;
+        }
+    }
+    // Measured on the console: the last map frame is $0C, the level's first
+    // frame is the 37th after the press.
+    assert_eq!(entered, Some((37, 0)));
+    assert!(matches!(runner.state, SessionState::InLevel(_)));
     let _ = fs::remove_file(&tmp_save);
 }

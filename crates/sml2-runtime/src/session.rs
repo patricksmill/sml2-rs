@@ -583,12 +583,76 @@ pub enum StepOutcome {
     GameOver,
 }
 
+/// Wall-clock pacing for the live audio stream. The device consumes a fixed
+/// 44.1 kHz whatever the display refresh is, so production follows elapsed time
+/// instead of the frame count; a 60 Hz vsync loop otherwise feeds ~44,305
+/// samples/s into a 44,100 Hz sink and the queue drifts up to its full depth.
+pub struct AudioClock {
+    start: std::time::Instant,
+    produced: u64,
+}
+
+impl AudioClock {
+    /// A clock whose epoch is `elapsed` in the past (tests only).
+    #[cfg(test)]
+    pub fn backdated(elapsed: std::time::Duration) -> Self {
+        Self {
+            start: std::time::Instant::now() - elapsed,
+            produced: 0,
+        }
+    }
+    /// Samples the wall clock owes since the last call, capped at four console
+    /// frames. `produced` is set to the elapsed-time total, so a frame that
+    /// stalls drops its surplus instead of pushing a burst into the stream.
+    pub fn take(&mut self) -> usize {
+        let due = (self.start.elapsed().as_secs_f64() * 44_100.0) as u64;
+        let deficit = due.saturating_sub(self.produced).min(4 * 739);
+        self.produced = due;
+        deficit as usize
+    }
+}
+
+/// A level entry requested from the map, held for the console's own transition
+/// before the level becomes live.
+pub struct MapTransition {
+    pub ctx: Box<LevelContext>,
+    pub level_id: u8,
+    pub frame: u16,
+}
+
+/// Frames from the first faded map frame to the first level frame: PyBoy shows
+/// $FF9B $0C at the last normal map frame, $0B one frame after the palette hits
+/// white, $02 for two frames, $03 for twenty, and the first $04 frame 37 frames
+/// after the fade started.
+pub const MAP_ENTRY_FRAMES: u16 = 37;
+
+/// Frames the map spends in the first fade step before the palette reaches
+/// white: `rBGP` $90 -> $40 at the fade start and -> $00 twelve frames later.
+pub const MAP_FADE_STEP: u16 = 12;
+
+/// `rBGP`/`rOBP` fade step: subtract `steps` from each 2-bit shade field,
+/// clamped at 0. The console's map-to-level fade runs `$90` -> `$40` -> `$00`.
+fn fade_palette(pal: u8, steps: u8) -> u8 {
+    let mut out = 0u8;
+    for i in 0..4 {
+        let shift = i * 2;
+        let field = (pal >> shift) & 0x03;
+        out |= field.saturating_sub(steps) << shift;
+    }
+    out
+}
+
 /// Top-level coordinator for multi-state gameplay sessions.
 pub struct SessionRunner {
     pub state: SessionState,
     /// Screen whose loader-run music request was last applied, so a screen's
     /// song is requested once per load instead of every frame.
     pub last_map_screen: Option<u8>,
+    /// Set while a map level entry runs its 37-frame transition.
+    pub pending_level: Option<Box<MapTransition>>,
+    /// `Some` only while a live audio device is open (never in headless runs,
+    /// which must stay frame-deterministic for the capture sweeps).
+    pub audio_sync: Option<AudioClock>,
     pub assets: SessionAssets,
     pub save_path: PathBuf,
     pub lives: u8,
@@ -629,6 +693,8 @@ impl SessionRunner {
         let mut runner = Self {
             state: SessionState::GameOver,
             last_map_screen: None,
+            pending_level: None,
+            audio_sync: None,
             assets,
             save_path,
             lives: 5,
@@ -666,8 +732,12 @@ impl SessionRunner {
             map_sim.load_screen(0, 0, &runner.assets.node_records);
             runner.state = SessionState::Overworld(map_sim);
         }
-        // $3EA9A / main.asm:7391: Overworld map theme (song 24)
-        runner.sound_driver.music_request = 24;
+        if runner.live_audio.is_some() {
+            runner.audio_sync = Some(AudioClock {
+                start: std::time::Instant::now(),
+                produced: 0,
+            });
+        }
 
         runner
     }
@@ -726,8 +796,16 @@ impl SessionRunner {
         let select_pressed = keys.select && !self.prev_select;
         self.prev_select = keys.select;
 
-        let outcome = match &mut self.state {
-            SessionState::Overworld(ref mut map_sim) => {
+        let mut outcome = match &mut self.state {
+            SessionState::Overworld(ref mut map_sim) => 'map: {
+                // A level entry from the map is the console's own 37-frame
+                // transition (measured: $0C at f66 -> $0B f80 -> $02 f81 ->
+                // $03 f83 -> $04 f103). The map handler stops running, so the
+                // cursor freezes while the palettes fade and the level loads.
+                if let Some(t) = self.pending_level.as_mut() {
+                    t.frame += 1;
+                    break 'map StepOutcome::Continue;
+                }
                 let keys_held = pack_joypad(
                     keys.right,
                     keys.left,
@@ -784,8 +862,17 @@ impl SessionRunner {
                         self.assets.object_tables.clone(),
                     ) {
                         Ok(ctx) => {
-                            self.state = SessionState::InLevel(Box::new(ctx));
-                            StepOutcome::LevelEntered(level_id)
+                            // $3C1A2 stops the map theme before loading, and the
+                            // console spends the next 37 frames fading the map
+                            // to white with the level loading behind a blank
+                            // LCD; the level goes live at the end of that.
+                            self.sound_driver.music_request = 0xFF;
+                            self.pending_level = Some(Box::new(MapTransition {
+                                ctx: Box::new(ctx),
+                                level_id,
+                                frame: 0,
+                            }));
+                            StepOutcome::Continue
                         }
                         Err(e) => {
                             eprintln!("failed to load level {level_id}: {e}");
@@ -909,6 +996,17 @@ impl SessionRunner {
             }
         };
 
+        // The frozen map arm advances the counter; once it reaches the console's
+        // entry length the level goes live (its own music request starts on the
+        // first InLevel frame).
+        if let Some(t) = self.pending_level.as_mut() {
+            if t.frame >= MAP_ENTRY_FRAMES {
+                let t = self.pending_level.take().expect("checked above");
+                self.state = SessionState::InLevel(t.ctx);
+                outcome = StepOutcome::LevelEntered(t.level_id);
+            }
+        }
+
         // The map screen loaders each request their own song on entry
         // ($3D0FF..$3D880) and call $2AAA right after, so the request is applied
         // when a screen is loaded (not every frame) and starts this same frame.
@@ -930,7 +1028,12 @@ impl SessionRunner {
             ctx.sim.current_song = self.sound_driver.active_song;
         }
         self.apu.ingest_driver(&self.sound_driver);
-        let samples = self.apu.frame_sample_count(44100);
+        // Live output follows the wall clock; headless/export paths keep the
+        // per-frame 738/739 cadence so captures stay byte-deterministic.
+        let samples = match self.audio_sync.as_mut() {
+            Some(clock) => clock.take(),
+            None => self.apu.frame_sample_count(44100),
+        };
         self.apu.generate_samples(44100, samples, &mut self.audio_buffer);
 
         if let Some(audio) = &self.live_audio {
@@ -976,6 +1079,16 @@ impl SessionRunner {
                     .find(|s| s.id == map_sim.screen_id)
                     .map(|s| s.bg_palette)
                     .unwrap_or(0xE4);
+                // While a level entry runs, the console walks every palette
+                // field toward shade 0 one step every MAP_FADE_STEP frames and
+                // holds the white screen until the level goes live.
+                let fade = match self.pending_level.as_ref() {
+                    Some(t) if t.frame < MAP_FADE_STEP => 1,
+                    Some(_) => 2,
+                    None => 0,
+                };
+                let bg_pal = fade_palette(bg_pal, fade);
+                let obp = fade_palette(0xD0, fade);
                 sml2_core::map::render_overworld_view(
                     map_sim.screen_id,
                     map_sim.cam_x,
@@ -989,7 +1102,7 @@ impl SessionRunner {
                     &map_sim.level_progress,
                     &vram,
                     bg_pal,
-                    0xD0,
+                    obp,
                     self.vw,
                     self.vh,
                 )

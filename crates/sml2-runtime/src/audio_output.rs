@@ -38,8 +38,9 @@ impl AudioOutput {
             None => return None,
         };
 
-        // Bounded queue: up to 16 frames (~260 ms) to prevent memory growth or latency drift
-        let (tx, rx) = sync_channel::<Vec<f32>>(16);
+        // Bounded queue: enough to ride out a render hitch, shallow enough that
+        // the stream stays close to real time (6 frames = 100 ms).
+        let (tx, rx) = sync_channel::<Vec<f32>>(6);
 
         let worker = thread::Builder::new()
             .name("sml2-audio-output".into())

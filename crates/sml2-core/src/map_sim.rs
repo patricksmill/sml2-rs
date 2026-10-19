@@ -320,9 +320,10 @@ impl MapEntry {
 /// $2AAA`: `$3D0FF`->`$10` (16, screen 2), `$3D208`->`$1E` (30, screen 1),
 /// `$3D371`->`$05` (screen 3), `$3D49F`->`$1C` (28, screen 4), `$3D61F`->`$12`
 /// (18, screen 5), `$3D79A`->`$1B` (27, screen 6), `$3D6EB`->`$0E` (14, screen
-/// 7), `$3D880`->`$0D` (13, screen 8). Hub screen uses song 24 (main.asm:7391);
-/// the castle screens (`$3F495`/`$3F513`/`$3F5A4`) request 21.
-pub const SCREEN_MUSIC: [u8; 13] = [24, 30, 16, 5, 28, 18, 27, 14, 13, 21, 21, 21, 21];
+/// 7), `$3D880`->`$0D` (13, screen 8). The hub loader `$3F156` stops music at
+/// `$3F160` and ends with `ld a,6 / ld [sMusicRequest],a` at `$3F1FE` (`$3EA9C`
+/// requests the same 6); the castle screens (`$3F495`/`$3F513`/`$3F5A4`) request 21.
+pub const SCREEN_MUSIC: [u8; 13] = [6, 30, 16, 5, 28, 18, 27, 14, 13, 21, 21, 21, 21];
 
 /// `sMusicRequest` value a screen's loader writes; 0 for a screen with no
 /// modelled loader.
