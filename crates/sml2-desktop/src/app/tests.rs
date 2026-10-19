@@ -22,6 +22,7 @@ fn app() -> (DesktopApp, Context, PathBuf) {
         filter: None,
         play: false,
         boot_title: false,
+        boot_select: false,
         scale: None,
         fullscreen: false,
         smoke_frames: None,

@@ -20,6 +20,10 @@ fn main() -> Result<(), String> {
                 options.play = true;
                 options.boot_title = true;
             }
+            "--file-select" => {
+                options.play = true;
+                options.boot_select = true;
+            }
             "--filter" => {
                 options.filter = Some(match value()?.as_str() {
                     "gray" => Filter::Gray,
@@ -49,7 +53,7 @@ fn main() -> Result<(), String> {
             }
             "--screenshot" => options.screenshot = Some(PathBuf::from(value()?)),
             "--help" | "-h" => {
-                println!("sml2-desktop [--assets DIR] [--config FILE] [--save FILE] [--play] [--title] [--filter gray|dmg|pocket|sgb|amber]\n  [--scale 1..8] [--fullscreen] [--no-audio]\n  Validation: --smoke-frames N [--screenshot FILE]\n\nEsc / Controller Start: menu | F11: fullscreen | +/-: zoom\nF1: debug | F2: debug pause | F3: one tick");
+                println!("sml2-desktop [--assets DIR] [--config FILE] [--save FILE] [--play] [--title] [--file-select] [--filter gray|dmg|pocket|sgb|amber]\n  [--scale 1..8] [--fullscreen] [--no-audio]\n  Validation: --smoke-frames N [--screenshot FILE]\n\nEsc / Controller Start: menu | F11: fullscreen | +/-: zoom\nF1: debug | F2: debug pause | F3: one tick");
                 return Ok(());
             }
             _ => return Err(format!("Unknown option: {argument}")),

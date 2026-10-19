@@ -70,7 +70,7 @@ impl DesktopApp {
             ColorImage::from_gray([160, 144], &[0; 160 * 144]),
             TextureOptions::NEAREST,
         );
-        let screen = if options.play || options.boot_title {
+        let screen = if options.play || options.boot_title || options.boot_select {
             Screen::Game
         } else {
             Screen::Home
@@ -104,7 +104,11 @@ impl DesktopApp {
             validation_error: Default::default(),
         };
         app.load_game();
-        if app.options.boot_title {
+        if app.options.boot_select {
+            if let Some(game) = &mut app.game {
+                game.session.enter_file_select();
+            }
+        } else if app.options.boot_title {
             if let Some(game) = &mut app.game {
                 game.session.enter_title();
             }

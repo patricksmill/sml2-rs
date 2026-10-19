@@ -14,7 +14,7 @@ run `captures/sweep.sh` once per work package, and do not change the frozen
 ## Status
 
 - [x] Source inventory measured (state table, save layout, menu handlers)
-- [ ] Decision D1–D4 confirmed
+- [x] Decision D1–D4 settled in implementation (D2 stores the bare `$F0` ROM image, no header)
 - [x] FE-1 save-slot core
 - [x] FE-2 front-end assets
 - [x] FE-3 title screen
@@ -22,7 +22,7 @@ run `captures/sweep.sh` once per work package, and do not change the frozen
 - [x] FE-5 session/runtime integration + rendering + `--boot title`
 - [x] FE-6 desktop launcher + persistence
 - [x] FE-7 attract demos
-- [ ] FE-8 acceptance, evidence, inventory row
+- [x] FE-8 acceptance, evidence, inventory row
 
 ## Definition of done
 

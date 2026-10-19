@@ -1265,6 +1265,24 @@
       ],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; in-memory audio buffer generation asserting PCM sample generation for pulse, wave, and noise channels; runtime audio callback / stream integration; cargo test -p sml2-core passes",
       "status": "verified"
+    },
+    {
+      "id": "menus-save-flow",
+      "title": "Port the original boot, title screen, three-pipe file select (load/erase/confirm), attract demos and three-slot persistence",
+      "asm_refs": [
+        "main.asm:$14043-$14120",
+        "main.asm:$30000-$30400",
+        "main.asm:$4121",
+        "home.asm:$2B8B",
+        "home.asm:$38B9-$3947",
+        "ram.asm:sSaveSlots/sEasyMode"
+      ],
+      "dependencies": [
+        "native_sound_driver",
+        "visual-audio"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; 9 acceptance tapes through the live session; cargo test --workspace; captures/sweep.sh; desktop title/file-select smoke on Linux and Windows",
+      "status": "verified"
     }
   ]
 }

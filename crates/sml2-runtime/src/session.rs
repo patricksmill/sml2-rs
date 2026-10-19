@@ -634,6 +634,13 @@ impl Session {
         }
     }
 
+    /// `$30000`: enter the file select directly (desktop smoke/evidence).
+    pub fn enter_file_select(&mut self) {
+        let mut file_select = FileSelect::new(&mut self.slots);
+        self.sound_driver.music_request = file_select.take_music();
+        self.state = SessionState::FileSelect(file_select);
+    }
+
     /// `$00`: enter the title screen with a specific `sDemoIndex`.
     pub fn enter_title_with_demo(&mut self, demo_index: u8) {
         self.enter_title();

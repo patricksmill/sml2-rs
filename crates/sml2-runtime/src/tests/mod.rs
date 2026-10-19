@@ -22,6 +22,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod acceptance;
 mod boss_entry;
 mod front_end;
 mod game;
