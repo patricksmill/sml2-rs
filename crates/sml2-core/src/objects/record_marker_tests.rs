@@ -33,7 +33,13 @@ fn record_marker_source_instructions_copy_then_store_two_and_remove_zero_or_spen
     let root = std::env::var_os("SML2_DECOMP_ROOT")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../sml2decomp")
+            let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let decomp = manifest.join("../../decomp");
+            if decomp.join("baserom.gb").is_file() {
+                decomp
+            } else {
+                manifest.join("../../../sml2decomp")
+            }
         });
     let rom = std::fs::read(root.join("baserom.gb")).expect("source ROM for marker contract");
     // $8CA8 copies all six bytes before the later $8CD4 store of marker 2.

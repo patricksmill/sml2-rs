@@ -1138,6 +1138,21 @@
    ],
    "verification_gate": "PORTING.md; progress0 source header entry and unchanged assets; fixed inputs through continuous live objects/camera, zero gameplay deaths; three source hidden-block overlays, upper $4B arm/fade/tally guard/map/save bytes; sensitivity, full core/runtime suites and frozen sweep",
    "status": "done"
+  },
+  {
+   "id": "overworld_source_map_render",
+   "title": "Extract and render source overworld backgrounds, route patches and cursor for live navigation",
+   "asm_refs": [
+    "main.asm:$3D0FF-$3D880",
+    "main.asm:$3E2A2-$3E2F7",
+    "main.asm:$3ED4C",
+    "main.asm:$61147"
+   ],
+   "dependencies": [
+    "map_zone_screen_loaders"
+   ],
+   "verification_gate": "PORTING.md; runtime consumes extracted assets only; source-derived hub/zone tilemaps and graphics, signed BG tile mapping, camera/palette/path patches and cursor; deterministic byte/render checks, extractor/runtime suites, source asset regeneration and frozen sweep",
+   "status": "done"
   }
  ]
 }

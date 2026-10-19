@@ -1,6 +1,6 @@
 {
  "active_milestone": "mechanics_all_levels",
- "milestone_note": "1 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+ "milestone_note": "3 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
  "queue": [
   {
    "id": "mechanics_all_levels_acceptance",
@@ -15,6 +15,23 @@
     "per_level_handler_coverage"
    ],
    "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+   "status": "pending"
+  },
+  {
+   "id": "overworld_runtime_session",
+   "title": "Integrate live overworld navigation with level entry and clear/death returns",
+   "asm_refs": [
+    "main.asm:$3C000-$3C169",
+    "main.asm:$3C38C-$3C7EC",
+    "main.asm:$3EEF0-$3F156",
+    "main.asm:$5579-$55C6",
+    "home.asm:$311A-$3186"
+   ],
+   "dependencies": [
+    "map_zone_screen_loaders",
+    "secret_route_entry_overlay"
+   ],
+   "verification_gate": "PORTING.md; one shared window/input/divider/frame budget across map and existing live level loop; real map tables choose node/progress/level assets; continuous map-to-level-to-map acceptance, death fade/lives and checkpoint reentry; persistence survives transitions; legacy suites, release build and frozen sweep",
    "status": "pending"
   }
  ],

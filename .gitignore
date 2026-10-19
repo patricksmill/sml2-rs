@@ -7,3 +7,4 @@ captures/*_raw.json
 
 # Python tooling caches
 __pycache__/
+/decomp

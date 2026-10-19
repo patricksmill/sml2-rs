@@ -15,6 +15,7 @@
 //!    `extracted/levels/levelNN.manifest.json` and `index.json`.
 
 mod ending;
+mod map;
 mod objects;
 mod parse;
 mod render;
@@ -624,6 +625,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!(
         "wrote map/node_records.bin: {WALK_NODES} records at ${records_rom:05X} (camera + cursor)"
     );
+
+    map::emit(&baserom, &extracted)?;
 
     // Per-level GFX config (UnknownData_0x360A -> sLevelGfxConfig): the high
     // nibble selects the two "extra" tile blocks loaded by LoadMarioGFX

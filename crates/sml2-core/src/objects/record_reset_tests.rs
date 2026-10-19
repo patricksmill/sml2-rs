@@ -186,8 +186,18 @@ fn record_reset_real_charging_step_then_separate_promotion_counter_owner() {
 
 #[test]
 fn record_reset_source_instructions_validate_constants_and_call_chain() {
-    let root=std::env::var_os("SML2_DECOMP_ROOT").map(std::path::PathBuf::from).unwrap_or_else(||std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../sml2decomp"));
-    let rom=std::fs::read(root.join("baserom.gb")).unwrap();
+    let root = std::env::var_os("SML2_DECOMP_ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let decomp = manifest.join("../../decomp");
+            if decomp.join("baserom.gb").is_file() {
+                decomp
+            } else {
+                manifest.join("../../../sml2decomp")
+            }
+        });
+    let rom = std::fs::read(root.join("baserom.gb")).unwrap();
     assert_eq!(&rom[0x5B2BF..0x5B2D7],&[0xF0,0xD6,0x67,0xF0,0xD7,0x6F,0x2B,0x2B,0x11,0xD0,0xFF,0x06,5,0xCD,0xAA,0x3C,0xCD,0xA0,0x3A,0x3E,1,0xE0,0xD8,0xC9]);
     assert_eq!(&rom[0x863C..0x864A],&[0xF0,0xDD,0xEA,0x38,0xAF,0xCD,0x40,0x42,0x3E,1,0xEA,0x3E,0xAF,0xC9]);
     assert_eq!(&rom[0x8240..0x8245],&[0xF0,0xD6,0xFE,0xAD,0xD0]);

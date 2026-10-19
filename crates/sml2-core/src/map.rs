@@ -333,6 +333,327 @@ pub fn save_record_valid(record: &[u8]) -> bool {
     sum == record[0x45] && record[0x46..0x4A] == SAVE_SIGNATURE
 }
 
+/// Signed tile index mapping for Game Boy LCDC bit 4 = 0 background addressing ($8800-$97FF).
+///
+/// Tile indices 0..127 read from $9000 (VRAM tile index 256..383).
+/// Tile indices 128..255 read from $8800 (VRAM tile index 128..255).
+pub const fn signed_bg_tile_index(tile: u8) -> usize {
+    if tile < 128 {
+        256 + tile as usize
+    } else {
+        tile as usize
+    }
+}
+
+/// The extracted overworld background tilemaps (`extracted/map/tilemaps.bin`).
+///
+/// Contains the 64x64 hub tilemap (4,096 bytes) stitched from the four 32x32
+/// quadrants, followed by 12 screen tilemaps (each 32x32 = 1,024 bytes, 576 bytes
+/// visible). Total size: 16,384 bytes.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OverworldTilemaps {
+    blob: Vec<u8>,
+}
+
+impl OverworldTilemaps {
+    pub const HUB_LEN: usize = 4096;
+    pub const SCREEN_LEN: usize = 1024;
+    pub const SCREEN_COUNT: usize = 12;
+    pub const TOTAL_LEN: usize = Self::HUB_LEN + Self::SCREEN_COUNT * Self::SCREEN_LEN;
+
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        (bytes.len() == Self::TOTAL_LEN).then(|| Self {
+            blob: bytes.to_vec(),
+        })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.blob.is_empty()
+    }
+
+    /// Read a tile byte from the 64x64 hub tilemap.
+    pub fn hub_tile(&self, x: usize, y: usize) -> u8 {
+        if x >= 64 || y >= 64 || self.blob.len() < Self::HUB_LEN {
+            return 0;
+        }
+        self.blob[y * 64 + x]
+    }
+
+    /// Read a tile byte from a screen tilemap (1..=12).
+    pub fn screen_tile(&self, screen_id: u8, x: usize, y: usize) -> u8 {
+        if screen_id == 0 {
+            return self.hub_tile(x, y);
+        }
+        if screen_id > Self::SCREEN_COUNT as u8 || x >= 32 || y >= 32 {
+            return 0;
+        }
+        let off = Self::HUB_LEN + (screen_id as usize - 1) * Self::SCREEN_LEN;
+        self.blob.get(off + y * 32 + x).copied().unwrap_or(0)
+    }
+
+    /// Access the raw tilemap for a screen.
+    pub fn screen_tilemap(&self, screen_id: u8) -> Option<&[u8]> {
+        if screen_id == 0 {
+            self.blob.get(..Self::HUB_LEN)
+        } else if screen_id <= Self::SCREEN_COUNT as u8 {
+            let off = Self::HUB_LEN + (screen_id as usize - 1) * Self::SCREEN_LEN;
+            self.blob.get(off..off + Self::SCREEN_LEN)
+        } else {
+            None
+        }
+    }
+}
+
+/// Composed VRAM background and sprite tile blocks for overworld screens (0..=12).
+///
+/// Each screen contains 384 tiles (6,144 bytes in 2bpp format):
+/// - Tiles 0..31: 32 common overworld/cursor/icon tiles
+/// - Tiles 32..383: 352 zone-specific background tiles
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OverworldTiles {
+    bytes: Vec<u8>,
+}
+
+impl OverworldTiles {
+    pub const TILES_PER_SCREEN: usize = 384;
+    pub const BYTES_PER_SCREEN: usize = Self::TILES_PER_SCREEN * 16; // 6144
+    pub const SCREEN_COUNT: usize = 13;
+    pub const TOTAL_LEN: usize = Self::SCREEN_COUNT * Self::BYTES_PER_SCREEN; // 79872
+
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        (bytes.len() == Self::TOTAL_LEN).then(|| Self {
+            bytes: bytes.to_vec(),
+        })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+
+    /// Decode the 384 2bpp tiles for a given screen into 8x8 pixel color arrays (0..=3).
+    pub fn screen_vram_tiles(&self, screen_id: u8) -> Vec<[u8; 64]> {
+        let sid = (screen_id as usize).min(Self::SCREEN_COUNT - 1);
+        let start = sid * Self::BYTES_PER_SCREEN;
+        let screen_bytes = match self.bytes.get(start..start + Self::BYTES_PER_SCREEN) {
+            Some(b) => b,
+            None => return vec![[0u8; 64]; Self::TILES_PER_SCREEN],
+        };
+        let mut tiles = Vec::with_capacity(Self::TILES_PER_SCREEN);
+        for chunk in screen_bytes.chunks_exact(16) {
+            let mut tile_16 = [0u8; 16];
+            tile_16.copy_from_slice(chunk);
+            tiles.push(crate::video::tile_colors(&tile_16));
+        }
+        tiles
+    }
+}
+
+/// One tile displacement in a route patch stream.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct PatchTile {
+    pub dx: u8,
+    pub dy: u8,
+    pub tile: u8,
+}
+
+/// One patch stream in bank 24 ($623EA).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct PatchStream {
+    pub id: usize,
+    pub ptr: String,
+    pub tiles: Vec<PatchTile>,
+}
+
+/// One tile in a cursor metasprite.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct CursorTile {
+    pub dx: u8,
+    pub dy: u8,
+    pub tile: u8,
+    pub attr: u8,
+}
+
+/// One of the 16 cursor metasprite poses ($4AD7).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct CursorPoseDef {
+    pub pose: u8,
+    pub direction: String,
+    pub step: u8,
+    pub tiles: [CursorTile; 4],
+}
+
+/// Screen rendering metadata.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct ScreenMeta {
+    pub id: u8,
+    pub name: String,
+    pub width: usize,
+    pub height: usize,
+    pub tilemap_offset: usize,
+    pub tilemap_len: usize,
+    pub gfx: String,
+    pub bg_palette: u8,
+}
+
+/// Dynamic patch placement for route unlocks.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct PatchPlacement {
+    pub x: u8,
+    pub y: u8,
+    pub patch_ids: Vec<usize>,
+}
+
+/// Rule mapping `sLevelProgress` flag to dynamic patch placement.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct DynamicUnlock {
+    pub name: String,
+    pub screen_id: u8,
+    pub progress_offset: usize,
+    pub mask: u8,
+    pub patches: Vec<PatchPlacement>,
+}
+
+/// Full extracted manifest for overworld route patches and cursor metadata.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct OverworldManifest {
+    pub screens: Vec<ScreenMeta>,
+    pub patches: Vec<PatchStream>,
+    pub cursor_poses: Vec<CursorPoseDef>,
+    pub dynamic_unlocks: Vec<DynamicUnlock>,
+}
+
+impl OverworldManifest {
+    pub fn from_json_str(json: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(json)
+    }
+
+    /// Retrieve the cursor metasprite definition for a pose (0..15).
+    pub fn cursor_pose(&self, pose: u8) -> Option<&CursorPoseDef> {
+        self.cursor_poses.get((pose & 0x0F) as usize)
+    }
+}
+
+/// Render one overworld frame into a 160x144 (or custom vw x vh) grayscale pixel buffer.
+pub fn render_overworld_view(
+    screen_id: u8,
+    cam_x: u16,
+    cam_y: u16,
+    cursor_x: u8,
+    cursor_y: u8,
+    cursor_move: u8,
+    cursor_pose: u8,
+    tilemaps: &OverworldTilemaps,
+    manifest: &OverworldManifest,
+    level_progress: &[u8],
+    tiles_vram: &[[u8; 64]],
+    bg_palette: u8,
+    obj_palette: u8,
+    vw: usize,
+    vh: usize,
+) -> Vec<u8> {
+    let bg_shades = crate::video::bgp_shades(bg_palette);
+    let obj_shades = crate::video::bgp_shades(obj_palette);
+    let mut img = vec![bg_shades[0]; vw * vh];
+
+    if screen_id == 0 {
+        // Hub 64x64 stitched map
+        for py in 0..vh {
+            let wy = (cam_y as usize + py) % 512;
+            let ty = wy / 8;
+            let sub_y = wy % 8;
+            for px in 0..vw {
+                let wx = (cam_x as usize + px) % 512;
+                let tx = wx / 8;
+                let sub_x = wx % 8;
+                let tile_byte = tilemaps.hub_tile(tx, ty);
+                let vram_idx = signed_bg_tile_index(tile_byte);
+                if let Some(tile_data) = tiles_vram.get(vram_idx) {
+                    let col = tile_data[sub_y * 8 + sub_x];
+                    img[py * vw + px] = bg_shades[col as usize];
+                }
+            }
+        }
+    } else {
+        // Zone screen 32x18 tiles (cloned to apply dynamic route patches)
+        let mut active_map = [0u8; 1024];
+        if let Some(base_map) = tilemaps.screen_tilemap(screen_id) {
+            let n = active_map.len().min(base_map.len());
+            active_map[..n].copy_from_slice(&base_map[..n]);
+        }
+        for unlock in &manifest.dynamic_unlocks {
+            if unlock.screen_id == screen_id {
+                let prog = level_progress.get(unlock.progress_offset).copied().unwrap_or(0);
+                if prog & unlock.mask != 0 {
+                    for placement in &unlock.patches {
+                        for &patch_id in &placement.patch_ids {
+                            if let Some(patch) = manifest.patches.get(patch_id) {
+                                for tile in &patch.tiles {
+                                    let tx = (placement.x as usize + tile.dx as usize) & 0x1F;
+                                    let ty = (placement.y as usize + tile.dy as usize) & 0x1F;
+                                    active_map[ty * 32 + tx] = tile.tile;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for py in 0..vh.min(144) {
+            let ty = py / 8;
+            let sub_y = py % 8;
+            for px in 0..vw.min(256) {
+                let tx = px / 8;
+                let sub_x = px % 8;
+                let tile_byte = active_map[ty * 32 + tx];
+                let vram_idx = signed_bg_tile_index(tile_byte);
+                if let Some(tile_data) = tiles_vram.get(vram_idx) {
+                    let col = tile_data[sub_y * 8 + sub_x];
+                    img[py * vw + px] = bg_shades[col as usize];
+                }
+            }
+        }
+    }
+
+    // Mario cursor metasprite
+    let mut cur_x = cursor_x as i32;
+    let mut cur_y = cursor_y as i32;
+    if cursor_move & 0x20 != 0 {
+        cur_x += 4;
+        cur_y += 8;
+    }
+    let spr_x0 = cur_x - 8;
+    let spr_y0 = cur_y - 16;
+
+    if let Some(pose_def) = manifest.cursor_pose(cursor_pose) {
+        for tile in &pose_def.tiles {
+            let tile_x0 = spr_x0 + tile.dx as i32;
+            let tile_y0 = spr_y0 + tile.dy as i32;
+            for dy in 0..8 {
+                let py = tile_y0 + dy;
+                if py < 0 || py >= vh as i32 {
+                    continue;
+                }
+                let src_y = if tile.attr & 0x40 != 0 { 7 - dy } else { dy };
+                for dx in 0..8 {
+                    let px = tile_x0 + dx;
+                    if px < 0 || px >= vw as i32 {
+                        continue;
+                    }
+                    let src_x = if tile.attr & 0x20 != 0 { 7 - dx } else { dx };
+                    if let Some(tile_data) = tiles_vram.get(tile.tile as usize) {
+                        let col = tile_data[src_y as usize * 8 + src_x as usize];
+                        if col != 0 {
+                            img[py as usize * vw + px as usize] = obj_shades[col as usize];
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    img
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -467,5 +788,149 @@ mod tests {
             "but +$4A is not part of the check — the ROM's compare stops at +$49"
         );
         assert!(!save_record_valid(&[0u8; 8]), "a short record fails");
+    }
+
+    #[test]
+    fn test_signed_bg_tile_indexing() {
+        assert_eq!(signed_bg_tile_index(0), 256, "0 -> $9000 (tile 256)");
+        assert_eq!(signed_bg_tile_index(1), 257);
+        assert_eq!(signed_bg_tile_index(127), 383, "127 -> $97F0 (tile 383)");
+        assert_eq!(signed_bg_tile_index(128), 128, "128 -> $8800 (tile 128)");
+        assert_eq!(signed_bg_tile_index(255), 255, "255 -> $8FF0 (tile 255)");
+    }
+
+    #[test]
+    fn test_overworld_tilemaps_indexing_and_screen_slices() {
+        let mut blob = vec![0u8; OverworldTilemaps::TOTAL_LEN];
+        blob[0] = 42; // Hub (0, 0)
+        blob[63] = 43; // Hub (63, 0)
+        blob[63 * 64 + 63] = 44; // Hub (63, 63)
+        // Screen 1 (Pumpkin)
+        let s1_off = OverworldTilemaps::HUB_LEN;
+        blob[s1_off] = 77;
+        blob[s1_off + 31] = 78;
+
+        let maps = OverworldTilemaps::from_bytes(&blob).expect("valid tilemaps blob");
+        assert_eq!(maps.hub_tile(0, 0), 42);
+        assert_eq!(maps.hub_tile(63, 0), 43);
+        assert_eq!(maps.hub_tile(63, 63), 44);
+        assert_eq!(maps.hub_tile(64, 64), 0, "out of bounds clamps to 0");
+
+        assert_eq!(maps.screen_tile(1, 0, 0), 77);
+        assert_eq!(maps.screen_tile(1, 31, 0), 78);
+        assert_eq!(maps.screen_tile(1, 32, 0), 0, "out of bounds clamps to 0");
+
+        let s1_slice = maps.screen_tilemap(1).expect("screen 1 slice");
+        assert_eq!(s1_slice[0], 77);
+        assert_eq!(s1_slice[31], 78);
+    }
+
+    #[test]
+    fn test_overworld_manifest_route_patches_and_rendering() {
+        let manifest_json = r#"{
+            "screens": [
+                {
+                    "id": 1,
+                    "name": "pumpkin",
+                    "width": 32,
+                    "height": 18,
+                    "tilemap_offset": 4096,
+                    "tilemap_len": 576,
+                    "gfx": "gfx/overworld/pumpkinzone.png",
+                    "bg_palette": 228
+                }
+            ],
+            "patches": [
+                {
+                    "id": 0,
+                    "ptr": "$6ECA",
+                    "tiles": [
+                        { "dx": 0, "dy": 0, "tile": 5 },
+                        { "dx": 1, "dy": 0, "tile": 6 }
+                    ]
+                }
+            ],
+            "cursor_poses": [
+                {
+                    "pose": 0,
+                    "direction": "Left",
+                    "step": 0,
+                    "tiles": [
+                        { "dx": 0, "dy": 0, "tile": 1, "attr": 0 },
+                        { "dx": 8, "dy": 0, "tile": 2, "attr": 0 },
+                        { "dx": 0, "dy": 8, "tile": 3, "attr": 0 },
+                        { "dx": 8, "dy": 8, "tile": 4, "attr": 0 }
+                    ]
+                }
+            ],
+            "dynamic_unlocks": [
+                {
+                    "name": "test_unlock",
+                    "screen_id": 1,
+                    "progress_offset": 2,
+                    "mask": 1,
+                    "patches": [
+                        { "x": 0, "y": 0, "patch_ids": [0] }
+                    ]
+                }
+            ]
+        }"#;
+
+        let manifest = OverworldManifest::from_json_str(manifest_json).expect("valid manifest");
+        assert_eq!(manifest.screens.len(), 1);
+        assert_eq!(manifest.patches.len(), 1);
+        assert_eq!(manifest.cursor_poses.len(), 1);
+
+        let tilemaps_blob = vec![0u8; OverworldTilemaps::TOTAL_LEN];
+        let tilemaps = OverworldTilemaps::from_bytes(&tilemaps_blob).expect("valid tilemaps");
+
+        // Prepare dummy VRAM tiles
+        let mut vram = vec![[0u8; 64]; 384];
+        let signed_tile_5 = signed_bg_tile_index(5);
+        let signed_tile_6 = signed_bg_tile_index(6);
+        vram[signed_tile_5].fill(1);
+        vram[signed_tile_6].fill(2);
+        vram[1].fill(3); // cursor top-left tile
+
+        // Render before unlock: progress byte at offset 2 is 0 -> tile is 0
+        let progress = [0u8; 42];
+        let frame_locked = render_overworld_view(
+            1, 0, 0, 0, 0, 0, 0,
+            &tilemaps, &manifest, &progress,
+            &vram, 0xE4, 0xD0, 160, 144,
+        );
+        assert_eq!(frame_locked.len(), 160 * 144);
+
+        // Render with unlock: progress byte at offset 2 has bit 0 set
+        let mut progress_unlocked = [0u8; 42];
+        progress_unlocked[2] = 1;
+        let frame_unlocked = render_overworld_view(
+            1, 0, 0, 8, 16, 0, 0, // cursor placed at hardware OAM (8, 16) -> screen pixel (0, 0)
+            &tilemaps, &manifest, &progress_unlocked,
+            &vram, 0xE4, 0xD0, 160, 144,
+        );
+        assert_eq!(frame_unlocked.len(), 160 * 144);
+        // At (0, 0), cursor tile 1 (color 3) should be drawn on top
+        let obj_shades = crate::video::bgp_shades(0xD0);
+        assert_eq!(frame_unlocked[0], obj_shades[3], "cursor sprite draws over background");
+    }
+
+    #[test]
+    fn test_overworld_tiles_decoding() {
+        let mut blob = vec![0u8; OverworldTiles::TOTAL_LEN];
+        // In screen 1, tile 0 is 16 bytes: fill with 0xFF -> color 3 everywhere
+        let s1_off = OverworldTiles::BYTES_PER_SCREEN;
+        blob[s1_off..s1_off + 16].fill(0xFF);
+
+        let tiles = OverworldTiles::from_bytes(&blob).expect("valid tiles blob");
+        assert_eq!(tiles.bytes.len(), OverworldTiles::TOTAL_LEN);
+
+        let vram = tiles.screen_vram_tiles(1);
+        assert_eq!(vram.len(), OverworldTiles::TILES_PER_SCREEN);
+        assert_eq!(vram[0], [3u8; 64], "tile 0 should be decoded to color 3 pixels");
+        assert_eq!(vram[1], [0u8; 64], "tile 1 should be zero");
+
+        // Invalid blob size rejected
+        assert!(OverworldTiles::from_bytes(&blob[..100]).is_none());
     }
 }
