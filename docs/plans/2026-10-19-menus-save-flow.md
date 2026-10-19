@@ -18,7 +18,7 @@ run `captures/sweep.sh` once per work package, and do not change the frozen
 - [x] FE-1 save-slot core
 - [x] FE-2 front-end assets
 - [x] FE-3 title screen
-- [ ] FE-4 file select
+- [x] FE-4 file select (state machine; OAM rendering with FE-5)
 - [ ] FE-5 session/runtime integration
 - [ ] FE-6 desktop launcher + persistence
 - [ ] FE-7 attract demos (can ship after FE-4)
@@ -267,8 +267,10 @@ mode and clears Easy; START or DOWN on slot 0/1/2 loads the right record;
 erase writes the exact template; the loaded counters
 match the slot; cursor sprite ids match `$3012A`.
 
-**Exit**: core-only file select tape (no runtime) produces the same OAM/tilemap
-cells as the pinned source.
+**Exit**: core-only file-select tape exercises every state, timer and commit;
+the OAM/tilemap cells are pinned by the FE-5 renderer tests. Nine tests cover
+the 45-frame cursor drop, both 32-frame walks, Easy/erase toggles, confirm
+blocking at the erase position, load, erase and the even-frame SFX 2 tick.
 
 ### FE-5 — Session/runtime integration (M)
 
