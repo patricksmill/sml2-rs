@@ -1097,6 +1097,24 @@
    ],
    "verification_gate": "PORTING.md; genuine progress8 entry, unchanged source assets, fixed native inputs with live objects/camera and zero deaths; upper $4B arm/fade/tally guard/map/save bytes and sensitivity; core/runtime suites and frozen sweep",
    "status": "done"
+  },
+  {
+   "id": "played_route_level19_header_exit",
+   "title": "Accept level 19 normal header spawn to lower $4A bell through native live play",
+   "asm_refs": [
+    "main.asm:$5579-$55C6",
+    "levels/levelheaders.asm:$5773-$5786",
+    "home.asm:$1029-$1054",
+    "home.asm:$1675-$16AE",
+    "home.asm:$1CBA-$1CFB",
+    "home.asm:$3547-$356E",
+    "main.asm:$3EEF0-$3F03D"
+   ],
+   "dependencies": [
+    "played_route_level19_secret_entry"
+   ],
+   "verification_gate": "PORTING.md; original header entry with progress0 and unchanged assets, fixed native inputs through live objects/camera with zero gameplay deaths, exact lower bell/fade/map/save bytes, behavior sensitivity, core/runtime suites and frozen sweep",
+   "status": "done"
   }
  ]
 }

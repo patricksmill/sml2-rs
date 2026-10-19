@@ -2,7 +2,8 @@
 
 **Status: all 32 rows measured 2026-10-18; the first slice (12, 19, 28, 29) is
 reviewed, every exit cell is test-pinned, levels 28/29 have played header
-approaches, and level 19 has played secret-entry routes to both bells.** Tool:
+approaches, and level 19 has played its header start to the lower bell and
+secret entry to both bells.** Tool:
 [`tools/route_matrix.py`](../tools/route_matrix.py); acceptance:
 `crates/sml2-core/src/route_matrix_tests.rs`.
 
@@ -117,7 +118,8 @@ named tests.
 ### Level 19 (id 18)
 
 - **Entry.** Node 60 (progress slot 16), header spawn (45, 436), time limit 7;
-  Space Zone tileset (`GFX_TilesetSpaceZone`).
+  Space Zone tileset (`GFX_TilesetSpaceZone`). The source header at `$5773`
+  begins `B4 01 2D 00 B0 01 50 00`: camera (80,432), normal progress `$00`.
 - **Exit.** Two bells in the same column, 288 px apart:
   - plain `$4A` on the floor at (190, 29) → (3040, 464);
   - the alternate `$4B` at (190, 11) → (3040, 176), reached from the row-12 pipe
@@ -218,6 +220,23 @@ bell, so that post-clear map latch cannot conceal a failed approach. Removing
 only the timed-float velocity extension makes this tape stall before the bell
 and fails the test; the original behavior is restored afterward.
 
+### Played route: level 19 header start to the lower bell
+
+`level19_header_spawn_to_plain_bell_through_live_play` starts at the source
+header `$5773`, progress `$00`, route latch 0, Mario (45,436) and camera
+(80,432). It uses all 25 original object records and the source timed-float
+physics. Its fixed 4,838-frame tape crosses the first broad spike bed via the
+column-60 foothold, refreshes the grounded float budget on narrow platforms,
+and releases A early over the later thorn gap to avoid the enemy above it.
+There are no position, physics, object or invincibility overrides after entry.
+
+With zero gameplay death frames, `$4A` arms on frame 4,611 at (3043,452),
+fade 192, music 3, exit flag 0. Fade completes on 4,803 and map handoff runs
+on 4,804. The final tally is 1, node 60, screen 4, music 28, with two saves.
+Progress slot 16 and its save byte are `$80`; entry flags remain `$00`.
+Disabling the grounded float budget rejects both the existing core float
+contract test and this played approach.
+
 ### Played route: level 19 secret entry to the lower bell
 
 `level19_secret_entry_to_plain_bell_through_live_play` starts from the genuine
@@ -289,12 +308,13 @@ played route's tally assertion.
    coin, save serialization, map node `$20`/screen 2, and clean re-entry. These
    are direct-placement acceptance tests; played approaches remain pending.
 3. **Most approaches remain unplayed.** Levels 28/29 header starts and level
-   19's secret entry to both bells now have native input tests. Other
-   ordinary/secret starts and approaches to boss entrances still need played
-   tests. Level 19's header start and the castle/night levels remain priorities.
+   19's header start to the lower bell and secret entry to both bells have native
+   input tests. Other ordinary/secret starts and approaches to boss entrances
+   still need played tests, including level 19's header-to-upper-bell route
+   and the castle/night levels.
 4. **The 28 unreviewed rows are tool-measured, not hand-checked.** Their zone,
    node, exit and secret columns are trustworthy by construction; the
    "required mechanic" summary and any route narrative still need a review pass.
-5. **Time limits and music tracks are reported, not asserted** — they come from
-   the header and are seeded by `seed_level_timer`, but no test pins per-level
-   values.
+5. **Most time limits and music tracks are reported, not asserted.** The level
+   19 header route pins time 7, music 19, and their seeded runtime values. Other
+   per-level values still come from the header without explicit acceptance.
