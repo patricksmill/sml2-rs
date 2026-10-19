@@ -819,10 +819,11 @@ impl MapSim {
         // auto-walks it next frame. The node change happens *after* the chain, so
         // `$14`'s own class does not fire this frame; the ROM jumps straight to the
         // gate (`$3C4D3`), skipping the walking check.
-        if self.node == 0 {
-            if self.cursor_walking == 0 && self.level_progress[0] & 0x80 != 0 {
-                self.node = 0x14;
-            }
+        if self.node == 0
+            && self.cursor_walking == 0
+            && self.level_progress[0] & 0x80 != 0
+        {
+            self.node = 0x14;
         }
         p
     }

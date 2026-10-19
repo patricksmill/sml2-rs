@@ -269,10 +269,7 @@ impl SoundDriver {
     /// `$11788`: a channel-4 note `$1F` starts noise effect 3 from inside the
     /// sequencer's own dispatch, which is why it is not a `sfx_request_2` write.
     fn start_music_drum(&mut self) {
-        let has_drum_trigger = self
-            .music_writes
-            .iter()
-            .any(|w| *w == MusicWrite::DrumTrigger);
+        let has_drum_trigger = self.music_writes.contains(&MusicWrite::DrumTrigger);
         if has_drum_trigger && self.noise_slot.active_effect == 0 {
             self.noise_slot
                 .start(3, &mut self.noise_music, &mut self.noise_writes);

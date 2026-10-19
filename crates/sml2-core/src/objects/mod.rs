@@ -974,30 +974,30 @@ impl ObjectSim {
     /// `$9C3F`: the hit body anims 10 and 11 share. A stomp takes 2 HP, a
     /// projectile 1, and 0 *or a borrow* sends the part to `$5435` — the
     /// defeat fall. The controller never runs this.
-
+    ///
     /// `$9CAC`: the shared hit-stun (state 1). Flash, count `B_T28` down, then
     /// either the defeat fall (remove-mode set) or restore the banked
     /// sprite/state/type.
-
+    ///
     /// `$9C8B`: the intro's end — arm the fight (type `$45`, state 3, sprite
     /// `$20`, a `$2F`-style sfx).
-
+    ///
     /// `$9CDF`: the bob body the walk states run each frame. `B_T24` picks the
     /// ascent profile (cap 15) or the descent one (cap 21) — the descent also
     /// ends the flight at `B_SCRY = $90`.
-
+    ///
     /// `$9D3D`: a walk hit the end of the arena — flip the state bit and the
     /// object, and re-announce the anim id.
-
+    ///
     /// `$9C36` (boss anim 10) and `$9D4F` (anims 11): the two parts of the
     /// Mario Zone boss. Same hit body, same shared states; the walk states are
     /// mirrored and anim 11's intro waits for the other part to clear.
-
+    ///
     /// `$9E07` (boss anim 12): the controller. It has no HP — its hit body banks
     /// the slot and parks it without touching `$FFD8` — waits for the parts to
     /// clear, then spawns one child (anim `$0D`, sprite `$0E`) and starts the
     /// fade-done walk, whose speed comes from `sBossHits` (`4 - hits/2`).
-
+    ///
     /// `$9323` (boss anim 3): a **defeated** part's way out — the body the
     /// `$9443` morph hands every finishing slot to (`B_DEF = 3`), parts and the
     /// controller alike.
@@ -1020,12 +1020,12 @@ impl ObjectSim {
     /// morph had frozen it — with `ObjectSim::boss_finish_blank`/`_counted` never
     /// reached, and the controller therefore waiting for a live count that never
     /// dropped.
-
+    ///
     /// `$9606` (boss anim 2): the def-2 spawner. While its remove-mode is 2 it
     /// spawns one child (anim 4 / sprite 9) and parks itself at sprite 7; every
     /// later call returns at the state test, because its state bodies belong to
     /// the def-4 family's table, not to its own.
-
+    ///
     /// `$0EB0`'s scene branch could not be taken: its counterpart (the bank-15
     /// `$3C000` handlers that clear `sSceneState`) is unported, and taking it
     /// would park the camera and swap this pass for the boss driver. Reported
@@ -1053,7 +1053,7 @@ impl ObjectSim {
     /// in this path `B_SCRY`/`B_SCRX` are the object's own OAM position — the
     /// def image carries it and the handlers' movers change it — and
     /// [`Self::boss_render`] consumes it as-is.
-
+    ///
     /// `$3A14` -> bank 25 `$66000` — the boss path's render pass.
     ///
     /// A *different* draw from the level's `$C000`: it reads the staged slot's
@@ -1076,7 +1076,7 @@ impl ObjectSim {
     /// `$88 <adj>` is the big-blob origin marker: one operand byte, and while
     /// flip bit 6 is set it shifts the base Y for every cell after it (the
     /// 32x32 blobs' offsets are computed from the flipped origin).
-
+    ///
     fn engine(&mut self, cam_x: u16, cam_y: u16, layout: &LevelLayout, tables: &ObjectTables) {
         let act_x = Self::window(cam_x, 0x60);
         let act_y = Self::window(cam_y, 0x60);

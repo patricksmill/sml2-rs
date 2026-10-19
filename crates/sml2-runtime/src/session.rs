@@ -27,6 +27,7 @@ use crate::render::{SpriteCtx, SpriteInst};
 
 /// Pack boolean keyboard inputs into the Game Boy hardware joypad register format
 /// consumed by `sml2_core::map_sim::MapInput`.
+#[allow(clippy::too_many_arguments)]
 pub fn pack_joypad(
     right: bool,
     left: bool,
@@ -80,6 +81,7 @@ pub struct LevelContext {
 }
 
 impl LevelContext {
+    #[allow(clippy::too_many_arguments)]
     pub fn from_content(
         level_id: u8,
         content: &crate::content::LevelContent,
@@ -180,6 +182,7 @@ impl LevelContext {
     }
 
     /// Step the in-level simulation by 1 frame.
+    #[allow(clippy::too_many_arguments)]
     pub fn step_frame(
         &mut self,
         keys: PlayerKeys,

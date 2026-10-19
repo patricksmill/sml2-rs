@@ -124,7 +124,7 @@ impl EndingSequenceController {
         let transfer_active = self
             .vram_transfer
             .as_ref()
-            .map_or(false, |t| t.active && t.remaining_bytes > 0);
+            .is_some_and(|t| t.active && t.remaining_bytes > 0);
 
         if transfer_active {
             if let Some(t) = self.vram_transfer.as_mut() {
@@ -299,7 +299,7 @@ impl EndingSequenceController {
                 // Substate 8 ($4149): Wobble, wait transfer completion
                 sound_updated = true;
                 self.sound_update_ticks += 1;
-                if self.vram_transfer.as_ref().map_or(true, |t| !t.active) {
+                if self.vram_transfer.as_ref().is_none_or(|t| !t.active) {
                     self.substate = 9;
                 }
                 let _ = context.scene.objects.write_frame(&[]);
@@ -372,7 +372,7 @@ impl EndingSequenceController {
                 );
                 sound_updated = true;
                 self.sound_update_ticks += 1;
-                if self.vram_transfer.as_ref().map_or(true, |t| !t.active) {
+                if self.vram_transfer.as_ref().is_none_or(|t| !t.active) {
                     self.vram_transfer = Some(VramTransfer::ending_request_1());
                     self.substate = 15;
                 }
@@ -386,7 +386,7 @@ impl EndingSequenceController {
                 );
                 sound_updated = true;
                 self.sound_update_ticks += 1;
-                if self.vram_transfer.as_ref().map_or(true, |t| !t.active) {
+                if self.vram_transfer.as_ref().is_none_or(|t| !t.active) {
                     self.sfx_request_0 = 6;
                     self.fade_timer = 0x0040;
                     self.substate = 16;
@@ -434,7 +434,7 @@ impl EndingSequenceController {
                 let wobble_active = (self.fade_timer as u8).wrapping_add(32) < 64;
                 self.raster_y = if wobble_active { 139 } else { 13 };
 
-                if self.credits_text.as_ref().map_or(false, |ct| ct.done) {
+                if self.credits_text.as_ref().is_some_and(|ct| ct.done) {
                     self.substate = 19;
                 } else if self.fade_timer == 0 {
                     if let Some(ct) = self.credits_text.as_mut() {

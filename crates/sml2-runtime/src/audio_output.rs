@@ -33,10 +33,7 @@ impl AudioOutput {
             }
         };
 
-        let mut stdin = match child.stdin.take() {
-            Some(s) => s,
-            None => return None,
-        };
+        let mut stdin = child.stdin.take()?;
 
         // Bounded queue: enough to ride out a render hitch, shallow enough that
         // the stream stays close to real time (6 frames = 100 ms).

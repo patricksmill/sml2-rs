@@ -85,7 +85,7 @@ impl Session {
                 // `$3F203` fills `sStatusBarOAM` from `$7251` on the hub; a zone
                 // screen's `$3E277` clears those nine entries first, so its bar
                 // has no counters.
-                let status_bar = (map_sim.screen_id == 0).then(|| sml2_core::map::StatusBar {
+                let status_bar = (map_sim.screen_id == 0).then_some(sml2_core::map::StatusBar {
                     lives: self.lives,
                     coins_low: map_sim.coins_low,
                     coins_high: map_sim.coins_high,

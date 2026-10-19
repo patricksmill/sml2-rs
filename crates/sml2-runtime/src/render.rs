@@ -38,9 +38,8 @@ pub struct SpriteCtx {
     /// extra OAM sprites drawn at the block — through the same player-sprite
     /// path, after Mario (his entries come first, so he wins overlaps).
     pub bumpers: Vec<(u16, u16, u8)>,
-    /// The live fireballs' sprites (`$3261`'s `$2CF4` staging, mapping `$B0`/`$B4`
-    /// + the rDiv flicker), `(x, y, mapping)` in the same convention as
-    /// `bumpers`.
+    /// The live fireballs' sprites (`$3261`'s `$2CF4` staging, mapping `$B0`/`$B4` +
+    /// the rDiv flicker), `(x, y, mapping)` in the same convention as `bumpers`.
     pub fireballs: Vec<(u16, u16, u8)>,
     /// During a boss fight, the boss path's own draw output (`$3A14` -> bank 25
     /// `$66000`, [`sml2_core::objects::ObjectSim::boss_oam`]): the entries are
@@ -294,12 +293,12 @@ pub fn render_view(
             for e in mapping {
                 let attr = e.attr ^ inst.flip;
                 let ex = if flip_x {
-                    (!e.x).wrapping_sub(7) as i8 as i32
+                    (!e.x).wrapping_sub(7) as i32
                 } else {
                     e.x as i32
                 };
                 let ey = if flip_y {
-                    (!e.y).wrapping_sub(7) as i8 as i32
+                    (!e.y).wrapping_sub(7) as i32
                 } else {
                     e.y as i32
                 };

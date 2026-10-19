@@ -446,7 +446,7 @@ impl OverworldTiles {
             None => return vec![[0u8; 64]; Self::TILES_PER_SCREEN],
         };
         let mut tiles = Vec::with_capacity(Self::TILES_PER_SCREEN);
-        for chunk in screen_bytes.chunks_exact(16) {
+        for chunk in screen_bytes.as_chunks::<16>().0 {
             let mut tile_16 = [0u8; 16];
             tile_16.copy_from_slice(chunk);
             tiles.push(crate::video::tile_colors(&tile_16));
@@ -941,6 +941,7 @@ pub const PAN_ARROWS: [(u8, u8, u8, u8); 4] = [
 pub const PAN_ARROW_BLANK: u8 = 0x7F;
 
 /// Render one overworld frame into a 160x144 (or custom vw x vh) grayscale pixel buffer.
+#[allow(clippy::too_many_arguments)]
 pub fn render_overworld_view(
     screen_id: u8,
     cam_x: u16,

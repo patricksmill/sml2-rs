@@ -873,6 +873,7 @@ impl PlayerSim {
     /// - `sMoonPhysics` bit 1 is set
     /// - `sFlutterArmed` is cleared
     /// - `sMoonPhysics` bit 2 (the 3-up moon shield) is cleared
+    ///
     /// When not matched:
     /// - `sMoonPhysics` bit 1 is cleared
     ///
@@ -1320,9 +1321,7 @@ impl PlayerSim {
             phase = 0x18;
             y = y.wrapping_sub(3);
         }
-        if phase != 0 {
-            phase -= 1;
-        }
+        phase = phase.saturating_sub(1);
         // `$33FB`: write back `+1..+4` then `+6` — the facing byte is never
         // touched again after the spawn.
         let slot = &mut self.fireballs[i];
@@ -1509,13 +1508,11 @@ impl PlayerSim {
                 }
             }
             // $1244: side pipe, left-hand wall; LEFT (`hKeysHeld` bit 5) travels $40.
-            4 => {
-                if self.side_push_dir == 0xFF || (keys.left && self.on_ground) {
-                    self.pipe_dir = 0x40;
-                    self.sfx0 = 5;
-                    self.ducking = false;
-                    self.hvel = 0x80;
-                }
+            4 if self.side_push_dir == 0xFF || (keys.left && self.on_ground) => {
+                self.pipe_dir = 0x40;
+                self.sfx0 = 5;
+                self.ducking = false;
+                self.hvel = 0x80;
             }
             _ => {}
         }
@@ -2570,7 +2567,7 @@ impl PlayerSim {
                 }
                 out.music = Some(6);
             }
-            0x6A | 0x6B | 0x6C => {
+            0x6A..=0x6C => {
                 out.screen = Some(3); // $3F0E4 -> $3F06F -> $3D371
                 out.music = Some(5);
                 if self.map_node == 0x6A && self.dead == 0 {

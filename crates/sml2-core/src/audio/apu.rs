@@ -150,7 +150,7 @@ impl PulseChannel {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct WaveChannel {
     pub enabled: bool,
     pub dac_enabled: bool,
@@ -161,22 +161,6 @@ pub struct WaveChannel {
     pub wave_ram: [u8; 16],
     pub sample_step: u8,
     pub timer: u32,
-}
-
-impl Default for WaveChannel {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            dac_enabled: false,
-            volume_code: 0,
-            length_timer: 0,
-            length_enabled: false,
-            freq: 0,
-            wave_ram: [0; 16],
-            sample_step: 0,
-            timer: 0,
-        }
-    }
 }
 
 impl WaveChannel {
@@ -632,7 +616,7 @@ impl Apu {
             self.frame_seq_step = (self.frame_seq_step + 1) & 7;
 
             // Step 0, 2, 4, 6: Clock Length (256 Hz)
-            if self.frame_seq_step % 2 == 0 {
+            if self.frame_seq_step.is_multiple_of(2) {
                 self.clock_length();
             }
             // Step 7: Clock Envelope (64 Hz)

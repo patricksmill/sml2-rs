@@ -7,7 +7,7 @@ impl ObjectSim {
         let frame = FrameTick(u64::from(self.fff0));
         let result = handler_0x59aad::update(&mut actor, frame, self.mario_ref_x);
         st.b = actor.to_raw_slot();
-        if matches!(result, Err(_)) {
+        if result.is_err() {
             self.note_unported(0x59AAD);
         }
     }

@@ -604,7 +604,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let records_rom = 24 * 0x4000 + (0x5EE6 - 0x4000);
     let records = &baserom[records_rom..records_rom + WALK_NODES * NODE_RECORD_LEN];
     if records
-        .chunks_exact(NODE_RECORD_LEN)
+        .as_chunks::<NODE_RECORD_LEN>()
+        .0
+        .iter()
         .any(|r| r[6] != 0 || r[7] != 0)
     {
         return Err(format!(

@@ -99,7 +99,7 @@ pub struct EndingDisplayMode {
 }
 
 /// Rendering state owned by the ending scene. No gameplay or sequence dispatch lives here.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct EndingScene {
     assets: Option<EndingAssets>,
     pub scroll_x: u8,
@@ -109,20 +109,6 @@ pub struct EndingScene {
     pub objects: SpriteBatch,
     pub display: EndingDisplayMode,
     pub credits_sprite_y: u8,
-}
-
-impl Default for EndingScene {
-    fn default() -> Self {
-        Self {
-            assets: None,
-            scroll_x: 0,
-            scroll_y: 0,
-            palettes: None,
-            objects: SpriteBatch::default(),
-            display: EndingDisplayMode::default(),
-            credits_sprite_y: 0,
-        }
-    }
 }
 
 impl EndingScene {

@@ -57,19 +57,10 @@ impl WaveMusicFlags {
 }
 
 /// Music Channel 3 context passed into wave effect routines.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct WaveMusicState {
     pub flags: WaveMusicFlags,
     pub wave_pattern: [u8; 16],
-}
-
-impl Default for WaveMusicState {
-    fn default() -> Self {
-        Self {
-            flags: WaveMusicFlags::default(),
-            wave_pattern: [0; 16],
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

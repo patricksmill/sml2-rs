@@ -239,7 +239,7 @@ impl LevelStart {
 
     pub fn to_bytes(self) -> [u8; 8] {
         let mut bytes = [0; 8];
-        for (dest, value) in bytes.chunks_exact_mut(2).zip([
+        for (dest, value) in bytes.as_chunks_mut::<2>().0.iter_mut().zip([
             self.mario_y, self.mario_x, self.camera_y, self.camera_x,
         ]) {
             dest.copy_from_slice(&value.to_le_bytes());

@@ -221,7 +221,7 @@ pub struct FrameTick(pub u64);
 impl FrameTick {
     pub const fn every(self, period: u64) -> bool {
         assert!(period > 0, "frame cadence period must be positive");
-        self.0 % period == 0
+        self.0.is_multiple_of(period)
     }
 }
 
