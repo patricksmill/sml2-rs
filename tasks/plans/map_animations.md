@@ -92,7 +92,7 @@ Remaining, in dependency order:
 Each one is a `MapSim` state machine plus the sprite ids it writes; the decor
 expander from phase 3 must be in place first.
 
-## Phase 4b — Zone-screen decor (measured, not ported)
+## Phase 4b — Zone-screen decor (Pumpkin done)
 
 Zone screens do **not** use the hub's expander. The Pumpkin handler ends with
 `call $3E277`, which:
@@ -123,7 +123,18 @@ metasprites are now in `crates/sml2-core/src/map_zone_decor.rs`, and
 (slot 0 and slot 1 exactly, slot 2 against the previous frame's coords, which is
 what the shadow upload shows).
 
-**Also needed:** the per-screen slot seeds and the handler writes. Zone loaders build them in code (the
+**Done for Pumpkin** (`caa22ed` + this commit): `ZONE_DECOR_METASPRITES` and
+`zone_decor_oam` live in `map_zone_decor.rs`, `MapSim` carries the sixteen
+3-byte slots, and `pumpkin_decor_tick` ports `$3D8E6`. The field names are one
+slot off from the 3-byte layout, which is what made the first cut drift:
+`sMapSprite0Y` is slot 0's **id**, `sMapSprite1Page` slot 1's **y**,
+`sMapSprite1X` slot 1's **id**, `sMapSprite1Y` slot 2's **x** (`(v >> 4) & 7`,
+sign bit 7), `sMapSprite1Id` slot 2's **y** (`v & 7`, sign bit 3), and
+`sMapSprite2Page` slot 2's **id**. With that mapping the model reproduces all
+sixteen slots over twenty frames on three separate trials.
+
+**Also needed:** the other zone screens' slot seeds and handlers (`$3DA2D` for
+Tree, and the rest), plus the Pumpkin growth/patch tail. Zone loaders build them in code (the
 hub is the only 72-byte block copy), so each loader needs reading; the Pumpkin
 handler `$3D8E6` then drives slots 0/1/2 from `sMapAnimPhase` (`$5A21` Y,
 `$5A29` X, `$6227` id/Y drift, page `22 + $5A16`) and arms the patch/growth

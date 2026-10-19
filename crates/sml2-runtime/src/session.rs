@@ -1135,13 +1135,16 @@ impl SessionRunner {
                     map_sim.cursor_walking,
                     map_sim.walk_frame,
                     map_sim.cursor_pose,
-                    // `$3CFC8` expands the hub's 18 slots every frame
-                    // (`hub_decor_tick` keeps them current); the zone screens
-                    // keep their lists in stride-3 arrays not modelled yet.
-                    if map_sim.screen_id == 0 {
-                        &map_sim.decor_slots[..]
+                    // `$3CFC8` (hub, OAM 13+) or `$3E277` (zones, OAM 4+): both
+                    // are expanded here, before the cursor, which owns 0-3.
+                    &if map_sim.screen_id == 0 {
+                        sml2_core::map::hub_decor_cells(
+                            &map_sim.decor_slots,
+                            map_sim.cam_x,
+                            map_sim.cam_y,
+                        )
                     } else {
-                        &[][..]
+                        sml2_core::map_zone_decor::zone_decor_oam(&map_sim.zone_slots)
                     },
                     map_sim.scroll_only_latch != 0,
                     // `$3C9F4` reads `$FF97`, a frame counter that free-runs from

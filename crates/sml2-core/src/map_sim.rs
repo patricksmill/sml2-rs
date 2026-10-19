@@ -377,6 +377,15 @@ pub struct MapSim {
     pub special_node_latch: u8,
     /// `sMapKeysXor` (`$A6B2`) — a census-only byte with no reader in the ROM.
     pub keys_xor: u8,
+    /// A zone screen's sixteen decor slots (`$A6B5`, 3 bytes each: `x`, `y`, `id`),
+    /// which `$3E277` expands into OAM from entry 4.
+    pub zone_slots: [(u8, u8, u8); 16],
+    /// `sMapAnimPhase` (`$A699`).
+    pub anim_phase: u8,
+    /// `sMapAnimIndexA` (`$A6A2`): 0..$4F walk of the `$6227` step table.
+    pub anim_index: u8,
+    /// `sMapAnimValueA` (`$A6A5`): the last step value read.
+    pub anim_value: u8,
     /// `sMapSprite*Page/X/Y/Id` (`$A6B5`, 18 x 4): the decor slot list `$3CFC8`
     /// expands into OAM from index 13.
     pub decor_slots: [(u8, u8, u8, u8); 18],
@@ -438,6 +447,10 @@ impl MapSim {
             rock_anim_timer: 0,
             special_node_latch: 0,
             keys_xor: 0,
+            zone_slots: [(0, 0, 0xFF); 16],
+            anim_phase: 0,
+            anim_index: 0,
+            anim_value: 0,
             decor_slots: crate::map::HUB_DECOR_SLOTS,
             coin_icon_phase: 0,
             cloud_drift: 0,
@@ -553,6 +566,17 @@ impl MapSim {
         if self.screen_id == 0 {
             self.seed_hub_coin_icons();
         }
+        // `$3CBE7`'s zone sibling seeds the sixteen 3-byte slots; the Pumpkin
+        // screen's are measured, the rest are left empty until their loaders
+        // are read.
+        self.zone_slots = if self.screen_id == 1 {
+            crate::map::PUMPKIN_ZONE_SLOTS
+        } else {
+            [(0, 0, 0xFF); 16]
+        };
+        self.anim_phase = 0;
+        self.anim_index = 0;
+        self.anim_value = 0;
         self.coin_icon_phase = 0;
         self.cloud_drift = 0;
         self.sparkle_timer = 0;
@@ -929,6 +953,54 @@ impl MapSim {
         }
     }
 
+    /// `$3D8E6`: the Pumpkin screen's decor handler, run every frame by `$3C063`
+    /// before `$3C38C`. Slot 0's id comes from `sMapAnimPhase` via `$5A21`, slot
+    /// 1's id from `$5A29` and its y drifts one pixel every 8 frames, and slot 2
+    /// walks `$6227` one step on alternate frames, moving its x by `(v >> 4) & 7`
+    /// (sign bit 7) and its y by `v & 7` (sign bit 3); slot 2's id is `22 + $5A16[...]` plus 3 unless the
+    /// step has bit 7 set, and the whole sprite is dropped once the second golden
+    /// coin is held.
+    fn pumpkin_decor_tick(&mut self) {
+        self.anim_phase = self.anim_phase.wrapping_add(1);
+        let e = ((self.anim_phase & 0x38) >> 3) as usize;
+        self.zone_slots[0].2 = crate::map::PUMPKIN_ID_Y[e];
+        let e = ((self.anim_phase & 0x0C) >> 2) as usize;
+        self.zone_slots[1].2 = crate::map::PUMPKIN_ID_X[e];
+        if self.frame_counter & 0x07 == 0 {
+            let step = if self.frame_counter & 0x20 != 0 { 0xFFu8 } else { 1 };
+            self.zone_slots[1].1 = self.zone_slots[1].1.wrapping_add(step);
+        }
+        if self.tick_timer & 0x01 != 0 {
+            self.anim_index = (self.anim_index + 1) % 0x50;
+            let v = crate::map::PUMPKIN_STEPS[self.anim_index as usize];
+            self.anim_value = v;
+            // `sMapSprite1Y` is slot 2's x: `(v >> 4) & 7`, signed by bit 7.
+            let a = (v >> 4) & 0x07;
+            self.zone_slots[2].0 = if v & 0x80 != 0 {
+                self.zone_slots[2].0.wrapping_sub(a)
+            } else {
+                self.zone_slots[2].0.wrapping_add(a)
+            };
+            // `sMapSprite1Id` is slot 2's y: `v & 7`, signed by bit 3.
+            let a = v & 0x07;
+            self.zone_slots[2].1 = if v & 0x08 != 0 {
+                self.zone_slots[2].1.wrapping_sub(a)
+            } else {
+                self.zone_slots[2].1.wrapping_add(a)
+            };
+        }
+        let v = self.anim_value;
+        let e = ((self.anim_index & 0x78) >> 3) as usize;
+        let mut id = 22u8.wrapping_add(crate::map::PUMPKIN_PAGE[e]);
+        if v & 0x80 == 0 {
+            id = id.wrapping_add(3);
+        }
+        if self.level_progress.get(crate::map::HUB_COIN_FLAGS[2]).copied().unwrap_or(0) & 0x80 != 0 {
+            id = 0xFF;
+        }
+        self.zone_slots[2].2 = id;
+    }
+
     /// `$3CE6B`: the hub's decor updater, run every frame by `$3CFC8` just before
     /// it expands the 18 slots. Coins (slots 4-9) cycle their ids 2/3/4 every 8
     /// frames, the three drifting sprites (slots 1-3) move one pixel every 4
@@ -986,6 +1058,9 @@ impl MapSim {
         self.keys_xor ^= div;
         self.frame_counter = self.frame_counter.wrapping_add(1);
         self.hub_decor_tick(div);
+        if self.screen_id == 1 {
+            self.pumpkin_decor_tick();
+        }
         self.tick_timer = self.tick_timer.wrapping_sub(1);
         if self.tick_timer == 0 {
             self.tick_timer = 40;
@@ -2691,5 +2766,88 @@ mod hub_coin_tests {
         assert_eq!(m.decor_slots[4].3, 3);
         assert_eq!(m.decor_slots[7].3, 3);
         assert_eq!(m.decor_slots[5].3, 0xFF);
+    }
+}
+
+#[cfg(test)]
+mod pumpkin_decor_tests {
+    use super::*;
+
+    fn map() -> MapSim {
+        let mut m = MapSim::new();
+        m.screen_id = 1;
+        m.zone_slots = crate::map::PUMPKIN_ZONE_SLOTS;
+        m
+    }
+
+    /// The per-step deltas measured on the console: `v = $01` -> y+1 only,
+    /// `$81` -> y+1 only, `$91` -> x-1 y+1, `$90` -> x-1 only. The step table
+    /// entry at `sMapAnimIndexA` is what moves slot 2; `sMapSprite1Y` is its x
+    /// and `sMapSprite1Id` its y, one slot up from the names.
+    #[test]
+    fn slot_two_steps_match_the_console() {
+        for (idx_value, dx, dy) in [
+            (0x01u8, 0i32, 1i32),
+            (0x81, 0, 1),
+            (0x91, -1, 1),
+            (0x90, -1, 0),
+        ] {
+            let mut m = map();
+            m.anim_index = 0x4F; // wraps to 0 on the first step
+            m.zone_slots[2] = (0x40, 0x40, 25);
+            // Force the step table to this value by seeding the index that reads it.
+            let step_index = crate::map::PUMPKIN_STEPS
+                .iter()
+                .position(|&v| v == idx_value)
+                .expect("the step table holds these values");
+            m.anim_index = (step_index as u8).wrapping_sub(1) & 0x7F;
+            m.tick_timer = 1; // odd -> the step branch runs
+            m.frame_counter = 1; // not a multiple of 8, so no drift
+            m.pumpkin_decor_tick();
+            assert_eq!(
+                (m.zone_slots[2].0 as i32 - 0x40, m.zone_slots[2].1 as i32 - 0x40),
+                (dx, dy),
+                "v = {idx_value:#04x}"
+            );
+        }
+    }
+
+    /// The two id tracks: slot 0 from `$5A21` by phase bits 3-5, slot 1 from
+    /// `$5A29` by phase bits 2-3, and slot 2's id from `22 + $5A16` plus 3.
+    #[test]
+    fn the_phase_drives_slot_zero_and_one_ids() {
+        let mut m = map();
+        m.tick_timer = 2; // even: no step
+        m.frame_counter = 1;
+        let mut seen0 = std::collections::BTreeSet::new();
+        let mut seen1 = std::collections::BTreeSet::new();
+        for _ in 0..64 {
+            m.pumpkin_decor_tick();
+            seen0.insert(m.zone_slots[0].2);
+            seen1.insert(m.zone_slots[1].2);
+        }
+        assert_eq!(seen0.into_iter().collect::<Vec<_>>(), vec![0x0F, 0x10, 0x11]);
+        assert_eq!(seen1.into_iter().collect::<Vec<_>>(), vec![0x12, 0x13, 0x14, 0x15]);
+        assert!((22..=0x1A).contains(&m.zone_slots[2].2), "slot 2 id {}", m.zone_slots[2].2);
+    }
+
+    /// `sMapSprite1Page` is slot 1's y and drifts one pixel every 8 frames, the
+    /// direction taken from frame-counter bit 5: clear -> +1, set -> -1. Over
+    /// 64 frames the two halves cancel.
+    #[test]
+    fn slot_one_y_drifts_every_eight_frames() {
+        let mut m = map();
+        m.tick_timer = 2; // even: no step
+        let start = m.zone_slots[1].1;
+        // fc = 8, 16, 24 are bit-5 clear (+1 each), 32 is set (-1).
+        for fc in 1..=32u8 {
+            m.frame_counter = fc;
+            m.pumpkin_decor_tick();
+        }
+        assert_eq!(
+            m.zone_slots[1].1,
+            start.wrapping_add(3).wrapping_sub(1),
+            "three +1 steps then one -1"
+        );
     }
 }

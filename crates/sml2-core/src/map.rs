@@ -865,6 +865,17 @@ fn draw_obj_tile(
     }
 }
 
+/// Expand a screen's decor slots into the OAM cells the renderer takes.
+pub fn hub_decor_cells(slots: &[(u8, u8, u8, u8)], cam_x: u16, cam_y: u16) -> Vec<(u8, u8, u8, u8)> {
+    let mut out = Vec::new();
+    for slot in slots {
+        if let Some(cells) = decor_oam(*slot, cam_x, cam_y) {
+            out.extend(cells);
+        }
+    }
+    out
+}
+
 /// `$4A11`: the four OAM entries `$3C9F4` stages while the hub pans its camera
 /// (B held, `$3C5B2`). Entry order and bytes are the ROM's: (y, x, tile, attr).
 /// `$4A21` is the same layout with tile `$7F`. The choice is
@@ -892,9 +903,10 @@ pub fn render_overworld_view(
     cursor_walking: u8,
     walk_frame: u8,
     cursor_pose: u8,
-    // The screen's `$3CFC8` slot list: cells expand through `decor_oam` and draw
-    // from OAM index 13, i.e. behind the cursor's 0-3 and the HUD's 4-12.
-    decor_slots: &[(u8, u8, u8, u8)],
+    // Decor OAM cells `(y, x, tile, attr)` in the order the console stages them:
+    // the hub's `$3CFC8` starts at entry 13, a zone screen's `$3E277` at entry 4.
+    // Either way they draw before the cursor, which owns entries 0-3.
+    decor_cells: &[(u8, u8, u8, u8)],
     // `sMapScrollOnlyLatch != 0`: B is panning the hub camera, which replaces
     // the cursor with the `$4A11` border arrows. `frame_counter` stands in for
     // `$FF97`: bit 4 picks `$4A11` (visible) or `$4A21` (blank), a 16-frame
@@ -973,26 +985,21 @@ pub fn render_overworld_view(
         }
     }
 
-    for slot in decor_slots {
-        let Some(cells) = decor_oam(*slot, cam_x, cam_y) else {
+    for &(oy, ox, tile, attr) in decor_cells {
+        if tile == 0x7F {
             continue;
-        };
-        for (oy, ox, tile, attr) in cells {
-            if tile == 0x7F {
-                continue;
-            }
-            draw_obj_tile(
-                &mut img,
-                tiles_vram,
-                &obj_shades,
-                ox as i32 - 8,
-                oy as i32 - 16,
-                tile,
-                attr,
-                vw,
-                vh,
-            );
         }
+        draw_obj_tile(
+            &mut img,
+            tiles_vram,
+            &obj_shades,
+            ox as i32 - 8,
+            oy as i32 - 16,
+            tile,
+            attr,
+            vw,
+            vh,
+        );
     }
 
     if camera_pan {
@@ -1701,8 +1708,9 @@ mod decor_render_tests {
 
     fn draw(slots: &[(u8, u8, u8, u8)], cam_y: u16) -> Vec<u8> {
         let (tilemaps, manifest, vram) = scene();
+        let cells = hub_decor_cells(slots, 0x0081, cam_y);
         render_overworld_view(
-            0, 0x0081, cam_y, 8, 16, 0, 0, 0, 0, slots, false, 0, &tilemaps, &manifest, &[], &vram,
+            0, 0x0081, cam_y, 8, 16, 0, 0, 0, 0, &cells, false, 0, &tilemaps, &manifest, &[], &vram,
             0xE4, 0xD0, 160, 144,
         )
     }
@@ -1745,3 +1753,38 @@ mod decor_render_tests {
         assert_ne!(without[40 * 160 + 63], obj[2]);
     }
 }
+/// `$5A21`: slot 0's id by `sMapAnimPhase` bits 3-5 - `$A6B7`, which is the
+/// *third* byte of the 3-byte zone slot, i.e. its id.
+pub const PUMPKIN_ID_Y: [u8; 8] = [0x0F, 0x0F, 0x0F, 0x10, 0x11, 0x11, 0x11, 0x11];
+
+/// `$5A29`: slot 1's id by `sMapAnimPhase` bits 2-3.
+pub const PUMPKIN_ID_X: [u8; 4] = [0x12, 0x13, 0x14, 0x15];
+
+/// `$5A16`: `sMapSprite2Page` - slot 2's id - is `22 + this[index]`, plus 3 unless
+/// the step value has bit 7 set.
+pub const PUMPKIN_PAGE: [u8; 16] = [0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x02, 0x01, 0x03, 0x0F, 0x0F, 0x0F, 0x10, 0x11];
+
+/// `$6227`: the Pumpkin step table (`sMapAnimIndexA` walks it 0..$4F).
+pub const PUMPKIN_STEPS: [u8; 80] = [0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x10, 0x10, 0x19, 0x10, 0x10, 0x10, 0x11, 0x10, 0x11, 0x11, 0x11, 0x01, 0x11, 0x01, 0x81, 0x91, 0x81, 0x91, 0x91, 0x91, 0x90, 0x91, 0x90, 0x90, 0x90, 0x99, 0x90, 0x90, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x99, 0x90, 0x90, 0x99, 0x90, 0x90, 0x90, 0x91, 0x90, 0x91, 0x91, 0x91, 0x81, 0x91, 0x81, 0x01, 0x11, 0x01, 0x11, 0x11, 0x11, 0x10, 0x11, 0x10, 0x10, 0x10, 0x19, 0x10, 0x10, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19];
+
+/// The Pumpkin screen's sixteen `(x, y, id)` decor slots, measured on PyBoy at
+/// `sMapAnimPhase = 0` right after the screen loads. Only slots 0-2 move; the
+/// rest are the loader's static placements.
+pub const PUMPKIN_ZONE_SLOTS: [(u8, u8, u8); 16] = [
+    (0, 76, 15),
+    (1, 16, 18),
+    (55, 254, 25),
+    (115, 240, 9),
+    (1, 139, 40),
+    (9, 16, 127),
+    (85, 255, 1),
+    (90, 0, 255),
+    (0, 210, 96),
+    (255, 16, 40),
+    (56, 255, 17),
+    (176, 92, 255),
+    (16, 142, 200),
+    (255, 17, 152),
+    (120, 255, 17),
+    (144, 120, 255),
+];
