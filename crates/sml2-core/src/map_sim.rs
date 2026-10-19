@@ -566,14 +566,19 @@ impl MapSim {
         if self.screen_id == 0 {
             self.seed_hub_coin_icons();
         }
-        // `$3CBE7`'s zone sibling seeds the sixteen 3-byte slots; the Pumpkin
-        // screen's are measured, the rest are left empty until their loaders
-        // are read.
-        self.zone_slots = if self.screen_id == 1 {
-            crate::map::PUMPKIN_ZONE_SLOTS
-        } else {
-            [(0, 0, 0xFF); 16]
-        };
+        // `$3CBE7` copies 72 bytes from `$4BFD` into `sMapSprite0Page` and never
+        // clears them when the screen changes, so a zone screen reads the first
+        // 48 of those bytes as sixteen 3-byte slots: the hub's list with its
+        // bytes regrouped. Verified against the console - the block's zone view
+        // is (0,76,79) (1,16,120) (54,255,16) (168,240,9), which is what a zone
+        // screen starts from before its loader patches fields and the handler
+        // rewrites slots 0-2's ids.
+        let block: Vec<u8> = crate::map::HUB_DECOR_SLOTS
+            .iter()
+            .flat_map(|s| [s.0, s.1, s.2, s.3])
+            .collect();
+        self.zone_slots =
+            std::array::from_fn(|i| (block[3 * i], block[3 * i + 1], block[3 * i + 2]));
         self.anim_phase = 0;
         self.anim_index = 0;
         self.anim_value = 0;
@@ -2776,7 +2781,7 @@ mod pumpkin_decor_tests {
     fn map() -> MapSim {
         let mut m = MapSim::new();
         m.screen_id = 1;
-        m.zone_slots = crate::map::PUMPKIN_ZONE_SLOTS;
+        m.zone_slots = [(0, 76, 0x4F), (1, 16, 0x78), (54, 255, 16), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF), (0, 0, 0xFF)];
         m
     }
 

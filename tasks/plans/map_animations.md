@@ -123,7 +123,18 @@ metasprites are now in `crates/sml2-core/src/map_zone_decor.rs`, and
 (slot 0 and slot 1 exactly, slot 2 against the previous frame's coords, which is
 what the shadow upload shows).
 
-**Done for Pumpkin** (`caa22ed` + this commit): `ZONE_DECOR_METASPRITES` and
+**Where the zone slots actually come from.** `$3CBE7` copies 72 bytes from
+`$4BFD` into `sMapSprite0Page` and nothing clears them on a screen change, so a
+zone screen reads the **first 48 of those bytes as sixteen 3-byte slots** - the
+hub's list with its bytes regrouped, then patched by the loader and by the
+handler's slot 0-2 writes. Measured: the block's zone view is `(0,76,79)
+(1,16,120) (54,255,16) (168,240,9)`, and a live zone screen reports `(0,76,*)
+(1,16,*) (54,255,*)` with the ids rewritten. So the port derives `zone_slots`
+from `HUB_DECOR_SLOTS` rather than carrying a measured snapshot - an earlier cut
+seeded a measured table that was really hub RAM, which put the Pumpkin screen's
+decor at the hub's positions.
+
+**Done for Pumpkin** (`caa22ed` + `3881259` + this commit): `ZONE_DECOR_METASPRITES` and
 `zone_decor_oam` live in `map_zone_decor.rs`, `MapSim` carries the sixteen
 3-byte slots, and `pumpkin_decor_tick` ports `$3D8E6`. The field names are one
 slot off from the 3-byte layout, which is what made the first cut drift:
