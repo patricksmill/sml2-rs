@@ -215,5 +215,5 @@ pub fn draw_cells_styled(
 }
 
 #[cfg(test)]
-#[path = "player_mapping_tests.rs"]
+#[path = "player/tests/mapping.rs"]
 mod mapping_tests;

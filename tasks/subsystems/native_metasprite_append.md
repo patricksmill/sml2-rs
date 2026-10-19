@@ -1,7 +1,7 @@
 # Shared native metasprite append prerequisite
 
-Source COMPLETE tasks/handlers/0x05297.md. Scope player.rs and new sibling
-player_mapping_tests.rs only. Read PORTING.md, native guide, this brief,
+Source COMPLETE tasks/handlers/0x05297.md. Scope player.rs and
+player/tests/mapping.rs only. Read PORTING.md, native guide, this brief,
 source packet, object.rs MappingEntry/player_mappings definitions and actor.rs
 ScreenPosition (bounded ranges only). No whole engine/runtime/main.asm.
 

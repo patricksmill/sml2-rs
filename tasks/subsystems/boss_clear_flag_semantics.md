@@ -9,9 +9,9 @@ can reward a coin without its source terminal producer.
 Keep the existing explicit obj.boss_clear_handoff producer from Mario Zone's
 reward.rs; remove ONLY the inferred fallback. No phase/level special-case guard.
 Read native guide/PORTING, named sourcebriefs, bounded apply_object_result and
-player_boss_clear_tests.rs, Mario Zone reward's explicit event. Touch ONLY
+player/tests/boss_clear.rs, Mario Zone reward's explicit event. Touch ONLY
 player_sim.rs receiver condition + stale boss_clear field comment, and bounded
-player_boss_clear_tests.rs source regressions/false inferred tests if present.
+player/tests/boss_clear.rs source regressions/false inferred tests if present.
 Do not edit runtime/ending worker or other gameplay handlers.
 
 First show new regression fails current code: object clear flag -> player
