@@ -9,3 +9,5 @@ captures/*_raw.json
 __pycache__/
 /decomp
 *.sav
+*.wav
+/audio_samples/

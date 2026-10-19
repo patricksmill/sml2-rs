@@ -609,6 +609,8 @@ pub struct SessionRunner {
     pub sound_driver: SoundDriver,
     pub apu: Apu,
     pub audio_buffer: Vec<f32>,
+    pub audio_out_path: Option<PathBuf>,
+    pub recorded_audio: Vec<f32>,
 }
 
 impl SessionRunner {
@@ -645,6 +647,8 @@ impl SessionRunner {
             sound_driver: SoundDriver::new(),
             apu: Apu::new(),
             audio_buffer: Vec::with_capacity(1470),
+            audio_out_path: None,
+            recorded_audio: Vec::new(),
         };
 
         if !runner.load_from_disk() {
@@ -890,6 +894,10 @@ impl SessionRunner {
         self.apu.ingest_driver(&self.sound_driver);
         self.apu.generate_samples(44100, 735, &mut self.audio_buffer);
 
+        if self.audio_out_path.is_some() {
+            self.recorded_audio.extend_from_slice(&self.audio_buffer);
+        }
+
         outcome
     }
 
@@ -897,6 +905,16 @@ impl SessionRunner {
     #[inline]
     pub fn audio_samples(&self) -> &[f32] {
         &self.audio_buffer
+    }
+
+    /// Save all accumulated recorded audio to `audio_out_path` if configured.
+    pub fn save_recorded_audio(&self) -> Result<(), Box<dyn Error>> {
+        if let Some(path) = &self.audio_out_path {
+            if !self.recorded_audio.is_empty() {
+                sml2_core::audio::write_wav_file(path, &self.recorded_audio, 44100)?;
+            }
+        }
+        Ok(())
     }
 
     /// Render current view to an 8-bit grey buffer.
@@ -1025,6 +1043,7 @@ impl SessionRunner {
                 .map_err(|e| e.to_string())?;
         }
 
+        self.save_recorded_audio()?;
         Ok(())
     }
 
@@ -1047,6 +1066,7 @@ impl SessionRunner {
             }
             self.step_frame(keys);
         }
+        self.save_recorded_audio()?;
         Ok(self.frame_n)
     }
 }

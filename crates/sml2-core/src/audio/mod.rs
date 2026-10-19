@@ -6,6 +6,7 @@ pub mod music;
 pub mod noise;
 pub mod pulse;
 pub mod wave;
+pub mod wav;
 
 pub use apu::Apu;
 pub use driver::{
@@ -18,4 +19,5 @@ pub use music::{MusicChannel, MusicSequencer, MusicWrite, SOUND_BANK04};
 pub use noise::{NoiseEffectState, NoiseMusicFlags, NoiseWrite};
 pub use pulse::{PulseEffectState, PulseMusicFlags, PulseMusicState, PulseWrite};
 pub use wave::{WaveEffectState, WaveMusicFlags, WaveMusicState, WaveWrite};
+pub use wav::{encode_wav_pcm16, write_wav_file};
 

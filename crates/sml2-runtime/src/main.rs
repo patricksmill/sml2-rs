@@ -60,6 +60,89 @@ use sml2_core::tileset::Tilesets;
 use sml2_core::video;
 
 /// Native GB screen; the HUD strip and the parity checks are anchored to it.
+fn export_song(
+    song_id: u8,
+    seconds: f32,
+    out_path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if song_id == 0 || song_id > 42 {
+        return Err(format!("invalid song ID {song_id} (must be 1..=42)").into());
+    }
+    let mut driver = sml2_core::audio::SoundDriver::new();
+    let mut apu = sml2_core::audio::Apu::new();
+
+    driver.music_request = song_id;
+    driver.update_sound(); // frame 1: load song
+
+    let total_frames = (seconds * 60.0).max(60.0) as usize;
+    let mut samples = Vec::with_capacity(total_frames * 1470);
+
+    for _ in 0..total_frames {
+        driver.update_sound();
+        apu.ingest_driver(&driver);
+        apu.generate_samples(44100, 735, &mut samples);
+    }
+
+    sml2_core::audio::write_wav_file(out_path, &samples, 44100)?;
+    println!(
+        "Exported Song {song_id} to {} ({:.1}s, {} samples)",
+        out_path.display(),
+        seconds,
+        samples.len() / 2
+    );
+    Ok(())
+}
+
+fn export_sfx(
+    slot: u8,
+    sfx_id: u8,
+    out_path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut driver = sml2_core::audio::SoundDriver::new();
+    let mut apu = sml2_core::audio::Apu::new();
+
+    match slot {
+        0 => {
+            if sfx_id == 0 || sfx_id > 24 {
+                return Err(format!("invalid Slot 0 SFX ID {sfx_id} (must be 1..=24)").into());
+            }
+            driver.sfx_request_0 = sfx_id;
+        }
+        1 => {
+            if sfx_id == 0 || sfx_id > 24 {
+                return Err(format!("invalid Slot 1 SFX ID {sfx_id} (must be 1..=24)").into());
+            }
+            driver.sfx_request_1 = sfx_id;
+        }
+        2 => {
+            if sfx_id == 0 || sfx_id > 11 {
+                return Err(format!("invalid Slot 2 SFX ID {sfx_id} (must be 1..=11)").into());
+            }
+            driver.sfx_request_2 = sfx_id;
+        }
+        other => return Err(format!("invalid SFX slot {other} (must be 0, 1, or 2)").into()),
+    }
+    driver.update_sound();
+
+    let total_frames = 120;
+    let mut samples = Vec::with_capacity(total_frames * 1470);
+
+    for _ in 0..total_frames {
+        driver.update_sound();
+        apu.ingest_driver(&driver);
+        apu.generate_samples(44100, 735, &mut samples);
+    }
+
+    sml2_core::audio::write_wav_file(out_path, &samples, 44100)?;
+    println!(
+        "Exported SFX slot {slot} id {sfx_id} to {} ({} samples)",
+        out_path.display(),
+        samples.len() / 2
+    );
+    Ok(())
+}
+
+/// Native GB screen; the HUD strip and the parity checks are anchored to it.
 pub(crate) const SCREEN_W: usize = 160;
 pub(crate) const SCREEN_H: usize = 144;
 
@@ -80,10 +163,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut level_progress = 0u8;
     let mut headless_frames: Option<u64> = None;
     let mut keys_tape: Option<String> = None;
+    let mut audio_out: Option<PathBuf> = None;
+    let mut export_song_id: Option<u8> = None;
+    let mut export_sfx_pair: Option<(u8, u8)> = None;
+    let mut export_seconds: f32 = 15.0;
     let mut view = (SCREEN_W, SCREEN_H);
     let mut args = env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
+            "--audio-out" => {
+                audio_out = Some(PathBuf::from(args.next().ok_or("--audio-out needs a path")?));
+            }
+            "--export-song" => {
+                export_song_id = Some(
+                    args.next()
+                        .ok_or("--export-song needs a song ID (1..=42)")?
+                        .parse()?,
+                );
+            }
+            "--export-sfx" => {
+                let slot = args
+                    .next()
+                    .ok_or("--export-sfx needs SLOT (0..=2)")?
+                    .parse::<u8>()?;
+                let id = args
+                    .next()
+                    .ok_or("--export-sfx needs ID (1..=24)")?
+                    .parse::<u8>()?;
+                export_sfx_pair = Some((slot, id));
+            }
+            "--seconds" => {
+                export_seconds = args
+                    .next()
+                    .ok_or("--seconds needs a duration in seconds")?
+                    .parse::<f32>()?;
+            }
             // A deterministic one-char-per-frame tape: `.` idle, R/L/U/D hold a
             // direction, A/B the buttons, S start, E select. The run stops when
             // the tape runs out and prints where it got to, so a play-test
@@ -166,6 +280,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             other => return Err(format!("unknown argument {other}").into()),
         }
     }
+    let resolve_out = |default_name: String| -> PathBuf {
+        if let Some(p) = audio_out.clone() {
+            p
+        } else if out.to_string_lossy() != "frame.png" {
+            out.clone()
+        } else {
+            PathBuf::from(default_name)
+        }
+    };
+    if let Some(song_id) = export_song_id {
+        let out_path = resolve_out(format!("song{song_id:02}.wav"));
+        return export_song(song_id, export_seconds, &out_path);
+    }
+    if let Some((slot, sfx_id)) = export_sfx_pair {
+        let out_path = resolve_out(format!("sfx_slot{slot}_id{sfx_id}.wav"));
+        return export_sfx(slot, sfx_id, &out_path);
+    }
     let tape = keys_tape.clone().map(PlayTape::Ascii);
     if map_mode || level.is_none() {
         let assets = session::SessionAssets::load()?;
@@ -176,6 +307,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             view,
             headless_frames.is_some(),
         );
+        runner.audio_out_path = audio_out;
         if let Some(n) = headless_frames {
             runner.run_headless(n, tape)?;
             return Ok(());
