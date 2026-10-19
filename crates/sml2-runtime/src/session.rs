@@ -602,6 +602,8 @@ pub struct Session {
     pub slots: SaveSlots,
     /// The slot the current game was loaded from, so saves update it in place.
     pub active_slot: Option<u8>,
+    /// Where a goal-bell bonus room returns to: `(screen, node, exit_tile_flag)`.
+    bell_return: Option<(u8, u8, u8)>,
 }
 
 impl Session {
@@ -633,6 +635,7 @@ impl Session {
             sound_driver,
             slots: SaveSlots::new(),
             active_slot: None,
+            bell_return: None,
         }
     }
 
@@ -824,6 +827,18 @@ impl Session {
                     &self.assets.walk,
                     &self.assets.node_records,
                 );
+
+                // `$3E9FB`/`$3EF2B`: once the bell room reaches state `$0A`,
+                // run the deferred level-exit landing.
+                if map_sim.screen_id >= 13 && map_sim.room.as_ref().is_some_and(|r| r.state >= 10)
+                {
+                    if let Some((screen, node, flag)) = self.bell_return.take() {
+                        map_sim.room = None;
+                        map_sim.load_screen(screen, flag, &self.assets.node_records);
+                        map_sim.node = node;
+                        map_sim.load_node(node, &self.assets.node_records);
+                    }
+                }
 
                 // A bonus room writes `sLives`/`sCurPowerup`/`sCoin*`; mirror
                 // them back while the room owns the screen.
@@ -1079,13 +1094,41 @@ impl Session {
                         let target_screen = handoff.screen.unwrap_or(0);
                         let mut map_sim = MapSim::from_player(&ctx.sim);
                         map_sim.set_castle_scripts(self.assets.castle_scripts.clone());
-                        map_sim.load_screen(
-                            target_screen,
-                            ctx.sim.exit_tile_flag,
-                            &self.assets.node_records,
-                        );
-                        map_sim.node = target_node;
-                        map_sim.load_node(target_node, &self.assets.node_records);
+                        if ctx.sim.goal_bell {
+                            // `$3EF2B`: `sGoalBell` sends the exit to the bonus
+                            // room, picked by `sMapNode` bit 0.
+                            let screen = if target_node & 1 == 0 { 13 } else { 14 };
+                            let scripts = self.assets.castle_scripts.clone();
+                            let room = if screen == 13 {
+                                sml2_core::castle_room::CastleRoom::enter_bell_a(
+                                    &scripts,
+                                    ctx.sim.level_timer.high,
+                                )
+                            } else {
+                                let tilemap = self
+                                    .assets
+                                    .overworld_tilemaps
+                                    .screen_tilemap(14)
+                                    .unwrap_or(&[]);
+                                sml2_core::castle_room::CastleRoom::enter_bell_b(
+                                    &scripts, tilemap,
+                                )
+                            };
+                            map_sim.screen_id = screen;
+                            map_sim.frame_counter = 0;
+                            map_sim.node = target_node;
+                            map_sim.room = Some(room);
+                            self.bell_return =
+                                Some((target_screen, target_node, ctx.sim.exit_tile_flag));
+                        } else {
+                            map_sim.load_screen(
+                                target_screen,
+                                ctx.sim.exit_tile_flag,
+                                &self.assets.node_records,
+                            );
+                            map_sim.node = target_node;
+                            map_sim.load_node(target_node, &self.assets.node_records);
+                        }
                         self.state = SessionState::Overworld(map_sim);
                         if handoff.saves > 0 {
                             let rec = self.save_record();
