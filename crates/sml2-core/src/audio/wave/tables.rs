@@ -143,29 +143,32 @@ pub const E5_RELOAD: WaveFrame = WaveFrame {
 pub const E5_DELTAS: [i16; 16] = [16, 16, 16, 16, -768, 128, -128, 128, 656, -8, -8, -8, -8, -8, -8, -8];
 
 // Effect 6 (ROM $10248..$10285)
+// Start frames: $49E1 (variant 0 path, level $20) / $49ED (variant 1 path,
+// level $40); both carry frequency_low $A0. Tick tables: $49D9 = [$49E7,
+// $49E1] and $49DD = [$49F3, $49ED], so step 1 is the $A8 pitch.
 pub const E6_VAR0_START: WaveFrame = WaveFrame {
     enable: 0x80,
     length: 0xFB,
     level: 0x20,
-    frequency_low: 0xA8,
+    frequency_low: 0xA0,
     frequency_control: 0xC7,
     ticks: 3,
 };
 pub const E6_VAR0_TICK: [WaveFrame; 2] = [
-    WaveFrame { enable: 0x80, length: 0xFB, level: 0x40, frequency_low: 0xA0, frequency_control: 0xC7, ticks: 3 },
-    WaveFrame { enable: 0x80, length: 0xFB, level: 0x40, frequency_low: 0xA8, frequency_control: 0xC7, ticks: 3 },
+    WaveFrame { enable: 0x80, length: 0xFB, level: 0x20, frequency_low: 0xA8, frequency_control: 0xC7, ticks: 3 },
+    WaveFrame { enable: 0x80, length: 0xFB, level: 0x20, frequency_low: 0xA0, frequency_control: 0xC7, ticks: 3 },
 ];
 pub const E6_VAR1_START: WaveFrame = WaveFrame {
     enable: 0x80,
     length: 0xFB,
     level: 0x40,
-    frequency_low: 0xA8,
+    frequency_low: 0xA0,
     frequency_control: 0xC7,
     ticks: 3,
 };
 pub const E6_VAR1_TICK: [WaveFrame; 2] = [
-    WaveFrame { enable: 0x80, length: 0xFB, level: 0x20, frequency_low: 0xA0, frequency_control: 0xC7, ticks: 3 },
-    WaveFrame { enable: 0x80, length: 0xFB, level: 0x20, frequency_low: 0xA8, frequency_control: 0xC7, ticks: 3 },
+    WaveFrame { enable: 0x80, length: 0xFB, level: 0x40, frequency_low: 0xA8, frequency_control: 0xC7, ticks: 3 },
+    WaveFrame { enable: 0x80, length: 0xFB, level: 0x40, frequency_low: 0xA0, frequency_control: 0xC7, ticks: 3 },
 ];
 
 // Effect 7 (ROM $10286..$10308)
@@ -360,20 +363,22 @@ pub const E20_INIT: WaveFrame = WaveFrame {
 pub const E20_DELTAS: [i16; 16] = [20, 18, 18, 16, 12, -20, -20, -20, 6, 8, 10, 12, 14, 16, 18, 8];
 
 // Effect 21 & 24 (ROM $10545..$10561, $10624..$10628)
+// Start frame $4D60 (frequency_low $C0); tick table $4D56 = [$4D66, $4D60,
+// $4D66, $4D60, $4D66], i.e. the alternation starts on the $C8 entry.
 pub const E21_INIT: WaveFrame = WaveFrame {
     enable: 0x80,
     length: 0xFB,
     level: 0x40,
-    frequency_low: 0xC8,
+    frequency_low: 0xC0,
     frequency_control: 0xC7,
     ticks: 4,
 };
 pub const E21_FRAMES: [WaveFrame; 5] = [
-    WaveFrame { enable: 0x80, length: 0xFB, level: 0x40, frequency_low: 0xC0, frequency_control: 0xC7, ticks: 4 },
     WaveFrame { enable: 0x80, length: 0xFB, level: 0x40, frequency_low: 0xC8, frequency_control: 0xC7, ticks: 4 },
     WaveFrame { enable: 0x80, length: 0xFB, level: 0x40, frequency_low: 0xC0, frequency_control: 0xC7, ticks: 4 },
     WaveFrame { enable: 0x80, length: 0xFB, level: 0x40, frequency_low: 0xC8, frequency_control: 0xC7, ticks: 4 },
     WaveFrame { enable: 0x80, length: 0xFB, level: 0x40, frequency_low: 0xC0, frequency_control: 0xC7, ticks: 4 },
+    WaveFrame { enable: 0x80, length: 0xFB, level: 0x40, frequency_low: 0xC8, frequency_control: 0xC7, ticks: 4 },
 ];
 
 // Effect 22 (ROM $10562..$10594)

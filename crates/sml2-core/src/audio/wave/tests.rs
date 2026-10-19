@@ -156,7 +156,7 @@ fn test_wave_effect24_gating() {
     assert_eq!(state.active_effect, 24);
     assert_eq!(writes[1], WaveWrite::WavePattern(PATTERN_5B96));
     assert_eq!(writes[5], WaveWrite::Level(0x40));
-    assert_eq!(writes[6], WaveWrite::FrequencyLow(0xC8));
+    assert_eq!(writes[6], WaveWrite::FrequencyLow(0xC0)); // $4D60 start frame
     assert_eq!(writes[7], WaveWrite::FrequencyControl(0xC7));
 }
 
@@ -304,3 +304,85 @@ fn test_wave_driver_dispatch_and_execution() {
     ]);
 }
 
+
+/// (level, frequency_low) of the single frame a tick's writes carry.
+fn level_and_freq(writes: &[WaveWrite]) -> (u8, u8) {
+    let mut level = None;
+    let mut freq = None;
+    for w in writes {
+        match w {
+            WaveWrite::Level(v) => level = Some(*v),
+            WaveWrite::FrequencyLow(v) => freq = Some(*v),
+            _ => {}
+        }
+    }
+    (level.expect("level write"), freq.expect("frequency write"))
+}
+
+#[test]
+fn test_wave_effect6_frames_follow_rom_tables() {
+    // $49E1/$49ED starts at frequency_low $A0; $49D9/$49DD tick tables put the
+    // $A8 pitch on step 1 and repeat the start pitch on step 2.
+    let mut state = WaveEffectState::default();
+    let mut music = WaveMusicState::default();
+    let mut writes = Vec::new();
+
+    // First play: variant 0 -> variant 1, $49ED (level $40).
+    state.start(6, &mut music, &mut writes);
+    assert_eq!(state.variant, 1);
+    assert_eq!(level_and_freq(&writes), (0x40, 0xA0));
+    writes.clear();
+    for _ in 0..3 {
+        state.tick(&mut music, &mut writes);
+    }
+    assert_eq!(level_and_freq(&writes), (0x40, 0xA8), "step 1 = $49F3");
+    writes.clear();
+    for _ in 0..3 {
+        state.tick(&mut music, &mut writes);
+    }
+    assert_eq!(level_and_freq(&writes), (0x40, 0xA0), "step 2 = $49ED");
+    for _ in 0..3 {
+        state.tick(&mut music, &mut writes);
+    }
+    assert_eq!(state.active_effect, 0, "step 3 stops");
+
+    // Second play: variant 1 -> variant 0, $49E1 (level $20).
+    writes.clear();
+    state.start(6, &mut music, &mut writes);
+    assert_eq!(state.variant, 0);
+    assert_eq!(level_and_freq(&writes), (0x20, 0xA0));
+    writes.clear();
+    for _ in 0..3 {
+        state.tick(&mut music, &mut writes);
+    }
+    assert_eq!(level_and_freq(&writes), (0x20, 0xA8), "step 1 = $49E7");
+    writes.clear();
+    for _ in 0..3 {
+        state.tick(&mut music, &mut writes);
+    }
+    assert_eq!(level_and_freq(&writes), (0x20, 0xA0), "step 2 = $49E1");
+}
+
+#[test]
+fn test_wave_effect21_frames_follow_rom_tables() {
+    // $4D60 start at $C0, tick table $4D56 alternates starting on $4D66 ($C8).
+    let mut state = WaveEffectState::default();
+    let mut music = WaveMusicState::default();
+    let mut writes = Vec::new();
+
+    state.start(21, &mut music, &mut writes);
+    assert_eq!(level_and_freq(&writes), (0x40, 0xC0));
+    let mut freqs = Vec::new();
+    for _ in 0..5 {
+        writes.clear();
+        for _ in 0..4 {
+            state.tick(&mut music, &mut writes);
+        }
+        freqs.push(level_and_freq(&writes).1);
+    }
+    assert_eq!(freqs, vec![0xC8, 0xC0, 0xC8, 0xC0, 0xC8]);
+    for _ in 0..4 {
+        state.tick(&mut music, &mut writes);
+    }
+    assert_eq!(state.active_effect, 0, "step 6 stops");
+}
