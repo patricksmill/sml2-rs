@@ -14,7 +14,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::audio::music::{MusicSequencer, MusicWrite, SOUND_BANK04};
+use crate::audio::music::{MusicSequencer, MusicWrite};
 use crate::audio::noise::{NoiseEffectState, NoiseMusicFlags, NoiseWrite};
 use crate::audio::pulse::{PulseEffectState, PulseMusicFlags, PulseMusicState, PulseWrite};
 use crate::audio::wave::{WaveEffectState, WaveMusicFlags, WaveMusicState, WaveWrite};
@@ -104,6 +104,7 @@ pub type SfxSlotState = WaveEffectState;
 /// Complete native sound driver state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SoundDriver {
+    music_bank: Vec<u8>,
     pub sfx_request_0: u8,
     pub sfx_request_1: u8,
     pub sfx_request_2: u8,
@@ -131,6 +132,10 @@ pub struct SoundDriver {
 impl Default for SoundDriver {
     fn default() -> Self {
         Self {
+            #[cfg(test)]
+            music_bank: crate::audio::music::SOUND_BANK04.to_vec(),
+            #[cfg(not(test))]
+            music_bank: Vec::new(),
             sfx_request_0: 0,
             sfx_request_1: 0,
             sfx_request_2: 0,
@@ -158,8 +163,17 @@ impl Default for SoundDriver {
 }
 
 impl SoundDriver {
+    /// Construct a driver without music content. Use `with_music_bank` for songs.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Construct a driver using caller-loaded Bank 4 data; no filesystem access.
+    pub fn with_music_bank(music_bank: Vec<u8>) -> Self {
+        Self {
+            music_bank,
+            ..Self::default()
+        }
     }
 
     /// Clears all four sound request registers and the sound mode per ROM $10067.
@@ -322,12 +336,12 @@ impl SoundDriver {
             } else {
                 // StartMusic runs $13F6B before it reads the song header.
                 self.reset_engine();
-                self.music_sequencer.start_song(req, SOUND_BANK04);
+                self.music_sequencer.start_song(req, &self.music_bank);
                 self.active_song = self.music_sequencer.cur_song();
                 // $10078 falls through to $10064, so the start frame still runs
                 // the sequencer; the slots were just reset, so nothing masks.
                 self.music_sequencer
-                    .tick(SOUND_BANK04, [0, 0, 0], &mut self.music_writes);
+                    .tick(&self.music_bank, [0, 0, 0], &mut self.music_writes);
                 self.active_song = self.music_sequencer.cur_song();
                 self.latch_ch3_pattern();
                 self.start_music_drum();
@@ -352,7 +366,7 @@ impl SoundDriver {
                 self.noise_slot.active_effect,
             ];
             self.music_sequencer
-                .tick(SOUND_BANK04, sfx_active, &mut self.music_writes);
+                .tick(&self.music_bank, sfx_active, &mut self.music_writes);
             self.active_song = self.music_sequencer.cur_song();
             self.latch_ch3_pattern();
             self.start_music_drum();

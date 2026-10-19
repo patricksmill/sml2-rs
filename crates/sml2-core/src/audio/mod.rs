@@ -14,8 +14,11 @@ pub use driver::{
     MASTER_VOLUME_NORMAL, SLOT0_BUSY_EXCEPTIONS, SLOT0_START_TABLE, SLOT0_TICK_TABLE,
     SLOT1_BUSY_EXCEPTION, SLOT1_START_TABLE, SLOT1_TICK_TABLE, SLOT2_START_TABLE, SLOT2_TICK_TABLE,
 };
-pub use music::{MusicChannel, MusicSequencer, MusicWrite, SOUND_BANK04};
+pub use music::{MusicChannel, MusicSequencer, MusicWrite};
 pub use noise::{NoiseEffectState, NoiseMusicFlags, NoiseWrite};
 pub use pulse::{PulseEffectState, PulseMusicFlags, PulseMusicState, PulseWrite};
 pub use wav::{encode_wav_pcm16, write_wav_file};
 pub use wave::{WaveEffectState, WaveMusicFlags, WaveMusicState, WaveWrite};
+
+#[cfg(test)]
+pub use music::SOUND_BANK04;

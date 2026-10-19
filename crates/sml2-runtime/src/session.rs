@@ -565,6 +565,7 @@ impl Session {
     pub fn new(assets: SessionAssets) -> Self {
         let mut map = MapSim::new();
         map.load_screen(0, 0, &assets.node_records);
+        let sound_driver = SoundDriver::with_music_bank(assets.music_bank.clone());
         Self {
             state: SessionState::Overworld(map),
             last_map_screen: None,
@@ -583,7 +584,7 @@ impl Session {
             prev_start: false,
             prev_select: false,
             frame_n: 0,
-            sound_driver: SoundDriver::new(),
+            sound_driver,
         }
     }
 

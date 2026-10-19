@@ -88,6 +88,7 @@ impl LevelContent {
 
 /// All assets required for running both overworld navigation and any level.
 pub struct SessionAssets {
+    pub music_bank: Vec<u8>,
     pub nodes: MapNodes,
     pub node_records: MapNodeRecords,
     pub walk: MapWalk,
@@ -109,6 +110,14 @@ impl SessionAssets {
     }
 
     pub fn load_from(source: &dyn ContentSource) -> Result<Self, Box<dyn Error>> {
+        let music_bank = source.read("audio/music_bank04.bin")?;
+        if music_bank.len() != 0x4000 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "audio/music_bank04.bin must contain 16384 bytes",
+            )
+            .into());
+        }
         let nodes = load_map_nodes_from(source);
         let node_records = load_map_node_records_from(source);
         let walk = load_map_walk_from(source);
@@ -133,6 +142,7 @@ impl SessionAssets {
             })
             .collect();
         Ok(Self {
+            music_bank,
             nodes,
             node_records,
             walk,

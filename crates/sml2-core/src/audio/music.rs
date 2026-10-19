@@ -9,7 +9,10 @@ mod rom_model;
 mod tests;
 
 pub use channel::MusicChannel;
-pub use tables::{bank4_offset, FAST_MUSIC_SONGS, PITCH_TABLE, SONG_POINTERS, SOUND_BANK04};
+pub use tables::{bank4_offset, FAST_MUSIC_SONGS, PITCH_TABLE, SONG_POINTERS};
+
+#[cfg(test)]
+pub use tables::SOUND_BANK04;
 
 use channel::word_at;
 

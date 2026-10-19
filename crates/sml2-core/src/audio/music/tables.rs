@@ -55,7 +55,8 @@ pub const NOISE_INSTRUMENTS: [[u8; 5]; 10] = [
     [0x30, 0x01, 0x03, 0x06, 0x0C],
 ];
 
-/// Embedded Bank 4 sound ROM binary extracted from baserom.gb.
+/// Extracted Bank 4 oracle for local parity tests only. Production loads assets.
+#[cfg(test)]
 pub const SOUND_BANK04: &[u8] = include_bytes!("../../../../../extracted/audio/music_bank04.bin");
 
 /// Resolves a 16-bit address within Bank 4 ($4000..$7FFF) to a byte slice offset.

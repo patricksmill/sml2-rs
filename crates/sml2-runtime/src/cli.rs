@@ -25,7 +25,9 @@ fn export_song(
     if song_id == 0 || song_id > 42 {
         return Err(format!("invalid song ID {song_id} (must be 1..=42)").into());
     }
-    let mut driver = sml2_core::audio::SoundDriver::new();
+    let mut driver = sml2_core::audio::SoundDriver::with_music_bank(fs::read(
+        extracted_dir().join("audio/music_bank04.bin"),
+    )?);
     let mut apu = sml2_core::audio::Apu::new();
 
     driver.music_request = song_id;
@@ -51,7 +53,9 @@ fn export_song(
 }
 
 fn export_sfx(slot: u8, sfx_id: u8, out_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let mut driver = sml2_core::audio::SoundDriver::new();
+    let mut driver = sml2_core::audio::SoundDriver::with_music_bank(fs::read(
+        extracted_dir().join("audio/music_bank04.bin"),
+    )?);
     let mut apu = sml2_core::audio::Apu::new();
 
     match slot {

@@ -1,6 +1,22 @@
 use super::*;
 
 #[test]
+fn music_uses_injected_bank_across_engine_reset() {
+    // Song 1's header is at Bank 4 $605C. Synthetic transpose and empty
+    // channel lists distinguish supplied content from the local ROM oracle.
+    let mut bank = vec![0; 0x4000];
+    bank[0x605C - 0x4000] = 7;
+    let mut driver = SoundDriver::with_music_bank(bank);
+    for _ in 0..2 {
+        driver.reset_engine();
+        driver.music_request = 1;
+        driver.update_sound();
+        assert_eq!(driver.music_sequencer.transpose, 7);
+        assert_eq!(driver.active_song, 1);
+    }
+}
+
+#[test]
 fn test_pointer_lookup_contract() {
     // ID 0 is invalid
     assert_eq!(
