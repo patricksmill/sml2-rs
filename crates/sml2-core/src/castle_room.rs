@@ -55,8 +55,11 @@ pub enum RoomKind {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct RoomInput {
     pub keys_pressed: u8,
+    pub keys_held: u8,
     pub frame: u8,
     pub node: u8,
+    /// `rDIV` as the room's shuffle reads it.
+    pub div: u8,
 }
 
 /// The bytes the scripts touch outside their own RAM block.
@@ -125,8 +128,8 @@ pub struct CastleRoom {
     pub slot_index: u8,
     /// OAM entries 0-3 (`$FFC4..$C7`): x, y, tile, attr.
     pub oam: [u8; 4],
-    /// `sSfxRequest0`/`1`.
-    pub sfx: [u8; 2],
+    /// `sSfxRequest0`/`1`/`2`.
+    pub sfx: [u8; 3],
     /// `sMusicRequest`.
     pub music: u8,
     /// `sGoalBell`.
@@ -146,6 +149,18 @@ pub struct CastleRoom {
     /// `sMapPatchList`/`sMapPatch1Id` for the five `$0D` slots.
     pub patch_state: [u8; 5],
     pub patch_id: [u8; 5],
+    /// `sCastleSpriteAnimState`/`Timer` (`$A7B3`/`$A7B4`).
+    pub anim_state: u8,
+    pub anim_timer: u8,
+    /// `sCastleDecorSlotA`/`B` (`$A7B0`/`$A7B1`).
+    pub decor_a: u8,
+    pub decor_b: u8,
+    /// `sMapRandAccum` (`$A7B7`).
+    pub rand_accum: u8,
+    /// The room's `$9800` tilemap, for `$60290`'s tile scan.
+    tilemap: Vec<u8>,
+    /// `$6734`/`$6761`: the two bell rooms' sprite lists.
+    sprite_lists: [Vec<u8>; 2],
 }
 
 impl CastleRoom {
@@ -174,7 +189,7 @@ impl CastleRoom {
             slots: [RoomSlot::default(); 5],
             slot_index: 0,
             oam: [156, 40, 0, 0],
-            sfx: [0; 2],
+            sfx: [0; 3],
             music: 0,
             goal_bell: 0,
             script: scripts.blob("coin_room_script").unwrap_or(&[]).to_vec(),
@@ -190,6 +205,16 @@ impl CastleRoom {
             ],
             patch_state: [0; 5],
             patch_id: [0; 5],
+            anim_state: 0,
+            anim_timer: 0,
+            decor_a: 0,
+            decor_b: 0,
+            rand_accum: 0,
+            tilemap: Vec::new(),
+            sprite_lists: [
+                scripts.blob("bell_room_a_sprites").unwrap_or(&[]).to_vec(),
+                scripts.blob("bell_room_b_sprites").unwrap_or(&[]).to_vec(),
+            ],
         }
     }
 
@@ -201,12 +226,68 @@ impl CastleRoom {
         room
     }
 
-    /// The second bell room (`$4028`, screen 14).
-    pub fn bell_b(scripts: &CastleScripts) -> Self {
+    /// The second bell room (`$4028`, screen 14). `tilemap` is the screen's
+    /// `$9800` copy (`$3F5A4` loads 576 bytes); `$60290` scans it for `$3C`/
+    /// `$3D` tiles.
+    pub fn bell_b(scripts: &CastleScripts, tilemap: &[u8]) -> Self {
         let mut room = Self::coin(scripts);
         room.kind = RoomKind::BellRoomB;
         room.script = scripts.blob("bell_room_b_script").unwrap_or(&[]).to_vec();
+        room.tilemap = tilemap.to_vec();
         room
+    }
+
+    /// `$3F4B1`: stage screen 13. `$4A1A`/`$4A2F`/`$4A58` is picked by the
+    /// timer's low nibble, the five slots start at 2/26/50/74/98 and the
+    /// `$6734` sprite list fills the table.
+    pub fn enter_bell_a(scripts: &CastleScripts, timer_high: u8) -> Self {
+        let mut room = Self::bell_a(scripts);
+        room.script_ptr = match timer_high & 0x0F {
+            0 => 0x4A1A,
+            1 => 0x4A2F,
+            _ => 0x4A58,
+        };
+        room.script_ptr_copy = room.script_ptr;
+        room.oam = [124, 240, 0, 0];
+        room.sfx[0] = 5;
+        for s in 0..5 {
+            room.patch_id[s] = 144;
+            room.patch_state[s] = 3;
+        }
+        for (s, delay) in [2u8, 26, 50, 74, 98].into_iter().enumerate() {
+            room.slots[s].delay = delay;
+        }
+        room.slot_index = 0;
+        room.music = 21;
+        room.goal_bell = 0;
+        room.load_sprite_list(0);
+        room
+    }
+
+    /// `$3F5A4`: stage screen 14 from the `$6761` sprite list.
+    pub fn enter_bell_b(scripts: &CastleScripts, tilemap: &[u8]) -> Self {
+        let mut room = Self::bell_b(scripts, tilemap);
+        room.oam = [124, 240, 0, 0];
+        room.sfx[0] = 5;
+        room.music = 21;
+        room.goal_bell = 0;
+        room.load_sprite_list(1);
+        room
+    }
+
+    /// `$3E2A2`'s sprite list: 3-byte records until an `$FF` record.
+    fn load_sprite_list(&mut self, which: usize) {
+        let list = self.sprite_lists[which].clone();
+        for index in 0..16 {
+            let at = index * 3;
+            let Some(record) = list.get(at..at + 3) else {
+                break;
+            };
+            if record[0] == 0xFF {
+                break;
+            }
+            self.sprites[at..at + 3].copy_from_slice(record);
+        }
     }
 
     /// The `$4A1A`/`$4A2F`/`$4A58` byte at a bank-24 address.
@@ -228,7 +309,7 @@ impl CastleRoom {
         match self.kind {
             RoomKind::CoinRooms => self.coin_tick(input, rewards),
             RoomKind::BellRoomA => self.bell_a_tick(input, rewards),
-            RoomKind::BellRoomB => {}
+            RoomKind::BellRoomB => self.bell_b_tick(input, rewards),
         }
     }
 
@@ -1026,6 +1107,335 @@ impl CastleRoom {
             .copied()
             .unwrap_or(0)
     }
+
+    // ---- `$4028`: bell room B (screen 14) ---------------------------------
+
+    fn bell_b_tick(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if self.script.is_empty() {
+            return;
+        }
+        match self.state {
+            0 => self.bell_b_state0(input, rewards),
+            1 => self.bell_b_state1(input, rewards),
+            2 => self.bell_b_state2(input, rewards),
+            3 => self.bell_b_state3(input, rewards),
+            4 => self.bell_b_state4(input, rewards),
+            5 => self.bell_b_state5(input, rewards),
+            6 => self.bell_b_state6(input, rewards),
+            7 => self.bell_b_state7(input, rewards),
+            8 => self.bell_b_commit(input, rewards),
+            9 => self.bell_b_state9(input, rewards),
+            _ => self.bell_b_commit(input, rewards),
+        }
+    }
+
+    /// `$4037` state 0 / `$404F`: decorate, then walk up to `$28`.
+    fn bell_b_state0(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        self.bell_b_decor_walk(input);
+        if input.frame & 0x01 == 0 {
+            self.bell_b_commit(input, rewards);
+            return;
+        }
+        if self.oam[1] == 0x28 {
+            self.state = 1;
+            self.oam[2] = self.bell_preview();
+            self.bell_b_state1(input, rewards);
+            return;
+        }
+        self.oam[1] = self.oam[1].wrapping_add(1);
+        if input.frame & 0x02 != 0 {
+            self.walk_phase += 1;
+            if self.walk_phase >= 3 {
+                self.walk_phase = 0;
+            }
+        }
+        self.oam[2] = self
+            .bell_preview()
+            .wrapping_add(self.walk_phase)
+            .wrapping_add(1);
+        self.bell_b_commit(input, rewards);
+    }
+
+    /// `$60097`: A → state 4; held bit 5 → state 2; held bit 4 → state 3.
+    fn bell_b_state1(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        self.bell_b_decor_walk(input);
+        if input.keys_pressed & 0x01 != 0 {
+            self.state = 4;
+            self.timer = 16;
+            self.bell_b_state4(input, rewards);
+        } else if input.keys_held & 0x20 != 0 {
+            self.state = 2;
+            self.timer = 32;
+            self.bell_b_state2(input, rewards);
+        } else if input.keys_held & 0x10 != 0 {
+            self.state = 3;
+            self.timer = 32;
+            self.bell_b_state3(input, rewards);
+        } else {
+            self.bell_b_commit(input, rewards);
+        }
+    }
+
+    /// `$600D3`: the upward walk at `$28` (state 2) and the lower one (state 3).
+    fn bell_b_walk_state(&mut self, input: RoomInput, rewards: &mut RoomRewards, target: u8) {
+        self.bell_b_decor_walk(input);
+        if input.frame & 0x03 == 0 {
+            self.bell_b_commit(input, rewards);
+            return;
+        }
+        if self.oam[1] == target || self.timer == 0 {
+            self.state = 1;
+            self.oam[2] = self.bell_preview();
+            self.bell_b_commit(input, rewards);
+            return;
+        }
+        self.timer = self.timer.wrapping_sub(1);
+        self.oam[1] = self.oam[1].wrapping_add(1);
+        if input.frame & 0x02 != 0 {
+            self.walk_phase += 1;
+            if self.walk_phase >= 3 {
+                self.walk_phase = 0;
+            }
+        }
+        self.oam[2] = self
+            .bell_preview()
+            .wrapping_add(self.walk_phase)
+            .wrapping_add(1);
+        self.bell_b_commit(input, rewards);
+    }
+
+    fn bell_b_state2(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        self.bell_b_walk_state(input, rewards, 0x28);
+    }
+
+    fn bell_b_state3(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        self.bell_b_walk_state(input, rewards, 0x88);
+    }
+
+    /// `$60182`: the `$421A` slide, the `$601BA` patch hit and the state-5 setup.
+    fn bell_b_state4(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        self.bell_b_decor_sprite(input.frame);
+        if input.frame & 0x03 == 0 {
+            self.bell_b_commit(input, rewards);
+            return;
+        }
+        if self.timer == 0 {
+            self.state = 5;
+            self.oam[2] = self.bell_preview();
+            let a = self.decor_a as usize;
+            let b = self.decor_b as usize;
+            self.patches[2 + 3 * a] = 0;
+            self.patches[2 + 3 * b] = 0;
+            self.set_sprite(0xA6DF, self.oam[1].wrapping_sub(4));
+            self.set_sprite(0xA6E1, 42);
+            self.anim_state = 3;
+            self.bell_b_state5(input, rewards);
+            return;
+        }
+        self.timer = self.timer.wrapping_sub(1);
+        let slide = self
+            .script
+            .get(0x421A - 0x4028 + self.timer as usize)
+            .copied()
+            .unwrap_or(0);
+        self.oam[0] = self.oam[0].wrapping_add(slide);
+        self.oam[2] = self.bell_preview().wrapping_add(8);
+        if self.timer == 0x08 {
+            let index = ((self.oam[1].wrapping_sub(40) & 0x60) >> 4) as usize;
+            self.patches[2 + 3 * index] = 1;
+            self.music = 8;
+        }
+        self.bell_b_commit(input, rewards);
+    }
+
+    /// `$6022A`: the bell animation state machine.
+    fn bell_b_state5(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if input.frame & 0x01 == 0 {
+            self.bell_b_commit(input, rewards);
+            return;
+        }
+        self.sfx[2] = 4;
+        if input.frame & 0x02 != 0 {
+            let mut page = self.sprite(0xA6E1).wrapping_add(1);
+            if page >= 0x2D {
+                page = 42;
+            }
+            self.set_sprite(0xA6E1, page);
+        }
+        match self.anim_state {
+            3 => self.bell_b_scan(),
+            1 => self.bell_b_anim_up(),
+            2 => self.bell_b_anim_down(),
+            _ => {}
+        }
+        self.bell_b_decor_sprite(input.frame);
+        self.bell_b_commit(input, rewards);
+    }
+
+    /// `$60290`: the `$9800` tile scan that starts the bell wobble.
+    fn bell_b_scan(&mut self) {
+        let id = self.sprite(0xA6E0).wrapping_sub(1);
+        self.set_sprite(0xA6E0, id);
+        if id & 0x07 == 0 {
+            let offset = ((id & 0xF8).wrapping_sub(16) as u16) << 2;
+            let row = self.sprite(0xA6DF).wrapping_sub(12) >> 3;
+            let at = offset.wrapping_add(row as u16) as usize;
+            let first = self.tilemap.get(at).copied().unwrap_or(0);
+            let second = self.tilemap.get(at + 1).copied().unwrap_or(0);
+            if second == 0x3D {
+                self.anim_state = 1;
+                self.anim_timer = 32;
+                return;
+            }
+            if first == 0x3C {
+                self.anim_state = 2;
+                self.anim_timer = 32;
+                return;
+            }
+        }
+        if self.sprite(0xA6E0) < 0x2A {
+            self.state = 6;
+            self.set_sprite(0xA6E2, self.sprite(0xA6DF).wrapping_sub(4));
+            self.item_index = (self.sprite(0xA6DF).wrapping_sub(36) & 0x60) >> 4;
+            self.set_sprite(0xA6E1, 255);
+            self.set_sprite(0xA6E4, 39);
+        }
+    }
+
+    /// `$60314`: the bell rises.
+    fn bell_b_anim_up(&mut self) {
+        self.set_sprite(0xA6DF, self.sprite(0xA6DF).wrapping_add(1));
+        self.anim_timer = self.anim_timer.wrapping_sub(1);
+        if self.anim_timer == 0 {
+            self.anim_state = 3;
+        }
+    }
+
+    /// `$6032A`: the bell falls.
+    fn bell_b_anim_down(&mut self) {
+        self.set_sprite(0xA6DF, self.sprite(0xA6DF).wrapping_sub(1));
+        self.anim_timer = self.anim_timer.wrapping_sub(1);
+        if self.anim_timer == 0 {
+            self.anim_state = 3;
+        }
+    }
+
+    /// `$4340`: the item icon's walk in, or Mario's approach to it.
+    fn bell_b_state6(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        self.bell_b_decor_sprite(input.frame);
+        let icon = self.sprite(0xA6E4);
+        if icon != 0xFF {
+            if input.frame & 0x0F != 0 {
+                self.bell_b_commit(input, rewards);
+                return;
+            }
+            if icon == 0x27 {
+                // `$603F9` erases the tile pair and asks for music 22.
+                self.music = 22;
+            }
+            if icon == 0x29 {
+                self.set_sprite(0xA6E4, 255);
+            }
+            if self.sprite(0xA6E4) != 0xFF {
+                self.set_sprite(0xA6E4, self.sprite(0xA6E4).wrapping_add(1));
+            }
+            self.bell_b_commit(input, rewards);
+            return;
+        }
+        let item = self.item_index as u16;
+        let page_at = 0xA6B9u16 + 3 * item;
+        let page = self.sprite(page_at).wrapping_add(1);
+        self.set_sprite(page_at, page);
+        if page >= 0x70 {
+            self.state = 7;
+            self.set_sprite(0xA6BAu16 + 3 * item, 255);
+            self.bell_a_award_preview(rewards);
+            self.timer = 20;
+            self.set_sprite(0xA6E3, 116);
+            self.bell_b_state7(input, rewards);
+            return;
+        }
+        self.oam[2] = self.bell_preview();
+        let target = self.sprite(0xA6B8u16 + 3 * item).wrapping_add(8);
+        if self.oam[1] == target {
+            self.bell_b_commit(input, rewards);
+            return;
+        }
+        let step = if self.oam[1] < target {
+            self.oam[1] = self.oam[1].wrapping_add(1);
+            1
+        } else {
+            self.oam[1] = self.oam[1].wrapping_sub(1);
+            5
+        };
+        if input.frame & 0x03 == 0 {
+            self.walk_phase += 1;
+            if self.walk_phase >= 3 {
+                self.walk_phase = 0;
+            }
+        }
+        self.oam[2] = self
+            .bell_preview()
+            .wrapping_add(self.walk_phase)
+            .wrapping_add(step);
+        self.bell_b_commit(input, rewards);
+    }
+
+    /// `$4433`: the shared preview routine.
+    fn bell_b_state7(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if input.frame & 0x03 == 0 {
+            self.bell_a_preview(input, rewards);
+        }
+        self.bell_b_commit(input, rewards);
+    }
+
+    /// `$4444`: a 20-frame hold before state 10.
+    fn bell_b_state9(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
+        if input.frame & 0x01 != 0 {
+            self.timer = self.timer.wrapping_sub(1);
+            if self.timer == 0 {
+                self.state = 10;
+            }
+        }
+        self.bell_b_commit(input, rewards);
+    }
+
+    fn bell_b_commit(&mut self, _input: RoomInput, _rewards: &mut RoomRewards) {}
+
+    /// `$6046A`: the random decor slot walk.
+    fn bell_b_decor_walk(&mut self, input: RoomInput) {
+        let a = 0xA6C6 + 3 * self.decor_a as u16;
+        let b = 0xA6C6 + 3 * self.decor_b as u16;
+        if input.frame & 0x07 != 0 {
+            self.set_sprite(a, 37);
+            self.set_sprite(b, 37);
+            return;
+        }
+        self.set_sprite(a, 255);
+        for _ in 0..64 {
+            let mut value = input.div;
+            value = value.rotate_left(4).wrapping_add(value);
+            value = self.rand_accum.wrapping_add(value);
+            self.rand_accum = 0x97u8.wrapping_add(value);
+            let pick = self.rand_accum & 0x0F;
+            if pick < 9 && pick != self.decor_b {
+                self.decor_a = pick;
+                break;
+            }
+        }
+        let a = 0xA6C6 + 3 * self.decor_a as u16;
+        self.set_sprite(a, 37);
+        self.set_sprite(b, 37);
+    }
+
+    /// `$60269`: both decor slots flash between frames 37 and 38.
+    fn bell_b_decor_sprite(&mut self, frame: u8) {
+        let value = if frame & 0x08 != 0 { 38 } else { 37 };
+        let a = 0xA6C6 + 3 * self.decor_a as u16;
+        let b = 0xA6C6 + 3 * self.decor_b as u16;
+        self.set_sprite(a, value);
+        self.set_sprite(b, value);
+    }
 }
 
 /// `add`/`daa`: BCD byte add with the carry the ROM's `daa` produces.
@@ -1058,8 +1468,10 @@ mod tests {
     fn input(frame: u8, keys: u8) -> RoomInput {
         RoomInput {
             keys_pressed: keys,
+            keys_held: 0,
             frame,
             node: 0x70,
+            div: 0,
         }
     }
 
@@ -1219,6 +1631,101 @@ mod tests {
         room.tick(input(0, 0), &mut rewards);
         assert_eq!(room.sfx[0], 9);
         assert_eq!(rewards.lives, 0x06, "item 3 is +1 life, BCD");
+    }
+
+    fn tiled() -> Vec<u8> {
+        vec![0u8; 576]
+    }
+
+    /// `$60097`: A picks state 4, the two held-direction bits pick 2 and 3.
+    #[test]
+    fn bell_room_b_picks_its_state_from_the_buttons() {
+        let scripts = scripts();
+        let mut room = CastleRoom::bell_b(&scripts, &tiled());
+        let mut rewards = RoomRewards::default();
+        room.state = 1;
+        room.tick(input(0, 0x01), &mut rewards);
+        assert_eq!((room.state, room.timer), (4, 16), "A -> the $60182 slide");
+
+        let mut room = CastleRoom::bell_b(&scripts, &tiled());
+        room.state = 1;
+        let held5 = RoomInput {
+            keys_pressed: 0,
+            keys_held: 0x20,
+            frame: 0,
+            node: 0x70,
+            div: 0,
+        };
+        room.tick(held5, &mut rewards);
+        assert_eq!((room.state, room.timer), (2, 32), "held bit 5");
+
+        let mut room = CastleRoom::bell_b(&scripts, &tiled());
+        room.state = 1;
+        let held4 = RoomInput {
+            keys_pressed: 0,
+            keys_held: 0x10,
+            frame: 0,
+            node: 0x70,
+            div: 0,
+        };
+        room.tick(held4, &mut rewards);
+        assert_eq!((room.state, room.timer), (3, 32), "held bit 4");
+    }
+
+    /// `$60290`: a `$3D` tile at the computed `$9800` offset starts the wobble.
+    #[test]
+    fn bell_room_b_tile_scan_starts_the_wobble() {
+        let scripts = scripts();
+        let mut map = vec![0u8; 576];
+        map[1] = 0x3D;
+        let mut room = CastleRoom::bell_b(&scripts, &map);
+        let mut rewards = RoomRewards::default();
+        room.state = 5;
+        room.anim_state = 3;
+        room.set_sprite(0xA6E0, 0x11); // id-1 = $10: offset 0, row from y
+        room.set_sprite(0xA6DF, 12);
+        room.tick(input(1, 0), &mut rewards);
+        assert_eq!(room.anim_state, 1);
+        assert_eq!(room.anim_timer, 32);
+        assert_eq!(room.sprite(0xA6E0), 0x10, "the id stepped first");
+    }
+
+    /// `$4340`: the item icon at `$27` asks for music 22 and advances.
+    #[test]
+    fn bell_room_b_icon_reaches_the_music_cue() {
+        let scripts = scripts();
+        let mut room = CastleRoom::bell_b(&scripts, &tiled());
+        let mut rewards = RoomRewards::default();
+        room.state = 6;
+        room.set_sprite(0xA6E4, 0x27);
+        room.tick(input(0, 0), &mut rewards);
+        assert_eq!(room.music, 22);
+        assert_eq!(room.sprite(0xA6E4), 0x28);
+    }
+
+    /// `$3F4B1`/`$3F5A4`: the timer nibble picks the slot table, the five
+    /// delays are 2/26/50/74/98 and the sprite lists stage both rooms.
+    #[test]
+    fn bell_room_loaders_stage_the_tables_and_sprites() {
+        let scripts = scripts();
+        let a = CastleRoom::enter_bell_a(&scripts, 0);
+        assert_eq!(a.script_ptr, 0x4A1A);
+        assert_eq!(a.script_ptr_copy, 0x4A1A);
+        assert_eq!(CastleRoom::enter_bell_a(&scripts, 1).script_ptr, 0x4A2F);
+        assert_eq!(CastleRoom::enter_bell_a(&scripts, 2).script_ptr, 0x4A58);
+        assert_eq!(
+            a.slots.iter().map(|s| s.delay).collect::<Vec<_>>(),
+            vec![2, 26, 50, 74, 98]
+        );
+        assert!(a.patch_id.iter().all(|&v| v == 144));
+        assert_eq!(&a.sprites[..3], &[0x20, 0xA0, 0x00], "$6734 record 0");
+        assert_eq!(a.music, 21);
+        assert_eq!(a.sfx[0], 5);
+
+        let b = CastleRoom::enter_bell_b(&scripts, &tiled());
+        assert_eq!(&b.sprites[..3], &[0x20, 0xA0, 0x00], "$6761 record 0");
+        assert_eq!(b.music, 21);
+        assert_eq!(b.sfx[0], 5);
     }
 
     /// `$60D32` reads the node's ten-byte row in the `$4000` item table.

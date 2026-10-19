@@ -94,8 +94,12 @@ five-slot engine (`$60965` patch entries from `$4A1A`/`$4A2F`/`$4A58`,
 `$60917` preview/lives award, `$609E4` slot commit). Four tests pin the A
 gate, the `$21` page walk, a slot patch step and both award arms.
 
-Bell room B `$4028` and both entry loaders (`$3F4B1`/`$3F5A4`, which pick the
-timer-variant table and stage the sprite lists) are ME-5.
+Bell room B `$4028` (screen 14) is ported too: its own `$6046A` decor walk,
+`$60269` frame flash, `$60290` `$9800` tile scan, `$60314`/`$6032A` bell wobble,
+the `$421A` slide, patch records `$A7D2`/`$A7ED`, sprites 10/11 and states 0-11.
+Both loaders are `CastleRoom::enter_bell_a` (timer nibble -> `$4A1A`/`$4A2F`/
+`$4A58`, slots 2/26/50/74/98, `$6734`) and `enter_bell_b` (`$6761`). The map
+entry from screen 8 and the return landing stay with ME-5's acceptance work.
 
 ### ME-4 — Coin-door rooms 9-12 (M)
 `$3F4A0`/`$4A81`: free-walk Mario from OAM `(40,156)`, collect the room's
@@ -104,13 +108,11 @@ screen 8. Prices and the unpayable path are already modelled. Tests: each of
 the four rooms, reward byte, no duplicate award, return screen.
 
 ### ME-5 — Bell rooms 13/14 (M)
-Room A `$4512` is ported (ME-3). Left: room B `$4028` (its own `$60269`/
-`$60290` helpers, patch records `$A7xx`, sprite 10/11, `sCastleSpriteAnimState`,
-the `$421A` timer table) and both entry loaders `$3F4B1`/`$3F5A4`
-(timer-variant script selection, the `$6734`/`$6761` sprite lists, five slot
-counters at 2/26/50/74/98, SFX 5, music 21, return to screen 8). Tests: all
-three timer variants and room B's node-bit variant, exact slot bytes, reward,
-return.
+Both room scripts and both loaders are ported (ME-3): `$4512` (screen 13),
+`$4028` (screen 14), `enter_bell_a` (three timer variants) and `enter_bell_b`.
+Left: wire the castle screen 8 bell nodes to the two entries, the `sCastleState
+== 3`/`10` return to screen 8, and the typed acceptance tape. Tests: all three
+timer variants and room B's node-bit variant, exact slot bytes, reward, return.
 
 ### ME-6 — Golden-coin/castle chain (M)
 Port states `$1B-$1F/$20/$21` into `SessionState` (or the existing ending

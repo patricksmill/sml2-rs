@@ -1388,8 +1388,10 @@ impl MapSim {
         };
         let room_input = crate::castle_room::RoomInput {
             keys_pressed: input.keys_pressed,
+            keys_held: input.keys_held,
             frame: self.frame_counter,
             node: self.node,
+            div: input.div,
         };
         let Some(room) = self.room.as_mut() else {
             return;
