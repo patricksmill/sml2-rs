@@ -167,13 +167,6 @@ use super::rom_model::RomSeq;
 
 const ROM_WALK_FRAMES: usize = 600;
 
-/// `$7F52` is a real section (`$7F52 -> $7F58`, the shared `$9B $20 / $A5 $01 /
-/// $9C` silent rest loop), not a "no channel" sentinel, so these songs' headers
-/// point a channel at a stream the port currently refuses to start. Every other
-/// song must match the ROM walk frame for frame; fixing `init_section` shrinks
-/// this list, and the constant is updated with it.
-const KNOWN_DIVERGENT: [u8; 7] = [8, 13, 27, 28, 30, 31, 40];
-
 fn walk_mismatch(song: u8, frames: usize) -> Option<String> {
     let mut rom = RomSeq::new(song, song == 9);
     let mut port = MusicSequencer::new();
@@ -218,7 +211,7 @@ fn walk_mismatch(song: u8, frames: usize) -> Option<String> {
 }
 
 #[test]
-fn test_song_walk_matches_rom_except_known_silent_channel_songs() {
+fn test_song_walk_matches_rom_all_songs() {
     let mut divergent = Vec::new();
     let mut details = Vec::new();
     for song in 1..=42u8 {
@@ -227,18 +220,11 @@ fn test_song_walk_matches_rom_except_known_silent_channel_songs() {
             details.push(msg);
         }
     }
-    assert_eq!(
-        divergent,
-        KNOWN_DIVERGENT.to_vec(),
-        "divergent songs {divergent:?} (expected {KNOWN_DIVERGENT:?}):\n{}",
+    assert!(
+        divergent.is_empty(),
+        "divergent songs {divergent:?}:\n{}",
         details.join("\n")
     );
-    for &song in KNOWN_DIVERGENT.iter() {
-        assert!(
-            walk_mismatch(song, ROM_WALK_FRAMES).is_some(),
-            "song {song} now matches the ROM walk; drop it from KNOWN_DIVERGENT"
-        );
-    }
 }
 
 /// Frames on which the console's `$115CD` fires: the ending channel's section
@@ -361,7 +347,7 @@ fn test_software_envelope_fires_on_the_scaled_timer() {
     bank[0x1CAC] = 0x10; // $5CAC[0], the nibble-1 instrument
     let mut ch = MusicChannel::new(1);
     ch.active = true;
-    ch.instrument = [0x01, 0x80, 0x00];
+    ch.instrument = [0x00, 0x81, 0x00];
     ch.env_timer = 4;
     ch.freq_hi = 0x05;
     ch.note_timer = 40;
@@ -399,7 +385,7 @@ fn test_duration_command_computes_the_envelope_timer() {
         0x03, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x12, 0x24, 0x48, 0x03, 0x08, 0x10, 0x02, 0x01, 0x90,
         0x03,
     ]);
-    bank[0x1000..0x1006].copy_from_slice(&[0x9D, 0x01, 0x80, 0x00, 0xA1, 0x40]);
+    bank[0x1000..0x1006].copy_from_slice(&[0x9D, 0x00, 0x81, 0x00, 0xA1, 0x40]);
 
     let mut ch = MusicChannel::new(1);
     ch.active = true;
@@ -413,7 +399,7 @@ fn test_duration_command_computes_the_envelope_timer() {
     let mut out = Vec::new();
     ch.tick(&bank, &mut transpose, &mut dur, &mut drum, false, &mut out);
 
-    assert_eq!(ch.instrument, [0x01, 0x80, 0x00]);
+    assert_eq!(ch.instrument, [0x00, 0x81, 0x00]);
     assert_eq!(ch.note_duration, 0x06);
     assert_eq!(ch.env_timer, 3, "6 with scale $80");
     assert_eq!(ch.env_counter, 0, "$117D9 resets the counter on every note");

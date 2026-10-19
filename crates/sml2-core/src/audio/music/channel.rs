@@ -70,7 +70,7 @@ impl MusicChannel {
 
     /// Reset channel for a new section starting at `section_ptr`.
     pub fn init_section(&mut self, section_ptr: u16, bank: &[u8]) {
-        self.active = section_ptr != 0 && section_ptr != 0x7F52;
+        self.active = section_ptr != 0;
         self.song_ended = false;
         self.section_ptr = section_ptr;
         self.loop_ptr = 0;
@@ -191,18 +191,10 @@ impl MusicChannel {
                     }
                 }
                 0x99 => {
-                    if self.id == 3 {
-                        *drum_mode = 1;
-                    } else {
-                        self.vibrato_flag = 1;
-                    }
+                    *drum_mode = 1;
                 }
                 0x9A => {
-                    if self.id == 3 {
-                        *drum_mode = 0;
-                    } else {
-                        self.vibrato_flag = 0;
-                    }
+                    *drum_mode = 0;
                 }
                 0x97 => self.slide_state = 1,
                 0x98 => self.slide_state = 0,
@@ -221,11 +213,9 @@ impl MusicChannel {
                     // $116B9: the software envelope's fire value scales the note
                     // duration by instrument[1]'s high nibble ($80 = half,
                     // $40 = quarter, anything else = three quarters), with a
-                    // minimum of 2; a zero nibble keeps the raw duration.
+                    // minimum of 2; when zero, env_timer is not written.
                     let scale = self.instrument[1] & 0xF0;
-                    self.env_timer = if scale == 0 {
-                        self.note_duration
-                    } else {
+                    if scale != 0 {
                         let scaled = if scale & 0x80 != 0 {
                             self.note_duration >> 1
                         } else if scale & 0x40 != 0 {
@@ -233,16 +223,16 @@ impl MusicChannel {
                         } else {
                             (self.note_duration >> 1) + ((self.note_duration >> 1) >> 1)
                         };
-                        scaled.max(2)
-                    };
+                        self.env_timer = scaled.max(2);
+                    }
 
                     // Next byte is the note pitch
                     let note = self.read_stream_byte(bank);
-                    self.trigger_note(note, *transpose, sfx_active, bank, out);
+                    self.trigger_note(note, *transpose, drum_mode, sfx_active, bank, out);
                     break;
                 }
                 note @ 0x01..=0x94 => {
-                    self.trigger_note(note, *transpose, sfx_active, bank, out);
+                    self.trigger_note(note, *transpose, drum_mode, sfx_active, bank, out);
                     break;
                 }
                 _ => {}
@@ -278,16 +268,16 @@ impl MusicChannel {
     }
 
     /// `$11899`/`$118E4`: when the channel's envelope counter reaches the value
-    /// the last duration command computed, write `$5CAC[(instrument & $0F) - 1]`
+    /// the last duration command computed, write `$5CAC[(instrument[1] & $0F) - 1]`
     /// to NRx2 and retrigger the note (NRx4 = freq_hi | $80).
     fn tick_software_envelope(&mut self, bank: &[u8], out: &mut Vec<MusicWrite>) {
-        if self.id > 2 || self.instrument[0] == 0 {
+        if self.id > 2 || self.instrument[1] == 0 {
             return;
         }
         if self.env_counter != self.env_timer {
             return;
         }
-        let index = (self.instrument[0] & 0x0F).wrapping_sub(1) as u16;
+        let index = (self.instrument[1] & 0x0F).wrapping_sub(1) as u16;
         let off = bank4_offset(0x5CACu16.wrapping_add(index));
         let envelope = bank.get(off).copied().unwrap_or(0);
         match self.id {
@@ -317,6 +307,7 @@ impl MusicChannel {
         &mut self,
         note: u8,
         transpose: i8,
+        drum_mode: &mut u8,
         sfx_active: bool,
         bank: &[u8],
         out: &mut Vec<MusicWrite>,
@@ -324,6 +315,12 @@ impl MusicChannel {
         self.note_timer = self.note_duration;
         // $117D9 zeroes block+14: every note restarts the envelope counter.
         self.env_counter = 0;
+
+        // $11804: on channel 3 note trigger, if sMusicDrumMode != 0, reset to 1 and slide_step = 0
+        if self.id == 3 && *drum_mode != 0 {
+            *drum_mode = 1;
+            self.slide_step = 0;
+        }
 
         // $11728 takes the channel-4 branch BEFORE the note-$01 rest test, so a
         // noise note $01 reads its $5C06 record like any other note (and leaves
@@ -391,8 +388,9 @@ impl MusicChannel {
         // Stream note bytes are byte offsets into table $5AF4.
         // Signed transpose is added directly to the byte offset in SM83:
         // hl = $5AF4 + (note as i16) + (transpose as i16)
-        let byte_offset = ((note as i32) + (transpose as i32)).clamp(0, 144) as usize;
-        let off = bank4_offset(0x5AF4) + byte_offset;
+        let addr = 0x5AF4u16
+            .wrapping_add((note as u16).wrapping_add(transpose as i8 as i16 as u16));
+        let off = bank4_offset(addr);
         let freq = if off + 1 < bank.len() {
             (bank[off] as u16) | ((bank[off + 1] as u16) << 8)
         } else {
