@@ -1784,6 +1784,18 @@ impl PlayerSim {
             let wants_jump = if self.powerup == 2 { keys.a } else { a_pressed };
             if wants_jump && (self.on_ground || self.swim) && !self.goal_bell {
                 self.jump_flag = true;
+                // $164C: the jump sound, then $164E..$1664 swaps it for the
+                // moon/jump-hold variants and $1664..$1674 silences it while
+                // UP is held (Bunny Mario keeps it).
+                self.sfx0 = 1;
+                if self.moon & 0x0F != 0 {
+                    self.sfx0 = if self.moon & 0x02 != 0 { 3 } else { 18 };
+                } else if self.swim {
+                    self.sfx0 = 3;
+                }
+                if self.powerup != 2 && keys.up {
+                    self.sfx0 = 0;
+                }
                 self.in_air = true;
                 self.on_ground = false;
                 self.flutter_armed = false;
@@ -2952,6 +2964,10 @@ impl PlayerSim {
         } else if self.on_ground || self.on_ground_obj {
             if self.dir_right {
                 if self.hvel < 0x80 {
+                    // $5384: walking right; the step sound is re-requested every
+                    // frame and the slot-0 busy gate turns it into the walk
+                    // patter.
+                    self.sfx0 = 4;
                     13
                 } else if self.hvel == 0x80 {
                     0
@@ -2959,6 +2975,8 @@ impl PlayerSim {
                     1 + cell
                 }
             } else if self.hvel >= 0x81 {
+                // $53FE: walking left.
+                self.sfx0 = 4;
                 12
             } else if self.hvel == 0x80 {
                 4

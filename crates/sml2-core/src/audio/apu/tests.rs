@@ -239,3 +239,66 @@ fn test_frame_sample_count_matches_the_console_cadence() {
         "the fixed 735/frame count lost 0.456 % of every second"
     );
 }
+
+/// The port now requests the walk (`$5384`/`$53FE`, SFX 4) and map-entry
+/// (`$3C1EC`, SFX 22) effects; both must reach the pulse channel, not just
+/// the driver's slot bookkeeping.
+#[test]
+fn walk_and_level_entry_sfx_reach_the_apu() {
+    for id in [4u8, 22u8] {
+        let mut driver = SoundDriver::new();
+        driver.sfx_request_0 = id;
+        driver.update_sound();
+        assert_eq!(driver.pulse_effect.active_effect, id, "slot 0 started {id}");
+        let mut apu = Apu::new();
+        apu.ingest_driver(&driver);
+        let mut buffer = Vec::new();
+        apu.generate_samples(44100, 735, &mut buffer);
+        assert!(
+            buffer.iter().any(|&s| s.abs() > 0.0),
+            "SFX {id} produced no APU signal"
+        );
+    }
+}
+
+/// `$13FE7`: the engine reset writes an all-channel silence frame. A stop-all
+/// (`sMusicRequest = $FF`) must therefore leave the APU quiet instead of
+/// holding the last note through a map/level transition.
+#[test]
+fn the_stop_all_silences_a_sounding_channel() {
+    let mut driver = SoundDriver::new();
+    let mut apu = Apu::new();
+    let mut buffer = Vec::new();
+    for _ in 0..5 {
+        driver.sfx_request_0 = 4;
+        driver.update_sound();
+        apu.ingest_driver(&driver);
+        buffer.clear();
+        apu.generate_samples(44_100, 735, &mut buffer);
+    }
+    assert_eq!(driver.pulse_effect.active_effect, 4, "the walk SFX is active");
+    assert!(
+        buffer.iter().any(|&s| s.abs() > 1e-3),
+        "SFX 4 sounds before the stop"
+    );
+
+    driver.music_request = 0xFF;
+    driver.update_sound();
+    apu.ingest_driver(&driver);
+    assert_eq!(apu.ch1.volume, 0, "NR12 = $08 zeroes the pulse volume");
+    assert_eq!(apu.ch2.volume, 0, "NR22 = $08");
+    assert_eq!(apu.ch4.volume, 0, "NR42 = $08");
+    assert!(!apu.ch3.dac_enabled, "NR30 = 0 turns the wave DAC off");
+
+    buffer.clear();
+    apu.generate_samples(44_100, 735, &mut buffer);
+    // What remains is only the AC-coupling capacitor's decaying DC offset:
+    // no periodic tone, so the magnitude falls monotonically.
+    let left: Vec<f32> = buffer.iter().step_by(2).copied().collect();
+    for w in left.windows(2) {
+        assert!(
+            (w[1].abs() - w[0].abs()).abs() < 1e-4,
+            "a tone survives the stop-all: {w:?}"
+        );
+    }
+}

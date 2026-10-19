@@ -374,7 +374,15 @@ impl LevelContext {
         let f = if was_dead {
             107
         } else {
-            self.sim.frame_index(self.sim.walk_timer)
+            // `$530D` only runs on simulated frames. Its walk request must not
+            // leak out of a paused, dead-fade or exit-fade frame — the tone
+            // would sustain for as long as Mario's last speed byte survives.
+            let held_sfx0 = self.sim.sfx0;
+            let f = self.sim.frame_index(self.sim.walk_timer);
+            if frozen {
+                self.sim.sfx0 = held_sfx0;
+            }
+            f
         };
         if gameplay && !was_dead {
             self.sim.block_update();
@@ -644,6 +652,7 @@ impl Session {
         let select_pressed = keys.select && !self.prev_select;
         self.prev_select = keys.select;
 
+        let mut deferred_sfx0: Option<u8> = None;
         let mut outcome = match &mut self.state {
             SessionState::Overworld(ref mut map_sim) => 'map: {
                 // A level entry from the map is the console's own 37-frame
@@ -713,7 +722,14 @@ impl Session {
                     self.sound_driver.music_request = music;
                 }
                 if let Some(sfx) = entry.sfx {
-                    self.sound_driver.sfx_request_1 = sfx;
+                    if self.sound_driver.music_request != 0 {
+                        // `$3C1EC` posts `sSfxRequest0` *after* `$3C1A2`'s
+                        // `$2AAA` already ran `_UpdateSound`; posting it before
+                        // this frame's update would let the stop-all clear it.
+                        deferred_sfx0 = Some(sfx);
+                    } else {
+                        self.sound_driver.sfx_request_0 = sfx;
+                    }
                 }
 
                 // `$3EAFF`: only the hub runs the wave strips, and `$3E7BE`
@@ -909,6 +925,11 @@ impl Session {
         }
 
         self.sound_driver.update_sound();
+        if let Some(sfx) = deferred_sfx0 {
+            // Applied after the frame's update so the next `_UpdateSound` sees
+            // it, exactly like the ROM's `$3C1EC` tail.
+            self.sound_driver.sfx_request_0 = sfx;
+        }
         // The ROM reads `sCurSong` from the level timer's music gate ($5DCB) on
         // the frame AFTER `_UpdateSound` wrote it, so publish the driver's song
         // id after the update, never before it.

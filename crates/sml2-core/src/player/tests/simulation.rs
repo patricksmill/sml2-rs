@@ -3556,3 +3556,98 @@ fn the_boss_clear_flag_crosses_from_the_object_pass() {
     sim.apply_object_result(&mut obj, false);
     assert!(sim.boss_clear);
 }
+
+/// `$1637`..`$1674`: the jump requests its own sound. Plain jumps use SFX 1;
+/// moon physics swaps in 18 (3 inside a bit-1 zone), swimming uses 3, and
+/// holding UP cancels the request for everyone but Bunny Mario.
+#[test]
+fn the_jump_arm_requests_sfx_1_with_the_moon_and_swim_variants() {
+    let layout = blank_layout();
+    let press = PlayerKeys {
+        a: true,
+        ..Default::default()
+    };
+    let grounded = || {
+        let mut sim = small_sim();
+        // The blank map is air, so the landing probe would clear `on_ground`
+        // before `$160A`; standing on an object keeps the jump arm reachable.
+        sim.on_ground_obj = true;
+        sim
+    };
+    let mut sim = grounded();
+    sim.step(&press, true, false, &layout);
+    assert_eq!(sim.sfx0, 1, "$164C: the plain jump sound");
+
+    // Moon physics bit 1 (the in-zone re-launch) uses SFX 3. The zone tile
+    // under the `$1CFB` sample keeps bit 1 from being cleared by the probe.
+    let mut moon_layout = blank_layout();
+    moon_layout.cells[EXIT_CELL] = 0x54;
+    let mut moon3 = grounded();
+    moon3.moon = 0x02;
+    moon3.step(&press, true, false, &moon_layout);
+    assert_eq!(moon3.sfx0, 3, "$165F: bit-1 moon zone");
+
+    // Any other nonzero moon nibble uses SFX 18.
+    let mut moon18 = grounded();
+    moon18.moon = 0x01;
+    moon18.step(&press, true, false, &layout);
+    assert_eq!(moon18.sfx0, 18, "$164C: the moon jump");
+
+    // Swimming (and not on the ground) also uses SFX 3. `$1BFF` clears the
+    // flag first each frame, so the `$4C` water tile has to be under the probe.
+    let mut water = blank_layout();
+    water.cells[EXIT_CELL] = 0x4C;
+    let mut swim = small_sim();
+    swim.on_ground = false;
+    swim.step(&press, true, false, &water);
+    assert_eq!(swim.sfx0, 3, "$1659: swimming");
+
+    // UP held silences a normal jump, but Bunny Mario keeps it.
+    let up_press = PlayerKeys {
+        a: true,
+        up: true,
+        ..Default::default()
+    };
+    let mut up = grounded();
+    up.step(&up_press, true, false, &layout);
+    assert_eq!(up.sfx0, 0, "$1674: UP cancels the jump sound");
+
+    let mut bunny = grounded();
+    bunny.powerup = 2;
+    bunny.step(&up_press, true, false, &layout);
+    assert_eq!(bunny.sfx0, 1, "Bunny Mario skips the UP cancel");
+}
+
+/// `$5384` / `$53FE`: the walk frame selection also re-requests SFX 4 while
+/// Mario moves in the direction he faces; the slot-0 busy gate turns the
+/// per-frame request into the walk patter. Standing and skidding are silent.
+#[test]
+fn walking_requests_sfx_4_from_the_frame_selection() {
+    let mut sim = PlayerSim::new();
+    sim.on_ground = true;
+    sim.dir_right = true;
+    sim.hvel = 0x50;
+    assert_eq!(sim.frame_index(0), 13, "$5384: the walk-right frame");
+    assert_eq!(sim.sfx0, 4, "the walk-right step");
+
+    let mut sim = PlayerSim::new();
+    sim.on_ground = true;
+    sim.dir_right = false;
+    sim.hvel = 0xB0;
+    assert_eq!(sim.frame_index(0), 12, "$53FE: the walk-left frame");
+    assert_eq!(sim.sfx0, 4, "the walk-left step");
+
+    let mut standing = PlayerSim::new();
+    standing.on_ground = true;
+    standing.dir_right = true;
+    standing.hvel = 0x80;
+    assert_eq!(standing.frame_index(0), 0);
+    assert_eq!(standing.sfx0, 0, "standing requests nothing");
+
+    let mut skid = PlayerSim::new();
+    skid.on_ground = true;
+    skid.dir_right = true;
+    skid.hvel = 0xB0;
+    assert_eq!(skid.frame_index(0), 1, "the skid frame");
+    assert_eq!(skid.sfx0, 0, "a skid is not a step");
+}

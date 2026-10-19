@@ -277,6 +277,19 @@ impl SoundDriver {
             ch.slide_step = 0;
             ch.bend_flag = 0;
         }
+        // `$13FE7`: the reset also writes the silence frame to every channel —
+        // NR12/NR22/NR42 = $08 (volume 0), NR14/NR24/NR44 = $80 (trigger at
+        // volume 0), NR10 = 0 and NR30 = 0 (wave DAC off). Without these a
+        // stop-all left the APU holding the last note, which buzzed through
+        // every map/level transition.
+        self.pulse_writes.push(PulseWrite::Envelope(0x08));
+        self.pulse_writes.push(PulseWrite::Ch2Envelope(0x08));
+        self.noise_writes.push(NoiseWrite::Envelope(0x08));
+        self.pulse_writes.push(PulseWrite::FrequencyControl(0x80));
+        self.pulse_writes.push(PulseWrite::Ch2FrequencyControl(0x80));
+        self.noise_writes.push(NoiseWrite::Control(0x80));
+        self.pulse_writes.push(PulseWrite::Sweep(0));
+        self.wave_writes.push(WaveWrite::Enable(0));
     }
 
     /// `$11788`: a channel-4 note `$1F` starts noise effect 3 from inside the

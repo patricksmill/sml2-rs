@@ -531,3 +531,34 @@ fn pan_arrows_blink_on_the_console_period() {
     assert_eq!(&runs[..3], &exp[..], "blink rhythm: {runs:?}");
     let _ = fs::remove_file(&tmp_save);
 }
+
+/// `$3C1EC`: entering a level posts `sSfxRequest0 = 22` *after* `$3C1A2`'s
+/// `$2AAA` already ran `_UpdateSound`. Posting it before the same frame's
+/// stop-all would let the music reset clear it unplayed; the console hears it
+/// on the next frame, so the request must still be pending after that update.
+#[test]
+fn map_level_entry_posts_the_start_sfx_after_the_music_stop() {
+    let tmp_save = temp_save_path("test_map_entry_sfx");
+    let _ = fs::remove_file(&tmp_save);
+    let assets = SessionAssets::load().expect("session assets must load");
+    let mut runner = SessionRunner::new(assets, tmp_save, 1, (160, 144), true);
+    runner.step_frame(PlayerKeys::default());
+    assert_eq!(runner.sound_driver.active_song, 6, "hub theme");
+
+    runner.step_frame(PlayerKeys {
+        a: true,
+        ..Default::default()
+    });
+    assert_eq!(runner.sound_driver.active_song, 0, "the map theme stops");
+    assert_eq!(
+        runner.sound_driver.sfx_request_0, 22,
+        "$3C1EC posts the entry sound after the update"
+    );
+
+    runner.step_frame(PlayerKeys::default());
+    assert_eq!(runner.sound_driver.sfx_request_0, 0, "consumed next update");
+    assert_eq!(
+        runner.sound_driver.pulse_effect.active_effect, 22,
+        "slot 0 starts SFX 22"
+    );
+}
