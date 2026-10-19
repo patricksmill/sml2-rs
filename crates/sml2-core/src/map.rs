@@ -916,6 +916,14 @@ impl StatusBar {
     }
 }
 
+/// The `$3F203` backdrop: the bottom row's right half, `(x0, y0, x1, y1)`. It
+/// starts where the bar's first sprite does - screen x 80 - and stops at the
+/// bottom edge, so the counters sit on a flat panel rather than a full-width
+/// band across the map.
+pub fn status_bar_strip_rect(vw: usize, vh: usize) -> (usize, usize, usize, usize) {
+    (vw / 2, vh.saturating_sub(8), vw, vh)
+}
+
 /// `$4A11`: the four OAM entries `$3C9F4` stages while the hub pans its camera
 /// (B held, `$3C5B2`). Entry order and bytes are the ROM's: (y, x, tile, attr).
 /// `$4A21` is the same layout with tile `$7F`. The choice is
@@ -1057,11 +1065,14 @@ pub fn render_overworld_view(
         return img;
     }
 
-    // `$3F203` writes tile `$E1` over two rows at `$9C00`, which the map scroll
-    // shows as the bottom row: a black strip under the counters.
-    for py in vh.saturating_sub(8)..vh {
-        for px in 0..vw {
-            img[py * vw + px] = bg_shades[3];
+    // `$3F203` fills tile `$E1` over the bottom row so the counters have a flat
+    // backdrop. It covers the right half only - screen x 80 onwards, where the
+    // bar's first sprite sits - and `$E1` is colour 0, i.e. the palette's
+    // lightest shade, not black.
+    let (x0, y0, x1, y1) = status_bar_strip_rect(vw, vh);
+    for py in y0..y1 {
+        for px in x0..x1 {
+            img[py * vw + px] = bg_shades[0];
         }
     }
     if let Some(bar) = status_bar {
@@ -1889,7 +1900,7 @@ mod status_bar_tests {
             // pattern so the counters are distinguishable from the strip.
             let mut v = vec![[0u8; 64]; 256];
             for t in [0x6Fu8, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x7C, 0x7D] {
-                v[t as usize] = [1u8; 64]; // decoded 2bpp: colour 1
+                v[t as usize] = [3u8; 64]; // decoded 2bpp: colour 3
             }
             (OverworldTilemaps::default(), OverworldManifest::default(), v)
         };
@@ -1905,9 +1916,12 @@ mod status_bar_tests {
             coins_low: 0x43,
             coins_high: 0x00,
         }));
+        // The panel is the bottom row's right half - from the bar's first sprite
+        // at x 80 to the edge - not a band across the whole map.
+        assert_eq!(status_bar_strip_rect(160, 144), (80, 136, 160, 144));
         let shades = crate::video::bgp_shades(0xE4);
-        for x in [0usize, 40, 79, 159] {
-            assert_eq!(plain[136 * 160 + x], shades[3], "strip at x {x}");
+        for x in [80usize, 100, 140, 159] {
+            assert_eq!(plain[136 * 160 + x], shades[0], "strip at x {x}");
         }
         let band: Vec<usize> = (136 * 160..144 * 160)
             .filter(|i| plain[*i] != with_bar[*i])
