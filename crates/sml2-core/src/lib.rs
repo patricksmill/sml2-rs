@@ -21,6 +21,8 @@ pub mod objects;
 pub mod player;
 pub mod player_sim;
 #[cfg(test)]
+mod player_jump_input_tests;
+#[cfg(test)]
 #[path = "route_matrix_tests.rs"]
 mod route_matrix_tests;
 pub mod scene;

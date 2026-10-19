@@ -74,9 +74,10 @@ disassembly. Exit **0** on success; **2** when an input is missing. A level's
 exit cell is accepted when `route_matrix_tests` arms its bell from the source
 cell (`cargo test -p sml2-core route_matrix`). Played approaches are a separate
 claim: `cargo test -p sml2-runtime played_route_tests` currently verifies the
-level28 walking route and level29 timed-float route from header spawn to bell
-through the actual live play loop, including float-budget consumption, exit
-fades, tallies, source node handoffs and save bytes.
+level28 walking and level29 timed-float header routes, plus level19's
+secret-entry route to the lower bell, through the actual live play loop. These
+checks include source entry bytes, float-budget consumption, exit fades,
+tallies, source node handoffs and save bytes.
 
 Native route fixtures also accept `PlayTape::Buttons(Vec<PlayerKeys>)` through
 the same live loop, allowing simultaneous movement/jump/run holds. CLI

@@ -1,8 +1,8 @@
 # Level route matrix
 
 **Status: all 32 rows measured 2026-10-18; the first slice (12, 19, 28, 29) is
-reviewed, every exit cell is test-pinned, and levels 28/29 have played
-header-spawn to bell routes.** Tool:
+reviewed, every exit cell is test-pinned, levels 28/29 have played header
+approaches, and level 19 has a played secret-entry to lower-bell route.** Tool:
 [`tools/route_matrix.py`](../tools/route_matrix.py); acceptance:
 `crates/sml2-core/src/route_matrix_tests.rs`.
 
@@ -123,7 +123,9 @@ named tests.
   - the alternate `$4B` at (190, 11) → (3040, 176), reached from the row-12 pipe
     corridor that runs west to the vertical `$07` pipe shaft at column 191.
   `$4B` is the "route already cleared" twin: it leaves `sExitTileFlag = $FF`,
-  which the `$3547` tally guard reads.
+  which the `$3547` tally guard reads. The corridor is solid `$07` terrain:
+  this level has no `$05` or `$08..$0F` pipe-mouth cells and its scene map is
+  zero throughout. There is no scene-connected pipe warp to the upper bell.
 - **Secret route.** Overlay drops Mario at (1905, 436) — inside the level, one
   cell above the row-29 floor. The loader applies it for progress bit 3.
 - **Mechanics.** `space_physics = $08` (moon bit 3, the timed float) and
@@ -213,6 +215,30 @@ bell, so that post-clear map latch cannot conceal a failed approach. Removing
 only the timed-float velocity extension makes this tape stall before the bell
 and fails the test; the original behavior is restored afterward.
 
+### Played route: level 19 secret entry to the lower bell
+
+`level19_secret_entry_to_plain_bell_through_live_play` starts from the genuine
+progress-bit-3 entry. The persistent node-60 progress byte (slot 16) is `$08`
+before `LevelHeader::entry` runs. The test pins the copied `$A800-$A807` block
+as `B4 01 71 07 BD 01 92 07`: Mario (1905,436), camera (1938,445), route latch
+`$FF`, and moon property `$08`. Original layout and all 25 object records run
+through the live loop; the test never rewrites position or physics afterward.
+
+Its 1,400-frame typed tape has 23 fixed spans of movement, A, Up+A and idle.
+These are native button holds, with ordinary press-edge handling. The source
+`$1675..$16AE` branch retains velocity 75 when Up is held with A; ordinary
+walking-band jumps select 48. `held_up_preserves_high_jump_across_the_walking_speed_band`
+pins both speed-band boundaries and the same-frame gravity outputs (74/47)
+in memory. Ignoring Up makes both that core test and this route fail.
+
+The route consumes the timed-float budget (first observed on frame 22, 50→49)
+and has zero gameplay death frames. It reaches the source `$4A` cell (190,29)
+on frame 1,173 at (3043,452), with fade 192, music 3 and exit flag 0. Fade
+completion is 1,365; handoff is 1,366. Tally is 1, node remains 60, screen is 4,
+music is 28, and the handoff makes two saves. The live route latch clears;
+persistent slot 16 and its serialized save byte become `$80`, clearing the
+entry checkpoint bit. The upper `$4B` approach remains unaccepted.
+
 ## Gaps
 
 1. **Secret-route entries are implemented; live overworld integration remains.**
@@ -225,7 +251,8 @@ and fails the test; the original behavior is restored afterward.
    `MapSim` selection to Mario/camera initialization, object route state, and
    reload. Run `sml2-runtime --level 11 --level-progress 8 --headless 1` for
    level 12's alternate entry. The runtime still lacks a live overworld loop;
-   the CLI supplies its entry progress byte. Played approaches remain pending.
+   the CLI supplies its entry progress byte. Level 19 now has one played
+   secret-entry approach; the others remain pending.
 2. **All nine boss definitions now accept arena entry.** Level 6 (TreeZone5,
    scene `$0B`, definition 0) is covered by runtime
    `tree_boss_real_level_scene_entry_selects_portable_definition`; its source
@@ -234,9 +261,9 @@ and fails the test; the original behavior is restored afterward.
    sweep states, collision-generated stomps, the appended reward, one golden
    coin, save serialization, map node `$20`/screen 2, and clean re-entry. These
    are direct-placement acceptance tests; played approaches remain pending.
-3. **Approaches beyond levels 28/29 remain unplayed.** Both header-spawn routes
-   now reach their bells through native input. Other ordinary starts,
-   secret-entry approaches, and approaches to boss entrances still need played
+3. **Most approaches remain unplayed.** Levels 28/29 header starts and level
+   19's secret entry to the lower bell now have native input tests. Other
+   ordinary/secret starts and approaches to boss entrances still need played
    tests. Level 19's upper bell and the castle/night levels are priorities.
 4. **The 28 unreviewed rows are tool-measured, not hand-checked.** Their zone,
    node, exit and secret columns are trustworthy by construction; the
