@@ -446,6 +446,36 @@ impl MapSim {
         sim.level_progress[..n].copy_from_slice(&self.level_progress[..n]);
     }
 
+    /// Restore map state from a validated 0x50-byte save record.
+    pub fn apply_save_record(&mut self, rec: &[u8], records: &MapNodeRecords) -> bool {
+        if !crate::map::save_record_valid(rec) {
+            return false;
+        }
+        self.node = rec[0];
+        let n = self.level_progress.len().min(0x40 - 0x08);
+        self.level_progress[..n].copy_from_slice(&rec[0x08..0x08 + n]);
+        self.coins_low = rec[0x40];
+        self.coins_high = rec[0x41];
+        self.load_node(self.node, records);
+        true
+    }
+
+    /// Build a 0x50-byte save record from current map progress and given player stats.
+    pub fn save_record(&self, lives: u8, level_tally: u8, money_bag: u8) -> [u8; 0x50] {
+        let mut rec = [0u8; 0x50];
+        rec[0] = self.node;
+        let n = self.level_progress.len().min(0x40 - 0x08);
+        rec[0x08..0x08 + n].copy_from_slice(&self.level_progress[..n]);
+        rec[0x40] = self.coins_low;
+        rec[0x41] = self.coins_high;
+        rec[0x42] = level_tally;
+        rec[0x43] = lives;
+        rec[0x44] = money_bag;
+        rec[0x45] = rec[..0x45].iter().fold(0u8, |c, b| c.wrapping_add(*b));
+        rec[0x46..0x4A].copy_from_slice(&crate::map::SAVE_SIGNATURE);
+        rec
+    }
+
     /// `$3EEA4`: adopt a node's record — the map camera it centres on and where the
     /// cursor sits there.
     ///

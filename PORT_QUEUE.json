@@ -1,51 +1,34 @@
 {
- "active_milestone": "mechanics_all_levels",
- "milestone_note": "3 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
- "queue": [
-  {
-   "id": "mechanics_all_levels_acceptance",
-   "title": "Per-level mechanics acceptance: source-derived route entry/exit and dynamic-spawn closure",
-   "asm_refs": [
-    "main.asm:$58040",
-    "main.asm:$59C07",
-    "main.asm:$92E8"
-   ],
-   "dependencies": [
-    "level_boot_route",
-    "per_level_handler_coverage"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "pending"
-  },
-  {
-   "id": "overworld_runtime_session",
-   "title": "Integrate live overworld navigation with level entry and clear/death returns",
-   "asm_refs": [
-    "main.asm:$3C000-$3C169",
-    "main.asm:$3C38C-$3C7EC",
-    "main.asm:$3EEF0-$3F156",
-    "main.asm:$5579-$55C6",
-    "home.asm:$311A-$3186"
-   ],
-   "dependencies": [
-    "map_zone_screen_loaders",
-    "secret_route_entry_overlay"
-   ],
-   "verification_gate": "PORTING.md; one shared window/input/divider/frame budget across map and existing live level loop; real map tables choose node/progress/level assets; continuous map-to-level-to-map acceptance, death fade/lives and checkpoint reentry; persistence survives transitions; legacy suites, release build and frozen sweep",
-   "status": "pending"
-  }
- ],
- "workflow_rules": {
-  "set": "2026-10-15",
-  "rules": [
-   "Canonical workflow: PORTING.md (supersedes long queue notes for how to work).",
-   "One ticket = one handler address OR one PORT_QUEUE id; max ~15k tokens context.",
-   "No new captures/traj*.json; unit-test slot bytes; sweep once per work package.",
-   "Cheap/flash models: scripts and scaffolding only \u2014 not handler logic."
+  "active_milestone": "mechanics_all_levels",
+  "milestone_note": "3 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+  "queue": [
+    {
+      "id": "mechanics_all_levels_acceptance",
+      "title": "Per-level mechanics acceptance: source-derived route entry/exit and dynamic-spawn closure",
+      "asm_refs": [
+        "main.asm:$58040",
+        "main.asm:$59C07",
+        "main.asm:$92E8"
+      ],
+      "dependencies": [
+        "level_boot_route",
+        "per_level_handler_coverage"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "pending"
+    }
   ],
-  "gate_standard": "PORTING.md \u00a7 What \u201cdone\u201d means",
-  "policy": "PORTING.md",
-  "plan": "docs/plans/2026-10-15-port-finish-reset.md"
- },
- "archive_file": "PORT_QUEUE.done.json"
+  "workflow_rules": {
+    "set": "2026-10-15",
+    "rules": [
+      "Canonical workflow: PORTING.md (supersedes long queue notes for how to work).",
+      "One ticket = one handler address OR one PORT_QUEUE id; max ~15k tokens context.",
+      "No new captures/traj*.json; unit-test slot bytes; sweep once per work package.",
+      "Cheap/flash models: scripts and scaffolding only \u2014 not handler logic."
+    ],
+    "gate_standard": "PORTING.md \u00a7 What \u201cdone\u201d means",
+    "policy": "PORTING.md",
+    "plan": "docs/plans/2026-10-15-port-finish-reset.md"
+  },
+  "archive_file": "PORT_QUEUE.done.json"
 }

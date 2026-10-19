@@ -2810,6 +2810,21 @@ impl PlayerSim {
         rec
     }
 
+    /// Restore player and overworld state from a validated 0x50-byte save record.
+    pub fn apply_save_record(&mut self, rec: &[u8]) -> bool {
+        if !crate::map::save_record_valid(rec) {
+            return false;
+        }
+        self.map_node = rec[0];
+        let n = self.level_progress.len().min(0x40 - 0x08);
+        self.level_progress[..n].copy_from_slice(&rec[0x08..0x08 + n]);
+        self.coins_low = rec[0x40];
+        self.coins_high = rec[0x41];
+        self.level_tally = rec[0x42];
+        self.lives = rec[0x43];
+        true
+    }
+
     /// `$0F2A` (level restart) + the fade tail's `$04F1` clears: Mario is put
     /// back at the header spawn with hvel $80 / vvel 24, facing right, with
     /// the death/powerup/invincibility state cleared. Fields the reload does

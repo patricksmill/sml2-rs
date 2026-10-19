@@ -1,1158 +1,1175 @@
 {
- "archived": "2026-10-15",
- "reason": "Done items confuse agents; truth is in tests and git history.",
- "queue": [
-  {
-   "id": "coin_collection_3451",
-   "title": "Item collection & coin credit ($3451 / $5B31D consumer)",
-   "asm_refs": [
-    "main.asm:$3451",
-    "main.asm:$5B31D"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "exit_bell_sequence",
-   "title": "Level-exit bell rung arm & camera freeze",
-   "asm_refs": [
-    "main.asm:$1BFF",
-    "main.asm:$1CBA"
-   ],
-   "dependencies": [
-    "coin_collection_3451"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "item_pickup_anim16",
-   "title": "Object item pickup collision & despawn (mode-A anim 16 / $59C07)",
-   "asm_refs": [
-    "main.asm:$58040",
-    "main.asm:$59C07",
-    "home.asm:$2DC6"
-   ],
-   "dependencies": [
-    "exit_bell_sequence"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "powerup_transitions_3451",
-   "title": "Mushroom / Carrot / Star powerup execution effects ($3451)",
-   "asm_refs": [
-    "home.asm:$3451",
-    "home.asm:$3534"
-   ],
-   "dependencies": [
-    "item_pickup_anim16"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "midpoint_bell_arm",
-   "title": "Mid-stage checkpoint bell strike & respawn coordinates save ($A210)",
-   "asm_refs": [
-    "home.asm:$34EC",
-    "home.asm:$3451"
-   ],
-   "dependencies": [
-    "powerup_transitions_3451"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "bounce_block_powerup_spawn",
-   "title": "Question & brick block powerup item emergence ($591F / $58040)",
-   "asm_refs": [
-    "main.asm:$591F",
-    "main.asm:$58040"
-   ],
-   "dependencies": [
-    "powerup_transitions_3451"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "spinjump_block_destroy",
-   "title": "Spin-jump downward brick tile destruction ($1327 / $1993)",
-   "asm_refs": [
-    "home.asm:$1327",
-    "home.asm:$1993"
-   ],
-   "dependencies": [
-    "powerup_transitions_3451"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "stage_clear_time_tally",
-   "title": "Post-bell score tally & timer countdown hand-off ($3547 / $3C94)",
-   "asm_refs": [
-    "home.asm:$3547",
-    "home.asm:$3C94"
-   ],
-   "dependencies": [
-    "exit_bell_sequence"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "game_over_scene",
-   "title": "Zero lives game over: $311A borrow -> $05 ($27AF state writes) -> $07 ($287E fade + START) -> $00",
-   "asm_refs": [
-    "home.asm:$311A",
-    "home.asm:$314B",
-    "home.asm:$27AF",
-    "home.asm:$2874",
-    "home.asm:$287E"
-   ],
-   "dependencies": [
-    "powerup_transitions_3451"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "camera_crouch_look_pan",
-   "title": "Crouch-look camera pan ($307D: B+Down / B+Up, 1 px/frame, edge-gated)",
-   "asm_refs": [
-    "home.asm:$307D",
-    "home.asm:$3098",
-    "home.asm:$30D9",
-    "home.asm:$0F71"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "camera_screen_transitions_capture",
-   "title": "Screen-transition paths: VERTICAL tr=4/8 now verified; horizontal tr=1/2 unreachable in level 1",
-   "asm_refs": [
-    "home.asm:$0DED",
-    "home.asm:$0EB0",
-    "home.asm:$0B5E",
-    "home.asm:$0BE5",
-    "home.asm:$0C7D"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "camera_sMarioScreenY_stale_register",
-   "title": "sy98 model vs the real stale sMarioScreenY ($A23B) register",
-   "asm_refs": [
-    "home.asm:$0C7D",
-    "home.asm:$54A7"
-   ],
-   "dependencies": [
-    "camera_screen_transitions_capture"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "camera_map_scroll_limit_play_default",
-   "title": "sMapScrollLimit: --play leaves it false while run_replay seeds it from the capture",
-   "asm_refs": [
-    "home.asm:$0D4F",
-    "home.asm:$0D05"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "camera_autoscroll_path",
-   "title": "Autoscroll camera path ($0DAF) is unmodelled",
-   "asm_refs": [
-    "home.asm:$0DAF",
-    "home.asm:$0B2A"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "bonk_single_slot_draw",
-   "title": "Single-slot $00/$03 bonk: the frame-66 draw traj15's two-slot $01 bump cannot show",
-   "asm_refs": [
-    "home.asm:$1993",
-    "main.asm:$5960",
-    "main.asm:$5997"
-   ],
-   "dependencies": [
-    "bounce_block_powerup_spawn"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "bonk_big_mario_types_1_5",
-   "title": "Big-Mario bounce-block types 1/5 (powerup emergence) have no capture",
-   "asm_refs": [
-    "home.asm:$1993",
-    "main.asm:$591F"
-   ],
-   "dependencies": [
-    "bonk_single_slot_draw"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "fireball_type06_break",
-   "title": "Fireball $06 tile break ($3415, a type-1 bump from the projectile)",
-   "asm_refs": [
-    "home.asm:$3415",
-    "home.asm:$2FED"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "spin_jump_pose_532D",
-   "title": "$532D spin-jump pose: its $FF97 & $0C table index needs bit 3, which captures do not record",
-   "asm_refs": [
-    "main.asm:$532D",
-    "home.asm:$126F"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "goal_bell_ring_anim",
-   "title": "Goal bell ring animation (the $34EC strike is ported; the animation is not)",
-   "asm_refs": [
-    "home.asm:$34EC",
-    "home.asm:$3451"
-   ],
-   "dependencies": [
-    "midpoint_bell_arm"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "fireball_paths",
-   "title": "Fireball projectile paths ($2FED / $324F family)",
-   "asm_refs": [
-    "home.asm:$2FED",
-    "home.asm:$324F"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "pause_and_palette_flash",
-   "title": "START pause + the BGP/OBP0 $E7/$93 flash (16 frames each - a 32-frame cycle off $FF97 bit 4)",
-   "asm_refs": [
-    "home.asm:$2756",
-    "home.asm:$273E",
-    "home.asm:$5183"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "scene_system",
-   "title": "Scene system: sSceneMap-nonzero levels run a scene at the transition finish (sSceneState = $F0 + the bank-5 script VM $20A4 + the bank-2 $8D9C boss/template set + $8E6C)",
-   "asm_refs": [
-    "home.asm:$0EB0",
-    "home.asm:$20A4",
-    "home.asm:$0F0B",
-    "home.asm:$3C94",
-    "main.asm:$8D9C",
-    "main.asm:$8E6C"
-   ],
-   "dependencies": [
-    "camera_screen_transitions_capture"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "scene_boss_scripts",
-   "title": "Scene slice 2: the $2x boss-arena scripts, the bank-2 scene load ($8D9C/$8DFD/$8E6C) and the $8DA9 driver",
-   "status": "done",
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "dependencies": [
-    "scene_system"
-   ],
-   "asm_refs": [
-    "home.asm:$20EB",
-    "home.asm:$211E",
-    "home.asm:$2162",
-    "home.asm:$3C94",
-    "main.asm:$8D9C",
-    "main.asm:$8DA9"
-   ]
-  },
-  {
-   "id": "map_handoff_14_body",
-   "title": "The $14 level-clear/map hand-off's banked body ($3EF2B: palette swap, map-node advance, save)",
-   "asm_refs": [
-    "main.asm:$3EF2B",
-    "home.asm:$3547"
-   ],
-   "dependencies": [
-    "stage_clear_time_tally"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "game_over_art_and_save",
-   "title": "GAME OVER screen art + save ($27AF's banked body: $4C92 gfx, $6492 tilemap, $2874 string via $30884, $2934 save)",
-   "asm_refs": [
-    "home.asm:$27AF",
-    "main.asm:$30884",
-    "home.asm:$2934"
-   ],
-   "dependencies": [
-    "game_over_scene"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "overworld_map_state_0C",
-   "title": "Overworld map ($0C): waits for input, unmodelled",
-   "asm_refs": [
-    "home.asm:$2C2E"
-   ],
-   "dependencies": [
-    "map_handoff_14_body"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "golden_coin_tally",
-   "title": "Golden coins (sGoldenCoin1-6 $A84D-$A865) and the map-side tally ($307BC / $30884)",
-   "asm_refs": [
-    "main.asm:$307BC",
-    "main.asm:$30884",
-    "ram.asm:$A84D"
-   ],
-   "dependencies": [
-    "map_handoff_14_body"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "per_anim_handlers",
-   "title": "Object handlers with no ported body (mode-A anims 0/3/4/7/13/14/26/30-34/40-48/51-58/61-69/77-90/92-95 + mode-B)",
-   "asm_refs": [
-    "main.asm:$58040",
-    "main.asm:$59C07"
-   ],
-   "dependencies": [
-    "item_pickup_anim16"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "carry_item_type06",
-   "title": "Carry / item type-$06 paths",
-   "asm_refs": [
-    "home.asm:$2DC6",
-    "main.asm:$58040"
-   ],
-   "dependencies": [
-    "per_anim_handlers"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "infra_play_parity_harness",
-   "title": "No gate covers --play: the mode with no capture is where the edge-map bug lived",
-   "asm_refs": [
-    "crates/sml2-runtime/src/main.rs"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "obj_on_ground_obj_never_set",
-   "title": "PlayerSim::on_ground_obj is never set true, so every gate that reads sMarioOnObject is inert",
-   "asm_refs": [
-    "home.asm:$307D",
-    "home.asm:$13FE"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "horizontal_transitions_other_level",
-   "title": "Horizontal screen transitions (tr=1/2) have no capture - unreachable in level 1",
-   "asm_refs": [
-    "home.asm:$0B5E",
-    "home.asm:$0BE5",
-    "home.asm:$0B39"
-   ],
-   "dependencies": [
-    "camera_screen_transitions_capture"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "scene_boss_spawn",
-   "title": "The bank-2 boss spawn behind the scene arena arm ($3C94 / $8D9C / $8DFD / $8E6C + the $8DA9 driver)",
-   "asm_refs": [
-    "home.asm:$0EB0",
-    "home.asm:$3C94",
-    "main.asm:$8D9C",
-    "main.asm:$8DFD",
-    "main.asm:$8E6C",
-    "main.asm:$8DA9"
-   ],
-   "dependencies": [
-    "scene_boss_scripts"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "level_boot_route",
-   "title": "Any level is reachable from the hub: the map-poke route (sMapScreenId + sMapNode + A)",
-   "asm_refs": [
-    "main.asm:$3C1A2",
-    "main.asm:$3E1D7",
-    "ram.asm:$A68B",
-    "ram.asm:$A840"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "space_physics_seeding",
-   "title": "sMoonPhysics (LevelPropertiesSpace) is never seeded - the replay-only-source class again",
-   "asm_refs": [
-    "home.asm:4099-4103",
-    "home.asm:$0F71"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "per_level_handler_coverage",
-   "title": "Measured: 97 object-engine handler classes are reachable from the 32 retail spawn streams, 11 ported",
-   "asm_refs": [
-    "main.asm:$58040",
-    "main.asm:$59C07"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "autoscroll_clamp_x_divergence",
-   "title": "traj19: x diverges by +1 (sim ahead) on exactly the frames the autoscroll camera steps",
-   "asm_refs": [
-    "home.asm:$0FBF",
-    "home.asm:$0FD1",
-    "home.asm:$0FE3",
-    "home.asm:$0F71",
-    "home.asm:$0B2A",
-    "home.asm:$0DAF"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "capture_targets",
-   "title": "Offline target table: cheapest level + map node for every pending capture item",
-   "asm_refs": [],
-   "dependencies": [
-    "level_boot_route"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "record_field_timing_audit",
-   "title": "Audit every record field the harness copies into the sim against its readers' sub-frame position",
-   "asm_refs": [],
-   "dependencies": [
-    "autoscroll_clamp_x_divergence"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "level03_handler_classes",
-   "title": "Level 3's three unported handler classes: the $59BC5 walker, the $594EB fallwalker clone, the $58DD1 carrying platform",
-   "asm_refs": [
-    "home.asm:$7585",
-    "home.asm:$73C6",
-    "home.asm:$3C1C",
-    "home.asm:$3BB8",
-    "home.asm:$3D22",
-    "home.asm:$3D32",
-    "home.asm:$3CDF",
-    "home.asm:$2DF7"
-   ],
-   "dependencies": [
-    "capture_targets"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "map_node_entry_actions",
-   "title": "The map's A/START node actions ($3C60B), the $3C2xx node flag helpers and the hub's cursor effects",
-   "asm_refs": [
-    "main.asm:$3C60B",
-    "main.asm:$3C29A",
-    "main.asm:$3CA31",
-    "main.asm:$3D0D7"
-   ],
-   "dependencies": [
-    "overworld_map_state_0C"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "map_handoff_3EF2B",
-   "title": "The level->map hand-off ($3EF2B / $3EEF0) and the $650E/$3C364 progress-offset disagreement",
-   "asm_refs": [
-    "main.asm:$3EF2B",
-    "main.asm:$3EEF0",
-    "main.asm:$3C32D",
-    "main.asm:$304F1"
-   ],
-   "dependencies": [
-    "overworld_map_state_0C"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "boss_child_anim_0d",
-   "title": "Boss anim $0D ($9EE3): the controller's child - a gate on sObjectRemoveMode == 2",
-   "asm_refs": [
-    "main.asm:$9EE3",
-    "main.asm:$9EF4",
-    "main.asm:$A029"
-   ],
-   "dependencies": [
-    "boss_fight_def2"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done",
-   "detail": "Ported: ld a,[sObjectRemoveMode] / cp $02 / ret nz, then SCRY=$90, SCRX=$58, then $58F8 rewrites the record to anim 4 / sprite 9 with state/phase/type cleared. Console-verified by poking sObjectRemoveMode = 2 on the level 13 arena tape: the spawned child goes anim=0D fst=00 y=40 x=58 spr=0E -> anim=04 fst=00 y=90 x=58 spr=09 on the next frame; count goes 1 -> 2 as anim 4's state 0 spawns anim 5. Without the poke it is inert for 200+ frames. NOT the win gate - see boss_clear_ending_handoff."
-  },
-  {
-   "id": "boss_mario_death_guard",
-   "title": "Boss dispatch freezes while Mario is dead ($92DF)",
-   "asm_refs": [
-    "main.asm:$92DF"
-   ],
-   "dependencies": [
-    "boss_fight_def2"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done",
-   "detail": "ld a,[sMarioDead] / cp $FF / ret z - the guard returns to the driver, so each slot is still rendered and written back unchanged. Console-verified: all three records stop changing on the frame Mario dies (f462 on the level 13 tape) and hold through the death animation."
-  },
-  {
-   "id": "boss_wario_child22",
-   "title": "Port Wario falling-child anim22 and its boss-delay producer",
-   "asm_refs": [
-    "main.asm:$AB30",
-    "main.asm:$AB4D",
-    "main.asm:$B157"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
-   "status": "done"
-  },
-  {
-   "id": "boss_wario_child25",
-   "title": "Port Wario falling-child anim25 and shared anim22 fall/removal path",
-   "asm_refs": [
-    "main.asm:$AB6E",
-    "main.asm:$AB4D",
-    "main.asm:$B157"
-   ],
-   "dependencies": [],
-   "verification_gate": "Five handler and dispatch/reset tests; init mutation fails; full core suite and frozen sweep",
-   "status": "done"
-  },
-  {
-   "id": "level_countdown_timer",
-   "title": "Port BCD level countdown and seed it from level headers for Wario attack selection",
-   "asm_refs": [
-    "main.asm:$5D6A",
-    "main.asm:$5D8C",
-    "main.asm:$5E03",
-    "home.asm:$05E4",
-    "main.asm:$AA05"
-   ],
-   "dependencies": [],
-   "verification_gate": "BCD byte and side-effect tests, runtime initialization/frame ordering/reset, core and runtime tests",
-   "status": "done"
-  },
-  {
-   "id": "boss_wario_phase1_exit_helper",
-   "title": "Port Wario phase-one exit and object-to-camera scene/pan result seam",
-   "asm_refs": [
-    "main.asm:$A96D",
-    "main.asm:$A987",
-    "main.asm:$A98B",
-    "main.asm:$A99A",
-    "main.asm:$A9B9"
-   ],
-   "dependencies": [],
-   "verification_gate": "Exact stream/slot/fade bytes, consumed scene events, real spawn scanner, original stream reload, sensitivity and core/runtime/sweep",
-   "status": "done"
-  },
-  {
-   "id": "wario_divider_input",
-   "title": "Supply native and deterministic replay divider samples to Wario child21/24",
-   "asm_refs": [
-    "main.asm:$AAA5",
-    "main.asm:$AB1D"
-   ],
-   "dependencies": [],
-   "verification_gate": "Six counter, eight child, three runtime clock tests; producer/consumer, cycle/rounding/cap sensitivity; full core/runtime and frozen sweep",
-   "status": "done"
-  },
-  {
-   "id": "boss_entry_object_scratch_reset",
-   "title": "Clear source AF00-AFFF scratch on boss entry without clearing external state or the original level stream",
-   "asm_refs": [
-    "home.asm:$3A28",
-    "main.asm:$8D9C",
-    "main.asm:$EC40",
-    "main.asm:$EC31"
-   ],
-   "dependencies": [],
-   "verification_gate": "Dirty scratch byte reset and external-state preservation, accurate zero stream pointer representation, normal Wario entry and full core/runtime/sweep",
-   "status": "done"
-  },
-  {
-   "id": "native_actor_boundary",
-   "title": "Introduce typed native Actor state and lossless raw-slot conversion boundary",
-   "asm_refs": [],
-   "dependencies": [],
-   "verification_gate": "Coordinate/flag/unknown-value preservation, native movement and shared motion tests; full core suite",
-   "status": "done"
-  },
-  {
-   "id": "native_wario_child_migration",
-   "title": "Migrate Wario child21/24 to typed domain behavior through the actor boundary",
-   "asm_refs": [],
-   "dependencies": [
-    "native_actor_boundary"
-   ],
-   "verification_gate": "Existing ROM-derived byte tests and actual boss dispatch/producer-consumer paths; sensitivity; core/runtime and frozen sweep",
-   "status": "done"
-  },
-  {
-   "id": "boss_wario_anim23",
-   "title": "Port Wario boss anim 23 (ROM $AB8B), including the $38 camera-pan write",
-   "asm_refs": [
-    "main.asm:$AB8B",
-    "main.asm:$AC04",
-    "main.asm:$AD4E"
-   ],
-   "dependencies": [
-    "boss_wario_anim20"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "boss_anim_4_5_chain",
-   "title": "Boss anims 4/5 ($9642/$9698): the spawn chain that ends at $FF9B = $1D",
-   "asm_refs": [
-    "main.asm:$9642",
-    "main.asm:$9698",
-    "main.asm:$9688"
-   ],
-   "dependencies": [
-    "boss_child_anim_0d"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done",
-   "detail": "anim 4 state 0: state=1, spawn staging anim $05/sprite $0C/attr $FFDD, call $B224 (the count went 1 -> 2 in the poke). $965E: $B38C sprite helper (FFF0 & 1 gate, B_ANIMFRAME cycle 1..5 with a $FFDD ^= $20 at 3), then the state table $966A = [$5629, $5670, $5688]: states 1/2 = the $71D6 (c=21, table $720E) / $718F (c=21, $71A3) descents with $FFDD ^= $40 at each transition; state 3 = $5688, rise 4 px a frame until SCRY < 8 then $FF9B = $1D. anim 5 state 0: 8 frames, then SCRY += $18 and state 1; its table $96BE = [$56C4, $56E1, $5688] = the two picker descents and the same $5688 win. Needs the $720E table ($B20E, 22 bytes) extracted - it is a window of the same $72xx profile blob as boss_picker_profile."
-  },
-  {
-   "id": "boss_clear_ending_handoff",
-   "title": "The boss-clear ending: $FF9B = $1F after $92C4's 640-frame fade (why the fight can't be finished)",
-   "asm_refs": [
-    "main.asm:$92C4",
-    "home.asm:~115",
-    "home.asm:$02AD (state $1F body)"
-   ],
-   "dependencies": [
-    "boss_fight_def2"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done",
-   "detail": "sBossHits ($AFC5) seeds 6 and drops 2 per stomp; at 0 the hit path's $92C4 sets sObjectRemoveMode = 1 and sFadeTimer = $0280. Poking exactly that on the console (remove_mode = 1, $A267/$A266 = $0280) took $FF9B to $1F with the fade counting down, and the port already models the fade - what is missing is the $1F body's overworld hand-off, so the port's clear fade expires into nothing. This, not anim $0D, is the 'you can't beat the boss' gap."
-  },
-  {
-   "id": "moon_physics_remaining_arms",
-   "title": "The remaining sMoonPhysics readers: the bit-1 zone machinery, the flutter-vs-moon arms, the $2E7C shield and the bank-1 poses",
-   "asm_refs": [
-    "home.asm:$1BFF",
-    "home.asm:$14FA",
-    "home.asm:$1541",
-    "home.asm:$181C",
-    "home.asm:$2E7C",
-    "main.asm:$5354",
-    "main.asm:$53CF",
-    "main.asm:$54FB"
-   ],
-   "dependencies": [
-    "space_physics_seeding"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "verified"
-  },
-  {
-   "id": "hardware_divider_input",
-   "title": "Finish shared sampled DIV input through normal map and game-state callers; level/Wario input is verified",
-   "asm_refs": [
-    "main.asm:$3C13E",
-    "main.asm:$AB1D"
-   ],
-   "dependencies": [
-    "wario_divider_input"
-   ],
-   "verification_gate": "Source-derived input timing, both sampled parities, and native/replay input integration tests",
-   "status": "verified"
-  },
-  {
-   "id": "map_zone_screen_loaders",
-   "title": "The zone screens the level->map hand-off selects ($3D0FF/$3D208/$3D371/$3D49F/$3D61F/$3D79A/$3D6EB/$3D880)",
-   "asm_refs": [
-    "main.asm:$3F04D",
-    "main.asm:$3F07E",
-    "main.asm:$3D0FF",
-    "main.asm:$3D208",
-    "main.asm:$3D371",
-    "main.asm:$3D49F",
-    "main.asm:$3D61F",
-    "main.asm:$3D79A",
-    "main.asm:$3D6EB",
-    "main.asm:$3D880"
-   ],
-   "dependencies": [
-    "map_handoff_3EF2B"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "verified"
-  },
-  {
-   "id": "camera_pan_timer",
-   "title": "Finish camera-pan timer producers and remaining flutter gate after shared draw timing is verified",
-   "asm_refs": [
-    "home.asm:$2062",
-    "main.asm:$54E9",
-    "main.asm:$C090",
-    "home.asm:$1090",
-    "home.asm:$160A",
-    "home.asm:$1701",
-    "main.asm:$A9EA",
-    "main.asm:$AA60",
-    "main.asm:$AD4E"
-   ],
-   "dependencies": [
-    "record_field_timing_audit",
-    "boss_wario_anim20",
-    "boss_wario_anim23",
-    "moon_physics_remaining_arms"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "verified"
-  },
-  {
-   "id": "boss_wario_anim20",
-   "title": "Port Wario boss anim 20 (ROM $A8AB), including the $34/$38 camera-pan writes",
-   "asm_refs": [
-    "main.asm:$A8AB",
-    "main.asm:$A90E",
-    "main.asm:$A9EA",
-    "main.asm:$AA60"
-   ],
-   "dependencies": [
-    "boss_wario_child22",
-    "boss_wario_transition21",
-    "level_countdown_timer",
-    "boss_wario_phase1_exit_helper",
-    "boss_entry_object_scratch_reset"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "verified"
-  },
-  {
-   "id": "boss_wario_transition21",
-   "title": "Port Wario child anim21/24 and consume the boss-transition latch",
-   "asm_refs": [
-    "main.asm:$AAA5",
-    "main.asm:$AAA8",
-    "main.asm:$AACA"
-   ],
-   "dependencies": [
-    "hardware_divider_input",
-    "boss_entry_object_scratch_reset"
-   ],
-   "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
-   "status": "verified"
-  },
-  {
-   "id": "boss_wario_phase_handoff",
-   "title": "Connect Wario phase exits to scene state and dynamically created object streams",
-   "asm_refs": [
-    "main.asm:$A96D",
-    "main.asm:$AC55"
-   ],
-   "dependencies": [
-    "boss_wario_anim20",
-    "boss_wario_anim23"
-   ],
-   "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
-   "status": "verified"
-  },
-  {
-   "id": "boss_arena_phase_cascade",
-   "title": "Arena cascade is 24 frames late: the port's pipe entry spends 63 frames where the console spends 47",
-   "asm_refs": [
-    "home.asm:$20A4",
-    "home.asm:~115 (VBlank fade tick)",
-    "main.asm:$20EB",
-    "main.asm:$B14E"
-   ],
-   "dependencies": [
-    "boss_fight_def2"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "verified",
-   "detail": "Console (level 13, cam 3760/192, mario 3759/212, Right held): arm f28 (Mario frozen at world 3779, sPipeTravelDirection=$30), sSceneId=$10 at f52, scene ops f67-f70, Mario placed f75, fade set f68, fade 0 f420, parts act f421. Port: arm f29 at the same 3779 (the $188B walk-in arm is right), but sSceneId=$10 at f52, ops f53-f57, placed f92, fade f54 -> 0 at f444, parts f444. So the port's arm-to-placement is 63 frames vs the console's 47: 23 frames of pipe_dir = 3 slide plus a 40-frame camera transition. The console's ops run *inside* the travel (sPipeTravelDirection still $30 at f67-f70, 8 frames before the placement), so the VM is not gated on 'is Mario travelling': that was tried and reverted (it runs the $2x arm after the placement and lands Mario at 1308 instead of 1561). The ROM's travelling sub-phase ends before sPipeTravelDirection clears, and that is the thing to model. Also still true: PlayerSim::step's sFadeTimer decrement is skipped on travel frames, which is only correct while no scene has armed a fade before a travel."
-  },
-  {
-   "id": "wario_arena_entry_enable",
-   "title": "Enable def 6 (Wario, level 0) in boss_def_portable once the fight can finish",
-   "asm_refs": [
-    "home.asm:$0EB0",
-    "main.asm:$8D9C"
-   ],
-   "dependencies": [
-    "boss_wario_anim23",
-    "boss_clear_ending_handoff"
-   ],
-   "verification_gate": "Play/replay entry takes the $F0 park, the fight reaches its level clear, and the clear reseeds sSceneState",
-   "status": "done"
-  },
-  {
-   "id": "wario_form3_source_corrections",
-   "title": "Correct final Wario saved-power state, wrapped proximity and shared animation contracts",
-   "asm_refs": [
-    "main.asm:$AD93",
-    "main.asm:$AF66",
-    "main.asm:$B35A"
-   ],
-   "dependencies": [],
-   "verification_gate": "Independent ROM regressions, persistent latch reset, real scene handoff and core/runtime/sensitivity gates",
-   "status": "done"
-  },
-  {
-   "id": "boss_clear_receiver_semantics",
-   "title": "Remove inferred flag-only boss reward handoff; retain explicit terminal event",
-   "asm_refs": [
-    "main.asm:$5D6A",
-    "main.asm:$5E12"
-   ],
-   "dependencies": [],
-   "verification_gate": "Flag-only input never grants coins or exits; explicit reward producer remains verified",
-   "status": "done"
-  },
-  {
-   "id": "wario_ending_entry",
-   "title": "Port phase3 input override and ending fade/init states through both runtime loops",
-   "asm_refs": [
-    "main.asm:$5E12",
-    "home.asm:$03AF",
-    "home.asm:$2CAE",
-    "main.asm:$68000"
-   ],
-   "dependencies": [
-    "boss_clear_receiver_semantics"
-   ],
-   "verification_gate": "Exact held/pressed boundaries and palettes; deferred current-frame execution; next-frame state35/18/19 transition",
-   "status": "done"
-  },
-  {
-   "id": "native_sound_driver",
-   "title": "Implement original native music and effect sequencing, synthesis and audio output",
-   "asm_refs": [
-    "main.asm:$10030",
-    "main.asm:$111A6",
-    "main.asm:$11638"
-   ],
-   "dependencies": [],
-   "verification_gate": "Source-derived native channel/stream state, ordered audio effects, deterministic output and normal runtime consumption",
-   "status": "done"
-  },
-  {
-   "id": "wario_ending_sequence",
-   "title": "Port complete ending sequence and credits from state19 through original completion",
-   "asm_refs": [
-    "main.asm:$6800F"
-   ],
-   "dependencies": [
-    "wario_ending_entry",
-    "native_sound_driver"
-   ],
-   "verification_gate": "All source state targets, display/audio timing, normal runtime entry and final completion scenarios",
-   "status": "done"
-  },
-  {
-   "id": "wario_arena_completion",
-   "title": "Close normal Wario arena entries for definitions6/7/8 through final ending",
-   "asm_refs": [
-    "main.asm:$8DFD",
-    "home.asm:$0EB0"
-   ],
-   "dependencies": [
-    "wario_form3_source_corrections",
-    "wario_ending_entry",
-    "wario_ending_sequence"
-   ],
-   "verification_gate": "Real scene/stream reentry across all3 forms with no blocked scene load or unported diagnostics and final ending",
-   "status": "done"
-  },
-  {
-   "id": "native_handler_migration",
-   "title": "Migrate remaining existing byte-oriented game handlers and shared behavior to native Actor/World methods",
-   "asm_refs": [],
-   "dependencies": [
-    "native_actor_boundary"
-   ],
-   "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
-   "status": "done"
-  },
-  {
-   "id": "remaining_handler_classes",
-   "title": "Remaining source-required level and boss object handlers and dynamic spawn closure",
-   "asm_refs": [
-    "main.asm:$58040",
-    "main.asm:$59C07"
-   ],
-   "dependencies": [
-    "per_level_handler_coverage",
-    "level_boot_route"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-   "status": "done"
-  },
-  {
-   "id": "secret_route_entry_overlay",
-   "title": "Apply the $377B secret-route entry overlay on level load",
-   "asm_refs": [
-    "main.asm:$55C0",
-    "main.asm:$377B",
-    "main.asm:$5579"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md section What done means; extract the 32 8-byte records, seed spawn/camera from them when sLevelProgressFlags bit 3 is set, byte test on the $A800-$A807 block",
-   "status": "done"
-  },
-  {
-   "id": "boss_def0_native_handler",
-   "title": "Complete native Tree Zone boss handler ROM $93A7 before arena acceptance",
-   "asm_refs": [
-    "main.asm:$93A7-$9594",
-    "main.asm:$9595",
-    "main.asm:$B16B"
-   ],
-   "dependencies": [],
-   "verification_gate": "PORTING.md; COMPLETE handler brief, native and slot-byte state/branch tests, sensitivity check, full core suite",
-   "status": "done"
-  },
-  {
-   "id": "boss_def0_arena_entry",
-   "title": "Boss definition 0 arena entry and clear flow (level ID $05, scene $0B)",
-   "asm_refs": [
-    "main.asm:$8D9C",
-    "main.asm:$8DFD",
-    "main.asm:$93A7",
-    "home.asm:$0EB0"
-   ],
-   "dependencies": [
-    "boss_def0_native_handler"
-   ],
-   "verification_gate": "PORTING.md \u00a7 What \"done\" means; runtime arena-flow test in the shape of definitions 3-5, then enable boss_def_portable(0)",
-   "status": "done"
-  },
-  {
-   "id": "played_route_level28",
-   "title": "Accept level 28 header-spawn to bell through the native live play loop",
-   "asm_refs": [
-    "home.asm:$1BFF-$1CFB",
-    "home.asm:$3547-$356E",
-    "main.asm:$5579",
-    "main.asm:$3F104-$3F118"
-   ],
-   "dependencies": [
-    "secret_route_entry_overlay"
-   ],
-   "verification_gate": "PORTING.md; original header/layout/spawns, input-only traversal with live objects and camera, exact bell/fade/tally/map bytes, sensitivity check, full core/runtime suites and frozen sweep",
-   "status": "done"
-  },
-  {
-   "id": "played_route_level29",
-   "title": "Accept the level 29 timed-float route from header spawn to bell through native live play",
-   "asm_refs": [
-    "home.asm:$0FF2-$108F",
-    "home.asm:$1BFF-$1CFB",
-    "home.asm:$3547-$356E",
-    "main.asm:$5579",
-    "main.asm:$3D56B-$3D58C"
-   ],
-   "dependencies": [
-    "played_route_level28"
-   ],
-   "verification_gate": "PORTING.md; original entry/assets with input-only timed-float traversal through live objects/camera, mechanic observation, bell/fade/map byte assertions and sensitivity; full core/runtime suites and frozen sweep",
-   "status": "done"
-  },
-  {
-   "id": "native_route_button_tapes",
-   "title": "Support simultaneous native button holds in live-play acceptance tapes",
-   "asm_refs": [
-    "home.asm:$0F7E",
-    "home.asm:$160A"
-   ],
-   "dependencies": [
-    "played_route_level29"
-   ],
-   "verification_gate": "Exact legacy ASCII tape decoding and edge/end tests, simultaneous PlayerKeys frames through same live loop, unchanged level28/29 acceptance; core/runtime suites",
-   "status": "done"
-  },
-  {
-   "id": "played_route_level19_secret_entry",
-   "title": "Accept level 19 source secret entry to the lower $4A bell through native live play",
-   "asm_refs": [
-    "main.asm:$5579-$55C6",
-    "home.asm:$377B",
-    "home.asm:$1029-$1054",
-    "home.asm:$160A-$16AE",
-    "home.asm:$1CBA",
-    "home.asm:$3547-$356E",
-    "main.asm:$3EF56-$3F03D"
-   ],
-   "dependencies": [
-    "native_route_button_tapes",
-    "secret_route_entry_overlay"
-   ],
-   "verification_gate": "PORTING.md; genuine progress-bit3 entry, original assets and persistent entry state, fixed native input tape with live objects/camera, exact source bell/fade/map/save bytes, zero gameplay deaths, sensitivity; full core/runtime and frozen sweep",
-   "status": "done"
-  },
-  {
-   "id": "played_route_level19_alternate_exit",
-   "title": "Accept level 19 secret entry to the upper $4B alternate bell through native live play",
-   "asm_refs": [
-    "main.asm:$5579-$55C6",
-    "home.asm:$377B",
-    "home.asm:$1029-$1054",
-    "home.asm:$1675-$16AE",
-    "home.asm:$1CBA-$1CFB",
-    "home.asm:$3547-$356E",
-    "main.asm:$3EF56-$3F03D",
-    "main.asm:$3D533-$3D562",
-    "home.asm:$1DFE-$1E35",
-    "home.asm:$1993-$19FE",
-    "main.asm:$5B3C"
-   ],
-   "dependencies": [
-    "played_route_level19_secret_entry"
-   ],
-   "verification_gate": "PORTING.md; genuine progress8 entry, unchanged source assets, fixed native inputs with live objects/camera and zero deaths; upper $4B arm/fade/tally guard/map/save bytes and sensitivity; core/runtime suites and frozen sweep",
-   "status": "done"
-  },
-  {
-   "id": "played_route_level19_header_exit",
-   "title": "Accept level 19 normal header spawn to lower $4A bell through native live play",
-   "asm_refs": [
-    "main.asm:$5579-$55C6",
-    "levels/levelheaders.asm:$5773-$5786",
-    "home.asm:$1029-$1054",
-    "home.asm:$1675-$16AE",
-    "home.asm:$1CBA-$1CFB",
-    "home.asm:$3547-$356E",
-    "main.asm:$3EEF0-$3F03D"
-   ],
-   "dependencies": [
-    "played_route_level19_secret_entry"
-   ],
-   "verification_gate": "PORTING.md; original header entry with progress0 and unchanged assets, fixed native inputs through live objects/camera with zero gameplay deaths, exact lower bell/fade/map/save bytes, behavior sensitivity, core/runtime suites and frozen sweep",
-   "status": "done"
-  },
-  {
-   "id": "played_route_level19_header_alternate_exit",
-   "title": "Accept level 19 normal header spawn to upper $4B bell through native live play",
-   "asm_refs": [
-    "main.asm:$5579-$55C6",
-    "levels/levelheaders.asm:$5773-$5786",
-    "home.asm:$1029-$1054",
-    "home.asm:$1675-$16AE",
-    "home.asm:$1DFE-$1E35",
-    "home.asm:$1993-$19FE",
-    "main.asm:$5B3C",
-    "home.asm:$1CBA-$1CFB",
-    "home.asm:$3547-$356E",
-    "main.asm:$3EF56-$3F03D",
-    "main.asm:$3D533-$3D562"
-   ],
-   "dependencies": [
-    "played_route_level19_header_exit",
-    "played_route_level19_alternate_exit"
-   ],
-   "verification_gate": "PORTING.md; progress0 source header entry and unchanged assets; fixed inputs through continuous live objects/camera, zero gameplay deaths; three source hidden-block overlays, upper $4B arm/fade/tally guard/map/save bytes; sensitivity, full core/runtime suites and frozen sweep",
-   "status": "done"
-  },
-  {
-   "id": "overworld_source_map_render",
-   "title": "Extract and render source overworld backgrounds, route patches and cursor for live navigation",
-   "asm_refs": [
-    "main.asm:$3D0FF-$3D880",
-    "main.asm:$3E2A2-$3E2F7",
-    "main.asm:$3ED4C",
-    "main.asm:$61147"
-   ],
-   "dependencies": [
-    "map_zone_screen_loaders"
-   ],
-   "verification_gate": "PORTING.md; runtime consumes extracted assets only; source-derived hub/zone tilemaps and graphics, signed BG tile mapping, camera/palette/path patches and cursor; deterministic byte/render checks, extractor/runtime suites, source asset regeneration and frozen sweep",
-   "status": "done"
-  }
- ]
+  "archived": "2026-10-15",
+  "reason": "Done items confuse agents; truth is in tests and git history.",
+  "queue": [
+    {
+      "id": "coin_collection_3451",
+      "title": "Item collection & coin credit ($3451 / $5B31D consumer)",
+      "asm_refs": [
+        "main.asm:$3451",
+        "main.asm:$5B31D"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "exit_bell_sequence",
+      "title": "Level-exit bell rung arm & camera freeze",
+      "asm_refs": [
+        "main.asm:$1BFF",
+        "main.asm:$1CBA"
+      ],
+      "dependencies": [
+        "coin_collection_3451"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "item_pickup_anim16",
+      "title": "Object item pickup collision & despawn (mode-A anim 16 / $59C07)",
+      "asm_refs": [
+        "main.asm:$58040",
+        "main.asm:$59C07",
+        "home.asm:$2DC6"
+      ],
+      "dependencies": [
+        "exit_bell_sequence"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "powerup_transitions_3451",
+      "title": "Mushroom / Carrot / Star powerup execution effects ($3451)",
+      "asm_refs": [
+        "home.asm:$3451",
+        "home.asm:$3534"
+      ],
+      "dependencies": [
+        "item_pickup_anim16"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "midpoint_bell_arm",
+      "title": "Mid-stage checkpoint bell strike & respawn coordinates save ($A210)",
+      "asm_refs": [
+        "home.asm:$34EC",
+        "home.asm:$3451"
+      ],
+      "dependencies": [
+        "powerup_transitions_3451"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "bounce_block_powerup_spawn",
+      "title": "Question & brick block powerup item emergence ($591F / $58040)",
+      "asm_refs": [
+        "main.asm:$591F",
+        "main.asm:$58040"
+      ],
+      "dependencies": [
+        "powerup_transitions_3451"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "spinjump_block_destroy",
+      "title": "Spin-jump downward brick tile destruction ($1327 / $1993)",
+      "asm_refs": [
+        "home.asm:$1327",
+        "home.asm:$1993"
+      ],
+      "dependencies": [
+        "powerup_transitions_3451"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "stage_clear_time_tally",
+      "title": "Post-bell score tally & timer countdown hand-off ($3547 / $3C94)",
+      "asm_refs": [
+        "home.asm:$3547",
+        "home.asm:$3C94"
+      ],
+      "dependencies": [
+        "exit_bell_sequence"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "game_over_scene",
+      "title": "Zero lives game over: $311A borrow -> $05 ($27AF state writes) -> $07 ($287E fade + START) -> $00",
+      "asm_refs": [
+        "home.asm:$311A",
+        "home.asm:$314B",
+        "home.asm:$27AF",
+        "home.asm:$2874",
+        "home.asm:$287E"
+      ],
+      "dependencies": [
+        "powerup_transitions_3451"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "camera_crouch_look_pan",
+      "title": "Crouch-look camera pan ($307D: B+Down / B+Up, 1 px/frame, edge-gated)",
+      "asm_refs": [
+        "home.asm:$307D",
+        "home.asm:$3098",
+        "home.asm:$30D9",
+        "home.asm:$0F71"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "camera_screen_transitions_capture",
+      "title": "Screen-transition paths: VERTICAL tr=4/8 now verified; horizontal tr=1/2 unreachable in level 1",
+      "asm_refs": [
+        "home.asm:$0DED",
+        "home.asm:$0EB0",
+        "home.asm:$0B5E",
+        "home.asm:$0BE5",
+        "home.asm:$0C7D"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "camera_sMarioScreenY_stale_register",
+      "title": "sy98 model vs the real stale sMarioScreenY ($A23B) register",
+      "asm_refs": [
+        "home.asm:$0C7D",
+        "home.asm:$54A7"
+      ],
+      "dependencies": [
+        "camera_screen_transitions_capture"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "camera_map_scroll_limit_play_default",
+      "title": "sMapScrollLimit: --play leaves it false while run_replay seeds it from the capture",
+      "asm_refs": [
+        "home.asm:$0D4F",
+        "home.asm:$0D05"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "camera_autoscroll_path",
+      "title": "Autoscroll camera path ($0DAF) is unmodelled",
+      "asm_refs": [
+        "home.asm:$0DAF",
+        "home.asm:$0B2A"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "bonk_single_slot_draw",
+      "title": "Single-slot $00/$03 bonk: the frame-66 draw traj15's two-slot $01 bump cannot show",
+      "asm_refs": [
+        "home.asm:$1993",
+        "main.asm:$5960",
+        "main.asm:$5997"
+      ],
+      "dependencies": [
+        "bounce_block_powerup_spawn"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "bonk_big_mario_types_1_5",
+      "title": "Big-Mario bounce-block types 1/5 (powerup emergence) have no capture",
+      "asm_refs": [
+        "home.asm:$1993",
+        "main.asm:$591F"
+      ],
+      "dependencies": [
+        "bonk_single_slot_draw"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "fireball_type06_break",
+      "title": "Fireball $06 tile break ($3415, a type-1 bump from the projectile)",
+      "asm_refs": [
+        "home.asm:$3415",
+        "home.asm:$2FED"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "spin_jump_pose_532D",
+      "title": "$532D spin-jump pose: its $FF97 & $0C table index needs bit 3, which captures do not record",
+      "asm_refs": [
+        "main.asm:$532D",
+        "home.asm:$126F"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "goal_bell_ring_anim",
+      "title": "Goal bell ring animation (the $34EC strike is ported; the animation is not)",
+      "asm_refs": [
+        "home.asm:$34EC",
+        "home.asm:$3451"
+      ],
+      "dependencies": [
+        "midpoint_bell_arm"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "fireball_paths",
+      "title": "Fireball projectile paths ($2FED / $324F family)",
+      "asm_refs": [
+        "home.asm:$2FED",
+        "home.asm:$324F"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "pause_and_palette_flash",
+      "title": "START pause + the BGP/OBP0 $E7/$93 flash (16 frames each - a 32-frame cycle off $FF97 bit 4)",
+      "asm_refs": [
+        "home.asm:$2756",
+        "home.asm:$273E",
+        "home.asm:$5183"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "scene_system",
+      "title": "Scene system: sSceneMap-nonzero levels run a scene at the transition finish (sSceneState = $F0 + the bank-5 script VM $20A4 + the bank-2 $8D9C boss/template set + $8E6C)",
+      "asm_refs": [
+        "home.asm:$0EB0",
+        "home.asm:$20A4",
+        "home.asm:$0F0B",
+        "home.asm:$3C94",
+        "main.asm:$8D9C",
+        "main.asm:$8E6C"
+      ],
+      "dependencies": [
+        "camera_screen_transitions_capture"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "scene_boss_scripts",
+      "title": "Scene slice 2: the $2x boss-arena scripts, the bank-2 scene load ($8D9C/$8DFD/$8E6C) and the $8DA9 driver",
+      "status": "done",
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "dependencies": [
+        "scene_system"
+      ],
+      "asm_refs": [
+        "home.asm:$20EB",
+        "home.asm:$211E",
+        "home.asm:$2162",
+        "home.asm:$3C94",
+        "main.asm:$8D9C",
+        "main.asm:$8DA9"
+      ]
+    },
+    {
+      "id": "map_handoff_14_body",
+      "title": "The $14 level-clear/map hand-off's banked body ($3EF2B: palette swap, map-node advance, save)",
+      "asm_refs": [
+        "main.asm:$3EF2B",
+        "home.asm:$3547"
+      ],
+      "dependencies": [
+        "stage_clear_time_tally"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "game_over_art_and_save",
+      "title": "GAME OVER screen art + save ($27AF's banked body: $4C92 gfx, $6492 tilemap, $2874 string via $30884, $2934 save)",
+      "asm_refs": [
+        "home.asm:$27AF",
+        "main.asm:$30884",
+        "home.asm:$2934"
+      ],
+      "dependencies": [
+        "game_over_scene"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "overworld_map_state_0C",
+      "title": "Overworld map ($0C): waits for input, unmodelled",
+      "asm_refs": [
+        "home.asm:$2C2E"
+      ],
+      "dependencies": [
+        "map_handoff_14_body"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "golden_coin_tally",
+      "title": "Golden coins (sGoldenCoin1-6 $A84D-$A865) and the map-side tally ($307BC / $30884)",
+      "asm_refs": [
+        "main.asm:$307BC",
+        "main.asm:$30884",
+        "ram.asm:$A84D"
+      ],
+      "dependencies": [
+        "map_handoff_14_body"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "per_anim_handlers",
+      "title": "Object handlers with no ported body (mode-A anims 0/3/4/7/13/14/26/30-34/40-48/51-58/61-69/77-90/92-95 + mode-B)",
+      "asm_refs": [
+        "main.asm:$58040",
+        "main.asm:$59C07"
+      ],
+      "dependencies": [
+        "item_pickup_anim16"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "carry_item_type06",
+      "title": "Carry / item type-$06 paths",
+      "asm_refs": [
+        "home.asm:$2DC6",
+        "main.asm:$58040"
+      ],
+      "dependencies": [
+        "per_anim_handlers"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "infra_play_parity_harness",
+      "title": "No gate covers --play: the mode with no capture is where the edge-map bug lived",
+      "asm_refs": [
+        "crates/sml2-runtime/src/main.rs"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "obj_on_ground_obj_never_set",
+      "title": "PlayerSim::on_ground_obj is never set true, so every gate that reads sMarioOnObject is inert",
+      "asm_refs": [
+        "home.asm:$307D",
+        "home.asm:$13FE"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "horizontal_transitions_other_level",
+      "title": "Horizontal screen transitions (tr=1/2) have no capture - unreachable in level 1",
+      "asm_refs": [
+        "home.asm:$0B5E",
+        "home.asm:$0BE5",
+        "home.asm:$0B39"
+      ],
+      "dependencies": [
+        "camera_screen_transitions_capture"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "scene_boss_spawn",
+      "title": "The bank-2 boss spawn behind the scene arena arm ($3C94 / $8D9C / $8DFD / $8E6C + the $8DA9 driver)",
+      "asm_refs": [
+        "home.asm:$0EB0",
+        "home.asm:$3C94",
+        "main.asm:$8D9C",
+        "main.asm:$8DFD",
+        "main.asm:$8E6C",
+        "main.asm:$8DA9"
+      ],
+      "dependencies": [
+        "scene_boss_scripts"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "level_boot_route",
+      "title": "Any level is reachable from the hub: the map-poke route (sMapScreenId + sMapNode + A)",
+      "asm_refs": [
+        "main.asm:$3C1A2",
+        "main.asm:$3E1D7",
+        "ram.asm:$A68B",
+        "ram.asm:$A840"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "space_physics_seeding",
+      "title": "sMoonPhysics (LevelPropertiesSpace) is never seeded - the replay-only-source class again",
+      "asm_refs": [
+        "home.asm:4099-4103",
+        "home.asm:$0F71"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "per_level_handler_coverage",
+      "title": "Measured: 97 object-engine handler classes are reachable from the 32 retail spawn streams, 11 ported",
+      "asm_refs": [
+        "main.asm:$58040",
+        "main.asm:$59C07"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "autoscroll_clamp_x_divergence",
+      "title": "traj19: x diverges by +1 (sim ahead) on exactly the frames the autoscroll camera steps",
+      "asm_refs": [
+        "home.asm:$0FBF",
+        "home.asm:$0FD1",
+        "home.asm:$0FE3",
+        "home.asm:$0F71",
+        "home.asm:$0B2A",
+        "home.asm:$0DAF"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "capture_targets",
+      "title": "Offline target table: cheapest level + map node for every pending capture item",
+      "asm_refs": [],
+      "dependencies": [
+        "level_boot_route"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "record_field_timing_audit",
+      "title": "Audit every record field the harness copies into the sim against its readers' sub-frame position",
+      "asm_refs": [],
+      "dependencies": [
+        "autoscroll_clamp_x_divergence"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "level03_handler_classes",
+      "title": "Level 3's three unported handler classes: the $59BC5 walker, the $594EB fallwalker clone, the $58DD1 carrying platform",
+      "asm_refs": [
+        "home.asm:$7585",
+        "home.asm:$73C6",
+        "home.asm:$3C1C",
+        "home.asm:$3BB8",
+        "home.asm:$3D22",
+        "home.asm:$3D32",
+        "home.asm:$3CDF",
+        "home.asm:$2DF7"
+      ],
+      "dependencies": [
+        "capture_targets"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "map_node_entry_actions",
+      "title": "The map's A/START node actions ($3C60B), the $3C2xx node flag helpers and the hub's cursor effects",
+      "asm_refs": [
+        "main.asm:$3C60B",
+        "main.asm:$3C29A",
+        "main.asm:$3CA31",
+        "main.asm:$3D0D7"
+      ],
+      "dependencies": [
+        "overworld_map_state_0C"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "map_handoff_3EF2B",
+      "title": "The level->map hand-off ($3EF2B / $3EEF0) and the $650E/$3C364 progress-offset disagreement",
+      "asm_refs": [
+        "main.asm:$3EF2B",
+        "main.asm:$3EEF0",
+        "main.asm:$3C32D",
+        "main.asm:$304F1"
+      ],
+      "dependencies": [
+        "overworld_map_state_0C"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "boss_child_anim_0d",
+      "title": "Boss anim $0D ($9EE3): the controller's child - a gate on sObjectRemoveMode == 2",
+      "asm_refs": [
+        "main.asm:$9EE3",
+        "main.asm:$9EF4",
+        "main.asm:$A029"
+      ],
+      "dependencies": [
+        "boss_fight_def2"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done",
+      "detail": "Ported: ld a,[sObjectRemoveMode] / cp $02 / ret nz, then SCRY=$90, SCRX=$58, then $58F8 rewrites the record to anim 4 / sprite 9 with state/phase/type cleared. Console-verified by poking sObjectRemoveMode = 2 on the level 13 arena tape: the spawned child goes anim=0D fst=00 y=40 x=58 spr=0E -> anim=04 fst=00 y=90 x=58 spr=09 on the next frame; count goes 1 -> 2 as anim 4's state 0 spawns anim 5. Without the poke it is inert for 200+ frames. NOT the win gate - see boss_clear_ending_handoff."
+    },
+    {
+      "id": "boss_mario_death_guard",
+      "title": "Boss dispatch freezes while Mario is dead ($92DF)",
+      "asm_refs": [
+        "main.asm:$92DF"
+      ],
+      "dependencies": [
+        "boss_fight_def2"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done",
+      "detail": "ld a,[sMarioDead] / cp $FF / ret z - the guard returns to the driver, so each slot is still rendered and written back unchanged. Console-verified: all three records stop changing on the frame Mario dies (f462 on the level 13 tape) and hold through the death animation."
+    },
+    {
+      "id": "boss_wario_child22",
+      "title": "Port Wario falling-child anim22 and its boss-delay producer",
+      "asm_refs": [
+        "main.asm:$AB30",
+        "main.asm:$AB4D",
+        "main.asm:$B157"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
+      "status": "done"
+    },
+    {
+      "id": "boss_wario_child25",
+      "title": "Port Wario falling-child anim25 and shared anim22 fall/removal path",
+      "asm_refs": [
+        "main.asm:$AB6E",
+        "main.asm:$AB4D",
+        "main.asm:$B157"
+      ],
+      "dependencies": [],
+      "verification_gate": "Five handler and dispatch/reset tests; init mutation fails; full core suite and frozen sweep",
+      "status": "done"
+    },
+    {
+      "id": "level_countdown_timer",
+      "title": "Port BCD level countdown and seed it from level headers for Wario attack selection",
+      "asm_refs": [
+        "main.asm:$5D6A",
+        "main.asm:$5D8C",
+        "main.asm:$5E03",
+        "home.asm:$05E4",
+        "main.asm:$AA05"
+      ],
+      "dependencies": [],
+      "verification_gate": "BCD byte and side-effect tests, runtime initialization/frame ordering/reset, core and runtime tests",
+      "status": "done"
+    },
+    {
+      "id": "boss_wario_phase1_exit_helper",
+      "title": "Port Wario phase-one exit and object-to-camera scene/pan result seam",
+      "asm_refs": [
+        "main.asm:$A96D",
+        "main.asm:$A987",
+        "main.asm:$A98B",
+        "main.asm:$A99A",
+        "main.asm:$A9B9"
+      ],
+      "dependencies": [],
+      "verification_gate": "Exact stream/slot/fade bytes, consumed scene events, real spawn scanner, original stream reload, sensitivity and core/runtime/sweep",
+      "status": "done"
+    },
+    {
+      "id": "wario_divider_input",
+      "title": "Supply native and deterministic replay divider samples to Wario child21/24",
+      "asm_refs": [
+        "main.asm:$AAA5",
+        "main.asm:$AB1D"
+      ],
+      "dependencies": [],
+      "verification_gate": "Six counter, eight child, three runtime clock tests; producer/consumer, cycle/rounding/cap sensitivity; full core/runtime and frozen sweep",
+      "status": "done"
+    },
+    {
+      "id": "boss_entry_object_scratch_reset",
+      "title": "Clear source AF00-AFFF scratch on boss entry without clearing external state or the original level stream",
+      "asm_refs": [
+        "home.asm:$3A28",
+        "main.asm:$8D9C",
+        "main.asm:$EC40",
+        "main.asm:$EC31"
+      ],
+      "dependencies": [],
+      "verification_gate": "Dirty scratch byte reset and external-state preservation, accurate zero stream pointer representation, normal Wario entry and full core/runtime/sweep",
+      "status": "done"
+    },
+    {
+      "id": "native_actor_boundary",
+      "title": "Introduce typed native Actor state and lossless raw-slot conversion boundary",
+      "asm_refs": [],
+      "dependencies": [],
+      "verification_gate": "Coordinate/flag/unknown-value preservation, native movement and shared motion tests; full core suite",
+      "status": "done"
+    },
+    {
+      "id": "native_wario_child_migration",
+      "title": "Migrate Wario child21/24 to typed domain behavior through the actor boundary",
+      "asm_refs": [],
+      "dependencies": [
+        "native_actor_boundary"
+      ],
+      "verification_gate": "Existing ROM-derived byte tests and actual boss dispatch/producer-consumer paths; sensitivity; core/runtime and frozen sweep",
+      "status": "done"
+    },
+    {
+      "id": "boss_wario_anim23",
+      "title": "Port Wario boss anim 23 (ROM $AB8B), including the $38 camera-pan write",
+      "asm_refs": [
+        "main.asm:$AB8B",
+        "main.asm:$AC04",
+        "main.asm:$AD4E"
+      ],
+      "dependencies": [
+        "boss_wario_anim20"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "boss_anim_4_5_chain",
+      "title": "Boss anims 4/5 ($9642/$9698): the spawn chain that ends at $FF9B = $1D",
+      "asm_refs": [
+        "main.asm:$9642",
+        "main.asm:$9698",
+        "main.asm:$9688"
+      ],
+      "dependencies": [
+        "boss_child_anim_0d"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done",
+      "detail": "anim 4 state 0: state=1, spawn staging anim $05/sprite $0C/attr $FFDD, call $B224 (the count went 1 -> 2 in the poke). $965E: $B38C sprite helper (FFF0 & 1 gate, B_ANIMFRAME cycle 1..5 with a $FFDD ^= $20 at 3), then the state table $966A = [$5629, $5670, $5688]: states 1/2 = the $71D6 (c=21, table $720E) / $718F (c=21, $71A3) descents with $FFDD ^= $40 at each transition; state 3 = $5688, rise 4 px a frame until SCRY < 8 then $FF9B = $1D. anim 5 state 0: 8 frames, then SCRY += $18 and state 1; its table $96BE = [$56C4, $56E1, $5688] = the two picker descents and the same $5688 win. Needs the $720E table ($B20E, 22 bytes) extracted - it is a window of the same $72xx profile blob as boss_picker_profile."
+    },
+    {
+      "id": "boss_clear_ending_handoff",
+      "title": "The boss-clear ending: $FF9B = $1F after $92C4's 640-frame fade (why the fight can't be finished)",
+      "asm_refs": [
+        "main.asm:$92C4",
+        "home.asm:~115",
+        "home.asm:$02AD (state $1F body)"
+      ],
+      "dependencies": [
+        "boss_fight_def2"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done",
+      "detail": "sBossHits ($AFC5) seeds 6 and drops 2 per stomp; at 0 the hit path's $92C4 sets sObjectRemoveMode = 1 and sFadeTimer = $0280. Poking exactly that on the console (remove_mode = 1, $A267/$A266 = $0280) took $FF9B to $1F with the fade counting down, and the port already models the fade - what is missing is the $1F body's overworld hand-off, so the port's clear fade expires into nothing. This, not anim $0D, is the 'you can't beat the boss' gap."
+    },
+    {
+      "id": "moon_physics_remaining_arms",
+      "title": "The remaining sMoonPhysics readers: the bit-1 zone machinery, the flutter-vs-moon arms, the $2E7C shield and the bank-1 poses",
+      "asm_refs": [
+        "home.asm:$1BFF",
+        "home.asm:$14FA",
+        "home.asm:$1541",
+        "home.asm:$181C",
+        "home.asm:$2E7C",
+        "main.asm:$5354",
+        "main.asm:$53CF",
+        "main.asm:$54FB"
+      ],
+      "dependencies": [
+        "space_physics_seeding"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "verified"
+    },
+    {
+      "id": "hardware_divider_input",
+      "title": "Finish shared sampled DIV input through normal map and game-state callers; level/Wario input is verified",
+      "asm_refs": [
+        "main.asm:$3C13E",
+        "main.asm:$AB1D"
+      ],
+      "dependencies": [
+        "wario_divider_input"
+      ],
+      "verification_gate": "Source-derived input timing, both sampled parities, and native/replay input integration tests",
+      "status": "verified"
+    },
+    {
+      "id": "map_zone_screen_loaders",
+      "title": "The zone screens the level->map hand-off selects ($3D0FF/$3D208/$3D371/$3D49F/$3D61F/$3D79A/$3D6EB/$3D880)",
+      "asm_refs": [
+        "main.asm:$3F04D",
+        "main.asm:$3F07E",
+        "main.asm:$3D0FF",
+        "main.asm:$3D208",
+        "main.asm:$3D371",
+        "main.asm:$3D49F",
+        "main.asm:$3D61F",
+        "main.asm:$3D79A",
+        "main.asm:$3D6EB",
+        "main.asm:$3D880"
+      ],
+      "dependencies": [
+        "map_handoff_3EF2B"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "verified"
+    },
+    {
+      "id": "camera_pan_timer",
+      "title": "Finish camera-pan timer producers and remaining flutter gate after shared draw timing is verified",
+      "asm_refs": [
+        "home.asm:$2062",
+        "main.asm:$54E9",
+        "main.asm:$C090",
+        "home.asm:$1090",
+        "home.asm:$160A",
+        "home.asm:$1701",
+        "main.asm:$A9EA",
+        "main.asm:$AA60",
+        "main.asm:$AD4E"
+      ],
+      "dependencies": [
+        "record_field_timing_audit",
+        "boss_wario_anim20",
+        "boss_wario_anim23",
+        "moon_physics_remaining_arms"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "verified"
+    },
+    {
+      "id": "boss_wario_anim20",
+      "title": "Port Wario boss anim 20 (ROM $A8AB), including the $34/$38 camera-pan writes",
+      "asm_refs": [
+        "main.asm:$A8AB",
+        "main.asm:$A90E",
+        "main.asm:$A9EA",
+        "main.asm:$AA60"
+      ],
+      "dependencies": [
+        "boss_wario_child22",
+        "boss_wario_transition21",
+        "level_countdown_timer",
+        "boss_wario_phase1_exit_helper",
+        "boss_entry_object_scratch_reset"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "verified"
+    },
+    {
+      "id": "boss_wario_transition21",
+      "title": "Port Wario child anim21/24 and consume the boss-transition latch",
+      "asm_refs": [
+        "main.asm:$AAA5",
+        "main.asm:$AAA8",
+        "main.asm:$AACA"
+      ],
+      "dependencies": [
+        "hardware_divider_input",
+        "boss_entry_object_scratch_reset"
+      ],
+      "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
+      "status": "verified"
+    },
+    {
+      "id": "boss_wario_phase_handoff",
+      "title": "Connect Wario phase exits to scene state and dynamically created object streams",
+      "asm_refs": [
+        "main.asm:$A96D",
+        "main.asm:$AC55"
+      ],
+      "dependencies": [
+        "boss_wario_anim20",
+        "boss_wario_anim23"
+      ],
+      "verification_gate": "PORTING.md unit byte tests and normal caller/consumer integration",
+      "status": "verified"
+    },
+    {
+      "id": "boss_arena_phase_cascade",
+      "title": "Arena cascade is 24 frames late: the port's pipe entry spends 63 frames where the console spends 47",
+      "asm_refs": [
+        "home.asm:$20A4",
+        "home.asm:~115 (VBlank fade tick)",
+        "main.asm:$20EB",
+        "main.asm:$B14E"
+      ],
+      "dependencies": [
+        "boss_fight_def2"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "verified",
+      "detail": "Console (level 13, cam 3760/192, mario 3759/212, Right held): arm f28 (Mario frozen at world 3779, sPipeTravelDirection=$30), sSceneId=$10 at f52, scene ops f67-f70, Mario placed f75, fade set f68, fade 0 f420, parts act f421. Port: arm f29 at the same 3779 (the $188B walk-in arm is right), but sSceneId=$10 at f52, ops f53-f57, placed f92, fade f54 -> 0 at f444, parts f444. So the port's arm-to-placement is 63 frames vs the console's 47: 23 frames of pipe_dir = 3 slide plus a 40-frame camera transition. The console's ops run *inside* the travel (sPipeTravelDirection still $30 at f67-f70, 8 frames before the placement), so the VM is not gated on 'is Mario travelling': that was tried and reverted (it runs the $2x arm after the placement and lands Mario at 1308 instead of 1561). The ROM's travelling sub-phase ends before sPipeTravelDirection clears, and that is the thing to model. Also still true: PlayerSim::step's sFadeTimer decrement is skipped on travel frames, which is only correct while no scene has armed a fade before a travel."
+    },
+    {
+      "id": "wario_arena_entry_enable",
+      "title": "Enable def 6 (Wario, level 0) in boss_def_portable once the fight can finish",
+      "asm_refs": [
+        "home.asm:$0EB0",
+        "main.asm:$8D9C"
+      ],
+      "dependencies": [
+        "boss_wario_anim23",
+        "boss_clear_ending_handoff"
+      ],
+      "verification_gate": "Play/replay entry takes the $F0 park, the fight reaches its level clear, and the clear reseeds sSceneState",
+      "status": "done"
+    },
+    {
+      "id": "wario_form3_source_corrections",
+      "title": "Correct final Wario saved-power state, wrapped proximity and shared animation contracts",
+      "asm_refs": [
+        "main.asm:$AD93",
+        "main.asm:$AF66",
+        "main.asm:$B35A"
+      ],
+      "dependencies": [],
+      "verification_gate": "Independent ROM regressions, persistent latch reset, real scene handoff and core/runtime/sensitivity gates",
+      "status": "done"
+    },
+    {
+      "id": "boss_clear_receiver_semantics",
+      "title": "Remove inferred flag-only boss reward handoff; retain explicit terminal event",
+      "asm_refs": [
+        "main.asm:$5D6A",
+        "main.asm:$5E12"
+      ],
+      "dependencies": [],
+      "verification_gate": "Flag-only input never grants coins or exits; explicit reward producer remains verified",
+      "status": "done"
+    },
+    {
+      "id": "wario_ending_entry",
+      "title": "Port phase3 input override and ending fade/init states through both runtime loops",
+      "asm_refs": [
+        "main.asm:$5E12",
+        "home.asm:$03AF",
+        "home.asm:$2CAE",
+        "main.asm:$68000"
+      ],
+      "dependencies": [
+        "boss_clear_receiver_semantics"
+      ],
+      "verification_gate": "Exact held/pressed boundaries and palettes; deferred current-frame execution; next-frame state35/18/19 transition",
+      "status": "done"
+    },
+    {
+      "id": "native_sound_driver",
+      "title": "Implement original native music and effect sequencing, synthesis and audio output",
+      "asm_refs": [
+        "main.asm:$10030",
+        "main.asm:$111A6",
+        "main.asm:$11638"
+      ],
+      "dependencies": [],
+      "verification_gate": "Source-derived native channel/stream state, ordered audio effects, deterministic output and normal runtime consumption",
+      "status": "done"
+    },
+    {
+      "id": "wario_ending_sequence",
+      "title": "Port complete ending sequence and credits from state19 through original completion",
+      "asm_refs": [
+        "main.asm:$6800F"
+      ],
+      "dependencies": [
+        "wario_ending_entry",
+        "native_sound_driver"
+      ],
+      "verification_gate": "All source state targets, display/audio timing, normal runtime entry and final completion scenarios",
+      "status": "done"
+    },
+    {
+      "id": "wario_arena_completion",
+      "title": "Close normal Wario arena entries for definitions6/7/8 through final ending",
+      "asm_refs": [
+        "main.asm:$8DFD",
+        "home.asm:$0EB0"
+      ],
+      "dependencies": [
+        "wario_form3_source_corrections",
+        "wario_ending_entry",
+        "wario_ending_sequence"
+      ],
+      "verification_gate": "Real scene/stream reentry across all3 forms with no blocked scene load or unported diagnostics and final ending",
+      "status": "done"
+    },
+    {
+      "id": "native_handler_migration",
+      "title": "Migrate remaining existing byte-oriented game handlers and shared behavior to native Actor/World methods",
+      "asm_refs": [],
+      "dependencies": [
+        "native_actor_boundary"
+      ],
+      "verification_gate": "Bounded routine migrations with ROM-derived parity evidence; no raw offsets or register plumbing in domain handlers",
+      "status": "done"
+    },
+    {
+      "id": "remaining_handler_classes",
+      "title": "Remaining source-required level and boss object handlers and dynamic spawn closure",
+      "asm_refs": [
+        "main.asm:$58040",
+        "main.asm:$59C07"
+      ],
+      "dependencies": [
+        "per_level_handler_coverage",
+        "level_boot_route"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
+      "status": "done"
+    },
+    {
+      "id": "secret_route_entry_overlay",
+      "title": "Apply the $377B secret-route entry overlay on level load",
+      "asm_refs": [
+        "main.asm:$55C0",
+        "main.asm:$377B",
+        "main.asm:$5579"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md section What done means; extract the 32 8-byte records, seed spawn/camera from them when sLevelProgressFlags bit 3 is set, byte test on the $A800-$A807 block",
+      "status": "done"
+    },
+    {
+      "id": "boss_def0_native_handler",
+      "title": "Complete native Tree Zone boss handler ROM $93A7 before arena acceptance",
+      "asm_refs": [
+        "main.asm:$93A7-$9594",
+        "main.asm:$9595",
+        "main.asm:$B16B"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md; COMPLETE handler brief, native and slot-byte state/branch tests, sensitivity check, full core suite",
+      "status": "done"
+    },
+    {
+      "id": "boss_def0_arena_entry",
+      "title": "Boss definition 0 arena entry and clear flow (level ID $05, scene $0B)",
+      "asm_refs": [
+        "main.asm:$8D9C",
+        "main.asm:$8DFD",
+        "main.asm:$93A7",
+        "home.asm:$0EB0"
+      ],
+      "dependencies": [
+        "boss_def0_native_handler"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \"done\" means; runtime arena-flow test in the shape of definitions 3-5, then enable boss_def_portable(0)",
+      "status": "done"
+    },
+    {
+      "id": "played_route_level28",
+      "title": "Accept level 28 header-spawn to bell through the native live play loop",
+      "asm_refs": [
+        "home.asm:$1BFF-$1CFB",
+        "home.asm:$3547-$356E",
+        "main.asm:$5579",
+        "main.asm:$3F104-$3F118"
+      ],
+      "dependencies": [
+        "secret_route_entry_overlay"
+      ],
+      "verification_gate": "PORTING.md; original header/layout/spawns, input-only traversal with live objects and camera, exact bell/fade/tally/map bytes, sensitivity check, full core/runtime suites and frozen sweep",
+      "status": "done"
+    },
+    {
+      "id": "played_route_level29",
+      "title": "Accept the level 29 timed-float route from header spawn to bell through native live play",
+      "asm_refs": [
+        "home.asm:$0FF2-$108F",
+        "home.asm:$1BFF-$1CFB",
+        "home.asm:$3547-$356E",
+        "main.asm:$5579",
+        "main.asm:$3D56B-$3D58C"
+      ],
+      "dependencies": [
+        "played_route_level28"
+      ],
+      "verification_gate": "PORTING.md; original entry/assets with input-only timed-float traversal through live objects/camera, mechanic observation, bell/fade/map byte assertions and sensitivity; full core/runtime suites and frozen sweep",
+      "status": "done"
+    },
+    {
+      "id": "native_route_button_tapes",
+      "title": "Support simultaneous native button holds in live-play acceptance tapes",
+      "asm_refs": [
+        "home.asm:$0F7E",
+        "home.asm:$160A"
+      ],
+      "dependencies": [
+        "played_route_level29"
+      ],
+      "verification_gate": "Exact legacy ASCII tape decoding and edge/end tests, simultaneous PlayerKeys frames through same live loop, unchanged level28/29 acceptance; core/runtime suites",
+      "status": "done"
+    },
+    {
+      "id": "played_route_level19_secret_entry",
+      "title": "Accept level 19 source secret entry to the lower $4A bell through native live play",
+      "asm_refs": [
+        "main.asm:$5579-$55C6",
+        "home.asm:$377B",
+        "home.asm:$1029-$1054",
+        "home.asm:$160A-$16AE",
+        "home.asm:$1CBA",
+        "home.asm:$3547-$356E",
+        "main.asm:$3EF56-$3F03D"
+      ],
+      "dependencies": [
+        "native_route_button_tapes",
+        "secret_route_entry_overlay"
+      ],
+      "verification_gate": "PORTING.md; genuine progress-bit3 entry, original assets and persistent entry state, fixed native input tape with live objects/camera, exact source bell/fade/map/save bytes, zero gameplay deaths, sensitivity; full core/runtime and frozen sweep",
+      "status": "done"
+    },
+    {
+      "id": "played_route_level19_alternate_exit",
+      "title": "Accept level 19 secret entry to the upper $4B alternate bell through native live play",
+      "asm_refs": [
+        "main.asm:$5579-$55C6",
+        "home.asm:$377B",
+        "home.asm:$1029-$1054",
+        "home.asm:$1675-$16AE",
+        "home.asm:$1CBA-$1CFB",
+        "home.asm:$3547-$356E",
+        "main.asm:$3EF56-$3F03D",
+        "main.asm:$3D533-$3D562",
+        "home.asm:$1DFE-$1E35",
+        "home.asm:$1993-$19FE",
+        "main.asm:$5B3C"
+      ],
+      "dependencies": [
+        "played_route_level19_secret_entry"
+      ],
+      "verification_gate": "PORTING.md; genuine progress8 entry, unchanged source assets, fixed native inputs with live objects/camera and zero deaths; upper $4B arm/fade/tally guard/map/save bytes and sensitivity; core/runtime suites and frozen sweep",
+      "status": "done"
+    },
+    {
+      "id": "played_route_level19_header_exit",
+      "title": "Accept level 19 normal header spawn to lower $4A bell through native live play",
+      "asm_refs": [
+        "main.asm:$5579-$55C6",
+        "levels/levelheaders.asm:$5773-$5786",
+        "home.asm:$1029-$1054",
+        "home.asm:$1675-$16AE",
+        "home.asm:$1CBA-$1CFB",
+        "home.asm:$3547-$356E",
+        "main.asm:$3EEF0-$3F03D"
+      ],
+      "dependencies": [
+        "played_route_level19_secret_entry"
+      ],
+      "verification_gate": "PORTING.md; original header entry with progress0 and unchanged assets, fixed native inputs through live objects/camera with zero gameplay deaths, exact lower bell/fade/map/save bytes, behavior sensitivity, core/runtime suites and frozen sweep",
+      "status": "done"
+    },
+    {
+      "id": "played_route_level19_header_alternate_exit",
+      "title": "Accept level 19 normal header spawn to upper $4B bell through native live play",
+      "asm_refs": [
+        "main.asm:$5579-$55C6",
+        "levels/levelheaders.asm:$5773-$5786",
+        "home.asm:$1029-$1054",
+        "home.asm:$1675-$16AE",
+        "home.asm:$1DFE-$1E35",
+        "home.asm:$1993-$19FE",
+        "main.asm:$5B3C",
+        "home.asm:$1CBA-$1CFB",
+        "home.asm:$3547-$356E",
+        "main.asm:$3EF56-$3F03D",
+        "main.asm:$3D533-$3D562"
+      ],
+      "dependencies": [
+        "played_route_level19_header_exit",
+        "played_route_level19_alternate_exit"
+      ],
+      "verification_gate": "PORTING.md; progress0 source header entry and unchanged assets; fixed inputs through continuous live objects/camera, zero gameplay deaths; three source hidden-block overlays, upper $4B arm/fade/tally guard/map/save bytes; sensitivity, full core/runtime suites and frozen sweep",
+      "status": "done"
+    },
+    {
+      "id": "overworld_source_map_render",
+      "title": "Extract and render source overworld backgrounds, route patches and cursor for live navigation",
+      "asm_refs": [
+        "main.asm:$3D0FF-$3D880",
+        "main.asm:$3E2A2-$3E2F7",
+        "main.asm:$3ED4C",
+        "main.asm:$61147"
+      ],
+      "dependencies": [
+        "map_zone_screen_loaders"
+      ],
+      "verification_gate": "PORTING.md; runtime consumes extracted assets only; source-derived hub/zone tilemaps and graphics, signed BG tile mapping, camera/palette/path patches and cursor; deterministic byte/render checks, extractor/runtime suites, source asset regeneration and frozen sweep",
+      "status": "done"
+    },
+    {
+      "id": "overworld_runtime_session",
+      "title": "Integrate live overworld navigation with level entry and clear/death returns",
+      "asm_refs": [
+        "main.asm:$3C000-$3C169",
+        "main.asm:$3C38C-$3C7EC",
+        "main.asm:$3EEF0-$3F156",
+        "main.asm:$5579-$55C6",
+        "home.asm:$311A-$3186"
+      ],
+      "dependencies": [
+        "map_zone_screen_loaders",
+        "secret_route_entry_overlay"
+      ],
+      "verification_gate": "PORTING.md; one shared window/input/divider/frame budget across map and existing live level loop; real map tables choose node/progress/level assets; continuous map-to-level-to-map acceptance, death fade/lives and checkpoint reentry; persistence survives transitions; legacy suites, release build and frozen sweep",
+      "status": "complete"
+    }
+  ]
 }

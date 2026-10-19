@@ -28,6 +28,7 @@ use std::path::{Path, PathBuf};
 
 mod divider_clock;
 mod play_tape;
+pub mod session;
 use play_tape::PlayTape;
 #[cfg(test)]
 mod door_boss_entry_tests;
@@ -43,12 +44,14 @@ mod circuit_boss_entry_tests;
 mod scene_pipe_tests;
 #[cfg(test)]
 mod played_route_tests;
+#[cfg(test)]
+mod session_tests;
 use divider_clock::{NativeDividerClock, VirtualDividerClock};
 
 use serde::Deserialize;
 use sml2_core::ending_entry::{EndingEntry, EndingEntryState, EndingFrame, EndingInput};
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest, LAYOUT_HEIGHT, LAYOUT_WIDTH};
-use sml2_core::map::MapNodes;
+use sml2_core::map::{MapNodeRecords, MapNodes, MapWalk};
 use sml2_core::object::ObjectTables;
 use sml2_core::objects::FireHit;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
@@ -57,8 +60,8 @@ use sml2_core::tileset::Tilesets;
 use sml2_core::video;
 
 /// Native GB screen; the HUD strip and the parity checks are anchored to it.
-const SCREEN_W: usize = 160;
-const SCREEN_H: usize = 144;
+pub(crate) const SCREEN_W: usize = 160;
+pub(crate) const SCREEN_H: usize = 144;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (mut level, mut camera) = (None, None);
@@ -72,6 +75,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut replay_file: Option<PathBuf> = None;
     let mut filmstrip: Option<PathBuf> = None;
     let mut play_mode = false;
+    let mut map_mode = false;
+    let mut save_path = PathBuf::from("sml2.sav");
     let mut level_progress = 0u8;
     let mut headless_frames: Option<u64> = None;
     let mut keys_tape: Option<String> = None;
@@ -88,6 +93,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             "--level" => {
                 level = Some(args.next().ok_or("--level needs a value")?.parse::<u8>()?);
+            }
+            "--map" => map_mode = true,
+            "--save" => {
+                save_path = PathBuf::from(args.next().ok_or("--save needs a path")?);
             }
             // The map's `$A27D` entry byte (decimal), consumed by `$5579`.
             "--level-progress" => {
@@ -157,7 +166,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             other => return Err(format!("unknown argument {other}").into()),
         }
     }
-    let level = level.ok_or("--level is required")?;
+    let tape = keys_tape.clone().map(PlayTape::Ascii);
+    if map_mode || level.is_none() {
+        let assets = session::SessionAssets::load()?;
+        let mut runner = session::SessionRunner::new(
+            assets,
+            save_path,
+            scale,
+            view,
+            headless_frames.is_some(),
+        );
+        if let Some(n) = headless_frames {
+            runner.run_headless(n, tape)?;
+            return Ok(());
+        }
+        runner.run_window(tape)?;
+        return Ok(());
+    }
+    let level = level.unwrap();
     if scale == 0 || scale > 16 {
         return Err("--scale must be in 1..=16".into());
     }
@@ -405,7 +431,7 @@ fn hud_row(hud: &HudStrip, digits: Option<&str>) -> Vec<u8> {
 /// $0F`, `$9C08 = sCoinLow >> 4`, `$9C09 = sCoinLow & $0F` (tile = `$80 +
 /// digit`). `digit_columns` is in display order (lives, coins, money, time),
 /// so the coin group is entries 2..5; everything else keeps the template.
-fn hud_row_coins(hud: &HudStrip, coins_high: u8, coins_low: u8) -> Vec<u8> {
+pub(crate) fn hud_row_coins(hud: &HudStrip, coins_high: u8, coins_low: u8) -> Vec<u8> {
     let mut row = hud.template.clone();
     for (k, v) in [coins_high & 0x0F, coins_low >> 4, coins_low & 0x0F]
         .iter()
@@ -423,7 +449,7 @@ fn hud_row_coins(hud: &HudStrip, coins_high: u8, coins_low: u8) -> Vec<u8> {
 /// Overlay the level's animated tiles (VRAM `$9200`..`$923F`) at the given
 /// phase onto the composed BG block (offset `$A00` = tile 32). No-op when the
 /// level's animation is disabled.
-fn apply_tile_anim(bg: &mut [u8], anim: &sml2_core::level::TileAnim, rows: &[u8], phase: u8) {
+pub(crate) fn apply_tile_anim(bg: &mut [u8], anim: &sml2_core::level::TileAnim, rows: &[u8], phase: u8) {
     if !anim.enabled {
         return;
     }
@@ -432,7 +458,7 @@ fn apply_tile_anim(bg: &mut [u8], anim: &sml2_core::level::TileAnim, rows: &[u8]
 }
 
 /// Locate `extracted/` whether run from the repo root or a crate dir.
-fn extracted_dir() -> PathBuf {
+pub(crate) fn extracted_dir() -> PathBuf {
     for cand in [
         "extracted",
         "../extracted",
@@ -451,7 +477,7 @@ fn extracted_dir() -> PathBuf {
 /// loaded like the scene scripts, and flagged when absent for the same reason:
 /// with no table the hand-off cannot index `sLevelProgress`, so it would silently
 /// stop marking progress.
-fn load_map_nodes() -> MapNodes {
+pub(crate) fn load_map_nodes() -> MapNodes {
     match fs::read(extracted_dir().join("map/nodes.bin"))
         .ok()
         .as_deref()
@@ -465,11 +491,80 @@ fn load_map_nodes() -> MapNodes {
     }
 }
 
+pub(crate) fn load_map_walk() -> MapWalk {
+    match fs::read(extracted_dir().join("map/walk.bin"))
+        .ok()
+        .as_deref()
+        .and_then(MapWalk::from_bytes)
+    {
+        Some(w) => w,
+        None => {
+            println!("note: map walk table missing — overworld walk streams will be empty");
+            MapWalk::default()
+        }
+    }
+}
+
+pub(crate) fn load_map_node_records() -> MapNodeRecords {
+    match fs::read(extracted_dir().join("map/node_records.bin"))
+        .ok()
+        .as_deref()
+        .and_then(MapNodeRecords::from_bytes)
+    {
+        Some(r) => r,
+        None => {
+            println!("note: map node records missing");
+            MapNodeRecords::default()
+        }
+    }
+}
+
+pub(crate) fn load_overworld_tilemaps() -> sml2_core::map::OverworldTilemaps {
+    match fs::read(extracted_dir().join("map/tilemaps.bin"))
+        .ok()
+        .as_deref()
+        .and_then(sml2_core::map::OverworldTilemaps::from_bytes)
+    {
+        Some(tm) => tm,
+        None => {
+            println!("note: map tilemaps missing");
+            sml2_core::map::OverworldTilemaps::default()
+        }
+    }
+}
+
+pub(crate) fn load_overworld_manifest() -> sml2_core::map::OverworldManifest {
+    match fs::read_to_string(extracted_dir().join("map/route_patches.json"))
+        .ok()
+        .and_then(|s| sml2_core::map::OverworldManifest::from_json_str(&s).ok())
+    {
+        Some(m) => m,
+        None => {
+            println!("note: map route_patches.json missing");
+            sml2_core::map::OverworldManifest::default()
+        }
+    }
+}
+
+pub(crate) fn load_overworld_tiles() -> sml2_core::map::OverworldTiles {
+    match fs::read(extracted_dir().join("map/tiles.bin"))
+        .ok()
+        .as_deref()
+        .and_then(sml2_core::map::OverworldTiles::from_bytes)
+    {
+        Some(t) => t,
+        None => {
+            println!("note: map tiles.bin missing");
+            sml2_core::map::OverworldTiles::default()
+        }
+    }
+}
+
 /// The bank-5 scene script table (`extracted/scenes/script_table.bin`). It is
 /// one ROM-wide blob rather than per level, and the missing-file flag matches
 /// the two level maps: with no table the scene VM is inert, and the run says so
 /// instead of quietly never running a script.
-fn load_scene_scripts() -> SceneScripts {
+pub(crate) fn load_scene_scripts() -> SceneScripts {
     match fs::read(extracted_dir().join("scenes/script_table.bin"))
         .ok()
         .as_deref()
@@ -487,7 +582,7 @@ fn load_scene_scripts() -> SceneScripts {
 /// ROM-wide table — `$25AF`'s three sources are indexed only by
 /// `sLevelGfxIndex`. Without it an arena keeps the level's own tiles and
 /// metatile definitions, which draws the right *layout* with the wrong art.
-fn load_tilesets() -> Tilesets {
+pub(crate) fn load_tilesets() -> Tilesets {
     match fs::read_to_string(extracted_dir().join("scenes/tilesets.json"))
         .ok()
         .and_then(|t| Tilesets::from_json(&t).ok())
@@ -507,7 +602,7 @@ fn load_tilesets() -> Tilesets {
 /// that one layout and the per-arena look comes from the tileset swap. A level's
 /// own layout at those cells holds that level's tiles, which is why an arena
 /// rendered from it comes out as ordinary level walls.
-fn load_arena_layout() -> Option<LevelLayout> {
+pub(crate) fn load_arena_layout() -> Option<LevelLayout> {
     match fs::read(extracted_dir().join("scenes/arena_layout.bin")) {
         Ok(b) => match LevelLayout::from_bytes(&b) {
             Ok(l) => Some(l),
@@ -543,35 +638,35 @@ struct Viewer<'a> {
 /// the object's `sSpriteFlipFlags` byte (bit4 = OBP select, bit5 = X flip,
 /// bit6 = Y flip, bit7 = BG-over-OBJ priority).
 #[derive(Debug, Clone, Deserialize)]
-struct SpriteInst {
-    sprite: u8,
-    x: u16,
-    y: u16,
+pub(crate) struct SpriteInst {
+    pub(crate) sprite: u8,
+    pub(crate) x: u16,
+    pub(crate) y: u16,
     #[serde(default)]
-    flip: u8,
+    pub(crate) flip: u8,
 }
 
 /// Everything needed for the OBJ pass.
-struct SpriteCtx {
-    insts: Vec<SpriteInst>,
-    objblock: Vec<u8>,
-    tables: ObjectTables,
-    level_id: u8,
-    obp0: u8,
-    obp1: u8,
+pub(crate) struct SpriteCtx {
+    pub(crate) insts: Vec<SpriteInst>,
+    pub(crate) objblock: Vec<u8>,
+    pub(crate) tables: ObjectTables,
+    pub(crate) level_id: u8,
+    pub(crate) obp0: u8,
+    pub(crate) obp1: u8,
     /// Optional player (Mario): world position + `$FFC6` frame.
-    player: Option<(u16, u16, u8)>,
+    pub(crate) player: Option<(u16, u16, u8)>,
     /// Optional 3-up moon shield ($54FB): world position + frame 220/221.
-    player_shield: Option<(u16, u16, u8)>,
+    pub(crate) player_shield: Option<(u16, u16, u8)>,
     /// Brick-bump sprites for this frame (`PlayerSim::block_draw`): the engine
     /// stages `$FFC4`/`$FFC5`/`$FFC6` and enqueues them (`$5297`), so they are
     /// extra OAM sprites drawn at the block — through the same player-sprite
     /// path, after Mario (his entries come first, so he wins overlaps).
-    bumpers: Vec<(u16, u16, u8)>,
+    pub(crate) bumpers: Vec<(u16, u16, u8)>,
     /// The live fireballs' sprites (`$3261`'s `$2CF4` staging, mapping `$B0`/`$B4`
     /// + the rDiv flicker), `(x, y, mapping)` in the same convention as
     /// `bumpers`.
-    fireballs: Vec<(u16, u16, u8)>,
+    pub(crate) fireballs: Vec<(u16, u16, u8)>,
     /// During a boss fight, the boss path's own draw output (`$3A14` -> bank 25
     /// `$66000`, [`sml2_core::objects::ObjectSim::boss_oam`]): the entries are
     /// already in OAM byte space, so they are blitted at `(x - 8, y - 16)` and
@@ -579,10 +674,10 @@ struct SpriteCtx {
     /// Drawn after Mario, like the level objects — and `insts` is empty on
     /// these frames, because the boss slots' state byte carries HP, not a slot
     /// state, and the engine's own draw never runs in the boss path.
-    boss_oam: Vec<sml2_core::objects::BossOamCell>,
+    pub(crate) boss_oam: Vec<sml2_core::objects::BossOamCell>,
     /// Distinct phases: Mario subtracts the decremented phase; BG/objects use latched scroll.
-    player_pan: u8,
-    scroll_pan: u8,
+    pub(crate) player_pan: u8,
+    pub(crate) scroll_pan: u8,
 }
 
 /// Interactive viewer: arrow keys scroll the camera, Q/ESC quits; the window
@@ -725,7 +820,7 @@ fn window_coord(v: i32, origin: i32) -> i32 {
 /// same WRAM map its probes read, so a cell the sim rewrote — a collected
 /// coin's `$60`, a bump's `$24`/`$07`/… — must draw as the new metatile.
 #[allow(clippy::too_many_arguments)]
-fn render_view(
+pub(crate) fn render_view(
     manifest: &LevelManifest,
     layout: &LevelLayout,
     overlay: &[(u32, u8)],
@@ -1278,7 +1373,7 @@ struct ExitArmJ {
 /// path takes it from its capture, play mode has no source for it yet and
 /// passes 0. `scene_state` and `flutter` are 0 in both paths for the same
 /// reason — nothing in the port drives `sSceneState` or `sFlutterTimer` yet.
-fn build_contact(sim: &PlayerSim, keys: &PlayerKeys, pan: u8) -> sml2_core::objects::MarioContact {
+pub(crate) fn build_contact(sim: &PlayerSim, keys: &PlayerKeys, pan: u8) -> sml2_core::objects::MarioContact {
     sml2_core::objects::MarioContact {
         x: sim.x,
         y: sim.y,
@@ -2322,7 +2417,7 @@ fn run_replay(
 /// A hand-off whose tail selected a zone screen: the ROM's
 /// `$3D0FF`/`$3D208`/`$3D371`/`$3D49F`/`$3D61F`/`$3D79A`/`$3D6EB`/`$3D880`
 /// loaders are ported into `PlayerSim::map_handoff` and `MapSim::load_screen`.
-fn note_handoff_screen(_out: &sml2_core::player_sim::MapHandoffOutcome) {}
+pub(crate) fn note_handoff_screen(_out: &sml2_core::player_sim::MapHandoffOutcome) {}
 
 /// Parse a 32-hex-char dump into 16 bytes (a `sBlockAnimSlots` entry).
 fn parse_slot16_hex(s: &str) -> Option<[u8; 16]> {
@@ -2399,22 +2494,22 @@ struct PlayOutcome {
 }
 
 #[allow(dead_code)]
-struct BellArm {
-    frame: u64,
-    position: (u16, u16),
-    fade_timer: u16,
-    music_request: u8,
-    exit_tile_flag: u8,
-    dead: u8,
+pub(crate) struct BellArm {
+    pub(crate) frame: u64,
+    pub(crate) position: (u16, u16),
+    pub(crate) fade_timer: u16,
+    pub(crate) music_request: u8,
+    pub(crate) exit_tile_flag: u8,
+    pub(crate) dead: u8,
 }
 
 #[allow(dead_code)]
-struct TimedFloatUse {
-    frame: u64,
-    timer_before: u8,
-    timer_after: u8,
-    vvel_before: u8,
-    vvel_after: u8,
+pub(crate) struct TimedFloatUse {
+    pub(crate) frame: u64,
+    pub(crate) timer_before: u8,
+    pub(crate) timer_after: u8,
+    pub(crate) vvel_before: u8,
+    pub(crate) vvel_after: u8,
 }
 
 /// Interactive play mode: the ported player physics + camera drive the
@@ -3019,7 +3114,7 @@ fn run_play(
 }
 
 /// The dispatch boundary shared by live play, replay, and pipe integration tests.
-fn scene_frame_head(
+pub(crate) fn scene_frame_head(
     scene: &mut SceneVm,
     ending: &mut EndingEntry,
     sim: &mut PlayerSim,
@@ -3058,13 +3153,13 @@ fn ending_frame_head(
 }
 
 /// Share the level route latch with object handlers, including pose 87.
-fn sample_level_player_inputs(obj: &mut sml2_core::objects::ObjectSim, sim: &PlayerSim) {
+pub(crate) fn sample_level_player_inputs(obj: &mut sml2_core::objects::ObjectSim, sim: &PlayerSim) {
     obj.sample_player_inputs(sim);
     obj.secret_route = sim.secret_route != 0;
 }
 
 /// Apply the resolved `$A800-$A807` block and `$5579` route/progress latches.
-fn apply_level_entry(
+pub(crate) fn apply_level_entry(
     sim: &mut PlayerSim,
     cam: &mut sml2_core::camera::CameraSim,
     entry: sml2_core::level::LevelEntry,
@@ -3091,7 +3186,7 @@ fn seed_unique_level_map_node(sim: &mut PlayerSim, level: u8, nodes: &MapNodes) 
 }
 
 /// `$04F1`: the header seeds the countdown and the level's music byte on load.
-fn seed_level_timer(sim: &mut PlayerSim, manifest: &LevelManifest) {
+pub(crate) fn seed_level_timer(sim: &mut PlayerSim, manifest: &LevelManifest) {
     sim.level_timer = sml2_core::level_timer::LevelTimer::new(manifest.header.time_limit);
     sim.level_song = manifest.header.music_track;
 }
