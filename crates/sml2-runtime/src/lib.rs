@@ -36,6 +36,7 @@ use render::{render_view, SpriteCtx, SpriteInst};
 use present::letterbox_gray;
 pub mod audio_output;
 pub mod session;
+pub mod host;
 use play_tape::PlayTape;
 #[cfg(test)]
 mod door_boss_entry_tests;

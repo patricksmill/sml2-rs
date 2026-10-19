@@ -349,8 +349,8 @@ fn map_screen_loader_music_reaches_the_driver() {
 
     // Screen 1 is loaded by $3D208, which requests song 30.
     {
-        let records = &runner.assets.node_records;
-        match &mut runner.state {
+        let records = &runner.session.assets.node_records;
+        match &mut runner.session.state {
             SessionState::Overworld(map) => {
                 let _ = map.load_screen(1, 0, records);
             }
@@ -362,8 +362,8 @@ fn map_screen_loader_music_reaches_the_driver() {
 
     // Screen 5 is loaded by $3D61F, which requests song 18.
     {
-        let records = &runner.assets.node_records;
-        match &mut runner.state {
+        let records = &runner.session.assets.node_records;
+        match &mut runner.session.state {
             SessionState::Overworld(map) => {
                 let _ = map.load_screen(5, 0, records);
             }

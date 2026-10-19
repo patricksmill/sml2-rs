@@ -1,10 +1,10 @@
 //! Read-only CPU composition of the native game view. No window or filesystem access.
 
+use crate::{SCREEN_H, SCREEN_W};
 use serde::Deserialize;
 use sml2_core::level::{LevelLayout, LevelManifest, LAYOUT_HEIGHT, LAYOUT_WIDTH};
 use sml2_core::object::ObjectTables;
 use sml2_core::video;
-use crate::{SCREEN_W, SCREEN_H};
 
 /// One live object instance fed to the renderer: world position, sprite id and
 /// the object's `sSpriteFlipFlags` byte (bit4 = OBP select, bit5 = X flip,
@@ -399,3 +399,5 @@ fn blit_obj_cell(
         }
     }
 }
+
+mod session;
