@@ -34,7 +34,8 @@ Concretely:
 1. Power-on with an empty or valid SRAM image shows the source title screen at
    the source palettes and cadence; START opens the file select.
 2. The file select shows three slots from the source tilemap and sprite layout,
-   with each slot's tally/lives read from its record.
+   with each slot's tally read from its record (the ROM draws only the tally
+   digits; lives are not in the slot row).
 3. New game, continue, erase, cancel, and the Easy-mode toggle behave as the
    ROM does, with the source's timers, SFX and music requests.
 4. Loading a slot copies its 64-byte progress block and counters into the live
@@ -84,6 +85,10 @@ belong to the ending/golden-coin chain and must not be pulled in.
 | 4 | `$426D` | erase-mode toggle at timer `$2B`: `sFileClearMode ^= 1`, `sMarioDirection = $FF`, SFX 0 = 8; clearing Easy mode when erase is on; state → 1 |
 | 5 | `$41C6` | confirm animation (timer 64); at zero: index = `(($FFC2 & $60) >> 5) - 1`; clear mode → erase path, otherwise load path |
 | 6 | `$4140` | post-erase animation (timer `$80`), then cursor Y → 124 and state → 1, clear mode cleared |
+
+Slot display (`$300FE`): two digit sprites per slot at X = 88/96 and Y =
+32/64/96, built from `sSaveSlotNTally` (`$5267`: high nibble, then low nibble,
+tile + `$80`). Lives are not drawn on this screen.
 
 Menu work RAM: `sMenuState $A277`, `sMenuTimer $A278`, `sSaveFileIndex $A2A3`,
 `sFileClearMode $A2C6`, `sCursorHopActive $A2C7`, `sCursorAnimY $A2D1`,
