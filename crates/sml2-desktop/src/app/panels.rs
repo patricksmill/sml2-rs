@@ -112,7 +112,13 @@ impl DesktopApp {
         ) {
             self.fullscreen(ctx);
         }
-        ui.label("+ / − zoom · F11 fullscreen · game view stays 160 × 144");
+        let adjust = self.menu.row_adjustment();
+        if self.menu.button(ui, format!("Filter: {}", self.settings.filter.label()))
+            || adjust != 0
+        {
+            self.cycle_filter(if adjust != 0 { adjust } else { 1 });
+        }
+        ui.label("+ / − zoom · F11 fullscreen · F4 cycles filters · game view stays 160 × 144");
         ui.add_space(10.0);
         ui.strong("Audio");
         let adjust = self.menu.row_adjustment();

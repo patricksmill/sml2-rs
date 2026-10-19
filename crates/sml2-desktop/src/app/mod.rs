@@ -3,7 +3,7 @@ use crate::{
     game::Game,
     input::{Action, InputState},
     menu::{release_focus, Menu},
-    settings::{Settings, Zoom},
+    settings::{Filter, Settings, Zoom},
     timing::{game_rectangle, TickBudget},
 };
 use eframe::egui::{
@@ -198,6 +198,13 @@ impl DesktopApp {
                     self.debug = !self.debug;
                     release_focus(ctx);
                 }
+                if ui
+                    .button(format!("Filter: {}", self.settings.filter.label()))
+                    .clicked()
+                {
+                    self.cycle_filter(1);
+                    release_focus(ctx);
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("Fullscreen · F11").clicked() {
                         self.fullscreen(ctx);
@@ -266,7 +273,7 @@ impl DesktopApp {
             }
             let pixels = game.session.render_frame((160, 144));
             self.texture.set(
-                ColorImage::from_gray([160, 144], &pixels),
+                colorized(&pixels, self.settings.filter),
                 TextureOptions::NEAREST,
             );
         }
@@ -353,6 +360,18 @@ impl DesktopApp {
             }
         }
     }
+}
+
+/// Map the simulation's four DMG shades into RGB for presentation.
+fn colorized(frame: &[u8], filter: Filter) -> ColorImage {
+    let pixels = frame
+        .iter()
+        .map(|&gray| {
+            let [r, g, b] = filter.rgb(gray);
+            Color32::from_rgb(r, g, b)
+        })
+        .collect();
+    ColorImage::new([160, 144], pixels)
 }
 
 impl eframe::App for DesktopApp {

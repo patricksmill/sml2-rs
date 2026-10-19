@@ -19,6 +19,7 @@ fn app() -> (DesktopApp, Context, PathBuf) {
             save: directory.join("save.sav"),
         },
         audio: false,
+        filter: None,
         play: false,
         boot_title: false,
         scale: None,

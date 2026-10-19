@@ -1,4 +1,5 @@
 use sml2_desktop::app::{self, Options};
+use sml2_desktop::settings::Filter;
 use std::path::PathBuf;
 
 fn main() -> Result<(), String> {
@@ -19,6 +20,16 @@ fn main() -> Result<(), String> {
                 options.play = true;
                 options.boot_title = true;
             }
+            "--filter" => {
+                options.filter = Some(match value()?.as_str() {
+                    "gray" => Filter::Gray,
+                    "dmg" => Filter::Dmg,
+                    "pocket" => Filter::Pocket,
+                    "sgb" => Filter::Sgb,
+                    "amber" => Filter::Amber,
+                    other => return Err(format!("--filter must be gray, dmg, pocket, sgb or amber, got {other}")),
+                });
+            }
             "--fullscreen" => options.fullscreen = true,
             "--scale" => {
                 let scale: u8 = value()?.parse().map_err(|_| "--scale needs 1..=8")?;
@@ -38,7 +49,7 @@ fn main() -> Result<(), String> {
             }
             "--screenshot" => options.screenshot = Some(PathBuf::from(value()?)),
             "--help" | "-h" => {
-                println!("sml2-desktop [--assets DIR] [--config FILE] [--save FILE] [--play] [--title]\n  [--scale 1..8] [--fullscreen] [--no-audio]\n  Validation: --smoke-frames N [--screenshot FILE]\n\nEsc / Controller Start: menu | F11: fullscreen | +/-: zoom\nF1: debug | F2: debug pause | F3: one tick");
+                println!("sml2-desktop [--assets DIR] [--config FILE] [--save FILE] [--play] [--title] [--filter gray|dmg|pocket|sgb|amber]\n  [--scale 1..8] [--fullscreen] [--no-audio]\n  Validation: --smoke-frames N [--screenshot FILE]\n\nEsc / Controller Start: menu | F11: fullscreen | +/-: zoom\nF1: debug | F2: debug pause | F3: one tick");
                 return Ok(());
             }
             _ => return Err(format!("Unknown option: {argument}")),

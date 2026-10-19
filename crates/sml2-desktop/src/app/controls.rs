@@ -35,7 +35,7 @@ impl DesktopApp {
                         }
                     }
                     if let Some((frame, rect)) = self.screenshot_check.take() {
-                        match screenshot::verify(image, &frame, rect) {
+                        match screenshot::verify(image, &frame, rect, self.settings.filter) {
                             Ok(()) => eprintln!("GPU game pixels match the CPU frame exactly"),
                             Err(e) => {
                                 eprintln!("{e}");
@@ -51,6 +51,10 @@ impl DesktopApp {
         self.input.event(Button::key("Shift"), raw.modifiers.shift);
         self.input.event(Button::key("Control"), raw.modifiers.ctrl);
         self.input.event(Button::key("Alt"), raw.modifiers.alt);
+    }
+
+    pub(super) fn cycle_filter(&mut self, delta: i32) {
+        self.settings.filter = self.settings.filter.cycle(delta);
     }
 
     pub(super) fn shortcuts(&mut self, ctx: &Context) {
@@ -86,6 +90,9 @@ impl DesktopApp {
         }
         if self.input.take_press(&Button::key("F11")) {
             self.fullscreen(ctx);
+        }
+        if self.input.take_press(&Button::key("F4")) {
+            self.cycle_filter(1);
         }
         if self.input.take_press(&Button::key("F1")) {
             self.debug = !self.debug;

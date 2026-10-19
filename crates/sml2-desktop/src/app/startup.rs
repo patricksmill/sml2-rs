@@ -1,5 +1,5 @@
 use super::DesktopApp;
-use crate::settings::{AppPaths, Settings, Zoom};
+use crate::settings::{AppPaths, Filter, Settings, Zoom};
 use eframe::egui;
 use sml2_runtime::content::ExtractedContent;
 use std::path::PathBuf;
@@ -8,6 +8,7 @@ pub struct Options {
     pub assets: PathBuf,
     pub paths: AppPaths,
     pub audio: bool,
+    pub filter: Option<Filter>,
     pub play: bool,
     pub boot_title: bool,
     pub scale: Option<u8>,
@@ -21,6 +22,7 @@ impl Options {
             assets: ExtractedContent::discover().root().to_owned(),
             paths: AppPaths::discover()?,
             audio: true,
+            filter: None,
             play: false,
             boot_title: false,
             scale: None,
@@ -40,6 +42,9 @@ pub fn run(options: Options) -> Result<(), String> {
     }
     if options.fullscreen {
         settings.fullscreen = true;
+    }
+    if let Some(filter) = options.filter {
+        settings.filter = filter;
     }
     let viewport = egui::ViewportBuilder::default()
         .with_inner_size(settings.window_size)
