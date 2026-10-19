@@ -15,12 +15,17 @@ use std::{
 
 /// PCM duration of one live simulation tick. Catch-up ticks each retain their
 /// own audio interval instead of assigning a wall-clock deficit to the first.
-#[derive(Default)]
-pub struct AudioClock;
+pub struct AudioClock {
+    rate: u32,
+}
 
 impl AudioClock {
+    pub fn new(rate: u32) -> Self {
+        Self { rate }
+    }
+
     pub fn take(&mut self) -> usize {
-        crate::audio_output::LIVE_FRAME_SAMPLES
+        self.rate as usize / 60
     }
 }
 
@@ -84,8 +89,8 @@ impl SessionRunner {
             },
         };
         runner.load_from_disk();
-        if runner.live_audio.is_some() {
-            runner.audio_sync = Some(AudioClock);
+        if let Some(out) = &runner.live_audio {
+            runner.audio_sync = Some(AudioClock::new(out.sample_rate()));
         }
         runner
     }

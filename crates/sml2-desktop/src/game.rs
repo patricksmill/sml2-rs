@@ -1,10 +1,6 @@
 use crate::settings::atomic_write;
 use sml2_core::{audio::Apu, divider::Divider, player_sim::PlayerKeys};
-use sml2_runtime::{
-    audio_output::{AudioOutput, LIVE_FRAME_SAMPLES},
-    content::SessionAssets,
-    FrameInput, Session,
-};
+use sml2_runtime::{audio_output::AudioOutput, content::SessionAssets, FrameInput, Session};
 use std::{fs, path::PathBuf, time::Instant};
 
 pub struct Game {
@@ -69,9 +65,12 @@ impl Game {
         self.apu.ingest_driver(&self.session.sound_driver);
         // Each catch-up tick advances its own PCM interval before the next
         // driver update, so short SFX cannot disappear into a zero-sample tick.
-        let samples = LIVE_FRAME_SAMPLES;
+        // The sink's rate decides the tick's length: WASAPI shared mode often
+        // runs at 48 kHz while the pipe backends ask for 44.1 kHz.
+        let rate = self.output.as_ref().map_or(44_100, |o| o.sample_rate());
+        let samples = rate as usize / 60;
         self.buffer.clear();
-        self.apu.generate_samples(44100, samples, &mut self.buffer);
+        self.apu.generate_samples(rate, samples, &mut self.buffer);
         for sample in &mut self.buffer {
             *sample *= volume;
         }

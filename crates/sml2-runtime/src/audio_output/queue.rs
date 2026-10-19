@@ -4,8 +4,9 @@ use super::LIVE_FRAME_SAMPLES;
 use std::collections::VecDeque;
 use std::sync::{Condvar, Mutex};
 
-// At 60 game ticks per second, keep at most 33 ms of stereo PCM in this queue.
-const MAX_SAMPLES: usize = 2 * LIVE_FRAME_SAMPLES * 2;
+// Keep at most one tick (16.7 ms) of stereo PCM in this queue: on a hitch the
+// newest tick wins, so the stream never plays audio the game has moved past.
+const MAX_SAMPLES: usize = 2 * LIVE_FRAME_SAMPLES;
 
 #[derive(Default)]
 struct Pending {

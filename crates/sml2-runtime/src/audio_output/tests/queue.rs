@@ -6,7 +6,8 @@ fn slow_playback_keeps_recent_events_instead_of_old_audio() {
     for event in [1.0, 2.0, 3.0] {
         queue.push(vec![event; LIVE_FRAME_SAMPLES * 2]);
     }
-    assert!(queue.pop().unwrap().iter().all(|&s| s == 2.0));
+    // One tick of backlog: the two older ticks were dropped, so the first
+    // chunk the sink sees is the newest one.
     assert!(queue.pop().unwrap().iter().all(|&s| s == 3.0));
     queue.close();
     assert!(queue.pop().is_none());

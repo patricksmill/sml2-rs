@@ -384,14 +384,14 @@ fn map_screen_loader_music_reaches_the_driver() {
 
 #[test]
 fn live_audio_keeps_a_separate_pcm_interval_for_each_catch_up_tick() {
-    let mut clock = AudioClock;
+    let mut clock = AudioClock::new(44_100);
     let samples: Vec<_> = (0..8).map(|_| clock.take()).collect();
     assert_eq!(
         samples,
         vec![735; 8],
         "eight ticks retain eight audio intervals"
     );
-    let mut clock = AudioClock;
+    let mut clock = AudioClock::new(44_100);
     assert_eq!((0..60).map(|_| clock.take()).sum::<usize>(), 44_100);
 }
 
