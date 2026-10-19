@@ -586,6 +586,9 @@ pub enum StepOutcome {
 /// Top-level coordinator for multi-state gameplay sessions.
 pub struct SessionRunner {
     pub state: SessionState,
+    /// Screen whose loader-run music request was last applied, so a screen's
+    /// song is requested once per load instead of every frame.
+    pub last_map_screen: Option<u8>,
     pub assets: SessionAssets,
     pub save_path: PathBuf,
     pub lives: u8,
@@ -624,6 +627,7 @@ impl SessionRunner {
         let (vw, vh) = view;
         let mut runner = Self {
             state: SessionState::GameOver,
+            last_map_screen: None,
             assets,
             save_path,
             lives: 5,
@@ -889,6 +893,19 @@ impl SessionRunner {
                 StepOutcome::Continue
             }
         };
+
+        // The map screen loaders each request their own song on entry
+        // ($3D0FF..$3D880) and call $2AAA right after, so the request is applied
+        // when a screen is loaded (not every frame) and starts this same frame.
+        if let SessionState::Overworld(map) = &self.state {
+            if self.last_map_screen != Some(map.screen_id) {
+                self.last_map_screen = Some(map.screen_id);
+                self.sound_driver.music_request =
+                    sml2_core::map_sim::screen_music(map.screen_id);
+            }
+        } else {
+            self.last_map_screen = None;
+        }
 
         self.sound_driver.update_sound();
         // The ROM reads `sCurSong` from the level timer's music gate ($5DCB) on

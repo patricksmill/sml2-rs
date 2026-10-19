@@ -339,3 +339,49 @@ fn level_entry_publishes_the_active_song_for_the_timer_gate() {
 
     let _ = fs::remove_file(&tmp_save);
 }
+
+#[test]
+fn map_screen_loader_music_reaches_the_driver() {
+    let tmp_save = temp_save_path("test_map_music");
+    let _ = fs::remove_file(&tmp_save);
+    let assets = SessionAssets::load().expect("session assets must load");
+    let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
+
+    // The hub loader ($3F156) requests $FF, i.e. stop.
+    runner.step_frame(PlayerKeys::default());
+    assert_eq!(runner.sound_driver.active_song, 0);
+
+    // Screen 1 is loaded by $3D208, which requests song 30.
+    {
+        let records = &runner.assets.node_records;
+        match &mut runner.state {
+            SessionState::Overworld(map) => {
+                let _ = map.load_screen(1, 0, records);
+            }
+            _ => panic!("expected Overworld"),
+        }
+    }
+    runner.step_frame(PlayerKeys::default());
+    assert_eq!(runner.sound_driver.active_song, 30, "screen 1 loader song");
+
+    // Screen 5 is loaded by $3D61F, which requests song 18.
+    {
+        let records = &runner.assets.node_records;
+        match &mut runner.state {
+            SessionState::Overworld(map) => {
+                let _ = map.load_screen(5, 0, records);
+            }
+            _ => panic!("expected Overworld"),
+        }
+    }
+    runner.step_frame(PlayerKeys::default());
+    assert_eq!(runner.sound_driver.active_song, 18, "screen 5 loader song");
+
+    // Re-loading the same screen must not restart the song.
+    let before = runner.sound_driver.update_count;
+    runner.step_frame(PlayerKeys::default());
+    assert_eq!(runner.sound_driver.active_song, 18);
+    assert_eq!(runner.sound_driver.update_count, before + 1);
+
+    let _ = fs::remove_file(&tmp_save);
+}
