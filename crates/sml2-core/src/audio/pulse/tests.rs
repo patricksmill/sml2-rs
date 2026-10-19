@@ -571,3 +571,46 @@ fn test_pulse_effect19_fast_slide() {
     );
 }
 
+
+#[test]
+fn test_pulse_effect14_frame_table() {
+    // $43C0 = [$43D0, $43D6, $43D6, $43D6, $43D6] indexed by step-1: the first
+    // expiry of every trigger writes the louder $59-envelope frame, and only
+    // the final pass (duration exhausted -> a=2 -> table[1]) writes $29.
+    let mut effect = PulseEffectState {
+        request: 14,
+        ..Default::default()
+    };
+    let mut music = PulseMusicState::default();
+    let mut out = Vec::new();
+
+    effect.start(14, &mut music, 0, &mut out);
+    assert_eq!((effect.duration, effect.step, effect.timer), (4, 0, 3));
+
+    let mut envelopes = Vec::new();
+    for _ in 0..8 {
+        effect.timer = 1;
+        out.clear();
+        effect.tick(&mut music, 0, &mut out);
+        let env = out
+            .iter()
+            .find_map(|w| match w {
+                PulseWrite::Envelope(v) => Some(*v),
+                _ => None,
+            })
+            .expect("effect 14 frame carries an envelope write");
+        envelopes.push(env);
+    }
+    assert_eq!(
+        envelopes,
+        vec![0x59, 0x59, 0x59, 0x59, 0x29, 0x29, 0x29, 0x29],
+        "step 1 uses the $43D0 frame, steps 3-5 alias $43D6"
+    );
+
+    // Step 6 stops the slot ($43A6 -> $106A8).
+    effect.timer = 1;
+    out.clear();
+    effect.tick(&mut music, 0, &mut out);
+    assert_eq!(effect.active_effect, 0);
+    assert_eq!(out.first(), Some(&PulseWrite::Sweep(0)));
+}

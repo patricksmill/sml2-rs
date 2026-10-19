@@ -409,7 +409,15 @@ impl PulseEffectState {
         } else if self.step == 6 {
             self.stop(music, out);
         } else {
-            self.emit_frame(E14_FRAME2, out);
+            // $43A9: `ld hl,$43C0 / call $51A6` indexes the frame table by
+            // step-1. Entry 1 points at the louder frame ($43D0, envelope $59);
+            // entries 2-5 all alias $43D6 (envelope $29).
+            let frame = if self.step == 1 {
+                E14_FRAME1
+            } else {
+                E14_FRAME2
+            };
+            self.emit_frame(frame, out);
         }
     }
 
