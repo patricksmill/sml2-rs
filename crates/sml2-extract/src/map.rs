@@ -107,10 +107,14 @@ pub const SCREEN_TILEMAP_SPECS: &[(u8, &str, usize, usize, &str, u8)] = &[
     ),
     // `$3F4B1`/`$3F5A4`: the two bell-bonus rooms, bank 17 `$7800`/`$7A40`
     // copied to `$9800` (0x400 each; the 32x18 visible rows are 576 bytes).
+    // `ld a, 17` selects decimal bank 17 ($11), so the flat addresses are
+    // 17*$4000 + ($7800-$4000) and +$3A40.
+    // Neither loader writes `sBGPalette`, so both rooms keep the $E4 the
+    // castle map screen (screen 8) and the zone screens use.
     (
         13,
         "bell_bonus_a",
-        0x5F800,
+        0x47800,
         576,
         "gfx/overworld/mariocastle.png",
         0xE4,
@@ -118,7 +122,7 @@ pub const SCREEN_TILEMAP_SPECS: &[(u8, &str, usize, usize, &str, u8)] = &[
     (
         14,
         "bell_bonus_b",
-        0x5FA40,
+        0x47A40,
         576,
         "gfx/overworld/mariocastle.png",
         0xE4,
@@ -429,8 +433,8 @@ mod tests {
 
         // The two bell-bonus rooms sit after the twelve zone screens.
         let mut rom = rom;
-        rom[0x5F800..0x5F800 + 576].fill(0x5A);
-        rom[0x5FA40..0x5FA40 + 576].fill(0x5B);
+        rom[0x47800..0x47800 + 576].fill(0x5A);
+        rom[0x47A40..0x47A40 + 576].fill(0x5B);
         let blob = build_tilemaps_binary(&rom).expect("valid binary with bell rooms");
         assert_eq!(blob[4096 + 12 * 1024], 0x5A);
         assert_eq!(blob[4096 + 13 * 1024], 0x5B);

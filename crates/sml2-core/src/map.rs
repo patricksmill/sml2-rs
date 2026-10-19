@@ -348,8 +348,9 @@ pub const fn signed_bg_tile_index(tile: u8) -> usize {
 /// The extracted overworld background tilemaps (`extracted/map/tilemaps.bin`).
 ///
 /// Contains the 64x64 hub tilemap (4,096 bytes) stitched from the four 32x32
-/// quadrants, followed by 12 screen tilemaps (each 32x32 = 1,024 bytes, 576 bytes
-/// visible). Total size: 16,384 bytes.
+/// quadrants, followed by the 14 screen tilemaps (each 32x32 = 1,024 bytes, 576
+/// bytes visible): the twelve zone screens plus the two bell-bonus rooms
+/// (screens 13/14). Total size: 18,432 bytes.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct OverworldTilemaps {
     blob: Vec<u8>,
@@ -358,7 +359,7 @@ pub struct OverworldTilemaps {
 impl OverworldTilemaps {
     pub const HUB_LEN: usize = 4096;
     pub const SCREEN_LEN: usize = 1024;
-    pub const SCREEN_COUNT: usize = 12;
+    pub const SCREEN_COUNT: usize = 14;
     pub const TOTAL_LEN: usize = Self::HUB_LEN + Self::SCREEN_COUNT * Self::SCREEN_LEN;
 
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
@@ -453,6 +454,44 @@ impl OverworldTiles {
             tile_16.copy_from_slice(chunk);
             tiles.push(crate::video::tile_colors(&tile_16));
         }
+        tiles
+    }
+}
+
+/// The bell-bonus rooms' background tiles (`extracted/map/bell_room_tiles.bin`).
+///
+/// `$3F4B1`/`$3F5A4` copy bank 25 `$5000` (256 tiles, 4 KiB) to VRAM
+/// `$8800-$97FF`, so the block occupies tile numbers 128..383 of the
+/// `$8000-$9FFF` map the overworld renderer walks. Both rooms share it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BellRoomTiles {
+    bytes: Vec<u8>,
+}
+
+impl BellRoomTiles {
+    pub const LEN: usize = 0x1000;
+    /// Tile number the block starts at (`$8800`).
+    pub const FIRST_TILE: usize = 128;
+
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        (bytes.len() == Self::LEN).then(|| Self {
+            bytes: bytes.to_vec(),
+        })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+
+    /// The 384 tiles of `$8000-$9FFF`, with the bell block at `$8800`.
+    pub fn vram_tiles(&self) -> Vec<[u8; 64]> {
+        let mut tiles = vec![[0u8; 64]; Self::FIRST_TILE];
+        for chunk in self.bytes.as_chunks::<16>().0 {
+            let mut tile = [0u8; 16];
+            tile.copy_from_slice(chunk);
+            tiles.push(crate::video::tile_colors(&tile));
+        }
+        tiles.resize(384, [0u8; 64]);
         tiles
     }
 }
@@ -1402,6 +1441,38 @@ mod tests {
             "but +$4A is not part of the check — the ROM's compare stops at +$49"
         );
         assert!(!save_record_valid(&[0u8; 8]), "a short record fails");
+    }
+
+    /// Screens 13/14 exist in `map/tilemaps.bin` and use the bank-25 `$5000`
+    /// block the room loaders copy to `$8800` (tile numbers 128..383), not the
+    /// twelve zone tilesets in `map/tiles.bin`.
+    #[test]
+    fn bell_room_screens_have_their_own_tiles() {
+        let tilemaps =
+            OverworldTilemaps::from_bytes(include_bytes!("../../../extracted/map/tilemaps.bin"))
+                .expect("18,432-byte tilemaps with 14 screens");
+        assert_eq!(tilemaps.screen_tile(13, 0, 0), 0x77, "bank 17 $7800");
+        assert_eq!(tilemaps.screen_tile(14, 0, 0), 0x2E, "bank 17 $7A40");
+        // The rooms are 20 tiles wide; the rest of the row is $00, which the
+        // signed addressing reads from $9000 — inside the copied block.
+        assert_eq!(tilemaps.screen_tile(13, 20, 0), 0x00);
+
+        let tiles =
+            BellRoomTiles::from_bytes(include_bytes!("../../../extracted/map/bell_room_tiles.bin"))
+                .expect("4,096-byte bell tileset");
+        let vram = tiles.vram_tiles();
+        assert_eq!(vram.len(), 384);
+        assert!(vram[..BellRoomTiles::FIRST_TILE]
+            .iter()
+            .all(|t| t.iter().all(|&c| c == 0)));
+        assert!(
+            vram[BellRoomTiles::FIRST_TILE].iter().any(|&c| c != 0),
+            "$8800 tile 0 is the ring tile"
+        );
+        assert!(
+            vram[signed_bg_tile_index(0)].iter().any(|&c| c != 0),
+            "$9000 tile 0 is bell tile 128, not blank"
+        );
     }
 
     #[test]

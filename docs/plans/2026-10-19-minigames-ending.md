@@ -45,12 +45,24 @@ Read the state table, the map-screen dispatch, the loaders, the bank-24 entry
 points, the existing ending/castle code. Verified ending/credits and level 24
 as above. This document.
 
-### ME-2 — Extract the bell rooms and script blobs (S)
-**Partial**: screens 13/14 are now in `SCREEN_TILEMAP_SPECS` (bank 17
-`$7800`/`$7A40`, 576 visible bytes each; `map/tilemaps.bin` is now 18,432 bytes
-with 14 zone screens + the hub) and the extractor test pins their offsets.
-Still to do: emit the bank-24 script blobs (`$4A81`, `$4512`, `$4028`,
-`$4A1A`/`$4A2F`/`$4A58`, `$6761`) with scanned lengths and render both screens.
+### ME-2 — Extract the bell rooms and script blobs (done)
+Screens 13/14 are in `SCREEN_TILEMAP_SPECS` and `map/tilemaps.bin` is 18,432
+bytes (14 screens + the hub). **Corrected**: the two room pointers are decimal
+bank 17 ($11), `$47800`/`$47A40`; the first cut used `$5F800`/`$5FA40`, which is
+bank 23 (`$17` read as hex) and renders as packed data. Bank 25 `$5000` (256
+tiles) is emitted as `map/bell_room_tiles.bin` and both screens render to
+`map/bell_bonus_a.png`/`_b.png`; neither loader writes `sBGPalette`, so both
+keep the $E4 of screen 8.
+
+`map/castle_scripts.bin` (+ `.json`) carries eight measured blobs (4,028
+bytes): `castle_screen` $4028 (1,258 B), `bell_room_a_script` $4512 (1,288 B),
+`bell_slots_0/1/2` $4A1A/$4A2F/$4A58 (21/41/41 B, `$FF`-terminated),
+`coin_room_script` $4A81 (1,241 B) and the bank-15 sprite/patch lists
+`bell_room_a_sprites` $6734 (45 B) and `bell_room_b_sprites` $6761 (93 B).
+Each code end is a `ret`; `castle_screen`/`bell_room_a_script` end where the
+next entry starts, `coin_room_script` at the $4F5A lookup tables. The sprite
+lists are `$3E2A2`'s two 3-byte record runs, each closed by an `$FF` record.
+`CastleScripts` and `BellRoomTiles` in `sml2-core` pin the emitted bytes.
 
 ### ME-3 — Port the bank-24 map-script VM subset (L)
 Implement the commands the three scripts use: far entry, waits, sprite/patch

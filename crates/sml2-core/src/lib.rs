@@ -3,6 +3,7 @@
 pub mod actor;
 pub mod audio;
 pub mod camera;
+pub mod castle;
 pub mod collision;
 pub mod credits_text;
 pub mod divider;

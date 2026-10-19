@@ -65,10 +65,16 @@ impl Session {
                 (vw, vh),
             ),
             SessionState::Overworld(map_sim) => {
-                let mut vram = self
-                    .assets
-                    .overworld_tiles
-                    .screen_vram_tiles(map_sim.screen_id);
+                let mut vram = if map_sim.screen_id >= 13 && !self.assets.bell_room_tiles.is_empty()
+                {
+                    // Screens 13/14 copy bank 25 `$5000` to `$8800`; the zone
+                    // tilesets at `map/tiles.bin` do not apply.
+                    self.assets.bell_room_tiles.vram_tiles()
+                } else {
+                    self.assets
+                        .overworld_tiles
+                        .screen_vram_tiles(map_sim.screen_id)
+                };
                 if map_sim.screen_id == 0 {
                     if let Some(wave) = &self.map_wave {
                         wave.apply(&mut vram);

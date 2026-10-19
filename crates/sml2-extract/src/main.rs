@@ -14,6 +14,7 @@
 //! 3. Emit one structured manifest per level plus a usage index:
 //!    `extracted/levels/levelNN.manifest.json` and `index.json`.
 
+mod castle;
 mod ending;
 mod front_end;
 mod map;
@@ -635,6 +636,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
 
     map::emit(&baserom, &extracted)?;
+    castle::emit(&baserom, &extracted)?;
 
     // Per-level GFX config (UnknownData_0x360A -> sLevelGfxConfig): the high
     // nibble selects the two "extra" tile blocks loaded by LoadMarioGFX

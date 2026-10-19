@@ -95,6 +95,8 @@ pub struct SessionAssets {
     pub overworld_tilemaps: OverworldTilemaps,
     pub overworld_manifest: OverworldManifest,
     pub overworld_tiles: OverworldTiles,
+    /// Bank 25 `$5000` tiles for the bell-bonus rooms (screens 13/14).
+    pub bell_room_tiles: sml2_core::map::BellRoomTiles,
     pub hud: HudStrip,
     pub anim_rows: Vec<u8>,
     pub scripts: SceneScripts,
@@ -126,6 +128,7 @@ impl SessionAssets {
         let overworld_tilemaps = load_overworld_tilemaps_from(source);
         let overworld_manifest = load_overworld_manifest_from(source);
         let overworld_tiles = load_overworld_tiles_from(source);
+        let bell_room_tiles = load_bell_room_tiles_from(source);
         let hud: HudStrip = serde_json::from_str(&source.read_text("hud.json")?)?;
         let anim_rows = source.read("tileanim.bin")?;
         let scripts = load_scene_scripts_from(source);
@@ -159,6 +162,7 @@ impl SessionAssets {
             overworld_tilemaps,
             overworld_manifest,
             overworld_tiles,
+            bell_room_tiles,
             hud,
             anim_rows,
             scripts,
@@ -311,6 +315,23 @@ pub(crate) fn load_overworld_tiles_from(
         None => {
             println!("note: map tiles.bin missing");
             sml2_core::map::OverworldTiles::default()
+        }
+    }
+}
+
+pub(crate) fn load_bell_room_tiles_from(
+    source: &dyn ContentSource,
+) -> sml2_core::map::BellRoomTiles {
+    match source
+        .read("map/bell_room_tiles.bin")
+        .ok()
+        .as_deref()
+        .and_then(sml2_core::map::BellRoomTiles::from_bytes)
+    {
+        Some(t) => t,
+        None => {
+            println!("note: map bell_room_tiles.bin missing");
+            sml2_core::map::BellRoomTiles::default()
         }
     }
 }
