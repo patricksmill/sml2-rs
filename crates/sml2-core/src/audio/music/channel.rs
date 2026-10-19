@@ -245,43 +245,9 @@ impl MusicChannel {
     ) {
         self.note_timer = self.note_duration;
 
-        if note == 0x01 {
-            // Rest ($11765 / $117D0): sets channel rest flag and silences envelope
-            self.rest = true;
-            if !sfx_active {
-                match self.id {
-                    1 => {
-                        out.push(MusicWrite::Ch1Sweep(0));
-                        out.push(MusicWrite::Ch1DutyLength(self.instrument[2] & 0xC0));
-                        out.push(MusicWrite::Ch1Envelope(0x08)); // Volume 0
-                        out.push(MusicWrite::Ch1FrequencyLow(self.freq_lo));
-                        out.push(MusicWrite::Ch1FrequencyControl(self.freq_hi | 0x80));
-                    }
-                    2 => {
-                        out.push(MusicWrite::Ch2DutyLength(self.instrument[2] & 0xC0));
-                        out.push(MusicWrite::Ch2Envelope(0x08)); // Volume 0
-                        out.push(MusicWrite::Ch2FrequencyLow(self.freq_lo));
-                        out.push(MusicWrite::Ch2FrequencyControl(self.freq_hi | 0x80));
-                    }
-                    3 => {
-                        out.push(MusicWrite::Ch3Enable(0x80));
-                        out.push(MusicWrite::Ch3Length(0));
-                        out.push(MusicWrite::Ch3Level(0)); // Volume 0
-                        out.push(MusicWrite::Ch3FrequencyLow(self.freq_lo));
-                        out.push(MusicWrite::Ch3FrequencyControl(self.freq_hi | 0x80));
-                    }
-                    4 => {
-                        out.push(MusicWrite::Ch4Envelope(0x08)); // Volume 0
-                        out.push(MusicWrite::Ch4Control(0x80));
-                    }
-                    _ => {}
-                }
-            }
-            return;
-        }
-
-        self.rest = false;
-
+        // $11728 takes the channel-4 branch BEFORE the note-$01 rest test, so a
+        // noise note $01 reads its $5C06 record like any other note (and leaves
+        // the rest flag alone).
         if self.id == 4 {
             if note == 0x1F {
                 if !sfx_active {
@@ -307,6 +273,39 @@ impl MusicChannel {
             }
             return;
         }
+
+        if note == 0x01 {
+            // Rest ($11765 / $117D0): sets channel rest flag and silences envelope
+            self.rest = true;
+            if !sfx_active {
+                match self.id {
+                    1 => {
+                        out.push(MusicWrite::Ch1Sweep(0));
+                        out.push(MusicWrite::Ch1DutyLength(self.instrument[2] & 0xC0));
+                        out.push(MusicWrite::Ch1Envelope(0x08)); // Volume 0
+                        out.push(MusicWrite::Ch1FrequencyLow(self.freq_lo));
+                        out.push(MusicWrite::Ch1FrequencyControl(self.freq_hi | 0x80));
+                    }
+                    2 => {
+                        out.push(MusicWrite::Ch2DutyLength(self.instrument[2] & 0xC0));
+                        out.push(MusicWrite::Ch2Envelope(0x08)); // Volume 0
+                        out.push(MusicWrite::Ch2FrequencyLow(self.freq_lo));
+                        out.push(MusicWrite::Ch2FrequencyControl(self.freq_hi | 0x80));
+                    }
+                    3 => {
+                        out.push(MusicWrite::Ch3Enable(0x80));
+                        out.push(MusicWrite::Ch3Length(0));
+                        out.push(MusicWrite::Ch3Level(0)); // Volume 0
+                        out.push(MusicWrite::Ch3FrequencyLow(self.freq_lo));
+                        out.push(MusicWrite::Ch3FrequencyControl(self.freq_hi | 0x80));
+                    }
+                    _ => {}
+                }
+            }
+            return;
+        }
+
+        self.rest = false;
 
         // Channels 1, 2, 3: pitch calculation per ROM $11755..$11762
         // Stream note bytes are byte offsets into table $5AF4.

@@ -186,14 +186,16 @@ impl RomSeq {
             ch.duration = d;
         }
         ch.timer = ch.duration;
+        if idx == 3 {
+            // $11728 branches to $1176A before the note-$01 test: noise notes
+            // are $5C06 offsets and never touch the rest flag.
+            return;
+        }
         if note == 0x01 {
             ch.rest = 1;
             return;
         }
         ch.rest = 0;
-        if idx == 3 {
-            return; // noise records are not part of the compared state
-        }
         // $11755: hl = note + signed transpose, then a flat add into the table.
         let off = PITCH_TABLE
             .wrapping_add((note as u16).wrapping_add(self.transpose as i8 as i16 as u16));

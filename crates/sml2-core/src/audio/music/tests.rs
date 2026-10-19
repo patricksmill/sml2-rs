@@ -276,3 +276,40 @@ fn test_song_end_frames_match_rom() {
         assert_eq!(port_end, Some(expected), "song {song}: port end frame");
     }
 }
+
+#[test]
+fn test_noise_note_01_reads_its_record_like_the_rom() {
+    // $11728 routes channel 4 to $1176A before the note-$01 rest test, so the
+    // byte is an offset into $5C06 and the record's registers are written; the
+    // rest flag is never touched.
+    let mut bank = vec![0u8; 0x4000];
+    bank[0x1000] = 0x01; // stream at CPU $5000
+    let rec = 0x1C06 + 1; // CPU $5C06 + note 1
+    bank[rec..rec + 5].copy_from_slice(&[0x11, 0x22, 0x33, 0x44, 0x55]);
+
+    let mut ch = MusicChannel::new(4);
+    ch.active = true;
+    ch.section_ptr = 0x5000;
+    ch.stream_ptr = 0x5000;
+    ch.note_timer = 1;
+    ch.note_duration = 0x18;
+    ch.rest = true;
+
+    let mut transpose = 0i8;
+    let mut dur = 0x5C61u16;
+    let mut drum = 0u8;
+    let mut out = Vec::new();
+    ch.tick(&bank, &mut transpose, &mut dur, &mut drum, false, &mut out);
+
+    assert_eq!(
+        out,
+        vec![
+            MusicWrite::Ch4Length(0x33),
+            MusicWrite::Ch4Envelope(0x11),
+            MusicWrite::Ch4Polynomial(0x44),
+            MusicWrite::Ch4Control(0xD5),
+        ]
+    );
+    assert!(ch.rest, "the noise note must not clear or set the rest flag");
+    assert_eq!(ch.note_timer, 0x18);
+}
