@@ -47,7 +47,7 @@ Goal: the hub's shoreline shimmer.
    renderer needs the tile offset, not a new tile).
 4. Gate: PyBoy, hub, 64 frames — compare the four VRAM tile pairs each frame.
 
-## Phase 3 — Decor slot expander (engine done, not wired)
+## Phase 3 — Decor slot expander (done)
 
 Goal: the static decor (flags, castles, clouds, bushes) that the BG does not
 draw, plus its culling.
@@ -59,11 +59,9 @@ terminated by a `$FF` *tile*), `HUB_DECOR_SLOTS` (the 72 bytes at `$4BFD`) and
 `cam = ($BB, $0142)` slot 14 stages OAM `y=62 x=213 tile=$3A`, which matches
 PyBoy exactly.
 
-**Not wired on purpose.** At the hub's idle camera PyBoy shows no OAM entry 13+
-at all, yet the static list plus the `$3D044` window keeps slot 3 - so the
-console rewrites the list before the expander runs. Rendering the static list
-would draw sprites the console hides, so the renderer stays off until phase 4
-supplies the live slot values. `decor_idle_probe` pins that disagreement.
+**Wired in `698c94f`** once phase 4 supplied the live slot values. The earlier
+"no decor on the hub" reading was a measurement artefact - the staged cells sit
+at OAM y=246/254, above the top edge, and my dump filtered `y >= 160`.
 
 1. Extract: the 18-slot list per screen (hub = the 72 bytes at `$4BFD`; zone
    screens build theirs in code, so each loader needs reading), the `$4C4D`
@@ -74,9 +72,15 @@ supplies the live slot values. `decor_idle_probe` pins that disagreement.
    (behind the cursor).
 3. Gate: PyBoy OAM entries 13-27 per screen at three camera positions.
 
-## Phase 4 — Per-screen animation scripts
+## Phase 4 — Per-screen animation scripts (hub done, `698c94f`)
 
-In dependency order:
+Hub: coins (slots 4-9, ids 2/3/4 every 8 frames), clouds (slots 1-3, one pixel
+every 4 frames, direction on `sMapCloudDriftCounter` bit 6) and sparkles (slots
+16/17, id `$0A`, re-armed from `rDIV`) are in `MapSim::hub_decor_tick`; the
+coin ids the loader seeds from the six golden-coin flags (`$3CE43`) are still
+the `$FF` the list starts with, so coins stay invisible until that lands.
+
+Remaining, in dependency order:
 
 1. **Pumpkin** `$3D8E6`: `sMapAnimPhase` → sprite 0 Y (`$5A21`), sprite 1 X
    (`$5A29`), and the `$6227` step table for sprite 1's id/Y every other frame.
