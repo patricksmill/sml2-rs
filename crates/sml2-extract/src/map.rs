@@ -105,6 +105,24 @@ pub const SCREEN_TILEMAP_SPECS: &[(u8, &str, usize, usize, &str, u8)] = &[
         "gfx/overworld/mariocastle.png",
         0xE4,
     ),
+    // `$3F4B1`/`$3F5A4`: the two bell-bonus rooms, bank 17 `$7800`/`$7A40`
+    // copied to `$9800` (0x400 each; the 32x18 visible rows are 576 bytes).
+    (
+        13,
+        "bell_bonus_a",
+        0x5F800,
+        576,
+        "gfx/overworld/mariocastle.png",
+        0xE4,
+    ),
+    (
+        14,
+        "bell_bonus_b",
+        0x5FA40,
+        576,
+        "gfx/overworld/mariocastle.png",
+        0xE4,
+    ),
 ];
 
 /// Table of 58 patch pointers at bank 24 $63EA (flat $623EA).
@@ -285,7 +303,7 @@ pub fn emit(baserom: &[u8], extracted: &Path) -> Result<(), Box<dyn Error>> {
     let tilemaps_bin = build_tilemaps_binary(baserom).map_err(|e| format!("map tilemaps: {e}"))?;
     fs::write(map_dir.join("tilemaps.bin"), &tilemaps_bin)?;
     println!(
-        "wrote map/tilemaps.bin: 64x64 hub + 12 zone screens ({} bytes)",
+        "wrote map/tilemaps.bin: 64x64 hub + 14 zone screens ({} bytes)",
         tilemaps_bin.len()
     );
 
@@ -402,12 +420,20 @@ mod tests {
         }
         // Build tilemaps
         let blob = build_tilemaps_binary(&rom).expect("valid binary");
-        assert_eq!(blob.len(), 4096 + 12 * 1024);
+        assert_eq!(blob.len(), 4096 + 14 * 1024);
         // Verify quadrant stitching
         assert_eq!(blob[0], 1, "top-left quadrant");
         assert_eq!(blob[32], 2, "top-right quadrant");
         assert_eq!(blob[32 * 64], 3, "bottom-left quadrant");
         assert_eq!(blob[32 * 64 + 32], 4, "bottom-right quadrant");
+
+        // The two bell-bonus rooms sit after the twelve zone screens.
+        let mut rom = rom;
+        rom[0x5F800..0x5F800 + 576].fill(0x5A);
+        rom[0x5FA40..0x5FA40 + 576].fill(0x5B);
+        let blob = build_tilemaps_binary(&rom).expect("valid binary with bell rooms");
+        assert_eq!(blob[4096 + 12 * 1024], 0x5A);
+        assert_eq!(blob[4096 + 13 * 1024], 0x5B);
     }
 
     #[test]
