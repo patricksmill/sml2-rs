@@ -3651,3 +3651,96 @@ fn walking_requests_sfx_4_from_the_frame_selection() {
     assert_eq!(skid.frame_index(0), 1, "the skid frame");
     assert_eq!(skid.sfx0, 0, "a skid is not a step");
 }
+
+/// $2E8E: harmful object contact sets sMarioDead = 15, and requests SFX 20
+/// (power-down) if Mario is powered up, or SFX 15 (death) if small.
+#[test]
+fn harm_or_star_emits_powerdown_sfx_for_powered_mario_and_death_sfx_for_small_mario() {
+    let mut obj = crate::objects::ObjectSim::new(Vec::new(), 0);
+    obj.slots[0].b[crate::objects::B_TYPE] = 0x40; // harmful
+    obj.mario.powerup = 1; // Big Mario
+    obj.harm_or_star(0);
+    assert_eq!(obj.mario_dead, 15);
+    assert_eq!(obj.sfx0, 20, "powered Mario emits SFX 20 (power-down)");
+
+    let mut obj_small = crate::objects::ObjectSim::new(Vec::new(), 0);
+    obj_small.slots[0].b[crate::objects::B_TYPE] = 0x40;
+    obj_small.mario.powerup = 0; // Small Mario
+    obj_small.harm_or_star(0);
+    assert_eq!(obj_small.mario_dead, 15);
+    assert_eq!(obj_small.sfx0, 15, "small Mario emits SFX 15 (death)");
+
+    let mut obj_moon = crate::objects::ObjectSim::new(Vec::new(), 0);
+    obj_moon.slots[0].b[crate::objects::B_TYPE] = 0x40;
+    obj_moon.mario.moon_physics = 0x04; // bit 2 shield
+    obj_moon.harm_or_star(0);
+    assert_eq!(obj_moon.mario.moon_physics & 0x04, 0, "shield consumed");
+    assert_eq!(obj_moon.mario.invincibility, 0x80);
+    assert_eq!(obj_moon.mario_dead, 0);
+    assert_eq!(obj_moon.sfx0, 0);
+
+    let mut obj_inv = crate::objects::ObjectSim::new(Vec::new(), 0);
+    obj_inv.slots[0].b[crate::objects::B_TYPE] = 0x40;
+    obj_inv.mario.invincibility = 64;
+    obj_inv.harm_or_star(0);
+    assert_eq!(obj_inv.mario_dead, 0);
+    assert_eq!(obj_inv.sfx0, 0);
+}
+
+/// $5447: when powered-down to small Mario (powerup = 0), the 128 frames of
+/// invincibility alternate between Small Mario (+32) when bit 2 of the timer is
+/// set, and Big Mario (+0) when bit 2 is clear. Once the timer reaches 0, Small
+/// Mario frame (+32) remains active.
+#[test]
+fn power_down_invincibility_flicker_alternates_small_and_big_mario_frames() {
+    let mut sim = PlayerSim::new();
+    sim.powerup = 0;
+    sim.invincibility = 128;
+    sim.on_ground = true;
+    sim.dir_right = true;
+    sim.hvel = 0x80; // standing pose base frame = 0
+
+    for frame in 0..128 {
+        let expected_inv_after_dec = 127 - frame;
+        let expected_frame = if expected_inv_after_dec & 0x04 != 0 {
+            32 // Small Mario frame
+        } else {
+            0 // Big Mario frame
+        };
+        let actual = sim.frame_index(0);
+        assert_eq!(
+            actual, expected_frame,
+            "frame {frame}: expected frame {expected_frame} (inv after dec = {expected_inv_after_dec})"
+        );
+    }
+    assert_eq!(sim.invincibility, 0);
+    // After invincibility has fully expired, Mario stays Small Mario (+32)
+    assert_eq!(sim.frame_index(0), 32);
+}
+
+/// $1C4E: spike hazard damage requests SFX 20 and initiates power-down for
+/// Big Mario, transitioning powerup to 0 and invincibility to 128.
+#[test]
+fn spike_hazard_power_down_emits_sfx_and_animates() {
+    let mut layout = blank_layout();
+    layout.cells[12 * 256 + 6] = 0x50; // a spike at the big-only sample
+    let mut sim = small_sim();
+    sim.powerup = 1; // Big Mario
+    let keys = PlayerKeys::default();
+
+    sim.step(&keys, false, false, &layout);
+    assert_eq!(sim.sfx0, 20, "emitted SFX 20 on damage from spikes");
+    assert_eq!(sim.powerup, 0, "powerup lost");
+    assert_eq!(sim.invincibility, 128, "granted 128 frames of invincibility");
+
+    // First frame of invincibility: decrements to 127 (bit 2 is 1) -> Small Mario (base 10 + 32 = 42)
+    assert_eq!(sim.frame_index(0), 42);
+
+    // After 4 frames (inv = 123, bit 2 is 0) -> Big Mario (base 10 + 0 = 10)
+    for _ in 0..3 {
+        sim.frame_index(0);
+    }
+    assert_eq!(sim.invincibility, 124);
+    assert_eq!(sim.frame_index(0), 10, "alternates back to Big Mario frame");
+}
+

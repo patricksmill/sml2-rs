@@ -379,7 +379,7 @@ impl LevelContext {
             // would sustain for as long as Mario's last speed byte survives.
             let held_sfx0 = self.sim.sfx0;
             let f = self.sim.frame_index(self.sim.walk_timer);
-            if frozen {
+            if frozen || held_sfx0 != 0 {
                 self.sim.sfx0 = held_sfx0;
             }
             f

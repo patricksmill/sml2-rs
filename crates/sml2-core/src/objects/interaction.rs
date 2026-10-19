@@ -350,7 +350,7 @@ impl ObjectSim {
         }
     }
 
-    pub(super) fn harm_or_star(&mut self, i: usize) {
+    pub(crate) fn harm_or_star(&mut self, i: usize) {
         if self.mario.star_high != 0 {
             // $2EAA: star defeat (type bit5 → immune).
             if self.slots[i].b[B_TYPE] & 0x20 != 0 {
@@ -375,5 +375,6 @@ impl ObjectSim {
             return;
         }
         self.mario_dead = 15;
+        self.sfx0 = if self.mario.powerup != 0 { 20 } else { 15 };
     }
 }

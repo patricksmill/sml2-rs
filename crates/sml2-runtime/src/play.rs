@@ -444,7 +444,12 @@ pub(crate) fn run_play(
         let f = if was_dead {
             107
         } else {
-            sim.frame_index(sim.walk_timer)
+            let held_sfx0 = sim.sfx0;
+            let f = sim.frame_index(sim.walk_timer);
+            if frozen || held_sfx0 != 0 {
+                sim.sfx0 = held_sfx0;
+            }
+            f
         };
         // $2C82: tick the bump slots. The bump stages its own sprite at the
         // block's screen coords (`block_draw`), which the renderer draws as an

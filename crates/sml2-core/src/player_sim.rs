@@ -2027,6 +2027,7 @@ impl PlayerSim {
         if let Some(d) = hazard_dead {
             if self.dead == 0 {
                 self.dead = d;
+                self.sfx0 = if d == 0x80 || self.powerup == 0 { 15 } else { 20 };
             }
         }
         self.death_dispatch();
@@ -2967,7 +2968,9 @@ impl PlayerSim {
                     // $5384: walking right; the step sound is re-requested every
                     // frame and the slot-0 busy gate turns it into the walk
                     // patter.
-                    self.sfx0 = 4;
+                    if self.sfx0 == 0 {
+                        self.sfx0 = 4;
+                    }
                     13
                 } else if self.hvel == 0x80 {
                     0
@@ -2976,7 +2979,9 @@ impl PlayerSim {
                 }
             } else if self.hvel >= 0x81 {
                 // $53FE: walking left.
-                self.sfx0 = 4;
+                if self.sfx0 == 0 {
+                    self.sfx0 = 4;
+                }
                 12
             } else if self.hvel == 0x80 {
                 4
@@ -2997,7 +3002,10 @@ impl PlayerSim {
         // $5447: the invincibility timer decrements once per frame (here, at
         // the engine's frame-selection point); while its bit 2 is set the
         // sprite flashes (+32) and the powerup offset is skipped entirely.
-        if self.invincibility != 0 {
+        // If the timer was active but bit 2 is clear, the engine branches to
+        // $546B directly, skipping the $545D small-Mario (+32) offset.
+        let inv_active = self.invincibility != 0;
+        if inv_active {
             self.invincibility -= 1;
             if self.invincibility & 0x04 != 0 {
                 return f.wrapping_add(32);
@@ -3014,7 +3022,7 @@ impl PlayerSim {
             return f.wrapping_add(112).wrapping_add(32);
         }
         f.wrapping_add(match self.powerup {
-            0 => 32,
+            0 if !inv_active => 32,
             2 => 69,
             3 => 112,
             _ => 0,
