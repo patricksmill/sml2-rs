@@ -2,8 +2,8 @@
 
 **Status: all 32 rows measured 2026-10-18; the first slice (12, 19, 28, 29) is
 reviewed, every exit cell is test-pinned, levels 28/29 have played header
-approaches, and level 19 has played its header start to the lower bell and
-secret entry to both bells.** Tool:
+approaches, and level 19 has played both its header and secret starts to
+both bells.** Tool:
 [`tools/route_matrix.py`](../tools/route_matrix.py); acceptance:
 `crates/sml2-core/src/route_matrix_tests.rs`.
 
@@ -237,6 +237,27 @@ Progress slot 16 and its save byte are `$80`; entry flags remain `$00`.
 Disabling the grounded float budget rejects both the existing core float
 contract test and this played approach.
 
+### Played route: level 19 header start to the alternate bell
+
+`level19_header_spawn_hidden_ladder_to_alternate_bell_through_live_play`
+starts from the original header with progress `$00` and runs continuously
+through the early thorn beds, the three hidden-block footholds, and the upper
+platforms. Its fixed 7,254-frame tape uses movement inputs to approach the
+ladder after crossing the first half of the level. Original camera, object,
+clock and physics state carry through the entire route.
+
+The test pins all three source `$7E` cells and their native `$07` overlays,
+zero gameplay death frames, and the `$4B` arm on frame 6,922 at (3033,164),
+fade 192, music 3, flag `$FF`. Fade completes on 7,114; handoff is 7,115.
+Tally stays 0, and node 67/screen 4/music 28 receive one save. Progress slot 16
+and its save byte are `$01`: starting from `$00`, the alternate path adds bit
+0 without setting the checkpoint bit. Entry progress flags remain `$00`.
+
+Removing the hidden-block bump rejects the core foothold test and this route.
+Removing the Space Zone path-bit write rejects the core map handoff test and
+this route's progress assertion. Both source starts now have native played
+approaches to both bells; the live overworld loop remains outside these tests.
+
 ### Played route: level 19 secret entry to the lower bell
 
 `level19_secret_entry_to_plain_bell_through_live_play` starts from the genuine
@@ -308,10 +329,9 @@ played route's tally assertion.
    coin, save serialization, map node `$20`/screen 2, and clean re-entry. These
    are direct-placement acceptance tests; played approaches remain pending.
 3. **Most approaches remain unplayed.** Levels 28/29 header starts and level
-   19's header start to the lower bell and secret entry to both bells have native
-   input tests. Other ordinary/secret starts and approaches to boss entrances
-   still need played tests, including level 19's header-to-upper-bell route
-   and the castle/night levels.
+   19's header and secret starts to both bells have native input tests. Other
+   ordinary/secret starts and approaches to boss entrances still need played
+   tests, including the castle/night levels.
 4. **The 28 unreviewed rows are tool-measured, not hand-checked.** Their zone,
    node, exit and secret columns are trustworthy by construction; the
    "required mechanic" summary and any route narrative still need a review pass.

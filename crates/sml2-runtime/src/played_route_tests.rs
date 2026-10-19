@@ -6,6 +6,9 @@ mod level19_alternate_route_tests;
 #[path = "level19_header_route_tests.rs"]
 mod level19_header_route_tests;
 
+#[path = "level19_header_alternate_route_tests.rs"]
+mod level19_header_alternate_route_tests;
+
 /// Extracted level28 (decimal CLI id 27), ordinary header entry. The fixed
 /// right-only tape descends from the upper starting ledge and walks the lower
 /// corridor to the source $4A cell (78,30). Objects, scenes, camera, fade and
