@@ -92,6 +92,41 @@ Remaining, in dependency order:
 Each one is a `MapSim` state machine plus the sprite ids it writes; the decor
 expander from phase 3 must be in place first.
 
+## Phase 4b — Zone-screen decor (measured, not ported)
+
+Zone screens do **not** use the hub's expander. The Pumpkin handler ends with
+`call $3E277`, which:
+
+- clears `sStatusBarOAM` (144 bytes), not the hub's 108-byte area;
+- starts at **OAM entry 4** (`sMapDecorOAMIndex = 4`), so zone decor loses to the
+  cursor (0-3) and the HUD (4-12 is rebuilt by this same clear);
+- walks **16 slots of 3 bytes** from `sMapSprite0Page` - `(x, y, id)` in OAM
+  space, `$FF` = empty - and calls `$3F75` per slot.
+
+`$3F75` is a bank-switch thunk: `ld a,$18 / ld [$A24E],a / ld [$2100],a /
+ld hl,$62E6 / call $509B / ld a,$0F / ... / ret`, i.e. bank 24's `$509B`. That
+routine takes `id * 2` into the word table at **bank 24 `$62E6`** and expands
+`(dy, dx, tile, attr)` cells, OAM = slot + (dy, dx), same terminator rule as the
+hub (a `$FF` tile).
+
+**Verified so far.** With the Pumpkin screen loaded, PyBoy's OAM 4+ matches this
+expansion exactly, one frame behind the slot sample (OAM is uploaded from the
+shadow): slot 0 `(0, 76, 16)` -> `(76,0,$30,0) (76,8,$30,$20)`; slot 1
+`(1, 15, 21)` -> `(15,9,$36,0) (23,4,$32,0) (23,12,$33,0)`.
+
+**Open question blocking the extractor.** The measured 16-slot table for screen
+1 carries ids 16, 21, 25, 9, 40, 127, 1, 96, 40, 17, 17 **and 200, 152**. A
+128-word table at `$62E6` cannot index those, and a 256-word one would run into
+the metasprite data at `$647A`. Either the table is longer/segmented or those
+slots are not read as ids in every case - resolve that before generating a
+constant table, or the extraction will silently read the wrong metasprites.
+
+**Also needed:** the per-screen slot seeds. Zone loaders build them in code (the
+hub is the only 72-byte block copy), so each loader needs reading; the Pumpkin
+handler `$3D8E6` then drives slots 0/1/2 from `sMapAnimPhase` (`$5A21` Y,
+`$5A29` X, `$6227` id/Y drift, page `22 + $5A16`) and arms the patch/growth
+sequence.
+
 ## Phase 5 — Cleanup
 
 - Fold `render_overworld_view`'s argument list (19 now) into a small
