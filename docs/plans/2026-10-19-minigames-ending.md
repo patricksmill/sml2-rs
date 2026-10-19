@@ -142,9 +142,19 @@ The state table at bank 0 `$02B0` maps `$1B`/`$1D` -> `$2AD3`, `$1C` ->
 | `$20` | `$477B` | congratulations tilemap `$688A` -> `$9800`, `$0348`, `$2A63`, fade 4/`$FF`, state++ |
 | `$21` | `$47A9` | wait for the fade and START, then `jp $01E5` |
 
-Implement in a `castle_sequence` module driven by `SessionState`, with the
-six-coin check and the final-castle entry from the map; tests per state's
-byte writes and the save/reload path.
+The `$1F` menu dispatcher (`$446B`, table `$446F`) is:
+
+| menu | handler | measured behavior |
+|---|---|---|
+| 0 | `$453B` | castle walk-in: stage OAM `$FFC0/$FFC2`, animate `sWalkAnimTimer` by 8, move `$FFC0` toward `$499D[sCurLevel]`; on arrival music 15 (26 with five coins), menu 1, fade 1/255 |
+| 1 | `$44AC` | wait fade 0; OBP1 `$D0`; `sLevelProgress[$44F1[sCurLevel]] |= $80`; five coins -> menu 2 (fade 64, row shift 5), else game state `$14` |
+| 2 | `$4477` | five row shifts, 64-frame fade and SFX 2=10 each; then menu 3, fade 255 |
+| 3 | `$44A1` | wait fade 0 -> game state `$14` |
+
+`$47BC` walks the six `sGoldenCoin1..6` flags and stages `$498A/$49A2/$49BA`
+positions, counting into `sGoldenCoinCount`. Implement in a `castle_sequence`
+module driven by `SessionState`; tests per state's byte writes and the
+save/reload path.
 
 ### ME-7 — Acceptance and inventory (S)
 End-to-end typed tapes: six coins → castle entry → Wario fight → ending/credits;
