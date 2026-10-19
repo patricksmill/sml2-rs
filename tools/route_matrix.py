@@ -40,8 +40,10 @@ import re
 import sys
 from pathlib import Path
 
+import os
+
 ROOT = Path(__file__).resolve().parent.parent
-DECOMP = ROOT.parent / "sml2decomp"
+DECOMP = Path(os.environ.get("SML2_DECOMP_ROOT") or (ROOT / "decomp" if (ROOT / "decomp").exists() else ROOT.parent / "sml2decomp"))
 LEVELS = ROOT / "extracted" / "levels"
 OBJECTS = ROOT / "extracted" / "objects.json"
 NODES = ROOT / "extracted" / "map" / "nodes.bin"

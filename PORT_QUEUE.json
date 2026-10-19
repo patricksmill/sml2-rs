@@ -1,23 +1,7 @@
 {
   "active_milestone": "mechanics_all_levels",
   "milestone_note": "3 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
-  "queue": [
-    {
-      "id": "mechanics_all_levels_acceptance",
-      "title": "Per-level mechanics acceptance: source-derived route entry/exit and dynamic-spawn closure",
-      "asm_refs": [
-        "main.asm:$58040",
-        "main.asm:$59C07",
-        "main.asm:$92E8"
-      ],
-      "dependencies": [
-        "level_boot_route",
-        "per_level_handler_coverage"
-      ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means",
-      "status": "pending"
-    }
-  ],
+  "queue": [],
   "workflow_rules": {
     "set": "2026-10-15",
     "rules": [
