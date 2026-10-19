@@ -2,6 +2,7 @@
 //! level entry, and clear/death returns.
 
 use std::error::Error;
+pub use crate::content::SessionAssets;
 use std::fs;
 use std::path::PathBuf;
 
@@ -14,9 +15,7 @@ use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
 use sml2_core::ending_scene::EndingScene;
 use sml2_core::ending_sequence::EndingSequenceController;
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest};
-use sml2_core::map::{
-    MapNodeRecords, MapNodes, MapWalk, OverworldManifest, OverworldTilemaps, OverworldTiles,
-};
+use sml2_core::map::MapNodes;
 use sml2_core::map_sim::MapSim;
 use sml2_core::object::ObjectTables;
 use sml2_core::objects::{FireHit, ObjectSim};
@@ -27,10 +26,8 @@ use sml2_core::tileset::Tilesets;
 use crate::divider_clock::{NativeDividerClock, VirtualDividerClock};
 use crate::play_tape::PlayTape;
 use crate::{
-    apply_level_entry, apply_tile_anim, build_contact, extracted_dir, hud_row_coins,
-    load_arena_layout, load_map_node_records, load_map_nodes, load_map_walk,
-    load_overworld_manifest, load_overworld_tilemaps, load_overworld_tiles, load_scene_scripts,
-    load_tilesets, note_handoff_screen, render_view, sample_level_player_inputs, scene_frame_head,
+    apply_level_entry, apply_tile_anim, build_contact, hud_row_coins,
+    note_handoff_screen, render_view, sample_level_player_inputs, scene_frame_head,
     seed_level_timer, BellArm, SpriteCtx, SpriteInst,
 };
 
@@ -89,8 +86,9 @@ pub struct LevelContext {
 }
 
 impl LevelContext {
-    pub fn new(
+    pub fn from_content(
         level_id: u8,
+        content: &crate::content::LevelContent,
         level_progress: u8,
         player_lives: u8,
         player_coins_low: u8,
@@ -103,15 +101,11 @@ impl LevelContext {
         anim_rows: Vec<u8>,
         hud: HudStrip,
         object_tables: ObjectTables,
-    ) -> Result<Self, Box<dyn Error>> {
-        let nn = level_id + 1;
-        let levels_dir = extracted_dir().join("levels");
-        let manifest: LevelManifest = serde_json::from_str(&fs::read_to_string(
-            levels_dir.join(format!("level{nn:02}.manifest.json")),
-        )?)?;
-        let layout = LevelLayout::from_bytes(&fs::read(levels_dir.join(&manifest.layout.file))?)?;
-        let bg_base = fs::read(levels_dir.join(format!("level{nn:02}.bgblock.bin")))?;
-        let objblock = fs::read(levels_dir.join(format!("level{nn:02}.objblock.bin")))?;
+    ) -> Self {
+        let manifest = content.manifest.clone();
+        let layout = content.layout.clone();
+        let bg_base = content.bg_base.clone();
+        let objblock = content.objblock.clone();
 
         let mut sim = PlayerSim::new();
         seed_level_timer(&mut sim, &manifest);
@@ -132,15 +126,11 @@ impl LevelContext {
         cam.auto_scroll = manifest.properties.auto_scroll;
         cam.scene_state = manifest.header.scene_state;
 
-        if let Ok(e) = fs::read(levels_dir.join(format!("level{nn:02}.edge.bin"))) {
-            if e.len() == 48 {
-                cam.edge_map.copy_from_slice(&e);
-            }
+        if let Some(edge) = content.edge_map {
+            cam.edge_map = edge;
         }
-        if let Ok(m) = fs::read(levels_dir.join(format!("level{nn:02}.scene.bin"))) {
-            if m.len() == 48 {
-                cam.scene_map = m;
-            }
+        if let Some(scene) = &content.scene_map {
+            cam.scene_map.clone_from(scene);
         }
 
         let mut obj = ObjectSim::new(manifest.spawns.records.clone(), cam.x);
@@ -163,7 +153,7 @@ impl LevelContext {
             boss_oam: Vec::new(),
         });
 
-        Ok(Self {
+        Self {
             layout_live: layout.clone(),
             bg_live: bg_base.clone(),
             manifest,
@@ -192,7 +182,7 @@ impl LevelContext {
             bell_arm: None,
             active_object_frames: 0,
             gameplay_death_frames: 0,
-        })
+        }
     }
 
     /// Step the in-level simulation by 1 frame.
@@ -518,56 +508,6 @@ impl LevelContext {
     }
 }
 
-/// All assets required for running both overworld navigation and any level.
-pub struct SessionAssets {
-    pub nodes: MapNodes,
-    pub node_records: MapNodeRecords,
-    pub walk: MapWalk,
-    pub overworld_tilemaps: OverworldTilemaps,
-    pub overworld_manifest: OverworldManifest,
-    pub overworld_tiles: OverworldTiles,
-    pub hud: HudStrip,
-    pub anim_rows: Vec<u8>,
-    pub scripts: SceneScripts,
-    pub tilesets: Tilesets,
-    pub arena_layout: Option<LevelLayout>,
-    pub object_tables: ObjectTables,
-}
-
-impl SessionAssets {
-    pub fn load() -> Result<Self, Box<dyn Error>> {
-        let extracted = extracted_dir();
-        let nodes = load_map_nodes();
-        let node_records = load_map_node_records();
-        let walk = load_map_walk();
-        let overworld_tilemaps = load_overworld_tilemaps();
-        let overworld_manifest = load_overworld_manifest();
-        let overworld_tiles = load_overworld_tiles();
-        let hud: HudStrip = serde_json::from_str(&fs::read_to_string(extracted.join("hud.json"))?)?;
-        let anim_rows = fs::read(extracted.join("tileanim.bin"))?;
-        let scripts = load_scene_scripts();
-        let tilesets = load_tilesets();
-        let arena_layout = load_arena_layout();
-        let object_tables: ObjectTables =
-            serde_json::from_str(&fs::read_to_string(extracted.join("objects.json"))?)?;
-
-        Ok(Self {
-            nodes,
-            node_records,
-            walk,
-            overworld_tilemaps,
-            overworld_manifest,
-            overworld_tiles,
-            hud,
-            anim_rows,
-            scripts,
-            tilesets,
-            arena_layout,
-            object_tables,
-        })
-    }
-}
-
 /// The three major modes of the runtime session.
 pub enum SessionState {
     Overworld(MapSim),
@@ -877,8 +817,9 @@ impl SessionRunner {
                 }
 
                 if let Some(level_id) = entry.level {
-                    match LevelContext::new(
+                    match self.assets.level(level_id).map(|content| LevelContext::from_content(
                         level_id,
+                        content,
                         entry.progress_flags,
                         self.lives,
                         map_sim.coins_low,
@@ -891,7 +832,7 @@ impl SessionRunner {
                         self.assets.anim_rows.clone(),
                         self.assets.hud.clone(),
                         self.assets.object_tables.clone(),
-                    ) {
+                    )) {
                         Ok(ctx) => {
                             // $3C1A2 stops the map theme before loading, and the
                             // console spends the next 37 frames fading the map

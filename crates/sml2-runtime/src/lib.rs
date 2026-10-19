@@ -29,6 +29,8 @@ use std::path::{Path, PathBuf};
 mod divider_clock;
 pub mod play_tape;
 pub mod render;
+pub mod content;
+use content::{extracted_dir, load_map_nodes, load_scene_scripts, load_tilesets, load_arena_layout};
 pub mod present;
 use render::{render_view, SpriteCtx, SpriteInst};
 use present::letterbox_gray;
@@ -56,12 +58,13 @@ use divider_clock::{NativeDividerClock, VirtualDividerClock};
 use serde::Deserialize;
 use sml2_core::ending_entry::{EndingEntry, EndingEntryState, EndingFrame, EndingInput};
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest, LAYOUT_HEIGHT, LAYOUT_WIDTH};
-use sml2_core::map::{MapNodeRecords, MapNodes, MapWalk};
+use sml2_core::map::MapNodes;
 use sml2_core::object::ObjectTables;
 use sml2_core::objects::FireHit;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
-use sml2_core::scene::{boss_def_index, boss_def_portable, SceneScripts, SceneStep, SceneVm};
-use sml2_core::tileset::Tilesets;
+use sml2_core::scene::{boss_def_index, boss_def_portable, SceneStep, SceneVm};
+#[cfg(test)]
+use sml2_core::scene::SceneScripts;
 use sml2_core::video;
 
 /// Native GB screen; the HUD strip and the parity checks are anchored to it.
@@ -593,169 +596,6 @@ pub(crate) fn apply_tile_anim(bg: &mut [u8], anim: &sml2_core::level::TileAnim, 
     }
     let off = anim.row as usize * 0x100 + (phase & 3) as usize * 0x40;
     bg[0xA00..0xA40].copy_from_slice(&rows[off..off + 0x40]);
-}
-
-/// Locate `extracted/` whether run from the repo root or a crate dir.
-pub(crate) fn extracted_dir() -> PathBuf {
-    for cand in [
-        "extracted",
-        "../extracted",
-        "../../extracted",
-        "sml2-rs/extracted",
-    ] {
-        let p = PathBuf::from(cand);
-        if p.join("levels").is_dir() {
-            return p;
-        }
-    }
-    PathBuf::from("extracted")
-}
-
-/// The overworld's node tables (`extracted/map/nodes.bin`). One ROM-wide blob,
-/// loaded like the scene scripts, and flagged when absent for the same reason:
-/// with no table the hand-off cannot index `sLevelProgress`, so it would silently
-/// stop marking progress.
-pub(crate) fn load_map_nodes() -> MapNodes {
-    match fs::read(extracted_dir().join("map/nodes.bin"))
-        .ok()
-        .as_deref()
-        .and_then(MapNodes::from_bytes)
-    {
-        Some(n) => n,
-        None => {
-            println!("note: map node tables missing — the hand-off cannot mark progress");
-            MapNodes::default()
-        }
-    }
-}
-
-pub(crate) fn load_map_walk() -> MapWalk {
-    match fs::read(extracted_dir().join("map/walk.bin"))
-        .ok()
-        .as_deref()
-        .and_then(MapWalk::from_bytes)
-    {
-        Some(w) => w,
-        None => {
-            println!("note: map walk table missing — overworld walk streams will be empty");
-            MapWalk::default()
-        }
-    }
-}
-
-pub(crate) fn load_map_node_records() -> MapNodeRecords {
-    match fs::read(extracted_dir().join("map/node_records.bin"))
-        .ok()
-        .as_deref()
-        .and_then(MapNodeRecords::from_bytes)
-    {
-        Some(r) => r,
-        None => {
-            println!("note: map node records missing");
-            MapNodeRecords::default()
-        }
-    }
-}
-
-pub(crate) fn load_overworld_tilemaps() -> sml2_core::map::OverworldTilemaps {
-    match fs::read(extracted_dir().join("map/tilemaps.bin"))
-        .ok()
-        .as_deref()
-        .and_then(sml2_core::map::OverworldTilemaps::from_bytes)
-    {
-        Some(tm) => tm,
-        None => {
-            println!("note: map tilemaps missing");
-            sml2_core::map::OverworldTilemaps::default()
-        }
-    }
-}
-
-pub(crate) fn load_overworld_manifest() -> sml2_core::map::OverworldManifest {
-    match fs::read_to_string(extracted_dir().join("map/route_patches.json"))
-        .ok()
-        .and_then(|s| sml2_core::map::OverworldManifest::from_json_str(&s).ok())
-    {
-        Some(m) => m,
-        None => {
-            println!("note: map route_patches.json missing");
-            sml2_core::map::OverworldManifest::default()
-        }
-    }
-}
-
-pub(crate) fn load_overworld_tiles() -> sml2_core::map::OverworldTiles {
-    match fs::read(extracted_dir().join("map/tiles.bin"))
-        .ok()
-        .as_deref()
-        .and_then(sml2_core::map::OverworldTiles::from_bytes)
-    {
-        Some(t) => t,
-        None => {
-            println!("note: map tiles.bin missing");
-            sml2_core::map::OverworldTiles::default()
-        }
-    }
-}
-
-/// The bank-5 scene script table (`extracted/scenes/script_table.bin`). It is
-/// one ROM-wide blob rather than per level, and the missing-file flag matches
-/// the two level maps: with no table the scene VM is inert, and the run says so
-/// instead of quietly never running a script.
-pub(crate) fn load_scene_scripts() -> SceneScripts {
-    match fs::read(extracted_dir().join("scenes/script_table.bin"))
-        .ok()
-        .as_deref()
-        .and_then(SceneScripts::from_bytes)
-    {
-        Some(s) => s,
-        None => {
-            println!("note: scene script table missing — no scene script can run");
-            SceneScripts::default()
-        }
-    }
-}
-
-/// The `$6x` opcode's tileset swaps (`extracted/scenes/tilesets.json`). Also one
-/// ROM-wide table — `$25AF`'s three sources are indexed only by
-/// `sLevelGfxIndex`. Without it an arena keeps the level's own tiles and
-/// metatile definitions, which draws the right *layout* with the wrong art.
-pub(crate) fn load_tilesets() -> Tilesets {
-    match fs::read_to_string(extracted_dir().join("scenes/tilesets.json"))
-        .ok()
-        .and_then(|t| Tilesets::from_json(&t).ok())
-    {
-        Some(t) => t,
-        None => {
-            println!("note: tileset table missing — a scene's $6x swap cannot run");
-            Tilesets::default()
-        }
-    }
-}
-
-/// The `$6x` reload's level data (`extracted/scenes/arena_layout.bin`).
-///
-/// `$25AF` hardcodes `sLevelLayoutIndex = 3` and `sLevelBank = 19`, so the same
-/// blob loads for **every** arena: the boss rooms are authored as screens of
-/// that one layout and the per-arena look comes from the tileset swap. A level's
-/// own layout at those cells holds that level's tiles, which is why an arena
-/// rendered from it comes out as ordinary level walls.
-pub(crate) fn load_arena_layout() -> Option<LevelLayout> {
-    match fs::read(extracted_dir().join("scenes/arena_layout.bin")) {
-        Ok(b) => match LevelLayout::from_bytes(&b) {
-            Ok(l) => Some(l),
-            Err(e) => {
-                println!("note: scenes/arena_layout.bin unusable — {e}");
-                None
-            }
-        },
-        Err(_) => {
-            println!(
-                "note: scenes/arena_layout.bin missing — a $6x swap cannot reload the arena room"
-            );
-            None
-        }
-    }
 }
 
 /// Everything the window viewer needs per frame.
