@@ -85,14 +85,15 @@ def make_brief(root: Path, decomp: Path, addr: int, *, bank=None, budget=800, de
 **Anims:** {', '.join(anims) or '(helper / no table entry)'}.
 **Policy:** [PORTING.md](../../PORTING.md).
 
-Implement in a focused sibling module under `crates/sml2-core/src/objects/`;
+Implement under `objects/handlers/<family>/` with `behavior.rs`, `adapter.rs`,
+and a local `tests/` directory;
 register it in its owning `mod.rs` if new, and wire `objects/dispatch.rs`.
-Wario modules belong in `objects/wario/`; shared boss helpers stay in `objects/`.
+Wario modules belong in `objects/bosses/wario/`; shared boss helpers belong in `objects/bosses/shared/`.
 Apply `docs/idiomatic-rust-porting.md`: use typed `Actor` state from `actor.rs`.
 Keep slot conversion and legacy world input/effect mapping in an explicit adapter;
 do not put raw offsets, register names or HRAM scratch in domain handler logic.
-Resolve typed shared-helper prerequisites first. New tests belong beside the
-implementation; shared integration fixtures are currently in `objects/tests.rs`.
+Resolve typed shared-helper prerequisites first. New tests belong in the owning family's
+`tests/` directory; shared integration fixtures are currently in `objects/tests/engine.rs`.
 
 ## Exact ROM-addressed instructions and ASM locations
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -20,11 +21,11 @@ QUEUE_FILES = {
     "map_zone_screen_loaders": ["crates/sml2-core/src/map.rs", "crates/sml2-core/src/map_sim.rs"],
     "camera_pan_timer": ["crates/sml2-core/src/camera.rs", "crates/sml2-core/src/player_sim.rs", "crates/sml2-runtime/src/main.rs"],
     "boss_arena_phase_cascade": [
-        "crates/sml2-core/src/objects/boss.rs",
+        "crates/sml2-core/src/objects/bosses/shared/handlers.rs",
         "crates/sml2-core/src/scene.rs",
     ],
     "boss_clear_ending_handoff": ["crates/sml2-core/src/scene.rs", "crates/sml2-core/src/player_sim.rs"],
-    "boss_anim_4_5_chain": ["crates/sml2-core/src/objects/boss.rs", "crates/sml2-core/src/objects/dispatch.rs", "crates/sml2-core/src/objects/tests.rs"],
+    "boss_anim_4_5_chain": ["crates/sml2-core/src/objects/bosses/shared/handlers.rs", "crates/sml2-core/src/objects/dispatch.rs", "crates/sml2-core/src/objects/tests/engine.rs"],
     "remaining_handler_classes": [],  # use --addr instead
 }
 
@@ -41,17 +42,39 @@ def run_handler_task(addr: int, *, dependencies=(), budget=800, state_table_cont
 
 
 def handler_prompt(addr: int, *, module: str | None = None, dependencies=(), budget=800, state_table_contract=None) -> str:
-    module = module or f"crates/sml2-core/src/objects/handler_0x{addr:05X}.rs"
-    path = (ROOT / module).resolve()
     folder = (ROOT / "crates/sml2-core/src/objects").resolve()
+    if module is None:
+        module = f"crates/sml2-core/src/objects/handlers/0x{addr:05x}/behavior.rs"
+        registry = folder / 'mod.rs'
+        if registry.is_file():
+            entry = re.search(
+                rf'#\[path = "([^"]+)"\]\s+mod handler_0x{addr:x};',
+                registry.read_text(),
+            )
+            if entry:
+                module = str((folder / entry[1]).relative_to(ROOT))
+    path = (ROOT / module).resolve()
     if not path.is_relative_to(folder) or path.suffix != '.rs' or path.stem in {'mod', 'dispatch', 'staging', 'helpers', 'tests'}:
         raise ValueError('choose a handler module within crates/sml2-core/src/objects/')
     if path.exists() and len(path.read_text().splitlines()) >= 400:
         raise ValueError(f'{module} is already at least 400 lines; choose a new focused sibling module')
-    adapter = path.with_name(f'{path.stem}_adapter.rs')
+    adapter = path.with_name('adapter.rs' if path.stem == 'behavior' else f'{path.stem}_adapter.rs')
     if adapter.exists() and len(adapter.read_text().splitlines()) >= 400:
         raise ValueError(f'{adapter.name} is already at least 400 lines; choose a focused adapter')
     registration = path.parent / "mod.rs"
+    # Grouped files retain their established module ownership and visibility.
+    if path.stem == 'behavior':
+        registration = folder / 'mod.rs'
+    test_paths = set()
+    for owner in (path, adapter):
+        if owner.is_file():
+            test_paths.update(
+                (owner.parent / relative).resolve()
+                for relative in re.findall(r'#\[path = "([^"]*tests/[^"]+)"\]', owner.read_text())
+            )
+    if not test_paths:
+        test_paths.add(path.parent / 'tests' / f'{path.stem}.rs')
+    test_files = '\n'.join(f'  - {test.relative_to(ROOT)} (local tests)' for test in sorted(test_paths))
     run_handler_task(addr, dependencies=dependencies, budget=budget, state_table_contract=state_table_contract)
     task = ROOT / "tasks/handlers" / f"0x{addr:05X}.md"
     if '**Slice status: COMPLETE**' not in task.read_text():
@@ -65,10 +88,12 @@ Read ONLY:
   - crates/sml2-core/src/actor.rs
   - {module} (create if absent)
   - {adapter.relative_to(ROOT)} (create if absent)
+{test_files}
 
 Touch ONLY:
   - {module} (implementation and local tests)
   - {adapter.relative_to(ROOT)} (slot compatibility and world input/effect adapter)
+{test_files}
   - crates/sml2-core/src/objects/dispatch.rs (one arm)
   - {registration.relative_to(ROOT)} (module registrations only, if new)
 
@@ -102,8 +127,8 @@ def queue_prompt(item_id: str) -> str:
         raise SystemExit("use --addr for handlers, not --queue remaining_handler_classes")
     if not files:
         raise ValueError(f'no bounded file list configured for queue item: {item_id}')
-    if any("/objects/" in p for p in files) and "crates/sml2-core/src/objects/tests.rs" not in files:
-        files = [*files, "crates/sml2-core/src/objects/tests.rs"]
+    if any("/objects/" in p for p in files) and "crates/sml2-core/src/objects/tests/engine.rs" not in files:
+        files = [*files, "crates/sml2-core/src/objects/tests/engine.rs"]
     for file in files:
         if not (ROOT / file).is_file():
             raise ValueError(f"missing task file: {file}")

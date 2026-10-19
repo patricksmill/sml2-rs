@@ -496,10 +496,32 @@ class PromptTests(unittest.TestCase):
                 prompt = dispatch_prompt.handler_prompt(0x58201)
             self.assertIn('docs/idiomatic-rust-porting.md', prompt)
             self.assertIn('crates/sml2-core/src/actor.rs', prompt)
-            self.assertIn('handler_0x58201_adapter.rs', prompt)
+            self.assertIn('objects/handlers/0x58201/behavior.rs', prompt)
+            self.assertIn('objects/handlers/0x58201/adapter.rs', prompt)
+            self.assertIn('objects/handlers/0x58201/tests/behavior.rs', prompt)
+            self.assertIn('objects/mod.rs (module registrations only', prompt)
             self.assertIn('No slot offsets, register names or HRAM scratch', prompt)
             self.assertIn('Actor::from_raw_slot / Actor::to_raw_slot', prompt)
             self.assertNotIn('objects/helpers.rs', prompt)
+
+    def test_handler_prompt_follows_registered_grouped_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            folder = root / 'crates/sml2-core/src/objects'
+            folder.mkdir(parents=True)
+            (folder / 'mod.rs').write_text(
+                '#[path = "handlers/hopping_enemy/behavior.rs"]\nmod handler_0x58848;\n')
+            owner = folder / 'handlers/hopping_enemy'
+            owner.mkdir(parents=True)
+            (owner / 'behavior.rs').write_text('')
+            (owner / 'adapter.rs').write_text(
+                '#[cfg(test)]\n#[path = "tests/adapter.rs"]\nmod tests;\n')
+            (root / 'tasks/handlers').mkdir(parents=True)
+            (root / 'tasks/handlers/0x58848.md').write_text('**Slice status: COMPLETE**')
+            with patch.object(dispatch_prompt, 'ROOT', root), patch.object(dispatch_prompt, 'run_handler_task'):
+                prompt = dispatch_prompt.handler_prompt(0x58848)
+            self.assertIn('objects/handlers/hopping_enemy/tests/adapter.rs', prompt)
+            self.assertNotIn('behavior_adapter.rs', prompt)
 
     def test_family_prompt_registers_owning_module_and_rejects_escape(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -508,12 +530,12 @@ class PromptTests(unittest.TestCase):
             (root / 'tasks/handlers/0x0AD93.md').write_text('**Slice status: COMPLETE**')
             with patch.object(dispatch_prompt, 'ROOT', root), patch.object(dispatch_prompt, 'run_handler_task'):
                 prompt = dispatch_prompt.handler_prompt(
-                    0xAD93, module='crates/sml2-core/src/objects/wario/form3.rs')
-                self.assertIn('objects/wario/form3_adapter.rs', prompt)
-                self.assertIn('objects/wario/mod.rs (module registrations only', prompt)
+                    0xAD93, module='crates/sml2-core/src/objects/bosses/wario/form3.rs')
+                self.assertIn('objects/bosses/wario/form3_adapter.rs', prompt)
+                self.assertIn('objects/bosses/wario/mod.rs (module registrations only', prompt)
                 self.assertNotIn('objects/mod.rs (module registrations only', prompt)
                 for module in ['crates/sml2-core/src/objects/../escape.rs',
-                               'crates/sml2-core/src/objects/wario/mod.rs']:
+                               'crates/sml2-core/src/objects/bosses/wario/mod.rs']:
                     with self.assertRaises(ValueError):
                         dispatch_prompt.handler_prompt(0xAD93, module=module)
 

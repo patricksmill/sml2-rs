@@ -86,5 +86,5 @@ impl<'a> TerrainProbes<'a> {
 }
 
 #[cfg(test)]
-#[path = "terrain_probes_tests.rs"]
+#[path = "tests/terrain_probes.rs"]
 mod tests;

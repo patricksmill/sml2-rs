@@ -72,7 +72,7 @@ do not extend byte-indexed handler logic or recreate HRAM scratch.
 Task: Port object handler ROM 0x{ADDR} using ONLY:
   - tasks/handlers/0x{ADDR}.md
   - one named handler module under crates/sml2-core/src/objects/
-    (Wario-specific modules go under objects/wario/)
+    (Wario-specific modules go under objects/bosses/wario/)
   - crates/sml2-core/src/actor.rs
   - one named compatibility adapter sibling module
 Touch the named domain/adapter modules plus dispatch.rs (one arm) and the owning mod.rs

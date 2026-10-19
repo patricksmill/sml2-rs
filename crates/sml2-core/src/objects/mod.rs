@@ -103,433 +103,510 @@ use helpers::bcd_add;
 mod staging;
 pub use staging::*;
 use staging::{BOUNCE_SPEED, FALL_SPEED, HOVER_SPEED, SPIN_WOBBLE, STEP_74A1};
+#[path = "handlers/boo/behavior.rs"]
 mod boo;
+#[path = "bosses/shared/handlers.rs"]
 mod boss;
+#[path = "bosses/shared/damage.rs"]
 mod boss_damage;
+#[path = "bosses/shared/flash.rs"]
 mod boss_flash;
 #[cfg(test)]
+#[path = "bosses/shared/tests/flash_paths.rs"]
 mod boss_flash_paths;
+#[path = "bosses/shared/morph.rs"]
 mod boss_morph;
+#[path = "bosses/shared/reverse_picker.rs"]
 mod boss_reverse_picker;
+#[path = "bosses/shared/reward.rs"]
 mod boss_reward;
 #[cfg(test)]
+#[path = "bosses/shared/tests/screen_input.rs"]
 mod boss_screen_input_tests;
+#[path = "bosses/shared/spawn.rs"]
 mod boss_spawn;
+#[path = "bosses/shared/sprite_cycle.rs"]
 mod boss_sprite_cycle;
+#[path = "bosses/shared/stun.rs"]
 mod boss_stun;
+#[path = "handlers/cannon_ant/behavior.rs"]
 mod cannon_ant;
+#[path = "handlers/carrier/behavior.rs"]
 mod carrier;
+#[path = "bosses/door/central/behavior.rs"]
 mod central_door;
+#[path = "bosses/door/central/adapter.rs"]
 mod central_door_adapter;
+#[path = "handlers/charging_enemy/behavior.rs"]
 mod charging_enemy;
+#[path = "bosses/circuit/behavior.rs"]
 mod circuit_boss;
+#[path = "bosses/circuit/adapter.rs"]
 mod circuit_boss_adapter;
 #[cfg(test)]
+#[path = "bosses/circuit/tests/flow.rs"]
 mod circuit_boss_flow_tests;
+#[path = "bosses/circuit/motion.rs"]
 mod circuit_boss_motion;
+#[path = "handlers/dashing_walker/behavior.rs"]
 mod dashing_walker;
 #[cfg(test)]
+#[path = "tests/defeat_motion.rs"]
 mod defeat_motion_tests;
 mod dispatch;
 #[cfg(test)]
+#[path = "bosses/door/tests/flow.rs"]
 mod door_boss_flow_tests;
+#[path = "bosses/door/mouth.rs"]
 mod door_boss_mouth;
+#[path = "bosses/door/child/behavior.rs"]
 mod door_child;
+#[path = "bosses/door/child/adapter.rs"]
 mod door_child_adapter;
+#[path = "handlers/edge_walker/behavior.rs"]
 mod edge_walker;
+#[path = "handlers/falling_dropper/behavior.rs"]
 mod falling_dropper;
+#[path = "handlers/fallwalker/behavior.rs"]
 mod fallwalker;
+#[path = "handlers/fire_piranha/behavior.rs"]
 mod fire_piranha;
+#[path = "handlers/groundwalker/behavior.rs"]
 mod groundwalker;
-#[path = "handler_0x586E6.rs"]
+#[path = "handlers/0x586e6/behavior.rs"]
 mod handler_0x586e6;
-#[path = "handler_0x586E6_adapter.rs"]
+#[path = "handlers/0x586e6/adapter.rs"]
 mod handler_0x586e6_adapter;
+#[path = "handlers/0x586eb/behavior.rs"]
 mod handler_0x586eb;
-#[path = "handler_0x587A1.rs"]
+#[path = "handlers/0x587a1/behavior.rs"]
 mod handler_0x587a1;
-#[path = "handler_0x587A1_adapter.rs"]
+#[path = "handlers/0x587a1/adapter.rs"]
 mod handler_0x587a1_adapter;
-#[path = "handler_0x58804.rs"]
+#[path = "handlers/0x58804/behavior.rs"]
 mod handler_0x58804;
-#[path = "handler_0x58804_adapter.rs"]
+#[path = "handlers/0x58804/adapter.rs"]
 mod handler_0x58804_adapter;
+#[path = "handlers/0x58848/behavior.rs"]
 mod handler_0x58848;
+#[path = "handlers/0x58848/adapter.rs"]
 mod handler_0x58848_adapter;
-#[path = "handler_0x589A6.rs"]
+#[path = "handlers/0x589a6/behavior.rs"]
 mod handler_0x589a6;
-#[path = "handler_0x589A6_adapter.rs"]
+#[path = "handlers/0x589a6/adapter.rs"]
 mod handler_0x589a6_adapter;
-#[path = "handler_0x58A6F.rs"]
+#[path = "handlers/0x58a6f/behavior.rs"]
 mod handler_0x58a6f;
-#[path = "handler_0x58A6F_adapter.rs"]
+#[path = "handlers/0x58a6f/adapter.rs"]
 mod handler_0x58a6f_adapter;
-#[path = "handler_0x58B43.rs"]
+#[path = "handlers/0x58b43/behavior.rs"]
 mod handler_0x58b43;
-#[path = "handler_0x58B43_adapter.rs"]
+#[path = "handlers/0x58b43/adapter.rs"]
 mod handler_0x58b43_adapter;
-#[path = "handler_0x58BBA.rs"]
+#[path = "handlers/0x58bba/behavior.rs"]
 mod handler_0x58bba;
-#[path = "handler_0x58BBA_adapter.rs"]
+#[path = "handlers/0x58bba/adapter.rs"]
 mod handler_0x58bba_adapter;
-#[path = "handler_0x58BCB.rs"]
+#[path = "handlers/0x58bcb/behavior.rs"]
 mod handler_0x58bcb;
-#[path = "handler_0x58BCB_adapter.rs"]
+#[path = "handlers/0x58bcb/adapter.rs"]
 mod handler_0x58bcb_adapter;
-#[path = "handler_0x58C41.rs"]
+#[path = "handlers/0x58c41/behavior.rs"]
 mod handler_0x58c41;
-#[path = "handler_0x58C41_adapter.rs"]
+#[path = "handlers/0x58c41/adapter.rs"]
 mod handler_0x58c41_adapter;
-#[path = "handler_0x58C52.rs"]
+#[path = "handlers/0x58c52/behavior.rs"]
 mod handler_0x58c52;
-#[path = "handler_0x58C52_adapter.rs"]
+#[path = "handlers/0x58c52/adapter.rs"]
 mod handler_0x58c52_adapter;
-#[path = "handler_0x58CE0.rs"]
+#[path = "handlers/0x58ce0/behavior.rs"]
 mod handler_0x58ce0;
-#[path = "handler_0x58CE0_adapter.rs"]
+#[path = "handlers/0x58ce0/adapter.rs"]
 mod handler_0x58ce0_adapter;
-#[path = "handler_0x58D34.rs"]
+#[path = "handlers/0x58d34/behavior.rs"]
 mod handler_0x58d34;
-#[path = "handler_0x58D34_adapter.rs"]
+#[path = "handlers/0x58d34/adapter.rs"]
 mod handler_0x58d34_adapter;
-#[path = "handler_0x58E7E.rs"]
+#[path = "handlers/0x58e7e/behavior.rs"]
 mod handler_0x58e7e;
-#[path = "handler_0x58E7E_adapter.rs"]
+#[path = "handlers/0x58e7e/adapter.rs"]
 mod handler_0x58e7e_adapter;
-#[path = "handler_0x5902D.rs"]
+#[path = "handlers/0x5902d/behavior.rs"]
 mod handler_0x5902d;
-#[path = "handler_0x5902D_adapter.rs"]
+#[path = "handlers/0x5902d/adapter.rs"]
 mod handler_0x5902d_adapter;
-#[path = "handler_0x5917A.rs"]
+#[path = "handlers/0x5917a/behavior.rs"]
 mod handler_0x5917a;
-#[path = "handler_0x5917A_adapter.rs"]
+#[path = "handlers/0x5917a/adapter.rs"]
 mod handler_0x5917a_adapter;
-#[path = "handler_0x591A3.rs"]
+#[path = "handlers/0x591a3/behavior.rs"]
 mod handler_0x591a3;
-#[path = "handler_0x591A3_adapter.rs"]
+#[path = "handlers/0x591a3/adapter.rs"]
 mod handler_0x591a3_adapter;
+#[path = "handlers/0x591f9/behavior.rs"]
 mod handler_0x591f9;
-#[path = "handler_0x59270.rs"]
+#[path = "handlers/0x59270/behavior.rs"]
 mod handler_0x59270;
-#[path = "handler_0x59270_adapter.rs"]
+#[path = "handlers/0x59270/adapter.rs"]
 mod handler_0x59270_adapter;
-#[path = "handler_0x5934A.rs"]
+#[path = "handlers/0x5934a/behavior.rs"]
 mod handler_0x5934a;
-#[path = "handler_0x5934A_adapter.rs"]
+#[path = "handlers/0x5934a/adapter.rs"]
 mod handler_0x5934a_adapter;
-#[path = "handler_0x59376.rs"]
+#[path = "handlers/0x59376/behavior.rs"]
 mod handler_0x59376;
-#[path = "handler_0x59376_adapter.rs"]
+#[path = "handlers/0x59376/adapter.rs"]
 mod handler_0x59376_adapter;
-#[path = "handler_0x593DA.rs"]
+#[path = "handlers/0x593da/behavior.rs"]
 mod handler_0x593da;
-#[path = "handler_0x593DA_adapter.rs"]
+#[path = "handlers/0x593da/adapter.rs"]
 mod handler_0x593da_adapter;
-#[path = "handler_0x59431.rs"]
+#[path = "handlers/0x59431/behavior.rs"]
 mod handler_0x59431;
-#[path = "handler_0x59431_adapter.rs"]
+#[path = "handlers/0x59431/adapter.rs"]
 mod handler_0x59431_adapter;
-#[path = "handler_0x5945A.rs"]
+#[path = "handlers/0x5945a/behavior.rs"]
 mod handler_0x5945a;
-#[path = "handler_0x5945A_adapter.rs"]
+#[path = "handlers/0x5945a/adapter.rs"]
 mod handler_0x5945a_adapter;
-#[path = "handler_0x59487.rs"]
+#[path = "handlers/0x59487/behavior.rs"]
 mod handler_0x59487;
-#[path = "handler_0x59487_adapter.rs"]
+#[path = "handlers/0x59487/adapter.rs"]
 mod handler_0x59487_adapter;
-#[path = "handler_0x594FB.rs"]
+#[path = "handlers/0x594fb/behavior.rs"]
 mod handler_0x594fb;
-#[path = "handler_0x594FB_adapter.rs"]
+#[path = "handlers/0x594fb/adapter.rs"]
 mod handler_0x594fb_adapter;
-#[path = "handler_0x595FE.rs"]
+#[path = "handlers/0x595fe/behavior.rs"]
 mod handler_0x595fe;
-#[path = "handler_0x595FE_adapter.rs"]
+#[path = "handlers/0x595fe/adapter.rs"]
 mod handler_0x595fe_adapter;
-#[path = "handler_0x5966C.rs"]
+#[path = "handlers/0x5966c/behavior.rs"]
 mod handler_0x5966c;
-#[path = "handler_0x5966C_adapter.rs"]
+#[path = "handlers/0x5966c/adapter.rs"]
 mod handler_0x5966c_adapter;
-#[path = "handler_0x596D9.rs"]
+#[path = "handlers/0x596d9/behavior.rs"]
 mod handler_0x596d9;
-#[path = "handler_0x596D9_adapter.rs"]
+#[path = "handlers/0x596d9/adapter.rs"]
 mod handler_0x596d9_adapter;
-#[path = "handler_0x59728.rs"]
+#[path = "handlers/0x59728/behavior.rs"]
 mod handler_0x59728;
-#[path = "handler_0x59728_adapter.rs"]
+#[path = "handlers/0x59728/adapter.rs"]
 mod handler_0x59728_adapter;
-#[path = "handler_0x59763.rs"]
+#[path = "handlers/0x59763/behavior.rs"]
 mod handler_0x59763;
-#[path = "handler_0x59763_adapter.rs"]
+#[path = "handlers/0x59763/adapter.rs"]
 mod handler_0x59763_adapter;
-#[path = "handler_0x59774.rs"]
+#[path = "handlers/0x59774/behavior.rs"]
 mod handler_0x59774;
-#[path = "handler_0x59774_adapter.rs"]
+#[path = "handlers/0x59774/adapter.rs"]
 mod handler_0x59774_adapter;
-#[path = "handler_0x597BD.rs"]
+#[path = "handlers/0x597bd/behavior.rs"]
 mod handler_0x597bd;
-#[path = "handler_0x597BD_adapter.rs"]
+#[path = "handlers/0x597bd/adapter.rs"]
 mod handler_0x597bd_adapter;
-#[path = "handler_0x599A6.rs"]
+#[path = "handlers/0x599a6/behavior.rs"]
 mod handler_0x599a6;
-#[path = "handler_0x599A6_adapter.rs"]
+#[path = "handlers/0x599a6/adapter.rs"]
 mod handler_0x599a6_adapter;
-#[path = "handler_0x59AAD.rs"]
+#[path = "handlers/0x59aad/behavior.rs"]
 mod handler_0x59aad;
-#[path = "handler_0x59AAD_adapter.rs"]
+#[path = "handlers/0x59aad/adapter.rs"]
 mod handler_0x59aad_adapter;
-#[path = "handler_0x59B0E.rs"]
+#[path = "handlers/0x59b0e/behavior.rs"]
 mod handler_0x59b0e;
-#[path = "handler_0x59B0E_adapter.rs"]
+#[path = "handlers/0x59b0e/adapter.rs"]
 mod handler_0x59b0e_adapter;
-#[path = "handler_0x59B1F.rs"]
+#[path = "handlers/0x59b1f/behavior.rs"]
 mod handler_0x59b1f;
-#[path = "handler_0x59B1F_adapter.rs"]
+#[path = "handlers/0x59b1f/adapter.rs"]
 mod handler_0x59b1f_adapter;
-#[path = "handler_0x59BE1.rs"]
+#[path = "handlers/0x59be1/behavior.rs"]
 mod handler_0x59be1;
-#[path = "handler_0x59BE1_adapter.rs"]
+#[path = "handlers/0x59be1/adapter.rs"]
 mod handler_0x59be1_adapter;
-#[path = "handler_0x59E5B.rs"]
+#[path = "handlers/0x59e5b/behavior.rs"]
 mod handler_0x59e5b;
-#[path = "handler_0x59E5B_adapter.rs"]
+#[path = "handlers/0x59e5b/adapter.rs"]
 mod handler_0x59e5b_adapter;
-#[path = "handler_0x59EFF.rs"]
+#[path = "handlers/0x59eff/behavior.rs"]
 mod handler_0x59eff;
-#[path = "handler_0x59EFF_adapter.rs"]
+#[path = "handlers/0x59eff/adapter.rs"]
 mod handler_0x59eff_adapter;
-#[path = "handler_0x59FB9.rs"]
+#[path = "handlers/0x59fb9/behavior.rs"]
 mod handler_0x59fb9;
-#[path = "handler_0x59FB9_adapter.rs"]
+#[path = "handlers/0x59fb9/adapter.rs"]
 mod handler_0x59fb9_adapter;
-#[path = "handler_0x59FCE.rs"]
+#[path = "handlers/0x59fce/behavior.rs"]
 mod handler_0x59fce;
-#[path = "handler_0x59FCE_adapter.rs"]
+#[path = "handlers/0x59fce/adapter.rs"]
 mod handler_0x59fce_adapter;
-#[path = "handler_0x59FDF.rs"]
+#[path = "handlers/0x59fdf/behavior.rs"]
 mod handler_0x59fdf;
-#[path = "handler_0x59FDF_adapter.rs"]
+#[path = "handlers/0x59fdf/adapter.rs"]
 mod handler_0x59fdf_adapter;
-#[path = "handler_0x5A031.rs"]
+#[path = "handlers/0x5a031/behavior.rs"]
 mod handler_0x5a031;
-#[path = "handler_0x5A031_adapter.rs"]
+#[path = "handlers/0x5a031/adapter.rs"]
 mod handler_0x5a031_adapter;
-#[path = "handler_0x5A0AA.rs"]
+#[path = "handlers/0x5a0aa/behavior.rs"]
 mod handler_0x5a0aa;
-#[path = "handler_0x5A0AA_adapter.rs"]
+#[path = "handlers/0x5a0aa/adapter.rs"]
 mod handler_0x5a0aa_adapter;
-#[path = "handler_0x5A11E.rs"]
+#[path = "handlers/0x5a11e/behavior.rs"]
 mod handler_0x5a11e;
-#[path = "handler_0x5A11E_adapter.rs"]
+#[path = "handlers/0x5a11e/adapter.rs"]
 mod handler_0x5a11e_adapter;
-#[path = "handler_0x5A179.rs"]
+#[path = "handlers/0x5a179/behavior.rs"]
 mod handler_0x5a179;
-#[path = "handler_0x5A179_adapter.rs"]
+#[path = "handlers/0x5a179/adapter.rs"]
 mod handler_0x5a179_adapter;
-#[path = "handler_0x5A236.rs"]
+#[path = "handlers/0x5a236/behavior.rs"]
 mod handler_0x5a236;
-#[path = "handler_0x5A236_adapter.rs"]
+#[path = "handlers/0x5a236/adapter.rs"]
 mod handler_0x5a236_adapter;
-#[path = "handler_0x5A258.rs"]
+#[path = "handlers/0x5a258/behavior.rs"]
 mod handler_0x5a258;
-#[path = "handler_0x5A258_adapter.rs"]
+#[path = "handlers/0x5a258/adapter.rs"]
 mod handler_0x5a258_adapter;
-#[path = "handler_0x5A2D0.rs"]
+#[path = "handlers/0x5a2d0/behavior.rs"]
 mod handler_0x5a2d0;
-#[path = "handler_0x5A2D0_adapter.rs"]
+#[path = "handlers/0x5a2d0/adapter.rs"]
 mod handler_0x5a2d0_adapter;
-#[path = "handler_0x5A30E.rs"]
+#[path = "handlers/0x5a30e/behavior.rs"]
 mod handler_0x5a30e;
-#[path = "handler_0x5A30E_adapter.rs"]
+#[path = "handlers/0x5a30e/adapter.rs"]
 mod handler_0x5a30e_adapter;
-#[path = "handler_0x5A355.rs"]
+#[path = "handlers/0x5a355/behavior.rs"]
 mod handler_0x5a355;
-#[path = "handler_0x5A355_adapter.rs"]
+#[path = "handlers/0x5a355/adapter.rs"]
 mod handler_0x5a355_adapter;
-#[path = "handler_0x5A545.rs"]
+#[path = "handlers/0x5a545/behavior.rs"]
 mod handler_0x5a545;
-#[path = "handler_0x5A545_adapter.rs"]
+#[path = "handlers/0x5a545/adapter.rs"]
 mod handler_0x5a545_adapter;
-#[path = "handler_0x5A5C7.rs"]
+#[path = "handlers/0x5a5c7/behavior.rs"]
 mod handler_0x5a5c7;
-#[path = "handler_0x5A5C7_adapter.rs"]
+#[path = "handlers/0x5a5c7/adapter.rs"]
 mod handler_0x5a5c7_adapter;
-#[path = "handler_0x5A5EC.rs"]
+#[path = "handlers/0x5a5ec/behavior.rs"]
 mod handler_0x5a5ec;
-#[path = "handler_0x5A5EC_adapter.rs"]
+#[path = "handlers/0x5a5ec/adapter.rs"]
 mod handler_0x5a5ec_adapter;
-#[path = "handler_0x5A667.rs"]
+#[path = "handlers/0x5a667/behavior.rs"]
 mod handler_0x5a667;
-#[path = "handler_0x5A667_adapter.rs"]
+#[path = "handlers/0x5a667/adapter.rs"]
 mod handler_0x5a667_adapter;
-#[path = "handler_0x5A683.rs"]
+#[path = "handlers/0x5a683/behavior.rs"]
 mod handler_0x5a683;
-#[path = "handler_0x5A683_adapter.rs"]
+#[path = "handlers/0x5a683/adapter.rs"]
 mod handler_0x5a683_adapter;
-#[path = "handler_0x5A6E7.rs"]
+#[path = "handlers/0x5a6e7/behavior.rs"]
 mod handler_0x5a6e7;
-#[path = "handler_0x5A6E7_adapter.rs"]
+#[path = "handlers/0x5a6e7/adapter.rs"]
 mod handler_0x5a6e7_adapter;
-#[path = "handler_0x5A721.rs"]
+#[path = "handlers/0x5a721/behavior.rs"]
 mod handler_0x5a721;
-#[path = "handler_0x5A721_adapter.rs"]
+#[path = "handlers/0x5a721/adapter.rs"]
 mod handler_0x5a721_adapter;
-#[path = "handler_0x5A739.rs"]
+#[path = "handlers/0x5a739/behavior.rs"]
 mod handler_0x5a739;
-#[path = "handler_0x5A739_adapter.rs"]
+#[path = "handlers/0x5a739/adapter.rs"]
 mod handler_0x5a739_adapter;
-#[path = "handler_0x5A816.rs"]
+#[path = "handlers/0x5a816/behavior.rs"]
 mod handler_0x5a816;
-#[path = "handler_0x5A816_adapter.rs"]
+#[path = "handlers/0x5a816/adapter.rs"]
 mod handler_0x5a816_adapter;
-#[path = "handler_0x5A85C.rs"]
+#[path = "handlers/0x5a85c/behavior.rs"]
 mod handler_0x5a85c;
-#[path = "handler_0x5A85C_adapter.rs"]
+#[path = "handlers/0x5a85c/adapter.rs"]
 mod handler_0x5a85c_adapter;
-#[path = "handler_0x5A8D2.rs"]
+#[path = "handlers/0x5a8d2/behavior.rs"]
 mod handler_0x5a8d2;
-#[path = "handler_0x5A8D2_adapter.rs"]
+#[path = "handlers/0x5a8d2/adapter.rs"]
 mod handler_0x5a8d2_adapter;
-#[path = "handler_0x5A8E4.rs"]
+#[path = "handlers/0x5a8e4/behavior.rs"]
 mod handler_0x5a8e4;
-#[path = "handler_0x5A8E4_adapter.rs"]
+#[path = "handlers/0x5a8e4/adapter.rs"]
 mod handler_0x5a8e4_adapter;
-#[path = "handler_0x5A969.rs"]
+#[path = "handlers/0x5a969/behavior.rs"]
 mod handler_0x5a969;
-#[path = "handler_0x5A969_adapter.rs"]
+#[path = "handlers/0x5a969/adapter.rs"]
 mod handler_0x5a969_adapter;
-#[path = "handler_0x5A992.rs"]
+#[path = "handlers/0x5a992/behavior.rs"]
 mod handler_0x5a992;
-#[path = "handler_0x5A992_adapter.rs"]
+#[path = "handlers/0x5a992/adapter.rs"]
 mod handler_0x5a992_adapter;
-#[path = "handler_0x5A9D3.rs"]
+#[path = "handlers/0x5a9d3/behavior.rs"]
 mod handler_0x5a9d3;
-#[path = "handler_0x5A9D3_adapter.rs"]
+#[path = "handlers/0x5a9d3/adapter.rs"]
 mod handler_0x5a9d3_adapter;
-#[path = "handler_0x5AA68.rs"]
+#[path = "handlers/0x5aa68/behavior.rs"]
 mod handler_0x5aa68;
-#[path = "handler_0x5AA68_adapter.rs"]
+#[path = "handlers/0x5aa68/adapter.rs"]
 mod handler_0x5aa68_adapter;
-#[path = "handler_0x5AA71.rs"]
+#[path = "handlers/0x5aa71/behavior.rs"]
 mod handler_0x5aa71;
-#[path = "handler_0x5AA71_adapter.rs"]
+#[path = "handlers/0x5aa71/adapter.rs"]
 mod handler_0x5aa71_adapter;
-#[path = "handler_0x5AAB9.rs"]
+#[path = "handlers/0x5aab9/behavior.rs"]
 mod handler_0x5aab9;
-#[path = "handler_0x5AAB9_adapter.rs"]
+#[path = "handlers/0x5aab9/adapter.rs"]
 mod handler_0x5aab9_adapter;
-#[path = "handler_0x5AB4B.rs"]
+#[path = "handlers/0x5ab4b/behavior.rs"]
 mod handler_0x5ab4b;
-#[path = "handler_0x5AB4B_adapter.rs"]
+#[path = "handlers/0x5ab4b/adapter.rs"]
 mod handler_0x5ab4b_adapter;
-#[path = "handler_0x5AB79.rs"]
+#[path = "handlers/0x5ab79/behavior.rs"]
 mod handler_0x5ab79;
-#[path = "handler_0x5AB79_adapter.rs"]
+#[path = "handlers/0x5ab79/adapter.rs"]
 mod handler_0x5ab79_adapter;
-#[path = "handler_0x5AC01.rs"]
+#[path = "handlers/0x5ac01/behavior.rs"]
 mod handler_0x5ac01;
-#[path = "handler_0x5AC01_adapter.rs"]
+#[path = "handlers/0x5ac01/adapter.rs"]
 mod handler_0x5ac01_adapter;
-#[path = "handler_0x5AC3C.rs"]
+#[path = "handlers/0x5ac3c/behavior.rs"]
 mod handler_0x5ac3c;
-#[path = "handler_0x5AC3C_adapter.rs"]
+#[path = "handlers/0x5ac3c/adapter.rs"]
 mod handler_0x5ac3c_adapter;
-#[path = "handler_0x5AC7D.rs"]
+#[path = "handlers/0x5ac7d/behavior.rs"]
 mod handler_0x5ac7d;
-#[path = "handler_0x5AC7D_adapter.rs"]
+#[path = "handlers/0x5ac7d/adapter.rs"]
 mod handler_0x5ac7d_adapter;
-#[path = "handler_0x5ACE4.rs"]
+#[path = "handlers/0x5ace4/behavior.rs"]
 mod handler_0x5ace4;
-#[path = "handler_0x5ACE4_adapter.rs"]
+#[path = "handlers/0x5ace4/adapter.rs"]
 mod handler_0x5ace4_adapter;
-#[path = "handler_0x5AD2D.rs"]
+#[path = "handlers/0x5ad2d/behavior.rs"]
 mod handler_0x5ad2d;
-#[path = "handler_0x5AD2D_adapter.rs"]
+#[path = "handlers/0x5ad2d/adapter.rs"]
 mod handler_0x5ad2d_adapter;
-#[path = "handler_0x5AD4D.rs"]
+#[path = "handlers/0x5ad4d/behavior.rs"]
 mod handler_0x5ad4d;
-#[path = "handler_0x5AD4D_adapter.rs"]
+#[path = "handlers/0x5ad4d/adapter.rs"]
 mod handler_0x5ad4d_adapter;
-#[path = "handler_0x5ADDD.rs"]
+#[path = "handlers/0x5addd/behavior.rs"]
 mod handler_0x5addd;
-#[path = "handler_0x5ADDD_adapter.rs"]
+#[path = "handlers/0x5addd/adapter.rs"]
 mod handler_0x5addd_adapter;
-#[path = "handler_0x5AEF4.rs"]
+#[path = "handlers/0x5aef4/behavior.rs"]
 mod handler_0x5aef4;
-#[path = "handler_0x5AEF4_adapter.rs"]
+#[path = "handlers/0x5aef4/adapter.rs"]
 mod handler_0x5aef4_adapter;
-#[path = "handler_0x5AFD7.rs"]
+#[path = "handlers/0x5afd7/behavior.rs"]
 mod handler_0x5afd7;
-#[path = "handler_0x5AFD7_adapter.rs"]
+#[path = "handlers/0x5afd7/adapter.rs"]
 mod handler_0x5afd7_adapter;
-#[path = "handler_0x5B06D.rs"]
+#[path = "handlers/0x5b06d/behavior.rs"]
 mod handler_0x5b06d;
-#[path = "handler_0x5B06D_adapter.rs"]
+#[path = "handlers/0x5b06d/adapter.rs"]
 mod handler_0x5b06d_adapter;
+#[path = "handlers/0x5b0d5/behavior.rs"]
 mod handler_0x5b0d5;
-#[path = "handler_0x5B177.rs"]
+#[path = "handlers/0x5b177/behavior.rs"]
 mod handler_0x5b177;
-#[path = "handler_0x5B177_adapter.rs"]
+#[path = "handlers/0x5b177/adapter.rs"]
 mod handler_0x5b177_adapter;
+#[path = "handlers/0x5b36d/behavior.rs"]
 mod handler_0x5b36d;
-#[path = "handler_0x96FE.rs"]
+#[path = "handlers/0x096fe/behavior.rs"]
 mod handler_0x96fe;
-#[path = "handler_0x9824.rs"]
+#[path = "handlers/0x09824/behavior.rs"]
 mod handler_0x9824;
 mod helpers;
+#[path = "handlers/horizontal_platform/behavior.rs"]
 mod horizontal_platform;
 mod interaction;
+#[path = "handlers/items/behavior.rs"]
 mod items;
+#[path = "handlers/left_marcher/behavior.rs"]
 mod left_marcher;
+#[path = "bosses/mario_zone/mod.rs"]
 mod mario_zone;
+#[path = "handlers/moneybag_reward/behavior.rs"]
 mod moneybag_reward;
+#[path = "handlers/paced_walker/behavior.rs"]
 mod paced_walker;
+#[path = "bosses/patrol/behavior.rs"]
 mod patrol_boss;
+#[path = "bosses/patrol/adapter.rs"]
 mod patrol_boss_adapter;
 #[cfg(test)]
+#[path = "bosses/patrol/tests/flow.rs"]
 mod patrol_boss_flow_tests;
+#[path = "bosses/patrol/child/behavior.rs"]
 mod patrol_child;
+#[path = "bosses/patrol/child/adapter.rs"]
 mod patrol_child_adapter;
+#[path = "handlers/perched_flyer/behavior.rs"]
 mod perched_flyer;
+#[path = "handlers/pipe_bobber/behavior.rs"]
 mod pipe_bobber;
+#[path = "handlers/piranha_fireball/behavior.rs"]
 mod piranha_fireball;
 #[cfg(test)]
+#[path = "tests/record_marker.rs"]
 mod record_marker_tests;
 mod record_origin;
 mod record_reset;
 #[cfg(test)]
+#[path = "tests/record_reset.rs"]
 mod record_reset_tests;
 mod reward_spawn;
+#[path = "handlers/rising_platform/behavior.rs"]
 mod rising_platform;
+#[path = "handlers/rising_platform/adapter.rs"]
 mod rising_platform_adapter;
 mod scratch;
 mod shell;
+#[path = "bosses/door/side/behavior.rs"]
 mod side_door;
+#[path = "handlers/squashed/behavior.rs"]
 mod squashed;
 #[cfg(test)]
+#[path = "tests/stomp_morph.rs"]
 mod stomp_morph_tests;
 mod stream;
 mod stream_cursor;
+#[path = "bosses/sweep/behavior.rs"]
 mod sweep_boss;
+#[path = "bosses/sweep/adapter.rs"]
 mod sweep_boss_adapter;
 #[cfg(test)]
+#[path = "bosses/sweep/tests/flow.rs"]
 mod sweep_boss_flow_tests;
+#[path = "bosses/sweep/child/behavior.rs"]
 mod sweep_child;
+#[path = "bosses/sweep/child/adapter.rs"]
 mod sweep_child_adapter;
+#[path = "bosses/sweep/drop_child/behavior.rs"]
 mod sweep_drop_child;
+#[path = "bosses/sweep/drop_child/adapter.rs"]
 mod sweep_drop_child_adapter;
 mod terrain_probes;
 #[cfg(test)]
+#[path = "tests/engine.rs"]
 mod tests;
+#[path = "bosses/tree/behavior.rs"]
 mod tree_boss;
+#[path = "bosses/tree/adapter.rs"]
 mod tree_boss_adapter;
 #[cfg(test)]
+#[path = "bosses/tree/tests/flow.rs"]
 mod tree_boss_flow_tests;
+#[path = "handlers/vertical_bobber/behavior.rs"]
 mod vertical_bobber;
+#[path = "handlers/vertical_pacer/behavior.rs"]
 mod vertical_pacer;
+#[path = "handlers/walker/behavior.rs"]
 mod walker;
+#[path = "handlers/walkers/behavior.rs"]
 mod walkers;
+#[path = "bosses/wario/mod.rs"]
 mod wario;
+#[path = "handlers/wave_flyer/behavior.rs"]
 mod wave_flyer;
+#[path = "handlers/winged_walker/behavior.rs"]
 mod winged_walker;
 
 #[derive(Debug, Clone)]

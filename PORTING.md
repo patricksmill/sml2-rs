@@ -59,7 +59,7 @@ Never assign “port the object engine” or “fix DeepSeek’s mess in `object
 
 1. Run `python3 tools/handler_task.py --addr 0x58201` (or `--anim 9` mode A) → writes `tasks/handlers/0x58201.md`. Require exit 0 and `Slice status: COMPLETE`; exit 2 requires source/dependency work. Bank `$16` is decimal 22.
 2. If no test exists: add `objects::tests::handler_0x58201_*` in the same PR as the handler (or `objects/tests/`).
-3. Implement in a focused module under `crates/sml2-core/src/objects/` (Wario in `objects/wario/`); wire **one line** in `objects/dispatch.rs`.
+3. Implement in a focused module under `crates/sml2-core/src/objects/` (Wario in `objects/bosses/wario/`); wire **one line** in `objects/dispatch.rs`.
 4. `cargo test -p sml2-core handler_0x58201` (or the test name you chose).
 5. Mark progress in `handler_coverage.json` (generated/manifest — see plan), not in a 2 KB `PORT_QUEUE` note.
 
@@ -71,19 +71,38 @@ Current module layout (keep the public facade stable):
 
 ```
 crates/sml2-core/src/objects/
-  mod.rs          # ObjectSim, slot loop, public API
-  staging.rs      # $FFD0 offsets, copy in/out
-  dispatch.rs     # match on handler ROM address → fn
-  helpers.rs      # $5Bxxx / probes already shared
-  walkers.rs      # existing handler family
-  items.rs        # existing item/pose family
-  boss.rs         # shared boss facade and existing other boss families
-  wario/          # Wario forms, children, exits, adapters and local tests
-  interaction.rs  # contact and projectile interactions
-  shell.rs        # carried shell behavior
-  stream.rs       # spawn stream
-  tests.rs        # existing cross-module tests; new handler tests stay local
+  mod.rs                 # ObjectSim, slot loop, module registrations, public API
+  dispatch.rs            # handler ROM address → method
+  staging.rs             # slot compatibility data
+  helpers.rs             # shared engine helpers
+  interaction.rs         # contact and projectile interactions
+  shell.rs               # carried shell behavior
+  stream.rs              # spawn stream
+  handlers/
+    walker/behavior.rs   # named behavior families
+    0x58848/
+      behavior.rs        # native actor behavior; ROM address retained for lookup
+      adapter.rs         # slot compatibility and world effects
+      tests/adapter.rs   # tests owned by this handler
+  bosses/
+    shared/              # damage, stun, flash, spawn and reward helpers
+    circuit/             # behavior.rs, adapter.rs, motion.rs, tests/
+    door/                # mouth, children, side and central doors, tests/
+    patrol/              # behavior.rs, adapter.rs, child/, tests/
+    sweep/               # behavior.rs, adapter.rs, child/, drop_child/, tests/
+    tree/                # behavior.rs, adapter.rs, tests/
+    mario_zone/          # parts, controller, reward, tests/
+    wario/               # forms, children, phase transitions, tests/
+  tests/                 # cross-module engine regressions
 ```
+
+Group files by their owning behavior or boss family. Within that directory,
+use short names such as `behavior.rs`, `adapter.rs`, and `tests/motion.rs`.
+Keep ROM addresses in existing addressed handler directory names and source
+comments. Module registrations use explicit paths to preserve the existing Rust
+module ownership, private access, and dispatch facade during this layout change.
+Register ordinary handlers in `objects/mod.rs`; Wario and Mario Zone keep their
+own registrations. New tests belong in the owner's `tests/` directory.
 
 **Rule:** No new handler bodies in a file over ~400 lines. Split before adding.
 

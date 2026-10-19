@@ -175,7 +175,7 @@ are outside the claim. Native helper parity remains separate work.
 ```bash
 python3 tools/dispatch_prompt.py --addr 0x58201
 python3 tools/dispatch_prompt.py --addr 0x58201 \
-  --module crates/sml2-core/src/objects/wario/form3.rs
+  --module crates/sml2-core/src/objects/bosses/wario/form3.rs
 python3 tools/dispatch_prompt.py --queue boss_arena_phase_cascade
 ```
 
@@ -186,8 +186,8 @@ assertions at the conversion boundary, one dispatch arm, and module registration
 Prompts require the native guide and `Actor` API; raw slot/register logic belongs
 outside domain handlers. Resolve missing native helpers first. Choose new modules
 when a family or adapter is already too large. Family subfolders are supported;
-Wario modules live in `objects/wario/`, and prompts register them in
-`objects/wario/mod.rs`. Coverage searches family subfolders recursively. `--dependency` and `--max-states` pass through to slicing. Queue prompts
+Wario modules live in `objects/bosses/wario/`, and prompts register them in
+`objects/bosses/wario/mod.rs`. Coverage searches family subfolders recursively. `--dependency` and `--max-states` pass through to slicing. Queue prompts
 validate the named current files and include existing object integration tests
 when appropriate. Successful stdout is the worker message; generator diagnostics
 are written to stderr.
