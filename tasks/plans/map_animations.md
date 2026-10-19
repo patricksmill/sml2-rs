@@ -47,10 +47,23 @@ Goal: the hub's shoreline shimmer.
    renderer needs the tile offset, not a new tile).
 4. Gate: PyBoy, hub, 64 frames — compare the four VRAM tile pairs each frame.
 
-## Phase 3 — Decor slot expander (all screens)
+## Phase 3 — Decor slot expander (engine done, not wired)
 
 Goal: the static decor (flags, castles, clouds, bushes) that the BG does not
 draw, plus its culling.
+
+**State:** `DECOR_METASPRITES` (17 metasprites, `(dy, dx, tile, attr)` cells
+terminated by a `$FF` *tile*), `HUB_DECOR_SLOTS` (the 72 bytes at `$4BFD`) and
+`decor_oam()` (the `$3D044` window plus `$3D001`'s cell math) are in
+`crates/sml2-core/src/map.rs`. The position math is console-verified: at
+`cam = ($BB, $0142)` slot 14 stages OAM `y=62 x=213 tile=$3A`, which matches
+PyBoy exactly.
+
+**Not wired on purpose.** At the hub's idle camera PyBoy shows no OAM entry 13+
+at all, yet the static list plus the `$3D044` window keeps slot 3 - so the
+console rewrites the list before the expander runs. Rendering the static list
+would draw sprites the console hides, so the renderer stays off until phase 4
+supplies the live slot values. `decor_idle_probe` pins that disagreement.
 
 1. Extract: the 18-slot list per screen (hub = the 72 bytes at `$4BFD`; zone
    screens build theirs in code, so each loader needs reading), the `$4C4D`

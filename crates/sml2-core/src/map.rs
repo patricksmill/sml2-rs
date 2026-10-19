@@ -616,6 +616,100 @@ pub fn cursor_sprite(
     CursorSprite::Pose(cursor_pose & 0x0F)
 }
 
+/// `$4C4D`: the seventeen decor metasprites, `(dy, dx, tile, attr)` cells
+/// terminated by a `$FF` tile (not a `$FF` dy - `$3D01D` tests the tile byte).
+pub const DECOR_METASPRITES: [&[(i8, i8, u8, u8)]; 17] = [
+    &[],  // $ 4c6f - 0 cells
+    &[(0, 8, 0x54, 0x00), (0, 16, 0x55, 0x00), (0, 24, 0x54, 0x20), (8, 0, 0x56, 0x00), (8, 8, 0x57, 0x00), (8, 16, 0x58, 0x00), (8, 24, 0x6D, 0x00), (8, 32, 0x7A, 0x00), (16, 0, 0x59, 0x00), (16, 8, 0x5A, 0x00), (16, 16, 0x5B, 0x00), (16, 24, 0x5A, 0x20), (16, 32, 0x7B, 0x00), (24, 0, 0x5C, 0x00), (24, 8, 0x5D, 0x00), (24, 16, 0x6C, 0x00), (24, 24, 0x5D, 0x20), (24, 32, 0x5C, 0x20)],  // $ 4c73 - 18 cells
+    &[(0, 0, 0x60, 0x00), (0, 8, 0x61, 0x00), (8, 0, 0x62, 0x00), (8, 8, 0x63, 0x00)],  // $ 4cbf - 4 cells
+    &[(0, 0, 0x64, 0x00), (0, 8, 0x65, 0x00), (8, 0, 0x66, 0x00), (8, 8, 0x67, 0x00)],  // $ 4cd3 - 4 cells
+    &[(0, 0, 0x68, 0x00), (0, 8, 0x69, 0x00), (8, 0, 0x6A, 0x00), (8, 8, 0x6B, 0x00)],  // $ 4ce7 - 4 cells
+    &[(0, 0, 0x3A, 0x00), (0, 8, 0x3B, 0x00), (0, 16, 0x3C, 0x00), (8, 0, 0x3D, 0x00), (8, 8, 0x3E, 0x00), (8, 16, 0x3F, 0x00), (16, 0, 0x40, 0x00), (16, 8, 0x41, 0x00), (16, 16, 0x42, 0x00)],  // $ 4cfb - 9 cells
+    &[(0, 0, 0x45, 0x00), (0, 8, 0x3B, 0x00), (0, 16, 0x3C, 0x00), (8, 0, 0x46, 0x00), (8, 8, 0x47, 0x00), (8, 16, 0x3F, 0x00), (16, 0, 0x48, 0x00), (16, 8, 0x49, 0x00), (16, 16, 0x42, 0x00)],  // $ 4d23 - 9 cells
+    &[(0, 0, 0x4A, 0x00), (0, 8, 0x3B, 0x00), (0, 16, 0x3C, 0x00), (8, 0, 0x4B, 0x00), (8, 8, 0x4C, 0x00), (8, 16, 0x3F, 0x00), (16, 0, 0x4D, 0x00), (16, 8, 0x4E, 0x00), (16, 16, 0x42, 0x00)],  // $ 4d4b - 9 cells
+    &[(0, 0, 0x4F, 0x00), (0, 8, 0x3B, 0x00), (0, 16, 0x3C, 0x00), (8, 0, 0x50, 0x00), (8, 8, 0x51, 0x00), (8, 16, 0x3F, 0x00), (16, 0, 0x52, 0x00), (16, 8, 0x53, 0x00), (16, 16, 0x42, 0x00)],  // $ 4d73 - 9 cells
+    &[(0, 0, 0x20, 0x00), (0, 8, 0x21, 0x00), (0, 16, 0x22, 0x00), (0, 24, 0x23, 0x00), (8, 0, 0x24, 0x00), (8, 8, 0x25, 0x00), (8, 16, 0x26, 0x00), (8, 24, 0x27, 0x00)],  // $ 4d9b - 8 cells
+    &[(0, 0, 0x36, 0x00), (0, 8, 0x36, 0x20), (0, 16, 0x36, 0x00), (0, 24, 0x36, 0x20)],  // $ 4dbf - 4 cells
+    &[(0, 0, 0x43, 0x00), (8, 0, 0x44, 0x00)],  // $ 4dd3 - 2 cells
+    &[(0, 0, 0x7C, 0x00), (0, 8, 0x7C, 0x20), (8, 0, 0x7D, 0x00), (8, 8, 0x7D, 0x20)],  // $ 4ddf - 4 cells
+    &[(0, 0, 0x37, 0x00), (0, 8, 0x38, 0x00), (8, 0, 0x37, 0x40), (8, 8, 0x38, 0x40)],  // $ 4df3 - 4 cells
+    &[(0, 0, 0x38, 0x20), (0, 8, 0x37, 0x20), (8, 0, 0x38, 0x60), (8, 8, 0x37, 0x60)],  // $ 4e07 - 4 cells
+    &[(0, 0, 0x7D, 0x40), (0, 8, 0x7D, 0x60), (8, 0, 0x7C, 0x40), (8, 8, 0x7C, 0x60)],  // $ 4e1b - 4 cells
+    &[(0, 0, 0x00, 0x00)],  // $ 4e2f - 1 cells
+];
+
+/// The hub's `sMapSprite0Page` list (`$4BFD`, copied by `$3CBE7`): `(A, X, Y, ID)`.
+/// `A`'s high nibble is the graphics bank offset and its low nibble tags the
+/// camera compare; `ID == $FF` is an empty slot, otherwise `ID` indexes
+/// [`DECOR_METASPRITES`].
+pub const HUB_DECOR_SLOTS: [(u8, u8, u8, u8); 18] = [
+    (0x00, 0x4C, 0x4F, 0x01),
+    (0x10, 0x78, 0x36, 0xFF),
+    (0x10, 0xA8, 0xF0, 0x09),
+    (0x01, 0xC0, 0x28, 0x09),
+    (0x10, 0x7F, 0x55, 0xFF),
+    (0x01, 0x5A, 0x00, 0xFF),
+    (0x00, 0xD2, 0x60, 0xFF),
+    (0x10, 0x28, 0x38, 0xFF),
+    (0x11, 0xB0, 0x5C, 0xFF),
+    (0x10, 0x8E, 0xC8, 0xFF),
+    (0x11, 0x98, 0x78, 0xFF),
+    (0x11, 0x90, 0x78, 0xFF),
+    (0x11, 0x88, 0x78, 0xFF),
+    (0x11, 0x80, 0x78, 0xFF),
+    (0x11, 0x88, 0x70, 0x05),
+    (0x11, 0x78, 0x78, 0xFF),
+    (0x00, 0xD8, 0xA8, 0xFF),
+    (0x10, 0x00, 0xB0, 0xFF),
+];
+
+/// `$3D044`'s 16-bit camera cull. The ROM builds both sides in "bank-tagged"
+/// space - the camera's high byte OR'd with `$06`, the slot's own nibble OR'd
+/// with `$06` - and keeps the slot only when `cam - $30 < slot < cam + $D0` on
+/// both axes. Anything outside that 208-pixel window is flagged
+/// `sMapSpriteOffscreen` and skipped.
+fn decor_offscreen(slot_a: u8, slot_x: u8, slot_y: u8, cam_x: u16, cam_y: u16) -> bool {
+    let inside = |cam: u16, value: u8, nibble: u8| {
+        let cam_side = (((0x06 | (cam >> 8) as u8) as u16) << 8) | (cam as u8) as u16;
+        let slot_side = (((0x06 | nibble) as u16) << 8) | value as u16;
+        slot_side > cam_side.wrapping_sub(0x30) && slot_side < cam_side.wrapping_add(0xD0)
+    };
+    !(inside(cam_x, slot_x, slot_a >> 4) && inside(cam_y, slot_y, slot_a & 0x0F))
+}
+
+/// One expanded decor slot: the OAM bytes `$3D001` would stage for it, or `None`
+/// when the camera cull drops it.
+///
+/// `$3D044` ends with `x = slot.x - cam.x + 8`, `y = slot.y - cam.y + 16` (both
+/// 8-bit), and `$3D01D` adds each cell's `(dy, dx)`; the OAM values are therefore
+/// `screen + (8, 16)`. Measured on the console at `cam = ($BB, $0142)`, slot 14
+/// (`$11 $88 $70 $05`) staged `y=62 x=213 tile=$3A attr=$00`, which is this
+/// arithmetic exactly.
+pub fn decor_oam(slot: (u8, u8, u8, u8), cam_x: u16, cam_y: u16) -> Option<Vec<(u8, u8, u8, u8)>> {
+    let (a, x, y, id) = slot;
+    if id == 0xFF || id as usize >= DECOR_METASPRITES.len() {
+        return None;
+    }
+    if decor_offscreen(a, x, y, cam_x, cam_y) {
+        return None;
+    }
+    let oam_x = x.wrapping_sub(cam_x as u8).wrapping_add(8);
+    let oam_y = y.wrapping_sub(cam_y as u8).wrapping_add(16);
+    Some(
+        DECOR_METASPRITES[id as usize]
+            .iter()
+            .map(|&(dy, dx, tile, attr)| {
+                (
+                    oam_y.wrapping_add(dy as u8),
+                    oam_x.wrapping_add(dx as u8),
+                    tile,
+                    attr,
+                )
+            })
+            .collect(),
+    )
+}
+
 /// The eight tiles the hub's wave strips write into, in strip order: strip `n`
 /// owns `WAVE_TILES[2n]` (`$88E0`-style base) and `WAVE_TILES[2n+1]` (`$88F0`).
 pub const WAVE_TILES: [u8; 8] = [0x8E, 0x8F, 0x9E, 0x9F, 0xCE, 0xCF, 0xDE, 0xDF];
@@ -1442,5 +1536,105 @@ mod wave_tests {
         let mut vram = vec![[0u8; 64]; 384];
         wave.apply(&mut vram);
         assert_eq!(vram[0x8E], crate::video::tile_colors(&wave.raw[0]));
+    }
+}
+
+#[cfg(test)]
+mod decor_tests {
+    use super::*;
+
+    /// `$4C4D` + the metasprite cells behind it, byte for byte from bank 15.
+    /// `$3D01D` terminates on a `$FF` *tile*, not a `$FF` dy, so no parsed cell
+    /// may carry one.
+    #[test]
+    fn metasprite_data_matches_the_rom() {
+        assert_eq!(DECOR_METASPRITES.len(), 17);
+        assert_eq!(DECOR_METASPRITES[0], &[], "ID 0 is the empty metasprite");
+        assert_eq!(DECOR_METASPRITES[1].len(), 18, "ID 1, $4C73");
+        assert_eq!(DECOR_METASPRITES[5].len(), 9, "ID 5, $4CFB");
+        assert_eq!(DECOR_METASPRITES[16].len(), 1, "ID 16, $4E2F");
+        assert_eq!(
+            &DECOR_METASPRITES[5][..3],
+            &[(0, 0, 0x3A, 0x00), (0, 8, 0x3B, 0x00), (0, 16, 0x3C, 0x00)][..],
+            "ID 5's first row"
+        );
+        assert!(
+            DECOR_METASPRITES
+                .iter()
+                .flat_map(|m| m.iter())
+                .all(|c| c.2 != 0xFF),
+            "the $FF tile is the terminator, never a cell"
+        );
+    }
+
+    /// The 72 bytes `$3CBE7` copies out of `$4BFD` onto the hub.
+    #[test]
+    fn hub_slot_list_matches_the_rom() {
+        let live: Vec<(u8, u8, u8, u8)> = HUB_DECOR_SLOTS
+            .iter()
+            .copied()
+            .filter(|s| s.3 != 0xFF)
+            .collect();
+        assert_eq!(
+            live,
+            vec![
+                (0x00, 0x4C, 0x4F, 0x01),
+                (0x10, 0xA8, 0xF0, 0x09),
+                (0x01, 0xC0, 0x28, 0x09),
+                (0x11, 0x88, 0x70, 0x05),
+            ],
+            "four live slots, the rest $FF"
+        );
+        assert_eq!(HUB_DECOR_SLOTS.len(), 18);
+    }
+
+    /// Measured on the console: at `cam = ($BB, $0142)` the hub staged OAM entry
+    /// 13 as `y=62 x=213 tile=$3A attr=$00`, which is slot 14's first cell with
+    /// `$3D044`'s `x = slot.x - cam.x + 8` / `y = slot.y - cam.y + 16`.
+    #[test]
+    fn slot_14_stages_the_cell_the_console_staged() {
+        let cells = decor_oam((0x11, 0x88, 0x70, 0x05), 0x00BB, 0x0142).expect("in window");
+        assert_eq!(cells.len(), 9);
+        assert_eq!(cells[0], (62, 213, 0x3A, 0x00));
+    }
+
+    /// `$3D044`'s window is `cam - $30 .. cam + $D0` on both axes, in the
+    /// bank-tagged 16-bit space the ROM compares in. Transcribed from the
+    /// listing (the hub's live list is updater-driven, so this has no console
+    /// sample of its own yet).
+    #[test]
+    fn the_camera_window_is_twenty_four_plus_two_oh_eight() {
+        // Slot 0 of the hub at the idle camera is behind the lower bound.
+        assert!(decor_oam(HUB_DECOR_SLOTS[0], 0x0081, 0x0142).is_none());
+        // The same slot well inside the view is kept.
+        assert!(decor_oam((0x00, 0x60, 0x60, 0x01), 0x0040, 0x0040).is_some());
+        // Empty slots never expand.
+        assert!(decor_oam((0x00, 0x60, 0x60, 0xFF), 0x0040, 0x0040).is_none());
+        // An out-of-range ID is refused rather than indexing past the table.
+        assert!(decor_oam((0x00, 0x60, 0x60, 0x20), 0x0040, 0x0040).is_none());
+    }
+}
+
+#[cfg(test)]
+mod decor_idle_probe {
+    use super::*;
+
+    /// Documents why the static hub list is not wired into the renderer: at the
+    /// hub's idle camera the console stages **no** decor entries (PyBoy OAM 13+
+    /// is empty), yet the static list plus `$3D044` keeps slot 3. Something
+    /// rewrites the list before the expander runs, so the live values have to
+    /// come from the per-screen updaters.
+    #[test]
+    fn the_static_hub_list_disagrees_with_the_idle_console() {
+        let kept: Vec<usize> = HUB_DECOR_SLOTS
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| decor_oam(**s, 0x0081, 0x0142).is_some())
+            .map(|(i, _)| i)
+            .collect();
+        assert!(
+            !kept.is_empty(),
+            "if this ever becomes empty the static list could be rendered as-is"
+        );
     }
 }
