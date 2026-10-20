@@ -1200,7 +1200,6 @@ pub fn render_overworld_view(
     vh: usize,
 ) -> Vec<u8> {
     let bg_shades = crate::video::bgp_shades(bg_palette);
-    let obj_shades = crate::video::bgp_shades(obj_palette);
     let mut img = vec![bg_shades[0]; vw * vh];
     let mut bg_colors = vec![0; vw * vh];
     let _ = &img;
@@ -1237,7 +1236,7 @@ pub fn render_overworld_view(
                     .get(unlock.progress_offset)
                     .copied()
                     .unwrap_or(0);
-                if prog & unlock.mask != 0 {
+                if unlock.mask == 0 || prog & unlock.mask != 0 {
                     for placement in &unlock.patches {
                         for &patch_id in &placement.patch_ids {
                             if let Some(patch) = manifest.patches.get(patch_id) {
@@ -1270,7 +1269,7 @@ pub fn render_overworld_view(
     }
 
     if screen_id >= 9 {
-        draw_room_objects(
+        draw_map_objects(
             &mut img,
             &bg_colors,
             tiles_vram,
@@ -1282,67 +1281,25 @@ pub fn render_overworld_view(
         return img;
     }
 
-    for &(oy, ox, tile, attr) in decor_cells {
-        if tile == 0x7F {
-            continue;
-        }
-        draw_obj_tile(
-            &mut img,
-            tiles_vram,
-            &obj_shades,
-            ox as i32 - 8,
-            oy as i32 - 16,
-            tile,
-            attr,
-            vw,
-            vh,
-        );
-    }
-
+    let mut oam = Vec::new();
     if camera_pan {
-        // `$3C9F4`: the whole cursor metasprite is replaced by the border arrows
-        // (`$4A11` visible, `$4A21` all `$7F`), so no Mario while panning.
+        // `$3C9F4` replaces cursor entries 0-3 with the border arrows.
         if frame_counter & 0x10 == 0 {
-            for (oy, ox, tile, attr) in PAN_ARROWS {
-                draw_obj_tile(
-                    &mut img,
-                    tiles_vram,
-                    &obj_shades,
-                    ox as i32 - 8,
-                    oy as i32 - 16,
-                    tile,
-                    attr,
-                    vw,
-                    vh,
-                );
-            }
+            oam.extend(PAN_ARROWS);
         }
+        oam.extend_from_slice(decor_cells);
+        draw_map_objects(&mut img, &bg_colors, tiles_vram, &oam, obj_palette, vw, vh);
         return img;
     }
 
-    // `$3F203` fills tile `$E1` over the bottom row so the counters have a flat
-    // backdrop. It covers the right half only - screen x 80 onwards, where the
-    // bar's first sprite sits - and `$E1` is colour 0, i.e. the palette's
-    // lightest shade, not black.
-    let (x0, y0, x1, y1) = status_bar_strip_rect(vw, vh);
-    for py in y0..y1 {
-        for px in x0..x1 {
-            img[py * vw + px] = bg_shades[0];
-        }
-    }
-    if let Some(bar) = status_bar {
-        for (oy, ox, tile, attr) in bar.cells() {
-            draw_obj_tile(
-                &mut img,
-                tiles_vram,
-                &obj_shades,
-                ox as i32 - 8,
-                oy as i32 - 16,
-                tile,
-                attr,
-                vw,
-                vh,
-            );
+    // `$3F203` supplies this strip on the hub only. Zone loaders clear it.
+    if screen_id == 0 {
+        let (x0, y0, x1, y1) = status_bar_strip_rect(vw, vh);
+        for py in y0..y1 {
+            for px in x0..x1 {
+                img[py * vw + px] = bg_shades[0];
+                bg_colors[py * vw + px] = 0;
+            }
         }
     }
 
@@ -1372,24 +1329,24 @@ pub fn render_overworld_view(
             CursorSprite::EdgeLeft(frame) => EDGE_LEFT[frame & 3],
             CursorSprite::Stump(frame) => WALK_STUMP[frame % WALK_STUMP.len()],
         };
-    let spr_x0 = cursor_x as i32 - 8 + shift_x;
-    let spr_y0 = cursor_y as i32 - 16 + shift_y;
-    for (i, (tile, attr)) in cells.iter().enumerate() {
-        if *tile == 0x7F {
-            continue; // $7F is the metasprite's blank entry
+    for (i, &(tile, attr)) in cells.iter().enumerate() {
+        if tile == 0x7F {
+            continue;
         }
-        draw_obj_tile(
-            &mut img,
-            tiles_vram,
-            &obj_shades,
-            spr_x0 + (i as i32 & 1) * 8,
-            spr_y0 + (i as i32 >> 1) * 8,
-            *tile,
-            *attr,
-            vw,
-            vh,
-        );
+        let x = cursor_x
+            .wrapping_add(shift_x as u8)
+            .wrapping_add((i as u8 & 1) * 8);
+        let y = cursor_y
+            .wrapping_add(shift_y as u8)
+            .wrapping_add((i as u8 >> 1) * 8);
+        oam.push((y, x, tile, attr));
     }
+    // The cursor owns OAM 0-3; hub counters precede scenery at entry 13.
+    if let Some(bar) = status_bar {
+        oam.extend(bar.cells());
+    }
+    oam.extend_from_slice(decor_cells);
+    draw_map_objects(&mut img, &bg_colors, tiles_vram, &oam, obj_palette, vw, vh);
 
     img
 }
@@ -1397,10 +1354,13 @@ pub fn render_overworld_view(
 #[cfg(test)]
 #[path = "map/minigame_render_tests.rs"]
 mod minigame_render_tests;
+#[cfg(test)]
+#[path = "map/zone_render_tests.rs"]
+mod zone_render_tests;
 
-/// Bonus rooms own their complete OAM list; no map cursor or hub strip.
+/// Compose map and room OAM using the DMG hardware palette and priority rules.
 /// Smaller OAM X wins overlaps, then earlier entries; bit 4 selects OBP1 ($39).
-fn draw_room_objects(
+fn draw_map_objects(
     img: &mut [u8],
     bg: &[u8],
     tiles: &[[u8; 64]],

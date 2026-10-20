@@ -7,7 +7,7 @@ fn room_objects_use_hardware_priority_and_both_palettes() {
     tiles[2] = [2; 64];
     let mut frame = vec![255; 16 * 8];
     // Smaller X wins even when it is later in OAM; bit 4 chooses $39.
-    draw_room_objects(
+    draw_map_objects(
         &mut frame,
         &[0; 128],
         &tiles,
@@ -20,7 +20,7 @@ fn room_objects_use_hardware_priority_and_both_palettes() {
     assert_eq!(frame[8], 170);
     // An equal-X later entry loses, including when the winner is behind BG.
     frame.fill(255);
-    draw_room_objects(
+    draw_map_objects(
         &mut frame,
         &[1; 128],
         &tiles,
@@ -31,7 +31,7 @@ fn room_objects_use_hardware_priority_and_both_palettes() {
     );
     assert_eq!(frame, vec![255; 128]);
     frame.fill(255);
-    draw_room_objects(
+    draw_map_objects(
         &mut frame,
         &[0; 128],
         &tiles,
