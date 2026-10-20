@@ -1283,6 +1283,13 @@ pub fn render_overworld_view(
         );
     }
 
+    // Bonus-screen dispatch runs the room's own sprite pass (`$6106D`
+    // for coin rooms, `$3E277` for bell rooms).
+    // The overworld cursor and hub status strip are absent in bonus rooms.
+    if screen_id >= 9 {
+        return img;
+    }
+
     if camera_pan {
         // `$3C9F4`: the whole cursor metasprite is replaced by the border arrows
         // (`$4A11` visible, `$4A21` all `$7F`), so no Mario while panning.
@@ -1377,6 +1384,10 @@ pub fn render_overworld_view(
 
     img
 }
+
+#[cfg(test)]
+#[path = "map/minigame_render_tests.rs"]
+mod minigame_render_tests;
 
 #[cfg(test)]
 mod tests {
