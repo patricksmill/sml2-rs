@@ -45,6 +45,39 @@ fn state(session: &Session) -> String {
     }
 }
 
+fn held_buttons(mask: u8) -> String {
+    let buttons = [
+        (1, "R"),
+        (2, "L"),
+        (4, "U"),
+        (8, "D"),
+        (16, "A"),
+        (32, "B"),
+        (64, "Start"),
+        (128, "Select"),
+    ];
+    let names: Vec<_> = buttons
+        .into_iter()
+        .filter_map(|(bit, name)| (mask & bit != 0).then_some(name))
+        .collect();
+    if names.is_empty() {
+        "none".into()
+    } else {
+        names.join("+")
+    }
+}
+
+fn player_position(session: &Session) -> String {
+    if let SessionState::InLevel(ctx) = &session.state {
+        format!(
+            " x={} y={} speed-index={:02X}",
+            ctx.sim.x, ctx.sim.y, ctx.sim.hvel
+        )
+    } else {
+        String::new()
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = std::env::args().skip(1);
     let path = args
@@ -147,10 +180,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut index = 0;
     let count = limit.min(movie.frames.len());
     let mut paused = false;
+    let mut slow = false;
     while index < count {
         let step = if let Some(w) = &mut window {
             if !w.is_open() || w.is_key_down(Key::Escape) {
                 break;
+            }
+            if w.is_key_pressed(Key::Tab, KeyRepeat::No) {
+                slow = !slow;
+                w.set_target_fps(if slow { 15 } else { 60 });
             }
             if w.is_key_pressed(Key::Space, KeyRepeat::No) {
                 paused = !paused;
@@ -188,10 +226,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         if let Some(w) = &mut window {
             w.set_title(&format!(
-                "TAS inputs by {} | frame {index}/{} | {} | Space pause, Right step, Esc exit",
-                movie.author,
+                "TAS | frame {}/{} | held {} | {}{} | {} | Space pause, Right step, Tab speed, Esc exit",
+                index.saturating_sub(1),
                 movie.frames.len(),
-                state(&session)
+                held_buttons(movie.frames[index.saturating_sub(1)]),
+                state(&session),
+                player_position(&session),
+                if paused { "paused" } else if slow { "0.25x" } else { "1x" }
             ));
             let (width, height) = w.get_size();
             if width > 0 && height > 0 {
@@ -220,6 +261,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn display_distinguishes_alternating_and_simultaneous_directions() {
+        assert_eq!(held_buttons(33), "R+B");
+        assert_eq!(held_buttons(34), "L+B");
+        assert_eq!(held_buttons(35), "R+L+B");
+        assert_eq!(held_buttons(0), "none");
+    }
+
     #[test]
     fn imported_masks_hold_simultaneous_buttons_without_reordering() {
         let k = keys(1 | 16 | 32 | 64);

@@ -22,8 +22,13 @@ python3 tools/import_bk2.py target/tas/4042.bk2 target/tas/4042.json --rom ../sm
 cargo run --release -p sml2-runtime --example tas_playback -- target/tas/4042.json
 ```
 
-The window shows the input frame number and current native state in its title.
-Space pauses/resumes; Right advances one frame while paused; Escape exits.
+The window shows the input frame number, held buttons, native state, and Mario's
+position/speed-table index in its title. `R+B` and `L+B` distinguish alternating
+directions; `R+L+B` would explicitly indicate both. The speed index is the ROM's
+encoded velocity-table selector, not pixels per frame.
+Space pauses/resumes; Right advances one frame while paused; Tab toggles between
+normal and quarter-speed playback; Escape exits. Slow playback preserves every
+input row and changes only the viewing rate.
 Game buttons come exclusively from the movie. Playback closes at the last row;
 it does not hand control to the keyboard. On Windows the same commands work
 with Python and a native Rust toolchain; this example is a separate executable
@@ -68,3 +73,8 @@ gate. Manual play remains useful; this tool provides a repeatable visual probe
 alongside it. The [original TAS publication](https://tasvideos.org/4042M) links
 the reference video and author notes. The generated video here is new native
 port output, not the author's emulator recording.
+
+The imported 4042 movie contains **zero simultaneous Left+Right frames**. Its
+rapid direction changes are intentional TAS input, not an importer conflict.
+Once gameplay diverges, later inputs address different obstacles/positions and
+cannot be interpreted as a successful movement test on their own.
