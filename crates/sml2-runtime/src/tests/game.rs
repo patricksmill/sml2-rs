@@ -612,6 +612,7 @@ fn pan_sprites(player: Option<(u16, u16, u8)>) -> SpriteCtx {
         player_shield: None,
         streak_counter: None,
         player_behind_bg: false,
+        pipe_background: None,
         player_star_flash: false,
         bumpers: Vec::new(),
         fireballs: Vec::new(),
@@ -904,4 +905,99 @@ fn wario_arena_entries_definitions_6_7_8_through_final_ending_integration() {
     // Verify clean diagnostics throughout
     assert!(!cam.take_blocked_scene_load());
     assert!(obj.unported.is_empty());
+}
+
+/// `$2359` writes the destination columns at camera+80/+96/+112;
+/// `$23E4` writes camera-96/-112/-128. The visible source columns survive
+/// the page teleport and leave through the opposite edge as the camera moves.
+#[test]
+fn horizontal_pipe_scroll_retains_source_room_pixels() {
+    use crate::render::PipeBackground;
+    use sml2_core::{camera::CameraSim, scene::SceneStep};
+    let (manifest, layout, bg) = level_files("level11.manifest.json", "level11.bgblock.bin");
+    for reverse in [false, true] {
+        let (x, source_y, dest_y, dir) = if reverse {
+            (0x250, 0x2C0, 0xC0, 2)
+        } else {
+            (0x1B0, 0xC0, 0x2C0, 1)
+        };
+        let mut cam = CameraSim::new(x, dest_y);
+        cam.transition = dir;
+        let mut s = pan_sprites(None);
+        PipeBackground::update(
+            &mut s.pipe_background,
+            (x, source_y),
+            &cam,
+            SceneStep::Ran(0x40),
+        );
+        for distance in [0, 4, 48, 80, 156, 160] {
+            let cx = if reverse { x - distance } else { x + distance };
+            let source = render_view(
+                &manifest,
+                &layout,
+                &[],
+                &bg,
+                cx,
+                source_y,
+                160,
+                144,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let dest = render_view(
+                &manifest,
+                &layout,
+                &[],
+                &bg,
+                cx,
+                dest_y,
+                160,
+                144,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let actual = render_view(
+                &manifest,
+                &layout,
+                &[],
+                &bg,
+                cx,
+                dest_y,
+                160,
+                144,
+                None,
+                Some(&s),
+                None,
+            )
+            .unwrap();
+            assert_ne!(source, dest, "fixture must distinguish the two rooms");
+            for row in 0..136 {
+                for col in 0..160 {
+                    let from_source = if reverse {
+                        col >= distance as usize
+                    } else {
+                        col < 160 - distance as usize
+                    };
+                    let at = row * 160 + col;
+                    assert_eq!(
+                        actual[at],
+                        if from_source { source[at] } else { dest[at] },
+                        "reverse={reverse}, distance={distance}, pixel=({col},{row})"
+                    );
+                }
+            }
+        }
+        cam.transition = 0;
+        PipeBackground::update(
+            &mut s.pipe_background,
+            (x, dest_y),
+            &cam,
+            SceneStep::NoScene,
+        );
+        assert!(s.pipe_background.is_none());
+    }
 }

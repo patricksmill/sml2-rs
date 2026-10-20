@@ -605,7 +605,16 @@ pub(crate) fn run_replay(
         // $20A4 owns the CPU across its HALT waits; the shared frame head
         // parks gameplay until its END returns to the main loop.
         if gameplay || ending_frame.is_none() {
-            scene_vm.step(&mut sim, &mut cam, &scripts);
+            let scene_camera = (cam.x, cam.y);
+            let stepped = scene_vm.step(&mut sim, &mut cam, &scripts);
+            if let Some(s) = spr.as_mut() {
+                crate::render::PipeBackground::update(
+                    &mut s.pipe_background,
+                    scene_camera,
+                    &cam,
+                    stepped,
+                );
+            }
         }
         // The full-death-cycle gap: after the fade-trigger frame the game
         // leaves the level (fade 192 frames → `$14` lives/save/map setup →

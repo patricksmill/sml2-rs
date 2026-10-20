@@ -150,6 +150,7 @@ impl LevelContext {
             obp1: manifest.header.palettes[2],
             player: Some((sim.x, sim.y, 0)),
             player_behind_bg: false,
+            pipe_background: None,
             player_star_flash: false,
             player_shield: None,
             streak_counter: None,
@@ -356,12 +357,21 @@ impl LevelContext {
             }
         }
 
+        let scene_camera = (self.cam.x, self.cam.y);
         let stepped = if gameplay || ending_frame.is_none() {
             self.scene_vm
                 .step(&mut self.sim, &mut self.cam, &self.scripts)
         } else {
             SceneStep::Idle
         };
+        if let Some(s) = self.spr.as_mut() {
+            crate::render::PipeBackground::update(
+                &mut s.pipe_background,
+                scene_camera,
+                &self.cam,
+                stepped,
+            );
+        }
         if let SceneStep::Ran(op) = stepped {
             if op >> 4 == 0x6 {
                 let index = self.sim.level_gfx_index;

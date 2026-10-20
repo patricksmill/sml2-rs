@@ -348,6 +348,7 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
                 player_shield: None,
                 streak_counter: None,
                 player_behind_bg: false,
+                pipe_background: None,
                 player_star_flash: false,
                 player_pan: 0,
                 scroll_pan: 0,

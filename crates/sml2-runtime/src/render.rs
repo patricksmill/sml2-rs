@@ -18,8 +18,13 @@ pub struct SpriteInst {
     pub flip: u8,
 }
 
+mod pipe_background;
+pub use pipe_background::PipeBackground;
+
 /// Everything needed for the OBJ pass.
 pub struct SpriteCtx {
+    /// Retained source-room columns during a horizontal scene warp.
+    pub pipe_background: Option<PipeBackground>,
     pub insts: Vec<SpriteInst>,
     pub objblock: Vec<u8>,
     pub tables: ObjectTables,
@@ -124,10 +129,23 @@ pub fn render_view(
     let mut bg_idx = vec![0u8; vw * vh];
     for py in 0..vh {
         let wy = window_coord(sy + py as i32, oy);
-        let (cy, ty) = ((wy as usize) >> 4, (wy as usize) & 15);
+
         for px in 0..vw {
             let wx = window_coord(sx + px as i32, ox);
+            let (wx, wy) = spr
+                .and_then(|s| s.pipe_background)
+                .map_or((wx, wy), |pipe| {
+                    let (x, y) = pipe.sample(sx + px as i32, sy + py as i32);
+                    let (dx, dy) = pipe.source_offset();
+                    let source = pipe.retains_source(sx + px as i32);
+                    let (vx, vy) = if source { (sx + dx, sy + dy) } else { (sx, sy) };
+                    (
+                        window_coord(x, window_origin(vx, world_w)),
+                        window_coord(y, window_origin(vy, world_h)),
+                    )
+                });
             let (cx, tx) = ((wx as usize) >> 4, (wx as usize) & 15);
+            let (cy, ty) = ((wy as usize) >> 4, (wy as usize) & 15);
             let key = (cy * 256 + cx) as u32;
             let Some(id) = overlay
                 .iter()

@@ -406,11 +406,20 @@ pub(crate) fn run_play(
             }
         }
         // Resume the blocking $20A4 call after gameplay, or its previous wait.
+        let scene_camera = (cam.x, cam.y);
         let stepped = if gameplay || ending_frame.is_none() {
             scene_vm.step(&mut sim, &mut cam, &scripts)
         } else {
             SceneStep::Idle
         };
+        if let Some(s) = spr.as_mut() {
+            crate::render::PipeBackground::update(
+                &mut s.pipe_background,
+                scene_camera,
+                &cam,
+                stepped,
+            );
+        }
         // `$6x` (`$25AF`): the scene's tileset swap. It is a *graphics* change —
         // VRAM tiles plus the metatile definitions — so it has to reach the
         // renderer's inputs, not just the sim's `sLevelGfxIndex`. This is what
