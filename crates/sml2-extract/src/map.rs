@@ -19,7 +19,7 @@ pub const SCREEN_TILEMAP_SPECS: &[(u8, &str, usize, usize, &str, u8)] = &[
     ),
     (
         2,
-        "tree_a",
+        "tree",
         0x3B240,
         576,
         "gfx/overworld/treezone.png",
@@ -43,7 +43,7 @@ pub const SCREEN_TILEMAP_SPECS: &[(u8, &str, usize, usize, &str, u8)] = &[
     ),
     (
         5,
-        "tree_b",
+        "turtle",
         0x3B900,
         576,
         "gfx/overworld/treezone.png",
@@ -59,7 +59,7 @@ pub const SCREEN_TILEMAP_SPECS: &[(u8, &str, usize, usize, &str, u8)] = &[
     ),
     (
         7,
-        "turtle",
+        "wario_castle",
         0x3BD80,
         576,
         "gfx/overworld/wariocastle.png",
@@ -260,12 +260,12 @@ pub const ZONE_GFX_LEN: usize = 5632;
 pub const SCREEN_TILES_SPECS: &[(u8, Option<usize>)] = &[
     (0, None),           // Hub: all 6144 bytes from OVERWORLD_GFX_ROM
     (1, Some(0x38200)),  // Pumpkin
-    (2, Some(0x39A00)),  // Tree A
+    (2, Some(0x39A00)),  // Tree
     (3, Some(0x35A00)),  // Macro
     (4, Some(0x40200)),  // Space
-    (5, Some(0x39A00)),  // Tree B
+    (5, Some(0x39A00)),  // Turtle (Tree Zone tiles)
     (6, Some(0x44200)),  // Mario
-    (7, Some(0x45A00)),  // Turtle
+    (7, Some(0x45A00)),  // Wario's Castle
     (8, Some(0x38200)),  // Castle / Minigame hill
     (9, Some(0x64000)),  // Bonus 30
     (10, Some(0x64000)), // Bonus 200

@@ -1,7 +1,7 @@
 //! Zone IRQ tile writers $3EC7D/$3ECF5/$3ED35 and home-bank copy helpers.
 //!
 //! `source` for `apply` concatenates ROM $41300..$41600 (Pumpkin),
-//! $39800..$39900 (Tree A), and $39C00..$39C80 (Tree B), in that order.
+//! $39800..$39900 (Tree), and $39C00..$39C80 (Turtle), in that order.
 
 use super::super::MapSim;
 
@@ -12,15 +12,15 @@ const PUMPKIN_PHASES: [u8; 64] = [
     8, 11, 10, 9, 8, 8, 4, 4, 8, 9, 10, 11, 8, 8, 8, 8, 4, 4, 5, 5, 8, 8, 8, 8, 0, 1, 2, 3, 0, 0,
     0, 0,
 ];
-const TREE_A_PHASES: [u8; 8] = [0, 1, 2, 3, 3, 3, 3, 3];
+const TREE_PHASES: [u8; 8] = [0, 1, 2, 3, 3, 3, 3, 3];
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct TileAnimation {
     pub(super) irq_divider: u8,
     pub(super) patch_index: u8,
     pub(super) pumpkin_frame: Option<u8>,
-    pub(super) tree_a_frame: Option<u8>,
-    pub(super) tree_b_frame: Option<u8>,
+    pub(super) tree_frame: Option<u8>,
+    pub(super) turtle_frame: Option<u8>,
 }
 
 pub(super) fn reset(map: &mut MapSim) {
@@ -31,8 +31,8 @@ pub(super) fn reset(map: &mut MapSim) {
     }
     // Every loader reinstalls its base graphics, replacing previous IRQ writes.
     state.pumpkin_frame = None;
-    state.tree_a_frame = None;
-    state.tree_b_frame = None;
+    state.tree_frame = None;
+    state.turtle_frame = None;
 }
 
 pub(super) fn tick(map: &mut MapSim, _div: u8) {
@@ -43,7 +43,7 @@ pub(super) fn tick(map: &mut MapSim, _div: u8) {
         5 => {
             // Source skips the write on multiples of 16, retaining prior VRAM.
             if map.frame_counter & 0x0F != 0 {
-                state.tree_b_frame = Some((map.frame_counter & 0x30) >> 4);
+                state.turtle_frame = Some((map.frame_counter & 0x30) >> 4);
             }
             return;
         }
@@ -63,7 +63,7 @@ pub(super) fn tick(map: &mut MapSim, _div: u8) {
     if map.screen_id == 1 {
         state.pumpkin_frame = Some(PUMPKIN_PHASES[(state.patch_index & 63) as usize]);
     } else {
-        state.tree_a_frame = Some(TREE_A_PHASES[(state.patch_index & 7) as usize]);
+        state.tree_frame = Some(TREE_PHASES[(state.patch_index & 7) as usize]);
     }
 }
 
@@ -86,7 +86,7 @@ impl TileAnimation {
                 }
             }
             2 => {
-                if let Some(frame) = self.tree_a_frame {
+                if let Some(frame) = self.tree_frame {
                     if frame >= 4 {
                         return false;
                     }
@@ -96,7 +96,7 @@ impl TileAnimation {
                 }
             }
             5 => {
-                if let Some(frame) = self.tree_b_frame {
+                if let Some(frame) = self.turtle_frame {
                     if frame >= 4 {
                         return false;
                     }

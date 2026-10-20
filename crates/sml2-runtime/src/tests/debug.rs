@@ -92,12 +92,12 @@ fn clearing_every_stage_sets_every_level_slot_and_opens_the_gates() {
     // The path bits share bytes with stage clears: bit 0 survives, and the
     // clear flag lands on bit 7 of the same byte.
     for offset in [
-        po::TREE_A_PATH_1,
+        po::TREE_PATH_1,
         po::PUMPKIN_PATH_1,
         po::PUMPKIN_PATH_2,
         po::MACRO_PATH_0,
         po::SPACE_PATH_0,
-        po::TREE_B_PATH_1,
+        po::TURTLE_PATH_1,
     ] {
         assert_eq!(progress[offset] & 0x01, 0x01, "path bit {offset} survives");
         assert_eq!(progress[offset] & 0x80, 0x80, "stage bit {offset} is set");
@@ -126,12 +126,12 @@ fn opening_the_secret_paths_leaves_the_stage_clears_alone() {
     session.debug_unlock_routes();
     let progress = session.debug_progress();
     for offset in [
-        po::TREE_A_PATH_1,
+        po::TREE_PATH_1,
         po::PUMPKIN_PATH_1,
         po::PUMPKIN_PATH_2,
         po::MACRO_PATH_0,
         po::SPACE_PATH_0,
-        po::TREE_B_PATH_1,
+        po::TURTLE_PATH_1,
     ] {
         assert_eq!(progress[offset], 0x01, "only the path bit at {offset}");
     }

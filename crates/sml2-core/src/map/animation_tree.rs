@@ -1,4 +1,4 @@
-//! Tree-A decoration animation, ROM $3DA2D and secret growth $3DADF.
+//! Tree Zone decoration animation, ROM $3DA2D and secret growth $3DADF.
 use super::super::MapSim;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

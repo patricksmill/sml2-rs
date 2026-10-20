@@ -1,219 +1,57 @@
-//! Turtle Zone decorations ($3DFE8-$3E1CA) and sky raster bands ($3E7F2).
-
+//! Turtle Zone decorations, ROM $3DDD3-$3DEC6 (screen 5, loaded by `$3D61F`). Hub WRAM symbol names alias
+//! the zone loader's three-byte x/y/id records here.
 use super::super::MapSim;
 
-const SWIM_FRAMES: [u8; 4] = [0, 1, 2, 1];
-const BLINK_FRAMES: [u8; 4] = [0, 1, 0, 2];
-const LIGHTNING_X: [u8; 4] = [0x30, 0x70, 0x60, 0x40];
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct TurtleAnimation {
-    pub(super) anim_count: u8,
-    pub(super) phase: u8,
-    pub(super) flash: u8,
-    pub(super) accum: u8,
-    pub(super) movement: u8,
-    pub(super) blink_timer: u8,
-    pub(super) raster_phase: u8,
-    pub(super) band_scroll: [u8; 3],
-    pub(super) bg_palette: u8,
-    pub(super) obj_palette: u8,
-}
-
-impl Default for TurtleAnimation {
-    fn default() -> Self {
-        Self {
-            anim_count: 0,
-            phase: 0,
-            flash: 0,
-            accum: 0,
-            movement: 0,
-            blink_timer: 1,
-            raster_phase: 0,
-            band_scroll: [0, 23, 0],
-            bg_palette: 0xE1,
-            obj_palette: 0x39,
-        }
-    }
-}
-
-/// The zone uses stride-three records at the addresses named for the hub's
-/// stride-four sprites. Keep that aliasing at the conversion boundary.
-struct Decorations {
-    turtle_frame: u8,
-    lightning_x: u8,
-    lightning_frame: u8,
-    swimmer: (u8, u8, u8),
-}
-
-impl Decorations {
-    fn read(map: &MapSim) -> Self {
-        Self {
-            turtle_frame: map.zone_slots[1].2,
-            lightning_x: map.zone_slots[2].0,
-            lightning_frame: map.zone_slots[2].2,
-            swimmer: map.zone_slots[3],
-        }
-    }
-
-    fn write(self, map: &mut MapSim) {
-        map.zone_slots[1].2 = self.turtle_frame;
-        map.zone_slots[2].0 = self.lightning_x;
-        map.zone_slots[2].2 = self.lightning_frame;
-        map.zone_slots[3] = self.swimmer;
-    }
-}
-
 pub(super) fn reset(map: &mut MapSim) {
-    // $3D6EB resets these fields, leaving the other animation counters intact.
-    let state = &mut map.zone_animation.turtle;
-    state.movement = 0;
-    state.blink_timer = 1;
-    state.band_scroll[1] = 23;
-    state.bg_palette = 0xE1;
-    state.obj_palette = 0x39;
+    map.zone_animation.moving_x = 160;
+    // $A6A8 is deliberately retained by this loader.
 }
 
 pub(super) fn tick(map: &mut MapSim, div: u8) {
-    let mut decor = Decorations::read(map);
     let frame = map.frame_counter;
-    let state = &mut map.zone_animation.turtle;
-    update_bands(state);
-    if frame & 7 == 0 {
-        state.anim_count = state.anim_count.wrapping_add(1);
-        if state.anim_count >= 3 {
-            state.anim_count = 0;
-        }
-        decor.turtle_frame = state.anim_count.wrapping_add(53);
+    let phase = (frame & 0x30) >> 4;
+    for slot in [1, 2, 3] {
+        map.zone_slots[slot].2 = 42 + phase;
     }
-    if frame & 3 == 0 {
-        decor.lightning_frame = 0xFF;
-        if div & 0x7E == 0 {
-            decor.lightning_frame = 56;
-            state.phase = state.phase.wrapping_add(1) & 3;
-            decor.lightning_x = LIGHTNING_X[state.phase as usize];
-        }
-        if map.zone_animation.transition_state == 0 {
-            let inverse = match state.flash {
-                1 => {
-                    state.flash = 2;
-                    false
-                }
-                2 => {
-                    state.flash = 0;
-                    true
-                }
-                _ => {
-                    let lightning = decor.lightning_frame == 56;
-                    if lightning {
-                        state.flash = 1;
-                    }
-                    lightning
-                }
-            };
-            state.bg_palette = if inverse { 0x1E } else { 0xE1 };
-            state.obj_palette = if inverse { 0xC6 } else { 0x39 };
-        }
+    for slot in [7, 8] {
+        map.zone_slots[slot].2 = 46 + phase;
     }
-    if frame & 1 == 0 {
-        state.accum = state.accum.wrapping_add(1);
-        animate_swimmer(
-            state,
-            &mut decor.swimmer,
-            div,
-            map.zone_animation.sampled_timer,
-        );
+    let drift = (frame & 0x7C) >> 2;
+    map.zone_slots[8].1 = 80 - drift;
+    map.zone_slots[7].1 = 64 - (drift & 15);
+    if map.level_progress[37] & 0x80 == 0 {
+        map.zone_slots[0].2 = 38 + ((frame & 0x60) >> 5);
+    } else if frame & 15 == 0 {
+        let animation = &mut map.zone_animation;
+        animation.random_accum = animation
+            .random_accum
+            .wrapping_add(div.rotate_left(4))
+            .wrapping_add(div)
+            .wrapping_add(animation.global_frame);
+        animation.patch_ids[0] = 53 + (animation.random_accum & 1);
     }
-    decor.write(map);
-}
 
-fn update_bands(state: &mut TurtleAnimation) {
-    state.raster_phase = state.raster_phase.wrapping_add(1);
-    if state.raster_phase & 3 != 0 {
-        return;
+    // ROM shifts bit 1 down, then ANDs the unshifted frame: only
+    // frames with both low bits set advance this moving decoration.
+    let distance = ((frame & 2) >> 1) & frame;
+    let animation = &mut map.zone_animation;
+    let (id, edge, y) = if animation.moving_direction & 1 == 0 {
+        animation.moving_x = animation.moving_x.wrapping_sub(distance);
+        (50, 0xC0, 120)
+    } else {
+        animation.moving_x = animation.moving_x.wrapping_add(distance);
+        (51, 0xB0, 64)
+    };
+    if animation.moving_x == edge {
+        animation.moving_direction ^= 255;
+        map.zone_slots[9].1 = y;
     }
-    state.band_scroll[0] = state.band_scroll[0].wrapping_sub(1);
-    if state.raster_phase & 4 != 0 {
-        return;
-    }
-    state.band_scroll[1] = state.band_scroll[1].wrapping_sub(1);
-    if state.band_scroll[1] >= 24 {
-        state.band_scroll[1] = 23;
-    }
-    if state.raster_phase & 8 == 0 {
-        state.band_scroll[2] = state.band_scroll[2].wrapping_sub(1);
-    }
-}
+    map.zone_slots[9].0 = animation.moving_x;
+    map.zone_slots[9].2 = id;
 
-fn animate_swimmer(state: &mut TurtleAnimation, swimmer: &mut (u8, u8, u8), div: u8, timer: u8) {
-    let (x, y, sprite) = swimmer;
-    match state.movement {
-        1 | 2 => {
-            *sprite =
-                SWIM_FRAMES[(state.accum & 3) as usize] + if state.movement == 1 { 57 } else { 60 };
-            if (state.movement == 1 && *x < 0x28) || (state.movement == 2 && *x >= 0x78) {
-                choose_movement(state, div, timer);
-                return;
-            }
-            let step = state.accum & 1;
-            *x = if state.movement == 1 {
-                x.wrapping_sub(step)
-            } else {
-                x.wrapping_add(step)
-            };
-            if (0x40..0x60).contains(x) && *y >= 0x50 {
-                *sprite = 0xFF;
-            }
-        }
-        3 | 4 => {
-            *sprite = 63;
-            if (state.movement == 3 && *y < 0x36) || (state.movement == 4 && *y >= 0x62) {
-                state.movement = if *x < 0x32 { 2 } else { 1 };
-                if state.movement == 2 {
-                    state.blink_timer = 30;
-                }
-                return;
-            }
-            *y = if state.movement == 3 {
-                y.wrapping_sub(4)
-            } else {
-                y.wrapping_add(4)
-            };
-            *sprite = 0xFF;
-        }
-        _ => {
-            *sprite = 63 + BLINK_FRAMES[((state.accum & 0x0C) >> 2) as usize];
-            if state.blink_timer != 0 {
-                state.blink_timer = state.blink_timer.wrapping_sub(1);
-            } else {
-                choose_movement(state, div, timer);
-            }
-        }
-    }
-}
-
-fn choose_movement(state: &mut TurtleAnimation, div: u8, timer: u8) {
-    // The ROM retries DIV+TIMA while hardware time advances. Sampling successive
-    // DIV bytes with fixed TIMA preserves rejection rules without a native spin.
-    // Exact random phase depends on CPU timing, which the native map omits.
-    let mut sample = div.wrapping_add(timer);
-    loop {
-        let candidate = sample & 7;
-        sample = sample.wrapping_add(1);
-        if candidate == state.movement {
-            continue;
-        }
-        let direction = if candidate >= 5 {
-            candidate - 4
-        } else {
-            candidate
-        };
-        if direction != 0 && (direction < 3) == (state.movement < 3) {
-            continue;
-        }
-        state.movement = direction;
-        state.blink_timer = 30;
-        return;
+    if frame & 15 == 0 && map.zone_slots[10].2 < 129 {
+        map.zone_slots[10].2 += 1;
+        animation.sfx0 = if map.zone_slots[10].2 == 129 { 21 } else { 6 };
     }
 }
 

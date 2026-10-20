@@ -33,7 +33,7 @@ fn zone_irq_tiles_use_rom_phase_sequences_and_fourteen_frame_cadence() {
         for _ in 0..14 {
             tick(&mut map, 0);
         }
-        assert_eq!(map.zone_animation.tiles.tree_a_frame, Some(frame));
+        assert_eq!(map.zone_animation.tiles.tree_frame, Some(frame));
     }
 }
 
@@ -63,7 +63,7 @@ fn zone_irq_tiles_gate_on_correct_saved_progress_high_bits_and_retain_writes() {
             if screen == 1 {
                 map.zone_animation.tiles.pumpkin_frame
             } else {
-                map.zone_animation.tiles.tree_a_frame
+                map.zone_animation.tiles.tree_frame
             },
             Some(if screen == 1 { 4 } else { 1 })
         );
@@ -105,12 +105,12 @@ fn zone_irq_patch_counter_wraps_before_rom_lookup() {
 }
 
 #[test]
-fn tree_b_irq_skips_sixteenth_frame_and_retains_previous_tile_pixels() {
+fn turtle_irq_skips_sixteenth_frame_and_retains_previous_tile_pixels() {
     let mut map = MapSim::default();
     map.screen_id = 5;
     reset(&mut map);
     tick(&mut map, 0);
-    assert_eq!(map.zone_animation.tiles.tree_b_frame, None);
+    assert_eq!(map.zone_animation.tiles.turtle_frame, None);
     for (frame, phase) in [
         (1, 0),
         (15, 0),
@@ -131,7 +131,7 @@ fn tree_b_irq_skips_sixteenth_frame_and_retains_previous_tile_pixels() {
         map.frame_counter = frame;
         tick(&mut map, 0);
         assert_eq!(
-            map.zone_animation.tiles.tree_b_frame,
+            map.zone_animation.tiles.turtle_frame,
             Some(phase),
             "frame {frame}"
         );
@@ -147,8 +147,8 @@ fn zone_irq_tile_writes_decode_planes_and_target_only_exact_vram_ranges() {
     ] {
         let mut state = TileAnimation::default();
         state.pumpkin_frame = Some(4);
-        state.tree_a_frame = Some(1);
-        state.tree_b_frame = Some(1);
+        state.tree_frame = Some(1);
+        state.turtle_frame = Some(1);
         let mut source = vec![0; SOURCE_LEN];
         source[offset] = 0xA5;
         source[offset + 1] = 0x3C;
@@ -191,19 +191,19 @@ fn zone_irq_missing_assets_and_uninitialized_phases_leave_base_graphics() {
 }
 
 #[test]
-fn zone_irq_loader_resets_counters_for_pumpkin_tree_a_and_restores_base_tiles() {
+fn zone_irq_loader_resets_counters_for_pumpkin_tree_and_restores_base_tiles() {
     let mut map = MapSim::default();
     for screen in [1, 2, 5] {
         map.screen_id = screen;
         map.zone_animation.tiles.irq_divider = 7;
         map.zone_animation.tiles.patch_index = 8;
         map.zone_animation.tiles.pumpkin_frame = Some(3);
-        map.zone_animation.tiles.tree_a_frame = Some(2);
-        map.zone_animation.tiles.tree_b_frame = Some(1);
+        map.zone_animation.tiles.tree_frame = Some(2);
+        map.zone_animation.tiles.turtle_frame = Some(1);
         reset(&mut map);
         assert_eq!(map.zone_animation.tiles.pumpkin_frame, None);
-        assert_eq!(map.zone_animation.tiles.tree_a_frame, None);
-        assert_eq!(map.zone_animation.tiles.tree_b_frame, None);
+        assert_eq!(map.zone_animation.tiles.tree_frame, None);
+        assert_eq!(map.zone_animation.tiles.turtle_frame, None);
         assert_eq!(
             (
                 map.zone_animation.tiles.irq_divider,

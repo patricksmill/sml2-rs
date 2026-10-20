@@ -107,7 +107,7 @@ impl MapNodeRecords {
 /// `bit 7` of Macro path 2) and the per-screen handlers are their readers.
 pub mod progress_offset {
     /// `$A84A` Tree Zone screen A path 1 (bit 0 set on secret clear, node 37).
-    pub const TREE_A_PATH_1: usize = 2;
+    pub const TREE_PATH_1: usize = 2;
     /// `$A84D` Tree Zone screen A gold coin (bit 7 = collected).
     pub const GOLDEN_COIN_1: usize = 5;
     /// `$A84F` Pumpkin Zone screen A path 1 (bit 0 set on node $2C secret clear).
@@ -122,8 +122,9 @@ pub mod progress_offset {
     pub const MACRO_PATH_2: usize = 13;
     /// `$A858` Space Zone path 0 (bit 0 set on secret clear, node 67).
     pub const SPACE_PATH_0: usize = 16;
-    /// `$A85E` Tree Zone screen B path 1 (bit 0 set on secret clear).
-    pub const TREE_B_PATH_1: usize = 22;
+    /// `$A85E` Turtle Zone path 1 (bit 0 set on secret clear; the decomp's
+    /// `sMapTreeBPath1`).
+    pub const TURTLE_PATH_1: usize = 22;
     /// `$A865` Mario Zone gold coin (bit 7 = collected).
     pub const GOLDEN_COIN_6: usize = 29;
     /// `$A86B` Macro gate — set when node `$6A` completes.

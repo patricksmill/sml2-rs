@@ -18,12 +18,12 @@ use sml2_runtime::session::SessionState;
 const ZONES: [(&str, u8, u8); 9] = [
     ("Hub", 0, 0x00),
     ("Pumpkin", 1, 0x28),
-    ("Tree A", 2, 0x23),
+    ("Tree", 2, 0x23),
     ("Macro", 3, 0x32),
     ("Space", 4, 0x3C),
-    ("Tree B", 5, 0x4B),
+    ("Turtle", 5, 0x4B),
     ("Mario", 6, 0x50),
-    ("Turtle", 7, 0x5A),
+    ("Wario", 7, 0x5A),
     ("Castle", 8, 0x72),
 ];
 

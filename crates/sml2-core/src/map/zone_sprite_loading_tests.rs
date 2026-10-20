@@ -95,7 +95,7 @@ fn zone_sprite_loaders_use_saved_coin_and_path_high_bits() {
 }
 
 #[test]
-fn zone_sprite_tree_b_new_secret_and_saved_secret_use_distinct_ids() {
+fn zone_sprite_turtle_new_secret_and_saved_secret_use_distinct_ids() {
     for (saved, exit, dead, expected) in [
         (0, 0, 0, 255),
         (0, 1, 0, 125),

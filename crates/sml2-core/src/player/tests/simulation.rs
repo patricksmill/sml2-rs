@@ -882,7 +882,7 @@ fn map_handoff_zone_loaders_paths_retargets_and_music() {
     sim.exit_tile_flag = 0x80;
     let out = sim.map_handoff(&nodes);
     assert_eq!(sim.map_node, 0x25, "node 37 in decimal");
-    assert_eq!(sim.level_progress[po::TREE_A_PATH_1] & 1, 1);
+    assert_eq!(sim.level_progress[po::TREE_PATH_1] & 1, 1);
     assert_eq!(out.screen, Some(2));
     assert_eq!(out.music, Some(16));
 
@@ -954,7 +954,7 @@ fn map_handoff_zone_loaders_paths_retargets_and_music() {
     sim.map_node = 0x48; // secret rewrite sends $48 -> $47
     sim.exit_tile_flag = 0x80;
     let out = sim.map_handoff(&nodes);
-    assert_eq!(sim.level_progress[po::TREE_B_PATH_1] & 1, 1);
+    assert_eq!(sim.level_progress[po::TURTLE_PATH_1] & 1, 1);
     assert_eq!(out.screen, Some(5));
     assert_eq!(out.music, Some(18));
 }

@@ -13,16 +13,16 @@ mod animation_space;
 mod animation_tiles;
 #[path = "animation_tree.rs"]
 mod animation_tree;
-#[path = "animation_tree_b.rs"]
-mod animation_tree_b;
 #[path = "animation_turtle.rs"]
 mod animation_turtle;
+#[path = "animation_wario_castle.rs"]
+mod animation_wario_castle;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZoneAnimation {
     tree: animation_tree::TreeAnimation,
     space: animation_space::SpaceAnimation,
-    turtle: animation_turtle::TurtleAnimation,
+    wario_castle: animation_wario_castle::WarioCastleAnimation,
     moving_x: u8,
     moving_direction: u8,
     pub(super) random_accum: u8,
@@ -45,7 +45,7 @@ impl Default for ZoneAnimation {
         Self {
             tree: Default::default(),
             space: Default::default(),
-            turtle: Default::default(),
+            wario_castle: Default::default(),
             moving_x: 0,
             moving_direction: 0,
             random_accum: 0,
@@ -116,7 +116,7 @@ impl MapSim {
                 _ => None,
             };
             return (
-                band.map_or(0, |i| self.zone_animation.turtle.band_scroll[i]),
+                band.map_or(0, |i| self.zone_animation.wario_castle.band_scroll[i]),
                 0,
             );
         }
@@ -125,8 +125,8 @@ impl MapSim {
 
     pub fn zone_palettes(&self) -> Option<(u8, u8)> {
         (self.screen_id == 7).then_some((
-            self.zone_animation.turtle.bg_palette,
-            self.zone_animation.turtle.obj_palette,
+            self.zone_animation.wario_castle.bg_palette,
+            self.zone_animation.wario_castle.obj_palette,
         ))
     }
 
@@ -138,9 +138,9 @@ impl MapSim {
             1 | 3 => animation_growth::tick(self),
             2 => animation_tree::tick(self, div),
             4 => animation_space::tick(self, div),
-            5 => animation_tree_b::tick(self, div),
+            5 => animation_turtle::tick(self, div),
             6 => animation_mario::tick(self, div),
-            7 => animation_turtle::tick(self, div),
+            7 => animation_wario_castle::tick(self, div),
             8 => animation_growth::hill_tick(self),
             _ => {}
         }
@@ -245,8 +245,8 @@ impl MapSim {
                 self.zone_animation.patch_ids[2] = 6 + ((self.level_progress[27] & 0x80) >> 6);
                 self.zone_animation.patch_ids[3] = 9 + ((self.level_progress[28] & 0x80) >> 6);
             }
-            7 => animation_turtle::reset(self),
-            5 => animation_tree_b::reset(self),
+            7 => animation_wario_castle::reset(self),
+            5 => animation_turtle::reset(self),
             _ => {}
         }
         self.zone_animation.apply_patches();

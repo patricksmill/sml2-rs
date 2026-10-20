@@ -287,7 +287,7 @@ const NODE_DOORS: &[(u8, NodeDoor)] = &[
             price: None,
         },
     ),
-    // $3D6C3: Turtle Zone — hub screen 0 only, which the caller already checked.
+    // $3D6C3: Wario's Castle — hub screen 0 only, which the caller already checked.
     (
         0x11,
         NodeDoor {
@@ -853,7 +853,7 @@ impl MapSim {
                 if exit_tile_flag != 0 && self.mario_dead == 0 {
                     self.node = 37; // 0x25
                     self.load_node(37, records);
-                    self.level_progress[po::TREE_A_PATH_1] |= 1;
+                    self.level_progress[po::TREE_PATH_1] |= 1;
                 }
                 if self.node == 0x26 {
                     self.node = 39; // 0x27
@@ -899,12 +899,12 @@ impl MapSim {
                 28 // Music request 28
             }
             5 => {
-                // $3D61F: Tree Zone screen B loader
+                // $3D61F: Turtle Zone loader
                 self.cam_x = 0;
                 self.cam_y = 0;
                 self.cursor_anim = 0x92;
                 if exit_tile_flag != 0 && self.mario_dead == 0 {
-                    self.level_progress[po::TREE_B_PATH_1] |= 1;
+                    self.level_progress[po::TURTLE_PATH_1] |= 1;
                 }
                 18 // Music request 18
             }
@@ -916,7 +916,7 @@ impl MapSim {
                 27 // Music request 27
             }
             7 => {
-                // $3D6EB: Turtle Zone loader
+                // $3D6EB: Wario's Castle loader
                 self.cam_x = 0;
                 self.cam_y = 0;
                 self.cursor_anim = 0x92;
@@ -948,7 +948,7 @@ impl MapSim {
     }
 
     /// `$3D0FF`: load Tree Zone screen A (screen 2).
-    pub fn load_screen_tree_a(&mut self, exit_tile_flag: u8, records: &MapNodeRecords) -> u8 {
+    pub fn load_screen_tree(&mut self, exit_tile_flag: u8, records: &MapNodeRecords) -> u8 {
         self.load_screen(2, exit_tile_flag, records)
     }
 
@@ -962,8 +962,9 @@ impl MapSim {
         self.load_screen(4, exit_tile_flag, records)
     }
 
-    /// `$3D61F`: load Tree Zone screen B (screen 5).
-    pub fn load_screen_tree_b(&mut self, exit_tile_flag: u8, records: &MapNodeRecords) -> u8 {
+    /// `$3D61F`: load Turtle Zone (screen 5). It copies the Tree Zone tile
+    /// bank, which is why the decomp's names call this screen "Tree B".
+    pub fn load_screen_turtle(&mut self, exit_tile_flag: u8, records: &MapNodeRecords) -> u8 {
         self.load_screen(5, exit_tile_flag, records)
     }
 
@@ -972,8 +973,8 @@ impl MapSim {
         self.load_screen(6, 0, records)
     }
 
-    /// `$3D6EB`: load Turtle Zone (screen 7).
-    pub fn load_screen_turtle(&mut self, records: &MapNodeRecords) -> u8 {
+    /// `$3D6EB`: load Wario's Castle (screen 7), the `$3BD80` tilemap.
+    pub fn load_screen_wario_castle(&mut self, records: &MapNodeRecords) -> u8 {
         self.load_screen(7, 0, records)
     }
 
@@ -3114,18 +3115,18 @@ mod tests {
         // Screen 2: Tree Zone screen A ($3D0FF)
         let mut map = MapSim::new();
         map.node = 0x23;
-        let music = map.load_screen_tree_a(0x80, &r);
+        let music = map.load_screen_tree(0x80, &r);
         assert_eq!(map.screen_id, 2);
         assert_eq!((map.cam_x, map.cam_y), (0, 0));
         assert_eq!(map.cursor_anim, 0x92);
         assert_eq!(map.node, 37, "secret clear retargets to node 37");
-        assert_eq!(map.level_progress[po::TREE_A_PATH_1] & 1, 1);
+        assert_eq!(map.level_progress[po::TREE_PATH_1] & 1, 1);
         assert_eq!(music, 16, "tree zone music track 16");
 
         // Tree Zone node $26 clear ($3D1B5)
         let mut map = MapSim::new();
         map.node = 0x26;
-        map.load_screen_tree_a(0, &r);
+        map.load_screen_tree(0, &r);
         assert_eq!(map.node, 39, "node $26 retargets to 39");
         assert_eq!(map.mario_dead, 0xFF, "mario_dead set to $FF");
 
@@ -3169,14 +3170,14 @@ mod tests {
         assert_eq!(map.node, 69, "node $44 retargets to 69");
         assert_eq!(map.mario_dead, 0xFF);
 
-        // Screen 5: Tree Zone screen B ($3D61F)
+        // Screen 5: Turtle Zone ($3D61F)
         let mut map = MapSim::new();
         map.node = 0x46;
-        let music = map.load_screen_tree_b(0x80, &r);
+        let music = map.load_screen_turtle(0x80, &r);
         assert_eq!(map.screen_id, 5);
         assert_eq!((map.cam_x, map.cam_y), (0, 0));
         assert_eq!(map.cursor_anim, 0x92);
-        assert_eq!(map.level_progress[po::TREE_B_PATH_1] & 1, 1);
+        assert_eq!(map.level_progress[po::TURTLE_PATH_1] & 1, 1);
         assert_eq!(music, 18, "tree zone B music track 18");
 
         // Screen 6: Mario Zone ($3D79A)
@@ -3188,14 +3189,14 @@ mod tests {
         assert_eq!(map.cursor_anim, 0x92);
         assert_eq!(music, 27, "mario zone music track 27");
 
-        // Screen 7: Turtle Zone ($3D6EB)
+        // Screen 7: Wario's Castle ($3D6EB)
         let mut map = MapSim::new();
         map.node = 0x5A;
-        let music = map.load_screen_turtle(&r);
+        let music = map.load_screen_wario_castle(&r);
         assert_eq!(map.screen_id, 7);
         assert_eq!((map.cam_x, map.cam_y), (0, 0));
         assert_eq!(map.cursor_anim, 0x92);
-        assert_eq!(music, 14, "turtle zone music track 14");
+        assert_eq!(music, 14, "Wario's Castle music track 14");
 
         // Screen 8: Castle ($3D880)
         let mut map = MapSim::new();
@@ -3210,10 +3211,10 @@ mod tests {
         let mut map = MapSim::new();
         map.node = 0x23;
         map.mario_dead = 0xFF;
-        map.load_screen_tree_a(0x80, &r);
+        map.load_screen_tree(0x80, &r);
         assert_eq!(map.node, 0x23, "dead mario does not retarget");
         assert_eq!(
-            map.level_progress[po::TREE_A_PATH_1],
+            map.level_progress[po::TREE_PATH_1],
             0,
             "path 1 bit 0 not set"
         );

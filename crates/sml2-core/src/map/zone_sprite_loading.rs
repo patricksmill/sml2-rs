@@ -16,7 +16,7 @@ const PUMPKIN: &[ZoneSprite] = &[
 ];
 
 // ROM $0F:$65BA.
-const TREE_A: &[ZoneSprite] = &[
+const TREE: &[ZoneSprite] = &[
     (0x44, 0x11, 0x00),
     (0x80, 0x58, 0x04),
     (0x1C, 0x32, 0x06),
@@ -57,7 +57,7 @@ const SPACE: &[ZoneSprite] = &[
 ];
 
 // ROM $0F:$6680.
-const TREE_B: &[ZoneSprite] = &[
+const TURTLE: &[ZoneSprite] = &[
     (0x58, 0x48, 0xFF),
     (0x18, 0x78, 0x2A),
     (0x70, 0x70, 0x2B),
@@ -87,7 +87,7 @@ const MARIO: &[ZoneSprite] = &[
 ];
 
 // ROM $0F:$66AA.
-const TURTLE: &[ZoneSprite] = &[
+const WARIO_CASTLE: &[ZoneSprite] = &[
     (0x19, 0x20, 0x34),
     (0x50, 0x21, 0x35),
     (0x34, 0x1C, 0xFF),
@@ -108,12 +108,12 @@ impl MapSim {
     pub(super) fn seed_zone_sprites(&mut self, screen: u8, exit_tile_flag: u8) {
         let list = match screen {
             1 => PUMPKIN,
-            2 => TREE_A,
+            2 => TREE,
             3 => MACRO,
             4 => SPACE,
-            5 => TREE_B,
+            5 => TURTLE,
             6 => MARIO,
-            7 => TURTLE,
+            7 => WARIO_CASTLE,
             8 => CASTLE,
             _ => return,
         };

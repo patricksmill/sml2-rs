@@ -122,12 +122,12 @@ impl Session {
     pub fn debug_unlock_routes(&mut self) {
         let mut progress = self.debug_progress();
         for offset in [
-            po::TREE_A_PATH_1,
+            po::TREE_PATH_1,
             po::PUMPKIN_PATH_1,
             po::PUMPKIN_PATH_2,
             po::MACRO_PATH_0,
             po::SPACE_PATH_0,
-            po::TREE_B_PATH_1,
+            po::TURTLE_PATH_1,
         ] {
             if let Some(byte) = progress.get_mut(offset) {
                 *byte |= 0x01;

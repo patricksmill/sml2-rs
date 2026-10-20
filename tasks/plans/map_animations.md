@@ -87,7 +87,7 @@ Remaining, in dependency order:
 2. **Castle sparkles** `$3CEC4`: `sMapSparkleTimer` (`$A7A9`), id 10 vs `$FF`,
    positions from `$4FA8`/`$4FB8`, re-arm on `rDIV & $72 == 0`.
 3. **Screen-5 mover** `$3DDD3`: `sMapMovingX`/`sMapMovingDir`.
-4. **Turtle** `$3E7F2` (the other `sMapRasterPhase` user).
+4. **Wario's Castle** `$3E7F2` (the other `sMapRasterPhase` user).
 
 Each one is a `MapSim` state machine plus the sprite ids it writes; the decor
 expander from phase 3 must be in place first.

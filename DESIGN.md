@@ -1116,8 +1116,8 @@ walk fires an A press cannot also enter the level (only the next frame can); and
 nodes `$0C`/`$1E` are Start-class, so the secret-route arm is automatic there.
 
 **`$3C60B`, the A/START node actions**, are a table now. Nine zone doors ($02/$19 →
-Tree-A screen 2, $09/$1C → Pumpkin-A 1, $06/$1B → Macro 3, $12 → Space 4, $67/$0D →
-Tree-B 5, $0B/$1D → Mario 6, $11 → Turtle 7, $15 → screen 8) each write the cursor,
+Tree screen 2, $09/$1C → Pumpkin-A 1, $06/$1B → Macro 3, $12 → Space 4, $67/$0D →
+Turtle 5, $0B/$1D → Mario 6, $11 → Wario's Castle 7, $15 → screen 8) each write the cursor,
 the node, `sMarioDead = $FF`, the music request and the `$3E3BA` walk-out direction.
 Four coin-operated doors (`$71`/`$70`/`$6F`/`$6E` → bonus screens 9/10/11/12) run
 `$3F38F`'s 16-bit **BCD** price check ($0999/$0200/$0050/$0030) and are the only
@@ -1268,9 +1268,9 @@ and the node rewrites need a LIVE Mario; the screen selection and `$5B`'s rewrit
 `MapSim::load_screen` and `PlayerSim::map_handoff` implement the zone screen selection bands
 and screen loader routines. When entering a zone screen, scroll is reset to (0, 0), walking
 and scroll-only latches are cleared, move animation ($92) is armed, and zone-specific node
-retargets and path-unlock bits (Tree A secret node 37 + path 1, Tree A node $26->39, Pumpkin
+retargets and path-unlock bits (Tree secret node 37 + path 1, Tree node $26->39, Pumpkin
 secret path 1/2, Macro secret node 107 + path 0, Macro node $6A gate/retarget, Space secret
-node 67 + path 0, Space node $44->69, Tree B secret path 1) are executed alongside the
+node 67 + path 0, Space node $44->69, Turtle secret path 1) are executed alongside the
 loader-requested music track.
 
 **The `$650E`/`$3C364` question is settled: the byte is the `sLevelProgress` index.** Three

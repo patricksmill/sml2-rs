@@ -2529,7 +2529,7 @@ impl PlayerSim {
                 out.music = Some(16);
                 if self.exit_tile_flag != 0 && self.dead == 0 {
                     self.map_node = 0x25; // 37 ($3D1A4)
-                    self.level_progress[po::TREE_A_PATH_1] |= 1;
+                    self.level_progress[po::TREE_PATH_1] |= 1;
                 }
                 if self.map_node == 0x26 {
                     self.map_node = 0x27; // 39 ($3D1B5)
@@ -2576,7 +2576,7 @@ impl PlayerSim {
                 out.screen = Some(5); // $3F089 -> $3D61F
                 out.music = Some(18);
                 if self.exit_tile_flag != 0 && self.dead == 0 {
-                    self.level_progress[po::TREE_B_PATH_1] |= 1; // $3D6A7
+                    self.level_progress[po::TURTLE_PATH_1] |= 1; // $3D6A7
                 }
             }
             0x50..=0x59 => {
