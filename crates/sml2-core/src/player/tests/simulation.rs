@@ -1736,6 +1736,48 @@ fn flutter_timer_vs_moon_physics() {
     assert_ne!(sim_moon.y, 100, "gravity ran");
 }
 
+/// `$10DC`: an airborne A press as Bunny Mario starts the flutter, which
+/// requests the ear-flap sound on channel 1; the held-A recharge does too.
+#[test]
+fn bunny_flutter_requests_its_sound() {
+    let layout = blank_layout();
+    let held = PlayerKeys {
+        a: true,
+        ..Default::default()
+    };
+    let mut sim = small_sim();
+    sim.powerup = 2;
+    sim.on_ground = false;
+    sim.in_air = true;
+    sim.vvel = 10;
+    sim.step(&held, true, false, &layout);
+    assert!(sim.flutter_armed);
+    assert_eq!(sim.flutter, 7, "set to 8, then $14FA's decrement");
+    assert_eq!(sim.sfx1, 6, "the press arm");
+
+    sim.sfx1 = 0;
+    sim.flutter_charge = 11;
+    sim.vvel = 10;
+    sim.step(&held, false, false, &layout);
+    assert_eq!(sim.flutter_charge, 0);
+    assert_eq!(sim.sfx1, 6, "the recharge arm");
+}
+
+/// `$547A`: Bunny Mario shows the ears-up pose (+26) while the flutter
+/// timer's bit 2 is set.
+#[test]
+fn bunny_flutter_pose_follows_timer_bit_2() {
+    let mut sim = small_sim();
+    sim.powerup = 2;
+    sim.on_ground = false;
+    sim.in_air = true;
+    sim.dir_right = true;
+    for (timer, want) in [(0, 8 + 69), (7, 8 + 69 + 26), (4, 8 + 69 + 26), (3, 8 + 69)] {
+        sim.flutter = timer;
+        assert_eq!(sim.frame_index(0), want, "flutter timer {timer}");
+    }
+}
+
 /// `$14D5`: walk animation cadence.
 /// Under moon physics (or goal bell), cadence is always +1 even with B held.
 #[test]

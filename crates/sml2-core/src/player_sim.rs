@@ -1825,10 +1825,12 @@ impl PlayerSim {
             && self.moon == 0
             && self.vvel < 0x48
         {
+            // $10DC: both arms start the flutter with the ear-flap sound.
             if a_pressed {
                 self.flutter_armed = true;
                 self.flutter = 8;
                 self.vvel = 24;
+                self.sfx1 = 6;
             } else if self.flutter_armed && !self.on_ground {
                 if keys.a {
                     self.flutter_charge = self.flutter_charge.wrapping_add(1);
@@ -1836,6 +1838,7 @@ impl PlayerSim {
                         self.flutter_charge = 0;
                         self.flutter = 8;
                         self.vvel = 24;
+                        self.sfx1 = 6;
                     }
                 }
             }
@@ -2950,7 +2953,7 @@ impl PlayerSim {
     /// The frame index the draw would put in `$FFC6` (powerup offsets
     /// included). Model: right stand 0 / walk 1-3 / skid 13; left stand 4 /
     /// walk 5-7 / skid 12; duck 14/15; air 8/9; grounded-in-air 10/11;
-    /// small +32, bunny +69 (flutter +26 not modelled), fire +112
+    /// small +32, bunny +69 (+26 while flutter bit 2 is set), fire +112
     /// (throw +32 not modelled). The `$532D` spin pose is modelled from
     /// [`Self::SPIN_JUMP_FRAMES`], but its index needs `$FF97` bit 3, which no
     /// capture records. Moon and pipes (as poses) not modelled.
@@ -3060,6 +3063,8 @@ impl PlayerSim {
         }
         f.wrapping_add(match self.powerup {
             0 if !inv_active => 32,
+            // $547A: the ears-up pose while the flutter timer's bit 2 is set.
+            2 if self.flutter & 0x04 != 0 => 69 + 26,
             2 => 69,
             3 => 112,
             _ => 0,
