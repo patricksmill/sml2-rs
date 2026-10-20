@@ -1,9 +1,10 @@
 # Minigames, final castle and ending — measured plan
 
-Status: **ending/credits and the final castle verified; the bonus minigames are not
-ported**. The `minigames-ending` inventory row stays `pending` until ME-2..ME-7
-land. This plan is based on ROM measurement on 2026-10-19, not on the old
-"unaudited" row.
+Status: **ME-1..ME-7 done.** Ending/credits, the final castle, coin rooms 9-12,
+bell rooms 13/14 and the six-coin chain are ported and taped (1,419 core + 76
+runtime tests, frozen sweep green). What remains is render-side: the rooms'
+and the reveal's VRAM/OAM staging, so those screens simulate correctly but are
+not yet drawn.
 
 ## What is already done
 
