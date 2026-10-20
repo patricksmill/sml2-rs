@@ -11,3 +11,6 @@ __pycache__/
 *.sav
 *.wav
 /audio_samples/
+
+# Local manual input recordings (kept outside cargo clean output)
+/recordings/

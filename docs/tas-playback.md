@@ -154,3 +154,37 @@ Use the movie's original emulator/core for a dependable reference, or explicitly
 resynchronize and independently verify a PyBoy adaptation before using it to
 judge native-port divergence. Do not describe the live PyBoy viewer as a
 verified TAS baseline.
+
+## Record your own PyBoy reference
+
+```bash
+/home/pmill/.venvs/sml2-pyboy/bin/python tools/record_play.py --rom ../sml2decomp/baserom.gb
+```
+
+The window records the exact held-button mask for every emulated tick, starting
+from fresh cartridge RAM and PyBoy's built-in DMG boot ROM. Arrows move, Z is
+A/jump, X is B/run, Enter is Start, and Backspace is Select. P pauses/resumes;
+Escape or closing the window finishes and saves. Losing focus pauses emulation
+and clears held controls. Paused time contributes no input rows. Save-state,
+rewind, and speed-up shortcuts are not bound.
+
+The generated file is `recordings/pyboy-<timestamp>.json`. This local directory
+is ignored by Git and survives `cargo clean`. A complete file is published
+atomically every 300 frames and at exit. It contains input masks, ROM/boot ROM
+hashes, PyBoy version, settings, and the final screen hash. It contains no ROM
+bytes, emulator snapshots, or memory trajectories. Existing saves are untouched.
+The recorder and comparison viewer currently run silently with sound emulation
+disabled, using identical settings.
+
+Replay the resulting file using the same Python environment:
+
+```bash
+python tools/compare_tas.py recordings/pyboy-<timestamp>.json --rom ../sml2decomp/baserom.gb
+```
+
+The viewer verifies the manual recording's ROM, boot ROM, PyBoy version and
+settings before playback. If playback reaches the last input, it also checks
+that PyBoy's final screen hash matches the recording. That check confirms the
+final frame; it does not locate the first divergent frame in the native port.
+A 180-frame neutral-input record/replay smoke check matched exactly before the
+first manual recording window was opened.

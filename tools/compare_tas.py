@@ -92,6 +92,16 @@ def main():
     if args.headless and args.paused:
         parser.error("--paused requires interactive windows")
     from pyboy import PyBoy
+    if movie.get('source') == 'manual-pyboy':
+        from importlib.metadata import version
+        import pyboy as pyboy_package
+        boot = args.bootrom or Path(pyboy_package.__file__).parent / 'core' / 'bootrom_dmg.bin'
+        if version('pyboy') != movie.get('pyboy_version'):
+            parser.error('PyBoy version differs from the manual recording')
+        if hashlib.sha1(boot.read_bytes()).hexdigest() != movie.get('bootrom_sha1'):
+            parser.error('boot ROM differs from the manual recording')
+        if movie.get('sound_emulated') is not False:
+            parser.error('unsupported recording audio configuration')
     # A file-like ROM prevents PyBoy from loading the ROM path's existing .ram.
     pyboy = PyBoy(io.BytesIO(rom), window='null', sound_emulated=False,
                   cgb=False, bootrom=str(args.bootrom) if args.bootrom else None)
@@ -112,7 +122,10 @@ def main():
             displays.append(Display(sdl, 'Rust port', 560))
         print(f"Inputs by {movie.get('author', 'unknown')}; same input index in both windows.", flush=True)
         print('Space pause/resume BOTH; Right step BOTH; Tab 1x/0.25x; Escape closes BOTH.', flush=True)
-        print('PyBoy uses its built-in boot ROM unless --bootrom is supplied; this BizHawk movie may desync in PyBoy too.', flush=True)
+        if movie.get('source') == 'manual-pyboy':
+            print('Manual PyBoy recording: ROM, boot ROM, core version, and settings match.', flush=True)
+        else:
+            print('PyBoy uses its built-in boot ROM unless --bootrom is supplied; this BizHawk movie may desync in PyBoy too.', flush=True)
         paused, slow, running = args.paused, False, True
         index, previous = 0, 0
         count = min(len(frames), args.frames or len(frames))
@@ -155,6 +168,11 @@ def main():
                 displays[0].draw(pyboy.screen.ndarray, f'PyBoy ROM | {label}')
                 displays[1].draw(native, f'Rust port | {label}')
                 time.sleep(max(0, 1 / (15 if slow else 60) - (time.perf_counter() - started)))
+        if index == len(frames) and movie.get('final_screen_sha256'):
+            actual = hashlib.sha256(pyboy.screen.ndarray.tobytes()).hexdigest()
+            if actual != movie['final_screen_sha256']:
+                raise RuntimeError('PyBoy final screen does not match the recording')
+            print('PyBoy final screen matches the recording exactly.', flush=True)
         print(f'Stopped after {index} shared input rows.', flush=True)
     finally:
         if bridge:
