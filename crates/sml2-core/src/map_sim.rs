@@ -82,6 +82,13 @@ enum ChainClass {
 /// chain re-reads `sMapNode` at every step, so the order is load-bearing: the
 /// three retargeting classes sit early, and a retarget changes what the rest of
 /// the chain matches against.
+/// `$3C364`: `sLevelProgress` index the arrival walk tests, indexed by `$650E` slot.
+const ARRIVAL_PROGRESS_INDEX: [u8; 40] = [
+    0x00, 0x02, 0x03, 0x05, 0x05, 0x05, 0x07, 0x08, 0x09, 0x09, 0x0B, 0x0C, 0x0D, 0x0E, 0x0E, 0x10,
+    0x11, 0x11, 0x13, 0x10, 0x15, 0x16, 0x17, 0x17, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1D, 0x1F, 0x20,
+    0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
+];
+
 const NODE_CHAIN: &[(u8, ChainClass)] = &[
     (0x14, ChainClass::Up),
     (0x35, ChainClass::MacroA),
@@ -1069,13 +1076,13 @@ impl MapSim {
     ///
     /// Once per screen — the walk has stopped, `sMarioDead` is 0 (the level-entry
     /// handlers set it to `$FF`) — the map *presses the node's own direction mask*
-    /// (`$6591[slot]`) so the cursor walks off the node by itself, provided the
-    /// stage has not been cleared yet.
+    /// (`$6591[slot]`) so the cursor walks off the node by itself. The latch is
+    /// spent before the clear test, so a skipped walk still does not fire again.
     ///
-    /// The ROM then reads `$3C364[slot]` and uses *that* as the `sLevelProgress`
-    /// offset, where `$3EEF0` (the writer) and `$3E1D7` (the gate) both use the slot
-    /// itself. The port follows the two routines that agree and reads the array
-    /// directly; the discrepancy is filed in the queue, not silently resolved.
+    /// The clear test does not read the slot `$3EEF0` just wrote. It reads
+    /// `sLevelProgress[$3C364[slot]]`. That table runs one ahead of the slot
+    /// (`$3C364[$1A] = $1B`), so finishing node `$50` still walks Up toward `$51`
+    /// while `$1B` is clear. The direction press stays `$6591[slot]`.
     fn zone_arrival_walk(&mut self, pressed: u8, nodes: &MapNodes) -> u8 {
         if self.cursor_walking != 0 || self.mario_dead != 0 {
             return pressed;
@@ -1084,7 +1091,15 @@ impl MapSim {
         let Some(slot) = nodes.progress_slot(self.node) else {
             return pressed;
         };
-        if self.block(slot as usize) & 0x80 != 0 {
+        // `$3C364` is 40 bytes. Slots `$28` and `$29` (nodes `$04` and `$44`)
+        // read the two opcodes that follow it, `ei` / `ld a, [sMapNode]`.
+        let index = match slot {
+            0..=39 => ARRIVAL_PROGRESS_INDEX[slot as usize],
+            0x28 => 0xFB,
+            0x29 => 0xFA,
+            _ => slot,
+        };
+        if self.block(index as usize) & 0x80 != 0 {
             return pressed;
         }
         // `$6591[slot]`: the mask is a direction byte, so this is the press the node
@@ -2798,13 +2813,42 @@ mod tests {
         // Next frame the chain's own class press runs instead.
         assert_eq!(map.synthetic_press(0x00, &n), 0x80);
 
-        // A cleared stage does not auto-walk at all — and does not spend the latch.
+        // The clear bit `$3EEF0` writes is the slot. `$3C32D` tests `$3C364[slot]`
+        // (`$3C364[6] = 7`), so marking slot 6 leaves the walk armed.
         let mut map = MapSim::new();
         map.node = 0x31;
         map.screen_id = 1;
         map.level_progress[6] = 0x80;
-        assert_eq!(map.synthetic_press(0x00, &n), 0x80);
+        assert_eq!(map.synthetic_press(0x00, &n), 0x10, "slot 6 is not the byte tested");
+        assert_eq!(map.mario_dead, 0xFF, "the one-shot is spent either way");
+
+        let mut map = MapSim::new();
+        map.node = 0x31;
+        map.screen_id = 1;
+        map.level_progress[7] = 0x80;
+        assert_eq!(map.synthetic_press(0x00, &n), 0x80, "$3C364[6] cleared suppresses it");
         assert_eq!(map.mario_dead, 0xFF);
+    }
+
+    /// Level 10's return: node `$50` is cleared (`sLevelProgress[$1A] = $80`) and
+    /// `$3C364[$1A] = $1B` is not, so the cursor still presses Up toward node `$51`.
+    #[test]
+    fn clearing_mario_zone_1_still_walks_to_the_next_node() {
+        let nodes = MapNodes::from_bytes(include_bytes!("../../../extracted/map/nodes.bin"))
+            .expect("nodes");
+        let mut map = MapSim::new();
+        map.node = 0x50;
+        map.screen_id = 6;
+        map.level_progress[0x1A] = 0x80;
+        assert_eq!(map.synthetic_press(0x00, &nodes), 0x40);
+        assert_eq!(map.mario_dead, 0xFF);
+
+        let mut done = MapSim::new();
+        done.node = 0x50;
+        done.screen_id = 6;
+        done.level_progress[0x1A] = 0x80;
+        done.level_progress[0x1B] = 0x80;
+        assert_eq!(done.synthetic_press(0x00, &nodes), 0x00);
     }
 
     /// `$3C316`: node 0 is the story entry. Once level 1 is cleared the cursor is
