@@ -3845,3 +3845,26 @@ fn spike_hazard_power_down_emits_sfx_and_animates() {
     assert_eq!(sim.frame_index(0), 10, "alternates back to Big Mario frame");
 }
 
+/// $3186 requests song 2 only when the death arc enters screen band $B0.
+#[test]
+fn death_arc_requests_jingle_on_fade_entry() {
+    let mut sim = PlayerSim::new();
+    sim.dead = 0xFF;
+    sim.vvel = 1; // MarioSpeedTableDead[1] = 3.
+    sim.y = 0x014A;
+    sim.powerup = 3;
+    sim.invincibility = 64;
+
+    sim.death_arc(0x0100);
+    assert_eq!(sim.y, 0x014D); // screen Y = $AF: still in the arc.
+    assert!(!sim.dead_fade);
+    assert_eq!(sim.music_request, 0);
+
+    sim.death_arc(0x0100);
+    assert_eq!(sim.y, 0x0150); // screen Y = $B2: enter $3186.
+    assert!(sim.dead_fade);
+    assert_eq!(sim.music_request, 2);
+    assert_eq!(sim.fade_timer.to_le_bytes(), [0xC0, 0]);
+    assert_eq!([sim.powerup, sim.invincibility], [0, 0]);
+}
+

@@ -2180,6 +2180,7 @@ impl PlayerSim {
         self.y = (self.y & 0xFF00) | (self.y as u8).wrapping_add(b) as u16;
         let sy = (self.y as u8).wrapping_sub(cam_y as u8).wrapping_add(98);
         if sy & 0xF0 == 0xB0 {
+            self.music_request = 2; // $3186: death jingle as Mario leaves the screen.
             self.dead_fade = true;
             self.fade_timer = 192; // $3186
             self.powerup = 0;
