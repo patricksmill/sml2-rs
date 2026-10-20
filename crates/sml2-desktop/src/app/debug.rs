@@ -30,6 +30,8 @@ const ZONES: [(&str, u8, u8); 9] = [
 /// One debug edit, applied after the panel's frame.
 pub(super) enum DebugAction {
     WarpMap { screen: u8, node: u8 },
+    /// Walk into a zone through its hub door, as a played entry does.
+    EnterZone(u8),
     WarpLevel(u8),
     ClearAllLevels,
     UnlockRoutes,
@@ -64,7 +66,11 @@ impl DesktopApp {
                         if ui.button(label).clicked() {
                             self.debug_screen = screen;
                             self.debug_node = node;
-                            action = Some(DebugAction::WarpMap { screen, node });
+                            action = Some(if screen == 0 {
+                                DebugAction::WarpMap { screen, node }
+                            } else {
+                                DebugAction::EnterZone(screen)
+                            });
                         }
                     }
                 });
@@ -79,8 +85,15 @@ impl DesktopApp {
                                 .unwrap_or("?"),
                         )
                         .show_ui(ui, |ui| {
-                            for (name, screen, _) in ZONES {
-                                ui.selectable_value(&mut self.debug_screen, screen, name);
+                            for (name, screen, node) in ZONES {
+                                // A new screen starts from its own landing node,
+                                // not the node picked for the previous screen.
+                                if ui
+                                    .selectable_value(&mut self.debug_screen, screen, name)
+                                    .clicked()
+                                {
+                                    self.debug_node = node;
+                                }
                             }
                         });
                     ui.label("node");
@@ -118,7 +131,7 @@ impl DesktopApp {
                         action = Some(DebugAction::WarpLevel(self.debug_level));
                     }
                 });
-                ui.label("Zone nodes are each door's own landing; levels load live.");
+                ui.label("Zone buttons walk in through the hub door; Teleport places the cursor directly.");
             });
 
         ui.separator();
@@ -215,7 +228,7 @@ impl DesktopApp {
     pub(super) fn apply_debug(&mut self, action: DebugAction) {
         let warped = matches!(
             &action,
-            DebugAction::WarpMap { .. } | DebugAction::WarpLevel(_)
+            DebugAction::WarpMap { .. } | DebugAction::EnterZone(_) | DebugAction::WarpLevel(_)
         );
         let Some(game) = &mut self.game else {
             return;
@@ -227,6 +240,10 @@ impl DesktopApp {
                     format!("warped to {} · node ${node:02X}", screen_name(screen)),
                     false,
                 ),
+                Err(error) => (error, true),
+            },
+            DebugAction::EnterZone(screen) => match session.debug_enter_zone(screen) {
+                Ok(()) => (format!("entering {}", screen_name(screen)), false),
                 Err(error) => (error, true),
             },
             DebugAction::WarpLevel(id) => match session.debug_warp_level(id) {

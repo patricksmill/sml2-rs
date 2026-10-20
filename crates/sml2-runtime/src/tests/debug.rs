@@ -377,3 +377,42 @@ fn warping_from_the_pause_screen_resumes_the_sound_engine() {
         assert_ne!(session.sound_driver.active_song, 0, "music plays after the warp");
     }
 }
+
+/// Entering a zone from the panel replays the hub door, so it ends where a
+/// played entry does. Expected values are PyBoy's (screen, node, cursor) 500
+/// frames after A on each door; the warp starts from another zone so nothing
+/// of the screen it left can leak through.
+#[test]
+fn entering_a_zone_from_the_panel_lands_where_the_rom_door_does() {
+    use crate::session::FrameInput;
+    use sml2_core::player_sim::PlayerKeys;
+
+    for (screen, expect) in [
+        (1u8, (1u8, 0x28u8, 83u8, 89u8)),
+        (2, (2, 0x23, 48, 110)),
+        (3, (3, 0x32, 18, 118)),
+        (4, (4, 0x3C, 64, 100)),
+        (5, (5, 0x48, 114, 90)),
+        (6, (6, 0x50, 60, 112)),
+        (8, (8, 0x6E, 40, 131)),
+    ] {
+        let mut session = session();
+        session.debug_warp_map(3, 0x32).expect("start somewhere else");
+        for _ in 0..20 {
+            session.advance(FrameInput { keys: PlayerKeys::default(), div: 0 });
+        }
+        session.debug_enter_zone(screen).expect("the door opens");
+        assert!(session.map_screen_transition.is_some(), "screen {screen}: the walk-in runs");
+        for _ in 0..500 {
+            session.advance(FrameInput { keys: PlayerKeys::default(), div: 0 });
+        }
+        let SessionState::Overworld(map) = &session.state else {
+            panic!("screen {screen}: left the overworld");
+        };
+        assert_eq!(
+            (map.screen_id, map.node, map.cursor_x, map.cursor_y),
+            expect,
+            "screen {screen}"
+        );
+    }
+}

@@ -245,6 +245,19 @@ fn debug_actions_edit_the_session_and_persist_the_active_pipe() {
         }
         _ => panic!("the map warp did not land"),
     }
+
+    // A zone button walks in through the hub door instead of teleporting.
+    app.apply_debug(DebugAction::EnterZone(2));
+    let session = &app.game.as_ref().unwrap().session;
+    let transition = session
+        .map_screen_transition
+        .as_ref()
+        .expect("the door's walk-in runs");
+    assert_eq!(transition.source.screen_id, 0, "it starts on the hub door");
+    match &session.state {
+        SessionState::Overworld(map) => assert_eq!((map.screen_id, map.node), (2, 0x23)),
+        _ => panic!("the zone entry left the map"),
+    }
     let _ = std::fs::remove_dir_all(path);
 }
 

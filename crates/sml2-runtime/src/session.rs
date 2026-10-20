@@ -752,6 +752,20 @@ impl Session {
     }
 
     /// Stage a coin-door room the way `$3F3B9` does, for tapes and previews.
+    /// Start the blocking bank-15 door walk once a door has run inside
+    /// `MapSim::tick`: `source` is the map as the frame began, `destination`
+    /// the screen the door loaded.
+    pub(crate) fn begin_door_transition(&mut self, source: MapSim, direction: u8, destination: u8) {
+        self.map_screen_transition = Some(MapScreenTransition::new(source, direction));
+        self.last_map_screen = Some(destination);
+        self.map_wave = if destination == 0 {
+            sml2_core::map::MapWave::seed(self.assets.overworld_tiles.screen_raw(0))
+        } else {
+            None
+        };
+        self.sound_driver.music_request = if destination == 0 { 0 } else { 0xFF };
+    }
+
     pub fn begin_coin_room(&mut self, screen: u8) {
         let mut map = MapSim::new();
         map.set_castle_scripts(self.assets.castle_scripts.clone());
@@ -1103,17 +1117,8 @@ impl Session {
                 );
 
                 if let Some(direction) = entry.transition {
-                    self.map_screen_transition =
-                        Some(MapScreenTransition::new(source_map, direction));
-                    self.last_map_screen = Some(map_sim.screen_id);
-                    if map_sim.screen_id == 0 {
-                        self.map_wave = sml2_core::map::MapWave::seed(
-                            self.assets.overworld_tiles.screen_raw(0),
-                        );
-                    } else {
-                        self.map_wave = None;
-                    }
-                    self.sound_driver.music_request = if map_sim.screen_id == 0 { 0 } else { 0xFF };
+                    let destination = map_sim.screen_id;
+                    self.begin_door_transition(source_map, direction, destination);
                     break 'map StepOutcome::Continue;
                 }
 

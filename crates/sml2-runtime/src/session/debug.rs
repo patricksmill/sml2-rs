@@ -23,6 +23,19 @@ use sml2_core::map_sim::MapSim;
 /// cursor landing, so they are not warp targets.
 pub const WARP_MAX_SCREEN: u8 = 8;
 
+/// The hub door (`$3C60B`) that loads each zone screen 1-8. Where a zone has
+/// two, this is the one whose landing the debug panel names.
+pub const ZONE_DOORS: [(u8, u8); 8] = [
+    (1, 0x09),
+    (2, 0x19),
+    (3, 0x1B),
+    (4, 0x12),
+    (5, 0x67),
+    (6, 0x1D),
+    (7, 0x11),
+    (8, 0x15),
+];
+
 impl Session {
     /// `sLevelProgress` as the live state holds it.
     ///
@@ -308,6 +321,39 @@ impl Session {
         self.debug_release_pause_audio();
         self.sound_driver.music_request = music;
         self.state = SessionState::Overworld(map);
+        Ok(())
+    }
+
+    /// Enter zone `screen` (1-8) the way the game does: stand on its hub
+    /// door, press A, and let that frame's `$3C60B` dispatch run the door's
+    /// loader and start the bank-15 walk-in. Nothing from the screen the warp
+    /// left survives, because the hub is rebuilt first.
+    pub fn debug_enter_zone(&mut self, screen: u8) -> Result<(), String> {
+        let Some(&(_, door)) = ZONE_DOORS.iter().find(|(id, _)| *id == screen) else {
+            return Err(format!("screen {screen} has no hub door (1..=8)"));
+        };
+        self.debug_warp_map(0, door)?;
+        let SessionState::Overworld(map) = &mut self.state else {
+            return Err("the hub did not load".into());
+        };
+        map.cursor_move = 0;
+        let scripts = map.castle_scripts.take();
+        let source = map.clone();
+        map.castle_scripts = scripts;
+        let entry = map.tick(
+            sml2_core::map_sim::MapInput::new(0x01, 0x01, 0),
+            &self.assets.nodes,
+            &self.assets.walk,
+            &self.assets.node_records,
+        );
+        let destination = map.screen_id;
+        let Some(direction) = entry.transition else {
+            return Err(format!("hub door ${door:02X} did not open"));
+        };
+        // The A press is consumed here; the host's held button must not read
+        // as a fresh press once the walk-in ends.
+        self.prev_keys_held = 0x01;
+        self.begin_door_transition(source, direction, destination);
         Ok(())
     }
 
