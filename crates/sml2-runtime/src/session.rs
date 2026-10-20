@@ -150,6 +150,7 @@ impl LevelContext {
             obp1: manifest.header.palettes[2],
             player: Some((sim.x, sim.y, 0)),
             player_behind_bg: false,
+            player_star_flash: false,
             player_shield: None,
             player_pan: 0,
             scroll_pan: 0,
@@ -402,6 +403,9 @@ impl LevelContext {
             // `$5297` expander sets attr bit 7 and the pipe's BG tiles cover
             // Mario instead of him being drawn over them.
             s.player_behind_bg = player_behind_bg(self.sim.pipe_dir);
+            // `$54C8`: `$FFC7` from the star countdown; the dead draw (`$5550`)
+            // does not go through it.
+            s.player_star_flash = !was_dead && self.sim.star_flash();
             s.player_shield = if was_dead {
                 None
             } else {

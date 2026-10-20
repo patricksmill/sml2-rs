@@ -153,8 +153,15 @@ pub(crate) fn seed_level_timer(sim: &mut PlayerSim, manifest: &LevelManifest) {
 }
 
 /// `$05E4`: countdown precedes death dispatch, player physics, and camera motion.
+/// The star tick is `$5D44`, ahead of `$5D6A`'s dead/goal guard, so it keeps
+/// running through a death fade or a level exit; pause (`$FF9B` = 8) skips the
+/// whole `$05D5` path.
 pub(crate) fn update_level_timer_at_frame_head(sim: &mut PlayerSim) {
-    if !sim.paused && !sim.dead_fade && !sim.exit_phase {
+    if sim.paused {
+        return;
+    }
+    sim.tick_star_timer();
+    if !sim.dead_fade && !sim.exit_phase {
         sim.update_level_timer();
     }
 }

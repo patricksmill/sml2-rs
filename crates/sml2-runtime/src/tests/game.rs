@@ -456,6 +456,26 @@ fn level_timer_frame_head_freezes_with_pause_and_fades() {
     assert_eq!((sim.level_timer.high, sim.level_timer.low), (3, 0));
 }
 
+/// `$5D44` sits ahead of `$5D6A`'s dead/goal guard, so the star keeps
+/// counting down through a death fade or a level exit; pause (`$FF9B` = 8)
+/// skips the whole `$05D5` path.
+#[test]
+fn star_timer_ticks_through_fades_but_not_pause() {
+    let mut sim = PlayerSim::new();
+    sim.star_high = 4;
+    sim.star_low = 64;
+    for flags in [(false, true, false), (false, false, true)] {
+        (sim.paused, sim.dead_fade, sim.exit_phase) = flags;
+        let before = sim.star_low;
+        update_level_timer_at_frame_head(&mut sim);
+        assert_eq!(sim.star_low, before - 1, "flags {flags:?}");
+    }
+    (sim.paused, sim.dead_fade, sim.exit_phase) = (true, false, false);
+    let before = (sim.star_high, sim.star_low);
+    update_level_timer_at_frame_head(&mut sim);
+    assert_eq!((sim.star_high, sim.star_low), before, "pause skips $05D5");
+}
+
 #[test]
 fn level_timer_expiry_precedes_the_death_snapshot() {
     let mut sim = PlayerSim::new();
@@ -591,6 +611,7 @@ fn pan_sprites(player: Option<(u16, u16, u8)>) -> SpriteCtx {
         player,
         player_shield: None,
         player_behind_bg: false,
+        player_star_flash: false,
         bumpers: Vec::new(),
         fireballs: Vec::new(),
         boss_oam: Vec::new(),

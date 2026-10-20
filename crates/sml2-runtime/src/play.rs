@@ -459,6 +459,9 @@ pub(crate) fn run_play(
         }
         if let Some(s) = spr.as_mut() {
             s.player = Some((sim.x, sim.y, f));
+            // `$54C8`: `$FFC7` from the star countdown; the dead draw (`$5550`)
+            // does not go through it.
+            s.player_star_flash = !was_dead && sim.star_flash();
             s.player_shield = if was_dead {
                 None
             } else {

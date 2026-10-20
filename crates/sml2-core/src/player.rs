@@ -166,8 +166,10 @@ pub fn append_cells(
 }
 
 /// Expand one player frame like the `$5297` expander. `star_flash` = the
-/// `$FFC7` value (1 while the invincibility timer flickers) forces attr
-/// bit 4; attr bit 7 is never forced on the player path.
+/// `$FFC7` value (1 while the star countdown's low byte has bit 2 set, i.e.
+/// `$54C8`, not the separate `sInvincibilityTimer` frame flicker at `$5447`)
+/// forces attr bit 4; attr bit 7 is never forced on the player path by
+/// `$FFC7`.
 pub fn draw_cells(
     tables: &ObjectTables,
     frame: u8,

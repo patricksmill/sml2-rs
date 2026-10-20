@@ -33,6 +33,9 @@ pub struct SpriteCtx {
     /// `$530D`'s `$FFBB` in draw order: true while pipe travel has set it to 0,
     /// which makes the `$5297` expander set attr bit 7 (Mario behind BG).
     pub player_behind_bg: bool,
+    /// `$54C8`'s `$FFC7`: the star countdown's bit 2, which makes `$5297` set
+    /// attr bit 4 on every one of Mario's cells (OBP1 — the star flash).
+    pub player_star_flash: bool,
     /// Brick-bump sprites for this frame (`PlayerSim::block_draw`): the engine
     /// stages `$FFC4`/`$FFC5`/`$FFC6` and enqueues them (`$5297`), so they are
     /// extra OAM sprites drawn at the block — through the same player-sprite
@@ -186,7 +189,7 @@ pub fn render_view(
                 cam_x,
                 cam_y,
                 sml2_core::player::CellStyle {
-                    force_palette_one: false,
+                    force_palette_one: s.player_star_flash,
                     behind_background: s.player_behind_bg,
                 },
             )

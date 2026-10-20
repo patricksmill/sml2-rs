@@ -137,6 +137,7 @@ fn run_entry_route(
         player: None,
         player_shield: None,
         player_behind_bg: false,
+        player_star_flash: false,
         player_pan: 0,
         scroll_pan: 0,
         bumpers: Vec::new(),

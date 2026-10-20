@@ -1227,6 +1227,85 @@ fn star_pickup_resets_the_stomp_chain_only_on_an_expired_timer() {
     }
 }
 
+/// `$5D44`: the 16-bit star countdown. From the pickup's `(4, 64)` it takes
+/// 833 ticks to reach the `(0, $FF)` marker the decrement stops at, and the
+/// borrow that clears the high byte restores `sLevelSong`.
+#[test]
+fn star_timer_counts_down_and_restores_the_level_song_on_expiry() {
+    let mut sim = PlayerSim::new();
+    sim.star_high = 4;
+    sim.star_low = 64;
+    sim.level_song = 5;
+    sim.current_song = 5;
+    sim.music_request = 0;
+    sim.tick_star_timer();
+    assert_eq!((sim.star_high, sim.star_low), (4, 63));
+    assert_eq!(sim.music_request, 0, "no restore while the high byte runs");
+    for _ in 1..64 {
+        sim.tick_star_timer();
+    }
+    assert_eq!((sim.star_high, sim.star_low), (4, 0));
+    sim.tick_star_timer();
+    assert_eq!((sim.star_high, sim.star_low), (3, 0xFF), "$5D4E borrow");
+    assert_eq!(sim.music_request, 0);
+    let mut ticks = 65;
+    while sim.star_high != 0 {
+        sim.tick_star_timer();
+        ticks += 1;
+    }
+    assert_eq!(ticks, 833);
+    assert_eq!((sim.star_high, sim.star_low), (0, 0xFF));
+    assert_eq!(sim.music_request, 5, "$5D5B restores the level song");
+    // The stopped pair is inert: `$5D44` gates on the high byte.
+    sim.music_request = 0;
+    for _ in 0..8 {
+        sim.tick_star_timer();
+    }
+    assert_eq!((sim.star_high, sim.star_low), (0, 0xFF));
+    assert_eq!(sim.music_request, 0);
+}
+
+/// `$5D5B`: the restore is skipped while `sCurSong` is 9 (the low-time
+/// warning), and a timer that never ran does not move at all.
+#[test]
+fn star_timer_restore_is_skipped_while_song_9_plays() {
+    let mut sim = PlayerSim::new();
+    sim.star_high = 1;
+    sim.star_low = 0;
+    sim.level_song = 5;
+    sim.current_song = 9;
+    sim.music_request = 0;
+    sim.tick_star_timer();
+    assert_eq!((sim.star_high, sim.star_low), (0, 0xFF));
+    assert_eq!(sim.music_request, 0, "song 9 is left alone");
+
+    let mut idle = PlayerSim::new();
+    idle.level_song = 5;
+    idle.current_song = 5;
+    idle.tick_star_timer();
+    assert_eq!((idle.star_high, idle.star_low), (0, 0));
+    assert_eq!(idle.music_request, 0);
+}
+
+/// `$54C8`: `$FFC7` is the star countdown's low-byte bit 2, gated on a
+/// running high byte.
+#[test]
+fn star_flash_is_bit_2_of_a_running_low_byte() {
+    let mut sim = PlayerSim::new();
+    for (high, low, want) in [
+        (4u8, 0x40u8, false),
+        (4, 0x44, true),
+        (4, 0x04, true),
+        (4, 0x03, false),
+        (0, 0x44, false),
+        (0, 0xFF, false),
+    ] {
+        sim.star_high = high;
+        sim.star_low = low;
+        assert_eq!(sim.star_flash(), want, "timer ({high}, {low:#04X})");
+    }
+}
+
 /// `$34AF` (id 5): `inc a / daa` on the BCD lives byte, clamped at 99
 /// when the increment wraps.
 #[test]

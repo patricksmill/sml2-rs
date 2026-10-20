@@ -344,6 +344,7 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
                 player: mario,
                 player_shield: None,
                 player_behind_bg: false,
+                player_star_flash: false,
                 player_pan: 0,
                 scroll_pan: 0,
                 bumpers: Vec::new(),

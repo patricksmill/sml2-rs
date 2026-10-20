@@ -2907,6 +2907,29 @@ impl PlayerSim {
         }
     }
 
+    /// `$5D44`: the star's 16-bit countdown. While the high byte is nonzero
+    /// the pair decrements once per frame; the borrow that clears the high
+    /// byte restores the level song (`$5D5B`, skipped while `sCurSong` is 9).
+    /// The pair stops at `(0, $FF)` — the marker `$3489` tests for the chain
+    /// reset — so the whole run is 832 frames from the pickup's `(4, 64)`.
+    pub fn tick_star_timer(&mut self) {
+        if self.star_high == 0 {
+            return;
+        }
+        let (low, borrow) = self.star_low.overflowing_sub(1);
+        self.star_low = low;
+        self.star_high = self.star_high.wrapping_sub(u8::from(borrow));
+        if self.star_high == 0 && self.current_song != 9 {
+            self.music_request = self.level_song;
+        }
+    }
+
+    /// `$FFC7` at `$54C8`: while the star runs, every fourth frame of its low
+    /// byte makes Mario's cells use OBP1 (`$5297`'s `set 4`).
+    pub fn star_flash(&self) -> bool {
+        self.star_high != 0 && self.star_low & 0x04 != 0
+    }
+
     /// `$5348`: the spin jump's four frame ids, indexed by `($FF97 & $0C) >> 2`.
     /// The ROM keeps them in a 4-byte table immediately after the code that
     /// indexes them.
