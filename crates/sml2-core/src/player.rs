@@ -216,6 +216,50 @@ pub fn draw_cells_styled(
     Some(cells)
 }
 
+/// `$551E`: Draw the star defeat streak counter or 1UP sprite.
+///
+/// `timer` is the post-decrement bounce timer (31 down to 0).
+/// `chain` is `sStompChainCount` (1, 2, ...).
+/// For `chain < 5`: emits a single 8x8 sprite with tile = 128 + chain (digits '1'..'4').
+/// For `chain >= 5`: expands player mapping 190 (the "(1UP)" graphic).
+pub fn draw_streak_counter(
+    tables: &ObjectTables,
+    timer: u8,
+    chain: u8,
+    mario_x: u16,
+    mario_y: u16,
+    cam_x: u16,
+    cam_y: u16,
+) -> Vec<Cell> {
+    let base = ScreenPosition {
+        x: (mario_x as u8).wrapping_sub(cam_x as u8).wrapping_add(96),
+        y: (mario_y as u8).wrapping_sub(cam_y as u8).wrapping_add(98),
+    };
+    let b = timer >> 1;
+    let streak_pos = ScreenPosition {
+        x: base.x.wrapping_sub(4),
+        y: base.y.wrapping_sub(32).wrapping_add(b),
+    };
+    let mut cells = Vec::new();
+    if chain < 5 {
+        cells.push(Cell {
+            y: streak_pos.y,
+            x: streak_pos.x,
+            tile: 128 + (chain & 0x0F),
+            attr: 0,
+        });
+    } else {
+        let _ = append_cells(
+            tables,
+            190,
+            streak_pos,
+            CellStyle::default(),
+            &mut cells,
+        );
+    }
+    cells
+}
+
 #[cfg(test)]
 #[path = "player/tests/mapping.rs"]
 mod mapping_tests;

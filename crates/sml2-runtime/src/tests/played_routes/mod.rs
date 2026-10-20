@@ -136,6 +136,7 @@ fn run_entry_route(
         obp1: manifest.header.palettes[2],
         player: None,
         player_shield: None,
+        streak_counter: None,
         player_behind_bg: false,
         player_star_flash: false,
         player_pan: 0,

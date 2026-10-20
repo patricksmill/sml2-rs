@@ -4071,3 +4071,62 @@ fn handler_dashing_walker_0x59d5a_dispatch_and_movement() {
     assert_eq!(st.x(), 197);
     assert_eq!(st.b[B_PHASE], 3);
 }
+
+/// `$2EAA` & `$85E2`: defeating enemies with star increments the streak counter,
+/// sets the bounce timer to 32, plays sfx 16 for kills 1..4, and plays sfx 9
+/// and awards a life for kill 5 and above.
+#[test]
+fn star_defeat_streak_increments_plays_sfx_and_awards_lives_at_5() {
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.mario.star_high = 4; // Mario has active star
+
+    // Enemy slot 0
+    obj.slots[0].b[B_STATE] = 2;
+    obj.slots[0].b[B_TYPE] = 0x40; // bit 6 set, not immune
+
+    let t = tables();
+
+    // Kill 1
+    obj.harm_or_star(0);
+    assert_eq!(obj.stomp_chain, 1);
+    assert_eq!(obj.stomp_bounce_timer, 32);
+    let mut st = Staging::default();
+    st.b = obj.slots[0].b;
+    obj.interaction_dispatch(&mut st, &t);
+    assert_eq!(obj.sfx0, 16, "kill 1 emits sfx 16");
+    assert_eq!(obj.award_lives, 0, "no extra life yet");
+
+    // Kills 2, 3, 4
+    for count in 2..=4 {
+        obj.slots[0].b[B_TYPE] = 0x40;
+        obj.harm_or_star(0);
+        assert_eq!(obj.stomp_chain, count);
+        let mut st = Staging::default();
+        st.b = obj.slots[0].b;
+        obj.interaction_dispatch(&mut st, &t);
+        assert_eq!(obj.sfx0, 16, "kill {count} emits sfx 16");
+        assert_eq!(obj.award_lives, 0);
+    }
+
+    // Kill 5: awards 1UP (sfx0 = 9) and increments lives
+    obj.slots[0].b[B_TYPE] = 0x40;
+    obj.harm_or_star(0);
+    assert_eq!(obj.stomp_chain, 5);
+    assert_eq!(obj.sfx0, 9, "kill 5 sets sfx 9");
+    assert_eq!(obj.award_lives, 1, "kill 5 awards 1 life");
+    let mut st = Staging::default();
+    st.b = obj.slots[0].b;
+    obj.interaction_dispatch(&mut st, &t);
+    assert_eq!(obj.sfx0, 9, "interaction dispatch keeps sfx 9");
+
+    // Timer countdown: 32 ticks down to 0
+    let mut count = 0;
+    while let Some((timer, chain)) = obj.tick_stomp_bounce_timer() {
+        assert_eq!(chain, 5);
+        assert_eq!(timer, 31 - count);
+        count += 1;
+    }
+    assert_eq!(count, 32);
+    assert_eq!(obj.stomp_bounce_timer, 0);
+    assert!(obj.tick_stomp_bounce_timer().is_none());
+}

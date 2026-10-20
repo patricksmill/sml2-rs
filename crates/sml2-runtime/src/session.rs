@@ -152,6 +152,7 @@ impl LevelContext {
             player_behind_bg: false,
             player_star_flash: false,
             player_shield: None,
+            streak_counter: None,
             player_pan: 0,
             scroll_pan: 0,
             bumpers: Vec::new(),
@@ -396,9 +397,15 @@ impl LevelContext {
         if gameplay && !was_dead {
             self.sim.block_update();
         }
+        let streak = if gameplay && !was_dead {
+            self.obj.tick_stomp_bounce_timer()
+        } else {
+            None
+        };
 
         if let Some(s) = self.spr.as_mut() {
             s.player = Some((self.sim.x, self.sim.y, f));
+            s.streak_counter = streak;
             // `$530D`: pipe travel ($A221 >= $10) clears `$FFBB`, so the
             // `$5297` expander sets attr bit 7 and the pipe's BG tiles cover
             // Mario instead of him being drawn over them.

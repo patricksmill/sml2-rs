@@ -343,6 +343,7 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
                 obp1: manifest.header.palettes[2],
                 player: mario,
                 player_shield: None,
+                streak_counter: None,
                 player_behind_bg: false,
                 player_star_flash: false,
                 player_pan: 0,

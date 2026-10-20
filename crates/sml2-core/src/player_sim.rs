@@ -2669,6 +2669,10 @@ impl PlayerSim {
         if let Some(t) = obj.fade_timer_set.take() {
             self.fade_timer = t;
         }
+        for _ in 0..obj.take_award_lives() {
+            let a = bcd_inc(self.lives);
+            self.lives = if a == 0 { 0x99 } else { a };
+        }
         if obj.boss_clear_flag != 0 {
             self.boss_clear = true;
         }

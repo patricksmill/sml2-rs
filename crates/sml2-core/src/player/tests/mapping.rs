@@ -258,3 +258,47 @@ fn pipe_travel_puts_every_player_cell_behind_the_background() {
         assert_eq!(b.attr, a.attr | 0x80);
     }
 }
+
+/// `$551E`: chain 1..4 draws single 8x8 digit tile (128 + chain) and floats upward as timer ticks.
+#[test]
+fn streak_counter_draws_digits_1_to_4_and_floats_up() {
+    let t = tables();
+    // Mario at (100, 100), cam at (0, 0)
+    // base_x = 100 + 96 = 196
+    // base_y = 100 + 98 = 198
+    // streak_x = 196 - 4 = 192
+    for chain in 1..=4 {
+        let cells_31 = draw_streak_counter(&t, 31, chain, 100, 100, 0, 0);
+        assert_eq!(cells_31.len(), 1);
+        assert_eq!(cells_31[0].tile, 128 + chain);
+        assert_eq!(cells_31[0].x, 192);
+        // timer 31: b = 31 >> 1 = 15; y = 198 - 32 + 15 = 181
+        assert_eq!(cells_31[0].y, 181);
+        assert_eq!(cells_31[0].attr, 0);
+
+        // timer 0: b = 0 >> 1 = 0; y = 198 - 32 + 0 = 166 (floated up 15 px)
+        let cells_0 = draw_streak_counter(&t, 0, chain, 100, 100, 0, 0);
+        assert_eq!(cells_0.len(), 1);
+        assert_eq!(cells_0[0].tile, 128 + chain);
+        assert_eq!(cells_0[0].x, 192);
+        assert_eq!(cells_0[0].y, 166);
+    }
+}
+
+/// `$5548`: chain >= 5 expands player mapping 190 (the 1UP graphic, tiles 149 and 150).
+#[test]
+fn streak_counter_draws_1up_for_chain_5_and_above() {
+    let t = tables();
+    for chain in [5, 6, 10] {
+        let cells = draw_streak_counter(&t, 31, chain, 100, 100, 0, 0);
+        assert_eq!(cells.len(), 2, "mapping 190 has two cells");
+        // base streak_x = 192, streak_y = 181
+        // mapping 190: cell 0 at dx=-4, cell 1 at dx=+4
+        assert_eq!(cells[0].tile, 149);
+        assert_eq!(cells[0].x, 188); // 192 - 4
+        assert_eq!(cells[0].y, 181);
+        assert_eq!(cells[1].tile, 150);
+        assert_eq!(cells[1].x, 196); // 192 + 4
+        assert_eq!(cells[1].y, 181);
+    }
+}

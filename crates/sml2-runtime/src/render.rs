@@ -30,6 +30,8 @@ pub struct SpriteCtx {
     pub player: Option<(u16, u16, u8)>,
     /// Optional 3-up moon shield ($54FB): world position + frame 220/221.
     pub player_shield: Option<(u16, u16, u8)>,
+    /// Star defeat streak counter ($551E): `(timer, chain)` where timer is post-decrement (31..0).
+    pub streak_counter: Option<(u8, u8)>,
     /// `$530D`'s `$FFBB` in draw order: true while pipe travel has set it to 0,
     /// which makes the `$5297` expander set attr bit 7 (Mario behind BG).
     pub player_behind_bg: bool,
@@ -217,6 +219,33 @@ pub fn render_view(
             let cells =
                 sml2_core::player::draw_cells(&s.tables, sframe, sx, sy, cam_x, cam_y, false)
                     .ok_or_else(|| format!("player shield frame {sframe} has no mapping"))?;
+            for c in cells {
+                blit_obj_cell(
+                    &mut img,
+                    &bg_idx,
+                    &mut taken,
+                    &s.objblock,
+                    &pal0,
+                    &pal1,
+                    c.x as i32 - 8,
+                    c.y.wrapping_sub(s.player_pan) as i32 - 16,
+                    c.tile,
+                    c.attr,
+                    vw,
+                    vh,
+                );
+            }
+        }
+        if let (Some((mx, my, _)), Some((timer, chain))) = (s.player, s.streak_counter) {
+            let cells = sml2_core::player::draw_streak_counter(
+                &s.tables,
+                timer,
+                chain,
+                mx,
+                my,
+                cam_x,
+                cam_y,
+            );
             for c in cells {
                 blit_obj_cell(
                     &mut img,

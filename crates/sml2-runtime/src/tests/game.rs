@@ -610,6 +610,7 @@ fn pan_sprites(player: Option<(u16, u16, u8)>) -> SpriteCtx {
         obp1: 0xE4,
         player,
         player_shield: None,
+        streak_counter: None,
         player_behind_bg: false,
         player_star_flash: false,
         bumpers: Vec::new(),

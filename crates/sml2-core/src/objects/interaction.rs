@@ -13,10 +13,16 @@ impl ObjectSim {
             return;
         }
         if f & 0x02 != 0 {
+            if self.sfx0 != 9 {
+                self.sfx0 = 6;
+            }
             self.defeat(st);
             return;
         }
         if f & 0x04 != 0 {
+            if self.sfx0 != 9 {
+                self.sfx0 = 16;
+            }
             self.defeat(st);
             return;
         }
@@ -360,6 +366,10 @@ impl ObjectSim {
             self.stomp_bounce_timer = 32;
             let (v, _) = bcd_add(self.stomp_chain, 1);
             self.stomp_chain = v;
+            if v >= 5 {
+                self.sfx0 = 9;
+                self.award_lives = self.award_lives.saturating_add(1);
+            }
             return;
         }
         if self.slots[i].b[B_TYPE] & 0x40 == 0 {

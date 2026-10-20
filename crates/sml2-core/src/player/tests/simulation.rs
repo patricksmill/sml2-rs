@@ -1306,6 +1306,24 @@ fn star_flash_is_bit_2_of_a_running_low_byte() {
     }
 }
 
+/// Object engine `award_lives` transfers through `apply_object_result` and increments lives (BCD).
+#[test]
+fn award_lives_from_objects_increments_lives() {
+    let mut sim = PlayerSim::new();
+    sim.lives = 5;
+    let mut obj = crate::objects::ObjectSim::new(Vec::new(), 0);
+    obj.award_lives = 1;
+    sim.apply_object_result(&mut obj, false);
+    assert_eq!(sim.lives, 6);
+    assert_eq!(obj.award_lives, 0);
+
+    // Multi-award
+    obj.award_lives = 2;
+    sim.apply_object_result(&mut obj, false);
+    assert_eq!(sim.lives, 8);
+    assert_eq!(obj.award_lives, 0);
+}
+
 /// `$34AF` (id 5): `inc a / daa` on the BCD lives byte, clamped at 99
 /// when the increment wraps.
 #[test]

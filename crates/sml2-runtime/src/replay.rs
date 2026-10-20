@@ -662,10 +662,16 @@ pub(crate) fn run_replay(
             );
             gap_ok = gap_ok && ok;
         }
+        let streak = if !fade_at_entry && !was_dead {
+            obj.tick_stomp_bounce_timer()
+        } else {
+            None
+        };
         if let Some(dir) = filmstrip {
             if i % 30 == 0 {
                 if let Some(s) = spr.as_mut() {
                     s.player = Some((sim.x, sim.y, frame_idx));
+                    s.streak_counter = streak;
                     s.player_pan = cam.player_pan;
                     s.scroll_pan = cam.scroll_pan;
                     // The dead path's own draw overwrites the staging pair.

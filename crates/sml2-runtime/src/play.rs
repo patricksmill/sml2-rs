@@ -457,8 +457,14 @@ pub(crate) fn run_play(
         if gameplay && !was_dead {
             sim.block_update();
         }
+        let streak = if gameplay && !was_dead {
+            obj.tick_stomp_bounce_timer()
+        } else {
+            None
+        };
         if let Some(s) = spr.as_mut() {
             s.player = Some((sim.x, sim.y, f));
+            s.streak_counter = streak;
             // `$54C8`: `$FFC7` from the star countdown; the dead draw (`$5550`)
             // does not go through it.
             s.player_star_flash = !was_dead && sim.star_flash();

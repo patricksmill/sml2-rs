@@ -649,6 +649,7 @@ pub struct ObjectSim {
     pub mario_y_adjust: Option<u16>,
     pub stomp_bounce_timer: u8,
     pub stomp_chain: u8,
+    pub award_lives: u8,
     pub money_bag: u8,
     pub window_hit: bool,
     pub sprite_flip_flags: u8,
@@ -762,6 +763,7 @@ impl ObjectSim {
             mario_y_adjust: None,
             stomp_bounce_timer: 0,
             stomp_chain: 0,
+            award_lives: 0,
             money_bag: 0,
             window_hit: false,
             sprite_flip_flags: 0,
@@ -977,6 +979,7 @@ impl ObjectSim {
         self.mario_y_adjust = None;
         self.stomp_bounce_timer = 0;
         self.stomp_chain = 0;
+        self.award_lives = 0;
         self.money_bag = 0;
         self.goal_bell = 0;
         self.mario = MarioContact::default();
@@ -987,6 +990,25 @@ impl ObjectSim {
         // $AF06: $EC40 clears it; $EC4B then sets 1 for levels >= $0A.
         self.sprite_map_index = if self.level_id >= 0x0A { 1 } else { 0 };
         self.odd = self.fff0 & 1 == 1; // fff0 kept ($FFF0 is HRAM)
+    }
+
+    pub fn take_award_lives(&mut self) -> u8 {
+        let r = self.award_lives;
+        self.award_lives = 0;
+        r
+    }
+
+    /// `$551E`: Count down the star defeat streak bounce timer ($A27A) by 1.
+    /// Returns `Some((timer, chain))` while active, where `timer` is the
+    /// post-decrement value (31 down to 0).
+    pub fn tick_stomp_bounce_timer(&mut self) -> Option<(u8, u8)> {
+        if self.stomp_bounce_timer > 0 {
+            let timer = self.stomp_bounce_timer - 1;
+            self.stomp_bounce_timer = timer;
+            Some((timer, self.stomp_chain))
+        } else {
+            None
+        }
     }
 
     /// ROM `$3CC0`: carrier platform horizontal carry right.
