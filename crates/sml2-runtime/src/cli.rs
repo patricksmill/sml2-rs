@@ -114,6 +114,7 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
     let mut map_mode = false;
     let mut save_path = PathBuf::from("sml2.sav");
     let mut level_progress = 0u8;
+    let mut easy_mode = false;
     let mut headless_frames: Option<u64> = None;
     let mut keys_tape: Option<String> = None;
     let mut audio_out: Option<PathBuf> = None;
@@ -164,6 +165,7 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
             "--level" => {
                 level = Some(args.next().ok_or("--level needs a value")?.parse::<u8>()?);
             }
+            "--easy" => easy_mode = true,
             "--map" => map_mode = true,
             "--save" => {
                 save_path = PathBuf::from(args.next().ok_or("--save needs a path")?);
@@ -275,6 +277,7 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
             headless_frames.is_some(),
             boot,
         );
+        runner.session.easy_mode = easy_mode;
         runner.audio_out_path = audio_out;
         if let Some(n) = headless_frames {
             runner.run_headless(n, tape)?;
@@ -440,7 +443,8 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
         }
         // The autoscroll path is no longer capture-less: traj19 (level 20) is in
         // the gate now — see the retired-flag note in `run_replay`.
-        let obj = sml2_core::objects::ObjectSim::new(manifest.spawns.records.clone(), cam.x);
+        let mut obj = sml2_core::objects::ObjectSim::new(manifest.spawns.records.clone(), cam.x);
+        obj.easy_mode = easy_mode;
         return run_play(
             &manifest,
             &layout,

@@ -578,6 +578,12 @@ pub struct MapTransition {
 /// after the fade started.
 pub const MAP_ENTRY_FRAMES: u16 = 37;
 
+/// Frames after the bell script reaches state `$0A` before the hub cursor
+/// runs. Measured on the level-1 clear: `$3E9FB`'s fade, the `$3F156`
+/// landing, and `$3EA9A`'s fade-in keep the map handler inside that call
+/// for 84 frames, and the next frame is the first `$3C000`.
+const BELL_RETURN_HOLD: u16 = 84;
+
 /// Frames the map spends in the first fade step before the palette reaches
 /// white: `rBGP` $90 -> $40 at the fade start and -> $00 twelve frames later.
 pub const MAP_FADE_STEP: u16 = 12;
@@ -620,8 +626,12 @@ pub struct Session {
     pub slots: SaveSlots,
     /// The slot the current game was loaded from, so saves update it in place.
     pub active_slot: Option<u8>,
+    /// Whether Easy mode is active for the current session.
+    pub easy_mode: bool,
     /// Where a goal-bell bonus room returns to: `(screen, node, exit_tile_flag)`.
     bell_return: Option<(u8, u8, u8)>,
+    /// Hold frames already spent after the bell script reached state `$0A`.
+    bell_fade: Option<u16>,
     /// Where the castle reveal lands: `(screen, node, exit_tile_flag)`.
     castle_return: Option<(u8, u8, u8)>,
     /// `sLevelProgress` while the reveal owns it.
@@ -673,6 +683,7 @@ impl Session {
             self.assets.object_tables.clone(),
         );
         let mut ctx = Box::new(ctx);
+        ctx.obj.easy_mode = self.easy_mode;
         ctx.credits_text = self.assets.credits_text.clone();
         if let Some(assets) = self.assets.ending_scene.clone() {
             let mut state = 4;
@@ -754,7 +765,9 @@ impl Session {
             sound_driver,
             slots: SaveSlots::new(),
             active_slot: None,
+            easy_mode: false,
             bell_return: None,
+            bell_fade: None,
             castle_return: None,
             castle_progress: [0; 42],
         }
@@ -928,6 +941,41 @@ impl Session {
                     t.frame += 1;
                     break 'map StepOutcome::Continue;
                 }
+                if let Some(held) = self.bell_fade {
+                    if held < BELL_RETURN_HOLD {
+                        self.prev_keys_held = pack_joypad(
+                            keys.right,
+                            keys.left,
+                            keys.up,
+                            keys.down,
+                            keys.a,
+                            keys.b,
+                            keys.select,
+                            keys.start,
+                        );
+                        self.bell_fade = Some(held + 1);
+                        break 'map StepOutcome::Continue;
+                    }
+                    self.bell_fade = None;
+                    eprintln!("BELL land f={}", self.frame_n);
+                    // `$3F024`: node 0's clear lands on node `$14` with the
+                    // stage marked. Other rooms keep the screen they stored.
+                    if let Some((screen, node, flag)) = self.bell_return.take() {
+                        map_sim.room = None;
+                        if node == 0 {
+                            map_sim.level_progress[0] |= 0x80;
+                            map_sim.level_progress[0] &= !0x08;
+                            map_sim.node = 0x14;
+                            map_sim.load_screen(0, flag, &self.assets.node_records);
+                            map_sim.load_node(0x14, &self.assets.node_records);
+                            map_sim.pending_save = true;
+                        } else {
+                            map_sim.load_screen(screen, flag, &self.assets.node_records);
+                            map_sim.node = node;
+                            map_sim.load_node(node, &self.assets.node_records);
+                        }
+                    }
+                }
                 if let Some(pan) = self.map_pan_return.as_mut() {
                     // Blocking loader/fade waits do not run map gameplay. Keep
                     // the input edge baseline current so held keys do not fire
@@ -973,15 +1021,24 @@ impl Session {
                     &self.assets.node_records,
                 );
 
-                // `$3E9FB`/`$3EF2B`: once the bell room reaches state `$0A`,
-                // run the deferred level-exit landing.
-                if map_sim.screen_id >= 13 && map_sim.room.as_ref().is_some_and(|r| r.state >= 10) {
-                    if let Some((screen, node, flag)) = self.bell_return.take() {
-                        map_sim.room = None;
-                        map_sim.load_screen(screen, flag, &self.assets.node_records);
-                        map_sim.node = node;
-                        map_sim.load_node(node, &self.assets.node_records);
-                    }
+                // State `$0A` is written by the script after this frame's
+                // screen check, so the `$3E9FB` fade starts on the next frame.
+                // Count the hold from the frame after this one.
+                if self.bell_fade.is_none()
+                    && map_sim.screen_id >= 13
+                    && map_sim.room.as_ref().is_some_and(|r| r.state >= 10)
+                {
+                    self.bell_fade = Some(0);
+                    eprintln!(
+                        "BELL hold f={} node={:02X} scr={:02X}",
+                        self.frame_n, map_sim.node, map_sim.screen_id
+                    );
+                }
+                if map_sim.screen_id == 0 {
+                    eprintln!(
+                        "MAP f={} node={:02X} walk={:02X}",
+                        self.frame_n, map_sim.node, map_sim.cursor_walking
+                    );
                 }
 
                 // A bonus room writes `sLives`/`sCurPowerup`/`sCoin*`; mirror
@@ -1074,6 +1131,7 @@ impl Session {
                         )
                     }) {
                         Ok(mut ctx) => {
+                            ctx.obj.easy_mode = self.easy_mode;
                             // The level loader shares the map's persistent block;
                             // entering one level must retain every other clear.
                             ctx.sim.level_progress = map_sim.level_progress;
@@ -1160,6 +1218,7 @@ impl Session {
                 match out.action {
                     FileSelectAction::Load { slot, record } => {
                         self.active_slot = Some(slot as u8);
+                        self.easy_mode = file_select.easy_mode();
                         // `$30227` copies the slot verbatim. An untouched slot
                         // holds the invalid new-game template, which becomes a
                         // valid fresh record for the map.
@@ -1300,7 +1359,7 @@ impl Session {
                         } else {
                             let mut map_sim = MapSim::from_player(&ctx.sim);
                             map_sim.set_castle_scripts(self.assets.castle_scripts.clone());
-                            if ctx.sim.goal_bell {
+                            if handoff.cutscene {
                                 // `$3EF2B`: `sGoalBell` sends the exit to the
                                 // bonus room, picked by `sMapNode` bit 0.
                                 let screen = if target_node & 1 == 0 { 13 } else { 14 };

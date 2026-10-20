@@ -332,6 +332,7 @@ fn acceptance_7_easy_mode_is_ui_state_and_erase_clears_it() {
 
     confirm_and_load(&mut session);
     assert!(matches!(session.state, SessionState::Overworld(_)));
+    assert!(session.easy_mode, "Easy mode transfers to the session on load");
     session.enter_file_select();
     assert!(!file_select(&session).easy_mode(), "Easy is not saved");
 
@@ -360,6 +361,43 @@ fn acceptance_7_easy_mode_is_ui_state_and_erase_clears_it() {
     idle(&mut erase, 12);
     assert!(file_select(&erase).clear_mode());
     assert!(!file_select(&erase).easy_mode());
+}
+
+#[test]
+fn acceptance_easy_mode_propagates_into_level() {
+    // Normal flow: start without Easy mode.
+    let mut normal_session = session();
+    to_file_select(&mut normal_session);
+    drop_in(&mut normal_session);
+    confirm_and_load(&mut normal_session);
+    assert!(!normal_session.easy_mode);
+    normal_session.begin_level(0, 0).expect("level 0 loads");
+    match &normal_session.state {
+        SessionState::InLevel(ctx) => assert!(!ctx.obj.easy_mode),
+        _ => panic!("expected InLevel"),
+    }
+
+    // Easy flow: toggle Easy mode in file select with SELECT.
+    let mut easy_session = session();
+    to_file_select(&mut easy_session);
+    drop_in(&mut easy_session);
+    press(
+        &mut easy_session,
+        PlayerKeys {
+            select: true,
+            ..PlayerKeys::default()
+        },
+    );
+    assert!(file_select(&easy_session).easy_mode());
+    confirm_and_load(&mut easy_session);
+    assert!(easy_session.easy_mode, "Easy mode transfers to session on load");
+
+    // Starting a level propagates Easy mode into ObjectSim.
+    easy_session.begin_level(0, 0).expect("level 0 loads");
+    match &easy_session.state {
+        SessionState::InLevel(ctx) => assert!(ctx.obj.easy_mode),
+        _ => panic!("expected InLevel"),
+    }
 }
 
 #[test]

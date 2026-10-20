@@ -281,6 +281,7 @@ impl DesktopApp {
                                     ));
                                 }
                             });
+                            ui.monospace(format!("Easy mode: {}", level.obj.easy_mode));
                             if !level.obj.unported.is_empty() {
                                 ui.label(format!("Unported handlers: {:?}", level.obj.unported));
                             }
