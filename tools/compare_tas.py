@@ -84,16 +84,44 @@ def apply_buttons(pyboy, previous, mask):
             (pyboy.button_press if mask & bit else pyboy.button_release)(name)
 
 
-def check_divergence(frame, memory, native, threshold):
-    """`sCurLevel`/`sMarioX`/`sMarioY` vs the port's own state, in gameplay only."""
+def logic_phases(before_state, before_ff97, st4_ran, f71_phases):
+    """Port steps for one hardware frame while phase-lock is on.
+
+    `$0F71` is one player update, and the phase argument is `$FF97 & 7` sampled
+    at that entry. `$FF97` itself is not a reliable count: a lag frame increments
+    it zero times, and a frame that finishes two waits increments it twice, while
+    the player update still runs once. A state-`$04` entry that never reaches
+    `$0F71` (pipe travel after the screen-transition branch) still moves Mario,
+    so it takes one step at the predicted phase. A hardware frame that reaches
+    neither, while already in a level, is the overrun tail of the previous logic
+    frame and must not be simulated again.
+    """
+    if f71_phases:
+        return list(f71_phases)
+    if st4_ran:
+        return [(before_ff97 + 1) & 7]
+    if before_state != 4:
+        return [(before_ff97 + 1) & 7]
+    return []
+
+
+def check_divergence(frame, memory, native, threshold, live=False):
+    """In-level ROM position vs the port. `live` reads `$FFC0`/`$FFC2` (the
+    position `$181C` just wrote). Otherwise `sMarioX`/`sMarioY`, which the
+    state-`$04` handler publishes one frame later."""
     if native is None or memory[0xFF9B] != 4:
         return None
     if memory[0xA269] != native['level']:
-        return None  # different screens mid-transition; positions are not comparable
-    x = memory[0xA227] | memory[0xA228] << 8
-    y = memory[0xA229] | memory[0xA22A] << 8
-    if x == 0 and y == 0:
-        return None  # the ROM's first gameplay frame still has the level entry pending
+        return {'frame': frame, 'dx': 0, 'dy': 0,
+                'detail': f'ROM level {memory[0xA269]} vs port level {native["level"]}'}
+    if live:
+        x = memory[0xFFC2] | memory[0xFFC3] << 8
+        y = memory[0xFFC0] | memory[0xFFC1] << 8
+    else:
+        x = memory[0xA227] | memory[0xA228] << 8
+        y = memory[0xA229] | memory[0xA22A] << 8
+        if x == 0 and y == 0:
+            return None  # the ROM's first gameplay frame still has the level entry pending
     dx, dy = native['x'] - x, native['y'] - y
     if abs(dx) <= threshold and abs(dy) <= threshold:
         return None
@@ -172,6 +200,13 @@ def main():
             displays.append(Display(sdl, 'PyBoy ROM', 60))
             displays.append(Display(sdl, 'Rust port', 560))
         print(f"Inputs by {movie.get('author', 'unknown')}; same input index in both windows.", flush=True)
+        st4_ran = []
+        f71_phases = []
+        if phase_lock:
+            pyboy.hook_register(0, 0x05D5, lambda _ctx: st4_ran.append(1), None)
+            pyboy.hook_register(
+                0, 0x0F71,
+                lambda _ctx: f71_phases.append(pyboy.memory[0xFF97] & 7), None)
         print('Space pause/resume BOTH; Right step BOTH; Tab 1x/0.25x; Escape closes BOTH.', flush=True)
         if movie.get('source') == 'manual-pyboy':
             print('Manual PyBoy recording: ROM, boot ROM, core version, and settings match.', flush=True)
@@ -208,27 +243,42 @@ def main():
                 mask = frames[index]
                 apply_buttons(pyboy, previous, mask)
                 if phase_lock:
-                    # $FF97 increments once in this frame's vblank wait before $181C reads it.
-                    bridge.stdin.write(f'{mask} {(pyboy.memory[0xFF97] + 1) & 7}\n'.encode())
-                else:
-                    bridge.stdin.write(f'{mask}\n'.encode())
-                bridge.stdin.flush()
+                    before_ff97 = pyboy.memory[0xFF97]
+                    before_state = pyboy.memory[0xFF9B]
+                    st4_ran.clear()
+                    f71_phases.clear()
                 if not pyboy.tick(1, True, False):
                     raise RuntimeError('PyBoy stopped before end of movie')
-                native_state = read_state(bridge.stdout) if watch else None
-                native = read_frame(bridge.stdout)
-                # The port is one input row behind the ROM's state after the same
-                # step (it is one gameplay frame behind at the level entry), so
-                # compare this row's ROM state with the previous row's port state.
-                if watch and divergence is None and previous_native is not None:
-                    divergence = check_divergence(
-                        index - 1, pyboy.memory, previous_native, args.diverge_threshold)
-                    if divergence:
-                        paused = True
-                        print(f'FIRST DIVERGENCE at input {divergence["frame"]}: {divergence["detail"]}',
-                              flush=True)
-                        if args.headless:
-                            break
+                if phase_lock:
+                    phases = logic_phases(before_state, before_ff97, st4_ran, f71_phases)
+                    for phase in phases:
+                        bridge.stdin.write(f'{mask} {phase}\n'.encode())
+                        bridge.stdin.flush()
+                        if watch:
+                            native_state = read_state(bridge.stdout)
+                        native = read_frame(bridge.stdout)
+                    if watch and divergence is None:
+                        divergence = check_divergence(
+                            index, pyboy.memory, native_state, args.diverge_threshold, live=True)
+                else:
+                    bridge.stdin.write(f'{mask}\n'.encode())
+                    bridge.stdin.flush()
+                    native_state = read_state(bridge.stdout) if watch else None
+                    native = read_frame(bridge.stdout)
+                    # sMarioX/Y are copied from HRAM at the next state-$04 entry,
+                    # so this row's ROM state matches the previous row's port state.
+                    if watch and divergence is None and previous_native is not None:
+                        divergence = check_divergence(
+                            index - 1, pyboy.memory, previous_native, args.diverge_threshold)
+                if divergence:
+                    paused = True
+                    print(f'FIRST DIVERGENCE at input {divergence["frame"]}: {divergence["detail"]}',
+                          flush=True)
+                    if args.headless:
+                        previous = mask
+                        previous_native = native_state
+                        index += 1
+                        break
                 previous = mask
                 previous_native = native_state
                 index += 1

@@ -817,7 +817,10 @@ impl CastleRoom {
 
     /// `$4539`: walk Mario up to `$20` and stage the preview tile.
     fn bell_a_state0(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
-        if input.frame & 0x01 != 0 {
+        // `$4539`: `and $01 / jp z, $47AA` — even frames only commit. The
+        // walk toward `$20` runs on the odd frames, after `$3C13E` has
+        // already incremented the counter.
+        if input.frame & 0x01 == 0 {
             self.bell_a_commit(input, rewards);
             return;
         }
@@ -1662,6 +1665,21 @@ mod tests {
             &table[TABLE_WALK_OFFSETS..TABLE_WALK_OFFSETS + 4],
             &[0xFC; 4]
         );
+    }
+
+    /// `$4539`: Mario steps toward `$20` on odd frames only.
+    #[test]
+    fn bell_room_a_walks_in_on_odd_frames() {
+        let scripts = scripts();
+        let mut room = CastleRoom::enter_bell_a(&scripts, 0);
+        let mut rewards = RoomRewards::default();
+        let start = room.oam[1];
+        room.tick(input(0, 0), &mut rewards);
+        assert_eq!(room.oam[1], start, "even frame stays put");
+        assert_eq!(room.state, 0);
+        room.tick(input(1, 0), &mut rewards);
+        assert_eq!(room.oam[1], start.wrapping_add(1), "odd frame steps");
+        assert_eq!(room.state, 0);
     }
 
     /// `$60582`: A starts bell room A's countdown.

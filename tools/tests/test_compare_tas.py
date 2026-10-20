@@ -4,7 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from compare_tas import apply_buttons
+from compare_tas import apply_buttons, logic_phases
 
 
 class Controller:
@@ -40,6 +40,20 @@ class ButtonDeliveryTests(unittest.TestCase):
         controller = Controller()
         apply_buttons(controller, 0, 3)
         self.assertEqual(controller.held, {'right', 'left'})
+
+
+class LogicPhaseTests(unittest.TestCase):
+    def test_player_update_uses_the_phase_sampled_at_entry(self):
+        self.assertEqual(logic_phases(4, 0x7C, [1, 1], [5]), [5])
+
+    def test_pipe_travel_without_a_player_update_still_steps_once(self):
+        self.assertEqual(logic_phases(4, 0x10, [1], []), [1])
+
+    def test_in_level_overrun_does_not_step(self):
+        self.assertEqual(logic_phases(4, 0x7C, [], []), [])
+
+    def test_outside_a_level_steps_once_per_hardware_frame(self):
+        self.assertEqual(logic_phases(0x0C, 0x20, [], []), [1])
 
 
 if __name__ == '__main__':

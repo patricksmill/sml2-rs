@@ -2392,11 +2392,10 @@ impl PlayerSim {
     ///   jumps to `$3F4B1` (even node) or `$3F5A4` (odd) — the post-clear walk
     ///   cutscene: bank-25 gfx, the castle RAM block, `sMapScreenId` 13/14 and
     ///   the item-slot arrays at `$A7D0`. None of that is modelled, because it
-    ///   exists to draw the overworld. Two of its effects are: it **clears
-    ///   `sGoalBell`**, which is what makes the re-entry at its end take the
-    ///   map-return half rather than looping, and the state moves to `$0C`. The
-    ///   port has no cutscene, so it collapses those few hundred frames into
-    ///   this call.
+    ///   exists to draw the overworld. Two of its effects are modelled here:
+    ///   it **clears `sGoalBell`**, which is what makes the re-entry at its end
+    ///   take the map-return half rather than looping, and the state moves to
+    ///   `$0C`. The session plays the room; pass 2 below runs when it ends.
     /// * **Pass 2**, `$3EF56` → `$3EFB2` → `$3F003` → `$3F03D`: the
     ///   secret-exit node rewrite (the `$4B` tile, live Mario only —
     ///   `$48→$47`, `$05`/`$12`/`$1A→$69`, `$29→$2C`, `$2A→$2F`, `$3C→$40`);
