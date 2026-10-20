@@ -813,19 +813,7 @@ impl MapSim {
         if self.screen_id == 0 {
             self.seed_hub_coin_icons();
         }
-        // `$3CBE7` copies 72 bytes from `$4BFD` into `sMapSprite0Page` and never
-        // clears them when the screen changes, so a zone screen reads the first
-        // 48 of those bytes as sixteen 3-byte slots: the hub's list with its
-        // bytes regrouped. Verified against the console - the block's zone view
-        // is (0,76,79) (1,16,120) (54,255,16) (168,240,9), which is what a zone
-        // screen starts from before its loader patches fields and the handler
-        // rewrites slots 0-2's ids.
-        let block: Vec<u8> = crate::map::HUB_DECOR_SLOTS
-            .iter()
-            .flat_map(|s| [s.0, s.1, s.2, s.3])
-            .collect();
-        self.zone_slots =
-            std::array::from_fn(|i| (block[3 * i], block[3 * i + 1], block[3 * i + 2]));
+        self.seed_zone_sprites(screen_id, exit_tile_flag);
         self.anim_phase = 0;
         self.anim_index = 0;
         self.anim_value = 0;
@@ -833,7 +821,7 @@ impl MapSim {
         self.cloud_drift = 0;
         self.sparkle_timer = 0;
 
-        match screen_id {
+        let music = match screen_id {
             0 => {
                 // $3F156: Overworld hub loader
                 self.load_node(self.node, records);
@@ -945,7 +933,9 @@ impl MapSim {
                 13 // Music request 13
             }
             _ => 6,
-        }
+        };
+        self.seed_zone_path_markers(screen_id);
+        music
     }
 
     /// `$3F156`: load overworld hub (screen 0).
@@ -3361,3 +3351,6 @@ mod pumpkin_decor_tests {
         );
     }
 }
+
+#[path = "map/zone_sprite_loading.rs"]
+mod zone_sprite_loading;
