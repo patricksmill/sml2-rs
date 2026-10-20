@@ -17,6 +17,9 @@ fn normal_doors_load_zones_walk_48_pixels_and_block_input() {
         (0x67, 5, 0x4B, 146, 26),
         (0x1D, 6, 0x50, 60, 112),
         (0x11, 7, 0x5A, 81, 137),
+        // $3D848 loads first, then lands the cursor at 212/131: 48 px right
+        // wraps it to 4 (the ROM's own trace).
+        (0x15, 8, 0x72, 4, 131),
     ] {
         let mut session = Session::new(SessionAssets::load().unwrap());
         if let SessionState::Overworld(map) = &mut session.state {
@@ -56,7 +59,10 @@ fn normal_doors_load_zones_walk_48_pixels_and_block_input() {
             [screen, dest, x, y],
             "door {node:02X}"
         );
-        assert_eq!((map.cam_x, map.cam_y), (0, 0));
+        // Zone loaders zero the camera; `$3D880` instead ends in `$3EEA4` on the
+        // hub node it left, which the ROM leaves in `$FFB7-$FFBA` (209/282).
+        let cam = if node == 0x15 { (209, 282) } else { (0, 0) };
+        assert_eq!((map.cam_x, map.cam_y), cam, "door {node:02X}");
         assert_eq!(
             session.sound_driver.active_song,
             sml2_core::map_sim::screen_music(screen)

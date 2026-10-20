@@ -1753,6 +1753,14 @@ impl MapSim {
             // the door's request is the one this frame reports; the session
             // issues the zone's when its transition reaches the loader.
             self.load_screen(d.screen_id, 0, records);
+            if d.screen_id == 8 {
+                // `$3D848` is the one door that runs its loader first: `$3D880`
+                // ends in `$3EEA4` (the node record), and only then does the
+                // door write its cursor and node, so the door's landing wins.
+                self.cursor_x = d.cursor_x;
+                self.cursor_y = d.cursor_y;
+                self.node = d.node;
+            }
         }
         out.music = Some(d.music);
         true
