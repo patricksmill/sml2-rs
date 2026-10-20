@@ -11,7 +11,7 @@
 //! `$3C000` switches on `sMapScreenId` (`$A68B`): `0` is the hub, `1`-`9` the
 //! zone screens, `$0A`+ the castle/ending screens. Every screen handler calls
 //! `$3C13E` (the frame/tick bookkeeping), its own screen routine (tiles, sprites,
-//! the camera latch — art, not modelled), then `$3C38C`, which is the cursor:
+//! palettes and raster state), then `$3C38C`, which is the cursor:
 //! while `sMapCursorWalking` is set it advances the walk, otherwise it runs the
 //! `$3E1D7` gate and either the node's own entry action or the direction input.
 //! The frame ends with `$3C169`, the A/START check that starts a level. The hub
@@ -45,21 +45,14 @@
 //! at `$08` stepping Left or Up lands on `$07` and only then stops. Bits 5-7 only
 //! reach the OAM/pose code.
 //!
-//! ## What is not modelled
+//! ## Presentation state
 //!
-//! Everything `$3C000` does to the *screen*: the map camera latch (`$3ED4C`), the
-//! tiles and sprites, the window raster, the gfx loads behind `$3E2F7`/`$3E00`,
-//! the hub's 18-entry decoration list (`$3CFC8`) and the cursor's OAM. The port
-//! keeps `sMapCursorPose` because the ROM computes it from the walk; it just has
-//! nothing to draw with. The blocking screen transition `$3E2F7` (40 iterations
-//! of a scroll) and the loaders' blocking fades (`$3E9FB`, `$3F156`) are art too,
-//! but their *effects* — the new node, the screen id, the move byte, the camera
-//! seed, state `$0C` — are modelled.
-//!
-//! ROM logic that is not ported yet is reported as [`MapEntry::unported`] rather
-//! than silently skipped. As of the node-action package that is only the *screen*
-//! half of `$3C60B`'s loaders (their zone gfx and script pointers) and the
-//! per-screen decoration handlers behind `$3C000`.
+//! Zone sprite motion, route growth, IRQ tile copies, palette flashes and
+//! raster scroll bands are native modules under `map/`. They update once per
+//! map tick; the renderer consumes their staged sprites and persistent tile
+//! writes without advancing them. DIV is an explicit clock input. Random
+//! rejection uses successive DIV samples rather than reproducing CPU timing.
+//! Blocking screen transitions remain represented by their native flow effects.
 
 use crate::map::{map_enterable, progress_offset, MapNodeRecords, MapNodes, MapWalk, WalkDir};
 
@@ -604,6 +597,7 @@ pub struct MapSim {
     /// A zone screen's sixteen decor slots (`$A6B5`, 3 bytes each: `x`, `y`, `id`),
     /// which `$3E277` expands into OAM from entry 4.
     pub zone_slots: [(u8, u8, u8); 16],
+    pub zone_animation: ZoneAnimation,
     /// `sMapAnimPhase` (`$A699`).
     pub anim_phase: u8,
     /// `sMapAnimIndexA` (`$A6A2`): 0..$4F walk of the `$6227` step table.
@@ -680,6 +674,7 @@ impl MapSim {
             special_node_latch: 0,
             keys_xor: 0,
             zone_slots: [(0, 0, 0xFF); 16],
+            zone_animation: ZoneAnimation::default(),
             anim_phase: 0,
             anim_index: 0,
             anim_value: 0,
@@ -803,6 +798,9 @@ impl MapSim {
         records: &MapNodeRecords,
     ) -> u8 {
         use crate::map::progress_offset as po;
+
+        let old_progress = self.level_progress;
+        let fresh_exit = exit_tile_flag != 0 && self.mario_dead == 0;
 
         self.screen_id = screen_id;
         self.cursor_walking = 0;
@@ -935,6 +933,7 @@ impl MapSim {
             _ => 6,
         };
         self.seed_zone_path_markers(screen_id);
+        self.reset_zone_animation(screen_id, fresh_exit, old_progress);
         music
     }
 
@@ -1237,14 +1236,7 @@ impl MapSim {
         if v & 0x80 == 0 {
             id = id.wrapping_add(3);
         }
-        if self
-            .level_progress
-            .get(crate::map::HUB_COIN_FLAGS[2])
-            .copied()
-            .unwrap_or(0)
-            & 0x80
-            != 0
-        {
+        if self.level_progress.get(9).copied().unwrap_or(0) & 0x80 != 0 {
             id = 0xFF;
         }
         self.zone_slots[2].2 = id;
@@ -1311,14 +1303,15 @@ impl MapSim {
         self.keys_xor ^= div;
         self.frame_counter = self.frame_counter.wrapping_add(1);
         self.hub_decor_tick(div);
-        if self.screen_id == 1 {
-            self.pumpkin_decor_tick();
-        }
         self.tick_timer = self.tick_timer.wrapping_sub(1);
         if self.tick_timer == 0 {
             self.tick_timer = 40;
             self.rand_latch ^= div;
         }
+        if self.screen_id == 1 {
+            self.pumpkin_decor_tick();
+        }
+        self.zone_animation_tick(div);
     }
 
     /// One map frame: `$3C000` for the frame's screen, then `$3C169`.
@@ -1358,8 +1351,7 @@ impl MapSim {
             false
         } else {
             self.bookkeeping(input.div);
-            // The screen routine itself ($3D8E6 and friends) is tiles, sprites and the
-            // camera latch: art, see the module docs.
+            // Bookkeeping includes the zone routine before the cursor chain.
             self.cursor_chain(input, nodes, walk, records, &mut out)
         };
         // The zone loaders clear `hKeysPressed` (`xor a / ldh [$FF81]`), so a door that
@@ -1378,6 +1370,9 @@ impl MapSim {
         // never re-enters a level.
         if self.screen_id < 9 {
             self.enter_check(entry_input, nodes, &mut out);
+        }
+        if self.zone_animation.sfx0 != 0 && out.sfx.is_none() {
+            out.sfx = Some(self.zone_animation.sfx0);
         }
         out
     }
@@ -1832,7 +1827,10 @@ mod tests {
         player.map_node = 60;
         player.level_progress[16] = 8;
         let map = MapSim::from_player(&player);
-        assert_eq!((map.mario_dead, map.node, map.level_progress[16]), (21, 60, 8));
+        assert_eq!(
+            (map.mario_dead, map.node, map.level_progress[16]),
+            (21, 60, 8)
+        );
     }
 
     /// The ROM's own bytes, embedded so the tests need no file.
@@ -3354,3 +3352,7 @@ mod pumpkin_decor_tests {
 
 #[path = "map/zone_sprite_loading.rs"]
 mod zone_sprite_loading;
+
+#[path = "map/zone_animation.rs"]
+mod zone_animation;
+pub use zone_animation::ZoneAnimation;

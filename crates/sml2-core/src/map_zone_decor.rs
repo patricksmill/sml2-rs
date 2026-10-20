@@ -903,6 +903,11 @@ pub fn zone_decor_oam(slots: &[ZoneSlot]) -> Vec<(u8, u8, u8, u8)> {
             continue;
         }
         for &(dy, dx, tile, attr) in ZONE_DECOR_METASPRITES[id as usize] {
+            // `$3E277` reserves entries 0-3 for the cursor; `$6109B`
+            // stops at hardware OAM entry 40, even in the middle of a sprite.
+            if out.len() == 36 {
+                return out;
+            }
             out.push((
                 y.wrapping_add(dy as u8),
                 x.wrapping_add(dx as u8),
@@ -917,6 +922,14 @@ pub fn zone_decor_oam(slots: &[ZoneSlot]) -> Vec<(u8, u8, u8, u8)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zone_decor_stops_at_the_source_oam_limit() {
+        let cells = zone_decor_oam(&[(8, 16, 0); 16]);
+        assert_eq!(cells.len(), 36);
+        assert_eq!(cells[0], (16, 8, 0x30, 0));
+        assert_eq!(cells[35], (24, 24, 0x35, 0));
+    }
 
     /// The Pumpkin screen's sixteen slots as PyBoy reports them, and the OAM 4+
     /// cells the console staged from the *previous* frame's slots (OAM is
