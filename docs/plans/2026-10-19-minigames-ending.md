@@ -1,10 +1,9 @@
 # Minigames, final castle and ending — measured plan
 
-Status: **ME-1..ME-7 done.** Ending/credits, the final castle, coin rooms 9-12,
+Status: **ME-1..ME-7 done, and the rooms now draw.** Ending/credits, the final castle, coin rooms 9-12,
 bell rooms 13/14 and the six-coin chain are ported and taped (1,419 core + 76
-runtime tests, frozen sweep green). What remains is render-side: the rooms'
-and the reveal's VRAM/OAM staging, so those screens simulate correctly but are
-not yet drawn.
+runtime tests, frozen sweep green). The render seam is wired: the rooms' `$8000` block and metasprite
+expansion, and the reveal's tiles/tilemap.
 
 ## What is already done
 

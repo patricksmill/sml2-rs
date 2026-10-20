@@ -468,6 +468,118 @@ pub struct BellRoomTiles {
     bytes: Vec<u8>,
 }
 
+/// `$3F58`: bank 6 `$4000` -> `$8000`, the 128 tiles both bonus rooms'
+/// sprites (`$6109B`) index.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RoomCommonTiles {
+    bytes: Vec<u8>,
+}
+
+impl RoomCommonTiles {
+    pub const LEN: usize = 0x0800;
+    pub const TILES: usize = 128;
+
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        (bytes.len() == Self::LEN).then(|| Self {
+            bytes: bytes.to_vec(),
+        })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+
+    pub fn vram_tiles(&self) -> Vec<[u8; 64]> {
+        let mut tiles = Vec::with_capacity(Self::TILES);
+        for chunk in self.bytes.as_chunks::<16>().0 {
+            let mut tile = [0u8; 16];
+            tile.copy_from_slice(chunk);
+            tiles.push(crate::video::tile_colors(&tile));
+        }
+        tiles
+    }
+}
+
+/// `$305B6`: the castle reveal's `$8000` tiles (0x1800) and `$9800` tilemap.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CastleRevealTiles {
+    tiles: Vec<u8>,
+    tilemap: Vec<u8>,
+}
+
+impl CastleRevealTiles {
+    pub const TILES_LEN: usize = 0x1800;
+    pub const TILEMAP_LEN: usize = 0x300;
+    /// The five four-byte runs `$45B6` writes tile `$74` into, in `$9800` space.
+    pub const COIN_RUNS: [usize; 5] = [0x148, 0x168, 0x188, 0x1A8, 0x1C8];
+
+    pub fn from_bytes(tiles: &[u8], tilemap: &[u8]) -> Option<Self> {
+        (tiles.len() == Self::TILES_LEN && tilemap.len() == Self::TILEMAP_LEN).then(|| Self {
+            tiles: tiles.to_vec(),
+            tilemap: tilemap.to_vec(),
+        })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tiles.is_empty()
+    }
+
+    pub fn vram_tiles(&self) -> Vec<[u8; 64]> {
+        let mut out = Vec::with_capacity(384);
+        for chunk in self.tiles.as_chunks::<16>().0 {
+            let mut tile = [0u8; 16];
+            tile.copy_from_slice(chunk);
+            out.push(crate::video::tile_colors(&tile));
+        }
+        out
+    }
+}
+
+/// Draw the reveal's 20x18 tiles; all six coins set the five `$74` runs.
+pub fn render_castle_reveal(
+    reveal: &CastleRevealTiles,
+    all_six_coins: bool,
+    bgp: u8,
+    vw: usize,
+    vh: usize,
+) -> Vec<u8> {
+    let shades = crate::video::bgp_shades(bgp);
+    let mut img = vec![shades[0]; vw * vh];
+    if reveal.is_empty() {
+        return img;
+    }
+    let vram = reveal.vram_tiles();
+    let mut tilemap = reveal.tilemap.clone();
+    if all_six_coins {
+        for run in CastleRevealTiles::COIN_RUNS {
+            for at in run..run + 4 {
+                if let Some(slot) = tilemap.get_mut(at) {
+                    *slot = 0x74;
+                }
+            }
+        }
+    }
+    let cols = vw / 8;
+    let rows = vh / 8;
+    for ty in 0..rows {
+        for tx in 0..cols {
+            let Some(&byte) = tilemap.get(ty * 32 + tx) else {
+                continue;
+            };
+            let index = signed_bg_tile_index(byte);
+            let Some(tile) = vram.get(index) else {
+                continue;
+            };
+            for py in 0..8 {
+                for px in 0..8 {
+                    img[(ty * 8 + py) * vw + tx * 8 + px] = shades[tile[py * 8 + px] as usize];
+                }
+            }
+        }
+    }
+    img
+}
+
 impl BellRoomTiles {
     pub const LEN: usize = 0x1000;
     /// Tile number the block starts at (`$8800`).
@@ -2259,5 +2371,31 @@ mod status_bar_tests {
             .filter(|i| plain[*i] != with_bar[*i])
             .collect();
         assert!(!band.is_empty(), "the counters draw in the strip's row");
+    }
+}
+
+#[cfg(test)]
+mod reveal_render_tests {
+    use super::*;
+
+    fn reveal() -> CastleRevealTiles {
+        let tiles = std::fs::read("../../extracted/map/castle_reveal_tiles.bin")
+            .or_else(|_| std::fs::read("extracted/map/castle_reveal_tiles.bin"))
+            .expect("tiles");
+        let map = std::fs::read("../../extracted/map/castle_reveal_tilemap.bin")
+            .or_else(|_| std::fs::read("extracted/map/castle_reveal_tilemap.bin"))
+            .expect("tilemap");
+        CastleRevealTiles::from_bytes(&tiles, &map).expect("reveal")
+    }
+
+    #[test]
+    fn the_six_coins_patch_the_five_runs() {
+        let reveal = reveal();
+        let plain = render_castle_reveal(&reveal, false, 0xE4, 160, 144);
+        let patched = render_castle_reveal(&reveal, true, 0xE4, 160, 144);
+        assert_ne!(plain, patched, "tile $74 lands in the five runs");
+        assert!(plain.iter().any(|&p| p != plain[0]), "the screen is drawn");
+        // The runs sit at rows 10-14, so the first row is untouched.
+        assert_eq!(&plain[..160], &patched[..160]);
     }
 }

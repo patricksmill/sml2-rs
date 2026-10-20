@@ -102,6 +102,10 @@ pub struct SessionAssets {
     pub credits_text: Vec<u8>,
     /// Bank 25 `$5000` tiles for the bell-bonus rooms (screens 13/14).
     pub bell_room_tiles: sml2_core::map::BellRoomTiles,
+    /// `room_common_tiles.bin`: `$3F58`'s bank-6 block at `$8000`.
+    pub room_common_tiles: sml2_core::map::RoomCommonTiles,
+    /// `castle_reveal_tiles.bin` + `castle_reveal_tilemap.bin`.
+    pub castle_reveal: sml2_core::map::CastleRevealTiles,
     pub hud: HudStrip,
     pub anim_rows: Vec<u8>,
     pub scripts: SceneScripts,
@@ -140,6 +144,19 @@ impl SessionAssets {
             .and_then(|text| sml2_core::ending_scene::EndingAssets::from_json(&text).ok());
         let credits_text = source.read("ending/credits.bin").unwrap_or_default();
         let bell_room_tiles = load_bell_room_tiles_from(source);
+        let room_common_tiles = sml2_core::map::RoomCommonTiles::from_bytes(
+            &source.read("map/room_common_tiles.bin").unwrap_or_default(),
+        )
+        .unwrap_or_default();
+        let castle_reveal = sml2_core::map::CastleRevealTiles::from_bytes(
+            &source
+                .read("map/castle_reveal_tiles.bin")
+                .unwrap_or_default(),
+            &source
+                .read("map/castle_reveal_tilemap.bin")
+                .unwrap_or_default(),
+        )
+        .unwrap_or_default();
         let hud: HudStrip = serde_json::from_str(&source.read_text("hud.json")?)?;
         let anim_rows = source.read("tileanim.bin")?;
         let scripts = load_scene_scripts_from(source);
@@ -177,6 +194,8 @@ impl SessionAssets {
             ending_scene,
             credits_text,
             bell_room_tiles,
+            room_common_tiles,
+            castle_reveal,
             hud,
             anim_rows,
             scripts,

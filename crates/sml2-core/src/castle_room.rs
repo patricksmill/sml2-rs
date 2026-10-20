@@ -12,6 +12,7 @@
 //! the hub's 4-byte view, so this module indexes the bytes by address instead.
 
 use crate::castle::CastleScripts;
+use crate::room_sprites::RoomSpriteTable;
 
 /// `sMapSprite0Page`: the 16-record, 3-byte-per-record sprite table.
 pub const SPRITES_AT: u16 = 0xA6B5;
@@ -161,6 +162,8 @@ pub struct CastleRoom {
     tilemap: Vec<u8>,
     /// `$6734`/`$6761`: the two bell rooms' sprite lists.
     sprite_lists: [Vec<u8>; 2],
+    /// `$51B1` (coin) / `$62E6` (bell): the metasprite table `$6109B` reads.
+    metasprites: RoomSpriteTable,
 }
 
 impl CastleRoom {
@@ -215,12 +218,18 @@ impl CastleRoom {
                 scripts.blob("bell_room_a_sprites").unwrap_or(&[]).to_vec(),
                 scripts.blob("bell_room_b_sprites").unwrap_or(&[]).to_vec(),
             ],
+            metasprites: RoomSpriteTable::new(
+                0x51B1,
+                scripts.blob("room_metasprites").unwrap_or(&[]),
+            ),
         }
     }
 
     /// A bell room as `$3F4B1`/`$3F5A4` stage it.
     pub fn bell_a(scripts: &CastleScripts) -> Self {
         let mut room = Self::coin(scripts);
+        room.metasprites =
+            RoomSpriteTable::new(0x62E6, scripts.blob("bell_metasprites").unwrap_or(&[]));
         room.kind = RoomKind::BellRoomA;
         room.script = scripts.blob("bell_room_a_script").unwrap_or(&[]).to_vec();
         room
@@ -231,6 +240,8 @@ impl CastleRoom {
     /// `$3D` tiles.
     pub fn bell_b(scripts: &CastleScripts, tilemap: &[u8]) -> Self {
         let mut room = Self::coin(scripts);
+        room.metasprites =
+            RoomSpriteTable::new(0x62E6, scripts.blob("bell_metasprites").unwrap_or(&[]));
         room.kind = RoomKind::BellRoomB;
         room.script = scripts.blob("bell_room_b_script").unwrap_or(&[]).to_vec();
         room.tilemap = tilemap.to_vec();
@@ -289,6 +300,19 @@ impl CastleRoom {
 
     /// `$3E2A2`: clear the sprite and patch tables, then load the two 3-byte
     /// record runs that follow the list's `$FF` terminator.
+    /// The room's sprite records expanded through its metasprite table, for
+    /// the renderer's OAM pass (`$6109B`'s output).
+    /// `$6109B` writes `(x, y, tile, attr)`; the map renderer wants
+    /// `(y, x, tile, attr)`, and an OAM y of 0 is off-screen.
+    pub fn oam_cells(&self) -> Vec<(u8, u8, u8, u8)> {
+        self.metasprites
+            .expand_records(&self.sprites)
+            .into_iter()
+            .filter(|&(_, y, _, _)| y != 0)
+            .map(|(x, y, tile, attr)| (y, x, tile, attr))
+            .collect()
+    }
+
     fn stage_list(&mut self, list: &[u8]) {
         self.sprites = [0xFF; SPRITE_BYTES];
         self.patches = [0xFF; 48];
@@ -1826,5 +1850,36 @@ mod tests {
         let items = scripts.blob("coin_room_items").unwrap();
         assert_eq!(&items[..10], &[2, 3, 1, 2, 3, 1, 2, 3, 1, 0]);
         assert_eq!(&items[20..30], &[6, 0, 11, 4, 5, 4, 6, 5, 4, 0]);
+    }
+}
+
+#[cfg(test)]
+mod oam_tests {
+    use super::*;
+
+    fn scripts() -> CastleScripts {
+        let bin = std::fs::read("../../extracted/map/castle_scripts.bin")
+            .or_else(|_| std::fs::read("extracted/map/castle_scripts.bin"))
+            .expect("castle scripts");
+        let json = std::fs::read_to_string("../../extracted/map/castle_scripts.json")
+            .or_else(|_| std::fs::read_to_string("extracted/map/castle_scripts.json"))
+            .expect("index");
+        CastleScripts::from_parts(bin, &json).expect("parse")
+    }
+
+    #[test]
+    fn the_coin_room_sprites_expand() {
+        let room = CastleRoom::enter_coin(&scripts(), 9);
+        let cells = room.oam_cells();
+        assert!(!cells.is_empty(), "the room's records expand to OAM cells");
+        assert_eq!(cells[0], (0x20, 0xA0, 0x7F, 0x20));
+    }
+
+    #[test]
+    fn the_bell_room_sprites_use_the_bell_table() {
+        let room = CastleRoom::enter_bell_a(&scripts(), 0);
+        let cells = room.oam_cells();
+        assert!(!cells.is_empty());
+        assert_eq!(cells[0], (0x20, 0xA0, 0x30, 0x00));
     }
 }

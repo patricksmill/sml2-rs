@@ -75,6 +75,21 @@ impl Session {
                         .overworld_tiles
                         .screen_vram_tiles(map_sim.screen_id)
                 };
+                // `$3F58` copies bank 6 `$4000` over `$8000` in both bonus
+                // rooms, so the sprite pass sees those 128 tiles.
+                if map_sim.screen_id >= 9 && !self.assets.room_common_tiles.is_empty() {
+                    for (index, tile) in self
+                        .assets
+                        .room_common_tiles
+                        .vram_tiles()
+                        .iter()
+                        .enumerate()
+                    {
+                        if index < vram.len() {
+                            vram[index] = *tile;
+                        }
+                    }
+                }
                 if map_sim.screen_id == 0 {
                     if let Some(wave) = &self.map_wave {
                         wave.apply(&mut vram);
@@ -108,6 +123,20 @@ impl Session {
                     coins_low: map_sim.coins_low,
                     coins_high: map_sim.coins_high,
                 });
+                // `$3CFC8` (hub, OAM 13+), `$3E277` (zones, OAM 4+) or the
+                // room's own `$6109B` expansion: all run before the cursor,
+                // which owns 0-3.
+                let decor_cells = if map_sim.screen_id == 0 {
+                    sml2_core::map::hub_decor_cells(
+                        &map_sim.decor_slots,
+                        map_sim.cam_x,
+                        map_sim.cam_y,
+                    )
+                } else if let Some(room) = &map_sim.room {
+                    room.oam_cells()
+                } else {
+                    sml2_core::map_zone_decor::zone_decor_oam(&map_sim.zone_slots)
+                };
                 sml2_core::map::render_overworld_view(
                     map_sim.screen_id,
                     map_sim.cam_x,
@@ -118,17 +147,7 @@ impl Session {
                     map_sim.cursor_walking,
                     map_sim.walk_frame,
                     map_sim.cursor_pose,
-                    // `$3CFC8` (hub, OAM 13+) or `$3E277` (zones, OAM 4+): both
-                    // are expanded here, before the cursor, which owns 0-3.
-                    &if map_sim.screen_id == 0 {
-                        sml2_core::map::hub_decor_cells(
-                            &map_sim.decor_slots,
-                            map_sim.cam_x,
-                            map_sim.cam_y,
-                        )
-                    } else {
-                        sml2_core::map_zone_decor::zone_decor_oam(&map_sim.zone_slots)
-                    },
+                    &decor_cells,
                     status_bar.as_ref(),
                     map_sim.scroll_only_latch != 0,
                     // `$3C9F4` reads `$FF97`, a frame counter that free-runs from
@@ -151,7 +170,13 @@ impl Session {
             SessionState::InLevel(ctx) => ctx
                 .render_frame(vw, vh)
                 .unwrap_or_else(|_| vec![0u8; vw * vh]),
-            SessionState::Castle(_) => vec![0u8; vw * vh],
+            SessionState::Castle(seq) => sml2_core::map::render_castle_reveal(
+                &self.assets.castle_reveal,
+                seq.coins.iter().all(|&coin| coin & 0x80 != 0),
+                if seq.bgp == 0 { 0xE4 } else { seq.bgp },
+                vw,
+                vh,
+            ),
             SessionState::GameOver => vec![0u8; vw * vh],
         }
     }

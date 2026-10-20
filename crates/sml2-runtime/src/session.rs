@@ -687,6 +687,23 @@ impl Session {
         self.state = SessionState::Overworld(map);
     }
 
+    /// Stage a coin-door room the way `$3F3B9` does, for tapes and previews.
+    pub fn begin_coin_room(&mut self, screen: u8) {
+        let mut map = MapSim::new();
+        map.set_castle_scripts(self.assets.castle_scripts.clone());
+        map.lives = self.lives;
+        map.powerup = self.powerup;
+        map.coins_low = self.coins_low;
+        map.coins_high = self.coins_high;
+        map.room = Some(sml2_core::castle_room::CastleRoom::enter_coin(
+            &self.assets.castle_scripts,
+            screen,
+        ));
+        map.screen_id = screen;
+        map.frame_counter = 0;
+        self.state = SessionState::Overworld(map);
+    }
+
     pub fn new(assets: SessionAssets) -> Self {
         let mut map = MapSim::new();
         map.set_castle_scripts(assets.castle_scripts.clone());

@@ -5,6 +5,7 @@ pub mod audio;
 pub mod camera;
 pub mod castle;
 pub mod castle_room;
+pub mod room_sprites;
 pub mod castle_sequence;
 pub mod collision;
 pub mod credits_text;

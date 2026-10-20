@@ -148,6 +148,22 @@ pub const BLOBS: &[BlobSpec] = &[
         end: 0,
         kind: BlobKind::SpriteList,
     },
+    // `$51B1`/`$62E6`: 64 metasprite pointers each, followed by 4-byte
+    // (dx, dy, tile, attr) records ended by a `$FF` tile.
+    BlobSpec {
+        name: "room_metasprites",
+        bank: 24,
+        addr: 0x51B1,
+        end: 0x5629,
+        kind: BlobKind::Fixed,
+    },
+    BlobSpec {
+        name: "bell_metasprites",
+        bank: 24,
+        addr: 0x62E6,
+        end: 0x69A6,
+        kind: BlobKind::Fixed,
+    },
     BlobSpec {
         name: "bell_room_b_sprites",
         bank: 15,
@@ -159,6 +175,12 @@ pub const BLOBS: &[BlobSpec] = &[
 
 /// Bank 25 `$5000`: the 256 tiles the bell rooms copy to `$8800`.
 pub const BELL_TILES_ROM: usize = 25 * 0x4000 + (0x5000 - 0x4000);
+/// `$3F58`: bank 6 `$4000` -> `$8000`, the 128 tiles both rooms' sprites use.
+/// `$305B6`: bank 12 `$4C92` -> `$8000` (0x1800) and `$6492` -> `$9800`.
+pub const CASTLE_REVEAL_TILES_ROM: usize = 0x30C92;
+pub const CASTLE_REVEAL_MAP_ROM: usize = 0x32492;
+pub const ROOM_COMMON_ROM: usize = 6 * 0x4000;
+pub const ROOM_COMMON_LEN: usize = 0x0800;
 pub const BELL_TILES_LEN: usize = 0x1000;
 
 /// First `$FF` on a `stride` boundary, counting from `start`. Returns the blob
@@ -286,6 +308,27 @@ pub fn render_bell_screen(baserom: &[u8], screen_id: u8, out: &Path) -> Result<(
 /// `map/bell_room_tiles.bin` and the two bell-room renders.
 pub fn emit(baserom: &[u8], extracted: &Path) -> Result<(), Box<dyn Error>> {
     let map_dir = extracted.join("map");
+    let common = baserom
+        .get(ROOM_COMMON_ROM..ROOM_COMMON_ROM + ROOM_COMMON_LEN)
+        .ok_or("truncated room common tiles")?;
+    fs::write(map_dir.join("room_common_tiles.bin"), common)?;
+    println!("wrote map/room_common_tiles.bin: {} bytes", common.len());
+    let reveal_tiles = baserom
+        .get(CASTLE_REVEAL_TILES_ROM..CASTLE_REVEAL_TILES_ROM + 0x1800)
+        .ok_or("truncated castle reveal tiles")?;
+    fs::write(map_dir.join("castle_reveal_tiles.bin"), reveal_tiles)?;
+    println!(
+        "wrote map/castle_reveal_tiles.bin: {} bytes",
+        reveal_tiles.len()
+    );
+    let reveal_map = baserom
+        .get(CASTLE_REVEAL_MAP_ROM..CASTLE_REVEAL_MAP_ROM + 0x300)
+        .ok_or("truncated castle reveal tilemap")?;
+    fs::write(map_dir.join("castle_reveal_tilemap.bin"), reveal_map)?;
+    println!(
+        "wrote map/castle_reveal_tilemap.bin: {} bytes",
+        reveal_map.len()
+    );
     fs::create_dir_all(&map_dir)?;
 
     let (blob, entries) =
