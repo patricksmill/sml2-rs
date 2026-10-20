@@ -14,6 +14,22 @@ BUTTONS = [(1, 'right'), (2, 'left'), (4, 'up'), (8, 'down'),
            (16, 'a'), (32, 'b'), (64, 'start'), (128, 'select')]
 
 
+def read_state(pipe):
+    line = pipe.readline()
+    if not line:
+        raise RuntimeError('native frame bridge closed unexpectedly')
+    text = line.decode().strip()
+    if not text.startswith('STATE '):
+        raise RuntimeError(f'unexpected bridge state line: {text!r}')
+    parts = text.split()[1:]
+    if parts == ['-'] * 5:
+        return None
+    if len(parts) != 5:
+        raise RuntimeError(f'malformed bridge state line: {text!r}')
+    level, x, y, cam_x, cam_y = (int(value) for value in parts)
+    return {'level': level, 'x': x, 'y': y, 'cam_x': cam_x, 'cam_y': cam_y}
+
+
 def read_frame(pipe):
     import numpy as np
     data = bytearray()
@@ -68,11 +84,34 @@ def apply_buttons(pyboy, previous, mask):
             (pyboy.button_press if mask & bit else pyboy.button_release)(name)
 
 
+def check_divergence(frame, memory, native, threshold):
+    """`sCurLevel`/`sMarioX`/`sMarioY` vs the port's own state, in gameplay only."""
+    if native is None or memory[0xFF9B] != 4:
+        return None
+    if memory[0xA269] != native['level']:
+        return None  # different screens mid-transition; positions are not comparable
+    x = memory[0xA227] | memory[0xA228] << 8
+    y = memory[0xA229] | memory[0xA22A] << 8
+    if x == 0 and y == 0:
+        return None  # the ROM's first gameplay frame still has the level entry pending
+    dx, dy = native['x'] - x, native['y'] - y
+    if abs(dx) <= threshold and abs(dy) <= threshold:
+        return None
+    return {'frame': frame, 'dx': dx, 'dy': dy,
+            'detail': f'level {native["level"]} ROM ({x}, {y}) vs port ({native["x"]}, {native["y"]})'}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('movie', type=Path, help='JSON from import_bk2.py')
     parser.add_argument('--rom', type=Path, required=True)
     parser.add_argument('--bridge', type=Path, default=Path('target/release/examples/tas_bridge'))
+    parser.add_argument('--no-phase-lock', action='store_true',
+                        help="do not feed the ROM's $FF97 phase to the port (see --phase-lock)")
+    parser.add_argument('--diverge-threshold', type=int, default=4,
+                        help='pause both windows when |dx| or |dy| exceeds this many pixels (0 disables)')
+    parser.add_argument('--no-diverge', action='store_true',
+                        help='keep playing past the first position divergence')
     parser.add_argument('--port-initial-phase', type=int, choices=range(8),
                         help='diagnostic first-level movement phase origin; input timing is unchanged')
     parser.add_argument('--bootrom', type=Path, help='optional local DMG boot ROM; otherwise PyBoy built-in')
@@ -115,8 +154,15 @@ def main():
         bridge_args = [str(args.bridge.resolve())]
         if args.port_initial_phase is not None:
             bridge_args.extend(['--initial-phase', str(args.port_initial_phase)])
+        watch = args.diverge_threshold > 0 and not args.no_diverge
+        phase_lock = not args.no_phase_lock
+        if watch:
+            bridge_args.append('--state')
+        if phase_lock:
+            bridge_args.append('--phase-lock')
         bridge = subprocess.Popen(bridge_args, stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE)
+        native_state = read_state(bridge.stdout) if watch else None
         native = read_frame(bridge.stdout)
         if not args.headless:
             import sdl2 as sdl
@@ -134,6 +180,8 @@ def main():
         if args.port_initial_phase is not None:
             print(f'Diagnostic alignment: first native level initial movement phase {args.port_initial_phase}; this is not a shared-clock fix.', flush=True)
         paused, slow, running = args.paused, False, True
+        divergence = None
+        previous_native = None
         index, previous = 0, 0
         count = min(len(frames), args.frames or len(frames))
         while running:
@@ -159,18 +207,38 @@ def main():
             if index < count and (not paused or step_once):
                 mask = frames[index]
                 apply_buttons(pyboy, previous, mask)
-                bridge.stdin.write(f'{mask}\n'.encode())
+                if phase_lock:
+                    # $FF97 increments once in this frame's vblank wait before $181C reads it.
+                    bridge.stdin.write(f'{mask} {(pyboy.memory[0xFF97] + 1) & 7}\n'.encode())
+                else:
+                    bridge.stdin.write(f'{mask}\n'.encode())
                 bridge.stdin.flush()
                 if not pyboy.tick(1, True, False):
                     raise RuntimeError('PyBoy stopped before end of movie')
+                native_state = read_state(bridge.stdout) if watch else None
                 native = read_frame(bridge.stdout)
+                # The port is one input row behind the ROM's state after the same
+                # step (it is one gameplay frame behind at the level entry), so
+                # compare this row's ROM state with the previous row's port state.
+                if watch and divergence is None and previous_native is not None:
+                    divergence = check_divergence(
+                        index - 1, pyboy.memory, previous_native, args.diverge_threshold)
+                    if divergence:
+                        paused = True
+                        print(f'FIRST DIVERGENCE at input {divergence["frame"]}: {divergence["detail"]}',
+                              flush=True)
+                        if args.headless:
+                            break
                 previous = mask
+                previous_native = native_state
                 index += 1
             if args.headless and index == count:
                 break
             held = '+'.join(name for bit, name in BUTTONS if previous & bit) or 'none'
             status = 'end' if index == count else 'paused' if paused else '0.25x' if slow else '1x'
             label = f'input {index - 1 if index else "not started"} | {held} | {status}'
+            if divergence:
+                label += f' | DIVERGED dx={divergence["dx"]} dy={divergence["dy"]}'
             if displays:
                 displays[0].draw(pyboy.screen.ndarray, f'PyBoy ROM | {label}')
                 port_name = 'Rust port' if args.port_initial_phase is None else f'Rust port [initial phase {args.port_initial_phase}]'
@@ -181,6 +249,9 @@ def main():
             if actual != movie['final_screen_sha256']:
                 raise RuntimeError('PyBoy final screen does not match the recording')
             print('PyBoy final screen matches the recording exactly.', flush=True)
+        if divergence:
+            print(f'Port and ROM agree on level/x/y until input {divergence["frame"]} '
+                  f'({divergence["detail"]}); playback paused there.', flush=True)
         print(f'Stopped after {index} shared input rows.', flush=True)
     finally:
         if bridge:
