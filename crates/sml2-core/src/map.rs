@@ -372,6 +372,22 @@ impl OverworldTilemaps {
         self.blob.is_empty()
     }
 
+    /// Apply the zone animation's persistent writes to a copy for presentation.
+    pub fn with_screen_writes(&self, screen_id: u8, writes: &[(u16, u8)]) -> Self {
+        let mut out = self.clone();
+        if (1..=Self::SCREEN_COUNT as u8).contains(&screen_id) {
+            let base = Self::HUB_LEN + (screen_id as usize - 1) * Self::SCREEN_LEN;
+            for &(at, tile) in writes {
+                if at < 1024 {
+                    if let Some(dest) = out.blob.get_mut(base + at as usize) {
+                        *dest = tile;
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// Read a tile byte from the 64x64 hub tilemap.
     pub fn hub_tile(&self, x: usize, y: usize) -> u8 {
         if x >= 64 || y >= 64 || self.blob.len() < Self::HUB_LEN {
@@ -1165,6 +1181,23 @@ pub const PAN_ARROWS: [(u8, u8, u8, u8); 4] = [
 /// `$4A21`'s tile: the blank half of the blink.
 pub const PAN_ARROW_BLANK: u8 = 0x7F;
 
+/// Background scroll per native scanline and the live second OBJ palette.
+#[derive(Clone, Debug)]
+pub struct MapVideo {
+    pub scroll_rows: [u8; 144],
+    pub scroll_y: u8,
+    pub obj_palette1: u8,
+}
+impl Default for MapVideo {
+    fn default() -> Self {
+        Self {
+            scroll_rows: [0; 144],
+            scroll_y: 0,
+            obj_palette1: 0x39,
+        }
+    }
+}
+
 /// Render one overworld frame into a 160x144 (or custom vw x vh) grayscale pixel buffer.
 #[allow(clippy::too_many_arguments)]
 pub fn render_overworld_view(
@@ -1198,6 +1231,67 @@ pub fn render_overworld_view(
     obj_palette: u8,
     vw: usize,
     vh: usize,
+) -> Vec<u8> {
+    render_overworld_view_with_video(
+        screen_id,
+        cam_x,
+        cam_y,
+        cursor_x,
+        cursor_y,
+        cursor_move,
+        cursor_walking,
+        walk_frame,
+        cursor_pose,
+        decor_cells,
+        status_bar,
+        camera_pan,
+        frame_counter,
+        tilemaps,
+        manifest,
+        level_progress,
+        tiles_vram,
+        bg_palette,
+        obj_palette,
+        vw,
+        vh,
+        None,
+    )
+}
+
+/// Render live zone scrolling and both sprite palettes.
+#[allow(clippy::too_many_arguments)]
+pub fn render_overworld_view_with_video(
+    screen_id: u8,
+    cam_x: u16,
+    cam_y: u16,
+    cursor_x: u8,
+    cursor_y: u8,
+    cursor_move: u8,
+    cursor_walking: u8,
+    walk_frame: u8,
+    cursor_pose: u8,
+    // Decor OAM cells `(y, x, tile, attr)` in the order the console stages them:
+    // the hub's `$3CFC8` starts at entry 13, a zone screen's `$3E277` at entry 4.
+    // Either way they draw before the cursor, which owns entries 0-3.
+    decor_cells: &[(u8, u8, u8, u8)],
+    // `$3F203`'s status bar, present on the hub and cleared by `$3E277` on the
+    // zone screens. `None` leaves the strip alone.
+    status_bar: Option<&StatusBar>,
+    // `sMapScrollOnlyLatch != 0`: B is panning the hub camera, which replaces
+    // the cursor with the `$4A11` border arrows. `frame_counter` stands in for
+    // `$FF97`: bit 4 picks `$4A11` (visible) or `$4A21` (blank), a 16-frame
+    // half-period.
+    camera_pan: bool,
+    frame_counter: u8,
+    tilemaps: &OverworldTilemaps,
+    manifest: &OverworldManifest,
+    level_progress: &[u8],
+    tiles_vram: &[[u8; 64]],
+    bg_palette: u8,
+    obj_palette: u8,
+    vw: usize,
+    vh: usize,
+    video: Option<&MapVideo>,
 ) -> Vec<u8> {
     let bg_shades = crate::video::bgp_shades(bg_palette);
     let mut img = vec![bg_shades[0]; vw * vh];
@@ -1252,11 +1346,18 @@ pub fn render_overworld_view(
             }
         }
         for py in 0..vh.min(144) {
-            let ty = py / 8;
-            let sub_y = py % 8;
+            let wy = (py + video.map_or(0, |v| v.scroll_y as usize)) & 255;
+            let ty = wy / 8;
+            let sub_y = wy % 8;
             for px in 0..vw.min(256) {
-                let tx = px / 8;
-                let sub_x = px % 8;
+                let wx = (px
+                    + video
+                        .and_then(|v| v.scroll_rows.get(py))
+                        .copied()
+                        .unwrap_or(0) as usize)
+                    & 255;
+                let tx = wx / 8;
+                let sub_x = wx % 8;
                 let tile_byte = active_map[ty * 32 + tx];
                 let vram_idx = signed_bg_tile_index(tile_byte);
                 if let Some(tile_data) = tiles_vram.get(vram_idx) {
@@ -1269,12 +1370,13 @@ pub fn render_overworld_view(
     }
 
     if screen_id >= 9 {
-        draw_map_objects(
+        draw_map_objects_with_palette(
             &mut img,
             &bg_colors,
             tiles_vram,
             decor_cells,
             obj_palette,
+            video.map_or(0x39, |v| v.obj_palette1),
             vw,
             vh,
         );
@@ -1288,7 +1390,16 @@ pub fn render_overworld_view(
             oam.extend(PAN_ARROWS);
         }
         oam.extend_from_slice(decor_cells);
-        draw_map_objects(&mut img, &bg_colors, tiles_vram, &oam, obj_palette, vw, vh);
+        draw_map_objects_with_palette(
+            &mut img,
+            &bg_colors,
+            tiles_vram,
+            &oam,
+            obj_palette,
+            video.map_or(0x39, |v| v.obj_palette1),
+            vw,
+            vh,
+        );
         return img;
     }
 
@@ -1346,7 +1457,16 @@ pub fn render_overworld_view(
         oam.extend(bar.cells());
     }
     oam.extend_from_slice(decor_cells);
-    draw_map_objects(&mut img, &bg_colors, tiles_vram, &oam, obj_palette, vw, vh);
+    draw_map_objects_with_palette(
+        &mut img,
+        &bg_colors,
+        tiles_vram,
+        &oam,
+        obj_palette,
+        video.map_or(0x39, |v| v.obj_palette1),
+        vw,
+        vh,
+    );
 
     img
 }
@@ -1357,15 +1477,19 @@ mod minigame_render_tests;
 #[cfg(test)]
 #[path = "map/zone_render_tests.rs"]
 mod zone_render_tests;
+#[cfg(test)]
+#[path = "map/zone_video_tests.rs"]
+mod zone_video_tests;
 
 /// Compose map and room OAM using the DMG hardware palette and priority rules.
 /// Smaller OAM X wins overlaps, then earlier entries; bit 4 selects OBP1 ($39).
-fn draw_map_objects(
+fn draw_map_objects_with_palette(
     img: &mut [u8],
     bg: &[u8],
     tiles: &[[u8; 64]],
     cells: &[(u8, u8, u8, u8)],
     obp0: u8,
+    obp1: u8,
     vw: usize,
     vh: usize,
 ) {
@@ -1378,7 +1502,7 @@ fn draw_map_objects(
         let Some(data) = tiles.get(tile as usize) else {
             continue;
         };
-        let pal = crate::video::bgp_shades(if attr & 0x10 != 0 { 0x39 } else { obp0 });
+        let pal = crate::video::bgp_shades(if attr & 0x10 != 0 { obp1 } else { obp0 });
         for dy in 0..8 {
             for dx in 0..8 {
                 let x = ox as i32 - 8 + dx;
@@ -2382,4 +2506,17 @@ mod reveal_render_tests {
         // The runs sit at rows 10-14, so the first row is untouched.
         assert_eq!(&plain[..160], &patched[..160]);
     }
+}
+
+#[cfg(test)]
+fn draw_map_objects(
+    img: &mut [u8],
+    bg: &[u8],
+    tiles: &[[u8; 64]],
+    cells: &[(u8, u8, u8, u8)],
+    obp0: u8,
+    vw: usize,
+    vh: usize,
+) {
+    draw_map_objects_with_palette(img, bg, tiles, cells, obp0, 0x39, vw, vh);
 }

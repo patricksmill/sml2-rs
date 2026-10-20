@@ -170,12 +170,17 @@ pub fn build_tilemaps_binary(baserom: &[u8]) -> Result<Vec<u8>, String> {
     out.extend_from_slice(&hub);
 
     // Screens 1..=12: 32x32 tilemaps (576 bytes filled, padded to 1024 bytes)
-    for &(_id, _name, rom_addr, len, _, _) in SCREEN_TILEMAP_SPECS {
+    for &(id, _name, rom_addr, len, _, _) in SCREEN_TILEMAP_SPECS {
         let src = baserom
             .get(rom_addr..rom_addr + len)
             .ok_or_else(|| format!("truncated tilemap at ROM ${rom_addr:05X}"))?;
         let mut screen_map = vec![0u8; 1024];
         screen_map[..len].copy_from_slice(src);
+        if id == 4 {
+            // `$3D4D3` fills $9B00..$9BFE with $7E; the UFO's vertical
+            // shake wraps those rows into view at the top of the screen.
+            screen_map[0x300..0x3FF].fill(0x7E);
+        }
         out.extend_from_slice(&screen_map);
     }
 
@@ -268,6 +273,18 @@ pub const SCREEN_TILES_SPECS: &[(u8, Option<usize>)] = &[
     (12, Some(0x64000)), // Bonus 999
 ];
 
+/// `$3EC7D/$3ECF5/$3ED35`: source blocks for live zone VRAM writes.
+pub fn build_zone_animation_tiles(rom: &[u8]) -> Result<Vec<u8>, String> {
+    let mut out = Vec::with_capacity(1152);
+    for (at, len) in [(0x41300, 768), (0x39800, 256), (0x39C00, 128)] {
+        out.extend_from_slice(
+            rom.get(at..at + len)
+                .ok_or("truncated zone animation tiles")?,
+        );
+    }
+    Ok(out)
+}
+
 /// Build the composed 384-tile VRAM blocks for all 13 screens (0..=12).
 pub fn build_tiles_binary(baserom: &[u8]) -> Result<Vec<u8>, String> {
     let ow_gfx = baserom
@@ -315,6 +332,11 @@ pub fn build_tiles_binary(baserom: &[u8]) -> Result<Vec<u8>, String> {
 pub fn emit(baserom: &[u8], extracted: &Path) -> Result<(), Box<dyn Error>> {
     let map_dir = extracted.join("map");
     fs::create_dir_all(&map_dir)?;
+
+    fs::write(
+        map_dir.join("zone_animations.bin"),
+        build_zone_animation_tiles(baserom)?,
+    )?;
 
     // 1. Tilemaps binary
     let tilemaps_bin = build_tilemaps_binary(baserom).map_err(|e| format!("map tilemaps: {e}"))?;
@@ -420,6 +442,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn zone_animation_blocks_match_the_banked_copy_sources() {
+        let mut rom = vec![0; 0x42000];
+        rom[0x41300..0x41600].fill(0xA1);
+        rom[0x39800..0x39900].fill(0xB2);
+        rom[0x39C00..0x39C80].fill(0xC3);
+        let blob = build_zone_animation_tiles(&rom).unwrap();
+        assert_eq!(blob.len(), 1152);
+        assert_eq!(&blob[..768], &[0xA1; 768]);
+        assert_eq!(&blob[768..1024], &[0xB2; 256]);
+        assert_eq!(&blob[1024..], &[0xC3; 128]);
+        assert!(build_zone_animation_tiles(&rom[..0x415FF]).is_err());
+    }
+
+    #[test]
     fn test_tilemaps_and_patches_structure() {
         // Construct minimum test buffer
         let mut rom = vec![0u8; 0x70000];
@@ -451,6 +487,8 @@ mod tests {
         let blob = build_tilemaps_binary(&rom).expect("valid binary with bell rooms");
         assert_eq!(blob[4096 + 12 * 1024], 0x5A);
         assert_eq!(blob[4096 + 13 * 1024], 0x5B);
+        assert_eq!(blob[4096 + 3 * 1024 + 0x300], 0x7E);
+        assert_eq!(blob[4096 + 3 * 1024 + 0x3FE], 0x7E);
     }
 
     #[test]
