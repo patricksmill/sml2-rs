@@ -91,25 +91,26 @@ def apply_buttons(pyboy, previous, mask):
             (pyboy.button_press if mask & bit else pyboy.button_release)(name)
 
 
-def logic_phases(before_state, before_ff97, st4_ran, f71_phases):
+def logic_phases(before_state, before_ff97, st4_ran, f71_phases, scene_phases=()):
     """Port steps for one hardware frame while phase-lock is on.
 
     `$0F71` is one player update, and the phase argument is `$FF97 & 7` sampled
     at that entry. `$FF97` itself is not a reliable count: a lag frame increments
     it zero times, and a frame that finishes two waits increments it twice, while
     the player update still runs once. A state-`$04` entry that never reaches
-    `$0F71` (pipe travel after the screen-transition branch) still moves Mario,
-    so it takes one step at the predicted phase. A hardware frame that reaches
-    neither, while already in a level, is the overrun tail of the previous logic
-    frame and must not be simulated again.
+    `$0F71` (the screen-transition branch) still advances the camera and scene,
+    so it takes one step at the predicted phase. Blocking scenes (`$20A4` to
+    `$21EE`) resume on each `$2728` return, bypassing both gameplay hooks.
+    Append those steps in execution order, including multiple waits completed
+    in one hardware frame. With neither kind of update, do not step again.
     """
     if f71_phases:
-        return list(f71_phases)
-    if st4_ran:
-        return [(before_ff97 + 1) & 7]
-    if before_state != 4:
-        return [(before_ff97 + 1) & 7]
-    return []
+        phases = list(f71_phases)
+    elif st4_ran or before_state != 4:
+        phases = [(before_ff97 + 1) & 7]
+    else:
+        phases = []
+    return phases + list(scene_phases)
 
 
 def check_divergence(frame, memory, native, threshold, live=False, player_ran=True):
@@ -217,11 +218,29 @@ def main():
         print(f"Inputs by {movie.get('author', 'unknown')}; same input index in both windows.", flush=True)
         st4_ran = []
         f71_phases = []
+        scene_running = [False]
+        scene_phases = []
         if phase_lock:
             pyboy.hook_register(0, 0x05D5, lambda _ctx: st4_ran.append(1), None)
             pyboy.hook_register(
                 0, 0x0F71,
                 lambda _ctx: f71_phases.append(pyboy.memory[0xFF97] & 7), None)
+            # `$20A4` also runs with a zero scene id; only a nonzero id enters
+            # the blocking script. `$21EE` returns ownership to the main loop.
+            def scene_enter(_ctx):
+                scene_running[0] = bool(pyboy.memory[0xA28E] | pyboy.memory[0xA28F])
+
+            def scene_exit(_ctx):
+                scene_running[0] = False
+
+            pyboy.hook_register(0, 0x20A4, scene_enter, None)
+            pyboy.hook_register(0, 0x21EE, scene_exit, None)
+            # `$273D` is the RET from `$2728`, after it increments `$FF97`.
+            def scene_resume(_ctx):
+                if scene_running[0]:
+                    scene_phases.append(pyboy.memory[0xFF97] & 7)
+
+            pyboy.hook_register(0, 0x273D, scene_resume, None)
         print('Space pause/resume BOTH; Right step BOTH; Tab 1x/0.25x; Escape closes BOTH.', flush=True)
         if movie.get('source') == 'manual-pyboy':
             print('Manual PyBoy recording: ROM, boot ROM, core version, and settings match.', flush=True)
@@ -262,10 +281,12 @@ def main():
                     before_state = pyboy.memory[0xFF9B]
                     st4_ran.clear()
                     f71_phases.clear()
+                    scene_phases.clear()
                 if not pyboy.tick(1, True, False):
                     raise RuntimeError('PyBoy stopped before end of movie')
                 if phase_lock:
-                    phases = logic_phases(before_state, before_ff97, st4_ran, f71_phases)
+                    phases = logic_phases(before_state, before_ff97, st4_ran, f71_phases,
+                                          scene_phases)
                     for phase in phases:
                         bridge.stdin.write(f'{mask} {phase}\n'.encode())
                         bridge.stdin.flush()

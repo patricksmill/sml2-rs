@@ -86,8 +86,20 @@ class LogicPhaseTests(unittest.TestCase):
     def test_player_update_uses_the_phase_sampled_at_entry(self):
         self.assertEqual(logic_phases(4, 0x7C, [1, 1], [5]), [5])
 
-    def test_pipe_travel_without_a_player_update_still_steps_once(self):
+    def test_camera_transition_without_a_player_update_still_steps_once(self):
         self.assertEqual(logic_phases(4, 0x10, [1], []), [1])
+
+    def test_blocking_pipe_scene_advances_without_gameplay_hooks(self):
+        self.assertEqual(logic_phases(4, 0x10, [], [], [2]), [2])
+
+    def test_scene_resumes_after_gameplay_in_the_same_hardware_frame(self):
+        self.assertEqual(logic_phases(4, 0x10, [1], [5], [6, 7]), [5, 6, 7])
+
+    def test_scene_wait_without_a_return_does_not_advance(self):
+        self.assertEqual(logic_phases(4, 7, [], [], []), [])
+
+    def test_scene_return_phase_wraps_without_a_gameplay_step(self):
+        self.assertEqual(logic_phases(4, 7, [], [], [0]), [0])
 
     def test_in_level_overrun_does_not_step(self):
         self.assertEqual(logic_phases(4, 0x7C, [], []), [])
