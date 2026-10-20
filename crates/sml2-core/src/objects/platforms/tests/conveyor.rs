@@ -163,3 +163,116 @@ fn mario_can_walk_freely_after_stepping_off_platform() {
         "Mario's position was preserved after getting off platform"
     );
 }
+
+/// `$2D7D` produces contact before `$8121` toggles the slot phase. An
+/// initialized odd slot can carry only on phase 1 (`$5800F`), even when FFF0
+/// is even on both adjacent engine passes. State 0 bypasses that slot gate.
+#[test]
+fn conveyor_contact_initialization_and_alternating_dispatch_consume_player_bytes() {
+    use crate::actor::{Hitbox, ScreenPosition};
+    use crate::player_sim::PlayerSim;
+
+    let tables: ObjectTables = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../extracted/objects.json"
+    )))
+    .unwrap();
+    let layout = LevelLayout::from_bytes(&[0x60; 0x3000]).unwrap();
+    assert_eq!(tables.anim_to_sprite_b[62], 153);
+    assert_eq!(tables.hitbox_for(10, 153), Some([-5, 1, -19, 19]));
+
+    for initial_phase in [false, true] {
+        let mut obj = ObjectSim::new(vec![], 0);
+        obj.configure(10);
+        obj.phase = initial_phase;
+        obj.fff0 = 1;
+        let mut actor = Actor::default();
+        actor.activity = 2;
+        actor.definition = 62;
+        actor.sprite = 153;
+        actor.position = Position { x: 100, y: 100 };
+        actor.screen = ScreenPosition { x: 88, y: 88 };
+        actor.hitbox = Hitbox {
+            top: -5,
+            bottom: 1,
+            left: -19,
+            right: 19,
+        };
+        obj.slots[5].b = actor.to_raw_slot();
+        let mut player = PlayerSim::new();
+        player.x = 100;
+        player.y = 67;
+        player.hvel = 0x80;
+        player.vvel = 0;
+
+        let contact = MarioContact {
+            x: player.x,
+            y: player.y,
+            hvel: 0x80,
+            ..Default::default()
+        };
+        obj.step(100, 100, &layout, &tables, &contact, false);
+        // No type before this init, so it cannot stand/carry retroactively.
+        assert_eq!((obj.slots[5].b[15], obj.slots[5].b[18]), (1, 32));
+        assert!(!obj.on_object);
+        assert_eq!(obj.mario_x_adjust, None);
+
+        let expected = if initial_phase {
+            vec![
+                (2, 1, 101, 0),
+                (2, 0, 101, 8),
+                (3, 1, 101, 0),
+                (3, 0, 101, 8),
+                (4, 1, 102, 0),
+            ]
+        } else {
+            vec![
+                (2, 0, 100, 8),
+                (3, 1, 100, 0),
+                (3, 0, 100, 8),
+                (4, 1, 101, 0),
+            ]
+        };
+        for (counter, phase, x, flags) in expected {
+            let contact = MarioContact {
+                x: player.x,
+                y: player.y,
+                hvel: 0x80,
+                ..Default::default()
+            };
+            obj.step(100, 100, &layout, &tables, &contact, false);
+            // Screen Y=88, top=-5: delta=98+(67-100)-(88-5-20)=2.
+            // `$2DF7` raises contact but does not nudge Y for delta < 3.
+            assert!(obj.on_object);
+            assert_eq!((obj.fff0, obj.update_phase), (counter, phase));
+            assert_eq!(obj.slots[5].b[23], flags);
+            player.apply_object_result(&mut obj, false);
+            assert_eq!(player.x.to_le_bytes(), [x, 0]);
+            assert_eq!(player.y.to_le_bytes(), [67, 0]);
+            assert!(player.on_ground_obj);
+            assert!(!player.on_ground);
+            assert_eq!(obj.mario_x_adjust, None);
+        }
+
+        // Last admitted pass cleared its interaction flags. Walking beyond the
+        // horizontal box or jumping above it must not reuse its carry result.
+        for (x, y, vvel) in [(140, 67, 0), (100, 40, 75)] {
+            player.x = x;
+            player.y = y;
+            let contact = MarioContact {
+                x,
+                y,
+                hvel: 0x80,
+                vvel,
+                ..Default::default()
+            };
+            obj.step(100, 100, &layout, &tables, &contact, false);
+            assert!(!obj.on_object);
+            assert_eq!(obj.mario_x_adjust, None);
+            player.apply_object_result(&mut obj, vvel != 0);
+            assert_eq!((player.x, player.y), (x, y));
+            assert!(!player.on_ground_obj);
+        }
+        assert!(obj.unported.is_empty());
+    }
+}

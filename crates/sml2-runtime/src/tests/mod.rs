@@ -24,6 +24,7 @@ use std::{
 
 mod acceptance;
 mod castle_flow;
+mod conveyor;
 mod boss_entry;
 mod debug;
 mod death_audio;
