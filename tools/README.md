@@ -41,6 +41,29 @@ a verified no-op. **1** reports an out-of-range or unimplemented landing, or a
 table handler) and fails unless both are detected; it never edits inputs.
 The reasoning and limits are in [`docs/dynamic-spawn-closure.md`](../docs/dynamic-spawn-closure.md).
 
+## Sprite-frame inventory
+
+```bash
+python3 tools/anim_inventory.py [--frames] [--json out.json] [--self-test]
+```
+
+Lists every entry of a sprite-frame table (so far the player's bank-1 `$4000`
+table, indexed by `$FFC6`), the ROM write sites that can select it, and whether
+native code cites each site's routine. Site values come from a small abstract
+interpreter over the disassembly (ROM table reads, reviewed `RAM_DOMAINS`,
+straight-line callees). Sites it cannot bound must be listed in `DECLARED` with
+a reviewed set and reason. `--frames` prints the per-frame checklist: `cited`,
+`uncited`, `data-mismatch` or `unreachable`, with aliases of shared mappings
+marked.
+
+Exit **0** means every reachable frame is inside the table, its extracted
+mapping matches the ROM, and every selecting site is cited. **1** names the
+failing frame or uncited site. **2** means missing inputs, an undeclared
+unbounded site, or a stale declaration. This is a citation audit like
+`handler_coverage.py`, not a parity proof. A cited routine can still be partly
+ported, and comment paragraphs that say "not modelled", "not ported",
+"unported" or "TODO" do not count as citations.
+
 ## Level smoke gate
 
 ```bash
