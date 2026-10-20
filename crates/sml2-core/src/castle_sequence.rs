@@ -1,25 +1,4 @@
-//! The golden-coin castle sequence (`sGameState` `$1B`-`$21`).
-//!
-//! Bank 0's `$02B0` table dispatches `$1B`/`$1D` through `$2AD3`, `$1C`
-//! through `$2ADE`, `$1E` through `$2AE9`, `$1F` through `$2AF4`, `$20`
-//! through `$2A80` and `$21` through `$2A8B`; every stub switches to bank 12
-//! and jumps. The handlers are mostly staging (castle tiles, the six coin
-//! positions, the congratulations tilemap), so this module keeps the control
-//! flow — the part later states branch on — and leaves the VRAM/OAM copies to
-//! the renderer:
-//!
-//! - `$45B6` (`$1B`/`$1D`): clear `sCastleCoinDone`, write tile `$74` into the
-//!   five four-byte runs when all six `sGoldenCoin1..6` flags have bit 7,
-//!   BGP/OBP staging, `sMenuTimer = 64`, `sMenuState = 0`, state += 1.
-//! - `$467A` (`$1C`): the `$446B` menu dispatcher.
-//! - `$441D` (`$1E`): `sLevelTally` += 1 BCD unless `sLevelProgressFlags` bit
-//!   7, tile-anim reset, fade `$C0`, `sMenuState = 0`, state += 1.
-//! - `$4451` (`$1F`): the menu dispatcher again.
-//! - `$477B` (`$20`): congratulations tilemap, fade `4`/`$FF`, state += 1.
-//! - `$47A9` (`$21`): wait for the fade (or START) and fall into `$01E5`.
-//!
-//! The walk-in animation (`$453B`) moves `sOAMShadow`'s tile byte toward
-//! `$499D[sCurLevel]`; here the caller reports `walk_done` when it arrives.
+//! Separate bank-12 castle visit ($467A) and boss-coin deposit ($4451).
 
 pub const STATE_REVEAL_A: u8 = 0x1B;
 pub const STATE_REVEAL_B: u8 = 0x1C;
@@ -33,8 +12,8 @@ pub const STATE_MAP: u8 = 0x14;
 
 /// `$44F1`: `sCurLevel` -> the `sLevelProgress` byte the reveal marks. The
 /// table is 25 bytes (levels 0-24).
-/// `$499D`: the castle walk-in's target X, indexed by `sCurLevel`.
-pub const WALK_TARGET_X: [u8; 25] = [
+/// `$499D`: the deposited coin's target y, indexed by `sCurLevel`.
+pub const COIN_TARGET_Y: [u8; 25] = [
     0x00, 0x00, 0x00, 0x00, 0x00, 0x79, 0x00, 0x00, 0x00, 0x46, 0x00, 0x00, 0x00, 0x5D, 0x00, 0x00,
     0x79, 0x00, 0x00, 0x5D, 0x00, 0x00, 0x00, 0x46, 0x00,
 ];
@@ -54,12 +33,22 @@ pub struct SequenceInput {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SequenceOut {
+    pub transition: Option<CastleTransition>,
     pub music: Option<u8>,
     pub sfx2: Option<u8>,
     /// The sequence handed control back (`sGameState` became `$14` or `$01E5`
     /// ran).
     pub done: bool,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CastleTransition {
+    ReturnToMap { walked_out: bool },
+    EnterLevel(u8),
+    Reset,
+}
+
+pub const GOLDEN_COIN_OFFSETS: [usize; 6] = [5, 9, 14, 17, 23, 29];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CastleSequence {
@@ -75,26 +64,31 @@ pub struct CastleSequence {
     /// `sRowShiftCount`/`Index` (`$A2C9`/`$A2CA`).
     pub row_shift_count: u8,
     pub row_shift_index: u8,
+    pub door_open_rows: u8,
     /// `sCastleCoinDone` (`$A2CB`): 0 or the six-coin tile `$74`.
     pub coin_done: u8,
     /// `sGoldenCoinCount` (`$A2CB` shared with the done byte in the ROM).
     pub golden_count: u8,
     /// `sMarioWalkAnimTimer` (`$A222`).
     pub walk_anim: u8,
-    /// `$FFC0`/`$FFC2`: the walk-in's X and Y.
+    /// Native OAM x/y ($FFC2/$FFC0); the source stages y before x.
     pub walk_x: u8,
     pub walk_y: u8,
+    pub sprite_id: u8,
+    pub sparkle: Option<(u8, u8, u8)>,
     /// `sCurLevel`.
     pub level: u8,
     /// `sLevelProgressFlags` (`$A27D`).
     pub progress_flags: u8,
     /// `sLevelTally` (`$A242`), BCD.
     pub level_tally: u8,
+    pub tally_credited: bool,
     /// `sGoldenCoin1..6` as `$45B6` reads them.
     pub coins: [u8; 6],
     /// `sBGPalette`/`sOAMPalette1` (`$A220`/`$A27F`).
     pub bgp: u8,
     pub obp1: u8,
+    pub obp2: u8,
 }
 
 impl Default for CastleSequence {
@@ -107,17 +101,22 @@ impl Default for CastleSequence {
             fade_high: 0,
             row_shift_count: 0,
             row_shift_index: 0,
+            door_open_rows: 0,
             coin_done: 0,
             golden_count: 0,
             walk_anim: 0,
-            walk_x: 16,
-            walk_y: 40,
+            walk_x: 88,
+            walk_y: 168,
+            sprite_id: 0xBB,
+            sparkle: None,
             level: 0,
             progress_flags: 0,
             level_tally: 0,
+            tally_credited: false,
             coins: [0; 6],
             bgp: 0xE4,
             obp1: 0xD0,
+            obp2: 0x38,
         }
     }
 }
@@ -136,8 +135,8 @@ impl CastleSequence {
     /// Run `$47BC`: count the flags and start the sequence.
     pub fn enter(&mut self, coins: &[u8; 6]) {
         self.coins = *coins;
-        self.walk_x = 16; // `$4008`: the castle sprite starts at X 16, Y 40
-        self.walk_y = 40;
+        self.walk_x = 88;
+        self.walk_y = 168;
         self.golden_count = Self::count_coins(coins);
         self.state = STATE_REVEAL_A;
     }
@@ -151,18 +150,25 @@ impl CastleSequence {
         progress: &mut [u8],
     ) -> SequenceOut {
         let mut out = SequenceOut::default();
-        // The VBlank handler walks the fade timers down every frame.
-        if self.fade_high != 0 {
-            self.fade_high -= 1;
-        } else if self.fade_low != 0 {
-            self.fade_low -= 1;
+        // $0168: subtract from the whole little-endian timer with saturation.
+        let fade = u16::from_le_bytes([self.fade_low, self.fade_high]).saturating_sub(1);
+        [self.fade_low, self.fade_high] = fade.to_le_bytes();
+        if self.row_shift_index != 0 {
+            self.door_open_rows = 6 - self.row_shift_index;
+            self.row_shift_index = 0;
         }
+        self.sparkle = None;
         match self.state {
             STATE_REVEAL_A | STATE_REVEAL_D => {
                 // `$45B6`: all six coins raise the castle's coin run.
                 self.coin_done = if self.all_six_coins_flags() { 0x74 } else { 0 };
                 self.bgp = 0xE4;
                 self.obp1 = 0xD0;
+                self.obp2 = 0x38;
+                self.walk_x = 88;
+                self.walk_y = 168;
+                self.sprite_id = 0xBB;
+                self.door_open_rows = if self.coin_done != 0 { 5 } else { 0 };
                 self.menu_timer = 64;
                 self.menu = 0;
                 self.walk_anim = 0;
@@ -171,16 +177,17 @@ impl CastleSequence {
                 }
                 self.state += 1;
             }
-            STATE_REVEAL_B => self.menu_tick(input, level_offset, progress, &mut out),
+            STATE_REVEAL_B => self.door_tick(input, &mut out),
             STATE_TALLY => {
                 // `$441D`: the tally only counts the first clear of the level.
-                if self.progress_flags & 0x80 == 0 {
+                if self.progress_flags & 0x80 == 0 && !self.tally_credited {
                     self.level_tally = bcd_add(self.level_tally, 1);
                 }
                 self.menu = 0;
                 self.walk_anim = 0;
-                self.fade_high = 0;
-                self.fade_low = 0xC0;
+                self.walk_x = COIN_X.get(self.level as usize).copied().unwrap_or(0);
+                self.walk_y = 192;
+                self.sprite_id = 0xBF;
                 self.state += 1;
             }
             STATE_MENU => self.menu_tick(input, level_offset, progress, &mut out),
@@ -192,15 +199,15 @@ impl CastleSequence {
             }
             STATE_WAIT_START => {
                 // `$47A9`: fade 0 or START both fall into `$01E5`.
-                if (self.fade_high == 0 && self.fade_low == 0) || input.keys_pressed & 0x08 != 0 {
+                if (self.fade_high == 0 && self.fade_low == 0) || input.keys_pressed == 0x08 {
                     out.done = true;
+                    out.transition = Some(CastleTransition::Reset);
                 }
             }
-            _ => {
-                out.done = true;
-            }
+            _ => {}
         }
 
+        self.golden_count = Self::count_coins(&self.coins);
         out
     }
 
@@ -218,19 +225,17 @@ impl CastleSequence {
     ) {
         match self.menu {
             0 => {
-                // `$453B`: the walk-in; music follows the coin count.
-                let target = WALK_TARGET_X
-                    .get(self.level as usize)
-                    .copied()
-                    .unwrap_or(0x88);
-                if self.walk_x != target && input.frame & 0x01 == 0 {
-                    self.walk_x = self.walk_x.wrapping_add(1);
-                }
-                if input.walk_done || self.walk_x == target {
+                self.sparkle = Some((self.walk_x, self.walk_y, 0xC5 + ((input.frame & 4) >> 2)));
+                self.walk_anim = (self.walk_anim + 8) % 0x50;
+                self.sprite_id = 0xBF + (self.walk_anim >> 4);
+                let target = COIN_TARGET_Y.get(self.level as usize).copied().unwrap_or(0);
+                if self.walk_y == target || input.walk_done {
                     out.music = Some(if self.golden_count == 5 { 26 } else { 15 });
                     self.menu = 1;
                     self.fade_high = 1;
                     self.fade_low = 0xFF;
+                } else if input.frame & 1 == 0 {
+                    self.walk_y = self.walk_y.wrapping_add(1);
                 }
             }
             1 => {
@@ -238,8 +243,14 @@ impl CastleSequence {
                 if self.fade_high == 0 && self.fade_low == 0 {
                     self.obp1 = 0xD0;
                     self.progress_flags |= 0x80;
+                    if let Some(index) = GOLDEN_COIN_OFFSETS
+                        .iter()
+                        .position(|&off| off == level_offset)
+                    {
+                        self.coins[index] = 0x80;
+                    }
                     if let Some(byte) = progress.get_mut(level_offset) {
-                        *byte |= 0x80;
+                        *byte = 0x80;
                     }
                     if self.golden_count == 5 {
                         self.menu = 2;
@@ -248,7 +259,12 @@ impl CastleSequence {
                     } else {
                         self.state = STATE_MAP;
                         out.done = true;
+                        out.transition = Some(CastleTransition::ReturnToMap { walked_out: false });
                     }
+                } else {
+                    self.walk_y = COIN_TARGET_Y.get(self.level as usize).copied().unwrap_or(0);
+                    self.sprite_id = COIN_SPRITE.get(self.level as usize).copied().unwrap_or(0);
+                    self.obp1 = if input.frame & 0x1F < 4 { 0 } else { 0xD0 };
                 }
             }
             2 => {
@@ -270,6 +286,7 @@ impl CastleSequence {
                 if self.fade_low == 0 {
                     self.state = STATE_MAP;
                     out.done = true;
+                    out.transition = Some(CastleTransition::ReturnToMap { walked_out: false });
                 }
             }
         }
@@ -290,174 +307,15 @@ fn bcd_add(value: u8, add: u8) -> u8 {
     (hi << 4) | lo
 }
 
+// Bank 12 $4985 / $49B5. Offsets are indexed by sCurLevel (0..23).
+const COIN_X: [u8; 24] = [
+    0, 0, 0, 0, 0, 0x3B, 0, 0, 0, 0x69, 0, 0, 0, 0x75, 0, 0, 0x75, 0, 0, 0x3B, 0, 0, 0, 0x47,
+];
+const COIN_SPRITE: [u8; 24] = [
+    0, 0, 0, 0, 0, 0xC4, 0, 0, 0, 0xDA, 0, 0, 0, 0xDB, 0, 0, 0xD8, 0, 0, 0xD7, 0, 0, 0, 0xD9,
+];
+#[path = "castle_sequence/door.rs"]
+mod door;
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn flags(set: usize) -> [u8; 6] {
-        let mut coins = [0u8; 6];
-        for coin in coins.iter_mut().take(set) {
-            *coin = 0x80;
-        }
-        coins
-    }
-
-    #[test]
-    fn the_six_coin_test_is_bit_seven_on_every_flag() {
-        assert!(CastleSequence::all_six_coins(&flags(6)));
-        assert!(!CastleSequence::all_six_coins(&flags(5)));
-        assert_eq!(CastleSequence::count_coins(&flags(5)), 5);
-    }
-
-    /// `$45B6`: the reveal opens with the coin run set only when all six are
-    /// collected, and `$1B` stops the music.
-    #[test]
-    fn the_reveal_checks_the_six_coins_and_advances() {
-        let mut seq = CastleSequence::default();
-        seq.enter(&flags(6));
-        let mut progress = [0u8; 42];
-        let out = seq.tick(SequenceInput::default(), 0, &mut progress);
-        assert_eq!(seq.coin_done, 0x74);
-        assert_eq!(seq.state, STATE_REVEAL_B);
-        assert_eq!(seq.menu_timer, 64);
-        assert_eq!(out.music, Some(0xFF));
-
-        let mut seq = CastleSequence::default();
-        seq.enter(&flags(4));
-        let _ = seq.tick(SequenceInput::default(), 0, &mut progress);
-        assert_eq!(seq.coin_done, 0, "four coins leave the run closed");
-    }
-
-    /// `$441D`: the tally counts once per level and the fade starts at `$C0`.
-    #[test]
-    fn the_tally_state_sets_the_reveal_fade() {
-        let mut seq = CastleSequence::default();
-        seq.state = STATE_TALLY;
-        seq.progress_flags = 0;
-        let mut progress = [0u8; 42];
-        seq.tick(SequenceInput::default(), 0, &mut progress);
-        assert_eq!(seq.state, STATE_MENU);
-        assert_eq!(seq.fade_low, 0xC0);
-        assert_eq!(seq.menu, 0);
-    }
-
-    /// `$453B` -> `$44AC`: arrival plays music 26 with five coins, then the
-    /// progress bit lands and the sequence returns to the map.
-    #[test]
-    fn the_menu_walk_in_and_reveal_complete_the_progress_bit() {
-        let mut seq = CastleSequence::default();
-        seq.enter(&flags(5));
-        seq.state = STATE_REVEAL_B;
-        let mut progress = [0u8; 42];
-        let out = seq.tick(
-            SequenceInput {
-                walk_done: true,
-                ..Default::default()
-            },
-            0,
-            &mut progress,
-        );
-        assert_eq!(out.music, Some(26), "$453B with five coins");
-        assert_eq!(seq.menu, 1);
-        assert_eq!((seq.fade_high, seq.fade_low), (1, 0xFF));
-
-        // Burn the fade down, then the reveal marks the level.
-        for _ in 0..300 {
-            if seq.menu != 1 {
-                break;
-            }
-            let _ = seq.tick(SequenceInput::default(), 0, &mut progress);
-        }
-        assert_eq!(seq.progress_flags & 0x80, 0x80);
-        assert_eq!(seq.menu, 2, "five coins open the row shift");
-        assert_eq!(seq.row_shift_count, 5);
-    }
-
-    /// `$44AC` marks `sLevelProgress[$44F1[sCurLevel]]` with bit 7.
-    #[test]
-    fn the_reveal_marks_the_level_progress_byte() {
-        assert_eq!(LEVEL_PROGRESS_OFFSETS[9], 9);
-        assert_eq!(LEVEL_PROGRESS_OFFSETS[23], 0x0E);
-        let mut seq = CastleSequence::default();
-        seq.enter(&flags(5));
-        seq.state = STATE_REVEAL_B;
-        seq.menu = 1;
-        seq.fade_high = 0;
-        seq.fade_low = 0;
-        let mut progress = [0u8; 42];
-        let _ = seq.tick(SequenceInput::default(), 9, &mut progress);
-        assert_eq!(progress[9] & 0x80, 0x80);
-        assert_eq!(seq.progress_flags & 0x80, 0x80);
-    }
-
-    /// `$453B`: the walk-in steps X once per even frame to `$499D[level]`.
-    #[test]
-    fn the_walk_in_reaches_the_level_target() {
-        let mut seq = CastleSequence::default();
-        seq.enter(&flags(5));
-        seq.level = 5; // $499D[5] = $79
-        seq.state = STATE_REVEAL_B;
-        let mut progress = [0u8; 42];
-        let mut frames = 0;
-        for frame in 0..600u16 {
-            let _ = seq.tick(
-                SequenceInput {
-                    frame: frame as u8,
-                    ..Default::default()
-                },
-                5,
-                &mut progress,
-            );
-            frames += 1;
-            if seq.menu != 0 {
-                break;
-            }
-        }
-        assert_eq!(seq.walk_x, WALK_TARGET_X[5]);
-        assert_eq!(seq.menu, 1);
-        assert!(frames < 300, "about two frames per pixel");
-    }
-
-    /// `$4477`: five shifts, each waiting out a 64-frame fade with SFX 2 = 10,
-    /// then `$44A1` hands back to the map.
-    #[test]
-    fn the_row_shift_runs_five_times_and_returns() {
-        let mut seq = CastleSequence::default();
-        seq.state = STATE_MENU;
-        seq.menu = 2;
-        seq.golden_count = 5;
-        seq.row_shift_count = 5;
-        let mut progress = [0u8; 42];
-        let mut shifts = 0;
-        for _ in 0..2000 {
-            let out = seq.tick(SequenceInput::default(), 0, &mut progress);
-            if out.sfx2 == Some(10) {
-                shifts += 1;
-            }
-            if out.done {
-                break;
-            }
-        }
-        assert_eq!(shifts, 5);
-        assert_eq!(seq.state, STATE_MAP);
-    }
-
-    /// `$21`: the fade expiring or START both end the sequence.
-    #[test]
-    fn the_start_wait_accepts_the_fade_or_start() {
-        let mut seq = CastleSequence::default();
-        seq.state = STATE_WAIT_START;
-        seq.fade_low = 0x40;
-        let mut progress = [0u8; 42];
-        assert!(!seq.tick(SequenceInput::default(), 0, &mut progress).done);
-        let out = seq.tick(
-            SequenceInput {
-                keys_pressed: 0x08,
-                ..Default::default()
-            },
-            0,
-            &mut progress,
-        );
-        assert!(out.done);
-    }
-}
+#[path = "castle_sequence/tests.rs"]
+mod tests;

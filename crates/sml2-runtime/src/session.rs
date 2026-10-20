@@ -5,6 +5,7 @@ pub use crate::content::SessionAssets;
 // Compatibility facade for existing CLI and tests; new hosts can own Session directly.
 pub use crate::host::{AudioClock, SessionRunner};
 
+mod castle;
 mod map_pan;
 pub use map_pan::{MapPanReturn, MAP_PAN_RELOAD_FRAMES, MAP_PAN_RETURN_FRAMES};
 
@@ -625,7 +626,17 @@ impl Session {
         node: u8,
         exit_tile_flag: u8,
     ) {
-        self.castle_progress = [0; 42];
+        self.castle_progress = match &self.state {
+            SessionState::Overworld(map) => map.level_progress,
+            SessionState::InLevel(ctx) => ctx.sim.level_progress,
+            _ => [0; 42],
+        };
+        for (index, off) in sml2_core::castle_sequence::GOLDEN_COIN_OFFSETS
+            .into_iter()
+            .enumerate()
+        {
+            self.castle_progress[off] = seq.coins[index];
+        }
         self.castle_return = Some((screen, node, exit_tile_flag));
         self.state = SessionState::Castle(seq);
     }
@@ -822,6 +833,15 @@ impl Session {
         map.set_castle_scripts(self.assets.castle_scripts.clone());
         map.lives = data[0x43];
         if map.apply_save_record(data, &self.assets.node_records) {
+            // $353E -> $14: resume through the same node/zone landing as play.
+            let mut sim = PlayerSim::new();
+            map.to_player(&mut sim);
+            sim.dead = 21;
+            let handoff = sim.map_handoff(&self.assets.nodes);
+            map = MapSim::from_player(&sim);
+            map.set_castle_scripts(self.assets.castle_scripts.clone());
+            map.load_screen(handoff.screen.unwrap_or(0), 0, &self.assets.node_records);
+            map.load_node(map.node, &self.assets.node_records);
             self.lives = data[0x43];
             self.coins_low = data[0x40];
             self.coins_high = data[0x41];
@@ -845,6 +865,11 @@ impl Session {
             SessionState::Castle(_) => {
                 let mut map = MapSim::new();
                 map.level_progress = self.castle_progress;
+                if let Some((screen, node, _)) = self.castle_return {
+                    map.load_screen(screen, 0, &self.assets.node_records);
+                    map.node = node;
+                    map.load_node(node, &self.assets.node_records);
+                }
                 map.coins_low = self.coins_low;
                 map.coins_high = self.coins_high;
                 map.save_record(self.lives, self.level_tally, self.money_bag)
@@ -854,7 +879,10 @@ impl Session {
                 map.save_record(self.lives, self.level_tally, self.money_bag)
             }
             SessionState::Title(_) | SessionState::FileSelect(_) | SessionState::Demo(_) => {
-                match self.active_slot.and_then(|slot| self.slots.slot(slot as usize)) {
+                match self
+                    .active_slot
+                    .and_then(|slot| self.slots.slot(slot as usize))
+                {
                     Some(record) => *record,
                     None => sml2_core::front_end::save_slots::fresh_template(),
                 }
@@ -936,8 +964,7 @@ impl Session {
 
                 // `$3E9FB`/`$3EF2B`: once the bell room reaches state `$0A`,
                 // run the deferred level-exit landing.
-                if map_sim.screen_id >= 13 && map_sim.room.as_ref().is_some_and(|r| r.state >= 10)
-                {
+                if map_sim.screen_id >= 13 && map_sim.room.as_ref().is_some_and(|r| r.state >= 10) {
                     if let Some((screen, node, flag)) = self.bell_return.take() {
                         map_sim.room = None;
                         map_sim.load_screen(screen, flag, &self.assets.node_records);
@@ -1003,6 +1030,19 @@ impl Session {
                     saves.push(rec);
                 }
 
+                if entry.level == Some(0xFF) {
+                    // $3573: this is a castle visit, not a level manifest.
+                    let mut seq = sml2_core::castle_sequence::CastleSequence::default();
+                    seq.enter(
+                        &sml2_core::castle_sequence::GOLDEN_COIN_OFFSETS
+                            .map(|off| map_sim.level_progress[off]),
+                    );
+                    seq.level_tally = self.level_tally;
+                    self.castle_progress = map_sim.level_progress;
+                    self.castle_return = Some((map_sim.screen_id, map_sim.node, 0));
+                    self.state = SessionState::Castle(seq);
+                    break 'map StepOutcome::Continue;
+                }
                 if let Some(level_id) = entry.level {
                     match self.assets.level(level_id).map(|content| {
                         LevelContext::from_content(
@@ -1073,9 +1113,8 @@ impl Session {
                     }
                     TitleAction::StartDemo(index) => {
                         if !self.start_demo(index) {
-                            diagnostics.push(format!(
-                                "front end: attract demo {index} could not load"
-                            ));
+                            diagnostics
+                                .push(format!("front end: attract demo {index} could not load"));
                         }
                     }
                     TitleAction::None => {}
@@ -1218,9 +1257,25 @@ impl Session {
                             seq.enter(&coins);
                             seq.level = ctx.manifest.level_id;
                             seq.progress_flags = ctx.sim.level_progress_flags;
+                            // PlayerSim's reward adapter already credited this tally.
                             seq.level_tally = ctx.sim.level_tally;
+                            seq.tally_credited = true;
+                            let offset = sml2_core::castle_sequence::LEVEL_PROGRESS_OFFSETS
+                                [seq.level as usize]
+                                as usize;
+                            if let Some(index) = sml2_core::castle_sequence::GOLDEN_COIN_OFFSETS
+                                .iter()
+                                .position(|&off| off == offset)
+                            {
+                                seq.coins[index] = ctx.sim.level_progress_flags;
+                                seq.golden_count =
+                                    sml2_core::castle_sequence::CastleSequence::count_coins(
+                                        &seq.coins,
+                                    );
+                            }
                             seq.state = sml2_core::castle_sequence::STATE_REVEAL_D;
                             self.castle_progress = ctx.sim.level_progress;
+                            self.castle_progress[offset] = ctx.sim.level_progress_flags;
                             self.castle_return =
                                 Some((target_screen, target_node, ctx.sim.exit_tile_flag));
                             self.state = SessionState::Castle(seq);
@@ -1331,39 +1386,20 @@ impl Session {
                 StepOutcome::Continue
             }
 
-            SessionState::Castle(ref mut seq) => {
-                let seq_in = sml2_core::castle_sequence::SequenceInput {
-                    keys_pressed: if start_pressed { 0x08 } else { 0 },
-                    frame: (self.frame_n & 0xFF) as u8,
-                    walk_done: false,
-                };
-                let offset = sml2_core::castle_sequence::LEVEL_PROGRESS_OFFSETS
-                    .get(seq.level as usize)
-                    .copied()
-                    .unwrap_or(0) as usize;
-                let out = seq.tick(seq_in, offset, &mut self.castle_progress);
-                if let Some(music) = out.music {
-                    self.sound_driver.music_request = music;
-                }
-                if let Some(sfx) = out.sfx2 {
-                    self.sound_driver.sfx_request_2 = sfx;
-                }
-                if out.done {
-                    if let Some((screen, node, flag)) = self.castle_return.take() {
-                        let mut map_sim = MapSim::new();
-                        map_sim.set_castle_scripts(self.assets.castle_scripts.clone());
-                        map_sim.lives = self.lives;
-                        map_sim.powerup = self.powerup;
-                        map_sim.coins_low = self.coins_low;
-                        map_sim.coins_high = self.coins_high;
-                        map_sim.level_progress = self.castle_progress;
-                        map_sim.load_screen(screen, flag, &self.assets.node_records);
-                        map_sim.node = node;
-                        map_sim.load_node(node, &self.assets.node_records);
-                        self.state = SessionState::Overworld(map_sim);
-                    }
-                }
-                StepOutcome::Continue
+            SessionState::Castle(_) => {
+                let held = pack_joypad(
+                    keys.right,
+                    keys.left,
+                    keys.up,
+                    keys.down,
+                    keys.a,
+                    keys.b,
+                    keys.select,
+                    keys.start,
+                );
+                let pressed = held & !self.prev_keys_held;
+                self.prev_keys_held = held;
+                self.advance_castle(pressed, &mut saves, &mut diagnostics)
             }
 
             SessionState::GameOver => {

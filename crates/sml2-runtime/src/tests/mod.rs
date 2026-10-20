@@ -23,6 +23,7 @@ use std::{
 };
 
 mod acceptance;
+mod castle_flow;
 mod boss_entry;
 mod front_end;
 mod game;

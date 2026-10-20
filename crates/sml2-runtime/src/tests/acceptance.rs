@@ -455,9 +455,9 @@ fn coin_door_room_plays_and_returns_to_the_castle() {
 fn castle_reveal_runs_and_lands_the_map() {
     let mut session = Session::new(SessionAssets::load().expect("session assets must load"));
     let mut seq = sml2_core::castle_sequence::CastleSequence::default();
-    seq.enter(&[0x80; 6]);
+    seq.enter(&[0x80, 0x80, 0, 0x80, 0x80, 0x80]);
     seq.level = 23; // $44F1[23] = $0E
-    seq.state = sml2_core::castle_sequence::STATE_REVEAL_A;
+    seq.state = sml2_core::castle_sequence::STATE_REVEAL_D;
     session.begin_castle_sequence(seq, 0, 0x50, 0);
     assert!(matches!(session.state, SessionState::Castle(_)));
     for _ in 0..4000 {
