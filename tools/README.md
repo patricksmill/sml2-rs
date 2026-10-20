@@ -221,3 +221,11 @@ Fixtures cover mode boundaries, separate boss/no-op accounting, invalid and
 missing inputs, exact unlabeled entries, far state branches, bank trampolines,
 HL/stack transfers, incomplete slices, prompt rejection, and gate failure paths.
 Use `cargo test -p sml2-core`, then the frozen sweep once at the package boundary.
+
+## TAS input playback
+
+Import a BizHawk Game Boy movie with `tools/import_bk2.py` and watch the native
+session with the `tas_playback` runtime example. See
+[TAS playback](../docs/tas-playback.md) for downloads, ROM verification, window
+controls, video export, and the first attempt's actual result. This is literal
+input playback, not an emulator-sync or full-game acceptance gate.
