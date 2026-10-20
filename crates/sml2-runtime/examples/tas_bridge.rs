@@ -76,12 +76,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
+        let before_scene = scene_snapshot(&session);
         let effects = session.advance(FrameInput {
             keys,
             div: Divider::from_elapsed(0, elapsed).sample(),
         });
         if effects.outcome != sml2_runtime::session::StepOutcome::Continue {
             eprintln!("input frame {index}: {:?}", effects.outcome);
+        }
+        let after_scene = scene_snapshot(&session);
+        if before_scene.map(|s| (s.4, s.5, s.6, s.7, s.9)) != after_scene.map(|s| (s.4, s.5, s.6, s.7, s.9)) {
+            eprintln!("scene boundary at native input {index}: {before_scene:?} -> {after_scene:?}");
         }
         for diagnostic in effects.diagnostics {
             eprintln!("{diagnostic}");
@@ -113,4 +118,11 @@ fn write_frame(
     out.write_all(&session.render_frame((160, 144)))?;
     out.flush()?;
     Ok(())
+}
+
+fn scene_snapshot(session: &Session) -> Option<(u16,u16,u16,u16,u8,u8,u8,bool,u8,bool)> {
+    match &session.state {
+        sml2_runtime::session::SessionState::InLevel(c) => Some((c.sim.x,c.sim.y,c.cam.x,c.cam.y,c.cam.transition,c.cam.scene_id,c.sim.pipe_dir,c.scene_vm.owns_gameplay(),c.obj.fff0,c.sim.on_ground_obj)),
+        _ => None,
+    }
 }
