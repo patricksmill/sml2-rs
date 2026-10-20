@@ -24,14 +24,20 @@ def read_state(pipe):
     parts = text.split()[1:]
     if parts == ['-'] * 5:
         return None
-    if len(parts) not in (5, 9):
+    if len(parts) not in (5, 9) and (
+            len(parts) < 10 or not all("=" in p for p in parts[9:])):
         raise RuntimeError(f'malformed bridge state line: {text!r}')
     try:
         level, x, y, cam_x, cam_y = (int(value) for value in parts[:5])
         state = {'level': level, 'x': x, 'y': y, 'cam_x': cam_x, 'cam_y': cam_y}
-        if len(parts) == 9:
+        if len(parts) >= 9:
             state.update(hvel=int(parts[5], 16), vvel=int(parts[6], 16),
                          on_ground=int(parts[7]), phase=int(parts[8]))
+            for field in parts[9:]:
+                key, value = field.split("=", 1)
+                if key not in {"step", "fff0", "update_phase", "standing", "scene", "owns", "pc"}:
+                    raise ValueError("unknown diagnostic field")
+                state[key] = int(value)
     except ValueError as exc:
         raise RuntimeError(f'malformed bridge state line: {text!r}') from exc
     return state
@@ -113,7 +119,8 @@ def logic_phases(before_state, before_ff97, st4_ran, f71_phases, scene_phases=()
     return phases + list(scene_phases)
 
 
-def check_divergence(frame, memory, native, threshold, live=False, player_ran=True):
+def check_divergence(frame, memory, native, threshold, live=False, player_ran=True,
+                     native_step=None):
     """In-level ROM position vs the port. `live` reads `$FFC0`/`$FFC2` (the
     position `$181C` just wrote). Otherwise `sMarioX`/`sMarioY`, which the
     state-`$04` handler publishes one frame later.
@@ -122,14 +129,19 @@ def check_divergence(frame, memory, native, threshold, live=False, player_ran=Tr
     port may still be on the last entry-hold step. That is only a missed level
     once `$0F71` or the pipe path has run.
     """
+    step = native.get('step', native_step) if native is not None else native_step
+    contract = (f'compared level/x/y, position tolerance {threshold}px; '
+                f'native update {step if step is not None else "unknown"}')
     if memory[0xFF9B] == 4 and native is None and player_ran:
         return {'frame': frame, 'dx': 0, 'dy': 0,
-                'detail': f'ROM level {memory[0xA269]} vs port not in a level'}
+                'native_step': step,
+                'detail': f'ROM level {memory[0xA269]} vs port not in a level; {contract}'}
     if native is None or memory[0xFF9B] != 4:
         return None
     if memory[0xA269] != native['level']:
         return {'frame': frame, 'dx': 0, 'dy': 0,
-                'detail': f'ROM level {memory[0xA269]} vs port level {native["level"]}'}
+                'native_step': step,
+                'detail': f'ROM level {memory[0xA269]} vs port level {native["level"]}; {contract}'}
     if live:
         x = memory[0xFFC2] | memory[0xFFC3] << 8
         y = memory[0xFFC0] | memory[0xFFC1] << 8
@@ -138,11 +150,37 @@ def check_divergence(frame, memory, native, threshold, live=False, player_ran=Tr
         y = memory[0xA229] | memory[0xA22A] << 8
         if x == 0 and y == 0:
             return None  # the ROM's first gameplay frame still has the level entry pending
+    cam_x = memory[0xFFCA] | memory[0xFFCB] << 8
+    cam_y = memory[0xFFC8] | memory[0xFFC9] << 8
     dx, dy = native['x'] - x, native['y'] - y
+    # Camera bytes are sampled now, even in the delayed sMario mode. Report
+    # their differences, but do not turn that mixed-boundary sample into a gate.
+    dcx, dcy = native['cam_x'] - cam_x, native['cam_y'] - cam_y
     if abs(dx) <= threshold and abs(dy) <= threshold:
         return None
-    return {'frame': frame, 'dx': dx, 'dy': dy,
-            'detail': f'level {native["level"]} ROM ({x}, {y}) vs port ({native["x"]}, {native["y"]})'}
+    diagnostics = ', '.join(f'{key}={native[key]}' for key in
+                            ('fff0', 'update_phase', 'standing', 'scene', 'owns', 'pc')
+                            if key in native)
+    detail = (f'level {native["level"]} ROM ({x}, {y}) vs port ({native["x"]}, {native["y"]}); '
+              f'world camera ROM ({cam_x}, {cam_y}) vs port ({native["cam_x"]}, {native["cam_y"]}) '
+              f'(delta {dcx}, {dcy}; diagnostic only); '
+              f'{contract}; '
+              f'ROM {"live HRAM" if live else "published prior position / current camera"}')
+    if diagnostics:
+        detail += (f'; native {diagnostics}; ROM current fff0={memory[0xFFF0]} '
+                   f'update_phase={memory[0xAF08]} standing={memory[0xA26B]} '
+                   f'scene={memory[0xA28E] | memory[0xA28F] << 8}')
+    return {'frame': frame, 'native_step': step, 'dx': dx, 'dy': dy,
+            'cam_dx': dcx, 'cam_dy': dcy, 'detail': detail}
+
+
+def comparison_threshold(threshold, exact=False, disabled=False):
+    """None disables comparison; exact is explicit so threshold=0 stays disabled."""
+    if disabled:
+        return None
+    if exact:
+        return 0
+    return threshold if threshold > 0 else None
 
 
 def main():
@@ -154,6 +192,10 @@ def main():
                         help="do not feed the ROM's $FF97 phase to the port (see --phase-lock)")
     parser.add_argument('--diverge-threshold', type=int, default=4,
                         help='pause both windows when |dx| or |dy| exceeds this many pixels (0 disables)')
+    parser.add_argument('--exact-position', action='store_true',
+                        help='pause on any world x/y mismatch (overrides threshold 0)')
+    parser.add_argument('--debug-state', action='store_true',
+                        help='include native clock/contact/scene diagnostics in divergence reports')
     parser.add_argument('--no-diverge', action='store_true',
                         help='keep playing past the first position divergence')
     parser.add_argument('--port-initial-phase', type=int, choices=range(8),
@@ -172,6 +214,8 @@ def main():
     frames = movie['frames']
     if any(type(mask) is not int or not 0 <= mask <= 255 for mask in frames):
         parser.error('invalid movie input mask')
+    if args.diverge_threshold < 0:
+        parser.error('--diverge-threshold must be nonnegative')
     if args.frames is not None and args.frames <= 0:
         parser.error('--frames must be positive')
     if args.headless and args.paused:
@@ -198,16 +242,22 @@ def main():
         bridge_args = [str(args.bridge.resolve())]
         if args.port_initial_phase is not None:
             bridge_args.extend(['--initial-phase', str(args.port_initial_phase)])
-        watch = args.diverge_threshold > 0 and not args.no_diverge
+        threshold = comparison_threshold(args.diverge_threshold, args.exact_position, args.no_diverge)
+        watch = threshold is not None
+        state_rows = watch or args.debug_state
         phase_lock = not args.no_phase_lock
-        if watch:
+        if state_rows:
             bridge_args.append('--state')
+        if args.debug_state:
+            bridge_args.append('--debug-state')
         if phase_lock:
             bridge_args.append('--phase-lock')
         bridge = subprocess.Popen(bridge_args, stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE)
-        native_state = read_state(bridge.stdout) if watch else None
+        native_state = read_state(bridge.stdout) if state_rows else None
         native = read_frame(bridge.stdout)
+        native_step = 0
+        previous_native_step = None
         if not args.headless:
             import sdl2 as sdl
             if sdl.SDL_Init(sdl.SDL_INIT_VIDEO) != 0:
@@ -241,6 +291,8 @@ def main():
                     scene_phases.append(pyboy.memory[0xFF97] & 7)
 
             pyboy.hook_register(0, 0x273D, scene_resume, None)
+        print(f'Position comparison: {"disabled" if threshold is None else f"level/x/y, world tolerance {threshold}px"}; camera is diagnostic only; pixels are not compared.', flush=True)
+        print(f'Phase lock: {"ROM-supplied phases (diagnostic alignment, not native clock parity)" if phase_lock else "off"}.', flush=True)
         print('Space pause/resume BOTH; Right step BOTH; Tab 1x/0.25x; Escape closes BOTH.', flush=True)
         if movie.get('source') == 'manual-pyboy':
             print('Manual PyBoy recording: ROM, boot ROM, core version, and settings match.', flush=True)
@@ -274,6 +326,7 @@ def main():
             if not running:
                 break
             if index < count and (not paused or step_once):
+                previous_divergence = divergence
                 mask = frames[index]
                 apply_buttons(pyboy, previous, mask)
                 if phase_lock:
@@ -290,24 +343,27 @@ def main():
                     for phase in phases:
                         bridge.stdin.write(f'{mask} {phase}\n'.encode())
                         bridge.stdin.flush()
-                        if watch:
+                        if state_rows:
                             native_state = read_state(bridge.stdout)
                         native = read_frame(bridge.stdout)
+                        native_step += 1
                     if watch and divergence is None:
                         divergence = check_divergence(
-                            index, pyboy.memory, native_state, args.diverge_threshold, live=True,
-                            player_ran=bool(f71_phases or st4_ran))
+                            index, pyboy.memory, native_state, threshold, live=True,
+                            player_ran=bool(f71_phases or st4_ran), native_step=native_step)
                 else:
                     bridge.stdin.write(f'{mask}\n'.encode())
                     bridge.stdin.flush()
-                    native_state = read_state(bridge.stdout) if watch else None
+                    native_state = read_state(bridge.stdout) if state_rows else None
                     native = read_frame(bridge.stdout)
+                    native_step += 1
                     # sMarioX/Y are copied from HRAM at the next state-$04 entry,
                     # so this row's ROM state matches the previous row's port state.
                     if watch and divergence is None and previous_native is not None:
                         divergence = check_divergence(
-                            index - 1, pyboy.memory, previous_native, args.diverge_threshold)
-                if divergence:
+                            index - 1, pyboy.memory, previous_native, threshold,
+                            native_step=previous_native_step)
+                if divergence is not None and previous_divergence is None:
                     paused = True
                     print(f'FIRST DIVERGENCE at input {divergence["frame"]}: {divergence["detail"]}',
                           flush=True)
@@ -318,6 +374,7 @@ def main():
                         break
                 previous = mask
                 previous_native = native_state
+                previous_native_step = native_step
                 index += 1
             if args.headless and index == count:
                 break
@@ -337,7 +394,7 @@ def main():
                 raise RuntimeError('PyBoy final screen does not match the recording')
             print('PyBoy final screen matches the recording exactly.', flush=True)
         if divergence:
-            print(f'Port and ROM agree on level/x/y until input {divergence["frame"]} '
+            print(f'First sampled level/x/y mismatch beyond tolerance at input {divergence["frame"]} '
                   f'({divergence["detail"]}); playback paused there.', flush=True)
         print(f'Stopped after {index} shared input rows.', flush=True)
     finally:

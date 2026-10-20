@@ -4,7 +4,8 @@
 //! `STATE level x y camx camy hvel vvel on_ground phase` line (velocities are
 //! hexadecimal; other fields are decimal) so the viewer can compare native positions
 //! against the emulator and stop at the first divergence. `-` marks a frame
-//! outside a level.
+//! outside a level. `--debug-state` appends decimal `key=value` diagnostics to
+//! that same line, preserving the following pixel frame boundary.
 use sml2_core::{divider::Divider, player_sim::PlayerKeys};
 use sml2_runtime::session::{FrameInput, Session, SessionAssets};
 use std::{
@@ -18,6 +19,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut initial_phase = None;
     let mut state_lines = false;
     let mut phase_lock = false;
+    let mut debug_state = false;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--initial-phase" => {
@@ -28,6 +30,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 initial_phase = Some(phase);
             }
             "--state" => state_lines = true,
+            "--debug-state" => {
+                state_lines = true;
+                debug_state = true;
+            }
             "--phase-lock" => phase_lock = true,
             _ => return Err(format!("unknown bridge argument: {arg}").into()),
         }
@@ -35,7 +41,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut session = Session::new(SessionAssets::load()?);
     session.enter_title();
     let mut out = io::BufWriter::new(io::stdout().lock());
-    write_frame(&mut out, &session, state_lines)?;
+    write_frame(&mut out, &session, state_lines, debug_state, 0)?;
     for (index, line) in io::stdin().lock().lines().enumerate() {
         // `--phase-lock` rows are `mask phase`: the ROM's own `$FF97 & 7`, which
         // a frame-synchronous port cannot derive (it counts vblank waits from
@@ -76,7 +82,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        let before_scene = scene_snapshot(&session);
         let effects = session.advance(FrameInput {
             keys,
             div: Divider::from_elapsed(0, elapsed).sample(),
@@ -84,14 +89,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         if effects.outcome != sml2_runtime::session::StepOutcome::Continue {
             eprintln!("input frame {index}: {:?}", effects.outcome);
         }
-        let after_scene = scene_snapshot(&session);
-        if before_scene.map(|s| (s.4, s.5, s.6, s.7, s.9)) != after_scene.map(|s| (s.4, s.5, s.6, s.7, s.9)) {
-            eprintln!("scene boundary at native input {index}: {before_scene:?} -> {after_scene:?}");
-        }
         for diagnostic in effects.diagnostics {
             eprintln!("{diagnostic}");
         }
-        write_frame(&mut out, &session, state_lines)?;
+        write_frame(&mut out, &session, state_lines, debug_state, tick)?;
     }
     Ok(())
 }
@@ -102,27 +103,43 @@ fn write_frame(
     out: &mut impl Write,
     session: &Session,
     state_lines: bool,
+    debug_state: bool,
+    native_step: u64,
 ) -> Result<(), Box<dyn Error>> {
     if state_lines {
-        let line = match &session.state {
+        let mut line = match &session.state {
             sml2_runtime::session::SessionState::InLevel(c) => format!(
                 "STATE {} {} {} {} {} {:02x} {:02x} {} {}",
-                c.manifest.level_id, c.sim.x, c.sim.y, c.cam.x, c.cam.y,
-                c.sim.hvel, c.sim.vvel, u8::from(c.sim.on_ground), c.sim.phase
+                c.manifest.level_id,
+                c.sim.x,
+                c.sim.y,
+                c.cam.x,
+                c.cam.y,
+                c.sim.hvel,
+                c.sim.vvel,
+                u8::from(c.sim.on_ground),
+                c.sim.phase
             ),
             _ => "STATE - - - - -".to_string(),
         };
+        if debug_state {
+            if let sml2_runtime::session::SessionState::InLevel(c) = &session.state {
+                line.push_str(&format!(
+                    " step={} fff0={} update_phase={} standing={} scene={} owns={} pc={}",
+                    native_step,
+                    c.obj.fff0,
+                    c.obj.update_phase,
+                    u8::from(c.sim.on_ground_obj),
+                    c.cam.scene_id,
+                    u8::from(c.scene_vm.owns_gameplay()),
+                    c.scene_vm.pc
+                ));
+            }
+        }
         out.write_all(line.as_bytes())?;
         out.write_all(b"\n")?;
     }
     out.write_all(&session.render_frame((160, 144)))?;
     out.flush()?;
     Ok(())
-}
-
-fn scene_snapshot(session: &Session) -> Option<(u16,u16,u16,u16,u8,u8,u8,bool,u8,bool)> {
-    match &session.state {
-        sml2_runtime::session::SessionState::InLevel(c) => Some((c.sim.x,c.sim.y,c.cam.x,c.cam.y,c.cam.transition,c.cam.scene_id,c.sim.pipe_dir,c.scene_vm.owns_gameplay(),c.obj.fff0,c.sim.on_ground_obj)),
-        _ => None,
-    }
 }

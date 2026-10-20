@@ -5,7 +5,8 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from compare_tas import apply_buttons, logic_phases, read_state
+from compare_tas import (apply_buttons, logic_phases, read_state,
+                         check_divergence, comparison_threshold)
 
 
 class BridgeStateTests(unittest.TestCase):
@@ -23,6 +24,23 @@ class BridgeStateTests(unittest.TestCase):
             'hvel': 0xFF, 'vvel': 0x0A, 'on_ground': 0, 'phase': 7,
         })
 
+    def test_debug_fields_share_the_state_line_and_preserve_pixel_boundary(self):
+        pixels = bytes(range(256)) * 90
+        pipe = io.BytesIO(b'STATE 10 498 164 499 160 00 00 1 2 '
+                          b'step=8102 fff0=174 update_phase=0 standing=1 scene=17 owns=1 pc=24700\n'
+                          + pixels + b'STATE - - - - -\n' + pixels)
+        state = read_state(pipe)
+        self.assertEqual(state['step'], 8102)
+        self.assertEqual(state['fff0'], 174)
+        self.assertEqual(state['update_phase'], 0)
+        self.assertEqual(state['standing'], 1)
+        self.assertEqual(state['scene'], 17)
+        self.assertEqual(state['owns'], 1)
+        self.assertEqual(state['pc'], 24700)
+        self.assertEqual(pipe.read(len(pixels)), pixels)
+        self.assertIsNone(read_state(pipe))
+        self.assertEqual(pipe.read(len(pixels)), pixels)
+
     def test_legacy_state(self):
         self.assertEqual(read_state(io.BytesIO(b'STATE 0 34 468 80 448\n')), {
             'level': 0, 'x': 34, 'y': 468, 'cam_x': 80, 'cam_y': 448,
@@ -34,7 +52,9 @@ class BridgeStateTests(unittest.TestCase):
     def test_invalid_state(self):
         for line in (b'STATE 0 34 468 80\n', b'STATE 0 34 468 80 448 80\n',
                      b'STATE 0 34 468 80 448 zz 18 1 0\n',
-                     b'STATE 0 bad 468 80 448\n'):
+                     b'STATE 0 bad 468 80 448\n',
+                     b'STATE 0 34 468 80 448 80 18 1 0 step=bad\n',
+                     b'STATE 0 34 468 80 448 80 18 1 0 typo=1\n'):
             with self.subTest(line=line), self.assertRaisesRegex(RuntimeError, 'malformed'):
                 read_state(io.BytesIO(line))
 
@@ -45,6 +65,81 @@ class BridgeStateTests(unittest.TestCase):
     def test_closed_bridge(self):
         with self.assertRaisesRegex(RuntimeError, 'closed unexpectedly'):
             read_state(io.BytesIO())
+
+
+class PositionComparisonTests(unittest.TestCase):
+    def fixture(self, x=402, y=343, cam_x=400, cam_y=300):
+        memory = bytearray(65536)
+        memory[0xFF9B] = 4
+        memory[0xA269] = 10
+        for address, value in ((0xFFC2, x), (0xFFC0, y),
+                               (0xA227, x), (0xA229, y),
+                               (0xFFCA, cam_x), (0xFFC8, cam_y)):
+            memory[address] = value & 255
+            memory[address + 1] = value >> 8
+        native = dict(level=10, x=x, y=y, cam_x=cam_x, cam_y=cam_y)
+        return memory, native
+
+    def test_threshold_zero_still_disables_and_exact_is_explicit(self):
+        self.assertIsNone(comparison_threshold(0))
+        self.assertEqual(comparison_threshold(0, exact=True), 0)
+        self.assertEqual(comparison_threshold(4, exact=True), 0)
+        self.assertIsNone(comparison_threshold(4, exact=True, disabled=True))
+
+    def test_one_pixel_mismatch_is_exact_only_and_reports_separate_indices(self):
+        memory, native = self.fixture()
+        native.update(x=401, step=7500)
+        self.assertIsNone(check_divergence(7602, memory, native, 4, live=True))
+        mismatch = check_divergence(7602, memory, native, 0, live=True)
+        self.assertEqual((mismatch['frame'], mismatch['native_step']), (7602, 7500))
+        self.assertEqual(mismatch['dx'], -1)
+        self.assertIn('position tolerance 0px', mismatch['detail'])
+        self.assertIn('compared level/x/y', mismatch['detail'])
+        self.assertIn('ROM live HRAM', mismatch['detail'])
+
+    def test_threshold_boundary_and_legacy_native_step_fallback(self):
+        memory, native = self.fixture()
+        native['x'] -= 4
+        self.assertIsNone(check_divergence(5, memory, native, 4))
+        native['x'] -= 1
+        mismatch = check_divergence(5, memory, native, 4, native_step=7)
+        self.assertEqual(mismatch['native_step'], 7)
+        self.assertIn('published prior position / current camera', mismatch['detail'])
+
+    def test_equal_modulo_projection_does_not_hide_page_change(self):
+        memory, native = self.fixture(x=499, y=676, cam_x=499, cam_y=672)
+        native.update(x=498, y=164, cam_y=160)
+        self.assertEqual((676 - 672) & 255, (native['y'] - native['cam_y']) & 255)
+        self.assertEqual(676 & 255, native['y'] & 255)
+        mismatch = check_divergence(8134, memory, native, 4, live=True, native_step=8000)
+        self.assertEqual((mismatch['dy'], mismatch['cam_dy']), (-512, -512))
+        self.assertIn('world camera ROM (499, 672) vs port (499, 160)', mismatch['detail'])
+
+    def test_camera_is_diagnostic_and_does_not_gate_mixed_boundary_state(self):
+        memory, native = self.fixture()
+        native['cam_y'] += 512
+        self.assertIsNone(check_divergence(1, memory, native, 0))
+
+    def test_live_reads_hram_and_published_mode_reads_saved_position(self):
+        memory, native = self.fixture()
+        memory[0xFFC2] += 1
+        self.assertIsNone(check_divergence(2, memory, native, 0))
+        self.assertEqual(check_divergence(2, memory, native, 0, live=True)['dx'], -1)
+
+    def test_entry_without_a_player_update_can_still_be_outside_a_level(self):
+        memory, _ = self.fixture()
+        self.assertIsNone(check_divergence(1, memory, None, 0, live=True, player_ran=False))
+        mismatch = check_divergence(1, memory, None, 0, live=True, native_step=4)
+        self.assertEqual(mismatch['native_step'], 4)
+        self.assertIn('position tolerance 0px; native update 4', mismatch['detail'])
+
+    def test_level_mismatch_reports_tolerance_and_native_update(self):
+        memory, native = self.fixture()
+        native.update(level=9, step=99)
+        mismatch = check_divergence(103, memory, native, 4, live=True)
+        self.assertEqual(mismatch['native_step'], 99)
+        self.assertIn('ROM level 10 vs port level 9', mismatch['detail'])
+        self.assertIn('position tolerance 4px; native update 99', mismatch['detail'])
 
 
 class Controller:

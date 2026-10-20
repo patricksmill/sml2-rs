@@ -115,6 +115,65 @@ PyBoy's progress before attributing a mismatch to native physics.
 shared input prefix without opening windows. This is a live inspection tool,
 not an automated trajectory-capture or acceptance-test harness.
 
+### Position comparison and sampling boundaries
+
+The default comparison pauses on the first sampled level difference or world
+X/Y difference greater than four pixels. `--diverge-threshold N` changes that
+inclusive tolerance; **`--diverge-threshold 0` disables it**. Use
+`--exact-position` to pause on any world X/Y difference, including one pixel.
+`--no-diverge` disables comparison even with `--exact-position`.
+
+```bash
+python tools/compare_tas.py recordings/<recording>.json --rom ../sml2decomp/baserom.gb --exact-position --debug-state
+```
+
+Reports identify the zero-based **movie input index** and the **native update
+count**, which starts at zero before any `Session::advance`. Those indices can
+differ: phase lock is on by default and may send zero, one, or several native
+updates for one movie row. Every update uses that row's unchanged button mask.
+The ROM-supplied phases are diagnostic alignment, not proof of native clock
+parity. The window's input label identifies the movie row, not a native update.
+
+The sampling contracts come from `home.asm` and the bridge:
+
+- `$05D5` publishes live Mario HRAM `$FFC2/$FFC0` into `$A227/$A229` before
+  calling the player routine `$0F71`. With phase lock off, the comparison uses
+  this published position and the preceding native row. This is a delayed
+  diagnostic approximation, particularly across transitions.
+- With phase lock on, hooks at `$05D5`, `$0F71` and the blocking scene's `$2728`
+  return (`$273D`) select native updates. The ROM sample is still taken after
+  `PyBoy.tick(1)`, an emulator hardware-frame boundary. Live HRAM is read then;
+  this is not necessarily the boundary of a completed gameplay update.
+- The native row and pixels both follow the corresponding `Session::advance`.
+  With no selected update the viewer retains the previous native row and image.
+- World camera X/Y (`$FFCA/$FFC8`) are sampled at the current ROM boundary and
+  shown with their deltas. They are diagnostic only, especially because the
+  non-phase-lock mode's published Mario position is from an earlier update.
+  The stop condition compares level and world X/Y only. It does not compare
+  cameras, velocities, contacts, or pixels.
+
+Equal screen projections do not imply equal world state: a 512-pixel page
+change can preserve `(Mario Y - camera Y) & 255`. For the local recording that
+motivated this tool, exact mode distinguishes a one-pixel mismatch at input
+7602 from the default tolerance's 512-pixel page difference at input 8134.
+These are diagnostic observations, not committed replay acceptance fixtures.
+Inspect native-size images separately before making a visual parity claim.
+
+`--debug-state` includes native object counter `fff0`, object update phase,
+standing-on-object contact, scene ID, gameplay ownership and script cursor.
+The ROM counter (`$FFF0`), phase (`$AF08`), contact (`$A26B`) and scene ID
+(`$A28E/$A28F`) shown beside them are current hardware-frame samples. Native
+ownership and cursor have no asserted equivalence to arbitrary stopped CPU
+registers. Debug fields supplement the position report and do not affect it.
+
+The bridge emits one ASCII `STATE` line followed immediately by exactly
+160×144 grayscale bytes. Legacy five-field position rows and nine-field
+position/velocity rows remain readable. `--debug-state` implies `--state` and
+appends decimal `key=value` fields to the same line; it adds no separate lines
+between state and pixels. Outside a level the row remains `STATE - - - - -`.
+The comparison viewer tracks native updates even with a legacy bridge, though
+opt-in debug fields require rebuilding the current bridge.
+
 ## PyBoy compatibility search (2026-10-19)
 
 The following published movies were tried with PyBoy 2.8.1, original Game Boy
