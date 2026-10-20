@@ -149,7 +149,7 @@ Eight core tests cover the six-coin test, tally, walk-in, menu flow, row
 shifts, progress-bit write and START wait.
 
 ### ME-7 — Acceptance and inventory (done except the Wario tape)
-Three session tapes in `crates/sml2-runtime/src/tests/acceptance.rs`:
+Four session tapes in `crates/sml2-runtime/src/tests/acceptance.rs`:
 
 - `coin_door_room_plays_and_returns_to_the_castle`: node `$70`, purse 2000,
   A -> screen 10 with a staged room, A again -> the room runs to state 3 and
