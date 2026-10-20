@@ -1202,6 +1202,7 @@ pub fn render_overworld_view(
     let bg_shades = crate::video::bgp_shades(bg_palette);
     let obj_shades = crate::video::bgp_shades(obj_palette);
     let mut img = vec![bg_shades[0]; vw * vh];
+    let mut bg_colors = vec![0; vw * vh];
     let _ = &img;
 
     if screen_id == 0 {
@@ -1218,6 +1219,7 @@ pub fn render_overworld_view(
                 let vram_idx = signed_bg_tile_index(tile_byte);
                 if let Some(tile_data) = tiles_vram.get(vram_idx) {
                     let col = tile_data[sub_y * 8 + sub_x];
+                    bg_colors[py * vw + px] = col;
                     img[py * vw + px] = bg_shades[col as usize];
                 }
             }
@@ -1260,10 +1262,24 @@ pub fn render_overworld_view(
                 let vram_idx = signed_bg_tile_index(tile_byte);
                 if let Some(tile_data) = tiles_vram.get(vram_idx) {
                     let col = tile_data[sub_y * 8 + sub_x];
+                    bg_colors[py * vw + px] = col;
                     img[py * vw + px] = bg_shades[col as usize];
                 }
             }
         }
+    }
+
+    if screen_id >= 9 {
+        draw_room_objects(
+            &mut img,
+            &bg_colors,
+            tiles_vram,
+            decor_cells,
+            obj_palette,
+            vw,
+            vh,
+        );
+        return img;
     }
 
     for &(oy, ox, tile, attr) in decor_cells {
@@ -1281,13 +1297,6 @@ pub fn render_overworld_view(
             vw,
             vh,
         );
-    }
-
-    // Bonus-screen dispatch runs the room's own sprite pass (`$6106D`
-    // for coin rooms, `$3E277` for bell rooms).
-    // The overworld cursor and hub status strip are absent in bonus rooms.
-    if screen_id >= 9 {
-        return img;
     }
 
     if camera_pan {
@@ -1388,6 +1397,50 @@ pub fn render_overworld_view(
 #[cfg(test)]
 #[path = "map/minigame_render_tests.rs"]
 mod minigame_render_tests;
+
+/// Bonus rooms own their complete OAM list; no map cursor or hub strip.
+/// Smaller OAM X wins overlaps, then earlier entries; bit 4 selects OBP1 ($39).
+fn draw_room_objects(
+    img: &mut [u8],
+    bg: &[u8],
+    tiles: &[[u8; 64]],
+    cells: &[(u8, u8, u8, u8)],
+    obp0: u8,
+    vw: usize,
+    vh: usize,
+) {
+    // Select the winning OBJ before applying its BG priority. An obscured
+    // foreground OBJ still prevents lower-priority objects showing through.
+    let mut occupied = vec![false; img.len()];
+    let mut order: Vec<_> = cells.iter().enumerate().collect();
+    order.sort_by_key(|&(i, &(_, x, _, _))| (x, i));
+    for (_, &(oy, ox, tile, attr)) in order {
+        let Some(data) = tiles.get(tile as usize) else {
+            continue;
+        };
+        let pal = crate::video::bgp_shades(if attr & 0x10 != 0 { 0x39 } else { obp0 });
+        for dy in 0..8 {
+            for dx in 0..8 {
+                let x = ox as i32 - 8 + dx;
+                let y = oy as i32 - 16 + dy;
+                if x < 0 || x >= vw as i32 || y < 0 || y >= vh as i32 {
+                    continue;
+                }
+                let sx = if attr & 0x20 != 0 { 7 - dx } else { dx };
+                let sy = if attr & 0x40 != 0 { 7 - dy } else { dy };
+                let color = data[(sy * 8 + sx) as usize];
+                let at = y as usize * vw + x as usize;
+                if color == 0 || occupied[at] {
+                    continue;
+                }
+                occupied[at] = true;
+                if attr & 0x80 == 0 || bg[at] == 0 {
+                    img[at] = pal[color as usize];
+                }
+            }
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
