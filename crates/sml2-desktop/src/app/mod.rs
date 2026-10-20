@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 mod controls;
+mod debug;
 mod panels;
 mod startup;
 pub use startup::{run, Options};
@@ -46,6 +47,16 @@ pub struct DesktopApp {
     debug: bool,
     paused: bool,
     step: bool,
+    /// Debug-panel pickers: overworld screen, map node, level id.
+    debug_screen: u8,
+    debug_node: u8,
+    debug_level: u8,
+    /// What the last debug edit did, shown under the controls.
+    debug_note: Option<String>,
+    /// Whether that note is a failure (drawn red instead of green).
+    debug_note_error: bool,
+    /// Level picker entries, cached when the assets load.
+    levels: Vec<(u8, String)>,
     focused: bool,
     last_update: Instant,
     last_save: Instant,
@@ -92,6 +103,12 @@ impl DesktopApp {
             debug: false,
             paused: false,
             step: false,
+            debug_screen: 0,
+            debug_node: 0x14,
+            debug_level: 0,
+            debug_note: None,
+            debug_note_error: false,
+            levels: Vec::new(),
             focused: false,
             last_update: Instant::now(),
             last_save: Instant::now(),
@@ -141,7 +158,8 @@ impl DesktopApp {
                     assets,
                     self.options.paths.save.clone(),
                     self.options.audio,
-                ))
+                ));
+                self.level_choices();
             }
             Err(e) => self.status = Some(format!("Game data could not be loaded: {e}")),
         }

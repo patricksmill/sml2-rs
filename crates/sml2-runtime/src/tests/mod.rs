@@ -25,6 +25,7 @@ use std::{
 mod acceptance;
 mod castle_flow;
 mod boss_entry;
+mod debug;
 mod front_end;
 mod game;
 mod pause_audio;

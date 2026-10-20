@@ -201,9 +201,10 @@ impl DesktopApp {
 
     pub(super) fn debug_panel(&mut self, ctx: &Context) {
         let mut open = self.debug;
+        let mut action = None;
         egui::Window::new("Debug · F1")
             .open(&mut open)
-            .default_width(320.0)
+            .default_width(360.0)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     if ui
@@ -324,8 +325,13 @@ impl DesktopApp {
                     }
                 }
                 ui.separator();
+                action = self.debug_controls(ui);
+                ui.separator();
                 ui.label("Menu and focus loss suspend ticking. Step advances one outer game tick.");
             });
         self.debug = open;
+        if let Some(action) = action {
+            self.apply_debug(action);
+        }
     }
 }

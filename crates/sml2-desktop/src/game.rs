@@ -83,6 +83,17 @@ impl Game {
         atomic_write(&self.save, &self.session.slots.image())
     }
 
+    /// Write the live progress record into the active pipe and persist the
+    /// slot image. The debug panel's Save button uses this; edits are not
+    /// written until it is pressed.
+    pub fn save_now(&mut self) -> std::io::Result<()> {
+        if let Some(slot) = self.session.active_slot {
+            let record = self.session.save_record();
+            self.session.slots.write_slot(slot as usize, &record);
+        }
+        self.persist_slots()
+    }
+
     pub fn audio_running(&mut self, running: bool) {
         if running && self.audio_enabled && self.output.is_none() {
             self.output = AudioOutput::open();

@@ -1,8 +1,10 @@
+use super::debug::DebugAction;
 use super::*;
 use crate::{
     input::{Button, PadButton},
     settings::AppPaths,
 };
+use sml2_runtime::session::SessionState;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn app() -> (DesktopApp, Context, PathBuf) {
@@ -155,6 +157,94 @@ fn focus_loss_freezes_ticks_and_clears_held_keys() {
     let _ = ctx.run(raw.take(), |ctx| app.ui(ctx));
     assert_eq!(app.game.as_ref().unwrap().session.frame_n, tick);
     assert!(!app.input.sample_player(&app.settings.bindings).a);
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn debug_panel_renders_with_a_game_and_lists_every_level() {
+    let (mut app, ctx, path) = app();
+    app.debug = true;
+    app.screen = Screen::Game;
+    // Two frames: the second reuses egui's memory, which is where duplicate
+    // widget ids would panic.
+    frame(&mut app, &ctx, vec![]);
+    frame(&mut app, &ctx, vec![]);
+    assert_eq!(app.levels.len(), 32, "every extracted level is offered");
+    assert!(app
+        .levels
+        .iter()
+        .any(|(id, label)| *id == 0 && label.contains("level1")));
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn debug_actions_edit_the_session_and_persist_the_active_pipe() {
+    let (mut app, ctx, path) = app();
+    app.debug = true;
+    app.screen = Screen::Game;
+    frame(&mut app, &ctx, vec![]);
+    app.game.as_mut().unwrap().session.active_slot = Some(0);
+
+    app.apply_debug(DebugAction::ClearAllLevels);
+    let game = app.game.as_ref().unwrap();
+    assert!(game.session.debug_golden_coins().iter().all(|&held| held));
+    assert!(
+        game.session.slots.load_slot(0).is_none_or(|record| record[0x08 + 5] & 0x80 == 0),
+        "an edit alone does not touch the pipe"
+    );
+    assert!(!path.join("save.sav").exists(), "nor the slot image on disk");
+
+    app.apply_debug(DebugAction::Save);
+    let game = app.game.as_ref().unwrap();
+    let record = game
+        .session
+        .slots
+        .load_slot(0)
+        .expect("pipe A holds the record");
+    assert_eq!(record[0x08 + 5] & 0x80, 0x80, "the clear reached the save");
+    assert!(sml2_core::map::save_record_valid(&record));
+    assert!(path.join("save.sav").exists(), "the slot image was written");
+
+    app.apply_debug(DebugAction::SetGoldenCoin {
+        index: 0,
+        held: false,
+    });
+    assert_eq!(
+        app.game.as_ref().unwrap().session.debug_golden_coins(),
+        [false, true, true, true, true, true]
+    );
+
+    app.apply_debug(DebugAction::AddCoins(250));
+    app.apply_debug(DebugAction::AddLives(2));
+    assert_eq!(app.game.as_ref().unwrap().session.debug_coins(), 250);
+    assert_eq!(app.game.as_ref().unwrap().session.debug_lives(), 7);
+
+    app.apply_debug(DebugAction::WarpLevel(4));
+    match &app.game.as_ref().unwrap().session.state {
+        SessionState::InLevel(level) => assert_eq!(level.manifest.level_id, 4),
+        _ => panic!("the level warp did not go live"),
+    }
+    // A warped level has to render and tick like a played one.
+    let before = app.game.as_ref().unwrap().session.frame_n;
+    frame(&mut app, &ctx, vec![]);
+    frame(&mut app, &ctx, vec![]);
+    assert!(app.game.as_ref().unwrap().session.frame_n > before);
+
+    app.apply_debug(DebugAction::WarpMap {
+        screen: 3,
+        node: 0x32,
+    });
+    match &app.game.as_ref().unwrap().session.state {
+        SessionState::Overworld(map) => {
+            assert_eq!((map.screen_id, map.node), (3, 0x32));
+            assert_eq!(
+                map.level_progress[5] & 0x80,
+                0,
+                "the removed coin stayed removed"
+            );
+        }
+        _ => panic!("the map warp did not land"),
+    }
     let _ = std::fs::remove_dir_all(path);
 }
 

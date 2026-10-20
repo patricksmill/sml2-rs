@@ -6,6 +6,7 @@ pub use crate::content::SessionAssets;
 pub use crate::host::{AudioClock, SessionRunner};
 
 mod castle;
+mod debug;
 mod map_pan;
 mod map_transition;
 pub use map_transition::MapScreenTransition;
