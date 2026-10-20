@@ -95,6 +95,8 @@ pub struct SessionAssets {
     pub overworld_tilemaps: OverworldTilemaps,
     pub overworld_manifest: OverworldManifest,
     pub overworld_tiles: OverworldTiles,
+    /// Raw ROM blocks used by the Pumpkin and Tree tile animation copies.
+    pub zone_animation_tiles: Vec<u8>,
     /// The bank-24 room blobs (`map/castle_scripts.*`).
     pub castle_scripts: sml2_core::castle::CastleScripts,
     /// `ending/scene.json` and `ending/credits.bin`.
@@ -148,6 +150,7 @@ impl SessionAssets {
             .ok()
             .and_then(|text| sml2_core::ending_scene::EndingAssets::from_json(&text).ok());
         let credits_text = source.read("ending/credits.bin").unwrap_or_default();
+        let zone_animation_tiles = source.read("map/zone_animations.bin").unwrap_or_default();
         let bell_room_tiles = load_bell_room_tiles_from(source);
         let room_common_tiles = sml2_core::map::RoomCommonTiles::from_bytes(
             &source.read("map/room_common_tiles.bin").unwrap_or_default(),
@@ -195,6 +198,7 @@ impl SessionAssets {
             overworld_tilemaps,
             overworld_manifest,
             overworld_tiles,
+            zone_animation_tiles,
             castle_scripts,
             ending_scene,
             credits_text,

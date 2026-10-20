@@ -95,6 +95,15 @@ impl Session {
                         wave.apply(&mut vram);
                     }
                 }
+                map_sim.apply_zone_tile_animation(&mut vram, &self.assets.zone_animation_tiles);
+                if map_sim.screen_id == 1
+                    && map_sim.level_progress[7] & 1 != 0
+                    && map_sim.level_progress[38] & 0x80 != 0
+                {
+                    // `$3D2FC`: bank 14 $4500->$8800, $220 bytes.
+                    let gate = vram[0x50..0x72].to_vec();
+                    vram[0x80..0xA2].copy_from_slice(&gate);
+                }
                 let bg_pal = self
                     .assets
                     .overworld_manifest
@@ -111,6 +120,8 @@ impl Session {
                     Some(_) => 2,
                     None => 0,
                 };
+                let zone_palettes = map_sim.zone_palettes();
+                let bg_pal = zone_palettes.map_or(bg_pal, |p| p.0);
                 let (bg_pal, obp) = match &self.map_pan_return {
                     Some(pan) => pan.palettes(),
                     None => (fade_palette(bg_pal, fade), fade_palette(0xD0, fade)),
@@ -135,9 +146,25 @@ impl Session {
                 } else if let Some(room) = &map_sim.room {
                     room.oam_cells()
                 } else {
-                    sml2_core::map_zone_decor::zone_decor_oam(&map_sim.zone_slots)
+                    sml2_core::map_zone_decor::zone_decor_oam(map_sim.zone_render_slots())
                 };
-                sml2_core::map::render_overworld_view(
+                let zone_live = (1..=8).contains(&map_sim.screen_id);
+                let tilemaps = self
+                    .assets
+                    .overworld_tilemaps
+                    .with_screen_writes(map_sim.screen_id, &map_sim.zone_tile_writes());
+                let mut manifest = self.assets.overworld_manifest.clone();
+                if zone_live {
+                    manifest
+                        .dynamic_unlocks
+                        .retain(|r| r.screen_id != map_sim.screen_id);
+                }
+                let video = sml2_core::map::MapVideo {
+                    scroll_rows: std::array::from_fn(|y| map_sim.zone_background_scroll(y).0),
+                    scroll_y: map_sim.zone_background_scroll(0).1,
+                    obj_palette1: fade_palette(zone_palettes.map_or(0x39, |p| p.1), fade),
+                };
+                sml2_core::map::render_overworld_view_with_video(
                     map_sim.screen_id,
                     map_sim.cam_x,
                     map_sim.cam_y,
@@ -153,14 +180,15 @@ impl Session {
                     // `$3C9F4` reads `$FF97`, a frame counter that free-runs from
                     // boot; the session's own frame count is the same shape.
                     (self.frame_n & 0xFF) as u8,
-                    &self.assets.overworld_tilemaps,
-                    &self.assets.overworld_manifest,
+                    &tilemaps,
+                    &manifest,
                     &map_sim.level_progress,
                     &vram,
                     bg_pal,
                     obp,
                     vw,
                     vh,
+                    Some(&video),
                 )
             }
             SessionState::Demo(demo) => demo

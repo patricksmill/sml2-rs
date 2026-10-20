@@ -1051,6 +1051,8 @@ impl Session {
 
                 let input = sml2_core::map_sim::MapInput::new(keys_held, keys_pressed, div);
 
+                map_sim.set_zone_animation_clock(self.frame_n as u8, 0);
+
                 let entry = map_sim.tick(
                     input,
                     &self.assets.nodes,

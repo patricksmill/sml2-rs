@@ -30,3 +30,4 @@ mod game;
 mod played_routes;
 mod scene_pipe;
 mod session;
+mod zone_animations;
