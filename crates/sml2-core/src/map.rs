@@ -535,71 +535,9 @@ impl CastleRevealTiles {
     }
 }
 
-/// Draw the reveal's 20x18 tiles; all six coins set the five `$74` runs.
-pub fn render_castle_reveal(
-    reveal: &CastleRevealTiles,
-    all_six_coins: bool,
-    bgp: u8,
-    obp1: u8,
-    // `$FFC4`/`$FFC5`/`$FFC6`: the walk-in's Mario — `$FFC6` is a `$5297`
-    // sprite id (`$BF + (anim >> 4)`), not a tile number.
-    mario: Option<(u8, u8, u8)>,
-    metas: &crate::room_sprites::SpriteMetas,
-    vw: usize,
-    vh: usize,
-) -> Vec<u8> {
-    let shades = crate::video::bgp_shades(bgp);
-    let mut img = vec![shades[0]; vw * vh];
-    if reveal.is_empty() {
-        return img;
-    }
-    let vram = reveal.vram_tiles();
-    let mut tilemap = reveal.tilemap.clone();
-    if all_six_coins {
-        for run in CastleRevealTiles::COIN_RUNS {
-            for at in run..run + 4 {
-                if let Some(slot) = tilemap.get_mut(at) {
-                    *slot = 0x74;
-                }
-            }
-        }
-    }
-    let cols = vw / 8;
-    let rows = vh / 8;
-    for ty in 0..rows {
-        for tx in 0..cols {
-            let Some(&byte) = tilemap.get(ty * 32 + tx) else {
-                continue;
-            };
-            let index = signed_bg_tile_index(byte);
-            let Some(tile) = vram.get(index) else {
-                continue;
-            };
-            for py in 0..8 {
-                for px in 0..8 {
-                    img[(ty * 8 + py) * vw + tx * 8 + px] = shades[tile[py * 8 + px] as usize];
-                }
-            }
-        }
-    }
-    if let Some((x, y, id)) = mario {
-        let obj_shades = crate::video::bgp_shades(obp1);
-        for (dx, dy, tile, attr) in metas.expand(id, x, y) {
-            draw_obj_tile(
-                &mut img,
-                &vram,
-                &obj_shades,
-                dx as i32 - 8,
-                dy as i32 - 16,
-                tile,
-                attr,
-                vw,
-                vh,
-            );
-        }
-    }
-    img
-}
+#[path = "map/castle_render.rs"]
+mod castle_render;
+pub use castle_render::{render_castle_reveal, render_castle_sequence};
 
 impl BellRoomTiles {
     pub const LEN: usize = 0x1000;

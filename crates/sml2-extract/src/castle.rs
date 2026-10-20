@@ -48,6 +48,29 @@ pub struct BlobSpec {
 /// Source order is ROM order; `code` ends were taken from the disassembly's
 /// next data block or next entry point.
 pub const BLOBS: &[BlobSpec] = &[
+    // $309CD consumes five overlapping 20-byte windows at stride four.
+    BlobSpec {
+        name: "castle_row_windows",
+        bank: 12,
+        addr: 0x4A2A,
+        end: 0x4A52,
+        kind: BlobKind::Fixed,
+    },
+    // $3077B / $2A63: congratulations map and the title tiles at $8800.
+    BlobSpec {
+        name: "castle_congrats_tilemap",
+        bank: 12,
+        addr: 0x688A,
+        end: 0x6B8A,
+        kind: BlobKind::Fixed,
+    },
+    BlobSpec {
+        name: "castle_congrats_tiles",
+        bank: 5,
+        addr: 0x41E5,
+        end: 0x51E5,
+        kind: BlobKind::Fixed,
+    },
     // The coin room's item table at the bank base: `$60D49` indexes
     // `$4F76[node-110] + column` into ten-byte rows.
     BlobSpec {

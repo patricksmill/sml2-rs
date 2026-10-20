@@ -170,29 +170,12 @@ impl Session {
             SessionState::InLevel(ctx) => ctx
                 .render_frame(vw, vh)
                 .unwrap_or_else(|_| vec![0u8; vw * vh]),
-            SessionState::Castle(seq) => sml2_core::map::render_castle_reveal(
+            SessionState::Castle(seq) => sml2_core::map::render_castle_sequence(
                 &self.assets.castle_reveal,
-                seq.coins.iter().all(|&coin| coin & 0x80 != 0),
-                if seq.bgp == 0 { 0xE4 } else { seq.bgp },
-                if seq.obp1 == 0 { 0xD0 } else { seq.obp1 },
-                // `$30777`: Mario's walk-in uses $BB/$BC/$BB/$BD. The
-                // $BF frames belong to the golden coin animation in $30567.
-                Some((
-                    seq.walk_x,
-                    seq.walk_y,
-                    if matches!(
-                        seq.state,
-                        sml2_core::castle_sequence::STATE_REVEAL_A
-                            | sml2_core::castle_sequence::STATE_REVEAL_B
-                    ) {
-                        [0xBB, 0xBC, 0xBB, 0xBD][((self.frame_n & 0x0C) >> 2) as usize]
-                    } else {
-                        0xBFu8.wrapping_add(seq.walk_anim >> 4)
-                    },
-                )),
+                &self.assets.castle_scripts,
                 &self.assets.sprite_metas,
-                vw,
-                vh,
+                seq,
+                (vw, vh),
             ),
             SessionState::GameOver => vec![0u8; vw * vh],
         }

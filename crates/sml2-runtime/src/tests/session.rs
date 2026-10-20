@@ -640,13 +640,15 @@ fn the_reveal_draws_the_walk_in() {
             .all(|&(x, y)| (24..=40).contains(&x) && (72..88).contains(&y)),
         "Mario's 2x2 sprite sits at (walk_x, walk_y)"
     );
-    // `$30777`: the free-running frame counter picks Mario's next walk pose.
+    // `$30777`: native sequence state supplies the next walking pose.
     let mut slow = sml2_core::castle_sequence::CastleSequence::default();
     slow.walk_x = 40;
     slow.walk_y = 96;
     slow.state = sml2_core::castle_sequence::STATE_REVEAL_B;
     runner.session.begin_castle_sequence(slow, 8, 0, 0);
-    runner.session.frame_n = 4;
+    if let SessionState::Castle(seq) = &mut runner.session.state {
+        seq.sprite_id = 0xBC;
+    }
     let other = runner.render_frame();
     assert_ne!(drawn, other, "the walk animation changes Mario's tile");
     let _ = std::fs::remove_file(&tmp_save);

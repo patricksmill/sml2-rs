@@ -130,6 +130,13 @@ fn six_coin_map_visit_accepts_a_start_or_up_and_enters_real_wario_level() {
             step(&mut session, PlayerKeys::default());
         }
         assert!(matches!(&session.state, SessionState::Castle(seq) if seq.fade_low == 1));
+        assert!(
+            session
+                .render_frame((160, 144))
+                .iter()
+                .all(|&pixel| pixel == 0),
+            "the door fade reaches black before loading"
+        );
         assert!(matches!(
             step(&mut session, PlayerKeys::default()).outcome,
             StepOutcome::LevelEntered(24)
