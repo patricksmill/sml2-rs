@@ -7,3 +7,5 @@ mod boss_clear;
 mod hidden_block;
 mod jump_input;
 mod simulation;
+
+mod pipe;

@@ -1690,16 +1690,18 @@ impl PlayerSim {
         layout: &LevelLayout,
     ) {
         self.tick_fade_timer();
-        // $0F71/$0FBB: travelling replaces the entire player update.
-        if self.pipe_dir >= 0x10 {
-            self.pipe_travel(layout);
-            return;
-        }
         self.phase = self.frame_phase();
         // $13FE
         self.x_sub = 0;
         self.x_pushed = false;
         self.pipe_align_target = 0;
+        // $0F71 calls $13FE before $0FBB's travelling branch. In particular,
+        // a vertical pipe must not carry the entry frame's XSub into the
+        // camera update; horizontal travel publishes its own delta below.
+        if self.pipe_dir >= 0x10 {
+            self.pipe_travel(layout);
+            return;
+        }
         // $13FE tail: armed pipe directions (1-4) are cleared every frame
         // and must be re-earned by this frame's landing/side-push/entry
         // events — this is what drops the arm when Mario walks off a mouth.
