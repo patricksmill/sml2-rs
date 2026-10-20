@@ -162,7 +162,7 @@ pub struct CastleRoom {
     tilemap: Vec<u8>,
     /// `$6734`/`$6761`: the two bell rooms' sprite lists.
     sprite_lists: [Vec<u8>; 2],
-    /// `$51B1` (coin) / `$62E6` (bell): the metasprite table `$6109B` reads.
+    /// `$51B1`: the metasprite table `$6106D` uses in all six minigame rooms.
     metasprites: RoomSpriteTable,
     /// `$5297`: `$FFC6` is a sprite id into this table, not a tile number.
     sprite_metas: crate::room_sprites::SpriteMetas,
@@ -233,8 +233,8 @@ impl CastleRoom {
     /// A bell room as `$3F4B1`/`$3F5A4` stage it.
     pub fn bell_a(scripts: &CastleScripts) -> Self {
         let mut room = Self::coin(scripts);
-        room.metasprites =
-            RoomSpriteTable::new(0x62E6, scripts.blob("bell_metasprites").unwrap_or(&[]));
+        // `$607AA` -> `$6106D` expands the bell room through `$51B1`.
+        // `$62E6` is only used by the zone/initial-list expander `$3E277`.
         room.kind = RoomKind::BellRoomA;
         room.script = scripts.blob("bell_room_a_script").unwrap_or(&[]).to_vec();
         room
@@ -245,8 +245,7 @@ impl CastleRoom {
     /// `$3D` tiles.
     pub fn bell_b(scripts: &CastleScripts, tilemap: &[u8]) -> Self {
         let mut room = Self::coin(scripts);
-        room.metasprites =
-            RoomSpriteTable::new(0x62E6, scripts.blob("bell_metasprites").unwrap_or(&[]));
+        // `$60461` -> `$6106D` uses the same `$51B1` room table.
         room.kind = RoomKind::BellRoomB;
         room.script = scripts.blob("bell_room_b_script").unwrap_or(&[]).to_vec();
         room.tilemap = tilemap.to_vec();
@@ -2008,7 +2007,7 @@ mod oam_tests {
     }
 
     #[test]
-    fn the_bell_room_sprites_use_the_bell_table() {
+    fn the_bell_room_sprites_use_the_gameplay_room_table() {
         let mut room = CastleRoom::enter_bell_a(&scripts(), 0);
         let cells = room.oam_cells();
         assert_eq!(
@@ -2016,8 +2015,42 @@ mod oam_tests {
             (120, 232, 0x41, 0x20),
             "Mario starts off the right edge"
         );
-        assert_eq!(cells[6].2, 0x2A, "the bell table follows Mario's six cells");
+        assert_eq!(cells[6], (52, 96, 0xB8, 0), "$51B1 entry $1F follows Mario");
         room.oam[1] = 40; // `$4539` walks x leftward; y stays at 124.
         assert_eq!(room.oam_cells()[0], (120, 32, 0x41, 0x20));
+    }
+
+    #[test]
+    fn both_bell_rooms_expand_rewards_to_the_rom_powerup_tiles() {
+        let scripts = scripts();
+        for mut room in [
+            CastleRoom::enter_bell_a(&scripts, 0),
+            CastleRoom::enter_bell_b(&scripts, &[]),
+        ] {
+            room.oam[2] = 0;
+            room.sprites = [0xFF; SPRITE_BYTES];
+            // `$51B1[$18]` -> `$5459`: mushroom, with BG priority set.
+            room.sprites[3..6].copy_from_slice(&[40, 100, 0x18]);
+            assert_eq!(
+                room.oam_cells(),
+                vec![
+                    (100, 40, 0x90, 0x80),
+                    (100, 48, 0x91, 0x80),
+                    (108, 40, 0x92, 0x80),
+                    (108, 48, 0x92, 0xA0),
+                ]
+            );
+            // `$51B1[$2D]` -> `$5599`: the other room's mushroom frame.
+            room.sprites[5] = 0x2D;
+            assert_eq!(
+                room.oam_cells(),
+                vec![
+                    (100, 40, 0x90, 0),
+                    (100, 48, 0x91, 0),
+                    (108, 40, 0x92, 0),
+                    (108, 48, 0x92, 0x20),
+                ]
+            );
+        }
     }
 }
