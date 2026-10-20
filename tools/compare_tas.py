@@ -73,6 +73,8 @@ def main():
     parser.add_argument('movie', type=Path, help='JSON from import_bk2.py')
     parser.add_argument('--rom', type=Path, required=True)
     parser.add_argument('--bridge', type=Path, default=Path('target/release/examples/tas_bridge'))
+    parser.add_argument('--port-initial-phase', type=int, choices=range(8),
+                        help='diagnostic first-level movement phase origin; input timing is unchanged')
     parser.add_argument('--bootrom', type=Path, help='optional local DMG boot ROM; otherwise PyBoy built-in')
     parser.add_argument('--paused', action='store_true')
     parser.add_argument('--headless', action='store_true', help='check protocol without opening windows')
@@ -110,7 +112,10 @@ def main():
     displays = []
     sdl = None
     try:
-        bridge = subprocess.Popen([str(args.bridge.resolve())], stdin=subprocess.PIPE,
+        bridge_args = [str(args.bridge.resolve())]
+        if args.port_initial_phase is not None:
+            bridge_args.extend(['--initial-phase', str(args.port_initial_phase)])
+        bridge = subprocess.Popen(bridge_args, stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE)
         native = read_frame(bridge.stdout)
         if not args.headless:
@@ -126,6 +131,8 @@ def main():
             print('Manual PyBoy recording: ROM, boot ROM, core version, and settings match.', flush=True)
         else:
             print('PyBoy uses its built-in boot ROM unless --bootrom is supplied; this BizHawk movie may desync in PyBoy too.', flush=True)
+        if args.port_initial_phase is not None:
+            print(f'Diagnostic alignment: first native level initial movement phase {args.port_initial_phase}; this is not a shared-clock fix.', flush=True)
         paused, slow, running = args.paused, False, True
         index, previous = 0, 0
         count = min(len(frames), args.frames or len(frames))
@@ -166,7 +173,8 @@ def main():
             label = f'input {index - 1 if index else "not started"} | {held} | {status}'
             if displays:
                 displays[0].draw(pyboy.screen.ndarray, f'PyBoy ROM | {label}')
-                displays[1].draw(native, f'Rust port | {label}')
+                port_name = 'Rust port' if args.port_initial_phase is None else f'Rust port [initial phase {args.port_initial_phase}]'
+                displays[1].draw(native, f'{port_name} | {label}')
                 time.sleep(max(0, 1 / (15 if slow else 60) - (time.perf_counter() - started)))
         if index == len(frames) and movie.get('final_screen_sha256'):
             actual = hashlib.sha256(pyboy.screen.ndarray.tobytes()).hexdigest()

@@ -188,3 +188,47 @@ that PyBoy's final screen hash matches the recording. That check confirms the
 final frame; it does not locate the first divergent frame in the native port.
 A 180-frame neutral-input record/replay smoke check matched exactly before the
 first manual recording window was opened.
+
+## First manual pipe divergence (2026-10-19)
+
+The first recording exposed two distinct problems:
+
+* At input 1461 (Down at the first pipe), PyBoy was at X=1140, movement phase 0;
+  the native session was at X=1138, phase 7. Both had the same horizontal speed
+  index `$AC`. The two-pixel difference delayed native pipe entry from the
+  phase-aligned frame 1462 until frame 1470. The ROM's `$1189` entry window
+  requires X low nibble 5 through 11 with bit 4 set, so a small movement mismatch
+  has a much larger timing effect here.
+* `$0F71` calls `$13FE` before branching to the travelling arm `$0FBB`. The
+  native implementation returned into pipe travel before clearing XSub,
+  XPushed, and PipeAlignTarget (`$A202/$A218/$A283`). A vertical pipe could then
+  carry the entry frame's horizontal delta into camera follow. This is fixed:
+  the reset now precedes the travelling branch. Horizontal pipes still publish
+  their own fresh delta. Two ROM-derived regressions failed before the fix and
+  pass afterwards.
+
+The speed table matches the ROM. Native `LevelContext` currently starts a new
+movement phase at each level, whereas the ROM's `$FF97` counter belongs to the
+shared game loop (`$02FF` / `$2728`). Correctly carrying the phase across boot,
+loading, and gameplay remains unresolved; native tick count alone is not a
+verified console frame origin.
+
+For an **explicit diagnostic experiment**, the comparison viewer can seed the
+first native level's phase before its first update:
+
+```bash
+python tools/compare_tas.py recordings/<recording>.json --rom ../sml2decomp/baserom.gb --port-initial-phase 1
+```
+
+This seeds the pre-update phase, so the first gameplay update increments it to
+2. It changes neither input rows nor their timing, applies only once, and labels
+the port window `[initial phase 1]`. Without the option, behavior is unchanged.
+The pipe reset fix plus this declared alignment let all 18,907 original input
+rows run, cleared native level 0 at input 8516, and preserved the exact PyBoy
+final-screen hash. That is evidence for the first-level improvement, not a claim
+that both levels or all frames now match. Earlier presentation differences and
+later map/level transitions still need review.
+
+Do not turn phase 1 into a hardcoded default or call this experiment a general
+frame-clock fix. The comparison bridge logs level entry/exit outcomes to stderr;
+its stdout remains the raw frame protocol.
