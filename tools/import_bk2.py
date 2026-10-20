@@ -37,6 +37,8 @@ def convert(data):
         for line in lines:
             if line.startswith('LogKey:'):
                 keys = line[len('LogKey:'):].replace('#', '').strip('|').split('|')
+                # GBHawk prefixes its single controller; reject any other player.
+                keys = [key.removeprefix('P1 ') for key in keys]
                 if len(keys) != len(set(keys)) or set(keys) - (set(BUTTONS) | {'Power', 'Reset'}):
                     raise ValueError(f'unsupported/duplicate controls: {keys}')
                 if not set(BUTTONS).issubset(keys):

@@ -114,3 +114,43 @@ PyBoy's progress before attributing a mismatch to native physics.
 `--headless --frames 1200` checks that the emulator and bridge can consume a
 shared input prefix without opening windows. This is a live inspection tool,
 not an automated trajectory-capture or acceptance-test harness.
+
+## PyBoy compatibility search (2026-10-19)
+
+The following published movies were tried with PyBoy 2.8.1, original Game Boy
+mode, fresh cartridge RAM, the project's SHA1-matching UE v1.0 ROM, PyBoy's
+built-in boot ROM, and unchanged input rows:
+
+| Publication | Author / run | Result in this setup |
+| --- | --- | --- |
+| [4042](https://tasvideos.org/4042M) | dadinfinitum, 20:49.86 | Did not reach the ending |
+| [1564](https://tasvideos.org/1564M) | andymac, 21:43.52 | Did not reach the ending; first Start precedes PyBoy's title readiness |
+| [1721](https://tasvideos.org/1721M) | andymac & MUGG, game end glitch | Did not trigger the ending |
+| [1886](https://tasvideos.org/1886M) | andymac & MUGG, game end glitch | Did not trigger the ending |
+| [2651](https://tasvideos.org/2651M) | MUGG & Masterjun, game end glitch | Did not trigger the ending |
+| [3746](https://tasvideos.org/3746M) | MUGG, Masterjun & Alyosha, game end glitch | Did not trigger the ending |
+
+The BK2 importer now accepts GBHawk's `P1 ` control-name prefix while continuing
+to reject other players. Older VBM inputs were decoded for this exploratory
+check using the [documented bit layout](https://tasvideos.org/EmulatorResources/VBA/VBM);
+they are not a new supported importer format. Their unused motion-sensor flags
+were ignored; no reset, shoulder, SRAM or snapshot starts were accepted.
+
+A separate experiment prepended 0, 1, 2, 4, 8, 12, 16, 24, 32, 48, or 64 neutral
+PyBoy ticks and tried up to the first 5,000 input rows of each candidate. None
+reached another playable level or triggered credits within that prefix. These
+were explicitly modified startup experiments, not successful original movies.
+No automatic input steering or per-level retiming was used, and the comparison
+viewer still defaults to unchanged inputs.
+
+The two older Soulrivers full-game movies use the Japanese ROM, as documented
+in [submission 2093](https://tasvideos.org/2093S) and
+[submission 1975](https://tasvideos.org/1975S), so they were not tested against the
+UE ROM. An older forum-linked Gambatte conversion could not be retrieved (404).
+
+**No published TAS has been verified to complete in this PyBoy configuration.**
+This does not establish incompatibility with every PyBoy/boot-ROM configuration.
+Use the movie's original emulator/core for a dependable reference, or explicitly
+resynchronize and independently verify a PyBoy adaptation before using it to
+judge native-port divergence. Do not describe the live PyBoy viewer as a
+verified TAS baseline.

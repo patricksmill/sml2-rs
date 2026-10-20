@@ -33,6 +33,12 @@ class ImportMovieTests(unittest.TestCase):
         log = 'LogKey:#A|B|Select|Start|Right|Left|Down|Up|Power|\n|AB..R....|'
         self.assertEqual(convert(archive(log))['frames'], [49])
 
+    def test_gbhawk_single_player_prefix(self):
+        key = LOG_KEY.replace('#Up', '#P1 Up').replace('|Down', '|P1 Down').replace('|Left', '|P1 Left').replace('|Right', '|P1 Right').replace('|Start', '|P1 Start').replace('|Select', '|P1 Select').replace('|B|', '|P1 B|').replace('|A|', '|P1 A|').replace('|Power', '|P1 Power')
+        self.assertEqual(convert(archive(key + '|...R..BA.|'))['frames'], [49])
+        with self.assertRaises(ValueError):
+            convert(archive(key.replace('P1 ', 'P2 ') + '|...R..BA.|'))
+
     def test_tasvideos_outer_zip(self):
         inner = archive(LOG_KEY + '|.........|')
         outer = io.BytesIO()
