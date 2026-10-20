@@ -587,8 +587,8 @@ pub struct MapSim {
     pub level_progress: [u8; 42],
     /// `sMapScrollOnlyLatch` (`$A7A0`): `$FF` while B is held on the hub.
     pub scroll_only_latch: u8,
-    /// `sMapRockAnimTimer` (`$A789`): the rock/gate animation countdown, set to 1
-    /// by the `$3C4E7` secret-route arm.
+    /// `sMapRockAnimTimer` (`$A789`): the turtle's swim counter, set to 1 by the
+    /// `$3C4E7` secret-route arm and stepped every hub frame by `$3CF16`.
     pub rock_anim_timer: u8,
     /// `sMapSpecialNodeLatch` (`$A7B8`) — written by `$3C201`, read by nothing.
     pub special_node_latch: u8,
@@ -1280,6 +1280,50 @@ impl MapSim {
                 let visible = self.sparkle_timer & 1 != 0;
                 self.set_sparkles(div, visible);
             }
+        }
+        // `$3CEB7` falls into `$3CF16` on every frame, not only the fourth.
+        self.turtle_swim_tick();
+    }
+
+    /// `$3CF16`: the turtle by nodes `$0C`/`$1E` (hub slot 14) once `$3C4E7`
+    /// arms `sMapRockAnimTimer`. The counter steps every frame: up to `$2B` the
+    /// turtle swims left one pixel a frame, opening and closing its mouth
+    /// (ids 5-8 from bits 3-4 of `counter - 2`) once the counter reaches `$10`;
+    /// from `$2C` it swims back right with its mouth shut; from `$58` it holds
+    /// id 5. Slots 10-13 and 15 are its wake (id 11), one more bubble for each
+    /// 8 px it has swum left of `$88`.
+    ///
+    /// The counter is never cleared here: it runs on and wraps through `$FF`
+    /// to 0, which takes one more left step before the routine idles.
+    fn turtle_swim_tick(&mut self) {
+        const TURTLE: usize = 14;
+        const WAKE: [usize; 5] = [10, 11, 12, 13, 15];
+        if self.rock_anim_timer == 0 {
+            return;
+        }
+        self.rock_anim_timer = self.rock_anim_timer.wrapping_add(1);
+        let counter = self.rock_anim_timer;
+        let mut mouth = if counter >= 0x10 {
+            (counter.wrapping_sub(2) & 0x18) >> 3
+        } else {
+            0
+        };
+        if counter >= 0x58 {
+            self.decor_slots[TURTLE].3 = 5;
+            return;
+        }
+        let x = &mut self.decor_slots[TURTLE].1;
+        if counter < 0x2C {
+            *x = x.wrapping_sub(1);
+        } else {
+            *x = x.wrapping_add(1);
+            mouth = 0;
+        }
+        let swum = (x.wrapping_sub(88) >> 3) & 7;
+        self.decor_slots[TURTLE].3 = mouth + 5;
+        // `$3CF5B`..`$3CFA7`: wake slot k is shown while `swum < 6 - k`.
+        for (k, slot) in WAKE.into_iter().enumerate() {
+            self.decor_slots[slot].3 = if (swum as usize) + k < 6 { 11 } else { 0xFF };
         }
     }
 
@@ -2284,6 +2328,56 @@ mod tests {
 
     /// `$3C32D`'s arrival press replaces whatever the player pressed — so A on the
     /// frame it fires cannot also enter the level, and only the next frame can.
+    /// `$3CF16`: once `$3C4E7` arms the counter, the hub turtle (slot 14) swims
+    /// left 42 px snapping its mouth, trails its wake, swims back 44 px, then
+    /// holds; the counter wraps through `$FF` for one last left step.
+    #[test]
+    fn the_hub_turtle_swims_out_and_back_once_armed() {
+        let mut map = MapSim::new();
+        map.screen_id = 0;
+        let start_x = map.decor_slots[14].1;
+        assert_eq!((start_x, map.decor_slots[14].3), (0x88, 5));
+        // Unarmed: the turtle does not move.
+        for _ in 0..8 {
+            map.bookkeeping(0x3D);
+        }
+        assert_eq!(map.decor_slots[14].1, start_x);
+
+        map.rock_anim_timer = 1;
+        let mut ids = Vec::new();
+        for _ in 2..=0x2B {
+            map.bookkeeping(0x3D);
+            ids.push(map.decor_slots[14].3);
+        }
+        assert_eq!(map.rock_anim_timer, 0x2B);
+        assert_eq!(map.decor_slots[14].1, 0x88 - 42, "one pixel left a frame");
+        // Mouth shut until `$10`, then ids 6, 7, 8, 5 in eight-frame runs.
+        assert!(ids[..14].iter().all(|&id| id == 5), "{ids:?}");
+        assert_eq!(&ids[14..17], &[6, 6, 7]);
+        assert_eq!(ids[0x1A - 2], 8);
+        assert_eq!(ids[0x22 - 2], 5);
+        // 42 px left of `$88`: all five wake bubbles are up.
+        let wake = |map: &MapSim| [10, 11, 12, 13, 15].map(|k| map.decor_slots[k].3);
+        assert_eq!(wake(&map), [11; 5]);
+
+        for _ in 0x2C..=0x57 {
+            map.bookkeeping(0x3D);
+            assert_eq!(map.decor_slots[14].3, 5, "the swim back keeps its mouth shut");
+        }
+        assert_eq!(map.decor_slots[14].1, 0x88 - 42 + 44);
+        assert_eq!(wake(&map), [0xFF; 5], "back past `$88`: no wake");
+
+        for _ in 0x58..=0xFF {
+            map.bookkeeping(0x3D);
+        }
+        assert_eq!(map.decor_slots[14].1, 0x8A, "held from `$58`");
+        map.bookkeeping(0x3D);
+        assert_eq!(map.rock_anim_timer, 0, "the counter wrapped");
+        assert_eq!(map.decor_slots[14].1, 0x89, "the wrap frame steps left once more");
+        map.bookkeeping(0x3D);
+        assert_eq!(map.decor_slots[14].1, 0x89, "then the routine idles");
+    }
+
     #[test]
     fn the_arrival_walk_swallows_the_players_press() {
         let (n, walk) = (nodes(), walk_blob());
