@@ -584,6 +584,11 @@ pub const MAP_ENTRY_FRAMES: u16 = 37;
 /// for 84 frames, and the next frame is the first `$3C000`.
 const BELL_RETURN_HOLD: u16 = 84;
 
+/// Frames `$3F4B1` spends in its graphics copy before the bell script runs.
+/// The setup begins on the frame state becomes `$14`; the script's first step
+/// is eight frames later, so the room waits through the seven frames in between.
+const BELL_ENTRY_HOLD: u16 = 7;
+
 /// Frames the map spends in the first fade step before the palette reaches
 /// white: `rBGP` $90 -> $40 at the fade start and -> $00 twelve frames later.
 pub const MAP_FADE_STEP: u16 = 12;
@@ -632,6 +637,8 @@ pub struct Session {
     bell_return: Option<(u8, u8, u8)>,
     /// Hold frames already spent after the bell script reached state `$0A`.
     bell_fade: Option<u16>,
+    /// Hold frames already spent before the bell script's first step.
+    bell_entry: Option<u16>,
     /// Where the castle reveal lands: `(screen, node, exit_tile_flag)`.
     castle_return: Option<(u8, u8, u8)>,
     /// `sLevelProgress` while the reveal owns it.
@@ -768,6 +775,7 @@ impl Session {
             easy_mode: false,
             bell_return: None,
             bell_fade: None,
+            bell_entry: None,
             castle_return: None,
             castle_progress: [0; 42],
         }
@@ -941,6 +949,23 @@ impl Session {
                     t.frame += 1;
                     break 'map StepOutcome::Continue;
                 }
+                if let Some(held) = self.bell_entry {
+                    if held < BELL_ENTRY_HOLD {
+                        self.prev_keys_held = pack_joypad(
+                            keys.right,
+                            keys.left,
+                            keys.up,
+                            keys.down,
+                            keys.a,
+                            keys.b,
+                            keys.select,
+                            keys.start,
+                        );
+                        self.bell_entry = Some(held + 1);
+                        break 'map StepOutcome::Continue;
+                    }
+                    self.bell_entry = None;
+                }
                 if let Some(held) = self.bell_fade {
                     if held < BELL_RETURN_HOLD {
                         self.prev_keys_held = pack_joypad(
@@ -957,7 +982,6 @@ impl Session {
                         break 'map StepOutcome::Continue;
                     }
                     self.bell_fade = None;
-                    eprintln!("BELL land f={}", self.frame_n);
                     // `$3F024`: node 0's clear lands on node `$14` with the
                     // stage marked. Other rooms keep the screen they stored.
                     if let Some((screen, node, flag)) = self.bell_return.take() {
@@ -1029,16 +1053,6 @@ impl Session {
                     && map_sim.room.as_ref().is_some_and(|r| r.state >= 10)
                 {
                     self.bell_fade = Some(0);
-                    eprintln!(
-                        "BELL hold f={} node={:02X} scr={:02X}",
-                        self.frame_n, map_sim.node, map_sim.screen_id
-                    );
-                }
-                if map_sim.screen_id == 0 {
-                    eprintln!(
-                        "MAP f={} node={:02X} walk={:02X}",
-                        self.frame_n, map_sim.node, map_sim.cursor_walking
-                    );
                 }
 
                 // A bonus room writes `sLives`/`sCurPowerup`/`sCoin*`; mirror
@@ -1383,6 +1397,7 @@ impl Session {
                                 map_sim.frame_counter = 0;
                                 map_sim.node = target_node;
                                 map_sim.room = Some(room);
+                                self.bell_entry = Some(0);
                                 self.bell_return =
                                     Some((target_screen, target_node, ctx.sim.exit_tile_flag));
                             } else {

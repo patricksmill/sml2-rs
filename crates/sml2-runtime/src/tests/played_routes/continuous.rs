@@ -117,10 +117,16 @@ pub(super) fn verify_map_entry_completion_and_reload(
     ));
     let assets = SessionAssets::load().unwrap();
     let slot = assets.nodes.progress_slot(node).unwrap() as usize;
-    let screen = match manifest.level_id {
-        18 | 28 => 4,
-        27 => 1,
-        _ => unreachable!(),
+    let screen = match node {
+        0x1E..=0x27 => 2,
+        0x28..=0x31 | 0x78 | 0x7A => 1,
+        0x32..=0x3B | 0x6A..=0x6C => 3,
+        0x3C..=0x45 => 4,
+        0x46..=0x4F => 5,
+        0x50..=0x59 => 6,
+        0x5A..=0x63 => 7,
+        0x6E..=0x77 => 8,
+        _ => 0,
     };
     let mut map = MapSim::new();
     map.node = node;
