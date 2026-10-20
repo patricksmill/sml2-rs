@@ -1327,6 +1327,7 @@ impl MapSim {
         records: &MapNodeRecords,
     ) -> MapEntry {
         let mut out = MapEntry::default();
+        let previous_screen = self.screen_id;
         // `$3C38C` runs *before* the cursor logic and may overwrite the pressed byte
         // with a synthetic key, so the whole frame sees the map's own press.
         let pressed = self.synthetic_press(input.keys_pressed, nodes);
@@ -1354,6 +1355,11 @@ impl MapSim {
             // Bookkeeping includes the zone routine before the cursor chain.
             self.cursor_chain(input, nodes, walk, records, &mut out)
         };
+        // Door dispatch selects a destination; run its actual loader as well.
+        // `$3D0D7`..`$3D880` and `$3C7BD` reset scroll, sprites and scripts.
+        if self.screen_id != previous_screen && self.screen_id < 9 {
+            out.music = Some(self.load_screen(self.screen_id, 0, records));
+        }
         // The zone loaders clear `hKeysPressed` (`xor a / ldh [$FF81]`), so a door that
         // opens cannot also enter a level on the same frame. The zone→hub doors do
         // *not* clear it — which is why pressing A on the untested door nodes can open
@@ -2578,7 +2584,10 @@ mod tests {
         );
         assert_eq!(map.cursor_move, 0x2F, "the door leaves the move byte alone");
         assert_eq!(out.transition, Some(4), "$3E3BA walks out Up");
-        assert_eq!(out.music, Some(255));
+        assert_eq!(out.music, Some(16));
+        assert_eq!((map.cam_x, map.cam_y), (0, 0));
+        assert_eq!(map.cursor_anim, 0x92);
+        assert!(map.zone_slots.iter().any(|slot| slot.2 != 0xFF));
         assert_eq!(out.level, None, "the press was consumed: no level entry");
         assert_eq!(out.state, 0, "the map stays in state $0C");
 
@@ -3356,3 +3365,6 @@ mod zone_sprite_loading;
 #[path = "map/zone_animation.rs"]
 mod zone_animation;
 pub use zone_animation::ZoneAnimation;
+
+#[path = "map/screen_transition.rs"]
+mod screen_transition;

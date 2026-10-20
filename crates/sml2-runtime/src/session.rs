@@ -7,6 +7,8 @@ pub use crate::host::{AudioClock, SessionRunner};
 
 mod castle;
 mod map_pan;
+mod map_transition;
+pub use map_transition::MapScreenTransition;
 pub use map_pan::{MapPanReturn, MAP_PAN_RELOAD_FRAMES, MAP_PAN_RETURN_FRAMES};
 
 use sml2_core::audio::driver::SoundDriver;
@@ -626,6 +628,7 @@ pub struct Session {
     pub pending_level: Option<Box<MapTransition>>,
     /// White-screen hub reload and palette return after releasing camera pan.
     pub map_pan_return: Option<MapPanReturn>,
+    pub map_screen_transition: Option<MapScreenTransition>,
     pub assets: SessionAssets,
     pub lives: u8,
     pub powerup: u8,
@@ -769,6 +772,7 @@ impl Session {
             map_wave: None,
             pending_level: None,
             map_pan_return: None,
+            map_screen_transition: None,
             assets,
             lives: 5,
             powerup: 0,
@@ -962,6 +966,21 @@ impl Session {
                     t.frame += 1;
                     break 'map StepOutcome::Continue;
                 }
+                if let Some(transition) = self.map_screen_transition.as_mut() {
+                    self.prev_keys_held = pack_joypad(keys.right, keys.left, keys.up, keys.down,
+                        keys.a, keys.b, keys.select, keys.start);
+                    if transition.advance(map_sim, div) {
+                        let entering = transition.entering;
+                        self.map_screen_transition = None;
+                        if !entering {
+                            self.map_pan_return = Some(MapPanReturn::default());
+                            self.sound_driver.music_request = 0xFF;
+                        }
+                    } else if transition.entering && transition.frame == 48 {
+                        self.sound_driver.music_request = sml2_core::map_sim::screen_music(map_sim.screen_id);
+                    }
+                    break 'map StepOutcome::Continue;
+                }
                 if let Some(held) = self.bell_entry {
                     if held < BELL_ENTRY_HOLD {
                         self.prev_keys_held = pack_joypad(
@@ -1053,12 +1072,25 @@ impl Session {
 
                 map_sim.set_zone_animation_clock(self.frame_n as u8, 0);
 
+                let source_map = map_sim.clone();
                 let entry = map_sim.tick(
                     input,
                     &self.assets.nodes,
                     &self.assets.walk,
                     &self.assets.node_records,
                 );
+
+                if let Some(direction) = entry.transition {
+                    self.map_screen_transition = Some(MapScreenTransition::new(source_map, direction));
+                    self.last_map_screen = Some(map_sim.screen_id);
+                    if map_sim.screen_id == 0 {
+                        self.map_wave = sml2_core::map::MapWave::seed(self.assets.overworld_tiles.screen_raw(0));
+                    } else {
+                        self.map_wave = None;
+                    }
+                    self.sound_driver.music_request = if map_sim.screen_id == 0 { 0 } else { 0xFF };
+                    break 'map StepOutcome::Continue;
+                }
 
                 // State `$0A` is written by the script after this frame's
                 // screen check, so the `$3E9FB` fade starts on the next frame.
