@@ -613,6 +613,45 @@ pub struct Session {
 }
 
 impl Session {
+    /// Start the golden-coin castle reveal and remember where it lands.
+    pub fn begin_castle_sequence(
+        &mut self,
+        seq: sml2_core::castle_sequence::CastleSequence,
+        screen: u8,
+        node: u8,
+        exit_tile_flag: u8,
+    ) {
+        self.castle_progress = [0; 42];
+        self.castle_return = Some((screen, node, exit_tile_flag));
+        self.state = SessionState::Castle(seq);
+    }
+
+    /// Stage a bell room the way the goal-bell exit does, for acceptance tapes.
+    pub fn begin_bell_room(&mut self, screen: u8, node: u8, exit_tile_flag: u8) {
+        let mut map = MapSim::new();
+        map.set_castle_scripts(self.assets.castle_scripts.clone());
+        map.lives = self.lives;
+        map.powerup = self.powerup;
+        map.coins_low = self.coins_low;
+        map.coins_high = self.coins_high;
+        let scripts = self.assets.castle_scripts.clone();
+        map.room = Some(if screen == 13 {
+            sml2_core::castle_room::CastleRoom::enter_bell_a(&scripts, 0)
+        } else {
+            let tilemap = self
+                .assets
+                .overworld_tilemaps
+                .screen_tilemap(14)
+                .unwrap_or(&[]);
+            sml2_core::castle_room::CastleRoom::enter_bell_b(&scripts, tilemap)
+        });
+        map.screen_id = screen;
+        map.node = node;
+        map.frame_counter = 0;
+        self.bell_return = Some((0, node, exit_tile_flag));
+        self.state = SessionState::Overworld(map);
+    }
+
     pub fn new(assets: SessionAssets) -> Self {
         let mut map = MapSim::new();
         map.set_castle_scripts(assets.castle_scripts.clone());

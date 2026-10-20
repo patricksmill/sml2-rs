@@ -148,10 +148,22 @@ tilemap) is render-side; the renderer paints the sequence black for now.
 Eight core tests cover the six-coin test, tally, walk-in, menu flow, row
 shifts, progress-bit write and START wait.
 
-### ME-7 — Acceptance and inventory (S)
-End-to-end typed tapes: six coins → castle entry → Wario fight → ending/credits;
-coin-door room; bell room; coin refusal; save/reload. Update the
-`minigames-ending` row only when all are green.
+### ME-7 — Acceptance and inventory (done except the Wario tape)
+Three session tapes in `crates/sml2-runtime/src/tests/acceptance.rs`:
+
+- `coin_door_room_plays_and_returns_to_the_castle`: node `$70`, purse 2000,
+  A -> screen 10 with a staged room, A again -> the room runs to state 3 and
+  `$3F4A0` lands screen 8 under 2,000 frames.
+- `bell_room_plays_and_returns_to_the_map`: screen 13 -> the walk-in, the A
+  gate and the bell sequence to state `$0A`, then the deferred exit lands the
+  map.
+- `castle_reveal_runs_and_lands_the_map` and
+  `the_castle_reveal_saves_and_reloads`: the six-coin reveal marks
+  `sLevelProgress[$44F1[23]]` and lands the map; a mid-chain record is valid
+  and reloads.
+
+Coin refusal stays covered by `the_coin_doors_take_their_bcd_price`. Left: one
+tape from six coins through the Wario fight into the ending/credits.
 
 ## Definition of done
 

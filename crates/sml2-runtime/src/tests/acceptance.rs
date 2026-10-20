@@ -390,3 +390,138 @@ fn acceptance_8_attract_demo_starts_and_start_interrupts_it() {
 fn acceptance_image_length_is_the_three_pipe_format() {
     assert_eq!(SAVE_IMAGE_LEN, 3 * SLOT_LEN);
 }
+
+/// ME-7: a coin door loads its room, the room's script runs to state 3 and
+/// `$3F4A0` lands the castle screen again.
+#[test]
+fn coin_door_room_plays_and_returns_to_the_castle() {
+    let mut session = Session::new(SessionAssets::load().expect("session assets must load"));
+    {
+        let SessionState::Overworld(map) = &mut session.state else {
+            panic!("a fresh session starts on the map");
+        };
+        map.screen_id = 0;
+        map.node = 0x70; // the $0200 coin door, screen 10
+        map.coins_low = 0x00;
+        map.coins_high = 0x20;
+        map.cursor_walking = 0;
+    }
+    press(
+        &mut session,
+        PlayerKeys {
+            a: true,
+            ..PlayerKeys::default()
+        },
+    );
+    {
+        let SessionState::Overworld(map) = &mut session.state else {
+            panic!("the door keeps the overworld");
+        };
+        assert_eq!(map.screen_id, 10, "$3F3F0 loads screen 10");
+        let room = map.room.as_mut().expect("the door staged a coin room");
+        // The intro page counts up to 7 over ~100 frames; skip that gate so
+        // the tape is about the room, not the wait.
+        room.set_sprite(0xA6BD, 7);
+    }
+    idle(&mut session, 2);
+    press(
+        &mut session,
+        PlayerKeys {
+            a: true,
+            ..PlayerKeys::default()
+        },
+    );
+    idle(&mut session, 2);
+    let mut frames = 0;
+    loop {
+        idle(&mut session, 1);
+        frames += 1;
+        match &session.state {
+            SessionState::Overworld(map) if map.screen_id == 8 => break,
+            _ if frames > 4000 => panic!("the coin room never returned"),
+            _ => {}
+        }
+    }
+    let SessionState::Overworld(map) = &session.state else {
+        panic!("the castle is the overworld");
+    };
+    assert!(map.room.is_none(), "the room is torn down");
+    assert!(frames < 2000, "the room returns in {frames} frames");
+}
+
+/// ME-7: the six-coin reveal runs its walk-in and menu, marks the level's
+/// progress byte and lands the map.
+#[test]
+fn castle_reveal_runs_and_lands_the_map() {
+    let mut session = Session::new(SessionAssets::load().expect("session assets must load"));
+    let mut seq = sml2_core::castle_sequence::CastleSequence::default();
+    seq.enter(&[0x80; 6]);
+    seq.level = 23; // $44F1[23] = $0E
+    seq.state = sml2_core::castle_sequence::STATE_REVEAL_A;
+    session.begin_castle_sequence(seq, 0, 0x50, 0);
+    assert!(matches!(session.state, SessionState::Castle(_)));
+    for _ in 0..4000 {
+        idle(&mut session, 1);
+        if matches!(session.state, SessionState::Overworld(_)) {
+            break;
+        }
+    }
+    let SessionState::Overworld(map) = &session.state else {
+        panic!("the reveal lands the map");
+    };
+    assert_eq!(map.screen_id, 0);
+    assert_eq!(map.node, 0x50);
+    assert_eq!(
+        map.level_progress[0x0E] & 0x80,
+        0x80,
+        "$44AC marks sLevelProgress[$44F1[23]]"
+    );
+}
+
+/// ME-7: the bell room runs its walk-in and bell sequence and returns to the
+/// map once the script writes state `$0A`.
+#[test]
+fn bell_room_plays_and_returns_to_the_map() {
+    let mut session = Session::new(SessionAssets::load().expect("session assets must load"));
+    session.begin_bell_room(13, 0x50, 0);
+    assert!(matches!(session.state, SessionState::Overworld(_)));
+    for frame in 0..6000 {
+        let keys = if frame % 8 == 0 {
+            PlayerKeys {
+                a: true,
+                ..PlayerKeys::default()
+            }
+        } else {
+            PlayerKeys::default()
+        };
+        step(&mut session, keys);
+        if let SessionState::Overworld(map) = &session.state {
+            if map.screen_id == 0 && map.room.is_none() {
+                break;
+            }
+        }
+    }
+    let SessionState::Overworld(map) = &session.state else {
+        panic!("the bell room returns to the map");
+    };
+    assert_eq!(map.screen_id, 0, "the deferred exit lands the map");
+    assert!(map.room.is_none());
+}
+
+/// ME-7: the save image written mid-reveal reloads into a fresh session.
+#[test]
+fn the_castle_reveal_saves_and_reloads() {
+    let mut session = Session::new(SessionAssets::load().expect("session assets must load"));
+    let mut seq = sml2_core::castle_sequence::CastleSequence::default();
+    seq.enter(&[0x80; 6]);
+    seq.level = 23;
+    seq.state = sml2_core::castle_sequence::STATE_REVEAL_A;
+    session.begin_castle_sequence(seq, 0, 0x50, 0);
+    idle(&mut session, 10);
+    let record = session.save_record();
+    assert!(save_record_valid(&record), "the mid-chain record is valid");
+
+    let mut other = Session::new(SessionAssets::load().expect("session assets must load"));
+    assert!(other.apply_save_record(&record), "the record reloads");
+    assert!(matches!(other.state, SessionState::Overworld(_)));
+}
