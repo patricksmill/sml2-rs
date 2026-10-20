@@ -119,6 +119,28 @@ def logic_phases(before_state, before_ff97, st4_ran, f71_phases, scene_phases=()
     return phases + list(scene_phases)
 
 
+# `ReadJoypad` ($1FD2) packs hKeysHeld as A, B, Select, Start, Right, Left, Up, Down.
+ROM_KEY_BITS = (16, 32, 128, 64, 1, 2, 4, 8)
+
+
+def rom_keys_mask(held):
+    """`hKeysHeld` in the movie's button-mask layout."""
+    return sum(bit for k, bit in enumerate(ROM_KEY_BITS) if held >> k & 1)
+
+
+def step_masks(mask, phases, f71_keys):
+    """Buttons for each port step from `logic_phases`.
+
+    A player update uses the keys the ROM latched at its last `ReadJoypad`
+    (`$38B9` runs right after the read). While frames keep up, that is this
+    row. Once a frame overruns the hardware tick, the next read happens before
+    the next row is applied, so the ROM acts on the previous row. Steps without
+    a `$0F71` entry, and updates before any read, use the movie row.
+    """
+    keys = [mask if held is None else rom_keys_mask(held) for held in f71_keys]
+    return keys + [mask] * (len(phases) - len(keys))
+
+
 def check_divergence(frame, memory, native, threshold, live=False, player_ran=True,
                      native_step=None):
     """In-level ROM position vs the port. `live` reads `$FFC0`/`$FFC2` (the
@@ -270,11 +292,21 @@ def main():
         f71_phases = []
         scene_running = [False]
         scene_phases = []
+        f71_keys = []
+        joypad_latch = [None]
         if phase_lock:
             pyboy.hook_register(0, 0x05D5, lambda _ctx: st4_ran.append(1), None)
-            pyboy.hook_register(
-                0, 0x0F71,
-                lambda _ctx: f71_phases.append(pyboy.memory[0xFF97] & 7), None)
+
+            def player_update(_ctx):
+                f71_phases.append(pyboy.memory[0xFF97] & 7)
+                f71_keys.append(joypad_latch[0])
+
+            pyboy.hook_register(0, 0x0F71, player_update, None)
+
+            def joypad_read(_ctx):
+                joypad_latch[0] = pyboy.memory[0xFF80]
+
+            pyboy.hook_register(0, 0x38B9, joypad_read, None)
             # `$20A4` also runs with a zero scene id; only a nonzero id enters
             # the blocking script. `$21EE` returns ownership to the main loop.
             def scene_enter(_ctx):
@@ -334,14 +366,15 @@ def main():
                     before_state = pyboy.memory[0xFF9B]
                     st4_ran.clear()
                     f71_phases.clear()
+                    f71_keys.clear()
                     scene_phases.clear()
                 if not pyboy.tick(1, True, False):
                     raise RuntimeError('PyBoy stopped before end of movie')
                 if phase_lock:
                     phases = logic_phases(before_state, before_ff97, st4_ran, f71_phases,
                                           scene_phases)
-                    for phase in phases:
-                        bridge.stdin.write(f'{mask} {phase}\n'.encode())
+                    for phase, keys in zip(phases, step_masks(mask, phases, f71_keys)):
+                        bridge.stdin.write(f'{keys} {phase}\n'.encode())
                         bridge.stdin.flush()
                         if state_rows:
                             native_state = read_state(bridge.stdout)

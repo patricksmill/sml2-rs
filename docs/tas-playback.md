@@ -130,7 +130,10 @@ python tools/compare_tas.py recordings/<recording>.json --rom ../sml2decomp/base
 Reports identify the zero-based **movie input index** and the **native update
 count**, which starts at zero before any `Session::advance`. Those indices can
 differ: phase lock is on by default and may send zero, one, or several native
-updates for one movie row. Every update uses that row's unchanged button mask.
+updates for one movie row. A player update (`$0F71`) uses the buttons the ROM
+latched at its last `ReadJoypad` (hooked at `$38B9`); other updates use the row.
+The two agree until a ROM frame overruns the hardware tick: the next read then
+happens before the next row is applied, and the ROM acts on the previous row.
 The ROM-supplied phases are diagnostic alignment, not proof of native clock
 parity. The window's input label identifies the movie row, not a native update.
 

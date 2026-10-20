@@ -6,7 +6,8 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from compare_tas import (apply_buttons, logic_phases, read_state,
-                         check_divergence, comparison_threshold)
+                         check_divergence, comparison_threshold, rom_keys_mask,
+                         step_masks)
 
 
 class BridgeStateTests(unittest.TestCase):
@@ -201,6 +202,24 @@ class LogicPhaseTests(unittest.TestCase):
 
     def test_outside_a_level_steps_once_per_hardware_frame(self):
         self.assertEqual(logic_phases(0x0C, 0x20, [], []), [1])
+
+
+
+class StepMaskTests(unittest.TestCase):
+    def test_rom_joypad_byte_maps_to_movie_layout(self):
+        # hKeysHeld: A=0, B=1, Select=2, Start=3, Right=4, Left=5, Up=6, Down=7.
+        self.assertEqual(rom_keys_mask(0b0000_0001), 16)
+        self.assertEqual(rom_keys_mask(0b0010_0010), 2 | 32)
+        self.assertEqual(rom_keys_mask(0b1100_1100), 8 | 4 | 64 | 128)
+
+    def test_player_update_uses_the_keys_the_rom_read(self):
+        # The row adds Left, but the overrunning frame read the previous row (B).
+        self.assertEqual(step_masks(2 | 32, [1], [0b0000_0010]), [32])
+
+    def test_steps_without_a_read_use_the_movie_row(self):
+        self.assertEqual(step_masks(34, [1], [None]), [34])
+        self.assertEqual(step_masks(34, [5, 6, 7], [0b0000_0010]), [32, 34, 34])
+        self.assertEqual(step_masks(34, [1], []), [34])
 
 
 if __name__ == '__main__':
