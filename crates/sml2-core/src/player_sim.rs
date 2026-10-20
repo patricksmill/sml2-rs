@@ -311,11 +311,12 @@ pub struct PlayerSim {
     /// `sMoonJumpPoseTimer` ($A285) — the bit-1 moon-zone re-launch's pose
     /// decay: 8 on the launch (`$1066`), read down by bank 1's `$5354`/`$53CF`.
     pub moon_jump_pose_timer: u8,
-    /// `sFlutterTimer` ($A286) — bunny flutter decay timer.
+    /// `sFlutterTimer` ($A24D) — bunny flutter decay timer.
     pub flutter: u8,
-    /// `sFlutterArmed` ($A287) — bunny flutter armed latch.
+    /// `sFlutterArmed` ($A284) — bunny flutter armed latch.
     pub flutter_armed: bool,
-    /// `sFlutterCharge` ($A288) — charge counter for repeated flutter while holding A.
+    /// `sFlutterCharge` ($A27C) — held-A flutter recharge. `$1090` only zeros
+    /// it at 12; a jump, a landing, and releasing A leave it alone.
     pub flutter_charge: u8,
     pub powerup: u8,
     pub goal_bell: bool,
@@ -1806,8 +1807,8 @@ impl PlayerSim {
                 }
                 self.in_air = true;
                 self.on_ground = false;
+                // $1675 clears the armed latch only. Charge survives the jump.
                 self.flutter_armed = false;
-                self.flutter_charge = 0;
                 self.vvel = 75;
                 if self.powerup != 2 && (0x48..0xC0).contains(&self.hvel) && !keys.up {
                     self.vvel = 48;
@@ -1836,13 +1837,8 @@ impl PlayerSim {
                         self.flutter = 8;
                         self.vvel = 24;
                     }
-                } else {
-                    self.flutter_charge = 0;
                 }
             }
-        }
-        if self.on_ground {
-            self.flutter_charge = 0;
         }
         // $14FA gravity + $156B integrator
         if self.moon & 0x02 == 0 && self.flutter != 0 {
@@ -2064,11 +2060,9 @@ impl PlayerSim {
             return;
         }
         // $319F: lose a powerup tier + 128 frames of invincibility.
+        // The routine does not write the flutter timer, latch, or charge.
         self.dead = 0;
         self.powerup = if self.powerup == 1 { 0 } else { 1 };
-        self.flutter = 0;
-        self.flutter_armed = false;
-        self.flutter_charge = 0;
         self.invincibility = 128;
     }
 
@@ -2758,6 +2752,10 @@ impl PlayerSim {
         // consume it: `$129F`'s landing arm (via `$1378`), the `$5375`/`$53FE`
         // frame test and `$307D`'s pan gate.
         self.on_ground_obj = obj.on_object;
+        // $2E23 ran this frame: the bounce drops the flutter latch. Charge stays.
+        if obj.flutter_disarmed {
+            self.flutter_armed = false;
+        }
         if obj.stomp_jump {
             self.in_air = true;
             self.vvel = if keys_a { 75 } else { 48 };

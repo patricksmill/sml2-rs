@@ -697,6 +697,90 @@ fn dying_in_a_zone_level_returns_to_that_zone() {
     );
 }
 
+/// `$A27C` and `$A284` have no writer on the map or in the level load, so a
+/// clear of Mario Zone 1 (node `$50`) carries the charge into level 11.
+#[test]
+fn flutter_charge_survives_a_level_change() {
+    use crate::session::{FrameInput, Session};
+    let mut session = Session::new(SessionAssets::load().expect("session assets"));
+    session.debug_warp_map(6, 0x50).expect("mario zone");
+    let tick = |session: &mut Session, keys: PlayerKeys| {
+        session
+            .advance(FrameInput { keys, div: 0 })
+            .outcome
+    };
+    let mut entered = None;
+    tick(
+        &mut session,
+        PlayerKeys {
+            a: true,
+            ..PlayerKeys::default()
+        },
+    );
+    for _ in 0..MAP_ENTRY_FRAMES + 8 {
+        if let StepOutcome::LevelEntered(id) = tick(&mut session, PlayerKeys::default()) {
+            entered = Some(id);
+            break;
+        }
+    }
+    assert_eq!(entered, Some(10));
+    {
+        let SessionState::InLevel(ctx) = &mut session.state else {
+            panic!("node $50 enters level 10");
+        };
+        ctx.sim.flutter_armed = true;
+        ctx.sim.flutter_charge = 1;
+        ctx.sim.exit_phase = true;
+        ctx.sim.exit_completed = true;
+        ctx.sim.fade_timer = 0;
+        ctx.sim.dead = 0;
+    }
+    let mut exited = false;
+    for _ in 0..8 {
+        if let StepOutcome::LevelExited { cleared: true, .. } =
+            tick(&mut session, PlayerKeys::default())
+        {
+            exited = true;
+            break;
+        }
+    }
+    assert!(exited, "the clear returns to the map");
+    let mut walked = false;
+    for _ in 0..400 {
+        tick(&mut session, PlayerKeys::default());
+        let SessionState::Overworld(map) = &session.state else {
+            continue;
+        };
+        if map.cursor_walking != 0 {
+            walked = true;
+        }
+        if walked && map.cursor_walking == 0 {
+            break;
+        }
+    }
+    assert!(walked, "clearing node $50 walks toward $51");
+    let mut entered = None;
+    tick(
+        &mut session,
+        PlayerKeys {
+            a: true,
+            ..PlayerKeys::default()
+        },
+    );
+    for _ in 0..MAP_ENTRY_FRAMES + 8 {
+        if let StepOutcome::LevelEntered(id) = tick(&mut session, PlayerKeys::default()) {
+            entered = Some(id);
+            break;
+        }
+    }
+    assert_eq!(entered, Some(11));
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!("the next node enters level 11");
+    };
+    assert!(ctx.sim.flutter_armed, "sFlutterArmed survives the map");
+    assert_eq!(ctx.sim.flutter_charge, 1, "sFlutterCharge survives the map");
+}
+
 /// `$022A` clears HRAM only at startup; `$EBBB` resets scratch on each load.
 #[test]
 fn object_clock_live_load_inherits_counter_and_resets_phase() {

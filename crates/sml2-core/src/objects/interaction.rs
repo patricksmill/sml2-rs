@@ -239,6 +239,7 @@ impl ObjectSim {
 
     pub(super) fn collide(&mut self, cam_x: u16, cam_y: u16, layout: &LevelLayout) {
         self.bounce = false;
+        self.flutter_disarmed = false;
         self.stomp_jump = false;
         self.stomp_bounce = false;
         self.on_object = false;
@@ -332,7 +333,9 @@ impl ObjectSim {
             self.mario_y_adjust = Some(self.mario.y.wrapping_sub(1));
             return;
         }
-        // $2E23: bounce path.
+        // $2E23: clear the flutter latch before the star test. A star still
+        // harms, but the latch is already down.
+        self.flutter_disarmed = true;
         if self.mario.star_high != 0 {
             self.harm_or_star(i);
             return;

@@ -507,6 +507,9 @@ fn the_object_write_back_covers_every_field() {
     obj.on_ground_cleared = true;
     obj.on_object = true;
     obj.stomp_jump = true;
+    obj.flutter_disarmed = true;
+    sim.flutter_armed = true;
+    sim.flutter_charge = 5;
 
     sim.apply_object_result(&mut obj, true);
     assert_eq!(sim.dead, 15, "a harmful hit");
@@ -516,6 +519,8 @@ fn the_object_write_back_covers_every_field() {
     assert!(!sim.on_ground, "$2D7D's landing arm cleared it");
     assert!(sim.on_ground_obj, "and the bit5 object raised this");
     assert!(sim.in_air && sim.vvel == 75, "A held: the high stomp jump");
+    assert!(!sim.flutter_armed, "$2E23 clears the flutter latch");
+    assert_eq!(sim.flutter_charge, 5, "the bounce leaves the charge");
 
     // Without A held the stomp jump is 48; a bounce is 49 either way.
     let mut sim2 = small_sim();
@@ -3500,7 +3505,7 @@ fn flutter_gated_by_goal_bell_moon_and_vvel_threshold() {
 }
 
 #[test]
-fn flutter_charge_resets_on_key_release_landing_jump_and_damage() {
+fn flutter_charge_persists_across_release_landing_and_jump() {
     let layout = blank_layout();
     let mut sim = small_sim();
     sim.powerup = 2;
@@ -3509,20 +3514,22 @@ fn flutter_charge_resets_on_key_release_landing_jump_and_damage() {
     sim.flutter_armed = true;
     sim.flutter_charge = 5;
 
-    // Key release in air resets charge
+    // `$10EB`: releasing A leaves the counter where it is.
     sim.step(&PlayerKeys::default(), false, false, &layout);
-    assert_eq!(sim.flutter_charge, 0, "releasing A resets charge");
+    assert_eq!(sim.flutter_charge, 5, "releasing A keeps the charge");
+    assert!(sim.flutter_armed);
 
-    // Landing on ground resets charge
+    // Landing does not write `$A27C` either.
     sim.flutter_charge = 7;
+    sim.flutter_armed = false;
     sim.on_ground = true;
     sim.on_ground_obj = true;
     sim.step(&PlayerKeys::default(), false, false, &layout);
-    assert_eq!(sim.flutter_charge, 0, "ground contact resets charge");
+    assert_eq!(sim.flutter_charge, 7, "ground contact keeps the charge");
 
-    // Jump from ground resets flutter armed and charge
+    // `$1675` clears the armed latch and leaves the charge.
     sim.flutter_armed = true;
-    sim.flutter_charge = 3;
+    sim.flutter_charge = 11;
     sim.on_ground = true;
     sim.on_ground_obj = true;
     sim.step(
@@ -3535,18 +3542,66 @@ fn flutter_charge_resets_on_key_release_landing_jump_and_damage() {
         &layout,
     );
     assert!(!sim.flutter_armed, "ground jump clears flutter_armed");
-    assert_eq!(sim.flutter_charge, 0, "ground jump clears flutter_charge");
+    assert_eq!(sim.flutter_charge, 11, "ground jump keeps flutter_charge");
+}
 
-    // Taking damage resets flutter state
+/// Level 10 input 9733: charge is already 11 and disarmed, so the A press
+/// starts an 8-frame hover and the next held frame immediately restarts it.
+#[test]
+fn flutter_charge_of_11_retriggers_on_the_frame_after_the_press() {
+    let layout = blank_layout();
+    let mut sim = small_sim();
+    sim.powerup = 2;
+    sim.on_ground = false;
+    sim.in_air = true;
+    sim.vvel = 0x0B;
+    sim.flutter_armed = false;
+    sim.flutter_charge = 11;
+
+    sim.step(
+        &PlayerKeys {
+            a: true,
+            ..Default::default()
+        },
+        true,
+        false,
+        &layout,
+    );
+    assert_eq!(sim.flutter, 7);
+    assert_eq!(sim.flutter_charge, 11, "the press does not increment charge");
+    assert_eq!(sim.vvel, 24);
+    assert_eq!(sim.y, 200);
+
+    sim.step(
+        &PlayerKeys {
+            a: true,
+            ..Default::default()
+        },
+        false,
+        false,
+        &layout,
+    );
+    assert_eq!(sim.flutter_charge, 0, "11 + 1 reaches the restart");
+    assert_eq!(sim.flutter, 7, "timer reloads to 8 and gravity decrements it");
+    assert_eq!(sim.vvel, 24);
+    assert_eq!(sim.y, 200, "the restarted hover does not fall");
+}
+
+#[test]
+fn powerup_loss_keeps_flutter_state() {
+    // `$319F` drops a tier and arms invincibility. It never writes
+    // `sFlutterTimer`, `sFlutterArmed`, or `sFlutterCharge`.
+    let mut sim = small_sim();
+    sim.powerup = 2;
     sim.flutter = 5;
     sim.flutter_armed = true;
     sim.flutter_charge = 8;
     sim.dead = 15;
     sim.death_dispatch();
     assert_eq!(sim.powerup, 1);
-    assert_eq!(sim.flutter, 0);
-    assert!(!sim.flutter_armed);
-    assert_eq!(sim.flutter_charge, 0);
+    assert_eq!(sim.flutter, 5);
+    assert!(sim.flutter_armed);
+    assert_eq!(sim.flutter_charge, 8);
     assert_eq!(sim.invincibility, 128);
 }
 

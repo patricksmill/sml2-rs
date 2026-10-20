@@ -120,3 +120,28 @@ fn stomp_morph_step_collision_produces_anim54_and_delays_its_handler() {
     assert_eq!(sim.money_bag, 0);
     assert!(sim.unported.is_empty());
 }
+
+/// `$2E23` clears `sFlutterArmed` as soon as the bounce path is taken.
+#[test]
+fn a_bounce_disarms_flutter() {
+    let layout = crate::level::LevelLayout::from_bytes(&[0x60; 0x3000]).unwrap();
+    let mut sim = ObjectSim::new(Vec::new(), 0);
+    sim.mario.x = 100;
+    sim.mario.y = 100;
+    sim.mario.vvel = 0;
+    sim.mario.powerup = 2;
+    let sx = 100u16.wrapping_add(96) as u8;
+    let sy = 100u16.wrapping_add(98) as u8;
+    let s = &mut sim.slots[0];
+    s.b[B_TYPE] = 1;
+    s.b[B_FLAGS] = 0;
+    s.b[B_SCRX] = sx;
+    s.b[B_SCRY] = sy.wrapping_add(20);
+    s.b[B_HB_TOP] = 0;
+    s.b[B_HB_BOTTOM] = 16;
+    s.b[B_HB_LEFT] = 0;
+    s.b[B_HB_RIGHT] = 16;
+    sim.collide(0, 0, &layout);
+    assert!(sim.flutter_disarmed, "$2E23 clears the flutter latch");
+    assert!(sim.bounce, "the contact is a bounce");
+}

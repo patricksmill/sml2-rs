@@ -644,6 +644,8 @@ pub struct ObjectSim {
     pub mario_ref_y: u16,
     pub mario_dead: u8,
     pub bounce: bool,
+    /// `$2E23` clears `sFlutterArmed` on the bounce path, including the star case.
+    pub flutter_disarmed: bool,
     pub stomp_jump: bool,
     pub stomp_bounce: bool,
     pub on_object: bool,
@@ -758,6 +760,7 @@ impl ObjectSim {
             mario_ref_y: 0,
             mario_dead: 0,
             bounce: false,
+            flutter_disarmed: false,
             stomp_jump: false,
             stomp_bounce: false,
             on_object: false,
@@ -974,6 +977,7 @@ impl ObjectSim {
         self.pending_item = 0;
         self.mario_dead = 0;
         self.bounce = false;
+        self.flutter_disarmed = false;
         self.stomp_jump = false;
         self.stomp_bounce = false;
         self.on_object = false;

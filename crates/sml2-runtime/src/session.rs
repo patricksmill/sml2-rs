@@ -652,6 +652,12 @@ pub struct Session {
     pub coins_high: u8,
     pub level_tally: u8,
     pub money_bag: u8,
+    /// `sFlutterTimer` `$A24D`, `sFlutterArmed` `$A284`, `sFlutterCharge`
+    /// `$A27C`. Level load and the map never write these, so the next level
+    /// starts with whatever the previous one left.
+    flutter: u8,
+    flutter_armed: bool,
+    flutter_charge: u8,
     pub prev_keys_held: u8,
     pub prev_a: bool,
     pub prev_b: bool,
@@ -816,6 +822,9 @@ impl Session {
             coins_high: 0,
             level_tally: 0,
             money_bag: 0,
+            flutter: 0,
+            flutter_armed: false,
+            flutter_charge: 0,
             prev_keys_held: 0,
             prev_a: false,
             prev_b: false,
@@ -937,6 +946,11 @@ impl Session {
             self.coins_high = data[0x41];
             self.level_tally = data[0x42];
             self.money_bag = data[0x44];
+            // The `$50`-byte record has no flutter bytes. A loaded file is a
+            // fresh WRAM image for `$A24D`/`$A284`/`$A27C`.
+            self.flutter = 0;
+            self.flutter_armed = false;
+            self.flutter_charge = 0;
             self.state = SessionState::Overworld(map);
             self.map_pan_return = None;
             true
@@ -1251,6 +1265,9 @@ impl Session {
                             // entering one level must retain every other clear.
                             ctx.sim.level_progress = map_sim.level_progress;
                             ctx.sim.level_tally = self.level_tally;
+                            ctx.sim.flutter = self.flutter;
+                            ctx.sim.flutter_armed = self.flutter_armed;
+                            ctx.sim.flutter_charge = self.flutter_charge;
                             // $3C1A2 stops the map theme before loading. `$3E9FB`
                             // fades the map out and the level goes live on the
                             // first state-`$04` frame, `MAP_ENTRY_FRAMES` later.
@@ -1395,6 +1412,9 @@ impl Session {
 
                 self.object_clock.observe(&ctx.obj);
                 if ctx.is_finished() {
+                    self.flutter = ctx.sim.flutter;
+                    self.flutter_armed = ctx.sim.flutter_armed;
+                    self.flutter_charge = ctx.sim.flutter_charge;
                     let handoff = ctx
                         .map_handoff
                         .unwrap_or_else(|| ctx.sim.map_handoff(&self.assets.nodes));
