@@ -48,24 +48,24 @@ fn handler_0x5b177_even_frames_rise_then_fall() {
     assert_eq!(u16::from_be_bytes([st.b[0], st.b[1]]), 98);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 76);
     assert_eq!(st.b[16], 1);
-    assert_eq!(st.b[27], 0);
+    assert_eq!(st.b[24], 0);
 
     st.b[16] = 20;
     sim.handler_0x5b177(&mut st);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 75);
     assert_eq!(st.b[16], 0);
-    assert_eq!(st.b[27], 1);
+    assert_eq!(st.b[24], 1);
 
     let (mut sim, mut st) = fixture(2);
     sim.fff0 = 0;
     position(&mut st.b, 100, 80);
     st.b[16] = 21;
-    st.b[27] = 1;
+    st.b[24] = 1;
     sim.handler_0x5b177(&mut st);
     assert_eq!(u16::from_be_bytes([st.b[0], st.b[1]]), 102);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 84);
     assert_eq!(st.b[16], 0);
-    assert_eq!(st.b[27], 0);
+    assert_eq!(st.b[24], 0);
 }
 
 #[test]

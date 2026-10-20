@@ -47,7 +47,7 @@ fn handler_0x58ce0_init_faces_and_arms_leg_counters() {
         expected[13] = flip;
         expected[15] = state;
         expected[18] = 32;
-        expected[27] = 24;
+        expected[24] = 24;
         expected[28] = 48;
         check(&mut sim, &mut st, expected, facing);
     }
@@ -58,7 +58,7 @@ fn handler_0x58ce0_skips_motion_on_odd_fff0_frames() {
     let (mut sim, mut st) = fixture(1);
     sim.fff0 = 1;
     position(&mut st.b, 100, 100);
-    st.b[27] = 10;
+    st.b[24] = 10;
     let expected = st.b;
     sim.handler_0x58ce0(&mut st);
     assert_eq!(st.b, expected);
@@ -70,17 +70,17 @@ fn handler_0x58ce0_state_one_steps_diagonally_and_counts_down() {
     let (mut sim, mut st) = fixture(1);
     sim.fff0 = 2;
     position(&mut st.b, 100, 100);
-    st.b[27] = 2;
+    st.b[24] = 2;
     st.b[28] = 48;
     let mut expected = st.b;
     position(&mut expected, 99, 101);
-    expected[27] = 1;
+    expected[24] = 1;
     check(&mut sim, &mut st, expected, 99);
 
-    st.b[27] = 1;
+    st.b[24] = 1;
     let mut expected = st.b;
     position(&mut expected, 98, 102);
-    expected[27] = 48;
+    expected[24] = 48;
     expected[15] = 2;
     check(&mut sim, &mut st, expected, 99);
 }
@@ -91,7 +91,7 @@ fn handler_0x58ce0_carries_a_stood_on_rider_on_both_axes() {
     sim.fff0 = 0;
     position(&mut st.b, 100, 100);
     st.b[23] = InteractionFlags::from_bits(0x08).bits();
-    st.b[27] = 24;
+    st.b[24] = 24;
     st.b[28] = 48;
     sim.mario.x = 200;
     sim.mario.y = 200;
@@ -121,7 +121,7 @@ fn handler_0x58ce0_real_anim44_mode_a_step() {
     };
     sim.step(100, 100, &layout, &tables, &mario, false);
     assert_eq!(sim.slots[1].b[18], 32);
-    assert_eq!(sim.slots[1].b[27], 24);
+    assert_eq!(sim.slots[1].b[24], 24);
     assert_eq!(sim.slots[1].b[28], 48);
     assert!(sim.unported.is_empty());
 }

@@ -17,7 +17,7 @@ fn handler_0x595fe_init_arms_contact_and_leg_counters() {
     expected[0..2].copy_from_slice(&96u16.to_be_bytes());
     expected[15] = 1;
     expected[18] = handler_0x595fe::CONTACT;
-    expected[27] = handler_0x595fe::LEG;
+    expected[24] = handler_0x595fe::LEG;
     expected[28] = handler_0x595fe::SPRITE_TIMER;
     sim.handler_0x595fe(&mut st);
     assert_eq!(st.b, expected);
@@ -32,18 +32,18 @@ fn handler_0x595fe_alternates_vertical_legs_and_toggles_state() {
     let mut actor = Actor::default();
     actor.position = Position { x: 100, y: 100 };
     actor.state = 1;
-    actor.hit_reaction = 2;
+    actor.motion_leg = 2;
     actor.timer = 0;
     actor.contact_kind = crate::actor::ContactKind::from_raw(handler_0x595fe::CONTACT);
     st.b = actor.to_raw_slot();
     sim.handler_0x595fe(&mut st);
     assert_eq!(
-        (y_of(&st.b), st.b[27], st.b[15]),
+        (y_of(&st.b), st.b[24], st.b[15]),
         (102, handler_0x595fe::LEG, 2)
     );
     assert_eq!(st.b[28], handler_0x595fe::SPRITE_TIMER);
     st.b[28] = 0;
-    st.b[27] = 2;
+    st.b[24] = 2;
     sim.handler_0x595fe(&mut st);
     assert_eq!((y_of(&st.b), st.b[15]), (100, 1));
 }
@@ -54,7 +54,7 @@ fn handler_0x595fe_carries_stood_on_rider_on_y() {
     sim.mario.y = 300;
     let mut st = Staging::default();
     st.b[15] = 1;
-    st.b[27] = 2;
+    st.b[24] = 2;
     st.b[23] = InteractionFlags::from_bits(0x08).bits();
     st.b[3..5].copy_from_slice(&100u16.to_be_bytes());
     sim.handler_0x595fe(&mut st);

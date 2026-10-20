@@ -1,5 +1,5 @@
 //! ROM `$58C41` (anim 43): horizontal platform like `$58C52`, but the leg
-//! length is 60 in `$FFE8` (`hit_reaction`) and state 0 omits flash 16.
+//! length is 60 in `$FFE8` (`motion_leg`) and state 0 omits flash 16.
 //!
 //! States 1/2 run the short legs; 3/4 alternate at `2 * span` (`state ^= 7`).
 //! `$3CF1`/`$3CC0` carry a stood-on rider by the same pixel.
@@ -26,25 +26,25 @@ pub(super) fn update(actor: &mut Actor, player_x: u16) -> Result<Effect, Error> 
         0 => {
             actor.contact_kind = ContactKind::from_raw(32);
             let relation = actor.face_toward(player_x);
-            actor.hit_reaction = SPAN;
+            actor.motion_leg = SPAN;
             Ok(Effect::Initialized { facing: relation })
         }
         1 => {
-            let (carry, done) = step(actor, -1, actor.hit_reaction);
+            let (carry, done) = step(actor, -1, actor.motion_leg);
             if done {
                 actor.state = 4;
             }
             Ok(Effect::Moved { carry_dx: carry })
         }
         2 => {
-            let (carry, done) = step(actor, 1, actor.hit_reaction);
+            let (carry, done) = step(actor, 1, actor.motion_leg);
             if done {
                 actor.state = 3;
             }
             Ok(Effect::Moved { carry_dx: carry })
         }
         3 => {
-            let cap = actor.hit_reaction.wrapping_mul(2);
+            let cap = actor.motion_leg.wrapping_mul(2);
             let (carry, done) = step(actor, -1, cap);
             if done {
                 actor.state ^= 7;
@@ -52,7 +52,7 @@ pub(super) fn update(actor: &mut Actor, player_x: u16) -> Result<Effect, Error> 
             Ok(Effect::Moved { carry_dx: carry })
         }
         4 => {
-            let cap = actor.hit_reaction.wrapping_mul(2);
+            let cap = actor.motion_leg.wrapping_mul(2);
             let (carry, done) = step(actor, 1, cap);
             if done {
                 actor.state ^= 7;

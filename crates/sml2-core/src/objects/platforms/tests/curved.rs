@@ -29,7 +29,7 @@ fn handler_0x5a355_init_rises_36_and_picks_a_curve() {
     assert_eq!(st.b[15], 0x10);
     assert_eq!(st.b[18], 72);
     assert_eq!(st.b[25], 20);
-    assert_eq!(st.b[27], 1);
+    assert_eq!(st.b[24], 1);
     assert_eq!(sim.facing, 1);
 
     let (mut sim, mut st) = fixture(0);
@@ -53,12 +53,12 @@ fn handler_0x5a355_even_frame_steps_both_axes_and_carries() {
     position(&mut st.b, 100, 100);
     st.b[23] = InteractionFlags::from_bits(0x08).bits();
     st.b[25] = 20;
-    st.b[27] = 1;
+    st.b[24] = 1;
     sim.handler_0x5a355(&mut st);
     assert_eq!(u16::from_be_bytes([st.b[0], st.b[1]]), 103);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 101);
     assert_eq!(st.b[25], 19);
-    assert_eq!(st.b[27], 2);
+    assert_eq!(st.b[24], 2);
     assert_eq!(sim.mario_x_adjust, Some(13));
     assert_eq!(sim.mario_y_adjust, Some(21));
 }
@@ -69,10 +69,10 @@ fn handler_0x5a355_vertical_index_advances_the_high_nibble() {
     sim.fff0 = 2;
     position(&mut st.b, 100, 100);
     st.b[25] = 2;
-    st.b[27] = 0x14;
+    st.b[24] = 0x14;
     sim.handler_0x5a355(&mut st);
     assert_eq!(st.b[15], 0x20);
-    assert_eq!(st.b[27], 0x15);
+    assert_eq!(st.b[24], 0x15);
     assert!(sim.unported.is_empty());
 }
 

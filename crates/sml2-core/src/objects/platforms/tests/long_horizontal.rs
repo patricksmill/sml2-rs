@@ -39,7 +39,7 @@ fn handler_0x58c41_init_faces_by_x_and_sets_span_60() {
         expected[13] = flip;
         expected[15] = state;
         expected[18] = 32;
-        expected[27] = 60;
+        expected[24] = 60;
         check(&mut sim, &mut st, expected, facing);
         assert_eq!(sim.mario_x_adjust, None);
     }
@@ -52,7 +52,7 @@ fn handler_0x58c41_short_legs_move_and_flip_to_the_long_legs() {
             let (mut sim, mut st) = fixture(state);
             position(&mut st.b, 100, 100);
             st.b[16] = phase;
-            st.b[27] = 60;
+            st.b[24] = 60;
             let mut expected = st.b;
             position(&mut expected, (100i16 + dx) as u16, 100);
             expected[16] = if transitions {
@@ -75,7 +75,7 @@ fn handler_0x58c41_long_legs_use_double_span_and_toggle() {
         let (mut sim, mut st) = fixture(state);
         position(&mut st.b, 100, 100);
         st.b[16] = 119;
-        st.b[27] = 60;
+        st.b[24] = 60;
         let mut expected = st.b;
         position(&mut expected, (100i16 + dx) as u16, 100);
         expected[16] = 0;
@@ -89,7 +89,7 @@ fn handler_0x58c41_carries_a_stood_on_rider_only() {
     let (mut sim, mut st) = fixture(1);
     position(&mut st.b, 100, 100);
     st.b[23] = InteractionFlags::from_bits(0x08).bits();
-    st.b[27] = 60;
+    st.b[24] = 60;
     sim.mario.x = 200;
     sim.handler_0x58c41(&mut st);
     assert_eq!(sim.mario_x_adjust, Some(199));
@@ -116,7 +116,7 @@ fn handler_0x58c41_real_anim43_mode_a_step() {
     };
     sim.step(100, 100, &layout, &tables, &mario, false);
     assert_eq!(sim.slots[1].b[18], 32);
-    assert_eq!(sim.slots[1].b[27], 60);
+    assert_eq!(sim.slots[1].b[24], 60);
     assert_eq!(sim.slots[1].b[15], 2);
     assert!(sim.unported.is_empty());
 }

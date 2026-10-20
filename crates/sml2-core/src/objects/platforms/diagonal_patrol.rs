@@ -38,7 +38,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
         0 => {
             actor.contact_kind = ContactKind::from_raw(32);
             let relation = actor.face_toward(player_x);
-            actor.hit_reaction = LEG;
+            actor.motion_leg = LEG;
             actor.timer = RELOAD;
             Ok(Effect::Initialized { facing: relation })
         }
@@ -54,11 +54,11 @@ fn step(actor: &mut Actor, dx: i16, dy: i16) -> Result<Effect, Error> {
     let riding = actor.interactions.stood_on();
     let carry_dx = riding.then_some(dx);
     let carry_dy = riding.then_some(dy);
-    actor.hit_reaction = actor.hit_reaction.wrapping_sub(1);
-    if actor.hit_reaction != 0 {
+    actor.motion_leg = actor.motion_leg.wrapping_sub(1);
+    if actor.motion_leg != 0 {
         return Ok(Effect::Moved { carry_dx, carry_dy });
     }
-    actor.hit_reaction = actor.timer;
+    actor.motion_leg = actor.timer;
     actor.state ^= 3;
     Ok(Effect::Moved { carry_dx, carry_dy })
 }

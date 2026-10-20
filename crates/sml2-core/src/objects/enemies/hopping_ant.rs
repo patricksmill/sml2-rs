@@ -28,7 +28,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
         0 => {
             actor.contact_kind = ContactKind::from_raw(77);
             let facing = actor.face_toward(player_x);
-            actor.hit_reaction = 1;
+            actor.motion_leg = 1;
             actor.set_travel_span(2);
             Ok(Effect::Initialized { facing })
         }
@@ -48,7 +48,7 @@ fn hop(actor: &mut Actor, frame: FrameTick, dx: i16) -> Effect {
     if !frame.every(2) {
         return Effect::Continue;
     }
-    let rising = actor.hit_reaction != 0;
+    let rising = actor.motion_leg != 0;
     let table: &[u8] = if rising { &FALL_SPEED } else { &BOUNCE_SPEED };
     let step = sample(actor, table);
     actor.position.move_y(if rising {
@@ -60,8 +60,8 @@ fn hop(actor: &mut Actor, frame: FrameTick, dx: i16) -> Effect {
         return Effect::Continue;
     }
     actor.motion_phase = 0;
-    actor.hit_reaction ^= 1;
-    if actor.hit_reaction == 0 {
+    actor.motion_leg ^= 1;
+    if actor.motion_leg == 0 {
         actor.sprite_flip = SpriteFlipFlags::from_bits(actor.sprite_flip.bits() ^ 0x20);
         actor.state ^= 3;
         return Effect::Continue;

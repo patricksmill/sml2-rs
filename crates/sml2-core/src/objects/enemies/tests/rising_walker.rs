@@ -110,11 +110,11 @@ fn handler_0x59e5b_rise_climbs_the_sprite_then_counts_to_32() {
 
     st.b[11] = 0x37;
     position(&mut st.b, 100, 100);
-    st.b[27] = 0x1F;
+    st.b[24] = 0x1F;
     let mut expected = st.b;
     position(&mut expected, 100, 99);
     expected[15] = 4;
-    expected[27] = 0x20;
+    expected[24] = 0x20;
     sim.handler_0x59e5b(&mut st, &layout);
     assert_eq!(st.b, expected);
 }
@@ -126,7 +126,7 @@ fn handler_0x59e5b_ceiling_skips_the_rise() {
     sim.fff0 = 0;
     position(&mut st.b, 100, 100);
     st.b[11] = 0x37;
-    st.b[27] = 4;
+    st.b[24] = 4;
     let mut expected = st.b;
     expected[15] = 4;
     sim.handler_0x59e5b(&mut st, &layout);
@@ -142,12 +142,12 @@ fn handler_0x59e5b_descent_faces_mario_when_the_rise_is_undone() {
     position(&mut st.b, 100, 100);
     st.b[11] = 0x35;
     st.b[13] = 0x20;
-    st.b[27] = 1;
+    st.b[24] = 1;
     let mut expected = st.b;
     position(&mut expected, 100, 101);
     expected[13] = 0;
     expected[15] = 1;
-    expected[27] = 0;
+    expected[24] = 0;
     sim.handler_0x59e5b(&mut st, &layout);
     assert_eq!(st.b, expected);
     assert_eq!(sim.facing, 255);

@@ -8,5 +8,5 @@ fn handler_0x597bd_init_sets_contact_and_leg_counters() {
     st.b[15] = 0;
     sim.handler_0x597bd(&mut st);
     assert_eq!(st.b[18], handler_0x597bd::CONTACT);
-    assert_eq!((st.b[27], st.b[24]), (1, 1));
+    assert_eq!((st.b[24], st.b[25], st.b[27]), (1, 1, 0));
 }

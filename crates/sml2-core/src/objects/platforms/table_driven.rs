@@ -20,14 +20,14 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Effe
     if actor.state == 0 {
         actor.contact_kind = ContactKind::from_raw(CONTACT);
         actor.face_toward(player_x);
-        actor.hit_reaction = 1;
         actor.motion_leg = 1;
+        actor.set_travel_span(1);
         return Effect::Initialized;
     }
     if !frame.every(2) {
         return Effect::Waiting;
     }
-    let idx = usize::from(actor.hit_reaction.min(20));
+    let idx = usize::from(actor.motion_leg.min(20));
     let dy = i16::from(TABLE_Y[idx].min(3));
     let dx = i16::from(TABLE_X[idx].min(3));
     actor
@@ -36,9 +36,10 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Effe
     actor
         .position
         .move_x(if actor.state & 2 == 0 { dx } else { -dx });
-    actor.motion_leg = actor.motion_leg.wrapping_add(1);
-    if actor.motion_leg >= 0x15 {
-        actor.motion_leg = 1;
+    let count = actor.travel_span().wrapping_add(1);
+    actor.set_travel_span(count);
+    if count >= 0x15 {
+        actor.set_travel_span(1);
         actor.state = actor.state.wrapping_add(1);
         if actor.state > 8 {
             actor.state = 1;

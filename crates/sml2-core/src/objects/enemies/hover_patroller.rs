@@ -19,18 +19,18 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick) -> Effect {
         }
         5 => {
             actor.position.move_y(2);
-            actor.hit_reaction = actor.hit_reaction.wrapping_add(2);
-            if actor.hit_reaction < 0x40 {
+            actor.motion_leg = actor.motion_leg.wrapping_add(2);
+            if actor.motion_leg < 0x40 {
                 return Effect::Moved { dy: 2 };
             }
-            actor.hit_reaction = 9;
+            actor.motion_leg = 9;
             actor.state = 6;
             Effect::Moved { dy: 2 }
         }
         6 => {
             actor.position.move_y(-3);
-            actor.hit_reaction = actor.hit_reaction.wrapping_sub(3);
-            if actor.hit_reaction != 0 {
+            actor.motion_leg = actor.motion_leg.wrapping_sub(3);
+            if actor.motion_leg != 0 {
                 return Effect::Moved { dy: -3 };
             }
             actor.state = 7;
@@ -49,7 +49,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick) -> Effect {
         _ => {
             actor.contact_kind = ContactKind::from_raw(CONTACT);
             actor.state = 5;
-            actor.hit_reaction = 0;
+            actor.motion_leg = 0;
             Effect::Armed { state: 5 }
         }
     }

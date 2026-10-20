@@ -30,7 +30,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick) -> Result<Effect, Erro
             actor.contact_kind = ContactKind::from_raw(CONTACT);
             actor.state = 1;
             actor.position.move_x(NUDGE);
-            actor.hit_reaction = LEG;
+            actor.motion_leg = LEG;
             actor.timer = SPRITE_TIMER;
             Ok(Effect::Initialized)
         }
@@ -47,11 +47,11 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick) -> Result<Effect, Erro
             }
             let dy = if actor.state == 1 { STEP } else { -STEP };
             actor.position.move_y(dy);
-            actor.hit_reaction = actor.hit_reaction.wrapping_sub(2);
-            if actor.hit_reaction != 0 {
+            actor.motion_leg = actor.motion_leg.wrapping_sub(2);
+            if actor.motion_leg != 0 {
                 return Ok(Effect::Moved { dy });
             }
-            actor.hit_reaction = LEG;
+            actor.motion_leg = LEG;
             actor.timer = SPRITE_TIMER;
             actor.state ^= 3;
             Ok(Effect::Moved { dy })

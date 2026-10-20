@@ -93,8 +93,8 @@ fn rise(actor: &mut Actor, frame: FrameTick, world: &mut impl World) -> Result<E
     }
     if !world.ceiling(actor) {
         actor.position.move_y(-1);
-        actor.hit_reaction = actor.hit_reaction.wrapping_add(1);
-        if actor.hit_reaction != RISE {
+        actor.motion_leg = actor.motion_leg.wrapping_add(1);
+        if actor.motion_leg != RISE {
             return Ok(Effect::Continue);
         }
     }
@@ -111,8 +111,8 @@ fn descend(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Result<Effect,
         return Ok(Effect::Continue);
     }
     actor.position.move_y(1);
-    actor.hit_reaction = actor.hit_reaction.wrapping_sub(1);
-    if actor.hit_reaction != 0 {
+    actor.motion_leg = actor.motion_leg.wrapping_sub(1);
+    if actor.motion_leg != 0 {
         return Ok(Effect::Continue);
     }
     Ok(Effect::Facing(actor.face_toward(player_x)))

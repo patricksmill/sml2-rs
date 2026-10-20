@@ -52,7 +52,7 @@ fn handler_0x5a545_even_air_walks_and_rises() {
     sim.fff0 = 2;
     position(&mut st.b, 100, 100);
     st.b[16] = 0;
-    st.b[27] = 0;
+    st.b[24] = 0;
     sim.handler_0x5a545(&mut st, &layout);
     assert_eq!(u16::from_be_bytes([st.b[0], st.b[1]]), 99);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 98);
@@ -85,10 +85,10 @@ fn handler_0x5a545_phase_eight_toggles_the_vertical_leg() {
     position(&mut st.b, 100, 100);
     st.b[16] = 7;
     st.b[23] = InteractionFlags::from_bits(0x08).bits();
-    st.b[27] = 0;
+    st.b[24] = 0;
     sim.handler_0x5a545(&mut st, &layout);
     assert_eq!(st.b[16], 0);
-    assert_eq!(st.b[27], 1);
+    assert_eq!(st.b[24], 1);
     assert_eq!(sim.mario_x_adjust, Some(41));
     assert_eq!(sim.mario_y_adjust, Some(40));
 }

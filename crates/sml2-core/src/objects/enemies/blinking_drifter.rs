@@ -31,7 +31,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
             }
             let dx: i16 = if actor.state == 1 { -1 } else { 1 };
             actor.position.move_x(dx);
-            let phase = actor.hit_reaction & 3;
+            let phase = actor.motion_leg & 3;
             let dy: i16 = match phase {
                 0 | 1 => 1,
                 _ => -1,
@@ -40,7 +40,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
             actor.motion_phase = actor.motion_phase.wrapping_add(1);
             if actor.motion_phase == 12 {
                 actor.motion_phase = 0;
-                actor.hit_reaction = actor.hit_reaction.wrapping_add(1) & 3;
+                actor.motion_leg = actor.motion_leg.wrapping_add(1) & 3;
             }
             Ok(Effect::Moved { dx, dy })
         }

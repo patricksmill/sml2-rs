@@ -95,7 +95,7 @@ fn bob(actor: &mut Actor, frame: FrameTick) {
 }
 
 fn vertical(actor: &mut Actor) -> i16 {
-    let rising = actor.hit_reaction == 0;
+    let rising = actor.motion_leg == 0;
     let table = if rising { &RISE } else { &FALL };
     let phase = usize::from(actor.motion_phase);
     let step = i16::from(*table.get(phase).unwrap_or(&0));
@@ -106,7 +106,7 @@ fn vertical(actor: &mut Actor) -> i16 {
     actor.position.move_y(dy);
     if actor.motion_phase == 8 {
         actor.motion_phase = 0;
-        actor.hit_reaction ^= 1;
+        actor.motion_leg ^= 1;
     }
     dy
 }

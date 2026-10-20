@@ -35,7 +35,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Effe
         let facing = actor.face_toward(player_x);
         let right = facing == Ordering::Greater;
         actor.state = if right { 0x10 } else { 0x12 };
-        actor.hit_reaction = 1;
+        actor.motion_leg = 1;
         actor.set_travel_span(if right { 20 } else { 1 });
         actor.contact_kind = ContactKind::from_raw(72);
         return Effect::Initialized { facing };
@@ -59,7 +59,7 @@ fn step_y(actor: &mut Actor) -> i16 {
         3 => (&CURVE_B, false, false),
         _ => (&CURVE_A, false, false),
     };
-    let step = sample(curve, actor.hit_reaction);
+    let step = sample(curve, actor.motion_leg);
     let dy = if down {
         i16::from(step)
     } else {
@@ -67,13 +67,13 @@ fn step_y(actor: &mut Actor) -> i16 {
     };
     actor.position.move_y(dy);
     if advance {
-        actor.hit_reaction = actor.hit_reaction.wrapping_add(1);
-        if actor.hit_reaction == 0x15 {
+        actor.motion_leg = actor.motion_leg.wrapping_add(1);
+        if actor.motion_leg == 0x15 {
             actor.state = actor.state.wrapping_add(0x10);
         }
     } else {
-        actor.hit_reaction = actor.hit_reaction.wrapping_sub(1);
-        if actor.hit_reaction == 0 {
+        actor.motion_leg = actor.motion_leg.wrapping_sub(1);
+        if actor.motion_leg == 0 {
             let mut next = actor.state.wrapping_add(0x10);
             if next >= 0x50 {
                 next = next.wrapping_sub(0x40);

@@ -24,7 +24,7 @@ fn handler_0x5afd7_init_faces_mario() {
     assert_eq!(st.b[15], 2);
     assert_eq!(st.b[18], 77);
     assert_eq!(st.b[25], 2);
-    assert_eq!(st.b[27], 1);
+    assert_eq!(st.b[24], 1);
     assert_eq!(sim.facing, 1);
     assert!(sim.unported.is_empty());
 }
@@ -35,7 +35,7 @@ fn handler_0x5afd7_even_apex_turns_or_opens() {
     position(&mut st.b, 100, 80);
     st.b[16] = 14;
     st.b[25] = 2;
-    st.b[27] = 1;
+    st.b[24] = 1;
     sim.handler_0x5afd7(&mut st);
     assert_eq!(u16::from_be_bytes([st.b[0], st.b[1]]), 99);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 77);
@@ -43,7 +43,7 @@ fn handler_0x5afd7_even_apex_turns_or_opens() {
     assert_eq!(st.b[15], 2);
     assert_eq!(st.b[16], 0);
     assert_eq!(st.b[25], 2);
-    assert_eq!(st.b[27], 0);
+    assert_eq!(st.b[24], 0);
 
     sim.fff0 = 1;
     let y = u16::from_be_bytes([st.b[3], st.b[4]]);
@@ -56,14 +56,14 @@ fn handler_0x5afd7_even_apex_turns_or_opens() {
     position(&mut st.b, 100, 80);
     st.b[16] = 14;
     st.b[25] = 1;
-    st.b[27] = 0;
+    st.b[24] = 0;
     sim.handler_0x5afd7(&mut st);
     assert_eq!(u16::from_be_bytes([st.b[0], st.b[1]]), 101);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 80);
     assert_eq!(st.b[15], 3);
     assert_eq!(st.b[16], 0);
     assert_eq!(st.b[25], 0);
-    assert_eq!(st.b[27], 1);
+    assert_eq!(st.b[24], 1);
     assert_eq!(st.b[31], 2);
 }
 
@@ -138,6 +138,6 @@ fn handler_0x5afd7_real_mode_b_anim88_step() {
     assert_eq!(sim.slots[1].b[15], 2);
     assert_eq!(sim.slots[1].b[18], 77);
     assert_eq!(sim.slots[1].b[25], 2);
-    assert_eq!(sim.slots[1].b[27], 1);
+    assert_eq!(sim.slots[1].b[24], 1);
     assert!(sim.unported.is_empty());
 }

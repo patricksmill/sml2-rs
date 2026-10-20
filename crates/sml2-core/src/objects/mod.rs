@@ -564,6 +564,9 @@ mod side_door;
 #[path = "effects/squashed.rs"]
 mod squashed;
 #[cfg(test)]
+#[path = "tests/knockback_latch.rs"]
+mod knockback_latch_tests;
+#[cfg(test)]
 #[path = "tests/stomp_morph.rs"]
 mod stomp_morph_tests;
 mod stream;

@@ -32,7 +32,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
     if actor.state == 0 {
         actor.contact_kind = ContactKind::from_raw(32);
         let relation = actor.face_toward(player_x);
-        actor.hit_reaction = SPAN;
+        actor.motion_leg = SPAN;
         return Ok(Effect::Initialized { facing: relation });
     }
     // $58D45: odd `$FFF0` frames return before the state table.
@@ -81,7 +81,7 @@ fn step(actor: &mut Actor, dx: i16, dy: i16) -> Effect {
 /// `$58D69`: count to the stored span, then enter `next`.
 fn finish_short(actor: &mut Actor, next: u8) {
     actor.motion_phase = actor.motion_phase.wrapping_add(1);
-    if actor.motion_phase == actor.hit_reaction {
+    if actor.motion_phase == actor.motion_leg {
         actor.motion_phase = 0;
         actor.state = next;
     }
@@ -89,7 +89,7 @@ fn finish_short(actor: &mut Actor, next: u8) {
 
 /// `$58DAA`: count to `2 * span`, then `state ^= 7`.
 fn finish_long(actor: &mut Actor) {
-    let cap = actor.hit_reaction.wrapping_mul(2);
+    let cap = actor.motion_leg.wrapping_mul(2);
     actor.motion_phase = actor.motion_phase.wrapping_add(1);
     if actor.motion_phase == cap {
         actor.motion_phase = 0;

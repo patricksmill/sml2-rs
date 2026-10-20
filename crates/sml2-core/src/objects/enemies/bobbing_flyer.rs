@@ -47,7 +47,7 @@ fn cruise(actor: &mut Actor, frame: FrameTick, dx: i16) {
         return;
     }
     actor.position.move_x(dx);
-    let rising = actor.hit_reaction == 0;
+    let rising = actor.motion_leg == 0;
     let table: &[u8] = if rising { &HOVER_SPEED } else { &FALL_SPEED };
     let step = i16::from(sample(actor, table).wrapping_add(1));
     actor.position.move_y(if rising { -step } else { step });
@@ -55,7 +55,7 @@ fn cruise(actor: &mut Actor, frame: FrameTick, dx: i16) {
         return;
     }
     actor.motion_phase = 0;
-    actor.hit_reaction ^= 1;
+    actor.motion_leg ^= 1;
 }
 
 fn sample(actor: &mut Actor, table: &[u8]) -> u8 {
