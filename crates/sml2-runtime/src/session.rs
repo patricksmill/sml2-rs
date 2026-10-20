@@ -271,7 +271,14 @@ impl LevelContext {
             } else if self.sim.dead_fade {
                 self.sim.fade_step();
                 if self.sim.fade_timer == 0 {
-                    self.sim.map_handoff_done = true;
+                    // A death ends in the same `$FF9B = $14` hand-off as a
+                    // clear: its zone band reloads the screen Mario died from
+                    // (PyBoy: a Tree Zone time-out lands on screen 2, node $23).
+                    let handoff = self.sim.map_handoff(nodes);
+                    note_handoff_screen(&handoff);
+                    if self.map_handoff.is_none() {
+                        self.map_handoff = Some(handoff);
+                    }
                 }
             }
             if exit_done_at_entry {

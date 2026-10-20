@@ -653,3 +653,46 @@ fn the_reveal_draws_the_walk_in() {
     assert_ne!(drawn, other, "the walk animation changes Mario's tile");
     let _ = std::fs::remove_file(&tmp_save);
 }
+
+/// A death runs the same `$FF9B = $14` hand-off as a clear, so its zone band
+/// reloads the screen Mario died from. PyBoy: a time-out in the Tree Zone
+/// level from node `$23` lands on screen 2, node `$23`, cursor 48/110.
+#[test]
+fn dying_in_a_zone_level_returns_to_that_zone() {
+    let mut session =
+        crate::session::Session::new(SessionAssets::load().expect("session assets must load"));
+    session.debug_warp_map(2, 0x23).expect("tree zone");
+    let tick = |session: &mut crate::session::Session, keys: PlayerKeys| {
+        session.advance(crate::session::FrameInput { keys, div: 0 }).outcome
+    };
+    for frame in 0..400 {
+        let a = frame % 20 < 2;
+        tick(&mut session, PlayerKeys { a, ..PlayerKeys::default() });
+        if matches!(session.state, SessionState::InLevel(_)) {
+            break;
+        }
+    }
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!("node $23 enters its level");
+    };
+    ctx.sim.dead = 0xFF;
+    ctx.sim.dead_fade = true;
+    ctx.sim.fade_timer = 3;
+    let mut exit = None;
+    for _ in 0..300 {
+        if let StepOutcome::LevelExited { node, screen, cleared } =
+            tick(&mut session, PlayerKeys::default())
+        {
+            exit = Some((node, screen, cleared));
+            break;
+        }
+    }
+    assert_eq!(exit, Some((0x23, 2, false)));
+    let SessionState::Overworld(map) = &session.state else {
+        panic!("the death lands on the map");
+    };
+    assert_eq!(
+        (map.screen_id, map.node, map.cursor_x, map.cursor_y),
+        (2, 0x23, 48, 110)
+    );
+}
