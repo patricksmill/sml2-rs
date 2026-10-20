@@ -109,6 +109,9 @@ pub struct CastleRoom {
     pub marker_col: u8,
     /// `sCastleShufflePhase`.
     pub shuffle_phase: u8,
+    /// Whether `$60EE6` has rewritten the three bulb tiles since the room's
+    /// graphics were loaded (until then they keep the loaded art).
+    pub bulbs_written: bool,
     /// `sCastleWalkPhase`.
     pub walk_phase: u8,
     /// `sMapSprite1AnimCount`.
@@ -188,6 +191,7 @@ impl CastleRoom {
             item_reached: 0,
             marker_col: 0,
             shuffle_phase: 0,
+            bulbs_written: false,
             walk_phase: 0,
             anim_count: 0,
             anim_step: 0,
@@ -493,10 +497,11 @@ impl CastleRoom {
 
     /// `$60D08`: step Mario's OAM x by the `$4FA8` walk table and set the
     /// preview tile. Returns without moving at the `$80` terminator.
-    fn coin_walk_anim(&mut self, script: &[u8]) {
+    fn coin_walk_anim(&mut self, script: &[u8], tables: &[u8]) {
         let preview = self.preview_tile(script);
         self.oam[2] = preview;
-        let Some(&delta) = script.get(TABLE_WALK_OFFSETS + self.walk_idx as usize) else {
+        // `$4FA8` is in the `$4F5A` table block, not the `$4A81` script.
+        let Some(&delta) = tables.get(TABLE_WALK_OFFSETS + self.walk_idx as usize) else {
             return;
         };
         if delta == 0x80 {
@@ -574,6 +579,21 @@ impl CastleRoom {
             writes.extend([(at, 212), (at + 1, 213), (at + 32, 216), (at + 33, 217)]);
         }
         writes
+    }
+
+    /// `$60EE6`'s VRAM side for a coin room's tile bank (`$8000`-based tile
+    /// numbers). `$3F0E` copies bank 25 `$4530` (the lit bulb, loaded at tile
+    /// `$D3`) or `$4D50` (the dark bulb, loaded at tile `$155`) into tiles
+    /// `$D3`/`$E7`/`$155`; the shuffle phase picks which one is lit.
+    pub fn apply_bulb_tiles(&self, vram: &mut [[u8; 64]]) {
+        const BULBS: [usize; 3] = [0xD3, 0xE7, 0x155];
+        if self.kind != RoomKind::CoinRooms || !self.bulbs_written || vram.len() <= BULBS[2] {
+            return;
+        }
+        let (lit, dark) = (vram[BULBS[0]], vram[BULBS[2]]);
+        for (index, &tile) in BULBS.iter().enumerate() {
+            vram[tile] = if index == self.shuffle_phase as usize { lit } else { dark };
+        }
     }
 
     /// `$60C41`: `$4C4D[sCurPowerup]` — the preview tile for the current form.
@@ -676,6 +696,12 @@ impl CastleRoom {
     /// `$6106D`) and the bank-1 call (`$3F44`) are render-side; the RAM part is
     /// the sprite-3 frame byte from `$4F5A`.
     fn coin_commit(&mut self, input: RoomInput, tables: &[u8]) {
+        // `$60EE6`: with an item decoded, every fourth frame steps the bulb
+        // chase; the tile copies themselves are `bulb_tiles`.
+        if self.item_index != 0 && input.frame & 0x03 == 0 {
+            self.shuffle_phase = (self.shuffle_phase + 1) % 3;
+            self.bulbs_written = true;
+        }
         let phase = ((self.reveal_tick & 0x0C) >> 2) as usize;
         let base = match input.node {
             0x6E => TABLE_SPRITE3_PHASE[0],
@@ -695,7 +721,7 @@ impl CastleRoom {
         tables: &[u8],
         items: &[u8],
     ) {
-        self.coin_walk_anim(script);
+        self.coin_walk_anim(script, tables);
         if self.oam[0] >= 0x6C || input.frame & 0x01 != 0 {
             self.coin_idle_anim(input, script, tables);
             return;
@@ -731,7 +757,7 @@ impl CastleRoom {
             self.coin_state2(input, rewards, script, tables);
             return;
         }
-        self.coin_walk_anim(script);
+        self.coin_walk_anim(script, tables);
         if self.timer < 0x78 {
             if self.timer & 0x01 != 0 {
                 self.anim_step = self.anim_step.wrapping_add(1);
@@ -814,14 +840,15 @@ impl CastleRoom {
         let _ = script;
     }
 
-    /// `$60C13`: state 4 slides the preview across the screen and back to 0.
+    /// `$60C13`: state 4 walks Mario up from the bottom edge, then state 0.
     fn coin_state4(&mut self, input: RoomInput, script: &[u8], tables: &[u8]) {
         self.oam[2] = self.preview_tile(script).wrapping_add(16);
         self.oam[0] = self.oam[0].wrapping_sub(1);
         if self.oam[0] < 0x7D {
             self.state = 0;
             self.oam[2] = self.preview_tile(script);
-            self.oam[3] = 1;
+            // The ROM also writes `$FFBB = 1`, which nothing in the coin rooms
+            // reads; `$FFC7` (`oam[3]`) stays 0.
         }
         self.coin_commit(input, tables);
     }
@@ -2035,6 +2062,32 @@ mod tests {
         for (index, tile) in [(0xCC, 212), (0xCD, 213), (0xEC, 216), (0xED, 217)] {
             assert!(writes.contains(&(index, tile)), "marker tile {index:#X}");
         }
+    }
+
+    /// `$60EE6`: once an item is decoded, every fourth frame lights the next
+    /// of the three bulb tiles (`$D3`, `$E7`, `$155`) with the `$4530` art.
+    #[test]
+    fn a_won_item_chases_the_bulbs() {
+        let scripts = scripts();
+        let mut room = CastleRoom::enter_coin(&scripts, 9);
+        let mut rewards = RoomRewards::default();
+        let mut vram = vec![[0u8; 64]; 384];
+        vram[0xD3] = [1; 64];
+        vram[0x155] = [2; 64];
+        let untouched = vram.clone();
+        room.apply_bulb_tiles(&mut vram);
+        assert_eq!(vram, untouched, "the loaded art stands until $60EE6 runs");
+
+        room.state = 2;
+        room.timer = 50;
+        room.item_index = 4;
+        for frame in [4u8, 8] {
+            room.tick(input(frame, 0), &mut rewards);
+        }
+        assert_eq!(room.shuffle_phase, 2);
+        let mut vram = untouched.clone();
+        room.apply_bulb_tiles(&mut vram);
+        assert_eq!([vram[0xD3][0], vram[0xE7][0], vram[0x155][0]], [2, 2, 1]);
     }
 
     /// `$60D32` reads the node's ten-byte row in the `$4000` item table.

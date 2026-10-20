@@ -101,6 +101,9 @@ impl Session {
                     }
                 }
                 map_sim.apply_zone_tile_animation(&mut vram, &self.assets.zone_animation_tiles);
+                if let Some(room) = map_sim.room.as_ref().filter(|_| (9..=12).contains(&map_sim.screen_id)) {
+                    room.apply_bulb_tiles(&mut vram);
+                }
                 if map_sim.screen_id == 1
                     && map_sim.level_progress[7] & 1 != 0
                     && map_sim.level_progress[38] & 0x80 != 0

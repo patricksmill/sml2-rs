@@ -1739,6 +1739,9 @@ impl MapSim {
         }
         self.screen_id = d.screen_id;
         if (9..=12).contains(&self.screen_id) {
+            // `$3F307` zeroes `sMapFrameCounter`; the room's even/odd steps
+            // (`$60C59`, `$60BBF`) and four-frame flashes count from here.
+            self.frame_counter = 0;
             self.room = self.castle_scripts.as_ref().map(|scripts| {
                 let mut room = crate::castle_room::CastleRoom::enter_coin(scripts, d.screen_id);
                 room.powerup = self.powerup;
@@ -2910,6 +2913,50 @@ mod tests {
         assert_eq!(room.state, 5, "$4A81 started the walk-in");
         assert_eq!(out.sfx, Some(1), "the start sfx reaches MapEntry");
         assert_eq!(room.sfx[0], 0, "and is cleared in the room");
+    }
+
+    /// The `$71` (999-coin) room against a PyBoy trace. `$3F307` zeroes
+    /// `sMapFrameCounter`; with A pressed on counter 204 the ROM hops Mario
+    /// (lowest `$FFC4` 86, back to 124), enters state 2 on counter 105 with
+    /// item 11, and awards 20 lives ($05 -> $25).
+    #[test]
+    fn the_999_room_matches_the_rom_trace() {
+        let (n, walk) = (nodes(), walk_blob());
+        let scripts = crate::castle::CastleScripts::from_parts(
+            include_bytes!("../../../extracted/map/castle_scripts.bin").to_vec(),
+            include_str!("../../../extracted/map/castle_scripts.json"),
+        )
+        .expect("castle scripts asset");
+        let mut map = MapSim::new();
+        map.set_castle_scripts(scripts);
+        map.screen_id = 0;
+        map.node = 0x71;
+        map.coins_low = 0x99;
+        map.coins_high = 0x09;
+        map.lives = 0x05;
+        map.frame_counter = 0x37; // the hub's counter runs freely before the door
+        let press = |pressed: u8| MapInput { keys_pressed: pressed, ..Default::default() };
+        map.tick(press(0x01), &n, &walk, &recs());
+        assert_eq!(map.screen_id, 9);
+
+        let (mut lowest_y, mut state2_at) = (u8::MAX, None);
+        // The player's A lands a fixed time after the door: tick 202, which is
+        // counter 204 once `$3F307` has reset it.
+        for tick in 0..700 {
+            let a = if tick == 202 { 0x01 } else { 0 };
+            map.tick(press(a), &n, &walk, &recs());
+            let Some(room) = map.room.as_ref() else { break };
+            if room.state == 5 || room.state == 1 {
+                lowest_y = lowest_y.min(room.oam[0]);
+            }
+            if room.state == 2 && state2_at.is_none() {
+                state2_at = Some((map.frame_counter, room.item_index));
+            }
+        }
+        assert_eq!(lowest_y, 86, "the hop peaks at $FFC4 = 86 and never wraps");
+        assert_eq!(state2_at, Some((105, 11)));
+        assert_eq!(map.lives, 0x25);
+        assert_eq!(map.screen_id, 8, "the room hands back to the castle screen");
     }
 
     /// `$3F3F0` stages a coin room; `$3F4A0` returns to the castle loader once
