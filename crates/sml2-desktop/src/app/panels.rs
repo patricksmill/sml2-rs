@@ -291,6 +291,9 @@ impl DesktopApp {
                             ui.label("Title");
                             ui.monospace(format!("Timer {:04X}", title.timer()));
                         }
+                        SessionState::FileSelectLoading(_) => {
+                            ui.label("Loading file select");
+                        }
                         SessionState::FileSelect(file_select) => {
                             ui.label("File select");
                             ui.monospace(format!(

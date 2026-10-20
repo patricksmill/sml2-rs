@@ -362,6 +362,7 @@ fn state_label(state: &SessionState) -> String {
         }
         SessionState::InLevel(ctx) => format!("level {}", ctx.manifest.level_id),
         SessionState::Title(_) => "title".into(),
+        SessionState::FileSelectLoading(_) => "loading file select".into(),
         SessionState::FileSelect(_) => "file select".into(),
         SessionState::Demo(demo) => format!("demo {}", demo.index),
         SessionState::Castle(seq) => format!("castle reveal {:02X}", seq.state),
