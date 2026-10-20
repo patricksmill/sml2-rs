@@ -1327,7 +1327,6 @@ impl MapSim {
         records: &MapNodeRecords,
     ) -> MapEntry {
         let mut out = MapEntry::default();
-        let previous_screen = self.screen_id;
         // `$3C38C` runs *before* the cursor logic and may overwrite the pressed byte
         // with a synthetic key, so the whole frame sees the map's own press.
         let pressed = self.synthetic_press(input.keys_pressed, nodes);
@@ -1355,11 +1354,6 @@ impl MapSim {
             // Bookkeeping includes the zone routine before the cursor chain.
             self.cursor_chain(input, nodes, walk, records, &mut out)
         };
-        // Door dispatch selects a destination; run its actual loader as well.
-        // `$3D0D7`..`$3D880` and `$3C7BD` reset scroll, sprites and scripts.
-        if self.screen_id != previous_screen && self.screen_id < 9 {
-            out.music = Some(self.load_screen(self.screen_id, 0, records));
-        }
         // The zone loaders clear `hKeysPressed` (`xor a / ldh [$FF81]`), so a door that
         // opens cannot also enter a level on the same frame. The zone→hub doors do
         // *not* clear it — which is why pressing A on the untested door nodes can open
@@ -1613,7 +1607,7 @@ impl MapSim {
         } else if self.node == 0x0D {
             pressed = 0x08;
             if self.rock_anim_timer != 0 {
-                return self.dispatch_door(pressed, out);
+                return self.dispatch_door(pressed, records, out);
             }
         }
         // `$3C5F4`: A or START, on the hub or screen 8, with a door to open.
@@ -1621,7 +1615,7 @@ impl MapSim {
             && (self.screen_id == 0 || self.screen_id == 8)
             && node_door(self.node).is_some()
         {
-            return self.dispatch_door(pressed, out);
+            return self.dispatch_door(pressed, records, out);
         }
         // `$3C66C`: on the hub that is the idle path; on a zone screen it is the door
         // cluster, and everything else falls through to the idle path too.
@@ -1654,7 +1648,12 @@ impl MapSim {
     /// Returns whether the press was consumed. Every door's loader clears
     /// `hKeysPressed` (`xor a / ldh [$FF81]`) but the *refused* coin doors do not:
     /// they fall into `$3C7D9` with the press intact.
-    fn dispatch_door(&mut self, _pressed: u8, out: &mut MapEntry) -> bool {
+    fn dispatch_door(
+        &mut self,
+        _pressed: u8,
+        records: &MapNodeRecords,
+        out: &mut MapEntry,
+    ) -> bool {
         let Some(d) = node_door(self.node) else {
             out.note(Some("map:$3C60B A/START node action"));
             return false;
@@ -1703,6 +1702,12 @@ impl MapSim {
         // $3E3BA's walk-out (the zone doors); the coin doors load without one.
         if let Some(dir) = d.dir {
             out.transition = Some(dir);
+            // `$3D0D7`..`$3D880`: after the hub's fade each zone door runs its
+            // screen loader, which resets scroll, sprites and scripts. The
+            // loader's own music request lands after that 48-frame fade, so
+            // the door's request is the one this frame reports; the session
+            // issues the zone's when its transition reaches the loader.
+            self.load_screen(d.screen_id, 0, records);
         }
         out.music = Some(d.music);
         true
@@ -2584,7 +2589,7 @@ mod tests {
         );
         assert_eq!(map.cursor_move, 0x2F, "the door leaves the move byte alone");
         assert_eq!(out.transition, Some(4), "$3E3BA walks out Up");
-        assert_eq!(out.music, Some(16));
+        assert_eq!(out.music, Some(255), "the door's own request, before the loader's");
         assert_eq!((map.cam_x, map.cam_y), (0, 0));
         assert_eq!(map.cursor_anim, 0x92);
         assert!(map.zone_slots.iter().any(|slot| slot.2 != 0xFF));
