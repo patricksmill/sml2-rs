@@ -859,8 +859,10 @@ impl CastleRoom {
     }
 
     /// `$60800`: the shared walk-cycle byte, complemented timer as direction.
+    /// `and $03 / ret z` — the cycle steps on the three frames that are not a
+    /// multiple of four.
     fn bell_a_walk_cycle(&mut self, frame: u8) {
-        if frame & 0x03 != 0 {
+        if frame & 0x03 == 0 {
             return;
         }
         let mut e = self.sprite(0xA6B8);
@@ -1680,6 +1682,21 @@ mod tests {
         room.tick(input(1, 0), &mut rewards);
         assert_eq!(room.oam[1], start.wrapping_add(1), "odd frame steps");
         assert_eq!(room.state, 0);
+    }
+
+    /// `$60800`: sprite 1's Y steps on every state-1 frame except multiples of four.
+    #[test]
+    fn bell_room_a_walk_cycle_steps_unless_the_frame_is_a_multiple_of_four() {
+        let scripts = scripts();
+        let mut room = CastleRoom::enter_bell_a(&scripts, 3);
+        let mut rewards = RoomRewards::default();
+        room.state = 1;
+        room.timer = 0;
+        room.set_sprite(0xA6B8, 0x60);
+        room.tick(input(0, 0), &mut rewards);
+        assert_eq!(room.sprite(0xA6BB), 0x60, "frame & 3 == 0 returns");
+        room.tick(input(1, 0), &mut rewards);
+        assert_eq!(room.sprite(0xA6BB), 0x61);
     }
 
     /// `$60582`: A starts bell room A's countdown.
