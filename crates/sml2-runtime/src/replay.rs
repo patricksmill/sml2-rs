@@ -7,7 +7,7 @@ use crate::game::{
     scene_frame_head, seed_level_timer,
 };
 use crate::image_output::write_png_scaled;
-use crate::render::{apply_tile_anim, hud_row_coins, render_view, SpriteCtx};
+use crate::render::{apply_tile_anim, hud_row_status, render_view, HudDigits, SpriteCtx};
 use crate::{SCREEN_H, SCREEN_W};
 use serde::Deserialize;
 use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
@@ -696,7 +696,17 @@ pub(crate) fn run_replay(
                 }
                 let mut rbg = bg_base.to_vec();
                 apply_tile_anim(&mut rbg, &manifest.tile_anim, anim_rows, 0);
-                let hud_live = hud_row_coins(hud, sim.coins_high, sim.coins_low);
+                let hud_live = hud_row_status(
+                    hud,
+                    HudDigits {
+                        lives: sim.lives,
+                        coins_high: sim.coins_high,
+                        coins_low: sim.coins_low,
+                        money_bag: obj.money_bag,
+                        timer_high: sim.level_timer.high,
+                        timer_low: sim.level_timer.low,
+                    },
+                );
                 let frame = render_view(
                     manifest,
                     layout,

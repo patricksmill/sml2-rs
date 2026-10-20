@@ -475,20 +475,42 @@ pub(crate) fn hud_row(hud: &HudStrip, digits: Option<&str>) -> Vec<u8> {
     row
 }
 
-/// The HUD row with the coin digits taken from the live sim. The engine's
-/// `$076B` patches the status bar every in-level frame: `$9C07 = sCoinHigh &
-/// $0F`, `$9C08 = sCoinLow >> 4`, `$9C09 = sCoinLow & $0F` (tile = `$80 +
-/// digit`). `digit_columns` is in display order (lives, coins, money, time),
-/// so the coin group is entries 2..5; everything else keeps the template.
-pub(crate) fn hud_row_coins(hud: &HudStrip, coins_high: u8, coins_low: u8) -> Vec<u8> {
+/// Live status-bar digits. `$076B` writes these while the game state is `$04`.
+pub(crate) struct HudDigits {
+    /// `sLives`, BCD.
+    pub lives: u8,
+    /// `sCoinHigh`. Only the low nibble is drawn.
+    pub coins_high: u8,
+    /// `sCoinLow`, BCD.
+    pub coins_low: u8,
+    /// `sMoneyBagCount`, BCD. Defeating an enemy increments it (`$5B31D`).
+    pub money_bag: u8,
+    /// `sTimerHigh`. Drawn as the whole byte, not a nibble.
+    pub timer_high: u8,
+    /// `sTimerLow`, BCD.
+    pub timer_low: u8,
+}
+
+/// `$076B`: patch the window map's digit tiles (`$80 + value`) from the live
+/// counters. Column order is lives, coins, money bags, time.
+pub(crate) fn hud_row_status(hud: &HudStrip, digits: HudDigits) -> Vec<u8> {
     let mut row = hud.template.clone();
-    for (k, v) in [coins_high & 0x0F, coins_low >> 4, coins_low & 0x0F]
-        .iter()
-        .enumerate()
-    {
-        if let Some(col) = hud.digit_columns.get(2 + k) {
-            if let Some(slot) = row.get_mut(*col as usize) {
-                *slot = 0x80 + v;
+    let values = [
+        digits.lives >> 4,
+        digits.lives & 0x0F,
+        digits.coins_high & 0x0F,
+        digits.coins_low >> 4,
+        digits.coins_low & 0x0F,
+        digits.money_bag >> 4,
+        digits.money_bag & 0x0F,
+        digits.timer_high,
+        digits.timer_low >> 4,
+        digits.timer_low & 0x0F,
+    ];
+    for (i, value) in values.into_iter().enumerate() {
+        if let Some(&col) = hud.digit_columns.get(i) {
+            if let Some(slot) = row.get_mut(col as usize) {
+                *slot = value.wrapping_add(0x80);
             }
         }
     }
@@ -509,4 +531,36 @@ pub(crate) fn apply_tile_anim(
     }
     let off = anim.row as usize * 0x100 + (phase & 3) as usize * 0x40;
     bg[0xA00..0xA40].copy_from_slice(&rows[off..off + 0x40]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{hud_row_status, HudDigits};
+    use sml2_core::level::HudStrip;
+
+    /// `$076B` writes every counter. The timer's high byte is not masked.
+    #[test]
+    fn the_status_bar_patches_lives_coins_money_and_time() {
+        let hud = HudStrip {
+            template: vec![0x80; 20],
+            window_x: 7,
+            window_y: 136,
+            digit_columns: vec![2, 3, 7, 8, 9, 13, 14, 17, 18, 19],
+        };
+        let row = hud_row_status(
+            &hud,
+            HudDigits {
+                lives: 0x15,
+                coins_high: 0x12,
+                coins_low: 0x34,
+                money_bag: 0x07,
+                timer_high: 0x14,
+                timer_low: 0x59,
+            },
+        );
+        assert_eq!(&row[2..4], &[0x81, 0x85], "lives");
+        assert_eq!(&row[7..10], &[0x82, 0x83, 0x84], "coins, high nibble only");
+        assert_eq!(&row[13..15], &[0x80, 0x87], "money bags");
+        assert_eq!(&row[17..20], &[0x94, 0x85, 0x89], "timer high is the whole byte");
+    }
 }

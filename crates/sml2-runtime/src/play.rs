@@ -8,7 +8,7 @@ use crate::game::{
 };
 use crate::play_tape::PlayTape;
 use crate::present::letterbox_gray;
-use crate::render::{apply_tile_anim, hud_row_coins, render_view, SpriteCtx, SpriteInst};
+use crate::render::{apply_tile_anim, hud_row_status, render_view, HudDigits, SpriteCtx, SpriteInst};
 use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest};
 use sml2_core::objects::FireHit;
@@ -584,9 +584,18 @@ pub(crate) fn run_play(
         if let Some(w) = window.as_mut() {
             let mut bg = bg_live.clone();
             apply_tile_anim(&mut bg, &manifest.tile_anim, anim_rows, anim_phase);
-            // $076B: the status bar's coin digits follow the sim (the picked-up
-            // coin shows up immediately, like the console's per-frame patch).
-            let hud_live = hud_row_coins(hud, sim.coins_high, sim.coins_low);
+            // $076B: lives, coins, money bags, and the countdown, every frame.
+            let hud_live = hud_row_status(
+                hud,
+                HudDigits {
+                    lives: sim.lives,
+                    coins_high: sim.coins_high,
+                    coins_low: sim.coins_low,
+                    money_bag: obj.money_bag,
+                    timer_high: sim.level_timer.high,
+                    timer_low: sim.level_timer.low,
+                },
+            );
             let frame = render_view(
                 &manifest,
                 &layout_live,

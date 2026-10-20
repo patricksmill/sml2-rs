@@ -1,7 +1,7 @@
 //! Read-only session presentation; view dimensions never enter simulation state.
 
 use super::render_view;
-use super::{apply_tile_anim, hud_row_coins};
+use super::{apply_tile_anim, hud_row_status, HudDigits};
 use crate::session::{LevelContext, Session, SessionState, MAP_FADE_STEP};
 use std::error::Error;
 
@@ -27,7 +27,17 @@ impl LevelContext {
             &self.anim_rows,
             self.anim_phase,
         );
-        let hud_live = hud_row_coins(&self.hud, self.sim.coins_high, self.sim.coins_low);
+        let hud_live = hud_row_status(
+            &self.hud,
+            HudDigits {
+                lives: self.sim.lives,
+                coins_high: self.sim.coins_high,
+                coins_low: self.sim.coins_low,
+                money_bag: self.obj.money_bag,
+                timer_high: self.sim.level_timer.high,
+                timer_low: self.sim.level_timer.low,
+            },
+        );
         let flash = if self.sim.paused {
             Some(self.sim.pause_flash())
         } else {
