@@ -205,7 +205,14 @@ pub(super) fn verify_map_entry_completion_and_reload(
     for &keys in tape {
         if let SessionState::InLevel(ctx) = &runner.session.state {
             if !ctx.sim.exit_phase {
-                assert_eq!(ctx.sim.dead, 0, "the played route must not die");
+                assert_eq!(
+                    ctx.sim.dead, 0,
+                    "the played route must not die: frame={} xy=({}, {}) clock={} phase={} camera=({}, {}) active_objects={:?}",
+                    ctx.frame_n, ctx.sim.x, ctx.sim.y, ctx.obj.fff0,
+                    ctx.obj.phase, ctx.cam.x, ctx.cam.y,
+                    ctx.obj.slots.iter().filter(|slot| slot.active())
+                        .map(|slot| (slot.def(), slot.x(), slot.y())).collect::<Vec<_>>(),
+                );
             }
             assert!(ctx.obj.unported.is_empty());
         }

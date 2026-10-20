@@ -31,7 +31,9 @@ fn level19_header_spawn_to_plain_bell_through_live_play() {
         ..Default::default()
     };
     let idle = PlayerKeys::default();
-    let mut tape = vec![right; 80];
+    let mut tape = vec![right; 81];
+    // Handwritten native fixture, not recorded ROM input: take off one update
+    // later so the descent clears the first moving enemy with the loader clock.
     for _ in 0..9 {
         tape.extend(
             [(80, right_high_jump), (40, right)]
@@ -53,12 +55,12 @@ fn level19_header_spawn_to_plain_bell_through_live_play() {
         (150, high_jump),
         (10, idle),
         // Catch column 81's raised foothold before the taller formation.
-        (190, right_high_jump),
+        (210, right_high_jump),
         (7, left_high_jump),
         (150, high_jump),
         (10, idle),
         // Clear that formation and settle on the first lower safe island.
-        (200, right_high_jump),
+        (180, right_high_jump),
         (6, left_high_jump),
         (180, high_jump),
         (10, idle),
