@@ -65,8 +65,11 @@ impl Session {
                 (vw, vh),
             ),
             SessionState::Overworld(map_sim) => {
-                let map_sim = self.map_screen_transition.as_ref()
-                    .filter(|t| t.shows_source()).map_or(map_sim, |t| &t.source);
+                let map_sim = self
+                    .map_screen_transition
+                    .as_ref()
+                    .filter(|t| t.shows_source())
+                    .map_or(map_sim, |t| &t.source);
                 let mut vram = if map_sim.screen_id >= 13 && !self.assets.bell_room_tiles.is_empty()
                 {
                     // Screens 13/14 copy bank 25 `$5000` to `$8800`; the zone
@@ -161,15 +164,18 @@ impl Session {
                         .dynamic_unlocks
                         .retain(|r| r.screen_id != map_sim.screen_id);
                 }
-                let transition_palettes = self.map_screen_transition.as_ref().map(|t| {
-                    if map_sim.screen_id == 7 && !t.shows_source() { (0xE1, 0xD0, 0x39) }
-                    else { t.palettes() }
-                });
+                let transition_palettes = self
+                    .map_screen_transition
+                    .as_ref()
+                    .map(|t| t.palettes(map_sim.screen_id));
                 let (bg_pal, obp) = transition_palettes.map_or((bg_pal, obp), |p| (p.0, p.1));
                 let video = sml2_core::map::MapVideo {
                     scroll_rows: std::array::from_fn(|y| map_sim.zone_background_scroll(y).0),
                     scroll_y: map_sim.zone_background_scroll(0).1,
-                    obj_palette1: transition_palettes.map_or_else(|| fade_palette(zone_palettes.map_or(0x39, |p| p.1), fade), |p| p.2),
+                    obj_palette1: transition_palettes.map_or_else(
+                        || fade_palette(zone_palettes.map_or(0x39, |p| p.1), fade),
+                        |p| p.2,
+                    ),
                 };
                 sml2_core::map::render_overworld_view_with_video(
                     map_sim.screen_id,

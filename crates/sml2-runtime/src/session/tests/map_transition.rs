@@ -24,23 +24,50 @@ fn normal_doors_load_zones_walk_48_pixels_and_block_input() {
             map.load_node(node, &session.assets.node_records);
             map.cursor_move = 0;
         }
-        tick(&mut session, PlayerKeys { a: true, ..Default::default() });
+        tick(
+            &mut session,
+            PlayerKeys {
+                a: true,
+                ..Default::default()
+            },
+        );
         assert!(session.map_screen_transition.is_some(), "door {node:02X}");
         for _ in 0..160 {
-            if session.map_screen_transition.is_none() { break; }
-            tick(&mut session, PlayerKeys { a: true, b: true, right: true, ..Default::default() });
+            if session.map_screen_transition.is_none() {
+                break;
+            }
+            tick(
+                &mut session,
+                PlayerKeys {
+                    a: true,
+                    b: true,
+                    right: true,
+                    ..Default::default()
+                },
+            );
             assert!(session.pending_level.is_none());
         }
         assert!(session.map_screen_transition.is_none());
-        let SessionState::Overworld(map) = &session.state else { panic!() };
-        assert_eq!([map.screen_id, map.node, map.cursor_x, map.cursor_y],
-                   [screen, dest, x, y], "door {node:02X}");
+        let SessionState::Overworld(map) = &session.state else {
+            panic!()
+        };
+        assert_eq!(
+            [map.screen_id, map.node, map.cursor_x, map.cursor_y],
+            [screen, dest, x, y],
+            "door {node:02X}"
+        );
         assert_eq!((map.cam_x, map.cam_y), (0, 0));
-        assert_eq!(session.sound_driver.active_song, sml2_core::map_sim::screen_music(screen));
+        assert_eq!(
+            session.sound_driver.active_song,
+            sml2_core::map_sim::screen_music(screen)
+        );
         // The zone loader replaced the default slots. Visibility is not the
         // test: Macro's list ($0F) is all `$FF` ids until its stages clear.
-        assert_ne!(map.zone_slots, sml2_core::map_sim::MapSim::new().zone_slots,
-                   "door {node:02X}: the zone sprite list was loaded");
+        assert_ne!(
+            map.zone_slots,
+            sml2_core::map_sim::MapSim::new().zone_slots,
+            "door {node:02X}: the zone sprite list was loaded"
+        );
     }
 }
 
@@ -54,22 +81,72 @@ fn tree_door_walks_out_then_reloads_and_fades_back_to_hub() {
         map.mario_dead = 0xFF;
         map.cursor_move = 0;
     }
-    tick(&mut session, PlayerKeys { down: true, ..Default::default() });
+    tick(
+        &mut session,
+        PlayerKeys {
+            down: true,
+            ..Default::default()
+        },
+    );
     let transition = session.map_screen_transition.as_ref().unwrap();
     assert!(!transition.entering);
     assert!(transition.shows_source());
     let start_y = transition.source.cursor_y;
-    for _ in 0..100 { tick(&mut session, PlayerKeys::default()); }
+    for _ in 0..100 {
+        tick(&mut session, PlayerKeys::default());
+    }
     assert!(session.map_screen_transition.is_none());
     assert!(session.map_pan_return.is_some());
     assert!(session.render_frame((160, 144)).iter().all(|&p| p == 255));
-    for _ in 0..32 { tick(&mut session, PlayerKeys::default()); }
+    for _ in 0..32 {
+        tick(&mut session, PlayerKeys::default());
+    }
     assert!(session.map_pan_return.is_none());
-    let SessionState::Overworld(map) = &session.state else { panic!() };
+    let SessionState::Overworld(map) = &session.state else {
+        panic!()
+    };
     let record = session.assets.node_records.record(25).unwrap();
-    assert_eq!([map.screen_id, map.node, map.cursor_x, map.cursor_y],
-               [0, 25, record.cursor_x, record.cursor_y]);
+    assert_eq!(
+        [map.screen_id, map.node, map.cursor_x, map.cursor_y],
+        [0, 25, record.cursor_x, record.cursor_y]
+    );
     assert_ne!(start_y, map.cursor_y);
     assert_eq!((map.cam_x, map.cam_y), (record.cam_x, record.cam_y));
     assert_eq!(session.sound_driver.active_song, 6);
+}
+
+#[test]
+fn screen_seven_holds_its_palettes_instead_of_fading_in() {
+    // `$3E4C1` (node $11's door) against `$3E3BA`'s fade-in (node $19's).
+    for (node, fixed) in [(0x11, true), (0x19, false)] {
+        let mut session = Session::new(SessionAssets::load().unwrap());
+        if let SessionState::Overworld(map) = &mut session.state {
+            map.node = node;
+            map.load_node(node, &session.assets.node_records);
+            map.cursor_move = 0;
+        }
+        tick(
+            &mut session,
+            PlayerKeys {
+                a: true,
+                ..Default::default()
+            },
+        );
+        for _ in 0..50 {
+            tick(&mut session, PlayerKeys::default());
+        }
+        let SessionState::Overworld(map) = &session.state else {
+            panic!()
+        };
+        let transition = session.map_screen_transition.as_ref().unwrap();
+        assert!(
+            !transition.shows_source(),
+            "door {node:02X} is past the hub fade"
+        );
+        assert_eq!(
+            transition.palettes(map.screen_id) == (0xE1, 0xD0, 0x39),
+            fixed,
+            "door {node:02X}"
+        );
+    }
 }

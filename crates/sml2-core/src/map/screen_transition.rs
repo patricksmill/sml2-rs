@@ -46,8 +46,10 @@ mod tests {
             for _ in 0..48 {
                 map.transition_walk_step(dir);
             }
-            assert_eq!([map.cursor_x, map.cursor_y, map.walk_frame, map.cursor_pose],
-                       [end_x, end_y, 48, pose]);
+            assert_eq!(
+                [map.cursor_x, map.cursor_y, map.walk_frame, map.cursor_pose],
+                [end_x, end_y, 48, pose]
+            );
         }
     }
 }

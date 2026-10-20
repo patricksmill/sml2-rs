@@ -2,6 +2,10 @@
 
 use sml2_core::map_sim::MapSim;
 
+/// The screen whose walk-in `$3E3BA` hands to `$3E4C1` (`cp $07`): the
+/// `$3D6EB` loader's screen, which draws Wario's castle (`$3BD80`).
+const FIXED_PALETTE_SCREEN: u8 = 7;
+
 #[derive(Debug)]
 pub struct MapScreenTransition {
     pub frame: u16,
@@ -12,18 +16,33 @@ pub struct MapScreenTransition {
 
 impl MapScreenTransition {
     pub fn new(source: MapSim, direction: u8) -> Self {
-        Self { frame: 0, entering: source.screen_id == 0, source, direction }
+        Self {
+            frame: 0,
+            entering: source.screen_id == 0,
+            source,
+            direction,
+        }
     }
 
     pub fn shows_source(&self) -> bool {
         !self.entering || self.frame < 48
     }
 
-    pub fn palettes(&self) -> (u8, u8, u8) {
+    /// `(sBGPalette, sOAMPalette1, sOAMPalette2)` for this frame of the walk.
+    /// `destination` is the screen the door loads.
+    pub fn palettes(&self, destination: u8) -> (u8, u8, u8) {
         const OBJ: [u8; 5] = [0, 0, 0x40, 0x80, 0xD0];
+        if self.entering && self.frame >= 48 && destination == FIXED_PALETTE_SCREEN {
+            // `$3E4C1`: screen 7 skips the fade-in and holds its own palettes.
+            return (0xE1, 0xD0, 0x39);
+        }
         if self.entering && self.frame < 48 {
             let step = self.frame / 12;
-            return ((0xE4u16 << (step * 2)) as u8, OBJ[4 - step as usize], OBJ[4 - step as usize]);
+            return (
+                (0xE4u16 << (step * 2)) as u8,
+                OBJ[4 - step as usize],
+                OBJ[4 - step as usize],
+            );
         }
         if self.entering {
             let step = ((self.frame - 48) / 5 + 1).min(4) as usize;
@@ -31,19 +50,30 @@ impl MapScreenTransition {
             (BG[step], OBJ[step], OBJ[step])
         } else {
             let step = self.frame.saturating_sub(80) / 5;
-            ((0xE4u16 << (step * 2)) as u8, OBJ[4 - step as usize], OBJ[4 - step as usize])
+            (
+                (0xE4u16 << (step * 2)) as u8,
+                OBJ[4 - step as usize],
+                OBJ[4 - step as usize],
+            )
         }
     }
 
     pub fn advance(&mut self, destination: &mut MapSim, div: u8) -> bool {
         let frame = self.frame;
         self.frame += 1;
-        if self.entering && frame < 48 { return false; }
-        let turtle = self.entering && destination.screen_id == 7;
+        if self.entering && frame < 48 {
+            return false;
+        }
+        // `$3E4C1`: screen 7's walk-in is 48 steps at two frames each, no fade.
+        let fixed = self.entering && destination.screen_id == FIXED_PALETTE_SCREEN;
         let walk_frame = if self.entering { frame - 48 } else { frame };
-        let map = if self.entering { destination } else { &mut self.source };
+        let map = if self.entering {
+            destination
+        } else {
+            &mut self.source
+        };
         map.bookkeeping(div);
-        let moving = if turtle {
+        let moving = if fixed {
             walk_frame % 2 == 0
         } else if self.entering && walk_frame < 20 {
             matches!(walk_frame % 5, 1 | 3)
@@ -52,8 +82,10 @@ impl MapScreenTransition {
         } else {
             walk_frame % 2 == 0
         };
-        if moving { map.transition_walk_step(self.direction); }
-        walk_frame + 1 >= if turtle { 96 } else { 100 }
+        if moving {
+            map.transition_walk_step(self.direction);
+        }
+        walk_frame + 1 >= if fixed { 96 } else { 100 }
     }
 }
 

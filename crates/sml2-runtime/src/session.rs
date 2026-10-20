@@ -968,8 +968,16 @@ impl Session {
                     break 'map StepOutcome::Continue;
                 }
                 if let Some(transition) = self.map_screen_transition.as_mut() {
-                    self.prev_keys_held = pack_joypad(keys.right, keys.left, keys.up, keys.down,
-                        keys.a, keys.b, keys.select, keys.start);
+                    self.prev_keys_held = pack_joypad(
+                        keys.right,
+                        keys.left,
+                        keys.up,
+                        keys.down,
+                        keys.a,
+                        keys.b,
+                        keys.select,
+                        keys.start,
+                    );
                     if transition.advance(map_sim, div) {
                         let entering = transition.entering;
                         self.map_screen_transition = None;
@@ -978,7 +986,8 @@ impl Session {
                             self.sound_driver.music_request = 0xFF;
                         }
                     } else if transition.entering && transition.frame == 48 {
-                        self.sound_driver.music_request = sml2_core::map_sim::screen_music(map_sim.screen_id);
+                        self.sound_driver.music_request =
+                            sml2_core::map_sim::screen_music(map_sim.screen_id);
                     }
                     break 'map StepOutcome::Continue;
                 }
@@ -1073,7 +1082,12 @@ impl Session {
 
                 map_sim.set_zone_animation_clock(self.frame_n as u8, 0);
 
+                // A door replaces the screen inside `tick`, and its walk still
+                // shows the screen it left. Snapshot without the room scripts:
+                // they are the only heap payload and a door walk never reads them.
+                let scripts = map_sim.castle_scripts.take();
                 let source_map = map_sim.clone();
+                map_sim.castle_scripts = scripts;
                 let entry = map_sim.tick(
                     input,
                     &self.assets.nodes,
@@ -1082,10 +1096,13 @@ impl Session {
                 );
 
                 if let Some(direction) = entry.transition {
-                    self.map_screen_transition = Some(MapScreenTransition::new(source_map, direction));
+                    self.map_screen_transition =
+                        Some(MapScreenTransition::new(source_map, direction));
                     self.last_map_screen = Some(map_sim.screen_id);
                     if map_sim.screen_id == 0 {
-                        self.map_wave = sml2_core::map::MapWave::seed(self.assets.overworld_tiles.screen_raw(0));
+                        self.map_wave = sml2_core::map::MapWave::seed(
+                            self.assets.overworld_tiles.screen_raw(0),
+                        );
                     } else {
                         self.map_wave = None;
                     }
