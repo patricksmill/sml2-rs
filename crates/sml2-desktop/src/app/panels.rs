@@ -303,6 +303,13 @@ impl DesktopApp {
                                 file_select.clear_mode()
                             ));
                         }
+                        SessionState::Castle(seq) => {
+                            ui.label("Castle reveal");
+                            ui.monospace(format!(
+                                "State {:02X}  menu {}  fade {:02X}/{:02X}",
+                                seq.state, seq.menu, seq.fade_high, seq.fade_low
+                            ));
+                        }
                         SessionState::GameOver => {
                             ui.label("Game over");
                         }

@@ -517,6 +517,8 @@ pub enum SessionState {
     Demo(Box<DemoContext>),
     Overworld(MapSim),
     InLevel(Box<LevelContext>),
+    /// `$1B`-`$21`: the golden-coin castle reveal.
+    Castle(sml2_core::castle_sequence::CastleSequence),
     GameOver,
 }
 
@@ -604,6 +606,10 @@ pub struct Session {
     pub active_slot: Option<u8>,
     /// Where a goal-bell bonus room returns to: `(screen, node, exit_tile_flag)`.
     bell_return: Option<(u8, u8, u8)>,
+    /// Where the castle reveal lands: `(screen, node, exit_tile_flag)`.
+    castle_return: Option<(u8, u8, u8)>,
+    /// `sLevelProgress` while the reveal owns it.
+    castle_progress: [u8; 42],
 }
 
 impl Session {
@@ -636,6 +642,8 @@ impl Session {
             slots: SaveSlots::new(),
             active_slot: None,
             bell_return: None,
+            castle_return: None,
+            castle_progress: [0; 42],
         }
     }
 
@@ -743,6 +751,13 @@ impl Session {
                 map.save_record(self.lives, self.level_tally, self.money_bag)
             }
             SessionState::InLevel(ctx) => ctx.sim.save_record(self.money_bag),
+            SessionState::Castle(_) => {
+                let mut map = MapSim::new();
+                map.level_progress = self.castle_progress;
+                map.coins_low = self.coins_low;
+                map.coins_high = self.coins_high;
+                map.save_record(self.lives, self.level_tally, self.money_bag)
+            }
             SessionState::GameOver => {
                 let map = MapSim::new();
                 map.save_record(self.lives, self.level_tally, self.money_bag)
@@ -1092,44 +1107,66 @@ impl Session {
                         self.powerup = ctx.sim.powerup;
                         let target_node = handoff.node;
                         let target_screen = handoff.screen.unwrap_or(0);
-                        let mut map_sim = MapSim::from_player(&ctx.sim);
-                        map_sim.set_castle_scripts(self.assets.castle_scripts.clone());
-                        if ctx.sim.goal_bell {
-                            // `$3EF2B`: `sGoalBell` sends the exit to the bonus
-                            // room, picked by `sMapNode` bit 0.
-                            let screen = if target_node & 1 == 0 { 13 } else { 14 };
-                            let scripts = self.assets.castle_scripts.clone();
-                            let room = if screen == 13 {
-                                sml2_core::castle_room::CastleRoom::enter_bell_a(
-                                    &scripts,
-                                    ctx.sim.level_timer.high,
-                                )
-                            } else {
-                                let tilemap = self
-                                    .assets
-                                    .overworld_tilemaps
-                                    .screen_tilemap(14)
-                                    .unwrap_or(&[]);
-                                sml2_core::castle_room::CastleRoom::enter_bell_b(
-                                    &scripts, tilemap,
-                                )
-                            };
-                            map_sim.screen_id = screen;
-                            map_sim.frame_counter = 0;
-                            map_sim.node = target_node;
-                            map_sim.room = Some(room);
-                            self.bell_return =
+                        if ctx.sim.boss_clear {
+                            // Bank 2's boss-clear arm sets `sGameState = $1D`.
+                            let mut seq = sml2_core::castle_sequence::CastleSequence::default();
+                            let coins = [
+                                ctx.sim.level_progress[5],
+                                ctx.sim.level_progress[9],
+                                ctx.sim.level_progress[14],
+                                ctx.sim.level_progress[17],
+                                ctx.sim.level_progress[23],
+                                ctx.sim.level_progress[29],
+                            ];
+                            seq.enter(&coins);
+                            seq.level = ctx.manifest.level_id;
+                            seq.progress_flags = ctx.sim.level_progress_flags;
+                            seq.level_tally = ctx.sim.level_tally;
+                            seq.state = sml2_core::castle_sequence::STATE_REVEAL_D;
+                            self.castle_progress = ctx.sim.level_progress;
+                            self.castle_return =
                                 Some((target_screen, target_node, ctx.sim.exit_tile_flag));
+                            self.state = SessionState::Castle(seq);
                         } else {
-                            map_sim.load_screen(
-                                target_screen,
-                                ctx.sim.exit_tile_flag,
-                                &self.assets.node_records,
-                            );
-                            map_sim.node = target_node;
-                            map_sim.load_node(target_node, &self.assets.node_records);
+                            let mut map_sim = MapSim::from_player(&ctx.sim);
+                            map_sim.set_castle_scripts(self.assets.castle_scripts.clone());
+                            if ctx.sim.goal_bell {
+                                // `$3EF2B`: `sGoalBell` sends the exit to the
+                                // bonus room, picked by `sMapNode` bit 0.
+                                let screen = if target_node & 1 == 0 { 13 } else { 14 };
+                                let scripts = self.assets.castle_scripts.clone();
+                                let room = if screen == 13 {
+                                    sml2_core::castle_room::CastleRoom::enter_bell_a(
+                                        &scripts,
+                                        ctx.sim.level_timer.high,
+                                    )
+                                } else {
+                                    let tilemap = self
+                                        .assets
+                                        .overworld_tilemaps
+                                        .screen_tilemap(14)
+                                        .unwrap_or(&[]);
+                                    sml2_core::castle_room::CastleRoom::enter_bell_b(
+                                        &scripts, tilemap,
+                                    )
+                                };
+                                map_sim.screen_id = screen;
+                                map_sim.frame_counter = 0;
+                                map_sim.node = target_node;
+                                map_sim.room = Some(room);
+                                self.bell_return =
+                                    Some((target_screen, target_node, ctx.sim.exit_tile_flag));
+                            } else {
+                                map_sim.load_screen(
+                                    target_screen,
+                                    ctx.sim.exit_tile_flag,
+                                    &self.assets.node_records,
+                                );
+                                map_sim.node = target_node;
+                                map_sim.load_node(target_node, &self.assets.node_records);
+                            }
+                            self.state = SessionState::Overworld(map_sim);
                         }
-                        self.state = SessionState::Overworld(map_sim);
                         if handoff.saves > 0 {
                             let rec = self.save_record();
                             if let Some(slot) = self.active_slot {
@@ -1193,6 +1230,41 @@ impl Session {
                 let index = demo.index;
                 if finished {
                     self.finish_demo(index);
+                }
+                StepOutcome::Continue
+            }
+
+            SessionState::Castle(ref mut seq) => {
+                let seq_in = sml2_core::castle_sequence::SequenceInput {
+                    keys_pressed: if start_pressed { 0x08 } else { 0 },
+                    frame: (self.frame_n & 0xFF) as u8,
+                    walk_done: false,
+                };
+                let offset = sml2_core::castle_sequence::LEVEL_PROGRESS_OFFSETS
+                    .get(seq.level as usize)
+                    .copied()
+                    .unwrap_or(0) as usize;
+                let out = seq.tick(seq_in, offset, &mut self.castle_progress);
+                if let Some(music) = out.music {
+                    self.sound_driver.music_request = music;
+                }
+                if let Some(sfx) = out.sfx2 {
+                    self.sound_driver.sfx_request_2 = sfx;
+                }
+                if out.done {
+                    if let Some((screen, node, flag)) = self.castle_return.take() {
+                        let mut map_sim = MapSim::new();
+                        map_sim.set_castle_scripts(self.assets.castle_scripts.clone());
+                        map_sim.lives = self.lives;
+                        map_sim.powerup = self.powerup;
+                        map_sim.coins_low = self.coins_low;
+                        map_sim.coins_high = self.coins_high;
+                        map_sim.level_progress = self.castle_progress;
+                        map_sim.load_screen(screen, flag, &self.assets.node_records);
+                        map_sim.node = node;
+                        map_sim.load_node(node, &self.assets.node_records);
+                        self.state = SessionState::Overworld(map_sim);
+                    }
                 }
                 StepOutcome::Continue
             }

@@ -151,6 +151,7 @@ impl Session {
             SessionState::InLevel(ctx) => ctx
                 .render_frame(vw, vh)
                 .unwrap_or_else(|_| vec![0u8; vw * vh]),
+            SessionState::Castle(_) => vec![0u8; vw * vh],
             SessionState::GameOver => vec![0u8; vw * vh],
         }
     }

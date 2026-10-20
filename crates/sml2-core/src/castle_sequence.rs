@@ -33,6 +33,12 @@ pub const STATE_MAP: u8 = 0x14;
 
 /// `$44F1`: `sCurLevel` -> the `sLevelProgress` byte the reveal marks. The
 /// table is 25 bytes (levels 0-24).
+/// `$499D`: the castle walk-in's target X, indexed by `sCurLevel`.
+pub const WALK_TARGET_X: [u8; 25] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x79, 0x00, 0x00, 0x00, 0x46, 0x00, 0x00, 0x00, 0x5D, 0x00, 0x00,
+    0x79, 0x00, 0x00, 0x5D, 0x00, 0x00, 0x00, 0x46, 0x00,
+];
+
 pub const LEVEL_PROGRESS_OFFSETS: [u8; 25] = [
     0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x1D, 0x00, 0x00,
     0x17, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00, 0x0E, 0x00,
@@ -41,6 +47,7 @@ pub const LEVEL_PROGRESS_OFFSETS: [u8; 25] = [
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SequenceInput {
     pub keys_pressed: u8,
+    pub frame: u8,
     /// `$453B`'s walk-in reached `$499D[sCurLevel]`.
     pub walk_done: bool,
 }
@@ -74,6 +81,11 @@ pub struct CastleSequence {
     pub golden_count: u8,
     /// `sMarioWalkAnimTimer` (`$A222`).
     pub walk_anim: u8,
+    /// `$FFC0`/`$FFC2`: the walk-in's X and Y.
+    pub walk_x: u8,
+    pub walk_y: u8,
+    /// `sCurLevel`.
+    pub level: u8,
     /// `sLevelProgressFlags` (`$A27D`).
     pub progress_flags: u8,
     /// `sLevelTally` (`$A242`), BCD.
@@ -98,6 +110,9 @@ impl Default for CastleSequence {
             coin_done: 0,
             golden_count: 0,
             walk_anim: 0,
+            walk_x: 16,
+            walk_y: 40,
+            level: 0,
             progress_flags: 0,
             level_tally: 0,
             coins: [0; 6],
@@ -121,6 +136,8 @@ impl CastleSequence {
     /// Run `$47BC`: count the flags and start the sequence.
     pub fn enter(&mut self, coins: &[u8; 6]) {
         self.coins = *coins;
+        self.walk_x = 16; // `$4008`: the castle sprite starts at X 16, Y 40
+        self.walk_y = 40;
         self.golden_count = Self::count_coins(coins);
         self.state = STATE_REVEAL_A;
     }
@@ -202,7 +219,14 @@ impl CastleSequence {
         match self.menu {
             0 => {
                 // `$453B`: the walk-in; music follows the coin count.
-                if input.walk_done {
+                let target = WALK_TARGET_X
+                    .get(self.level as usize)
+                    .copied()
+                    .unwrap_or(0x88);
+                if self.walk_x != target && input.frame & 0x01 == 0 {
+                    self.walk_x = self.walk_x.wrapping_add(1);
+                }
+                if input.walk_done || self.walk_x == target {
                     out.music = Some(if self.golden_count == 5 { 26 } else { 15 });
                     self.menu = 1;
                     self.fade_high = 1;
@@ -364,6 +388,34 @@ mod tests {
         let _ = seq.tick(SequenceInput::default(), 9, &mut progress);
         assert_eq!(progress[9] & 0x80, 0x80);
         assert_eq!(seq.progress_flags & 0x80, 0x80);
+    }
+
+    /// `$453B`: the walk-in steps X once per even frame to `$499D[level]`.
+    #[test]
+    fn the_walk_in_reaches_the_level_target() {
+        let mut seq = CastleSequence::default();
+        seq.enter(&flags(5));
+        seq.level = 5; // $499D[5] = $79
+        seq.state = STATE_REVEAL_B;
+        let mut progress = [0u8; 42];
+        let mut frames = 0;
+        for frame in 0..600u16 {
+            let _ = seq.tick(
+                SequenceInput {
+                    frame: frame as u8,
+                    ..Default::default()
+                },
+                5,
+                &mut progress,
+            );
+            frames += 1;
+            if seq.menu != 0 {
+                break;
+            }
+        }
+        assert_eq!(seq.walk_x, WALK_TARGET_X[5]);
+        assert_eq!(seq.menu, 1);
+        assert!(frames < 300, "about two frames per pixel");
     }
 
     /// `$4477`: five shifts, each waiting out a 64-frame fade with SFX 2 = 10,
