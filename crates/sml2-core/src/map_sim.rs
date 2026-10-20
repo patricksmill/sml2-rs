@@ -1442,6 +1442,10 @@ impl MapSim {
             return;
         };
         room.tick(room_input, &mut rewards);
+        // `$3EAFF` runs `$3EBD5` on screens 9-12 at the frame sync.
+        if self.screen_id <= 12 {
+            room.frame_sync();
+        }
         if room.music != 0 {
             out.music = Some(room.music);
             room.music = 0;

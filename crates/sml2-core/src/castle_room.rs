@@ -166,6 +166,10 @@ pub struct CastleRoom {
     metasprites: RoomSpriteTable,
     /// `$5297`: `$FFC6` is a sprite id into this table, not a tile number.
     sprite_metas: crate::room_sprites::SpriteMetas,
+    /// `$3EBD5`'s bank-16 prize strips, one per coin door.
+    panels: Vec<u8>,
+    /// The strip row `$3EBD5` drew from on the last frame sync.
+    panel_row: u8,
 }
 
 impl CastleRoom {
@@ -227,6 +231,8 @@ impl CastleRoom {
             sprite_metas: crate::room_sprites::SpriteMetas::new(
                 scripts.blob("sprite_metasprites").unwrap_or(&[]),
             ),
+            panels: scripts.blob("coin_room_panels").unwrap_or(&[]).to_vec(),
+            panel_row: 0,
         }
     }
 
@@ -298,6 +304,9 @@ impl CastleRoom {
     /// music 21 comes from `MapSim`'s door entry).
     pub fn enter_coin(scripts: &CastleScripts, screen: u8) -> Self {
         let mut room = Self::coin(scripts);
+        // `$3F307` starts the room in state 4, which walks Mario up from the
+        // bottom edge (`$60C7D`) before the idle state 0.
+        room.state = 4;
         // `$3F35A`: `$737F` then `add $10`.
         room.oam = [156, 40, 0, 0];
         room.refresh_oam_tile(scripts);
@@ -516,6 +525,55 @@ impl CastleRoom {
         } else {
             tile
         };
+    }
+
+    /// `$3EBD5`'s RAM side, run once per frame sync on screens 9-12: the
+    /// panel row is `sCastleRevealProgress` bits 2-6, and a row past 29
+    /// clamps the progress byte itself (`and $77`) while drawing row 29.
+    pub fn frame_sync(&mut self) {
+        if self.kind != RoomKind::CoinRooms {
+            return;
+        }
+        let row = (self.reveal_progress & 0x7C) >> 2;
+        self.panel_row = if row >= 0x1E {
+            self.reveal_progress &= 0x77;
+            29
+        } else {
+            row
+        };
+    }
+
+    /// `$3EBD5`'s `$9800` writes as `(tilemap index, tile)`: nine rows of the
+    /// door's prize strip at `$988A`, the purse at `$9823-$9825`, the lives
+    /// at `$9863-$9864` (digit tiles `$80-$89`) and, while
+    /// `sCastleMarkerCol` bit 7 is set, the 2x2 marker at `$988C + 32*col`.
+    pub fn bg_writes(&self, node: u8, coins_low: u8, coins_high: u8, lives: u8) -> Vec<(u16, u8)> {
+        let mut writes = Vec::new();
+        if self.kind != RoomKind::CoinRooms {
+            return writes;
+        }
+        // `$6C75`: $7B40/$7C2A/$7D14/$7DFE, 234 bytes apart from the blob base.
+        let strip = node.wrapping_sub(0x6E) as usize * 234 + self.panel_row as usize * 6;
+        if let Some(rows) = self.panels.get(strip..strip + 9 * 6) {
+            for (row, tiles) in rows.chunks(6).enumerate() {
+                for (col, &tile) in tiles.iter().enumerate() {
+                    writes.push((0x8A + row as u16 * 32 + col as u16, tile));
+                }
+            }
+        }
+        let digit = |nibble: u8| 0x80 + (nibble & 0x0F);
+        writes.extend([
+            (0x23, digit(coins_high)),
+            (0x24, digit(coins_low >> 4)),
+            (0x25, digit(coins_low)),
+            (0x63, digit(lives >> 4)),
+            (0x64, digit(lives)),
+        ]);
+        if self.marker_col & 0x80 != 0 {
+            let at = 0x8C + u16::from(self.marker_col & 0x0F) * 32;
+            writes.extend([(at, 212), (at + 1, 213), (at + 32, 216), (at + 33, 217)]);
+        }
+        writes
     }
 
     /// `$60C41`: `$4C4D[sCurPowerup]` — the preview tile for the current form.
@@ -1928,6 +1986,55 @@ mod tests {
         let after = rewards.lives;
         room.tick(input(1, 0), &mut rewards);
         assert_eq!(rewards.lives, after, "no second award in state 6");
+    }
+
+    /// `$3F307` starts a coin room in state 4: Mario walks up from y=156 and
+    /// stops at y=124 (the ROM's `$FFC4` once the walk-in ends) in state 0.
+    #[test]
+    fn a_coin_room_opens_with_marios_walk_in() {
+        let scripts = scripts();
+        let mut room = CastleRoom::enter_coin(&scripts, 12);
+        let mut rewards = RoomRewards::default();
+        assert_eq!(room.state, 4);
+        for frame in 0..64 {
+            room.tick(input(frame, 0), &mut rewards);
+            if room.state == 0 {
+                break;
+            }
+        }
+        assert_eq!((room.state, room.oam[0], room.oam[1]), (0, 124, 40));
+    }
+
+    /// `$3EBD5`: nine rows of the door's bank-16 strip at `$988A`, then the
+    /// purse and lives digits. The rows are the ROM's `$9800` bytes in the
+    /// `$6E` room with the reel on row 5.
+    #[test]
+    fn a_coin_room_draws_its_prize_panel_and_counters() {
+        let scripts = scripts();
+        let mut room = CastleRoom::enter_coin(&scripts, 12);
+        room.reveal_progress = 5 << 2;
+        room.frame_sync();
+        let writes = room.bg_writes(0x6E, 0x69, 0x09, 0x05);
+        let at = |index: u16| writes.iter().rev().find(|w| w.0 == index).map(|w| w.1);
+        let row = |r: u16| (0..6).map(|c| at(0x8A + r * 32 + c).unwrap()).collect::<Vec<_>>();
+        assert_eq!(row(0), [0x44, 0x44, 0x32, 0x33, 0x44, 0x44]);
+        assert_eq!(row(1), [0xDA, 0x53, 0x53, 0x53, 0x53, 0x54]);
+        assert_eq!(row(2), [0x44, 0x44, 0x20, 0x21, 0x44, 0x44]);
+        assert_eq!([at(0x23), at(0x24), at(0x25)], [Some(0x89), Some(0x86), Some(0x89)]);
+        assert_eq!([at(0x63), at(0x64)], [Some(0x80), Some(0x85)]);
+
+        // Past row 29 the sync clamps the progress byte and draws row 29.
+        room.reveal_progress = 0x7C;
+        room.frame_sync();
+        assert_eq!(room.reveal_progress, 0x74);
+        assert_eq!(room.panel_row, 29);
+
+        // `sCastleMarkerCol` bit 7: the 2x2 marker at `$988C + 32 * col`.
+        room.marker_col = 0x82;
+        let writes = room.bg_writes(0x6E, 0, 0, 0);
+        for (index, tile) in [(0xCC, 212), (0xCD, 213), (0xEC, 216), (0xED, 217)] {
+            assert!(writes.contains(&(index, tile)), "marker tile {index:#X}");
+        }
     }
 
     /// `$60D32` reads the node's ten-byte row in the `$4000` item table.

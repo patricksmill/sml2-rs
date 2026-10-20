@@ -99,12 +99,22 @@ impl MapSim {
     }
 
     pub fn zone_tile_writes(&self) -> Vec<(u16, u8)> {
-        self.zone_animation
+        let mut writes: Vec<(u16, u8)> = self
+            .zone_animation
             .tile_writes
             .iter()
             .enumerate()
             .filter_map(|(i, &t)| t.map(|t| (i as u16, t)))
-            .collect()
+            .collect();
+        // Screens 9-12: `$3EBD5` redraws the prize panel and the counters.
+        if let Some(room) = self
+            .room
+            .as_ref()
+            .filter(|_| (9..=12).contains(&self.screen_id))
+        {
+            writes.extend(room.bg_writes(self.node, self.coins_low, self.coins_high, self.lives));
+        }
+        writes
     }
 
     pub fn zone_background_scroll(&self, row: usize) -> (u8, u8) {

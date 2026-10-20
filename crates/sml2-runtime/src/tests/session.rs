@@ -584,7 +584,7 @@ fn the_coin_room_draws_the_item_preview() {
         },
         _ => panic!("the coin room is live"),
     };
-    assert_eq!(tile, 0x30, "$737F($20) + $10");
+    assert_eq!(tile, 0x20, "$60C7D ends the walk-in on $4C4D[0]");
     let bare = runner.render_frame();
     let diffs: Vec<(usize, usize)> = frame
         .iter()
@@ -597,8 +597,8 @@ fn the_coin_room_draws_the_item_preview() {
     assert!(
         diffs
             .iter()
-            .all(|&(x, y)| (24..39).contains(&x) && (136..144).contains(&y)),
-        "the preview enters at OAM x=40, y=156 along the bottom left"
+            .all(|&(x, y)| (24..40).contains(&x) && (108..128).contains(&y)),
+        "the walk-in ends with Mario standing at OAM x=40, y=124 (the ROM's $FFC4)"
     );
     let _ = std::fs::remove_file(&tmp_save);
 }

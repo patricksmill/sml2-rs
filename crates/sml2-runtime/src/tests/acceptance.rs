@@ -456,7 +456,23 @@ fn coin_door_room_plays_and_returns_to_the_castle() {
             panic!("the door keeps the overworld");
         };
         assert_eq!(map.screen_id, 10, "$3F3F0 loads screen 10");
-        let room = map.room.as_mut().expect("the door staged a coin room");
+        assert!(map.room.is_some(), "the door staged a coin room");
+    }
+    // `$3F307` opens on the state-4 walk-in; A is only read from state 0.
+    for _ in 0..64 {
+        idle(&mut session, 1);
+        if let SessionState::Overworld(map) = &session.state {
+            if map.room.as_ref().is_some_and(|room| room.state == 0) {
+                break;
+            }
+        }
+    }
+    {
+        let SessionState::Overworld(map) = &mut session.state else {
+            panic!("the room keeps the overworld");
+        };
+        let room = map.room.as_mut().expect("the coin room is live");
+        assert_eq!(room.state, 0, "the walk-in ended");
         // The intro page counts up to 7 over ~100 frames; skip that gate so
         // the tape is about the room, not the wait.
         room.set_sprite(0xA6BD, 7);

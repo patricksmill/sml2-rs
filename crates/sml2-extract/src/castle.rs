@@ -203,6 +203,16 @@ pub const BLOBS: &[BlobSpec] = &[
         end: 0,
         kind: BlobKind::SpriteList,
     },
+    // `$3EBD5`'s four prize-panel strips, one per coin door, at the bank-16
+    // pointers in `$6C75` ($7B40/$7C2A/$7D14/$7DFE). Each is 39 rows of six
+    // tiles; the panel shows nine rows from row `sCastleRevealProgress`.
+    BlobSpec {
+        name: "coin_room_panels",
+        bank: 16,
+        addr: 0x7B40,
+        end: 0x7EE8,
+        kind: BlobKind::Fixed,
+    },
 ];
 
 /// Bank 25 `$5000`: the 256 tiles the bell rooms copy to `$8800`.
@@ -469,6 +479,7 @@ mod tests {
         assert_eq!(by_name("bell_room_a_script").len, 0x508);
         assert_eq!(by_name("coin_room_script").len, 0x4D9);
         assert_eq!(by_name("coin_room_tables").len, 0x113);
+        assert_eq!(by_name("coin_room_panels").len, 4 * 234);
         assert_eq!(
             blob.len(),
             entries.last().unwrap().offset + entries.last().unwrap().len
