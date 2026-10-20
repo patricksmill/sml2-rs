@@ -550,7 +550,7 @@ fn bell_room_plays_and_returns_to_the_map() {
         };
         step(&mut session, keys);
         if let SessionState::Overworld(map) = &session.state {
-            if map.screen_id == 0 && map.room.is_none() {
+            if map.screen_id == 6 && map.room.is_none() {
                 break;
             }
         }
@@ -558,7 +558,11 @@ fn bell_room_plays_and_returns_to_the_map() {
     let SessionState::Overworld(map) = &session.state else {
         panic!("the bell room returns to the map");
     };
-    assert_eq!(map.screen_id, 0, "the deferred exit lands the map");
+    assert_eq!(map.screen_id, 6, "$3F098 returns node $50 to Mario Zone");
+    assert_eq!(map.node, 0x50);
+    let slot = session.assets.nodes.progress_slot(0x50).unwrap() as usize;
+    assert_eq!(map.level_progress[slot], 0x80, "$3EEF0 records the clear");
+    assert_eq!(session.save_record()[8 + slot], 0x80);
     assert!(map.room.is_none());
 }
 

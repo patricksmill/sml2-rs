@@ -657,8 +657,8 @@ pub struct Session {
     pub active_slot: Option<u8>,
     /// Whether Easy mode is active for the current session.
     pub easy_mode: bool,
-    /// Where a goal-bell bonus room returns to: `(screen, node, exit_tile_flag)`.
-    bell_return: Option<(u8, u8, u8)>,
+    /// Deferred goal-bell handoff inputs: `(node, exit_tile_flag)`.
+    bell_return: Option<(u8, u8)>,
     /// Hold frames already spent after the bell script reached state `$0A`.
     bell_fade: Option<u16>,
     /// Hold frames already spent before the bell script's first step.
@@ -747,7 +747,7 @@ impl Session {
         map.screen_id = screen;
         map.node = node;
         map.frame_counter = 0;
-        self.bell_return = Some((0, node, exit_tile_flag));
+        self.bell_return = Some((node, exit_tile_flag));
         self.state = SessionState::Overworld(map);
     }
 
@@ -1045,22 +1045,26 @@ impl Session {
                         break 'map StepOutcome::Continue;
                     }
                     self.bell_fade = None;
-                    // `$3F024`: node 0's clear lands on node `$14` with the
-                    // stage marked. Other rooms keep the screen they stored.
-                    if let Some((screen, node, flag)) = self.bell_return.take() {
+                    // The room clears sGoalBell; its return runs $3EF2B
+                    // again, including the progress write and zone selection.
+                    if let Some((node, flag)) = self.bell_return.take() {
+                        let mut sim = PlayerSim::new();
+                        map_sim.to_player(&mut sim);
+                        sim.map_node = node;
+                        sim.dead = map_sim.mario_dead;
+                        sim.exit_tile_flag = flag;
+                        let handoff = sim.map_handoff(&self.assets.nodes);
                         map_sim.room = None;
-                        if node == 0 {
-                            map_sim.level_progress[0] |= 0x80;
-                            map_sim.level_progress[0] &= !0x08;
-                            map_sim.node = 0x14;
-                            map_sim.load_screen(0, flag, &self.assets.node_records);
-                            map_sim.load_node(0x14, &self.assets.node_records);
-                            map_sim.pending_save = true;
-                        } else {
-                            map_sim.load_screen(screen, flag, &self.assets.node_records);
-                            map_sim.node = node;
-                            map_sim.load_node(node, &self.assets.node_records);
-                        }
+                        map_sim.level_progress = sim.level_progress;
+                        map_sim.mario_dead = sim.dead;
+                        map_sim.node = handoff.node;
+                        map_sim.load_screen(
+                            handoff.screen.unwrap_or(0),
+                            flag,
+                            &self.assets.node_records,
+                        );
+                        map_sim.load_node(handoff.node, &self.assets.node_records);
+                        map_sim.pending_save = handoff.saves > 0;
                     }
                 }
                 if let Some(pan) = self.map_pan_return.as_mut() {
@@ -1480,7 +1484,7 @@ impl Session {
                                 map_sim.room = Some(room);
                                 self.bell_entry = Some(0);
                                 self.bell_return =
-                                    Some((target_screen, target_node, ctx.sim.exit_tile_flag));
+                                    Some((target_node, ctx.sim.exit_tile_flag));
                             } else {
                                 map_sim.load_screen(
                                     target_screen,

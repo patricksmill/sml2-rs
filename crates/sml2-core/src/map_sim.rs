@@ -1374,7 +1374,12 @@ impl MapSim {
         let mut out = MapEntry::default();
         // `$3C38C` runs *before* the cursor logic and may overwrite the pressed byte
         // with a synthetic key, so the whole frame sees the map's own press.
-        let pressed = self.synthetic_press(input.keys_pressed, nodes);
+        // Bonus screens $3C0C3-$3C10E run only their room scripts.
+        let pressed = if self.screen_id < 9 {
+            self.synthetic_press(input.keys_pressed, nodes)
+        } else {
+            input.keys_pressed
+        };
         let input = MapInput {
             keys_pressed: pressed,
             ..input
@@ -2765,6 +2770,18 @@ mod tests {
         map.node = 0x6A;
         map.synthetic_press(0x10, &n);
         assert_eq!(map.node, 0x6C);
+    }
+
+    /// $3C0DF/$3C10E run bell-room scripts without $3C38C's arrival walk.
+    #[test]
+    fn bell_rooms_preserve_the_live_mario_byte_for_the_deferred_clear() {
+        for screen in [13, 14] {
+            let mut map = MapSim::new();
+            map.screen_id = screen;
+            map.node = 0x50;
+            map.tick(MapInput::default(), &nodes(), &walk_blob(), &recs());
+            assert_eq!([map.mario_dead, map.node], [0, 0x50]);
+        }
     }
 
     /// `$3C32D`: a zone node presses its own `$6591` mask once per screen. The mask

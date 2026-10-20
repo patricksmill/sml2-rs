@@ -156,3 +156,58 @@ fn screen_seven_holds_its_palettes_instead_of_fading_in() {
         );
     }
 }
+
+#[test]
+fn mario_zone_level_clear_returns_from_either_bonus_room_and_saves_progress() {
+    // $3EF2B chooses room 13/14 by node parity. Its second pass reaches
+    // $3EEF0 (progress) and $3F098 (screen 6), after the room's fade.
+    for (node, level, slot, room_screen) in [(0x50, 10, 0x1A, 13), (0x51, 11, 0x1B, 14)] {
+        let mut session = Session::new(SessionAssets::load().unwrap());
+        session.begin_level(level, 0).unwrap();
+        let SessionState::InLevel(ctx) = &mut session.state else {
+            panic!("level loaded")
+        };
+        ctx.sim.map_node = node;
+        ctx.sim.level_progress[slot] = 0x08;
+        ctx.sim.level_progress[2] = 0x80;
+        ctx.sim.goal_bell = true;
+        ctx.sim.exit_phase = true;
+        ctx.sim.fade_timer = 2;
+        for _ in 0..100 {
+            tick(&mut session, PlayerKeys::default());
+            if matches!(session.state, SessionState::Overworld(_)) {
+                break;
+            }
+        }
+        let SessionState::Overworld(map) = &mut session.state else {
+            panic!("bell room entered")
+        };
+        assert_eq!([map.screen_id, map.node], [room_screen, node]);
+        assert_eq!(map.level_progress[slot], 0x08, "pass 1 defers progress");
+        // The full room script is covered by the acceptance tape; isolate its
+        // state-$0A return here for both node parities.
+        map.room.as_mut().unwrap().state = 10;
+        let mut saved = None;
+        for _ in 0..400 {
+            let result = session.advance(FrameInput::default());
+            if let Some(record) = result.saves.last() {
+                saved = Some(*record);
+            }
+            if let SessionState::Overworld(map) = &session.state {
+                if map.room.is_none() {
+                    break;
+                }
+            }
+        }
+        let SessionState::Overworld(map) = &session.state else {
+            panic!("returned to Mario Zone")
+        };
+        assert!(map.room.is_none());
+        assert_eq!([map.screen_id, map.node], [6, node]);
+        assert_eq!(map.level_progress[slot], 0x80);
+        assert_eq!(map.level_progress[2], 0x80, "other clears survive");
+        let record = saved.expect("second handoff persists the clear");
+        assert_eq!(record[0], node);
+        assert_eq!(record[8 + slot], 0x80);
+    }
+}
