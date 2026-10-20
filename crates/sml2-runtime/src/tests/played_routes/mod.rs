@@ -124,7 +124,8 @@ fn run_entry_route(
     sim.seed_moon_physics(manifest.properties.space_physics);
     check_entry(&manifest, &layout, &sim, &cam, &nodes);
     assert_eq!((sim.powerup, sim.dead, sim.invincibility), (0, 0, 0));
-    let obj = sml2_core::objects::ObjectSim::new(manifest.spawns.records.clone(), cam.x);
+    let mut obj = sml2_core::objects::ObjectSim::new(manifest.spawns.records.clone(), cam.x);
+    crate::game::initialize_level_objects(&mut obj, 0);
     assert_eq!(sim.moon_float_timer, 0);
     let spr = SpriteCtx {
         insts: Vec::new(),

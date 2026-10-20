@@ -445,6 +445,7 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
         // The autoscroll path is no longer capture-less: traj19 (level 20) is in
         // the gate now — see the retired-flag note in `run_replay`.
         let mut obj = sml2_core::objects::ObjectSim::new(manifest.spawns.records.clone(), cam.x);
+        crate::game::initialize_level_objects(&mut obj, 0);
         obj.easy_mode = easy_mode;
         return run_play(
             &manifest,

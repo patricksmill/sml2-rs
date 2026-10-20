@@ -6,6 +6,19 @@ use sml2_core::map::MapNodes;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
 use sml2_core::scene::SceneVm;
 
+/// `$EBBB` clears the level's scratch phase; `$FFF0` survives the loader.
+/// Cold startup (`$022A`) supplies zero, while session re-entry supplies its
+/// persistent counter. Replay fixtures retain their own explicit seeds.
+pub(crate) fn initialize_level_objects(
+    objects: &mut sml2_core::objects::ObjectSim,
+    persistent_counter: u8,
+) {
+    objects.fff0 = persistent_counter;
+    objects.odd = persistent_counter & 1 != 0;
+    objects.phase = false;
+    objects.update_phase = 0;
+}
+
 /// The `MarioContact` both loops hand to the object engine (`$2D7D`'s view of
 /// Mario). One constructor, because each loop used to build it by hand and the
 /// play loop quietly passed defaults for `star_high`, `invincibility` and

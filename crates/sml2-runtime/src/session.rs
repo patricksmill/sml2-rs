@@ -7,6 +7,8 @@ pub use crate::host::{AudioClock, SessionRunner};
 
 mod castle;
 mod debug;
+mod object_clock;
+use object_clock::ObjectClock;
 mod file_select_loading;
 pub use file_select_loading::FileSelectLoading;
 mod map_pan;
@@ -145,6 +147,7 @@ impl LevelContext {
 
         let mut obj = ObjectSim::new(manifest.spawns.records.clone(), cam.x);
         obj.configure(level_id);
+        ObjectClock::default().initialize_level(&mut obj);
 
         let spr = Some(SpriteCtx {
             insts: Vec::new(),
@@ -630,6 +633,7 @@ pub(crate) fn player_behind_bg(pipe_dir: u8) -> bool {
 
 /// Native session state. Advancing it performs no I/O or clock sampling.
 pub struct Session {
+    object_clock: ObjectClock,
     pub state: SessionState,
     /// Screen whose loader-run music request was last applied, so a screen's
     /// song is requested once per load instead of every frame.
@@ -682,6 +686,7 @@ impl Session {
         node: u8,
         exit_tile_flag: u8,
     ) {
+        self.object_clock.remember(&self.state);
         self.castle_progress = match &self.state {
             SessionState::Overworld(map) => map.level_progress,
             SessionState::InLevel(ctx) => ctx.sim.level_progress,
@@ -700,6 +705,7 @@ impl Session {
     /// Put a level live immediately (the map's own 37-frame transition is
     /// skipped), for acceptance tapes.
     pub fn begin_level(&mut self, level_id: u8, progress_flags: u8) -> Result<(), String> {
+        self.object_clock.remember(&self.state);
         let content = self.assets.level(level_id)?.clone();
         let ctx = LevelContext::from_content(
             level_id,
@@ -718,6 +724,7 @@ impl Session {
             self.assets.object_tables.clone(),
         );
         let mut ctx = Box::new(ctx);
+        self.object_clock.initialize_level(&mut ctx.obj);
         ctx.obj.easy_mode = self.easy_mode;
         ctx.credits_text = self.assets.credits_text.clone();
         if let Some(assets) = self.assets.ending_scene.clone() {
@@ -731,6 +738,7 @@ impl Session {
 
     /// Stage a bell room the way the goal-bell exit does, for acceptance tapes.
     pub fn begin_bell_room(&mut self, screen: u8, node: u8, exit_tile_flag: u8) {
+        self.object_clock.remember(&self.state);
         let mut map = MapSim::new();
         map.set_castle_scripts(self.assets.castle_scripts.clone());
         map.lives = self.lives;
@@ -771,6 +779,7 @@ impl Session {
     }
 
     pub fn begin_coin_room(&mut self, screen: u8) {
+        self.object_clock.remember(&self.state);
         let mut map = MapSim::new();
         map.set_castle_scripts(self.assets.castle_scripts.clone());
         map.lives = self.lives;
@@ -794,6 +803,7 @@ impl Session {
         let sound_driver = SoundDriver::with_music_bank(assets.music_bank.clone());
         Self {
             state: SessionState::Overworld(map),
+            object_clock: ObjectClock::default(),
             last_map_screen: None,
             map_wave: None,
             pending_level: None,
@@ -826,6 +836,7 @@ impl Session {
 
     /// `$30000`: enter the file select directly (desktop smoke/evidence).
     pub fn enter_file_select(&mut self) {
+        self.object_clock.remember(&self.state);
         let mut file_select = FileSelect::new(&mut self.slots);
         self.sound_driver.music_request = file_select.take_music();
         self.state = SessionState::FileSelect(file_select);
@@ -841,6 +852,7 @@ impl Session {
 
     /// `$00`: enter the title screen instead of the overworld.
     pub fn enter_title(&mut self) {
+        self.object_clock.remember(&self.state);
         self.state = SessionState::Title(TitleScreen::new());
         self.last_map_screen = None;
         self.active_slot = None;
@@ -850,12 +862,13 @@ impl Session {
 
     /// `$140D6`/`$140A8`: load the demo's level and copy its tape page.
     pub fn start_demo(&mut self, index: u8) -> bool {
+        self.object_clock.remember(&self.state);
         let index = index & 0x03;
         let level_id = DEMO_LEVELS[index as usize];
         let Ok(content) = self.assets.level(level_id) else {
             return false;
         };
-        let ctx = LevelContext::from_content(
+        let mut ctx = LevelContext::from_content(
             level_id,
             content,
             0,
@@ -871,6 +884,7 @@ impl Session {
             self.assets.hud.clone(),
             self.assets.object_tables.clone(),
         );
+        self.object_clock.initialize_level(&mut ctx.obj);
         self.state = SessionState::Demo(Box::new(DemoContext {
             ctx: Box::new(ctx),
             tape: DemoTape::new(self.assets.front_end.demo_tape(index)),
@@ -901,6 +915,7 @@ impl Session {
 
     /// Apply an already-read ROM-format progress record.
     pub fn apply_save_record(&mut self, data: &[u8]) -> bool {
+        self.object_clock.remember(&self.state);
         if !sml2_core::map::save_record_valid(data) {
             return false;
         }
@@ -967,6 +982,7 @@ impl Session {
 
     /// Advance exactly one tick from explicit inputs, emitting deferred host effects.
     pub fn advance(&mut self, input: FrameInput) -> FrameEffects {
+        self.object_clock.remember(&self.state);
         let FrameInput { keys, div } = input;
         self.frame_n += 1;
         let mut saves = Vec::new();
@@ -1229,6 +1245,7 @@ impl Session {
                         )
                     }) {
                         Ok(mut ctx) => {
+                            self.object_clock.initialize_level(&mut ctx.obj);
                             ctx.obj.easy_mode = self.easy_mode;
                             // The level loader shares the map's persistent block;
                             // entering one level must retain every other clear.
@@ -1376,6 +1393,7 @@ impl Session {
                 self.sound_driver.stomp_chain = ctx.obj.stomp_chain;
                 self.sound_driver.low_time_flag = ctx.sim.low_time_flag != 0;
 
+                self.object_clock.observe(&ctx.obj);
                 if ctx.is_finished() {
                     let handoff = ctx
                         .map_handoff
@@ -1546,6 +1564,7 @@ impl Session {
                                 div,
                                 &self.assets.nodes,
                             );
+                            self.object_clock.observe(&demo.ctx.obj);
                             if demo.ctx.sim.sfx0 != 0 {
                                 self.sound_driver.sfx_request_0 = demo.ctx.sim.sfx0;
                                 demo.ctx.sim.sfx0 = 0;

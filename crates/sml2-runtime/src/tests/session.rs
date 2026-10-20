@@ -696,3 +696,264 @@ fn dying_in_a_zone_level_returns_to_that_zone() {
         (2, 0x23, 48, 110)
     );
 }
+
+/// `$022A` clears HRAM only at startup; `$EBBB` resets scratch on each load.
+#[test]
+fn object_clock_live_load_inherits_counter_and_resets_phase() {
+    use crate::session::{FrameInput, Session};
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(10, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!()
+    };
+    assert_eq!(
+        (ctx.obj.fff0, ctx.obj.phase, ctx.obj.update_phase),
+        (0, false, 0)
+    );
+    ctx.obj.fff0 = 37;
+    ctx.obj.phase = true;
+    ctx.obj.update_phase = 1;
+    session.begin_level(10, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!()
+    };
+    assert_eq!(
+        (
+            ctx.obj.fff0,
+            ctx.obj.phase,
+            ctx.obj.update_phase,
+            ctx.obj.odd
+        ),
+        (37, false, 0, true)
+    );
+    // A normal Session caller advances the source's first and second passes.
+    session.advance(FrameInput {
+        keys: PlayerKeys::default(),
+        div: 0,
+    });
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!()
+    };
+    assert_eq!((ctx.obj.fff0, ctx.obj.update_phase), (38, 1));
+    session.advance(FrameInput {
+        keys: PlayerKeys::default(),
+        div: 0,
+    });
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!()
+    };
+    assert_eq!((ctx.obj.fff0, ctx.obj.update_phase), (38, 0));
+    session.enter_title();
+    session.begin_level(10, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!()
+    };
+    assert_eq!((ctx.obj.fff0, ctx.obj.update_phase), (38, 0));
+    ctx.obj.fff0 = 255;
+    ctx.obj.phase = true;
+    ctx.obj.reset_level_start();
+    assert_eq!(
+        (ctx.obj.fff0, ctx.obj.phase, ctx.obj.update_phase),
+        (255, false, 0)
+    );
+    session.advance(FrameInput {
+        keys: PlayerKeys::default(),
+        div: 0,
+    });
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!()
+    };
+    assert_eq!(
+        (ctx.obj.fff0, ctx.obj.update_phase, ctx.obj.odd),
+        (0, 1, false)
+    );
+}
+
+/// `$2D7D` produces standing contact before `$8121` toggles the slot phase.
+/// `$5800F..$5802B` admits odd slots on phase 1; `$5A236`/`$3CC0` carry on even FFF0.
+#[test]
+fn object_clock_first_live_pass_updates_odd_slot_conveyor_and_player_bytes() {
+    use crate::session::Session;
+    use sml2_core::actor::{Actor, ContactKind, Hitbox, Position, ScreenPosition};
+    use sml2_core::level::LevelLayout;
+    use sml2_core::objects::MarioContact;
+    for (inherited, expected_x) in [(37, 101), (38, 100), (255, 101)] {
+        let mut session = Session::new(SessionAssets::load().unwrap());
+        session.begin_level(10, 0).unwrap();
+        let SessionState::InLevel(ctx) = &mut session.state else {
+            panic!()
+        };
+        ctx.obj.fff0 = inherited;
+        session.begin_level(10, 0).unwrap();
+        let tables = session.assets.object_tables.clone();
+        let SessionState::InLevel(ctx) = &mut session.state else {
+            panic!()
+        };
+        let mut actor = Actor::default();
+        actor.activity = 2;
+        actor.definition = 62;
+        actor.state = 1;
+        actor.contact_kind = ContactKind::from_raw(32);
+        // `$C090`: x+8-(camera_x-80), y+16-(camera_y-72).
+        actor.position = Position { x: 112, y: 130 };
+        actor.screen = ScreenPosition { x: 100, y: 118 };
+        actor.hitbox = Hitbox {
+            top: 0,
+            bottom: 16,
+            left: 0,
+            right: 16,
+        };
+        ctx.obj.slots[5].b = actor.to_raw_slot();
+        let layout = LevelLayout::from_bytes(&[0x60; 0x3000]).unwrap();
+        let contact = MarioContact {
+            x: 100,
+            y: 100,
+            hvel: 0x80,
+            ..Default::default()
+        };
+        ctx.obj.step(100, 100, &layout, &tables, &contact, false);
+        assert_eq!(
+            (ctx.obj.fff0, ctx.obj.update_phase),
+            (inherited.wrapping_add(1), 1)
+        );
+        assert!(ctx.obj.on_object);
+        ctx.sim.x = 100;
+        ctx.sim.y = 100;
+        ctx.sim.apply_object_result(&mut ctx.obj, false);
+        assert_eq!(ctx.sim.x.to_le_bytes(), [expected_x, 0]);
+        assert_eq!(ctx.sim.y.to_le_bytes(), [100, 0]);
+        assert!(ctx.sim.on_ground_obj);
+    }
+}
+
+#[test]
+fn object_clock_survives_death_map_entry_and_demo_replacement() {
+    use crate::session::{FrameInput, Session};
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!()
+    };
+    ctx.obj.fff0 = 73;
+    ctx.sim.dead = 0xFF;
+    ctx.sim.dead_fade = true;
+    ctx.sim.fade_timer = 1;
+    let mut exited = false;
+    for _ in 0..100 {
+        if matches!(
+            session.advance(FrameInput::default()).outcome,
+            StepOutcome::LevelExited { .. }
+        ) {
+            exited = true;
+            break;
+        }
+    }
+    assert!(exited);
+    session.advance(FrameInput {
+        keys: PlayerKeys {
+            a: true,
+            ..Default::default()
+        },
+        div: 0,
+    });
+    for _ in 0..MAP_ENTRY_FRAMES + 8 {
+        if matches!(
+            session.advance(FrameInput::default()).outcome,
+            StepOutcome::LevelEntered(_)
+        ) {
+            break;
+        }
+    }
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!("expected map reentry")
+    };
+    assert_eq!((ctx.obj.fff0, ctx.obj.update_phase), (73, 0));
+    assert!(session.start_demo(0));
+    let SessionState::Demo(demo) = &mut session.state else {
+        panic!()
+    };
+    assert_eq!((demo.ctx.obj.fff0, demo.ctx.obj.phase), (73, false));
+    demo.ctx.obj.fff0 = 117;
+    session.advance(FrameInput {
+        keys: PlayerKeys {
+            start: true,
+            ..Default::default()
+        },
+        div: 0,
+    });
+    assert!(matches!(session.state, SessionState::Title(_)));
+    session.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!()
+    };
+    assert_eq!((ctx.obj.fff0, ctx.obj.update_phase), (117, 0));
+}
+
+#[test]
+fn object_clock_boss_driver_counter_survives_next_loader() {
+    use crate::session::Session;
+    use sml2_core::objects::MarioContact;
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(0, 0).unwrap();
+    let tables = session.assets.object_tables.clone();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!()
+    };
+    ctx.obj.fff0 = 255;
+    ctx.obj.spawn_boss(0);
+    assert_eq!((ctx.obj.fff0, ctx.obj.update_phase), (255, 0));
+    // `$8DA9` increments every pass, independently of the scratch phase.
+    let contact = MarioContact {
+        travelling: true,
+        ..Default::default()
+    };
+    ctx.obj.step(
+        ctx.cam.x,
+        ctx.cam.y,
+        &ctx.layout_live,
+        &tables,
+        &contact,
+        true,
+    );
+    assert_eq!((ctx.obj.fff0, ctx.obj.update_phase), (0, 0));
+    ctx.obj.step(
+        ctx.cam.x,
+        ctx.cam.y,
+        &ctx.layout_live,
+        &tables,
+        &contact,
+        true,
+    );
+    assert_eq!(ctx.obj.fff0, 1);
+    session.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!()
+    };
+    assert_eq!(
+        (ctx.obj.fff0, ctx.obj.phase, ctx.obj.update_phase),
+        (1, false, 0)
+    );
+}
+
+#[test]
+fn object_clock_exit_retains_the_final_engine_pass() {
+    use crate::session::{FrameInput, Session};
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!()
+    };
+    ctx.obj.fff0 = 72;
+    // A completed handoff is consumed after this tick's engine pass. Retain
+    // that pass's result rather than the snapshot from the frame's start.
+    ctx.sim.map_handoff_done = true;
+    assert!(matches!(
+        session.advance(FrameInput::default()).outcome,
+        StepOutcome::LevelExited { .. }
+    ));
+    session.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!()
+    };
+    assert_eq!((ctx.obj.fff0, ctx.obj.update_phase), (73, 0));
+}
