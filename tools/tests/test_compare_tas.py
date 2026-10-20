@@ -7,7 +7,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from compare_tas import (apply_buttons, logic_phases, read_state,
                          check_divergence, comparison_threshold, rom_keys_mask,
-                         step_masks)
+                         step_masks, completed_sample)
 
 
 class BridgeStateTests(unittest.TestCase):
@@ -180,22 +180,26 @@ class ButtonDeliveryTests(unittest.TestCase):
 
 class LogicPhaseTests(unittest.TestCase):
     def test_player_update_uses_the_phase_sampled_at_entry(self):
-        self.assertEqual(logic_phases(4, 0x7C, [1, 1], [5]), [5])
+        self.assertEqual(logic_phases(4, 0x7C, [5]), [5])
 
     def test_camera_transition_without_a_player_update_still_steps_once(self):
-        self.assertEqual(logic_phases(4, 0x10, [1], []), [1])
+        self.assertEqual(logic_phases(4, 0x10, [1]), [1])
+
+    def test_every_state4_entry_steps_even_without_the_player_routine(self):
+        # The hit (reaches `$0F71`), then the first death-arc entry (does not).
+        self.assertEqual(logic_phases(4, 5, [6, 7]), [6, 7])
 
     def test_blocking_pipe_scene_advances_without_gameplay_hooks(self):
-        self.assertEqual(logic_phases(4, 0x10, [], [], [2]), [2])
+        self.assertEqual(logic_phases(4, 0x10, [], [2]), [2])
 
     def test_scene_resumes_after_gameplay_in_the_same_hardware_frame(self):
-        self.assertEqual(logic_phases(4, 0x10, [1], [5], [6, 7]), [5, 6, 7])
+        self.assertEqual(logic_phases(4, 0x10, [5], [6, 7]), [5, 6, 7])
 
     def test_scene_wait_without_a_return_does_not_advance(self):
-        self.assertEqual(logic_phases(4, 7, [], [], []), [])
+        self.assertEqual(logic_phases(4, 7, [], []), [])
 
     def test_scene_return_phase_wraps_without_a_gameplay_step(self):
-        self.assertEqual(logic_phases(4, 7, [], [], [0]), [0])
+        self.assertEqual(logic_phases(4, 7, [], [0]), [0])
 
     def test_in_level_overrun_does_not_step(self):
         self.assertEqual(logic_phases(4, 0x7C, [], []), [])
@@ -220,6 +224,32 @@ class StepMaskTests(unittest.TestCase):
         self.assertEqual(step_masks(34, [1], [None]), [34])
         self.assertEqual(step_masks(34, [5, 6, 7], [0b0000_0010]), [32, 34, 34])
         self.assertEqual(step_masks(34, [1], []), [34])
+
+
+
+class CompletedSampleTests(unittest.TestCase):
+    def test_without_a_completion_the_live_memory_and_last_state_are_used(self):
+        live = {0xFFC0: 1}
+        self.assertEqual(completed_sample(live, [('u', None)], [('a', 0), ('b', 1)]),
+                         (live, ('b', 1)))
+
+    def test_clean_frame_pairs_the_completion_with_the_last_step(self):
+        sample, state = completed_sample(
+            {}, [('u', None), ('d', {0xFFC0: 7})], [('a', 0), ('b', 1)])
+        self.assertEqual((sample[0xFFC0], state), (7, ('b', 1)))
+
+    def test_straddling_update_pairs_with_the_step_before_it(self):
+        # Death arc: update k finishes, update k+1 starts before the tick ends.
+        live = {0xFFC0: 0xD1, 0xFF9B: 4}
+        sample, state = completed_sample(
+            live, [('d', {0xFFC0: 0xD4}), ('u', None)], [('a', 0), ('b', 1)])
+        self.assertEqual((sample[0xFFC0], sample[0xFF9B], state), (0xD4, 4, ('a', 0)))
+
+    def test_two_updates_in_one_frame_pair_the_last_completion(self):
+        _, state = completed_sample(
+            {}, [('u', None), ('d', {}), ('u', None), ('d', {})],
+            [('a', 0), ('b', 1), ('c', 2)])
+        self.assertEqual(state, ('c', 2))
 
 
 if __name__ == '__main__':

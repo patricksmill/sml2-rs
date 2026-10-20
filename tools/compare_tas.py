@@ -97,22 +97,24 @@ def apply_buttons(pyboy, previous, mask):
             (pyboy.button_press if mask & bit else pyboy.button_release)(name)
 
 
-def logic_phases(before_state, before_ff97, st4_ran, f71_phases, scene_phases=()):
+def logic_phases(before_state, before_ff97, st4_phases, scene_phases=()):
     """Port steps for one hardware frame while phase-lock is on.
 
-    `$0F71` is one player update, and the phase argument is `$FF97 & 7` sampled
-    at that entry. `$FF97` itself is not a reliable count: a lag frame increments
-    it zero times, and a frame that finishes two waits increments it twice, while
-    the player update still runs once. A state-`$04` entry that never reaches
-    `$0F71` (the screen-transition branch) still advances the camera and scene,
-    so it takes one step at the predicted phase. Blocking scenes (`$20A4` to
-    `$21EE`) resume on each `$2728` return, bypassing both gameplay hooks.
-    Append those steps in execution order, including multiple waits completed
-    in one hardware frame. With neither kind of update, do not step again.
+    Every state-`$04` entry (`$05D5`) is one gameplay update, whether it reaches
+    the player routine `$0F71` (its only caller) or not: the screen-transition
+    branch and the death arc at `$0640` skip it. The phase argument is
+    `$FF97 & 7` sampled at that entry; `$FF97` only changes in the main loop's
+    halt wait, so `$0F71` would see the same value. `$FF97` itself is not a
+    reliable count: a lag frame increments it zero times, and a frame that
+    finishes two waits increments it twice, with one update after each.
+    Blocking scenes (`$20A4` to `$21EE`) resume on each `$2728` return,
+    bypassing `$05D5`. Append those steps in execution order, including
+    multiple waits completed in one hardware frame. Outside a level, step once
+    per hardware frame; in a level with neither kind of update, do not step.
     """
-    if f71_phases:
-        phases = list(f71_phases)
-    elif st4_ran or before_state != 4:
+    if st4_phases:
+        phases = list(st4_phases)
+    elif before_state != 4:
         phases = [(before_ff97 + 1) & 7]
     else:
         phases = []
@@ -128,17 +130,52 @@ def rom_keys_mask(held):
     return sum(bit for k, bit in enumerate(ROM_KEY_BITS) if held >> k & 1)
 
 
-def step_masks(mask, phases, f71_keys):
+def step_masks(mask, phases, st4_keys):
     """Buttons for each port step from `logic_phases`.
 
-    A player update uses the keys the ROM latched at its last `ReadJoypad`
+    A gameplay update uses the keys the ROM latched at its last `ReadJoypad`
     (`$38B9` runs right after the read). While frames keep up, that is this
     row. Once a frame overruns the hardware tick, the next read happens before
-    the next row is applied, so the ROM acts on the previous row. Steps without
-    a `$0F71` entry, and updates before any read, use the movie row.
+    the next row is applied, so the ROM acts on the previous row. Other steps,
+    and updates before any read, use the movie row.
     """
-    keys = [mask if held is None else rom_keys_mask(held) for held in f71_keys]
+    keys = [mask if held is None else rom_keys_mask(held) for held in st4_keys]
     return keys + [mask] * (len(phases) - len(keys))
+
+
+# Every address `check_divergence` reads.
+SNAPSHOT_ADDRS = (0xFF9B, 0xA269, 0xFFC0, 0xFFC1, 0xFFC2, 0xFFC3, 0xFFC8, 0xFFC9,
+                  0xFFCA, 0xFFCB, 0xFFF0, 0xAF08, 0xA26B, 0xA28E, 0xA28F)
+
+
+class Snapshot(dict):
+    """Memory captured at one ROM point; other addresses read live."""
+    def __init__(self, memory, values):
+        super().__init__(values)
+        self.memory = memory
+
+    def __missing__(self, address):
+        return self.memory[address]
+
+
+def completed_sample(memory, events, states):
+    """Pair the last completed ROM update with the port state after its step.
+
+    `events` are this hardware frame's hooks in execution order: `u` ($05D5)
+    and `d` with the memory captured at `$028D`, the main loop's
+    point after the state handler returns. A lagging ROM frame can straddle the
+    tick boundary: the next update has started (and the port has stepped for
+    it), but its `$028D` lands in the next frame, so live HRAM can hold half an
+    update. Compare the last `d` instead, against the port state from before
+    any step still in progress. `states` holds `(state, step)` from before this
+    frame and after each of its steps. Without a `d`, sample live memory.
+    """
+    done = [k for k, (kind, _) in enumerate(events) if kind == 'd']
+    if not done:
+        return memory, states[-1]
+    pending = sum(kind == 'u' for kind, _ in events[done[-1] + 1:])
+    return (Snapshot(memory, events[done[-1]][1]),
+            states[max(0, len(states) - 1 - pending)])
 
 
 def check_divergence(frame, memory, native, threshold, live=False, player_ran=True,
@@ -288,25 +325,29 @@ def main():
             displays.append(Display(sdl, 'PyBoy ROM', 60))
             displays.append(Display(sdl, 'Rust port', 560))
         print(f"Inputs by {movie.get('author', 'unknown')}; same input index in both windows.", flush=True)
-        st4_ran = []
-        f71_phases = []
+        st4_phases = []
+        st4_keys = []
         scene_running = [False]
         scene_phases = []
-        f71_keys = []
         joypad_latch = [None]
+        events = []
         if phase_lock:
-            pyboy.hook_register(0, 0x05D5, lambda _ctx: st4_ran.append(1), None)
+            def state4_entry(_ctx):
+                st4_phases.append(pyboy.memory[0xFF97] & 7)
+                st4_keys.append(joypad_latch[0])
+                events.append(('u', None))
 
-            def player_update(_ctx):
-                f71_phases.append(pyboy.memory[0xFF97] & 7)
-                f71_keys.append(joypad_latch[0])
-
-            pyboy.hook_register(0, 0x0F71, player_update, None)
+            pyboy.hook_register(0, 0x05D5, state4_entry, None)
 
             def joypad_read(_ctx):
                 joypad_latch[0] = pyboy.memory[0xFF80]
 
             pyboy.hook_register(0, 0x38B9, joypad_read, None)
+
+            def post_state(_ctx):
+                events.append(('d', {a: pyboy.memory[a] for a in SNAPSHOT_ADDRS}))
+
+            pyboy.hook_register(0, 0x028D, post_state, None)
             # `$20A4` also runs with a zero scene id; only a nonzero id enters
             # the blocking script. `$21EE` returns ownership to the main loop.
             def scene_enter(_ctx):
@@ -364,26 +405,29 @@ def main():
                 if phase_lock:
                     before_ff97 = pyboy.memory[0xFF97]
                     before_state = pyboy.memory[0xFF9B]
-                    st4_ran.clear()
-                    f71_phases.clear()
-                    f71_keys.clear()
+                    st4_phases.clear()
+                    st4_keys.clear()
                     scene_phases.clear()
+                    events.clear()
+                    states = [(native_state, native_step)]
                 if not pyboy.tick(1, True, False):
                     raise RuntimeError('PyBoy stopped before end of movie')
                 if phase_lock:
-                    phases = logic_phases(before_state, before_ff97, st4_ran, f71_phases,
-                                          scene_phases)
-                    for phase, keys in zip(phases, step_masks(mask, phases, f71_keys)):
+                    phases = logic_phases(before_state, before_ff97, st4_phases, scene_phases)
+                    for phase, keys in zip(phases, step_masks(mask, phases, st4_keys)):
                         bridge.stdin.write(f'{keys} {phase}\n'.encode())
                         bridge.stdin.flush()
                         if state_rows:
                             native_state = read_state(bridge.stdout)
                         native = read_frame(bridge.stdout)
                         native_step += 1
+                        states.append((native_state, native_step))
                     if watch and divergence is None:
+                        sample, (paired, paired_step) = completed_sample(
+                            pyboy.memory, events, states)
                         divergence = check_divergence(
-                            index, pyboy.memory, native_state, threshold, live=True,
-                            player_ran=bool(f71_phases or st4_ran), native_step=native_step)
+                            index, sample, paired, threshold, live=True,
+                            player_ran=bool(st4_phases), native_step=paired_step)
                 else:
                     bridge.stdin.write(f'{mask}\n'.encode())
                     bridge.stdin.flush()

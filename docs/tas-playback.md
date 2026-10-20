@@ -130,7 +130,7 @@ python tools/compare_tas.py recordings/<recording>.json --rom ../sml2decomp/base
 Reports identify the zero-based **movie input index** and the **native update
 count**, which starts at zero before any `Session::advance`. Those indices can
 differ: phase lock is on by default and may send zero, one, or several native
-updates for one movie row. A player update (`$0F71`) uses the buttons the ROM
+updates for one movie row. A gameplay update (`$05D5`) uses the buttons the ROM
 latched at its last `ReadJoypad` (hooked at `$38B9`); other updates use the row.
 The two agree until a ROM frame overruns the hardware tick: the next read then
 happens before the next row is applied, and the ROM acts on the previous row.
@@ -143,10 +143,14 @@ The sampling contracts come from `home.asm` and the bridge:
   calling the player routine `$0F71`. With phase lock off, the comparison uses
   this published position and the preceding native row. This is a delayed
   diagnostic approximation, particularly across transitions.
-- With phase lock on, hooks at `$05D5`, `$0F71` and the blocking scene's `$2728`
-  return (`$273D`) select native updates. The ROM sample is still taken after
-  `PyBoy.tick(1)`, an emulator hardware-frame boundary. Live HRAM is read then;
-  this is not necessarily the boundary of a completed gameplay update.
+- With phase lock on, each state-`$04` entry (`$05D5`) is one native update,
+  whether or not it reaches the player routine `$0F71` (the death arc and the
+  screen-transition branch do not); blocking scenes add one per `$2728` return
+  (`$273D`). The ROM sample is the memory captured at `$028D`, the main loop's
+  point after the state handler returns, paired with the native update for
+  the same ROM update. A lagging ROM frame can straddle `PyBoy.tick(1)`'s
+  boundary, so live HRAM at the tick can hold half an update; it is used only
+  for frames that never reach `$028D`.
 - The native row and pixels both follow the corresponding `Session::advance`.
   With no selected update the viewer retains the previous native row and image.
 - World camera X/Y (`$FFCA/$FFC8`) are sampled at the current ROM boundary and
