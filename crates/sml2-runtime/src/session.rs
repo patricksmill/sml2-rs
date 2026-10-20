@@ -7,6 +7,8 @@ pub use crate::host::{AudioClock, SessionRunner};
 
 mod castle;
 mod debug;
+mod file_select_loading;
+pub use file_select_loading::FileSelectLoading;
 mod map_pan;
 mod map_transition;
 pub use map_transition::MapScreenTransition;
@@ -547,7 +549,9 @@ pub struct FrameEffects {
 pub enum SessionState {
     /// `$00`/`$01`: the title screen.
     Title(TitleScreen),
-    /// `$19`/`$1A`: the file select.
+    /// `$19`: title exit has requested the file-select loader.
+    FileSelectLoading(FileSelectLoading),
+    /// `$1A`: the file select, after loading has completed.
     FileSelect(FileSelect),
     /// `$0B`: an attract demo level driven by a recorded tape.
     Demo(Box<DemoContext>),
@@ -949,7 +953,7 @@ impl Session {
                 let map = MapSim::new();
                 map.save_record(self.lives, self.level_tally, self.money_bag)
             }
-            SessionState::Title(_) | SessionState::FileSelect(_) | SessionState::Demo(_) => {
+            SessionState::Title(_) | SessionState::FileSelectLoading(_) | SessionState::FileSelect(_) | SessionState::Demo(_) => {
                 match self
                     .active_slot
                     .and_then(|slot| self.slots.slot(slot as usize))
@@ -1272,10 +1276,9 @@ impl Session {
                 self.prev_keys_held = keys_held;
                 match title.step(keys_held, keys_pressed) {
                     TitleAction::OpenFileSelect => {
-                        // `$30000`: validate the three slots, request song 13.
-                        let mut file_select = FileSelect::new(&mut self.slots);
-                        self.sound_driver.music_request = file_select.take_music();
-                        self.state = SessionState::FileSelect(file_select);
+                        // `$140B1` changes dispatch to `$19`; it does not run
+                        // the loader or the cursor's `$1A` update itself.
+                        self.state = SessionState::FileSelectLoading(FileSelectLoading::new());
                     }
                     TitleAction::StartDemo(index) => {
                         if !self.start_demo(index) {
@@ -1285,6 +1288,11 @@ impl Session {
                     }
                     TitleAction::None => {}
                 }
+                StepOutcome::Continue
+            }
+
+            SessionState::FileSelectLoading(_) => {
+                self.advance_file_select_loading(keys);
                 StepOutcome::Continue
             }
 

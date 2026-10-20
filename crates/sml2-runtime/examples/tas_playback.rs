@@ -36,6 +36,7 @@ fn keys(mask: u8) -> PlayerKeys {
 fn state(session: &Session) -> String {
     match &session.state {
         SessionState::Title(_) => "title".into(),
+        SessionState::FileSelectLoading(_) => "file-select-loading".into(),
         SessionState::FileSelect(_) => "file-select".into(),
         SessionState::Demo(ctx) => format!("attract-demo-{}", ctx.level_id),
         SessionState::Overworld(_) => "map".into(),

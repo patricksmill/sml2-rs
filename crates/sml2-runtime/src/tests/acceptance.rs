@@ -37,7 +37,14 @@ fn to_file_select(session: &mut Session) {
             ..PlayerKeys::default()
         },
     );
+    assert!(matches!(session.state, SessionState::FileSelectLoading(_)));
+    // Separate `$19` loader dispatch, before the 45 `$1A` cursor updates.
+    for _ in 0..20 {
+        if !matches!(session.state, SessionState::FileSelectLoading(_)) { break; }
+        idle(session, 1);
+    }
     assert!(matches!(session.state, SessionState::FileSelect(_)));
+    assert_eq!(file_select(session).cursor(), (40, 16));
 }
 
 fn drop_in(session: &mut Session) {

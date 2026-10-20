@@ -57,6 +57,14 @@ impl Session {
             SessionState::Title(_) => {
                 sml2_core::front_end::render_title(&self.assets.front_end, (vw, vh))
             }
+            SessionState::FileSelectLoading(loading) => {
+                // Pending `$19` retains title VRAM; active transfers have LCD off.
+                if loading.lcd_disabled() {
+                    vec![255; vw * vh]
+                } else {
+                    sml2_core::front_end::render_title(&self.assets.front_end, (vw, vh))
+                }
+            }
             SessionState::FileSelect(file_select) => sml2_core::front_end::render_file_select(
                 file_select,
                 &self.slots,

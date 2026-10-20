@@ -41,6 +41,15 @@ fn press_once(runner: &mut SessionRunner, keys: u8) {
     runner.step_frame(press(keys));
 }
 
+fn finish_file_select_loading(runner: &mut SessionRunner) {
+    if !matches!(runner.state, SessionState::FileSelectLoading(_)) { return; }
+    for _ in 0..20 {
+        runner.step_frame(PlayerKeys::default());
+        if !matches!(runner.state, SessionState::FileSelectLoading(_)) { return; }
+    }
+    panic!("file select loader did not complete");
+}
+
 #[test]
 fn boot_title_then_start_opens_the_file_select() {
     let mut runner = runner_with_boot("title_to_fs");
@@ -52,7 +61,11 @@ fn boot_title_then_start_opens_the_file_select() {
     for _ in 0..64 {
         runner.step_frame(PlayerKeys::default());
     }
+    let title = runner.render_frame();
     press_once(&mut runner, START);
+    assert!(matches!(runner.state, SessionState::FileSelectLoading(_)));
+    assert_eq!(runner.render_frame(), title, "pending $19 retains title VRAM");
+    finish_file_select_loading(&mut runner);
     assert!(matches!(runner.state, SessionState::FileSelect(_)));
     assert_eq!(runner.sound_driver.active_song, 13, "$30000 requests song 13");
 }
@@ -64,6 +77,7 @@ fn the_file_select_loads_a_blank_slot_into_the_overworld() {
         runner.step_frame(PlayerKeys::default());
     }
     press_once(&mut runner, START);
+    finish_file_select_loading(&mut runner);
     assert!(matches!(runner.state, SessionState::FileSelect(_)));
 
     // `$43D6`: 45 frames until the slot row is live; then START confirms.
@@ -98,6 +112,7 @@ fn select_marks_easy_mode_without_touching_the_slots() {
         runner.step_frame(PlayerKeys::default());
     }
     press_once(&mut runner, START);
+    finish_file_select_loading(&mut runner);
     for _ in 0..45 {
         runner.step_frame(PlayerKeys::default());
     }
@@ -122,6 +137,7 @@ fn a_damaged_slot_start_a_fresh_game() {
         runner.step_frame(PlayerKeys::default());
     }
     press_once(&mut runner, START);
+    finish_file_select_loading(&mut runner);
     for _ in 0..45 {
         runner.step_frame(PlayerKeys::default());
     }
