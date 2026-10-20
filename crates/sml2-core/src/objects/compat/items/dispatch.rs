@@ -87,7 +87,7 @@ impl ObjectSim {
     pub(super) fn handler_pickup16(&mut self, st: &mut Staging, tables: &ObjectTables) {
         st.b[B_FSTATE] = 1;
         self.flash_toggle(st);
-        self.mv_y_add(st, 2);
+        self.mv_y_sub(st, 2);
         st.b[B_T24] = st.b[B_T24].wrapping_add(2);
         if st.b[B_T24] != 0x20 {
             return;

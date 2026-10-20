@@ -222,7 +222,7 @@ fn touched_86_to_88_and_8a_plus_are_inert() {
     assert_eq!(st.b[B_DEF], 2, "kicked without B held: anim += 1");
 }
 
-/// `$586F5` per call: `+15 = 1`, the `$5B68B` flash on even `$FFF0`, Y += 2
+/// `$586F5` per call: `+15 = 1`, the `$5B68B` flash on even `$FFF0`, Y -= 2
 /// and `+24` += 2; the first 15 calls never remove.
 #[test]
 fn pickup16_rises_steps_the_counter_and_flashes_on_even_frames() {
@@ -234,14 +234,14 @@ fn pickup16_rises_steps_the_counter_and_flashes_on_even_frames() {
     set_y(&mut st.b, 100);
     obj.handler_pickup16(&mut st, &t);
     assert_eq!(st.b[B_FSTATE], 1);
-    assert_eq!(y_of(&st.b), 102);
+    assert_eq!(y_of(&st.b), 98);
     assert_eq!(st.b[B_T24], 2);
     assert_eq!(st.b[B_FLASH], 0x10);
     assert_eq!(obj.done, 0);
     obj.fff0 = 1; // odd: no flash
     obj.handler_pickup16(&mut st, &t);
     assert_eq!(st.b[B_FLASH], 0x10);
-    assert_eq!(y_of(&st.b), 104);
+    assert_eq!(y_of(&st.b), 96);
     assert_eq!(st.b[B_T24], 4);
     assert_eq!(obj.done, 0);
 }
@@ -306,7 +306,7 @@ fn stepped_mushroom_touch_stages_the_id_and_despawns() {
     // The next frame is the pickup handler's first call.
     obj.step(0, 0, &layout, &t, &mario, false);
     assert_eq!(obj.slots[0].b[B_T24], 2);
-    assert_eq!(y_of(&obj.slots[0].b), 102);
+    assert_eq!(y_of(&obj.slots[0].b), 98);
     assert_eq!(obj.slots[0].b[B_FSTATE], 1);
     // The parity gate halves the cadence; by 31 engine frames it is gone.
     for _ in 0..40 {
