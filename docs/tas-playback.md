@@ -78,3 +78,39 @@ The imported 4042 movie contains **zero simultaneous Left+Right frames**. Its
 rapid direction changes are intentional TAS input, not an importer conflict.
 Once gameplay diverges, later inputs address different obstacles/positions and
 cannot be interpreted as a successful movement test on their own.
+
+## Live PyBoy and port comparison
+
+Build the native pipe host, then use a Python environment containing PyBoy,
+NumPy, and PySDL2 (including SDL2 binaries on Windows):
+
+```bash
+cargo build --release -p sml2-runtime --example tas_bridge
+python tools/compare_tas.py target/tas/4042.json --rom ../sml2decomp/baserom.gb
+```
+
+On this WSL installation the Python executable is
+`/home/pmill/.venvs/sml2-pyboy/bin/python`. On Windows pass
+`--bridge target/release/examples/tas_bridge.exe`.
+
+Two SDL windows display actual PyBoy ROM output and actual native session
+output. One controller sends exactly the same input row to both, waits for both
+to finish the tick, then draws both frames. Space pauses/resumes both, Right
+steps both, Tab toggles normal/quarter speed, and Escape or closing either window
+closes both. Use `--paused` to begin paused. At EOF both frames remain displayed.
+The titles show the same zero-based input row and held buttons. Window position
+requests place PyBoy on the left and the port on the right; the desktop may
+choose different positions. This viewer is silent.
+
+The ROM is supplied from memory with fresh cartridge RAM; neither your `.ram`
+file nor native save is read or written. Only the imported movie controls the
+games. No savestates, memory edits, or input retiming are used. PyBoy normally
+uses its own replacement boot ROM; `--bootrom PATH` accepts a local DMG boot ROM.
+The source movie used Gambatte in BizHawk, so equal input indices do **not** imply
+PyBoy reproduces that movie correctly. Boot timing and core differences may
+already desynchronize the reference. Use the original published video to check
+PyBoy's progress before attributing a mismatch to native physics.
+
+`--headless --frames 1200` checks that the emulator and bridge can consume a
+shared input prefix without opening windows. This is a live inspection tool,
+not an automated trajectory-capture or acceptance-test harness.
