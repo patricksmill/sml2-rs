@@ -354,3 +354,134 @@ fn test_song_start_frame_runs_the_sequencer() {
         "song 1's first note must reach the registers on the start frame"
     );
 }
+
+/// `$273E` writes `sSoundMode = 1`. `$118F7` then silences every channel
+/// through `$13FE7`, drops the three slot effects, flags `sSoundPaused`, loads
+/// the first pause beep and clears the one-shot mode through `$10067`.
+#[test]
+fn pause_mode_stops_the_engine_and_starts_the_beep() {
+    let mut driver = SoundDriver::new();
+    driver.music_request = 1;
+    driver.update_sound();
+    driver.update_sound();
+    assert_ne!(driver.active_song, 0, "a song is playing");
+    let song = driver.music_sequencer.clone();
+
+    driver.sound_mode = 1;
+    driver.update_sound();
+
+    assert!(driver.sound_paused, "the engine stops");
+    assert_eq!(driver.sound_mode, 0, "$10067 clears the one-shot mode");
+    assert_eq!(driver.active_song, song.cur_song, "the song stays loaded");
+    // `$13FE7`'s eight register writes.
+    assert!(driver.pulse_writes.contains(&PulseWrite::Envelope(8)));
+    assert!(driver.pulse_writes.contains(&PulseWrite::Ch2Envelope(8)));
+    assert!(driver.pulse_writes.contains(&PulseWrite::FrequencyControl(0x80)));
+    assert!(driver
+        .pulse_writes
+        .contains(&PulseWrite::Ch2FrequencyControl(0x80)));
+    assert!(driver.pulse_writes.contains(&PulseWrite::Sweep(0)));
+    assert!(driver.noise_writes.contains(&NoiseWrite::Envelope(8)));
+    assert!(driver.noise_writes.contains(&NoiseWrite::Control(0x80)));
+    assert!(driver.wave_writes.contains(&WaveWrite::Enable(0)));
+    // `$5970`'s beep, on pulse 2, with its 5-frame budget.
+    assert!(driver
+        .pulse_writes
+        .contains(&PulseWrite::Ch2DutyLength(0x80)));
+    assert!(driver.pulse_writes.contains(&PulseWrite::Ch2Envelope(0xA1)));
+    assert!(driver.pulse_writes.contains(&PulseWrite::Ch2FrequencyLow(0xC1)));
+    assert!(driver
+        .pulse_writes
+        .contains(&PulseWrite::Ch2FrequencyControl(0xC7)));
+    assert_eq!(driver.pause_beep_timer, 5);
+    assert_eq!(driver.pause_beep_index, 0);
+
+    // Paused frames never touch the song.
+    for _ in 0..3 {
+        driver.update_sound();
+        assert_eq!(driver.music_sequencer, song, "the song holds");
+        assert!(driver.music_writes.is_empty());
+    }
+}
+
+/// `$11936`: the paused engine ticks `sPauseBeepTimer`; on expiry it steps
+/// `sPauseBeepIndex` and plays that entry, and index 6 parks a 240-frame hold.
+#[test]
+fn the_pause_beep_walks_its_five_entries_then_holds() {
+    let mut driver = SoundDriver::new();
+    driver.sound_mode = 1;
+    driver.update_sound();
+    // (index reached, timer, the NR23 byte that entry writes)
+    let expected = [
+        (1u8, 5u8, 0xBEu8), // $5975
+        (2, 5, 0xC1),       // $5970
+        (3, 12, 0xD1),      // $597A
+        (4, 7, 0xB6),       // $597F
+        (5, 15, 0xBA),      // $5984
+    ];
+    for (index, timer, low) in expected {
+        let budget = driver.pause_beep_timer as usize;
+        for frame in 0..budget {
+            driver.update_sound();
+            if frame + 1 < budget {
+                assert_eq!(
+                    (driver.pause_beep_index, driver.pause_beep_timer),
+                    (index - 1, (budget - frame - 1) as u8),
+                    "the beep holds its pitch until its budget runs out"
+                );
+            }
+        }
+        assert_eq!(driver.pause_beep_index, index);
+        assert_eq!(driver.pause_beep_timer, timer);
+        assert!(
+            driver.pulse_writes.contains(&PulseWrite::Ch2FrequencyLow(low)),
+            "entry {index} writes NR23 = ${low:02X}"
+        );
+    }
+    // The fifth entry's expiry is the long hold (`$11959`).
+    for _ in 0..driver.pause_beep_timer {
+        driver.update_sound();
+    }
+    assert_eq!(driver.pause_beep_index, 5);
+    assert_eq!(driver.pause_beep_timer, 240);
+    assert!(
+        !driver
+            .pulse_writes
+            .iter()
+            .any(|w| matches!(w, PulseWrite::Ch2FrequencyLow(_))),
+        "the hold writes no new beep"
+    );
+}
+
+/// `$11926`: mode 2 unpauses, clears the three `sSfx*Busy` bytes and falls into
+/// `$10044`, so a request pending on the resume frame still runs.
+#[test]
+fn resume_mode_unpauses_and_runs_the_same_frame() {
+    let mut driver = SoundDriver::new();
+    driver.sound_mode = 1;
+    driver.update_sound();
+    assert!(driver.sound_paused);
+
+    driver.pulse_effect.busy = 1;
+    driver.wave_slot.busy = 1;
+    driver.noise_slot.busy = 1;
+    driver.music_request = 1;
+    driver.sound_mode = 2;
+    driver.update_sound();
+
+    assert!(!driver.sound_paused);
+    assert_eq!(driver.sound_mode, 0);
+    assert_eq!(
+        (
+            driver.pulse_effect.busy,
+            driver.wave_slot.busy,
+            driver.noise_slot.busy
+        ),
+        (0, 0, 0),
+        "sSfx0Busy/sSfx1Busy/sSfx2Busy"
+    );
+    assert_ne!(
+        driver.active_song, 0,
+        "$11926 falls into $10044: the resume frame runs the music"
+    );
+}

@@ -560,6 +560,11 @@ pub struct PlayerSim {
     /// `sMusicRequest` ($A468) — the exit bell requests track 3 (the level
     /// clear fanfare). Fidelity only (audio is not modelled).
     pub music_request: u8,
+    /// `sSoundMode` ($A26A) — the pause handlers' one-shot sound-engine mode:
+    /// `1` parks the engine and starts the pause beep (`$273E`), `2` resumes it
+    /// (`$2756`/`$2760`). The driver consumes it on the frame's `_UpdateSound`
+    /// and clears it again in `$10067`, exactly like the ROM's byte.
+    pub sound_mode: u8,
     /// `sTileAnimConfig` ($A299) — the exit bell clears it. Fidelity only:
     /// the port's tile animation comes from the level manifest.
     pub tile_anim_config: u8,
@@ -655,6 +660,7 @@ impl PlayerSim {
             exit_tile_flag: 0,
             level_tally: 0,
             music_request: 0,
+            sound_mode: 0,
             tile_anim_config: 0,
         }
     }
@@ -2305,9 +2311,9 @@ impl PlayerSim {
     }
 
     /// `$273E` — the START check at the tail of the in-level frame: START
-    /// enters the pause state (`$FF9B = 8`). The ROM stores `sPauseState = 0`
-    /// and requests the pause jingle through `sSoundMode = 1`; the port has no
-    /// sound-mode state, so that write is flagged rather than invented.
+    /// enters the pause state (`$FF9B = 8`). The handler stores
+    /// `sPauseState = 0`, moves the state and writes `sSoundMode = 1`, which
+    /// parks the sound engine and starts the pause beep.
     ///
     /// The ROM's own gate is `hKeysPressed == $08` — START and *nothing else*
     /// newly pressed that frame — plus `sScreenTransition == 0`, and the
@@ -2317,6 +2323,7 @@ impl PlayerSim {
     /// half is not modelled, because ENTER is not a gameplay key (flagged).
     pub fn pause_enter(&mut self) {
         self.paused = true;
+        self.sound_mode = 1;
     }
 
     /// The palette byte a paused frame shows (`$2756`): the handler tests bit 4
@@ -2336,17 +2343,19 @@ impl PlayerSim {
     /// leaves the pause state and restores `sBGPalette`/`sOAMPalette1`/
     /// `sOAMPalette2` from the `sLevel*` copies (`$A80F-$A811`). The port's
     /// renderer already reads the level palettes from the manifest, so
-    /// clearing the flag is the whole restore; `sSoundMode = 2` is flagged.
+    /// clearing the flag is the whole restore; `sSoundMode = 2` hands the sound
+    /// engine back (`$11926`).
     pub fn pause_exit(&mut self) {
         self.paused = false;
+        self.sound_mode = 2;
     }
 
     /// `$2756`'s SELECT branch: with `sLevelProgressFlags` bit 7 set (the stage
     /// was already cleared) SELECT abandons the level through the `$14`
     /// hand-off instead of resuming — the same entry the level-clear tail
-    /// takes. The ROM also writes `sSoundMode = 2`, `sMarioDead = 2` and
-    /// clears `sAutoScroll`/`sTileAnimConfig`/`sExitTileFlag`/`sFastMusic`;
-    /// the port has no sound-mode or fast-music state and its `dead` field
+    /// takes. The ROM writes `sSoundMode = 2`, `sMarioDead = 2`, clears
+    /// `sAutoScroll`/`sTileAnimConfig`/`sExitTileFlag`/`sFastMusic` and moves
+    /// `$FF9B` to `$14`; the port has no fast-music state and its `dead` field
     /// carries different values ($0F/$80/$FF), so those are flagged. The flag
     /// it does set is [`PlayerSim::exit_completed`], which is this port's
     /// marker that `$FF9B` reached `$14`. Returns whether the branch fired.
@@ -2355,6 +2364,7 @@ impl PlayerSim {
             return false;
         }
         self.paused = false;
+        self.sound_mode = 2;
         self.tile_anim_config = 0;
         self.exit_tile_flag = 0;
         self.exit_completed = true;

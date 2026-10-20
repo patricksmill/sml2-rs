@@ -29,6 +29,26 @@ pub const SLOT0_BUSY_EXCEPTIONS: [u8; 8] = [0x09, 0x0C, 0x0F, 0x10, 0x11, 0x13, 
 /// Slot 1 (Wave) request ID that bypasses the channel busy check ($106DB).
 pub const SLOT1_BUSY_EXCEPTION: u8 = 0x14; // 20 decimal
 
+/// `$5966`: the pause beep's five register blobs, in `sPauseBeepIndex` order
+/// 1..5 — `NR21` (duty/length), `NR22` (envelope), `NR23` (frequency low),
+/// `NR24` (frequency high + trigger + length enable), and the frame budget
+/// `$111C1` stores in `sPauseBeepTimer`.
+///
+/// The blobs are the ROM's own bytes: `$5975`, `$5970`, `$597A`, `$597F`,
+/// `$5984`. Index 6 is not a blob — `$11959` intercepts it for the 240-frame
+/// hold — and index 0 only exists as the "not started yet" value, since
+/// `$118F7` starts the sequence from the `$5970` entry directly.
+pub const PAUSE_BEEP_ENTRIES: [[u8; 5]; 5] = [
+    [0x80, 0xA1, 0xBE, 0xC7, 0x05],
+    [0x80, 0xA1, 0xC1, 0xC7, 0x05],
+    [0x80, 0xA1, 0xD1, 0xC7, 0x0C],
+    [0x80, 0xA1, 0xB6, 0xC7, 0x07],
+    [0x80, 0xA1, 0xBA, 0xC7, 0x0F],
+];
+
+/// The entry `$118F7` starts with: index 2, the `$5970` blob.
+pub const PAUSE_BEEP_AT_ENTER: u8 = 2;
+
 /// Slot 0 (Pulse 1) Start pointers at ROM $1007E (24 entries).
 pub const SLOT0_START_TABLE: [u16; 24] = [
     0x4127, 0x413A, 0x415E, 0x4188, 0x41A9, 0x41F3, 0x4217, 0x4238, 0x4271, 0x42B0, 0x42B2, 0x42E2,
@@ -122,6 +142,10 @@ pub struct SoundDriver {
     pub noise_slot: NoiseEffectState,
     pub noise_music: NoiseMusicFlags,
     pub music_sequencer: MusicSequencer,
+    /// `sPauseBeepTimer` (`$A2xx`) and `sPauseBeepIndex`: the pause beep's own
+    /// sequencer, which `$11936` ticks while `sSoundPaused` is set.
+    pub pause_beep_timer: u8,
+    pub pause_beep_index: u8,
     pub pulse_writes: Vec<PulseWrite>,
     pub wave_writes: Vec<WaveWrite>,
     pub noise_writes: Vec<NoiseWrite>,
@@ -153,6 +177,8 @@ impl Default for SoundDriver {
             noise_slot: NoiseEffectState::default(),
             noise_music: NoiseMusicFlags::default(),
             music_sequencer: MusicSequencer::default(),
+            pause_beep_timer: 0,
+            pause_beep_index: 0,
             pulse_writes: Vec::new(),
             wave_writes: Vec::new(),
             noise_writes: Vec::new(),
@@ -271,6 +297,9 @@ impl SoundDriver {
         self.noise_music = NoiseMusicFlags::default();
         self.sound_mode = 0;
         self.low_time_flag = false;
+        // `$13F6B` also clears the pause beep's two bytes.
+        self.pause_beep_timer = 0;
+        self.pause_beep_index = 0;
         self.music_sequencer.drum_mode = 0;
         for ch in &mut self.music_sequencer.channels {
             ch.slide_state = 0;
@@ -314,6 +343,72 @@ impl SoundDriver {
         }
     }
 
+    /// `$118F7`: sound mode 1 — park the engine for the pause screen.
+    ///
+    /// The ROM silences every channel through `$13FE7` (envelope 0 + trigger on
+    /// pulse 1/2 and noise, sweep off, wave DAC off), drops the three
+    /// `sSfxActive*` bytes, flags `sSoundPaused`, releases the four music
+    /// channels' SFX claim (`res 7` of `sMusicCh1..4Flags`) and starts the first
+    /// beep from `$5970`. It does *not* run `$13F6B`: the song stays loaded and
+    /// resumes where it stopped.
+    fn pause_enter(&mut self) {
+        // `$13FE7` — NR12/NR22/NR42 = 8 (volume 0), NR14/NR24/NR44 = $80
+        // (trigger), NR10 = 0 (sweep off), NR30 = 0 (wave DAC off).
+        self.pulse_writes.push(PulseWrite::Envelope(8));
+        self.pulse_writes.push(PulseWrite::Ch2Envelope(8));
+        self.noise_writes.push(NoiseWrite::Envelope(8));
+        self.pulse_writes.push(PulseWrite::FrequencyControl(0x80));
+        self.pulse_writes.push(PulseWrite::Ch2FrequencyControl(0x80));
+        self.noise_writes.push(NoiseWrite::Control(0x80));
+        self.pulse_writes.push(PulseWrite::Sweep(0));
+        self.wave_writes.push(WaveWrite::Enable(0));
+        // `sSfxActive0..2` = 0.
+        self.pulse_effect.active_effect = 0;
+        self.wave_slot.active_effect = 0;
+        self.noise_slot.active_effect = 0;
+        self.pause_beep_index = 0;
+        self.sound_paused = true;
+        // `res 7` on sMusicCh1Flags..sMusicCh4Flags. The port has no pulse-2
+        // music flags byte (its channel-2 ownership is implicit), so the three
+        // it does carry are released.
+        self.pulse_music.flags.release_effect();
+        self.wave_music.flags.release_effect();
+        self.noise_music.release_effect();
+        self.start_pause_beep(PAUSE_BEEP_AT_ENTER);
+    }
+
+    /// `$111C1`: load one pause-beep entry — four channel-2 registers plus the
+    /// frame budget that holds it before the next entry.
+    fn start_pause_beep(&mut self, index: u8) {
+        let Some(entry) = PAUSE_BEEP_ENTRIES.get(index.wrapping_sub(1) as usize) else {
+            return;
+        };
+        let [duty, envelope, low, control, budget] = *entry;
+        self.pulse_writes.push(PulseWrite::Ch2DutyLength(duty));
+        self.pulse_writes.push(PulseWrite::Ch2Envelope(envelope));
+        self.pulse_writes.push(PulseWrite::Ch2FrequencyLow(low));
+        self.pulse_writes.push(PulseWrite::Ch2FrequencyControl(control));
+        self.pause_beep_timer = budget;
+    }
+
+    /// `$11936`: one paused frame — tick `sPauseBeepTimer` and, when it runs
+    /// out, step `sPauseBeepIndex` and play that entry. Index 6 is `$11959`'s
+    /// 240-frame hold, which parks the index at 5 so every later expiry takes
+    /// the hold again.
+    fn pause_beep_frame(&mut self) {
+        self.pause_beep_timer = self.pause_beep_timer.saturating_sub(1);
+        if self.pause_beep_timer != 0 {
+            return;
+        }
+        self.pause_beep_index = self.pause_beep_index.wrapping_add(1);
+        if self.pause_beep_index == 6 {
+            self.pause_beep_timer = 240;
+            self.pause_beep_index = 5;
+            return;
+        }
+        self.start_pause_beep(self.pause_beep_index);
+    }
+
     /// Complete per-frame sound update driver (_UpdateSound $10030).
     pub fn update_sound(&mut self) {
         self.update_count += 1;
@@ -323,18 +418,23 @@ impl SoundDriver {
         self.music_writes.clear();
 
         if self.sound_mode == 1 {
-            self.sound_paused = true;
+            self.pause_enter();
             self.clear_requests();
             return;
         }
 
         if self.sound_mode == 2 {
+            // `$11926`: unpause, drop the three busy bytes, then fall into
+            // `$10044` — the resume frame runs the full body.
             self.sound_paused = false;
-            self.clear_requests();
-            return;
+            self.pulse_effect.busy = 0;
+            self.wave_slot.busy = 0;
+            self.noise_slot.busy = 0;
         }
 
         if self.sound_paused {
+            // `$11936`: only the pause beep runs while the engine is parked.
+            self.pause_beep_frame();
             self.clear_requests();
             return;
         }

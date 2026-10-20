@@ -1293,6 +1293,12 @@ impl Session {
                     self.sound_driver.music_request = ctx.sim.music_request;
                     ctx.sim.music_request = 0;
                 }
+                // `$273E`/`$2756` write `sSoundMode`; `_UpdateSound` consumes it
+                // this same frame and `$10067` clears the byte again.
+                if ctx.sim.sound_mode != 0 {
+                    self.sound_driver.sound_mode = ctx.sim.sound_mode;
+                    ctx.sim.sound_mode = 0;
+                }
                 self.sound_driver.stomp_chain = ctx.obj.stomp_chain;
                 self.sound_driver.low_time_flag = ctx.sim.low_time_flag != 0;
 

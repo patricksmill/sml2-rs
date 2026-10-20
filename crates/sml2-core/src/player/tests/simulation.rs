@@ -2732,15 +2732,18 @@ fn pause_flash_comes_off_bit_4_of_the_frame_counter() {
 }
 
 /// `$273E` enters and `$2756` leaves; the flag *is* the port's model of
-/// `$FF9B = 8`.
+/// `$FF9B = 8`, and each handler's `sSoundMode` write rides along.
 #[test]
 fn pause_enters_and_exits() {
     let mut sim = PlayerSim::new();
     assert!(!sim.paused);
+    assert_eq!(sim.sound_mode, 0);
     sim.pause_enter();
     assert!(sim.paused);
+    assert_eq!(sim.sound_mode, 1, "$273E writes sSoundMode = 1");
     sim.pause_exit();
     assert!(!sim.paused);
+    assert_eq!(sim.sound_mode, 2, "$278E writes sSoundMode = 2");
 }
 
 /// The SELECT branch needs `sLevelProgressFlags` bit 7 — the ROM's
@@ -2761,6 +2764,7 @@ fn pause_select_exit_needs_the_cleared_level_flag() {
     sim.level_progress_flags = 0x80;
     assert!(sim.pause_select_exit(), "bit 7 set: the level is abandoned");
     assert!(!sim.paused);
+    assert_eq!(sim.sound_mode, 2, "$2760 writes sSoundMode = 2");
     assert_eq!(sim.exit_tile_flag, 0);
     assert_eq!(sim.tile_anim_config, 0);
     assert!(sim.exit_completed, "the $14 hand-off is marked reached");

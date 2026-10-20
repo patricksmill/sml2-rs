@@ -27,6 +27,7 @@ mod castle_flow;
 mod boss_entry;
 mod front_end;
 mod game;
+mod pause_audio;
 mod played_routes;
 mod scene_pipe;
 mod session;
