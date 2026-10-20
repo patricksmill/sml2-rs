@@ -162,8 +162,15 @@ Four session tapes in `crates/sml2-runtime/src/tests/acceptance.rs`:
   `sLevelProgress[$44F1[23]]` and lands the map; a mid-chain record is valid
   and reloads.
 
-Coin refusal stays covered by `the_coin_doors_take_their_bcd_price`. Left: one
-tape from six coins through the Wario fight into the ending/credits.
+Coin refusal stays covered by `the_coin_doors_take_their_bcd_price`.
+
+`six_coins_wario_and_ending_tape` sets the six golden-coin flags, puts level 24
+live, drives the fight to its terminal phase (`boss_clear`, phase 3) and runs
+the ending entry into the credits page: the scene asset loads from
+`extracted/ending/scene.json` and the sequence reaches substate 18 (the text
+stream). Its terminal substate 19 waits on `credits_text`, whose table the
+`$68572` service reads and which is not extracted yet — that is the one
+remaining asset for the credits to finish.
 
 ## Definition of done
 

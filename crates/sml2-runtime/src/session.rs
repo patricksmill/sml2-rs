@@ -626,6 +626,30 @@ impl Session {
         self.state = SessionState::Castle(seq);
     }
 
+    /// Put a level live immediately (the map's own 37-frame transition is
+    /// skipped), for acceptance tapes.
+    pub fn begin_level(&mut self, level_id: u8, progress_flags: u8) -> Result<(), String> {
+        let content = self.assets.level(level_id)?.clone();
+        let ctx = LevelContext::from_content(
+            level_id,
+            &content,
+            progress_flags,
+            self.lives,
+            self.coins_low,
+            self.coins_high,
+            self.powerup,
+            0,
+            self.assets.scripts.clone(),
+            self.assets.tilesets.clone(),
+            self.assets.arena_layout.clone(),
+            self.assets.anim_rows.clone(),
+            self.assets.hud.clone(),
+            self.assets.object_tables.clone(),
+        );
+        self.state = SessionState::InLevel(Box::new(ctx));
+        Ok(())
+    }
+
     /// Stage a bell room the way the goal-bell exit does, for acceptance tapes.
     pub fn begin_bell_room(&mut self, screen: u8, node: u8, exit_tile_flag: u8) {
         let mut map = MapSim::new();

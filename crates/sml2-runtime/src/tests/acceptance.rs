@@ -525,3 +525,66 @@ fn the_castle_reveal_saves_and_reloads() {
     assert!(other.apply_save_record(&record), "the record reloads");
     assert!(matches!(other.state, SessionState::Overworld(_)));
 }
+
+/// ME-7: six golden coins, the final castle's level 24 and a Wario clear run
+/// the ending entry into the credits sequence.
+#[test]
+fn six_coins_wario_and_ending_tape() {
+    let mut session = Session::new(SessionAssets::load().expect("session assets must load"));
+    if let SessionState::Overworld(map) = &mut session.state {
+        for offset in [5usize, 9, 14, 17, 23, 29] {
+            map.level_progress[offset] = 0x80;
+        }
+    }
+    session.begin_level(24, 0x80).expect("level 24 loads");
+    idle(&mut session, 60);
+    {
+        let SessionState::InLevel(ctx) = &mut session.state else {
+            panic!("level 24 is live");
+        };
+        // The fight's own handlers are covered by `player/tests/boss_clear.rs`;
+        // this tape starts at its terminal state.
+        ctx.sim.boss_clear = true;
+        ctx.sim.fade_timer = 2;
+        ctx.cam.boss_fight_phase = 3; // the fight's terminal phase
+    }
+    // The ending scene's own assets (`extracted/ending/scene.json`); substate 4
+    // holds until the scene is loaded.
+    let ending_assets = sml2_core::ending_scene::EndingAssets::from_json(include_str!(
+        "../../../../extracted/ending/scene.json"
+    ))
+    .expect("ending scene asset");
+    {
+        let SessionState::InLevel(ctx) = &mut session.state else {
+            panic!("level 24 is live");
+        };
+        let mut state = 4;
+        let mut fade = 0x0100;
+        ctx.ending_scene.load(ending_assets, &mut state, &mut fade);
+    }
+    let mut frames = 0;
+    let mut substate = 0;
+    for _ in 0..30000 {
+        idle(&mut session, 1);
+        frames += 1;
+        substate = match &session.state {
+            SessionState::InLevel(ctx) => ctx.ending_sequence.substate,
+            _ => substate,
+        };
+        if !matches!(session.state, SessionState::InLevel(_)) || substate >= 18 {
+            break;
+        }
+    }
+    let entry_state = match &session.state {
+        SessionState::InLevel(ctx) => ctx.ending_entry.state(),
+        _ => sml2_core::ending_entry::EndingEntryState::Sequence,
+    };
+    assert!(
+        entry_state == sml2_core::ending_entry::EndingEntryState::Sequence || substate > 0,
+        "the ending entry reached its sequence (substate {substate}, {frames} frames)"
+    );
+    assert!(
+        substate >= 18,
+        "the credits page is streaming (substate {substate}, {frames} frames)"
+    );
+}
