@@ -1063,6 +1063,10 @@ impl Session {
                         )
                     }) {
                         Ok(mut ctx) => {
+                            // The level loader shares the map's persistent block;
+                            // entering one level must retain every other clear.
+                            ctx.sim.level_progress = map_sim.level_progress;
+                            ctx.sim.level_tally = self.level_tally;
                             // $3C1A2 stops the map theme before loading, and the
                             // console spends the next 37 frames fading the map
                             // to white with the level loading behind a blank
@@ -1200,7 +1204,10 @@ impl Session {
                         .map_handoff
                         .unwrap_or_else(|| ctx.sim.map_handoff(&self.assets.nodes));
 
-                    if ctx.sim.dead != 0 {
+                    // Zone loaders can set the shared dead byte after a clear
+                    // ($3D573, for example). The completed exit identifies the
+                    // bell path independently of that map-arrival latch.
+                    if ctx.sim.dead != 0 && !ctx.sim.exit_completed {
                         // Player died in level
                         if ctx.sim.lives == 0 || ctx.sim.game_over || ctx.sim.lives == 0x99 {
                             self.state = SessionState::GameOver;

@@ -1,9 +1,10 @@
 # Minigames, final castle and ending — measured plan
 
-Status: **ME-1..ME-7 done, and the rooms now draw.** Ending/credits, the final castle, coin rooms 9-12,
-bell rooms 13/14 and the six-coin chain are ported and taped (1,419 core + 76
-runtime tests, frozen sweep green). The render seam is wired: the rooms' `$8000` block and metasprite
-expansion, and the reveal's tiles/tilemap.
+Status: ME-1..ME-7 established the room/ending routines and direct-state tapes.
+The later [castle live-flow package](2026-10-19-castle-live-flow.md) corrects
+Wario-door controls, separates visits from coin deposits, connects normal map
+entry and source presentation, and extends continuous session coverage. Full
+approaches for the remaining levels are still pending.
 
 ## What is already done
 
@@ -16,10 +17,11 @@ expansion, and the reveal's tiles/tilemap.
 | Coin doors | screens 9-12 tilemaps extracted (`bank 15 $43240/$43480/$436C0/$43900`), prices `$0999/$0200/$0050/$001E` and loaders modelled in `MapSim` |
 | Coin icons | hub/zone coin icons follow the six golden-coin flags; renderer tests |
 
-## What is missing
+## Original audit (historical)
 
-The bonus rooms are **bank 24 map scripts**, not object code. The port has the
-node walk streams but no general map-script VM.
+The following gaps describe the initial audit before ME-2..ME-7 and the later
+castle live-flow package. They are retained as source references, not a current
+missing-feature list. The bonus rooms use bank-24 map scripts.
 
 - Coin-door rooms (screens 9-12): per-frame handler `$3F4A0` far-jumps to
   `$4A81` (bank 24); `sCastleState == 3` returns to the castle screen 8. The

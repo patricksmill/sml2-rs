@@ -184,14 +184,8 @@ fn the_menu_walk_in_and_reveal_complete_the_progress_bit() {
     seq.enter(&flags(5));
     seq.state = STATE_MENU;
     let mut progress = [0u8; 42];
-    let out = seq.tick(
-        SequenceInput {
-            walk_done: true,
-            ..Default::default()
-        },
-        0,
-        &mut progress,
-    );
+    seq.walk_y = COIN_TARGET_Y[seq.level as usize];
+    let out = seq.tick(SequenceInput::default(), 0, &mut progress);
     assert_eq!(out.music, Some(26), "$453B with five coins");
     assert_eq!(seq.menu, 1);
     assert_eq!((seq.fade_high, seq.fade_low), (1, 0xFF));

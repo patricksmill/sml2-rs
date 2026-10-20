@@ -20,7 +20,6 @@ impl Session {
             SequenceInput {
                 keys_pressed: pressed,
                 frame: self.frame_n as u8,
-                walk_done: false,
             },
             offset,
             &mut self.castle_progress,

@@ -3,7 +3,10 @@
 **Status: all 32 rows measured 2026-10-18; the first slice (12, 19, 28, 29) is
 reviewed, every exit cell is test-pinned, levels 28/29 have played header
 approaches, and level 19 has played both its header and secret starts to
-both bells.** Tool:
+both bells. The live session now checks all 64 header/secret-entry cases at
+32 ordinary map origins (31 level IDs), plus normal map entry through Wario's
+door into level 24. Six played approaches across levels 19/28/29 additionally
+run through map selection, completion, return, actual host save and reload.** Tool:
 [`tools/route_matrix.py`](../tools/route_matrix.py); acceptance:
 `crates/sml2-core/src/route_matrix_tests.rs`.
 

@@ -27,8 +27,6 @@ pub const LEVEL_PROGRESS_OFFSETS: [u8; 25] = [
 pub struct SequenceInput {
     pub keys_pressed: u8,
     pub frame: u8,
-    /// `$453B`'s walk-in reached `$499D[sCurLevel]`.
-    pub walk_done: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -61,13 +59,13 @@ pub struct CastleSequence {
     /// `sFadeTimerLow`/`High` (`$A266`/`$A267`).
     pub fade_low: u8,
     pub fade_high: u8,
-    /// `sRowShiftCount`/`Index` (`$A2C9`/`$A2CA`).
+    /// `sRowShiftCount`/`Index` (`$A2CA`/`$A2C9`).
     pub row_shift_count: u8,
     pub row_shift_index: u8,
     pub door_open_rows: u8,
-    /// `sCastleCoinDone` (`$A2CB`): 0 or the six-coin tile `$74`.
+    /// `sCastleCoinDone` (`$A2CC`): 0 or the six-coin tile `$74`.
     pub coin_done: u8,
-    /// `sGoldenCoinCount` (`$A2CB` shared with the done byte in the ROM).
+    /// `sGoldenCoinCount` (`$A2CB`), recomputed after each menu handler.
     pub golden_count: u8,
     /// `sMarioWalkAnimTimer` (`$A222`).
     pub walk_anim: u8,
@@ -85,7 +83,7 @@ pub struct CastleSequence {
     pub tally_credited: bool,
     /// `sGoldenCoin1..6` as `$45B6` reads them.
     pub coins: [u8; 6],
-    /// `sBGPalette`/`sOAMPalette1` (`$A220`/`$A27F`).
+    /// `sBGPalette`/`sOAMPalette1` (`$A27E`/`$A27F`).
     pub bgp: u8,
     pub obp1: u8,
     pub obp2: u8,
@@ -229,7 +227,7 @@ impl CastleSequence {
                 self.walk_anim = (self.walk_anim + 8) % 0x50;
                 self.sprite_id = 0xBF + (self.walk_anim >> 4);
                 let target = COIN_TARGET_Y.get(self.level as usize).copied().unwrap_or(0);
-                if self.walk_y == target || input.walk_done {
+                if self.walk_y == target {
                     out.music = Some(if self.golden_count == 5 { 26 } else { 15 });
                     self.menu = 1;
                     self.fade_high = 1;

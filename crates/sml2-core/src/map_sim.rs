@@ -721,6 +721,7 @@ impl MapSim {
         me.coins_high = sim.coins_high;
         me.lives = sim.lives;
         me.powerup = sim.powerup;
+        me.mario_dead = sim.dead;
         let n = me.level_progress.len().min(sim.level_progress.len());
         me.level_progress[..n].copy_from_slice(&sim.level_progress[..n]);
         me
@@ -1833,6 +1834,16 @@ impl MapSim {
 mod tests {
     use super::*;
     use crate::map::MapNodes;
+
+    #[test]
+    fn player_return_preserves_the_global_map_arrival_latch() {
+        let mut player = crate::player_sim::PlayerSim::new();
+        player.dead = 21;
+        player.map_node = 60;
+        player.level_progress[16] = 8;
+        let map = MapSim::from_player(&player);
+        assert_eq!((map.mario_dead, map.node, map.level_progress[16]), (21, 60, 8));
+    }
 
     /// The ROM's own bytes, embedded so the tests need no file.
     ///

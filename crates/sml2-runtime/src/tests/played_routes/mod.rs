@@ -1,5 +1,6 @@
 use super::*;
 
+mod continuous;
 mod level19_alternate;
 
 mod level19_header;
@@ -146,7 +147,11 @@ fn run_entry_route(
         serde_json::from_str(&fs::read_to_string(root.join("hud.json")).unwrap()).unwrap();
     let tape = tape.into();
     let frames = tape.len() as u64;
-    run_play(
+    let session_tape: Vec<_> = (0..tape.len())
+        .map(|frame| tape.frame(frame).unwrap())
+        .collect();
+    let map_node = sim.map_node;
+    let outcome = run_play(
         &manifest,
         &layout,
         &fs::read(levels.join(format!("level{level:02}.bgblock.bin"))).unwrap(),
@@ -164,7 +169,15 @@ fn run_entry_route(
         Some(tape),
         Some(frames),
     )
-    .expect("source route must use implemented native paths")
+    .expect("source route must use implemented native paths");
+    continuous::verify_map_entry_completion_and_reload(
+        &manifest,
+        map_node,
+        progress,
+        &session_tape,
+        &outcome,
+    );
+    outcome
 }
 
 #[test]
