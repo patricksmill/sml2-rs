@@ -30,7 +30,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick) -> Result<Effect, Erro
             actor.contact_kind = ContactKind::from_raw(32);
             if riding {
                 actor.state = 1;
-                actor.hit_reaction = DROP;
+                actor.motion_leg = DROP;
                 actor.set_travel_span(DROP);
             }
             Ok(Effect::Continue)
@@ -44,11 +44,11 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick) -> Result<Effect, Erro
             if !frame.every(2) {
                 return Ok(Effect::Continue);
             }
-            if actor.hit_reaction == 0 {
+            if actor.motion_leg == 0 {
                 actor.state = 3;
                 return Ok(Effect::Respawn);
             }
-            actor.hit_reaction -= 1;
+            actor.motion_leg -= 1;
             actor.position.move_y(1);
             Ok(Effect::Moved { carry_dy: Some(1) })
         }
@@ -64,10 +64,10 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick) -> Result<Effect, Erro
                     return Ok(Effect::Continue);
                 }
             }
-            if actor.hit_reaction == actor.travel_span() {
+            if actor.motion_leg == actor.travel_span() {
                 return Ok(Effect::Continue);
             }
-            actor.hit_reaction = actor.hit_reaction.wrapping_add(1);
+            actor.motion_leg = actor.motion_leg.wrapping_add(1);
             actor.position.move_y(-1);
             Ok(Effect::Moved { carry_dy: None })
         }

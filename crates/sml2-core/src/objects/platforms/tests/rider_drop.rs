@@ -39,8 +39,8 @@ fn handler_0x5a258_waits_for_a_rider_then_arms_the_drop() {
     ride(&mut st.b);
     sim.handler_0x5a258(&mut st, &tables);
     assert_eq!(st.b[15], 1);
+    assert_eq!(st.b[24], 24);
     assert_eq!(st.b[25], 24);
-    assert_eq!(st.b[27], 24);
 }
 
 #[test]
@@ -51,10 +51,10 @@ fn handler_0x5a258_sinks_while_ridden_and_rises_after_the_pause() {
     sim.mario.y = 40;
     position(&mut st.b, 100, 100);
     ride(&mut st.b);
-    st.b[27] = 2;
+    st.b[24] = 2;
     sim.handler_0x5a258(&mut st, &tables);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 101);
-    assert_eq!(st.b[27], 1);
+    assert_eq!(st.b[24], 1);
     assert_eq!(sim.mario_y_adjust, Some(41));
 
     st.b[23] &= !0x08;
@@ -66,7 +66,7 @@ fn handler_0x5a258_sinks_while_ridden_and_rises_after_the_pause() {
     st.b[25] = 24;
     sim.handler_0x5a258(&mut st, &tables);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 100);
-    assert_eq!(st.b[27], 2);
+    assert_eq!(st.b[24], 2);
     assert!(sim.unported.is_empty());
 }
 
@@ -90,7 +90,7 @@ fn handler_0x5a258_bottom_restores_the_spawn_record() {
     st.b[8] = 2;
     st.b[15] = 1;
     st.b[23] = 0x08;
-    st.b[27] = 0;
+    st.b[24] = 0;
     position(&mut st.b, 50, 50);
     sim.fff0 = 0;
     sim.handler_0x5a258(&mut st, &tables);
@@ -118,4 +118,36 @@ fn handler_0x5a258_real_mode_b_anim63_step() {
     assert_eq!(sim.slots[1].b[18], 32);
     assert_eq!(sim.slots[1].b[15], 0);
     assert!(sim.unported.is_empty());
+}
+
+#[test]
+fn handler_0x5a258_ridden_platform_sinks_instead_of_knockback() {
+    let tables = tables();
+    let layout = LevelLayout::from_bytes(&[0x60; 0x3000]).unwrap();
+    let mut sim = ObjectSim::new(vec![], 0);
+    sim.configure(0x0A);
+    sim.fff0 = 1;
+    let mut actor = crate::actor::Actor::default();
+    actor.position = crate::actor::Position { x: 100, y: 100 };
+    actor.activity = 2;
+    actor.definition = 63;
+    sim.slots[1].b = actor.to_raw_slot();
+    sim.slots[1].b[23] = 0x08;
+    let mario = MarioContact::default();
+    sim.step(100, 100, &layout, &tables, &mario, false);
+    assert_eq!(sim.slots[1].b[15], 1);
+    assert_eq!(sim.slots[1].b[24], 24);
+    assert_eq!(sim.slots[1].b[27], 0);
+
+    let mut y = 100u16;
+    for _ in 0..6 {
+        sim.slots[1].b[23] = 0x08;
+        sim.step(100, 100, &layout, &tables, &mario, false);
+        assert_eq!(u16::from_be_bytes([sim.slots[1].b[0], sim.slots[1].b[1]]), 100);
+        assert_eq!(sim.slots[1].b[27], 0);
+        let next = u16::from_be_bytes([sim.slots[1].b[3], sim.slots[1].b[4]]);
+        assert!(next == y || next == y + 1, "platform y jumped from {y} to {next}");
+        y = next;
+    }
+    assert!(y > 100, "ridden platform never sank");
 }

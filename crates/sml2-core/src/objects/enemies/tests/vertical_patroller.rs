@@ -22,8 +22,8 @@ fn handler_0x5a992_init_arms_contact_and_a_64_step_leg() {
     sim.handler_0x5a992(&mut st);
     assert_eq!(st.b[15], 1);
     assert_eq!(st.b[18], 72);
+    assert_eq!(st.b[24], 64);
     assert_eq!(st.b[25], 64);
-    assert_eq!(st.b[27], 64);
     assert!(sim.unported.is_empty());
 }
 
@@ -33,13 +33,13 @@ fn handler_0x5a992_even_leg_ends_and_reverses() {
     sim.fff0 = 0;
     position(&mut st.b, 100, 100);
     st.b[11] = 10;
+    st.b[24] = 1;
     st.b[25] = 64;
-    st.b[27] = 1;
     sim.handler_0x5a992(&mut st);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 101);
     assert_eq!(st.b[11], 11);
     assert_eq!(st.b[15], 2);
-    assert_eq!(st.b[27], 64);
+    assert_eq!(st.b[24], 64);
 }
 
 #[test]
@@ -73,6 +73,20 @@ fn handler_0x5a992_real_mode_b_anim80_step() {
     sim.step(100, 100, &layout, &tables, &MarioContact::default(), false);
     assert_eq!(sim.slots[1].b[18], 72);
     assert_eq!(sim.slots[1].b[15], 1);
-    assert_eq!(sim.slots[1].b[27], 64);
+    assert_eq!(sim.slots[1].b[24], 64);
+    assert_eq!(sim.slots[1].b[27], 0);
     assert!(sim.unported.is_empty());
+
+    // The leg lives in `$FFE8`. A non-zero `$FFEB` makes the engine play
+    // knockback and skip this handler, which is the bounce the saw was taking.
+    let mut y = 100u16;
+    for _ in 0..8 {
+        sim.step(100, 100, &layout, &tables, &MarioContact::default(), false);
+        assert_eq!(u16::from_be_bytes([sim.slots[1].b[0], sim.slots[1].b[1]]), 100);
+        assert_eq!(sim.slots[1].b[27], 0);
+        let next = u16::from_be_bytes([sim.slots[1].b[3], sim.slots[1].b[4]]);
+        assert!(next == y || next == y + 1, "saw y jumped from {y} to {next}");
+        y = next;
+    }
+    assert_eq!(y, 102);
 }

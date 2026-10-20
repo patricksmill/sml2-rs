@@ -26,7 +26,7 @@ pub(super) fn update(actor: &mut Actor, easy: bool, launch_dx: i16) -> Result<Ef
             actor.flash = FlashFlags::from_bits(16);
             actor.contact_kind = ContactKind::from_raw(32);
             actor.state = 3;
-            actor.hit_reaction = LEG;
+            actor.motion_leg = LEG;
             actor.set_travel_span(LEG);
             Ok(Effect::Continue)
         }
@@ -38,11 +38,11 @@ pub(super) fn update(actor: &mut Actor, easy: bool, launch_dx: i16) -> Result<Ef
                 -i16::from(step)
             };
             actor.position.move_y(dy);
-            let remaining = actor.hit_reaction.wrapping_sub(step);
-            actor.hit_reaction = remaining;
+            let remaining = actor.motion_leg.wrapping_sub(step);
+            actor.motion_leg = remaining;
             let bounce = remaining == 0;
             if bounce {
-                actor.hit_reaction = actor.travel_span();
+                actor.motion_leg = actor.travel_span();
                 let leaving_fall = actor.state == 1;
                 actor.state ^= 3;
                 if leaving_fall {

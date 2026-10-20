@@ -22,8 +22,8 @@ fn handler_0x5aab9_init_arms_the_wait() {
     assert_eq!(st.b[14], 16);
     assert_eq!(st.b[15], 3);
     assert_eq!(st.b[18], 32);
+    assert_eq!(st.b[24], 48);
     assert_eq!(st.b[25], 48);
-    assert_eq!(st.b[27], 48);
     assert!(sim.unported.is_empty());
 }
 
@@ -53,16 +53,16 @@ fn handler_0x5aab9_easy_mode_halves_the_step_and_the_fall_plays_sfx() {
     let (mut sim, mut st) = fixture(1);
     sim.easy_mode = true;
     position(&mut st.b, 100, 100);
+    st.b[24] = 2;
     st.b[25] = 48;
-    st.b[27] = 2;
     sim.handler_0x5aab9(&mut st);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 102);
     assert_eq!(st.b[15], 2);
-    assert_eq!(st.b[27], 48);
+    assert_eq!(st.b[24], 48);
     assert_eq!(sim.sfx1, 10);
 
     sim.sfx1 = 0;
-    st.b[27] = 2;
+    st.b[24] = 2;
     sim.handler_0x5aab9(&mut st);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 100);
     assert_eq!(st.b[15], 1);

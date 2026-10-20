@@ -29,9 +29,9 @@ fn handler_0x5a721_init_bobs_then_faces_and_loads_the_legs() {
     assert_eq!(st.b[13], 0x20);
     assert_eq!(st.b[15], 2);
     assert_eq!(st.b[18], 72);
+    assert_eq!(st.b[24], 112);
     assert_eq!(st.b[25], 56);
     assert_eq!(st.b[26], 1);
-    assert_eq!(st.b[27], 112);
     assert_eq!(sim.facing, 1);
 }
 
@@ -42,9 +42,9 @@ fn handler_0x5a721_phase_three_sets_vertical_flip_and_walks() {
     position(&mut st.b, 100, 100);
     st.b[11] = 10;
     st.b[13] = 0;
+    st.b[24] = 112;
     st.b[25] = 4;
     st.b[26] = 2;
-    st.b[27] = 112;
     sim.handler_0x5a721(&mut st);
     assert_eq!(st.b[26], 3);
     assert_eq!(st.b[13] & 0x40, 0x40);
@@ -95,7 +95,8 @@ fn handler_0x5a721_real_mode_b_anim75_step() {
         false,
     );
     assert_eq!(sim.slots[1].b[18], 72);
+    assert_eq!(sim.slots[1].b[24], 112);
     assert_eq!(sim.slots[1].b[25], 56);
-    assert_eq!(sim.slots[1].b[27], 112);
+    assert_eq!(sim.slots[1].b[27], 0);
     assert!(sim.unported.is_empty());
 }

@@ -28,7 +28,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
         actor.contact_kind = ContactKind::from_raw(72);
         let facing = actor.face_toward(player_x);
         actor.set_travel_span(FIRST_LEG);
-        actor.hit_reaction = RELOAD;
+        actor.motion_leg = RELOAD;
         return Ok(Effect::Initialized { facing });
     }
     if !frame.every(2) {
@@ -62,7 +62,7 @@ fn step(actor: &mut Actor, dx: i16) -> Result<Effect, Error> {
     if remaining != 0 {
         return Ok(Effect::Continue);
     }
-    actor.set_travel_span(actor.hit_reaction);
+    actor.set_travel_span(actor.motion_leg);
     actor.state ^= 3;
     actor.sprite_flip.toggle_horizontal();
     Ok(Effect::Continue)

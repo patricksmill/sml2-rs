@@ -54,6 +54,7 @@ fn handler_0x5ab4b_real_mode_b_anim99_step() {
     sim.step(100, 100, &layout, &tables, &MarioContact::default(), false);
     assert_eq!(sim.slots[1].b[14], 16);
     assert_eq!(sim.slots[1].b[15], 3);
-    assert_eq!(sim.slots[1].b[27], 48);
+    assert_eq!(sim.slots[1].b[24], 48);
+    assert_eq!(sim.slots[1].b[27], 0);
     assert!(sim.unported.is_empty());
 }

@@ -27,8 +27,8 @@ fn handler_0x5a30e_init_faces_and_loads_both_legs() {
     assert_eq!(st.b[13], 0x20);
     assert_eq!(st.b[15], 2);
     assert_eq!(st.b[18], 72);
+    assert_eq!(st.b[24], 112);
     assert_eq!(st.b[25], 56);
-    assert_eq!(st.b[27], 112);
     assert_eq!(sim.facing, 1);
     assert!(sim.unported.is_empty());
 }
@@ -40,8 +40,8 @@ fn handler_0x5a30e_even_steps_reload_the_long_leg_and_flip() {
     position(&mut st.b, 100, 100);
     st.b[11] = 10;
     st.b[13] = 0;
+    st.b[24] = 112;
     st.b[25] = 1;
-    st.b[27] = 112;
     sim.handler_0x5a30e(&mut st);
     assert_eq!(u16::from_be_bytes([st.b[0], st.b[1]]), 99);
     assert_eq!(st.b[11], 11);
@@ -90,7 +90,23 @@ fn handler_0x5a30e_real_mode_b_anim65_step() {
         false,
     );
     assert_eq!(sim.slots[1].b[18], 72);
+    assert_eq!(sim.slots[1].b[24], 112);
     assert_eq!(sim.slots[1].b[25], 56);
-    assert_eq!(sim.slots[1].b[27], 112);
+    assert_eq!(sim.slots[1].b[27], 0);
     assert!(sim.unported.is_empty());
+
+    let mario = MarioContact {
+        x: 1000,
+        ..Default::default()
+    };
+    let mut x = 100u16;
+    for _ in 0..8 {
+        sim.step(100, 100, &layout, &tables, &mario, false);
+        assert_eq!(u16::from_be_bytes([sim.slots[1].b[3], sim.slots[1].b[4]]), 100);
+        assert_eq!(sim.slots[1].b[27], 0);
+        let next = u16::from_be_bytes([sim.slots[1].b[0], sim.slots[1].b[1]]);
+        assert!(next == x || next == x + 1, "pacer x jumped from {x} to {next}");
+        x = next;
+    }
+    assert_eq!(x, 102);
 }

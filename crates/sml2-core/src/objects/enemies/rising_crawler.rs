@@ -27,7 +27,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
     if actor.state == 0 {
         actor.contact_kind = ContactKind::from_raw(77);
         actor.state = 5;
-        actor.hit_reaction = RISE;
+        actor.motion_leg = RISE;
         actor.defeat_mode = 128;
         return Ok(Effect::Initialized);
     }
@@ -41,8 +41,8 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
                 return Ok(Effect::Continue);
             }
             actor.position.move_y(-1);
-            actor.hit_reaction = actor.hit_reaction.wrapping_sub(1);
-            if actor.hit_reaction != 0 {
+            actor.motion_leg = actor.motion_leg.wrapping_sub(1);
+            if actor.motion_leg != 0 {
                 return Ok(Effect::Continue);
             }
             let facing = actor.face_toward(player_x);

@@ -19,7 +19,7 @@ pub(super) fn update(actor: &mut Actor, player_x: u16) -> Result<(), Error> {
     if actor.state == 0 {
         actor.contact_kind = ContactKind::from_raw(72);
         actor.state = 3;
-        actor.hit_reaction = LEG;
+        actor.motion_leg = LEG;
         actor.set_travel_span(LEG);
         return Ok(());
     }
@@ -40,10 +40,10 @@ pub(super) fn update(actor: &mut Actor, player_x: u16) -> Result<(), Error> {
 
 fn step(actor: &mut Actor, dy: i16) -> Result<(), Error> {
     actor.position.move_y(dy);
-    let remaining = actor.hit_reaction.wrapping_sub(1);
-    actor.hit_reaction = remaining;
+    let remaining = actor.motion_leg.wrapping_sub(1);
+    actor.motion_leg = remaining;
     if remaining == 0 {
-        actor.hit_reaction = actor.travel_span();
+        actor.motion_leg = actor.travel_span();
         actor.state ^= 3;
     }
     Ok(())

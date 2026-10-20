@@ -21,8 +21,8 @@ fn handler_0x5aa71_init_arms_the_wait() {
     sim.handler_0x5aa71(&mut st);
     assert_eq!(st.b[15], 3);
     assert_eq!(st.b[18], 72);
+    assert_eq!(st.b[24], 8);
     assert_eq!(st.b[25], 8);
-    assert_eq!(st.b[27], 8);
     assert!(sim.unported.is_empty());
 }
 
@@ -46,12 +46,12 @@ fn handler_0x5aa71_proximity_sets_sprite_bit_0() {
 fn handler_0x5aa71_leg_reverses_after_eight_steps() {
     let (mut sim, mut st) = fixture(1);
     position(&mut st.b, 100, 100);
+    st.b[24] = 1;
     st.b[25] = 8;
-    st.b[27] = 1;
     sim.handler_0x5aa71(&mut st);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 99);
     assert_eq!(st.b[15], 2);
-    assert_eq!(st.b[27], 8);
+    assert_eq!(st.b[24], 8);
 }
 
 #[test]
@@ -74,6 +74,7 @@ fn handler_0x5aa71_real_mode_b_anims_86_and_87_step() {
     sim.step(100, 100, &layout, &tables, &MarioContact::default(), false);
     assert_eq!(sim.slots[1].b[18], 72);
     assert_eq!(sim.slots[1].b[15], 3);
-    assert_eq!(sim.slots[1].b[27], 8);
+    assert_eq!(sim.slots[1].b[24], 8);
+    assert_eq!(sim.slots[1].b[27], 0);
     assert!(sim.unported.is_empty());
 }

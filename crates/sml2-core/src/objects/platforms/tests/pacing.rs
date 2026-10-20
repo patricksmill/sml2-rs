@@ -23,8 +23,8 @@ fn handler_0x5ad4d_init_arms_the_rightward_leg() {
     assert_eq!(st.b[15], 2);
     assert_eq!(st.b[16], 1);
     assert_eq!(st.b[18], 32);
+    assert_eq!(st.b[24], 80);
     assert_eq!(st.b[25], 40);
-    assert_eq!(st.b[27], 80);
     assert!(sim.unported.is_empty());
 }
 
@@ -78,7 +78,7 @@ fn handler_0x5ad4d_easy_odd_frames_only_bob() {
 #[test]
 fn handler_0x5ad4d_pause_reloads_and_the_left_leg_turns() {
     let (mut sim, mut st) = fixture(3);
-    st.b[27] = 80;
+    st.b[24] = 80;
     st.b[28] = 1;
     sim.handler_0x5ad4d(&mut st);
     assert_eq!(st.b[15], 4);
@@ -94,7 +94,7 @@ fn handler_0x5ad4d_pause_reloads_and_the_left_leg_turns() {
     assert_eq!(st.b[15], 1);
     assert_eq!(st.b[28], 48);
 
-    st.b[27] = 80;
+    st.b[24] = 80;
     st.b[28] = 5;
     sim.handler_0x5ad4d(&mut st);
     assert_eq!(st.b[15], 1);
@@ -120,7 +120,8 @@ fn handler_0x5ad4d_real_mode_b_anim107_step() {
     sim.step(100, 100, &layout, &tables, &MarioContact::default(), false);
     assert_eq!(sim.slots[1].b[15], 2);
     assert_eq!(sim.slots[1].b[18], 32);
+    assert_eq!(sim.slots[1].b[24], 80);
     assert_eq!(sim.slots[1].b[25], 40);
-    assert_eq!(sim.slots[1].b[27], 80);
+    assert_eq!(sim.slots[1].b[27], 0);
     assert!(sim.unported.is_empty());
 }

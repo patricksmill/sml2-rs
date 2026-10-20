@@ -27,7 +27,7 @@ fn handler_0x5a2d0_init_arms_the_rise() {
     assert_eq!(st.b[12], 128);
     assert_eq!(st.b[15], 5);
     assert_eq!(st.b[18], 77);
-    assert_eq!(st.b[27], 16);
+    assert_eq!(st.b[24], 16);
     assert!(sim.unported.is_empty());
 }
 
@@ -40,13 +40,13 @@ fn handler_0x5a2d0_rise_faces_mario_when_the_counter_ends() {
     position(&mut st.b, 100, 100);
     st.b[12] = 128;
     st.b[13] = 0;
-    st.b[27] = 1;
+    st.b[24] = 1;
     sim.handler_0x5a2d0(&mut st, &layout);
     assert_eq!(u16::from_be_bytes([st.b[3], st.b[4]]), 99);
     assert_eq!(st.b[12], 0);
     assert_eq!(st.b[13], 0x20);
     assert_eq!(st.b[15], 2);
-    assert_eq!(st.b[27], 0);
+    assert_eq!(st.b[24], 0);
     assert_eq!(sim.facing, 1);
 }
 
@@ -82,6 +82,7 @@ fn handler_0x5a2d0_real_mode_b_anim64_step() {
     sim.step(100, 100, &layout, &tables, &MarioContact::default(), false);
     assert_eq!(sim.slots[1].b[18], 77);
     assert_eq!(sim.slots[1].b[15], 5);
-    assert_eq!(sim.slots[1].b[27], 16);
+    assert_eq!(sim.slots[1].b[24], 16);
+    assert_eq!(sim.slots[1].b[27], 0);
     assert!(sim.unported.is_empty());
 }

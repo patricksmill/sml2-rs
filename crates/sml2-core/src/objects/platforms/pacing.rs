@@ -26,7 +26,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, easy: bool) -> Result<
             actor.contact_kind = ContactKind::from_raw(32);
             actor.state = 2;
             actor.set_travel_span(40);
-            actor.hit_reaction = 80;
+            actor.motion_leg = 80;
             actor.flash = FlashFlags::from_bits(16);
             actor.motion_phase = 1;
             Ok(Effect::Continue)
@@ -44,7 +44,7 @@ fn pause(actor: &mut Actor) -> Result<Effect, Error> {
         return Ok(Effect::Continue);
     }
     actor.state = actor.state.wrapping_add(1);
-    actor.set_travel_span(actor.hit_reaction);
+    actor.set_travel_span(actor.motion_leg);
     actor.motion_phase = 0;
     Ok(Effect::Continue)
 }
