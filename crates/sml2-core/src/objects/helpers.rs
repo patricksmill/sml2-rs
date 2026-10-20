@@ -261,6 +261,7 @@ impl ObjectSim {
         st: &mut Staging,
         layout: &LevelLayout,
         dy: u8,
+        retry_dy: u8,
         dx: i16,
         flag: u8,
     ) {
@@ -275,51 +276,61 @@ impl ObjectSim {
         if Self::probe(layout, st.px, st.py) < 0x38 {
             return;
         }
-        st.py = st.y().wrapping_sub(5);
+        st.py = st.y().wrapping_sub(retry_dy as u16);
         if Self::probe(layout, st.px, st.py) < 0x38 {
             return;
         }
         self.move_flags &= !flag;
     }
 
+    /// Bank 2 `$841A`.
     pub(super) fn m_right_wall_low(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.wall_probe(st, layout, 8, 7, 0x01);
+        self.wall_probe(st, layout, 8, 5, 7, 0x01);
     }
 
+    /// Bank 2 `$843C`.
     pub(super) fn m_right_wall(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.wall_probe(st, layout, 11, 7, 0x01);
+        self.wall_probe(st, layout, 11, 5, 7, 0x01);
     }
 
+    /// Bank 2 `$8462`.
     pub(super) fn m_right_wall_mid(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.wall_probe(st, layout, 11, 11, 0x01);
+        self.wall_probe(st, layout, 11, 5, 11, 0x01);
     }
 
+    /// Bank 2 `$8484`.
     pub(super) fn m_right_wall_far(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.wall_probe(st, layout, 11, 19, 0x01);
+        self.wall_probe(st, layout, 11, 5, 19, 0x01);
     }
 
+    /// Bank 2 `$84A6`.
     pub(super) fn m_right_wall_high(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.wall_probe(st, layout, 19, 11, 0x01);
+        self.wall_probe(st, layout, 19, 4, 11, 0x01);
     }
 
+    /// Bank 2 `$84C8`.
     pub(super) fn m_left_wall_low(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.wall_probe(st, layout, 8, -7, 0x02);
+        self.wall_probe(st, layout, 8, 5, -7, 0x02);
     }
 
+    /// Bank 2 `$84EA`.
     pub(super) fn m_left_wall(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.wall_probe(st, layout, 11, -7, 0x02);
+        self.wall_probe(st, layout, 11, 5, -7, 0x02);
     }
 
+    /// Bank 2 `$8510`.
     pub(super) fn m_left_wall_mid(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.wall_probe(st, layout, 11, -11, 0x02);
+        self.wall_probe(st, layout, 11, 5, -11, 0x02);
     }
 
+    /// Bank 2 `$8532`.
     pub(super) fn m_left_wall_far(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.wall_probe(st, layout, 11, -19, 0x02);
+        self.wall_probe(st, layout, 11, 5, -19, 0x02);
     }
 
+    /// Bank 2 `$8554`.
     pub(super) fn m_left_wall_high(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.wall_probe(st, layout, 19, -11, 0x02);
+        self.wall_probe(st, layout, 19, 4, -11, 0x02);
     }
 }
 

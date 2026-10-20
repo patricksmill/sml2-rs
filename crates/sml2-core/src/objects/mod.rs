@@ -297,17 +297,17 @@ mod handler_0x59728_adapter;
 mod handler_0x59763;
 #[path = "compat/enemies/animated_walker.rs"]
 mod handler_0x59763_adapter;
-#[path = "enemies/vertical_shuttle.rs"]
+#[path = "enemies/proximity_runner.rs"]
 mod handler_0x59774;
-#[path = "compat/enemies/vertical_shuttle.rs"]
+#[path = "compat/enemies/proximity_runner.rs"]
 mod handler_0x59774_adapter;
 #[path = "platforms/table_driven.rs"]
 mod handler_0x597bd;
 #[path = "compat/platforms/table_driven.rs"]
 mod handler_0x597bd_adapter;
-#[path = "enemies/hover_patroller.rs"]
+#[path = "enemies/umbrella_hopper.rs"]
 mod handler_0x599a6;
-#[path = "compat/enemies/hover_patroller.rs"]
+#[path = "compat/enemies/umbrella_hopper.rs"]
 mod handler_0x599a6_adapter;
 #[path = "enemies/blinking_drifter.rs"]
 mod handler_0x59aad;

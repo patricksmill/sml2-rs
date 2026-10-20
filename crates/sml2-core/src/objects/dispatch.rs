@@ -68,7 +68,7 @@ impl ObjectSim {
             0x59763 => self.handler_0x59763(st, layout),
             0x59774 => self.handler_0x59774(st, layout),
             0x597BD => self.handler_0x597bd(st),
-            0x599A6 => self.handler_0x599a6(st),
+            0x599A6 => self.handler_0x599a6(st, layout),
             0x595B2 => self.handler_falling_dropper(st),
             0x59AAD => self.handler_0x59aad(st),
             0x59B0E => self.handler_0x59b0e(st, layout),
