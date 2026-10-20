@@ -509,6 +509,60 @@ fn block_row_top(img: &[u8], vw: usize, darkest: u8) -> usize {
         .0
 }
 
+/// $5BFC writes collision tile 24, but $5C01 blanks the BG with tile $FF
+/// until $5B3C restores the used block at timer 8.
+#[test]
+fn a_bouncing_coin_block_clears_its_background_until_it_lands() {
+    let (mut manifest, mut layout, bg) =
+        level_files("level01.manifest.json", "level01.bgblock.bin");
+    // Give the temporary collision ID conspicuous artwork, independent of
+    // the tileset, so drawing it instead of $FF cannot pass accidentally.
+    manifest.metatiles.metatiles[24].tiles = [244, 245, 246, 247];
+    layout.cells[28 * 256 + 22] = 1;
+    layout.cells[28 * 256 + 23] = 24;
+    let draw = |writes: &[(u32, u8)]| {
+        render_view(
+            &manifest, &layout, writes, &bg, 368, 456, 32, 16, None, None, None,
+        )
+        .unwrap()
+    };
+    let baseline = draw(&[]);
+    let mut sim = PlayerSim::new();
+    sim.block_slots[0] = [3, 1, 0xD8, 1, 0x70, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    for timer in 2..=8 {
+        sim.block_update();
+        let img = draw(&sim.layout_writes);
+        assert_eq!(sim.block_slots[0][1], timer);
+        assert_eq!(
+            sim.layout_writes,
+            [(28 * 256 + 22, if timer < 8 { 24 } else { 7 })]
+        );
+        // Compare with the source's explicit 2x2 BG writes, pixel by pixel.
+        let expected_tiles = if timer < 8 {
+            [255, 255, 255, 255]
+        } else {
+            [248, 249, 250, 251]
+        };
+        for y in 0..16 {
+            for x in 0..16 {
+                let tile = expected_tiles[(y / 8) * 2 + x / 8];
+                let off = video::bg_tile_offset(tile);
+                let bytes = bg[off..off + 16].try_into().unwrap();
+                let color = video::tile_colors(&bytes)[(y % 8) * 8 + x % 8];
+                assert_eq!(
+                    img[y * 32 + x],
+                    video::bgp_shades(manifest.header.palettes[0])[color as usize]
+                );
+            }
+            // An untouched neighboring tile 24 must retain its artwork.
+            assert_eq!(
+                &img[y * 32 + 16..y * 32 + 32],
+                &baseline[y * 32 + 16..y * 32 + 32]
+            );
+        }
+    }
+}
+
 /// The view must not be clamped into the level's own bounds. Level 5's start camera sits
 /// at the bottom of a 768-px world (cam_y 704), so the view's top row (632) is past
 /// `768 - 144`: the engine lets the view overhang and the tilemap window's rows come back

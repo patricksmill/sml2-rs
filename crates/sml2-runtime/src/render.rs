@@ -85,7 +85,8 @@ fn window_coord(v: i32, origin: i32) -> i32 {
 /// `overlay` is the sim's sparse level-map rewrite list (`layout_writes`: keys
 /// `row * 256 + col`, the engine's `$B000` addressing). The engine edits the
 /// same WRAM map its probes read, so a cell the sim rewrote — a collected
-/// coin's `$60`, a bump's `$24`/`$07`/… — must draw as the new metatile.
+/// coin's `$60`, a bump's `$18`/`$07`/… — must draw its updated background.
+/// The transient bump tile `$18` uses the ROM's separate blank BG writes.
 #[allow(clippy::too_many_arguments)]
 pub fn render_view(
     manifest: &LevelManifest,
@@ -147,12 +148,11 @@ pub fn render_view(
             let (cx, tx) = ((wx as usize) >> 4, (wx as usize) & 15);
             let (cy, ty) = ((wy as usize) >> 4, (wy as usize) & 15);
             let key = (cy * 256 + cx) as u32;
-            let Some(id) = overlay
+            let rewritten = overlay
                 .iter()
                 .find(|(k, _)| *k == key)
-                .map(|(_, v)| *v)
-                .or_else(|| layout.get(cx, cy))
-            else {
+                .map(|(_, v)| *v);
+            let Some(id) = rewritten.or_else(|| layout.get(cx, cy)) else {
                 continue;
             };
             let mt = manifest
@@ -160,7 +160,15 @@ pub fn render_view(
                 .get(id)
                 .ok_or_else(|| format!("metatile id {id} out of table"))?;
             let q = (ty >> 3) * 2 + (tx >> 3);
-            let tile = mt.tiles[q] as usize;
+            // $5BFC keeps collision tile 24 during a block bump, while $5C01
+            // clears all four BG tiles to $FF. The moving block is an OBJ.
+            // Only rewrites carry this transient state; an original layout
+            // cell numbered 24 still uses the level's metatile artwork.
+            let tile = if rewritten == Some(24) {
+                0xFF
+            } else {
+                mt.tiles[q] as usize
+            };
             let col = tiles[tile][(ty & 7) * 8 + (tx & 7)];
             bg_idx[py * vw + px] = col;
             img[py * vw + px] = shades[col as usize];
