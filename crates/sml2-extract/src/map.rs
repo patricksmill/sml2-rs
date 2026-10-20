@@ -79,7 +79,7 @@ pub const SCREEN_TILEMAP_SPECS: &[(u8, &str, usize, usize, &str, u8)] = &[
         0x43240,
         576,
         "gfx/overworld/mariocastle.png",
-        0xE4,
+        0xE1,
     ),
     (
         10,
@@ -87,7 +87,7 @@ pub const SCREEN_TILEMAP_SPECS: &[(u8, &str, usize, usize, &str, u8)] = &[
         0x43480,
         576,
         "gfx/overworld/mariocastle.png",
-        0xE4,
+        0xE1,
     ),
     (
         11,
@@ -95,7 +95,7 @@ pub const SCREEN_TILEMAP_SPECS: &[(u8, &str, usize, usize, &str, u8)] = &[
         0x436C0,
         576,
         "gfx/overworld/mariocastle.png",
-        0xE4,
+        0xE1,
     ),
     (
         12,
@@ -103,7 +103,7 @@ pub const SCREEN_TILEMAP_SPECS: &[(u8, &str, usize, usize, &str, u8)] = &[
         0x43900,
         576,
         "gfx/overworld/mariocastle.png",
-        0xE4,
+        0xE1,
     ),
     // `$3F4B1`/`$3F5A4`: the two bell-bonus rooms, bank 17 `$7800`/`$7A40`
     // copied to `$9800` (0x400 each; the 32x18 visible rows are 576 bytes).
@@ -451,6 +451,19 @@ mod tests {
         let blob = build_tilemaps_binary(&rom).expect("valid binary with bell rooms");
         assert_eq!(blob[4096 + 12 * 1024], 0x5A);
         assert_eq!(blob[4096 + 13 * 1024], 0x5B);
+    }
+
+    #[test]
+    fn coin_room_palettes_match_the_four_loader_writes() {
+        // `$3F3B9/$3F3F0/$3F427/$3F45E` all write 225 to sBGPalette.
+        for &(id, _, _, _, _, palette) in SCREEN_TILEMAP_SPECS {
+            if (9..=12).contains(&id) {
+                assert_eq!(palette, 0xE1);
+            }
+            if id >= 13 {
+                assert_eq!(palette, 0xE4);
+            }
+        }
     }
 
     #[test]
