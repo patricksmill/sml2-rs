@@ -283,6 +283,19 @@ pub fn build_tiles_binary(baserom: &[u8]) -> Result<Vec<u8>, String> {
                 // Screen 0: entire 6144 bytes from overworld.2bpp
                 out.extend_from_slice(ow_gfx);
             }
+            Some(room_addr) if (9..=12).contains(&id) => {
+                // `$3F307`: bank 25 `$4000..$4FFF` -> `$8800..$97FF`.
+                // `$3F58` separately installs Mario at `$8000..$87FF`.
+                // These rooms do not use the zone loader's 32-tile prefix.
+                let mario = baserom
+                    .get(0x18000..0x18800)
+                    .ok_or("truncated room Mario gfx")?;
+                let room = baserom
+                    .get(room_addr..room_addr + 0x1000)
+                    .ok_or_else(|| format!("screen {id}: truncated coin-room gfx"))?;
+                out.extend_from_slice(mario);
+                out.extend_from_slice(room);
+            }
             Some(zone_addr) => {
                 let zone_gfx = baserom
                     .get(zone_addr..zone_addr + ZONE_GFX_LEN)
@@ -458,5 +471,25 @@ mod tests {
         let s1 = &blob[OVERWORLD_GFX_LEN..OVERWORLD_GFX_LEN * 2];
         assert!(s1[..COMMON_CURSOR_LEN].iter().all(|&b| b == 0xAA));
         assert!(s1[COMMON_CURSOR_LEN..].iter().all(|&b| b == 0xBB));
+    }
+
+    #[test]
+    fn coin_rooms_copy_the_rom_blocks_to_their_vram_addresses() {
+        let mut rom = vec![0u8; 0x70000];
+        rom[0x18000..0x18800].fill(0x19);
+        // Distinct bytes per tile expose shifts and accidental over-copying.
+        for tile in 0..256 {
+            rom[0x64000 + tile * 16..0x64000 + (tile + 1) * 16].fill(tile as u8);
+        }
+        rom[0x65000..0x65600].fill(0xEE);
+        let blob = build_tiles_binary(&rom).unwrap();
+        for screen in 9..=12 {
+            let vram = &blob[screen * 0x1800..(screen + 1) * 0x1800];
+            assert_eq!(&vram[..0x800], &rom[0x18000..0x18800]);
+            assert_eq!(&vram[0x800..], &rom[0x64000..0x65000]);
+            // `$6109B`'s claw tiles $B2/$B3 must address bank 25 $4320/$4330.
+            assert_eq!(&vram[0xB2 * 16..0xB3 * 16], &[0x32; 16]);
+            assert_eq!(&vram[0xB3 * 16..0xB4 * 16], &[0x33; 16]);
+        }
     }
 }
