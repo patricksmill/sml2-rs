@@ -541,8 +541,10 @@ pub fn render_castle_reveal(
     all_six_coins: bool,
     bgp: u8,
     obp1: u8,
-    // `$FFC4`/`$FFC5`/`$FFC6`: the walk-in's Mario, tile `$BF + (anim >> 4)`.
+    // `$FFC4`/`$FFC5`/`$FFC6`: the walk-in's Mario — `$FFC6` is a `$5297`
+    // sprite id (`$BF + (anim >> 4)`), not a tile number.
     mario: Option<(u8, u8, u8)>,
+    metas: &crate::room_sprites::SpriteMetas,
     vw: usize,
     vh: usize,
 ) -> Vec<u8> {
@@ -580,19 +582,21 @@ pub fn render_castle_reveal(
             }
         }
     }
-    if let Some((x, y, tile)) = mario {
+    if let Some((x, y, id)) = mario {
         let obj_shades = crate::video::bgp_shades(obp1);
-        draw_obj_tile(
-            &mut img,
-            &vram,
-            &obj_shades,
-            x as i32 - 8,
-            y as i32 - 16,
-            tile,
-            0,
-            vw,
-            vh,
-        );
+        for (dx, dy, tile, attr) in metas.expand(id, x, y) {
+            draw_obj_tile(
+                &mut img,
+                &vram,
+                &obj_shades,
+                dx as i32 - 8,
+                dy as i32 - 16,
+                tile,
+                attr,
+                vw,
+                vh,
+            );
+        }
     }
     img
 }
@@ -2408,8 +2412,9 @@ mod reveal_render_tests {
     #[test]
     fn the_six_coins_patch_the_five_runs() {
         let reveal = reveal();
-        let plain = render_castle_reveal(&reveal, false, 0xE4, 0xD0, None, 160, 144);
-        let patched = render_castle_reveal(&reveal, true, 0xE4, 0xD0, None, 160, 144);
+        let metas = crate::room_sprites::SpriteMetas::default();
+        let plain = render_castle_reveal(&reveal, false, 0xE4, 0xD0, None, &metas, 160, 144);
+        let patched = render_castle_reveal(&reveal, true, 0xE4, 0xD0, None, &metas, 160, 144);
         assert_ne!(plain, patched, "tile $74 lands in the five runs");
         assert!(plain.iter().any(|&p| p != plain[0]), "the screen is drawn");
         // The runs sit at rows 10-14, so the first row is untouched.

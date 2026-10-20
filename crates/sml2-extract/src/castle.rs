@@ -150,6 +150,15 @@ pub const BLOBS: &[BlobSpec] = &[
     },
     // `$51B1`/`$62E6`: 64 metasprite pointers each, followed by 4-byte
     // (dx, dy, tile, attr) records ended by a `$FF` tile.
+    // `$5297`: bank 1 `$4000`'s 242 sprite ids and (dy, dx, tile, attr)
+    // records, ended by a `$80` y-offset. The rooms and reveal use it.
+    BlobSpec {
+        name: "sprite_metasprites",
+        bank: 1,
+        addr: 0x4000,
+        end: 0x526A,
+        kind: BlobKind::Fixed,
+    },
     BlobSpec {
         name: "room_metasprites",
         bank: 24,

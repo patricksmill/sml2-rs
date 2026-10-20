@@ -127,7 +127,7 @@ pub struct CastleRoom {
     pub slots: [RoomSlot; 5],
     /// `sCastleSlotIndex` (`$A7E9`).
     pub slot_index: u8,
-    /// OAM entries 0-3 (`$FFC4..$C7`): x, y, tile, attr.
+    /// Sprite staging (`$FFC4..$C7`): y, x, sprite id, palette override.
     pub oam: [u8; 4],
     /// `sSfxRequest0`/`1`/`2`.
     pub sfx: [u8; 3],
@@ -164,6 +164,8 @@ pub struct CastleRoom {
     sprite_lists: [Vec<u8>; 2],
     /// `$51B1` (coin) / `$62E6` (bell): the metasprite table `$6109B` reads.
     metasprites: RoomSpriteTable,
+    /// `$5297`: `$FFC6` is a sprite id into this table, not a tile number.
+    sprite_metas: crate::room_sprites::SpriteMetas,
 }
 
 impl CastleRoom {
@@ -221,6 +223,9 @@ impl CastleRoom {
             metasprites: RoomSpriteTable::new(
                 0x51B1,
                 scripts.blob("room_metasprites").unwrap_or(&[]),
+            ),
+            sprite_metas: crate::room_sprites::SpriteMetas::new(
+                scripts.blob("sprite_metasprites").unwrap_or(&[]),
             ),
         }
     }
@@ -290,7 +295,7 @@ impl CastleRoom {
     }
 
     /// `$3F3B9`..`$3F45E`: stage a coin room (screens 9-12). `$3F35A` sets
-    /// Mario's OAM entry to `(156, 40)`; `$3F495` asks for SFX 5 (the door's
+    /// Mario's OAM position to `(x=40, y=156)`; `$3F495` asks for SFX 5 (the door's
     /// music 21 comes from `MapSim`'s door entry).
     pub fn enter_coin(scripts: &CastleScripts, screen: u8) -> Self {
         let mut room = Self::coin(scripts);
@@ -310,13 +315,18 @@ impl CastleRoom {
     /// `$6109B` writes `(x, y, tile, attr)`; the map renderer wants
     /// `(y, x, tile, attr)`, and an OAM y of 0 is off-screen.
     ///
-    /// OAM entry 0 (`$FFC4..$C7`) is written directly by the room, not by the
-    /// expander: it is Mario, or the coin room's `$4C4D`/`$4C51` item preview.
+    /// The room stages Mario or the `$4C4D`/`$4C51` item preview in
+    /// `$FFC4..$C7`; `$5297` expands its sprite id before the room decorations.
     /// The first record at `$A6B5` is the expander's blank `$7F` placeholder.
     pub fn oam_cells(&self) -> Vec<(u8, u8, u8, u8)> {
         let mut cells = Vec::new();
         if self.oam[2] != 0 {
-            cells.push((self.oam[1], self.oam[0], self.oam[2], self.oam[3]));
+            for (x, y, tile, attr) in
+                self.sprite_metas
+                    .expand(self.oam[2], self.oam[1], self.oam[0])
+            {
+                cells.push((y, x, tile, attr));
+            }
         }
         for index in 1..16 {
             let at = index * 3;
@@ -1920,20 +1930,27 @@ mod oam_tests {
             cells.iter().all(|&(_, _, tile, _)| tile != 0x7F),
             "no blank placeholder cells"
         );
-        assert_eq!(cells[0], (40, 156, 0x30, 0), "the preview at (156, 40)");
-        assert_eq!(cells[1].2, 0xB0, "record 1's first tile");
-        // The item preview is OAM entry 0 at `(156, 40)`; `$60C41` gives the
-        // tile for the current powerup (`$4C4D[0] = $20`).
-        assert_eq!(cells[0], (40, 156, 0x30, 0), "the preview draws first");
+        // `$3F35A`: y=156, x=40, id=$30. Bank 1's mapping is six
+        // `(dy, dx, tile, attr)` records, not one tile numbered $30.
+        assert_eq!(cells[0], (152, 32, 0x4C, 0), "the preview draws first");
+        assert_eq!(cells[1], (152, 39, 0x4C, 0x20));
+        assert_eq!(cells[4], (168, 32, 0x6C, 0));
+        assert_eq!(cells[6].2, 0xB0, "record 1 follows the six preview cells");
         room.oam[2] = 0x45;
-        assert_eq!(room.oam_cells()[0], (40, 156, 0x45, 0));
+        assert_eq!(room.oam_cells()[0], (144, 33, 0x75, 0x20));
     }
 
     #[test]
     fn the_bell_room_sprites_use_the_bell_table() {
         let mut room = CastleRoom::enter_bell_a(&scripts(), 0);
         let cells = room.oam_cells();
-        assert_eq!(cells[0], (240, 124, 0x20, 0), "Mario at (124, 240)");
-        assert_eq!(cells[1].2, 0x2A, "the bell table's first tile");
+        assert_eq!(
+            cells[0],
+            (120, 232, 0x41, 0x20),
+            "Mario starts off the right edge"
+        );
+        assert_eq!(cells[6].2, 0x2A, "the bell table follows Mario's six cells");
+        room.oam[1] = 40; // `$4539` walks x leftward; y stays at 124.
+        assert_eq!(room.oam_cells()[0], (120, 32, 0x41, 0x20));
     }
 }

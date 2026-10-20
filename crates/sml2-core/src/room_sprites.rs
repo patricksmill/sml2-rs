@@ -79,9 +79,87 @@ impl RoomSpriteTable {
     }
 }
 
+/// `$5297`: the map's sprite table (bank 1 `$4000`). `$FFC6` holds an *id*,
+/// not a tile; each id points at 4-byte `(dy, dx, tile, attr)` records that
+/// end when the y-offset is `$80`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SpriteMetas {
+    bytes: Vec<u8>,
+}
+
+impl SpriteMetas {
+    pub const BASE: u16 = 0x4000;
+    pub const ENTRIES: usize = 242;
+
+    pub fn new(bytes: &[u8]) -> Self {
+        Self {
+            bytes: bytes.to_vec(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bytes.len() < Self::ENTRIES * 2
+    }
+
+    /// Expand the sprite `id` at `(x, y)`; the record's offsets are signed
+    /// bytes relative to the sprite's centre.
+    pub fn expand(&self, id: u8, x: u8, y: u8) -> Vec<OamCell> {
+        let mut cells = Vec::new();
+        if self.is_empty() || id as usize >= Self::ENTRIES {
+            return cells;
+        }
+        let index = id as usize;
+        let ptr = u16::from_le_bytes([self.bytes[index * 2], self.bytes[index * 2 + 1]]);
+        if ptr < Self::BASE {
+            return cells;
+        }
+        let mut at = (ptr - Self::BASE) as usize;
+        while at + 4 <= self.bytes.len() && cells.len() < OAM_LIMIT {
+            let (dy, dx, tile, attr) = (
+                self.bytes[at],
+                self.bytes[at + 1],
+                self.bytes[at + 2],
+                self.bytes[at + 3],
+            );
+            at += 4;
+            if dy == 0x80 {
+                break;
+            }
+            cells.push((x.wrapping_add(dx), y.wrapping_add(dy), tile, attr));
+        }
+        cells
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_sprite_table_expands_a_mario_frame() {
+        let rom = std::fs::read("../../extracted/map/castle_scripts.bin")
+            .or_else(|_| std::fs::read("extracted/map/castle_scripts.bin"))
+            .expect("castle scripts");
+        let json = std::fs::read_to_string("../../extracted/map/castle_scripts.json")
+            .or_else(|_| std::fs::read_to_string("extracted/map/castle_scripts.json"))
+            .expect("castle script index");
+        let meta: serde_json::Value = serde_json::from_str(&json).expect("json");
+        let entry = meta["blobs"]
+            .as_array()
+            .expect("blobs")
+            .iter()
+            .find(|b| b["name"] == "sprite_metasprites")
+            .expect("blob");
+        let at = entry["offset"].as_u64().expect("offset") as usize;
+        let len = entry["len"].as_u64().expect("len") as usize;
+        let table = SpriteMetas::new(&rom[at..at + len]);
+        let cells = table.expand(0xBB, 0x28, 0x60);
+        assert_eq!(cells.len(), 4, "a 2x2 frame");
+        assert_eq!(cells[0], (32, 88, 0x0D, 0x00));
+        assert_eq!(cells[1], (40, 88, 0x0D, 0x20));
+        assert_eq!(cells[2], (32, 96, 0x0E, 0x00));
+        assert_eq!(cells[3], (40, 96, 0x0E, 0x20));
+    }
 
     #[test]
     fn the_coin_rooms_first_sprite_is_a_two_by_three_block() {

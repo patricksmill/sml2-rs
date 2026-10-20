@@ -175,12 +175,22 @@ impl Session {
                 seq.coins.iter().all(|&coin| coin & 0x80 != 0),
                 if seq.bgp == 0 { 0xE4 } else { seq.bgp },
                 if seq.obp1 == 0 { 0xD0 } else { seq.obp1 },
-                // `$3053B`/`$30557`: the walk-in tile is `$BF + (anim >> 4)`.
+                // `$30777`: Mario's walk-in uses $BB/$BC/$BB/$BD. The
+                // $BF frames belong to the golden coin animation in $30567.
                 Some((
                     seq.walk_x,
                     seq.walk_y,
-                    0xBFu8.wrapping_add(seq.walk_anim >> 4),
+                    if matches!(
+                        seq.state,
+                        sml2_core::castle_sequence::STATE_REVEAL_A
+                            | sml2_core::castle_sequence::STATE_REVEAL_B
+                    ) {
+                        [0xBB, 0xBC, 0xBB, 0xBD][((self.frame_n & 0x0C) >> 2) as usize]
+                    } else {
+                        0xBFu8.wrapping_add(seq.walk_anim >> 4)
+                    },
                 )),
+                &self.assets.sprite_metas,
                 vw,
                 vh,
             ),

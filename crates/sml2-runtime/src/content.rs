@@ -106,6 +106,8 @@ pub struct SessionAssets {
     pub room_common_tiles: sml2_core::map::RoomCommonTiles,
     /// `castle_reveal_tiles.bin` + `castle_reveal_tilemap.bin`.
     pub castle_reveal: sml2_core::map::CastleRevealTiles,
+    /// `$5297`'s sprite table (bank 1 `$4000`), carried inside `castle_scripts`.
+    pub sprite_metas: sml2_core::room_sprites::SpriteMetas,
     pub hud: HudStrip,
     pub anim_rows: Vec<u8>,
     pub scripts: SceneScripts,
@@ -138,6 +140,9 @@ impl SessionAssets {
         let overworld_manifest = load_overworld_manifest_from(source);
         let overworld_tiles = load_overworld_tiles_from(source);
         let castle_scripts = load_castle_scripts_from(source);
+        let sprite_metas = sml2_core::room_sprites::SpriteMetas::new(
+            castle_scripts.blob("sprite_metasprites").unwrap_or(&[]),
+        );
         let ending_scene = source
             .read_text("ending/scene.json")
             .ok()
@@ -196,6 +201,7 @@ impl SessionAssets {
             bell_room_tiles,
             room_common_tiles,
             castle_reveal,
+            sprite_metas,
             hud,
             anim_rows,
             scripts,

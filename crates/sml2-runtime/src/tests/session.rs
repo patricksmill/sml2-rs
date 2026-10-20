@@ -597,8 +597,8 @@ fn the_coin_room_draws_the_item_preview() {
     assert!(
         diffs
             .iter()
-            .all(|&(x, y)| (148..156).contains(&x) && (24..32).contains(&y)),
-        "the preview sits at OAM (156, 40)"
+            .all(|&(x, y)| (24..39).contains(&x) && (136..144).contains(&y)),
+        "the preview enters at OAM x=40, y=156 along the bottom left"
     );
     let _ = std::fs::remove_file(&tmp_save);
 }
@@ -611,12 +611,19 @@ fn the_reveal_draws_the_walk_in() {
     let mut seq = sml2_core::castle_sequence::CastleSequence::default();
     seq.walk_x = 40;
     seq.walk_y = 96;
-    seq.walk_anim = 0x18;
+    seq.state = sml2_core::castle_sequence::STATE_REVEAL_B;
     runner.session.begin_castle_sequence(seq, 8, 0, 0);
     let drawn = runner.render_frame();
+    // `$30777[0] = $BB`: tile $0D row 2 is $0F/$08. OBP $D0
+    // makes its four opaque pixels black/white/white/white; the right cell
+    // mirrors them. A coin sprite also changes pixels but fails this row.
+    assert_eq!(
+        &drawn[74 * 160 + 28..74 * 160 + 36],
+        &[0, 255, 255, 255, 255, 255, 255, 0]
+    );
     let mut bare_seq = sml2_core::castle_sequence::CastleSequence::default();
-    bare_seq.walk_anim = 0x18;
-    bare_seq.walk_x = 0; // OAM x 0 puts the sprite above the screen
+    bare_seq.state = sml2_core::castle_sequence::STATE_REVEAL_B;
+    bare_seq.walk_x = 0; // OAM x 0 puts the sprite outside the viewport
     runner.session.begin_castle_sequence(bare_seq, 8, 0, 0);
     let bare = runner.render_frame();
     let diffs: Vec<(usize, usize)> = drawn
@@ -630,15 +637,16 @@ fn the_reveal_draws_the_walk_in() {
     assert!(
         diffs
             .iter()
-            .all(|&(x, y)| (32..40).contains(&x) && (80..88).contains(&y)),
-        "Mario sits at (walk_x - 8, walk_y - 16)"
+            .all(|&(x, y)| (24..=40).contains(&x) && (72..88).contains(&y)),
+        "Mario's 2x2 sprite sits at (walk_x, walk_y)"
     );
-    // `$30557`: the tile is `$BF + (anim >> 4)`, so the frame changes with anim.
+    // `$30777`: the free-running frame counter picks Mario's next walk pose.
     let mut slow = sml2_core::castle_sequence::CastleSequence::default();
     slow.walk_x = 40;
     slow.walk_y = 96;
-    slow.walk_anim = 0x08;
+    slow.state = sml2_core::castle_sequence::STATE_REVEAL_B;
     runner.session.begin_castle_sequence(slow, 8, 0, 0);
+    runner.session.frame_n = 4;
     let other = runner.render_frame();
     assert_ne!(drawn, other, "the walk animation changes Mario's tile");
     let _ = std::fs::remove_file(&tmp_save);
