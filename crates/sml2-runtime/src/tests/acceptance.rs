@@ -548,43 +548,21 @@ fn six_coins_wario_and_ending_tape() {
         ctx.sim.fade_timer = 2;
         ctx.cam.boss_fight_phase = 3; // the fight's terminal phase
     }
-    // The ending scene's own assets (`extracted/ending/scene.json`); substate 4
-    // holds until the scene is loaded.
-    let ending_assets = sml2_core::ending_scene::EndingAssets::from_json(include_str!(
-        "../../../../extracted/ending/scene.json"
-    ))
-    .expect("ending scene asset");
-    {
-        let SessionState::InLevel(ctx) = &mut session.state else {
-            panic!("level 24 is live");
-        };
-        let mut state = 4;
-        let mut fade = 0x0100;
-        ctx.ending_scene.load(ending_assets, &mut state, &mut fade);
-    }
     let mut frames = 0;
     let mut substate = 0;
-    for _ in 0..30000 {
+    for _ in 0..200000 {
         idle(&mut session, 1);
         frames += 1;
         substate = match &session.state {
             SessionState::InLevel(ctx) => ctx.ending_sequence.substate,
             _ => substate,
         };
-        if !matches!(session.state, SessionState::InLevel(_)) || substate >= 18 {
+        if !matches!(session.state, SessionState::InLevel(_)) || substate == 19 {
             break;
         }
     }
-    let entry_state = match &session.state {
-        SessionState::InLevel(ctx) => ctx.ending_entry.state(),
-        _ => sml2_core::ending_entry::EndingEntryState::Sequence,
-    };
-    assert!(
-        entry_state == sml2_core::ending_entry::EndingEntryState::Sequence || substate > 0,
-        "the ending entry reached its sequence (substate {substate}, {frames} frames)"
-    );
-    assert!(
-        substate >= 18,
-        "the credits page is streaming (substate {substate}, {frames} frames)"
+    assert_eq!(
+        substate, 19,
+        "the credits sequence reached its terminal substate ({frames} frames)"
     );
 }

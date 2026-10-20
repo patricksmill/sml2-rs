@@ -97,6 +97,9 @@ pub struct SessionAssets {
     pub overworld_tiles: OverworldTiles,
     /// The bank-24 room blobs (`map/castle_scripts.*`).
     pub castle_scripts: sml2_core::castle::CastleScripts,
+    /// `ending/scene.json` and `ending/credits.bin`.
+    pub ending_scene: Option<sml2_core::ending_scene::EndingAssets>,
+    pub credits_text: Vec<u8>,
     /// Bank 25 `$5000` tiles for the bell-bonus rooms (screens 13/14).
     pub bell_room_tiles: sml2_core::map::BellRoomTiles,
     pub hud: HudStrip,
@@ -131,6 +134,11 @@ impl SessionAssets {
         let overworld_manifest = load_overworld_manifest_from(source);
         let overworld_tiles = load_overworld_tiles_from(source);
         let castle_scripts = load_castle_scripts_from(source);
+        let ending_scene = source
+            .read_text("ending/scene.json")
+            .ok()
+            .and_then(|text| sml2_core::ending_scene::EndingAssets::from_json(&text).ok());
+        let credits_text = source.read("ending/credits.bin").unwrap_or_default();
         let bell_room_tiles = load_bell_room_tiles_from(source);
         let hud: HudStrip = serde_json::from_str(&source.read_text("hud.json")?)?;
         let anim_rows = source.read("tileanim.bin")?;
@@ -166,6 +174,8 @@ impl SessionAssets {
             overworld_manifest,
             overworld_tiles,
             castle_scripts,
+            ending_scene,
+            credits_text,
             bell_room_tiles,
             hud,
             anim_rows,

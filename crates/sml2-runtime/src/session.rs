@@ -72,6 +72,8 @@ pub struct LevelContext {
     pub ending_entry: EndingEntry,
     pub ending_sequence: EndingSequenceController,
     pub ending_scene: EndingScene,
+    /// `ending/credits.bin`, sliced into the step context.
+    pub credits_text: Vec<u8>,
     pub scripts: SceneScripts,
     pub tilesets: Tilesets,
     pub arena_layout: Option<LevelLayout>,
@@ -172,6 +174,7 @@ impl LevelContext {
             ending_entry: EndingEntry::default(),
             ending_sequence: EndingSequenceController::new(),
             ending_scene: EndingScene::default(),
+            credits_text: Vec::new(),
             scripts,
             tilesets,
             arena_layout,
@@ -243,7 +246,8 @@ impl LevelContext {
                         .step(&mut sml2_core::ending_sequence::EndingStepContext {
                             scene: &mut self.ending_scene,
                             rom: None,
-                            credits_text: None,
+                            credits_text: (!self.credits_text.is_empty())
+                                .then_some(self.credits_text.as_slice()),
                             object_tables: obj_tables.as_ref(),
                             decrement_fade: true,
                         });
@@ -646,7 +650,14 @@ impl Session {
             self.assets.hud.clone(),
             self.assets.object_tables.clone(),
         );
-        self.state = SessionState::InLevel(Box::new(ctx));
+        let mut ctx = Box::new(ctx);
+        ctx.credits_text = self.assets.credits_text.clone();
+        if let Some(assets) = self.assets.ending_scene.clone() {
+            let mut state = 4;
+            let mut fade = 0x0100;
+            ctx.ending_scene.load(assets, &mut state, &mut fade);
+        }
+        self.state = SessionState::InLevel(ctx);
         Ok(())
     }
 
@@ -994,11 +1005,17 @@ impl Session {
                             self.assets.object_tables.clone(),
                         )
                     }) {
-                        Ok(ctx) => {
+                        Ok(mut ctx) => {
                             // $3C1A2 stops the map theme before loading, and the
                             // console spends the next 37 frames fading the map
                             // to white with the level loading behind a blank
                             // LCD; the level goes live at the end of that.
+                            ctx.credits_text = self.assets.credits_text.clone();
+                            if let Some(assets) = self.assets.ending_scene.clone() {
+                                let mut state = 4;
+                                let mut fade = 0x0100;
+                                ctx.ending_scene.load(assets, &mut state, &mut fade);
+                            }
                             self.sound_driver.music_request = 0xFF;
                             self.pending_level = Some(Box::new(MapTransition {
                                 ctx: Box::new(ctx),

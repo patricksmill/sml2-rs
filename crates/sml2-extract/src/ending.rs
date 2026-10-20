@@ -6,6 +6,9 @@ use sml2_core::ending_scene::EndingAssets;
 // ld a,$11 / ld hl,$5800 / ld bc,$1800; then bank $1A, de=$548E.
 const TILES_ROM: usize = 0x45800;
 const TILEMAP_ROM: usize = 0x6948E;
+/// `$68572`'s service starts its pointer at bank 26 `$56CE`; rows are 20 bytes,
+/// `$FF` is a blank row and `$FE` ends the sequence.
+const CREDITS_TEXT_ROM: usize = 26 * 0x4000 + (0x56CE - 0x4000);
 
 fn extract(rom: &[u8]) -> Result<EndingAssets, String> {
     let tiles = rom
@@ -17,10 +20,26 @@ fn extract(rom: &[u8]) -> Result<EndingAssets, String> {
     EndingAssets::new(tiles.to_vec(), tilemap.to_vec())
 }
 
+/// The credits text rows up to and including the `$FE` terminator.
+pub fn credits_text(rom: &[u8]) -> Result<Vec<u8>, String> {
+    let rest = rom
+        .get(CREDITS_TEXT_ROM..)
+        .ok_or("credits text truncated")?;
+    let len = rest
+        .iter()
+        .position(|&b| b == 0xFE)
+        .ok_or("credits text has no $FE terminator")?
+        + 1;
+    Ok(rest[..len].to_vec())
+}
+
 pub fn emit(rom: &[u8], extracted: &Path) -> Result<(), Box<dyn Error>> {
     let assets = extract(rom)?;
     let dir = extracted.join("ending");
     fs::create_dir_all(&dir)?;
+    let credits = credits_text(rom)?;
+    fs::write(dir.join("credits.bin"), &credits)?;
+    println!("wrote ending/credits.bin: {} bytes", credits.len());
     fs::write(
         dir.join("scene.json"),
         serde_json::to_string_pretty(&assets)? + "\n",

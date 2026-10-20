@@ -166,11 +166,10 @@ Coin refusal stays covered by `the_coin_doors_take_their_bcd_price`.
 
 `six_coins_wario_and_ending_tape` sets the six golden-coin flags, puts level 24
 live, drives the fight to its terminal phase (`boss_clear`, phase 3) and runs
-the ending entry into the credits page: the scene asset loads from
-`extracted/ending/scene.json` and the sequence reaches substate 18 (the text
-stream). Its terminal substate 19 waits on `credits_text`, whose table the
-`$68572` service reads and which is not extracted yet — that is the one
-remaining asset for the credits to finish.
+the ending entry through the credits to the terminal substate 19. The runtime
+now stages `extracted/ending/scene.json` and the new
+`extracted/ending/credits.bin` (bank 26 `$56CE`, 1,798 bytes up to the `$FE`
+terminator — the table `$68572` reads) into every level context.
 
 ## Definition of done
 
