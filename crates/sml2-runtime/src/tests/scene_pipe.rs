@@ -9,6 +9,92 @@ fn level_10_first_pipe_exits_into_the_collision_room() {
     pipe_roundtrip(true);
 }
 
+/// `$05D5` -> `$0B2A` -> `$20A4` must claim the scene on the edge frame,
+/// then `$2323` writes both Y pages on the first resume. Exercise the live
+/// session caller so a helper-only test cannot hide an extra gameplay step.
+#[test]
+fn live_session_pipe_page_write_preserves_low_bytes_and_suspends_gameplay() {
+    use crate::session::{FrameInput, Session, SessionAssets, SessionState};
+
+    fn level(session: &Session) -> &crate::session::LevelContext {
+        match &session.state {
+            SessionState::InLevel(ctx) => ctx,
+            _ => panic!("expected the pipe's live level"),
+        }
+    }
+
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(10, 0).unwrap();
+    if let SessionState::InLevel(ctx) = &mut session.state {
+        ctx.sim.x = 0x1F0;
+        ctx.sim.y = 0xA4;
+        ctx.sim.phase = 0;
+        ctx.sim.pipe_dir = 0x30;
+        ctx.sim.on_ground = true;
+        ctx.sim.hvel = 0x80;
+        ctx.cam = CameraSim::new(0x1B0, 0xC3);
+        ctx.cam.prev_mario_y_lo = 0xA4;
+        ctx.cam.update_enables(ctx.sim.x);
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../extracted/levels");
+        ctx.cam.edge_map.copy_from_slice(&fs::read(root.join("level11.edge.bin")).unwrap());
+        ctx.cam.scene_map = fs::read(root.join("level11.scene.bin")).unwrap();
+    }
+    let input = FrameInput {
+        keys: PlayerKeys { right: true, ..Default::default() },
+        div: 0,
+    };
+    // The first pass reads the prior draw at screen X $A0, even though
+    // this frame crosses $A1. Its draw publishes the next pass's latch.
+    session.advance(input);
+    let ctx = level(&session);
+    assert_eq!((ctx.cam.transition, ctx.cam.scene_id), (0, 0));
+    assert!(ctx.cam.mario_screen_x >= 0xA1);
+    assert!(!ctx.scene_vm.owns_gameplay());
+    session.advance(input);
+    let ctx = level(&session);
+    assert_eq!((ctx.cam.transition, ctx.cam.scene_id), (1, 17));
+    assert!(ctx.scene_vm.owns_gameplay());
+    let source = (ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y);
+    let clock = (ctx.obj.fff0, ctx.obj.update_phase);
+    let timer = ctx.sim.level_timer;
+
+    // `$20A4`'s single prologue wait has completed; scene 17 is `40 21 FF`.
+    session.advance(input);
+    let ctx = level(&session);
+    assert_eq!(ctx.sim.x, source.0);
+    assert_eq!(ctx.cam.x, source.2);
+    assert_eq!(ctx.sim.y.to_le_bytes(), [source.1 as u8, 2]);
+    assert_eq!(ctx.cam.y.to_le_bytes(), [source.3 as u8, 2]);
+    assert_eq!((ctx.obj.fff0, ctx.obj.update_phase), clock);
+    assert_eq!(ctx.sim.level_timer, timer);
+    assert_eq!(ctx.cam.scene_transition_flag, 0);
+    let destination = (ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y);
+
+    // `$2323` own wait, two streamer waits and the `$21E8` tail wait.
+    // Each advance resumes one wait; END returns ownership after the last.
+    for _ in 0..3 {
+        session.advance(input);
+        let ctx = level(&session);
+        assert!(ctx.scene_vm.owns_gameplay());
+        assert_eq!((ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y), destination);
+        assert_eq!((ctx.obj.fff0, ctx.obj.update_phase), clock);
+        assert_eq!(ctx.sim.level_timer, timer);
+    }
+    assert_eq!(level(&session).cam.scene_transition_flag, 1);
+    session.advance(input);
+    let ctx = level(&session);
+    assert!(!ctx.scene_vm.owns_gameplay());
+    assert_eq!((ctx.cam.scene_id, ctx.cam.scene_transition_latch), (0, 1));
+    assert_eq!((ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y), destination);
+
+    session.advance(input);
+    let ctx = level(&session);
+    assert_eq!(ctx.sim.x, destination.0 + 1);
+    assert_eq!(ctx.cam.x, destination.2 + 4);
+    assert_eq!((ctx.sim.y, ctx.cam.y), (destination.1, destination.3));
+    assert_ne!(ctx.obj.update_phase, clock.1);
+}
+
 fn pipe_roundtrip(reverse: bool) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../extracted");
     let layout =

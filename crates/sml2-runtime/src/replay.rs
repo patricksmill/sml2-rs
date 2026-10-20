@@ -296,6 +296,9 @@ pub(crate) fn run_replay(
     cam.pan_timer = f0.pan.unwrap_or(0); // documented initial snapshot only
     cam.update_scroll();
     cam.prev_mario_y_lo = f0.y as u8;
+    // Frozen tapes begin from a live snapshot, rather than the level loader.
+    // Seed its projection once; subsequent Mario draws own this latch.
+    cam.mario_screen_x = (f0.x as u8).wrapping_sub(cam.x as u8).wrapping_add(96);
     cam.map_scroll_limit = f0.limit;
     cam.auto_scroll = f0.autoscroll;
     if let Some(e) = edge_map.as_ref() {

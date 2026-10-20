@@ -19,6 +19,7 @@ fn door_boss_real_level_scene_entry_selects_portable_definition() {
     player.y = 0x01D4;
     let mut camera = CameraSim::new(0x0EB0, 0x01C0);
     camera.prev_mario_y_lo = player.y as u8;
+    camera.update_enables(player.x); // Initial snapshot includes the preceding draw.
     camera
         .edge_map
         .copy_from_slice(&fs::read(dir.join("level10.edge.bin")).unwrap());
@@ -75,6 +76,7 @@ fn door_boss_real_level_scene_entry_selects_portable_definition() {
             // This entry harness omits PlayerSim::step, which normally ticks fade.
             player.tick_fade_timer();
             camera.step(&mut player);
+            camera.update_enables(player.x); // `$54A7`: draw publishes the next edge latch.
             if camera.scene_load_pending {
                 let definition = boss_def_index(manifest.level_id, camera.boss_fight_phase);
                 assert_eq!(definition, 1);

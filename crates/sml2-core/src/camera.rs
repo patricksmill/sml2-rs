@@ -41,6 +41,9 @@ pub struct CameraSim {
     pub map_scroll_limit: bool,
     pub map_scroll_flags: u8,
     pub prev_mario_y_lo: u8,
+    /// `$A23C`: screen X published by the previous Mario draw (`$54A7`).
+    /// Edge triggers consume this latch before the current frame draws.
+    pub mario_screen_x: u8,
     /// `sScreenEdgeMap[y_hi * 16 + x_hi]` — per-16-cell-sector scroll locks
     /// (bit0 left edge `$B0`, bit1 `$50`, bit2 up `$48`, bit3 down `$C0`);
     /// zero for free-scroll levels.
@@ -114,6 +117,7 @@ impl CameraSim {
             map_scroll_limit: false,
             map_scroll_flags: 0,
             prev_mario_y_lo: y as u8, // caller seeds with the live value
+            mario_screen_x: 0x40, // `$0F2A` level reset
             edge_map: [0; 48],
             edge_now: None,
             auto_scroll: 0,
@@ -147,6 +151,7 @@ impl CameraSim {
         self.x = x;
         self.y = y;
         self.prev_mario_y_lo = mario_y_lo;
+        self.mario_screen_x = 0x40;
         self.transition = 0;
         self.edge_now = None;
         self.map_scroll_flags = 0;
@@ -335,6 +340,7 @@ impl CameraSim {
     /// its side. Runs after the camera in the frame; call it once per step.
     pub fn update_enables(&mut self, mario_x: u16) {
         let sx = ((mario_x as u8).wrapping_sub(self.x as u8)).wrapping_add(96);
+        self.mario_screen_x = sx;
         if sx >= 0x60 {
             self.right_enabled = true;
         } else {
@@ -359,8 +365,7 @@ impl CameraSim {
             // The same shape as `$0B5E`, but `>=` where that one tests `==`,
             // and a Mario screen X below $A1 `ret`s outright — it does not
             // fall through to the scroll the way $0B5E's tail does.
-            let sx = ((sim.x as u8).wrapping_sub(cam_lo)).wrapping_add(96);
-            if sx < 0xA1 {
+            if self.mario_screen_x < 0xA1 {
                 return;
             }
             self.transition = 1;
@@ -421,8 +426,7 @@ impl CameraSim {
             // once Mario's screen X >= $A1; above it the camera pulls back; else
             // the normal right scroll. All paths then fall into $0BE5.
             if edges & 1 != 0 && (self.x as u8) == 0xB0 {
-                let sx = (mx_lo.wrapping_sub(self.x as u8)).wrapping_add(96);
-                if sx >= 0xA1 {
+                if self.mario_screen_x >= 0xA1 {
                     self.transition = 1;
                     self.scene_lookup(sim);
                 }
@@ -446,8 +450,7 @@ impl CameraSim {
             // once Mario's screen X < $0F (Mario warps to x=0, hi+1); below it a
             // pull-back; else the normal left scroll.
             if edges & 2 != 0 && (self.x as u8) == 0x50 {
-                let sx = (mx_lo.wrapping_sub(self.x as u8)).wrapping_add(96);
-                if sx < 0x0F {
+                if self.mario_screen_x < 0x0F {
                     // MarioX = 0, MarioX_hi += 1 (mod $10) — $FFC2/$FFC3
                     self.transition = 2;
                     sim.x = (((sim.x >> 8).wrapping_add(1)) & 0x0F) << 8;
@@ -804,6 +807,7 @@ mod tests {
         // Mario's screen X is (marioX - camX) + 96; the arm needs >= $A1.
         let mut sim = PlayerSim::default();
         sim.x = 0xEB0 + 0x41;
+        c.update_enables(sim.x); // Seed the preceding Mario draw.
         c.step(&mut sim);
         assert_eq!(c.transition, 1, "$0B5E starts the right transition");
         assert_eq!(c.scene_id, 0x10, "and $0F0B latches the pipe's scene");
@@ -1255,6 +1259,7 @@ mod tests {
         let (mut c, mut sim) = auto_cam(0x00B0, 0x140);
         c.edge_map[16] = 0x01; // row 1, cell 0: bit0 (the right edge)
         sim.x = 0x00F5; // sx = $F5 - $B0 + $60 = $A5
+        c.update_enables(sim.x); // Seed the preceding Mario draw.
         c.step(&mut sim);
         assert_eq!(
             c.transition, 1,
@@ -1329,6 +1334,7 @@ mod tests {
         let mut sim = PlayerSim::new();
         sim.x = 0x00F5;
         sim.y = 0x0140;
+        c.update_enables(sim.x); // Seed the preceding Mario draw.
         c.step(&mut sim);
         assert_eq!(c.transition, 1, "$0B5E's bit0 arm fires");
         let (mario_at_arm, cam_at_arm) = (sim.x, c.x);
@@ -1362,6 +1368,7 @@ mod tests {
         let mut sim = PlayerSim::new();
         sim.x = 0x02F5; // screen X $05, and Xhi 2 for the warp
         sim.y = 0x0140;
+        c.update_enables(sim.x); // Seed the preceding Mario draw.
         c.step(&mut sim);
         assert_eq!(c.transition, 2, "$0BE5's bit1 arm fires");
         assert_eq!(sim.x, 0x0300, "Mario warps to x=0 with the camera's hi+1");
@@ -1626,6 +1633,7 @@ mod tests {
         sim.x = 0x00B0 + 0x41; // sx >= $A1 -> triggers transition 1
         sim.y = 0x0048;
 
+        c.update_enables(sim.x); // Seed the preceding Mario draw.
         c.step(&mut sim);
         assert_eq!(c.transition, 1, "right transition started");
 
@@ -1663,3 +1671,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "camera_latch_tests.rs"]
+mod latch_tests;
