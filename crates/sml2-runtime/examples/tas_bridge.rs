@@ -99,8 +99,9 @@ fn write_frame(
     if state_lines {
         let line = match &session.state {
             sml2_runtime::session::SessionState::InLevel(c) => format!(
-                "STATE {} {} {} {} {}",
-                c.manifest.level_id, c.sim.x, c.sim.y, c.cam.x, c.cam.y
+                "STATE {} {} {} {} {} {:02x} {:02x} {} {}",
+                c.manifest.level_id, c.sim.x, c.sim.y, c.cam.x, c.cam.y,
+                c.sim.hvel, c.sim.vvel, u8::from(c.sim.on_ground), c.sim.phase
             ),
             _ => "STATE - - - - -".to_string(),
         };

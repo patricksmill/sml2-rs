@@ -572,11 +572,14 @@ pub struct MapTransition {
     pub frame: u16,
 }
 
-/// Frames from the first faded map frame to the first level frame: PyBoy shows
-/// $FF9B $0C at the last normal map frame, $0B one frame after the palette hits
-/// white, $02 for two frames, $03 for twenty, and the first $04 frame 37 frames
-/// after the fade started.
-pub const MAP_ENTRY_FRAMES: u16 = 37;
+/// Frames from the map's A press to the first state-`$04` frame. `$3C1EC`
+/// calls `$3E9FB` (four palette steps, twelve `$3E9EC` waits each) and then
+/// clears the tilemap before state `$0B`; `$02` lasts two frames and `$03`
+/// twenty. Measured on this movie: level 0 goes `$04` 73 frames after A, the
+/// post-bell level 74 frames after A, and the first `$181C` is the frame
+/// after `$04`. 74 lands the level on that `$04` frame, so the next step is
+/// the first player update.
+pub const MAP_ENTRY_FRAMES: u16 = 74;
 
 /// Frames after the bell script reaches state `$0A` before the hub cursor
 /// runs. Measured on the level-1 clear: `$3E9FB`'s fade, the `$3F156`
@@ -1054,7 +1057,6 @@ impl Session {
                 {
                     self.bell_fade = Some(0);
                 }
-
                 // A bonus room writes `sLives`/`sCurPowerup`/`sCoin*`; mirror
                 // them back while the room owns the screen.
                 if map_sim.room.is_some() {
@@ -1150,10 +1152,9 @@ impl Session {
                             // entering one level must retain every other clear.
                             ctx.sim.level_progress = map_sim.level_progress;
                             ctx.sim.level_tally = self.level_tally;
-                            // $3C1A2 stops the map theme before loading, and the
-                            // console spends the next 37 frames fading the map
-                            // to white with the level loading behind a blank
-                            // LCD; the level goes live at the end of that.
+                            // $3C1A2 stops the map theme before loading. `$3E9FB`
+                            // fades the map out and the level goes live on the
+                            // first state-`$04` frame, `MAP_ENTRY_FRAMES` later.
                             ctx.credits_text = self.assets.credits_text.clone();
                             if let Some(assets) = self.assets.ending_scene.clone() {
                                 let mut state = 4;

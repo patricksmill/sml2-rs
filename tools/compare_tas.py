@@ -105,10 +105,18 @@ def logic_phases(before_state, before_ff97, st4_ran, f71_phases):
     return []
 
 
-def check_divergence(frame, memory, native, threshold, live=False):
+def check_divergence(frame, memory, native, threshold, live=False, player_ran=True):
     """In-level ROM position vs the port. `live` reads `$FFC0`/`$FFC2` (the
     position `$181C` just wrote). Otherwise `sMarioX`/`sMarioY`, which the
-    state-`$04` handler publishes one frame later."""
+    state-`$04` handler publishes one frame later.
+
+    The frame that first stores state `$04` has not run the player yet, so the
+    port may still be on the last entry-hold step. That is only a missed level
+    once `$0F71` or the pipe path has run.
+    """
+    if memory[0xFF9B] == 4 and native is None and player_ran:
+        return {'frame': frame, 'dx': 0, 'dy': 0,
+                'detail': f'ROM level {memory[0xA269]} vs port not in a level'}
     if native is None or memory[0xFF9B] != 4:
         return None
     if memory[0xA269] != native['level']:
@@ -259,7 +267,8 @@ def main():
                         native = read_frame(bridge.stdout)
                     if watch and divergence is None:
                         divergence = check_divergence(
-                            index, pyboy.memory, native_state, args.diverge_threshold, live=True)
+                            index, pyboy.memory, native_state, args.diverge_threshold, live=True,
+                            player_ran=bool(f71_phases or st4_ran))
                 else:
                     bridge.stdin.write(f'{mask}\n'.encode())
                     bridge.stdin.flush()
