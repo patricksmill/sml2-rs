@@ -53,8 +53,9 @@ fn level19_header_spawn_hidden_ladder_to_alternate_bell_through_live_play() {
         (7, left_high_jump),
         (150, high_jump),
         (10, idle),
-        // Catch column 81's raised foothold before the taller formation.
-        (210, right_high_jump),
+        // Catch column 81's raised foothold before the taller formation, then
+        // leave it before the enemy below fires at the landing spot.
+        (250, right_high_jump),
         (7, left_high_jump),
         (150, high_jump),
         (10, idle),
@@ -95,7 +96,7 @@ fn level19_header_spawn_hidden_ladder_to_alternate_bell_through_live_play() {
     );
     // Reach the ladder base and settle after braking, using ordinary input.
     tape.extend(
-        [(25, right), (5, left), (3, idle)]
+        [(25, right), (5, left), (28, idle)]
             .into_iter()
             .flat_map(|(frames, held)| vec![held; frames]),
     );
@@ -229,7 +230,7 @@ fn level19_header_spawn_hidden_ladder_to_alternate_bell_through_live_play() {
     let arm = outcome
         .bell_arm
         .expect("the native ladder and platform approach must reach $4B");
-    assert_eq!((arm.frame, arm.position), (6922, (3033, 164)));
+    assert_eq!((arm.frame, arm.position), (6981, (3034, 164)));
     assert_eq!(
         (
             arm.fade_timer,
@@ -240,9 +241,9 @@ fn level19_header_spawn_hidden_ladder_to_alternate_bell_through_live_play() {
         (192, 3, 0xFF, 0)
     );
     assert_eq!(outcome.gameplay_death_frames, 0);
-    assert_eq!(outcome.frames, 7254);
-    assert_eq!(outcome.exit_completed_frame, Some(7114));
-    assert_eq!(outcome.map_handoff_frame, Some(7115));
+    assert_eq!(outcome.frames, 7320);
+    assert_eq!(outcome.exit_completed_frame, Some(7173));
+    assert_eq!(outcome.map_handoff_frame, Some(7174));
     assert_eq!((outcome.sim.x, outcome.sim.y), arm.position);
     assert_eq!((outcome.cam.x, outcome.cam.y), (2992, 181));
     assert_eq!(
@@ -281,7 +282,7 @@ fn level19_header_spawn_hidden_ladder_to_alternate_bell_through_live_play() {
             float.vvel_before,
             float.vvel_after
         ),
-        (82, 50, 49, 74, 73)
+        (83, 50, 49, 74, 73)
     );
     assert!(outcome.timed_float_frames > 0);
     assert!(outcome.active_object_frames > 0);

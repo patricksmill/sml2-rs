@@ -54,8 +54,9 @@ fn level19_header_spawn_to_plain_bell_through_live_play() {
         (7, left_high_jump),
         (150, high_jump),
         (10, idle),
-        // Catch column 81's raised foothold before the taller formation.
-        (210, right_high_jump),
+        // Catch column 81's raised foothold before the taller formation, then
+        // leave it before the enemy below fires at the landing spot.
+        (250, right_high_jump),
         (7, left_high_jump),
         (150, high_jump),
         (10, idle),
@@ -93,7 +94,7 @@ fn level19_header_spawn_to_plain_bell_through_live_play() {
         (10, idle),
         (15, right),
         // Fixed lower-corridor movement, with ordinary enemies still active.
-        (20, right),
+        (16, right),
         (20, high_jump),
         (80, right_jump),
         (80, right),
@@ -173,7 +174,7 @@ fn level19_header_spawn_to_plain_bell_through_live_play() {
     let arm = outcome
         .bell_arm
         .expect("the header approach must reach the source plain bell");
-    assert_eq!((arm.frame, arm.position), (4611, (3043, 452)));
+    assert_eq!((arm.frame, arm.position), (4648, (3043, 452)));
     assert_eq!(
         (
             arm.fade_timer,
@@ -184,9 +185,9 @@ fn level19_header_spawn_to_plain_bell_through_live_play() {
         (192, 3, 0, 0)
     );
     assert_eq!(outcome.gameplay_death_frames, 0);
-    assert_eq!(outcome.frames, 4838);
-    assert_eq!(outcome.exit_completed_frame, Some(4803));
-    assert_eq!(outcome.map_handoff_frame, Some(4804));
+    assert_eq!(outcome.frames, 4875);
+    assert_eq!(outcome.exit_completed_frame, Some(4840));
+    assert_eq!(outcome.map_handoff_frame, Some(4841));
     assert_eq!((outcome.sim.x, outcome.sim.y), arm.position);
     assert_eq!((outcome.cam.x, outcome.cam.y), (2992, 448));
     assert_eq!(
@@ -222,7 +223,7 @@ fn level19_header_spawn_to_plain_bell_through_live_play() {
             float.vvel_before,
             float.vvel_after
         ),
-        (82, 50, 49, 74, 73)
+        (83, 50, 49, 74, 73)
     );
     assert!(outcome.timed_float_frames > 0);
     assert!(outcome.active_object_frames > 0);
