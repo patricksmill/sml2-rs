@@ -24,10 +24,17 @@ def read_state(pipe):
     parts = text.split()[1:]
     if parts == ['-'] * 5:
         return None
-    if len(parts) != 5:
+    if len(parts) not in (5, 9):
         raise RuntimeError(f'malformed bridge state line: {text!r}')
-    level, x, y, cam_x, cam_y = (int(value) for value in parts)
-    return {'level': level, 'x': x, 'y': y, 'cam_x': cam_x, 'cam_y': cam_y}
+    try:
+        level, x, y, cam_x, cam_y = (int(value) for value in parts[:5])
+        state = {'level': level, 'x': x, 'y': y, 'cam_x': cam_x, 'cam_y': cam_y}
+        if len(parts) == 9:
+            state.update(hvel=int(parts[5], 16), vvel=int(parts[6], 16),
+                         on_ground=int(parts[7]), phase=int(parts[8]))
+    except ValueError as exc:
+        raise RuntimeError(f'malformed bridge state line: {text!r}') from exc
+    return state
 
 
 def read_frame(pipe):

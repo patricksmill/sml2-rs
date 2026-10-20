@@ -1,7 +1,8 @@
 //! Pipe host for tools/compare_tas.py: initial frame, then one frame per mask line.
 //! Stdout is raw 160x144 grayscale; diagnostics go to stderr. No save-file I/O.
 //! With `--state`, every frame (the first included) is preceded by a
-//! `STATE level x y camx camy` line so the viewer can compare native positions
+//! `STATE level x y camx camy hvel vvel on_ground phase` line (velocities are
+//! hexadecimal; other fields are decimal) so the viewer can compare native positions
 //! against the emulator and stop at the first divergence. `-` marks a frame
 //! outside a level.
 use sml2_core::{divider::Divider, player_sim::PlayerKeys};
@@ -90,7 +91,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// `STATE level x y camx camy`, or dashes outside a level, then the pixels.
+/// `STATE level x y camx camy hvel vvel on_ground phase`, or five dashes outside
+/// a level, then the pixels. Velocities are hexadecimal; other fields are decimal.
 fn write_frame(
     out: &mut impl Write,
     session: &Session,

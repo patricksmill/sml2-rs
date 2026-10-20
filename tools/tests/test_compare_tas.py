@@ -1,10 +1,50 @@
-"""A direction change must release the old key while preserving held buttons."""
+"""Comparison bridge protocol, button delivery, and logic phase selection."""
+import io
 from pathlib import Path
 import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from compare_tas import apply_buttons, logic_phases
+from compare_tas import apply_buttons, logic_phases, read_state
+
+
+class BridgeStateTests(unittest.TestCase):
+    def test_extended_state_leaves_pixels_and_next_frame_aligned(self):
+        pixels = bytes(range(256)) * 90  # 160 * 144 grayscale pixels
+        pipe = io.BytesIO(b'STATE 0 34 468 80 448 80 18 1 0\n' + pixels
+                          + b'STATE 1 35 469 81 449 ff 0a 0 7\n')
+        self.assertEqual(read_state(pipe), {
+            'level': 0, 'x': 34, 'y': 468, 'cam_x': 80, 'cam_y': 448,
+            'hvel': 0x80, 'vvel': 0x18, 'on_ground': 1, 'phase': 0,
+        })
+        self.assertEqual(pipe.read(len(pixels)), pixels)
+        self.assertEqual(read_state(pipe), {
+            'level': 1, 'x': 35, 'y': 469, 'cam_x': 81, 'cam_y': 449,
+            'hvel': 0xFF, 'vvel': 0x0A, 'on_ground': 0, 'phase': 7,
+        })
+
+    def test_legacy_state(self):
+        self.assertEqual(read_state(io.BytesIO(b'STATE 0 34 468 80 448\n')), {
+            'level': 0, 'x': 34, 'y': 468, 'cam_x': 80, 'cam_y': 448,
+        })
+
+    def test_outside_level(self):
+        self.assertIsNone(read_state(io.BytesIO(b'STATE - - - - -\n')))
+
+    def test_invalid_state(self):
+        for line in (b'STATE 0 34 468 80\n', b'STATE 0 34 468 80 448 80\n',
+                     b'STATE 0 34 468 80 448 zz 18 1 0\n',
+                     b'STATE 0 bad 468 80 448\n'):
+            with self.subTest(line=line), self.assertRaisesRegex(RuntimeError, 'malformed'):
+                read_state(io.BytesIO(line))
+
+    def test_unexpected_output(self):
+        with self.assertRaisesRegex(RuntimeError, 'unexpected bridge state'):
+            read_state(io.BytesIO(b'diagnostic\n'))
+
+    def test_closed_bridge(self):
+        with self.assertRaisesRegex(RuntimeError, 'closed unexpectedly'):
+            read_state(io.BytesIO())
 
 
 class Controller:
