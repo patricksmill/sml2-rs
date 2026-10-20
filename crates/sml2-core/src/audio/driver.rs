@@ -396,7 +396,8 @@ impl SoundDriver {
     /// 240-frame hold, which parks the index at 5 so every later expiry takes
     /// the hold again.
     fn pause_beep_frame(&mut self) {
-        self.pause_beep_timer = self.pause_beep_timer.saturating_sub(1);
+        // `$111B3` is a bare `dec a`: a zero timer wraps to 255.
+        self.pause_beep_timer = self.pause_beep_timer.wrapping_sub(1);
         if self.pause_beep_timer != 0 {
             return;
         }
