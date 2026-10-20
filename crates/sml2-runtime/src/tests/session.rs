@@ -562,3 +562,84 @@ fn map_level_entry_posts_the_start_sfx_after_the_music_stop() {
         "slot 0 starts SFX 22"
     );
 }
+
+#[test]
+fn the_coin_room_draws_the_item_preview() {
+    let tmp_save = temp_save_path("test_coin_preview");
+    let assets = SessionAssets::load().expect("session assets must load");
+    let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
+    runner.session.begin_coin_room(9);
+    for _ in 0..40 {
+        let _ = runner.step_frame(PlayerKeys::default());
+    }
+    let frame = runner.render_frame();
+    let tile = match &mut runner.session.state {
+        SessionState::Overworld(map) => match &mut map.room {
+            Some(room) => {
+                let tile = room.oam[2];
+                room.oam[2] = 0;
+                tile
+            }
+            None => panic!("the coin room is live"),
+        },
+        _ => panic!("the coin room is live"),
+    };
+    assert_eq!(tile, 0x30, "$737F($20) + $10");
+    let bare = runner.render_frame();
+    let diffs: Vec<(usize, usize)> = frame
+        .iter()
+        .zip(&bare)
+        .enumerate()
+        .filter(|(_, (a, b))| a != b)
+        .map(|(i, _)| (i % 160, i / 160))
+        .collect();
+    assert!(!diffs.is_empty(), "the preview draws");
+    assert!(
+        diffs
+            .iter()
+            .all(|&(x, y)| (148..156).contains(&x) && (24..32).contains(&y)),
+        "the preview sits at OAM (156, 40)"
+    );
+    let _ = std::fs::remove_file(&tmp_save);
+}
+
+#[test]
+fn the_reveal_draws_the_walk_in() {
+    let tmp_save = temp_save_path("test_reveal_walk");
+    let assets = SessionAssets::load().expect("session assets must load");
+    let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
+    let mut seq = sml2_core::castle_sequence::CastleSequence::default();
+    seq.walk_x = 40;
+    seq.walk_y = 96;
+    seq.walk_anim = 0x18;
+    runner.session.begin_castle_sequence(seq, 8, 0, 0);
+    let drawn = runner.render_frame();
+    let mut bare_seq = sml2_core::castle_sequence::CastleSequence::default();
+    bare_seq.walk_anim = 0x18;
+    bare_seq.walk_x = 0; // OAM x 0 puts the sprite above the screen
+    runner.session.begin_castle_sequence(bare_seq, 8, 0, 0);
+    let bare = runner.render_frame();
+    let diffs: Vec<(usize, usize)> = drawn
+        .iter()
+        .zip(&bare)
+        .enumerate()
+        .filter(|(_, (a, b))| a != b)
+        .map(|(i, _)| (i % 160, i / 160))
+        .collect();
+    assert!(!diffs.is_empty(), "Mario is drawn");
+    assert!(
+        diffs
+            .iter()
+            .all(|&(x, y)| (32..40).contains(&x) && (80..88).contains(&y)),
+        "Mario sits at (walk_x - 8, walk_y - 16)"
+    );
+    // `$30557`: the tile is `$BF + (anim >> 4)`, so the frame changes with anim.
+    let mut slow = sml2_core::castle_sequence::CastleSequence::default();
+    slow.walk_x = 40;
+    slow.walk_y = 96;
+    slow.walk_anim = 0x08;
+    runner.session.begin_castle_sequence(slow, 8, 0, 0);
+    let other = runner.render_frame();
+    assert_ne!(drawn, other, "the walk animation changes Mario's tile");
+    let _ = std::fs::remove_file(&tmp_save);
+}

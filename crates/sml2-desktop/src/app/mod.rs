@@ -113,6 +113,21 @@ impl DesktopApp {
                 game.session.enter_title();
             }
         }
+        if let Some(room) = app.options.room {
+            if let Some(game) = &mut app.game {
+                if room >= 13 {
+                    game.session.begin_bell_room(room, 0, 0);
+                } else {
+                    game.session.begin_coin_room(room);
+                }
+            }
+        } else if app.options.reveal {
+            if let Some(game) = &mut app.game {
+                let mut seq = sml2_core::castle_sequence::CastleSequence::default();
+                seq.coins = [0x80; 6];
+                game.session.begin_castle_sequence(seq, 8, 0, 0);
+            }
+        }
         if let Some(scale) = app.options.scale {
             app.zoom(ctx, Some(scale));
         }

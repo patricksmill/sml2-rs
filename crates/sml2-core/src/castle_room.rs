@@ -259,7 +259,9 @@ impl CastleRoom {
             _ => 0x4A58,
         };
         room.script_ptr_copy = room.script_ptr;
+        // `$3F4B1`: `$737F` straight into `$FFC6`.
         room.oam = [124, 240, 0, 0];
+        room.refresh_oam_tile(scripts);
         room.sfx[0] = 5;
         for s in 0..5 {
             room.patch_id[s] = 144;
@@ -279,6 +281,7 @@ impl CastleRoom {
     pub fn enter_bell_b(scripts: &CastleScripts, tilemap: &[u8]) -> Self {
         let mut room = Self::bell_b(scripts, tilemap);
         room.oam = [124, 240, 0, 0];
+        room.refresh_oam_tile(scripts);
         room.sfx[0] = 5;
         room.music = 21;
         room.goal_bell = 0;
@@ -291,7 +294,9 @@ impl CastleRoom {
     /// music 21 comes from `MapSim`'s door entry).
     pub fn enter_coin(scripts: &CastleScripts, screen: u8) -> Self {
         let mut room = Self::coin(scripts);
+        // `$3F35A`: `$737F` then `add $10`.
         room.oam = [156, 40, 0, 0];
+        room.refresh_oam_tile(scripts);
         room.sfx[0] = 5;
         let name = format!("coin_room_{screen}_sprites");
         room.stage_list(scripts.blob(&name).unwrap_or(&[]));
@@ -304,13 +309,30 @@ impl CastleRoom {
     /// the renderer's OAM pass (`$6109B`'s output).
     /// `$6109B` writes `(x, y, tile, attr)`; the map renderer wants
     /// `(y, x, tile, attr)`, and an OAM y of 0 is off-screen.
+    ///
+    /// OAM entry 0 (`$FFC4..$C7`) is written directly by the room, not by the
+    /// expander: it is Mario, or the coin room's `$4C4D`/`$4C51` item preview.
+    /// The first record at `$A6B5` is the expander's blank `$7F` placeholder.
     pub fn oam_cells(&self) -> Vec<(u8, u8, u8, u8)> {
-        self.metasprites
-            .expand_records(&self.sprites)
-            .into_iter()
-            .filter(|&(_, y, _, _)| y != 0)
-            .map(|(x, y, tile, attr)| (y, x, tile, attr))
-            .collect()
+        let mut cells = Vec::new();
+        if self.oam[2] != 0 {
+            cells.push((self.oam[1], self.oam[0], self.oam[2], self.oam[3]));
+        }
+        for index in 1..16 {
+            let at = index * 3;
+            let (y, x, id) = (self.sprites[at], self.sprites[at + 1], self.sprites[at + 2]);
+            if y == 0xFF || id == 0xFF {
+                continue;
+            }
+            cells.extend(
+                self.metasprites
+                    .expand(id, x, y)
+                    .into_iter()
+                    .filter(|&(_, y, _, _)| y != 0)
+                    .map(|(x, y, tile, attr)| (y, x, tile, attr)),
+            );
+        }
+        cells
     }
 
     fn stage_list(&mut self, list: &[u8]) {
@@ -465,6 +487,26 @@ impl CastleRoom {
         self.walk_idx = self.walk_idx.wrapping_add(1);
         self.oam[0] = self.oam[0].wrapping_add(delta);
         self.oam[2] = self.preview_tile(script).wrapping_add(8);
+    }
+
+    /// `$737F`: `$738B[sCurPowerup]` — the same table `$4C4D` mirrors; the coin
+    /// room adds `$10` to it, the bell rooms use it as is.
+    pub fn powerup_tile(scripts: &CastleScripts, powerup: u8) -> u8 {
+        let script = scripts.blob("coin_room_script").unwrap_or(&[]);
+        script
+            .get(POWERUP_PREVIEW_AT + powerup as usize)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// `$3F35A`/`$3F4B1`: `$FFC6` from `$737F`, plus `$10` in the coin rooms.
+    pub fn refresh_oam_tile(&mut self, scripts: &CastleScripts) {
+        let tile = Self::powerup_tile(scripts, self.powerup);
+        self.oam[2] = if self.kind == RoomKind::CoinRooms {
+            tile.wrapping_add(0x10)
+        } else {
+            tile
+        };
     }
 
     /// `$60C41`: `$4C4D[sCurPowerup]` — the preview tile for the current form.
@@ -1820,7 +1862,8 @@ mod tests {
         for screen in 9..=12 {
             let room = CastleRoom::enter_coin(&scripts, screen);
             assert_eq!(&room.sprites[..3], &[0x20, 0xA0, 0x00], "screen {screen}");
-            assert_eq!(room.oam, [156, 40, 0, 0]);
+            // `$3F35A`: `$737F` ($4C4D[0] = $20) plus `$10`.
+            assert_eq!(room.oam, [156, 40, 0x30, 0]);
         }
     }
 
@@ -1869,17 +1912,28 @@ mod oam_tests {
 
     #[test]
     fn the_coin_room_sprites_expand() {
-        let room = CastleRoom::enter_coin(&scripts(), 9);
+        let mut room = CastleRoom::enter_coin(&scripts(), 9);
         let cells = room.oam_cells();
         assert!(!cells.is_empty(), "the room's records expand to OAM cells");
-        assert_eq!(cells[0], (0x20, 0xA0, 0x7F, 0x20));
+        // Record 0 is the blank `$7F` placeholder and is skipped.
+        assert!(
+            cells.iter().all(|&(_, _, tile, _)| tile != 0x7F),
+            "no blank placeholder cells"
+        );
+        assert_eq!(cells[0], (40, 156, 0x30, 0), "the preview at (156, 40)");
+        assert_eq!(cells[1].2, 0xB0, "record 1's first tile");
+        // The item preview is OAM entry 0 at `(156, 40)`; `$60C41` gives the
+        // tile for the current powerup (`$4C4D[0] = $20`).
+        assert_eq!(cells[0], (40, 156, 0x30, 0), "the preview draws first");
+        room.oam[2] = 0x45;
+        assert_eq!(room.oam_cells()[0], (40, 156, 0x45, 0));
     }
 
     #[test]
     fn the_bell_room_sprites_use_the_bell_table() {
-        let room = CastleRoom::enter_bell_a(&scripts(), 0);
+        let mut room = CastleRoom::enter_bell_a(&scripts(), 0);
         let cells = room.oam_cells();
-        assert!(!cells.is_empty());
-        assert_eq!(cells[0], (0x20, 0xA0, 0x30, 0x00));
+        assert_eq!(cells[0], (240, 124, 0x20, 0), "Mario at (124, 240)");
+        assert_eq!(cells[1].2, 0x2A, "the bell table's first tile");
     }
 }

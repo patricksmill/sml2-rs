@@ -20,6 +20,20 @@ fn main() -> Result<(), String> {
                 options.play = true;
                 options.boot_title = true;
             }
+            "--room" => {
+                let room: u8 = value()?
+                    .parse()
+                    .map_err(|_| "--room needs a screen number (9..14)")?;
+                if !(9..=14).contains(&room) {
+                    return Err("--room must be 9..=14".into());
+                }
+                options.play = true;
+                options.room = Some(room);
+            }
+            "--reveal" => {
+                options.play = true;
+                options.reveal = true;
+            }
             "--file-select" => {
                 options.play = true;
                 options.boot_select = true;
@@ -53,7 +67,7 @@ fn main() -> Result<(), String> {
             }
             "--screenshot" => options.screenshot = Some(PathBuf::from(value()?)),
             "--help" | "-h" => {
-                println!("sml2-desktop [--assets DIR] [--config FILE] [--save FILE] [--play] [--title] [--file-select] [--filter gray|dmg|pocket|sgb|amber]\n  [--scale 1..8] [--fullscreen] [--no-audio]\n  Validation: --smoke-frames N [--screenshot FILE]\n\nEsc / Controller Start: menu | F11: fullscreen | +/-: zoom\nF1: debug | F2: debug pause | F3: one tick");
+                println!("sml2-desktop [--assets DIR] [--config FILE] [--save FILE] [--play] [--title] [--file-select] [--room 9..14] [--reveal] [--filter gray|dmg|pocket|sgb|amber]\n  [--scale 1..8] [--fullscreen] [--no-audio]\n  Validation: --smoke-frames N [--screenshot FILE]\n\nEsc / Controller Start: menu | F11: fullscreen | +/-: zoom\nF1: debug | F2: debug pause | F3: one tick");
                 return Ok(());
             }
             _ => return Err(format!("Unknown option: {argument}")),

@@ -1699,10 +1699,12 @@ impl MapSim {
         }
         self.screen_id = d.screen_id;
         if (9..=12).contains(&self.screen_id) {
-            self.room = self
-                .castle_scripts
-                .as_ref()
-                .map(|scripts| crate::castle_room::CastleRoom::enter_coin(scripts, d.screen_id));
+            self.room = self.castle_scripts.as_ref().map(|scripts| {
+                let mut room = crate::castle_room::CastleRoom::enter_coin(scripts, d.screen_id);
+                room.powerup = self.powerup;
+                room.refresh_oam_tile(scripts);
+                room
+            });
         }
         self.scroll_only_latch = 0;
         self.cursor_anim = 0;
@@ -2818,7 +2820,7 @@ mod tests {
         assert_eq!(map.screen_id, 10);
         let room = map.room.as_ref().expect("the door staged a room");
         assert_eq!(room.kind, crate::castle_room::RoomKind::CoinRooms);
-        assert_eq!(room.oam, [156, 40, 0, 0], "$3F35A's OAM entry");
+        assert_eq!(room.oam, [156, 40, 0x30, 0], "$3F35A's OAM entry");
         assert_eq!(room.sfx[0], 5, "$3F495's SFX request");
         assert_eq!(&room.sprites[..3], &[0x20, 0xA0, 0x00], "$671C record 0");
 

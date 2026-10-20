@@ -540,6 +540,9 @@ pub fn render_castle_reveal(
     reveal: &CastleRevealTiles,
     all_six_coins: bool,
     bgp: u8,
+    obp1: u8,
+    // `$FFC4`/`$FFC5`/`$FFC6`: the walk-in's Mario, tile `$BF + (anim >> 4)`.
+    mario: Option<(u8, u8, u8)>,
     vw: usize,
     vh: usize,
 ) -> Vec<u8> {
@@ -576,6 +579,20 @@ pub fn render_castle_reveal(
                 }
             }
         }
+    }
+    if let Some((x, y, tile)) = mario {
+        let obj_shades = crate::video::bgp_shades(obp1);
+        draw_obj_tile(
+            &mut img,
+            &vram,
+            &obj_shades,
+            x as i32 - 8,
+            y as i32 - 16,
+            tile,
+            0,
+            vw,
+            vh,
+        );
     }
     img
 }
@@ -2391,8 +2408,8 @@ mod reveal_render_tests {
     #[test]
     fn the_six_coins_patch_the_five_runs() {
         let reveal = reveal();
-        let plain = render_castle_reveal(&reveal, false, 0xE4, 160, 144);
-        let patched = render_castle_reveal(&reveal, true, 0xE4, 160, 144);
+        let plain = render_castle_reveal(&reveal, false, 0xE4, 0xD0, None, 160, 144);
+        let patched = render_castle_reveal(&reveal, true, 0xE4, 0xD0, None, 160, 144);
         assert_ne!(plain, patched, "tile $74 lands in the five runs");
         assert!(plain.iter().any(|&p| p != plain[0]), "the screen is drawn");
         // The runs sit at rows 10-14, so the first row is untouched.

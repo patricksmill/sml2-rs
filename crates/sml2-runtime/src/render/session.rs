@@ -174,6 +174,13 @@ impl Session {
                 &self.assets.castle_reveal,
                 seq.coins.iter().all(|&coin| coin & 0x80 != 0),
                 if seq.bgp == 0 { 0xE4 } else { seq.bgp },
+                if seq.obp1 == 0 { 0xD0 } else { seq.obp1 },
+                // `$3053B`/`$30557`: the walk-in tile is `$BF + (anim >> 4)`.
+                Some((
+                    seq.walk_x,
+                    seq.walk_y,
+                    0xBFu8.wrapping_add(seq.walk_anim >> 4),
+                )),
                 vw,
                 vh,
             ),

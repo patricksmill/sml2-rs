@@ -12,6 +12,10 @@ pub struct Options {
     pub play: bool,
     pub boot_title: bool,
     pub boot_select: bool,
+    /// `--room`: stage a bonus room (screens 9-14).
+    pub room: Option<u8>,
+    /// `--reveal`: stage the six-coin castle reveal.
+    pub reveal: bool,
     pub scale: Option<u8>,
     pub fullscreen: bool,
     pub smoke_frames: Option<u64>,
@@ -27,6 +31,8 @@ impl Options {
             play: false,
             boot_title: false,
             boot_select: false,
+            room: None,
+            reveal: false,
             scale: None,
             fullscreen: false,
             smoke_frames: None,
