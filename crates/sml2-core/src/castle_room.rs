@@ -8,7 +8,7 @@
 //! (`sCastleState`) that each frame's bank-15 screen handler dispatches on.
 //!
 //! The sprite table is the 48 bytes at `$A6B5` read as 3-byte records
-//! `(page, x, id)`; the `sMapSpriteNPage/X/Y/Id` names in `ram.asm` describe
+//! `(x, y, id)`; the `sMapSpriteNPage/X/Y/Id` names in `ram.asm` describe
 //! the hub's 4-byte view, so this module indexes the bytes by address instead.
 
 use crate::castle::CastleScripts;
@@ -312,8 +312,8 @@ impl CastleRoom {
     /// record runs that follow the list's `$FF` terminator.
     /// The room's sprite records expanded through its metasprite table, for
     /// the renderer's OAM pass (`$6109B`'s output).
-    /// `$6109B` writes `(x, y, tile, attr)`; the map renderer wants
-    /// `(y, x, tile, attr)`, and an OAM y of 0 is off-screen.
+    /// The metasprite API returns `(x, y, tile, attr)`; the map renderer wants
+    /// hardware OAM order `(y, x, tile, attr)`, and an OAM y of 0 is off-screen.
     ///
     /// The room stages Mario or the `$4C4D`/`$4C51` item preview in
     /// `$FFC4..$C7`; `$5297` expands its sprite id before the room decorations.
@@ -330,8 +330,8 @@ impl CastleRoom {
         }
         for index in 1..16 {
             let at = index * 3;
-            let (y, x, id) = (self.sprites[at], self.sprites[at + 1], self.sprites[at + 2]);
-            if y == 0xFF || id == 0xFF {
+            let (x, y, id) = (self.sprites[at], self.sprites[at + 1], self.sprites[at + 2]);
+            if x == 0xFF || id == 0xFF {
                 continue;
             }
             cells.extend(
@@ -1973,6 +1973,38 @@ mod oam_tests {
         assert_eq!(cells[6].2, 0xB0, "record 1 follows the six preview cells");
         room.oam[2] = 0x45;
         assert_eq!(room.oam_cells()[0], (144, 33, 0x75, 0x20));
+    }
+
+    /// Room records use x/y order; only the renderer output uses OAM y/x.
+    #[test]
+    fn room_oam_preserves_the_claw_and_powerup_axes() {
+        let mut room = CastleRoom::enter_coin(&scripts(), 9);
+        let cells = room.oam_cells();
+        assert_eq!(cells[6], (56, 64, 0xB0, 0));
+        assert_eq!(cells[7], (56, 72, 0xB0, 0x20));
+        assert_eq!(
+            &cells[10..16],
+            &[
+                (76, 150, 0xBE, 0),
+                (76, 158, 0xBF, 0),
+                (84, 150, 0xC0, 0),
+                (84, 158, 0xC1, 0),
+                (92, 152, 0xC7, 0),
+                (100, 152, 0xC6, 0),
+            ]
+        );
+        room.oam[2] = 0;
+        room.sprites = [0xFF; SPRITE_BYTES];
+        room.sprites[3..6].copy_from_slice(&[40, 100, 0x0C]);
+        assert_eq!(
+            room.oam_cells(),
+            vec![
+                (100, 40, 0x90, 0),
+                (100, 48, 0x91, 0),
+                (108, 40, 0x92, 0),
+                (108, 48, 0x92, 0x20),
+            ]
+        );
     }
 
     #[test]

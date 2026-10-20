@@ -1,8 +1,8 @@
 //! The `$6109B` metasprite expander used by the castle rooms.
 //!
-//! A room's 16 records at `$A6B5` are `(y, x, id)`; `id` indexes a table of
+//! A room's 16 records at `$A6B5` are `(x, y, id)`; `id` indexes a table of
 //! 64 little-endian pointers, and each sprite is a run of 4-byte records
-//! `(dx, dy, tile, attr)` ended by a `$FF` tile. `$3F75` picks the bell
+//! `(dy, dx, tile, attr)` ended by a `$FF` tile. `$3F75` picks the bell
 //! table (`$62E6`) and defers to `$6109B`; the coin rooms pass `$51B1`.
 
 /// Pointers in the table.
@@ -34,8 +34,8 @@ impl RoomSpriteTable {
         self.bytes.len() < TABLE_ENTRIES * 2
     }
 
-    /// Expand `id` at the record's `(x, y)`; the ROM adds the record's second
-    /// byte to x and its first to y.
+    /// Expand `id` at `(x, y)`; the ROM adds each metasprite record's
+    /// first offset to y and its second offset to x.
     pub fn expand(&self, id: u8, x: u8, y: u8) -> Vec<OamCell> {
         let mut cells = Vec::new();
         if self.is_empty() {
@@ -51,8 +51,8 @@ impl RoomSpriteTable {
         }
         let mut at = (ptr - self.base) as usize;
         while at + 4 <= self.bytes.len() && cells.len() < OAM_LIMIT {
-            let dx = self.bytes[at];
-            let dy = self.bytes[at + 1];
+            let dy = self.bytes[at];
+            let dx = self.bytes[at + 1];
             let tile = self.bytes[at + 2];
             let attr = self.bytes[at + 3];
             at += 4;
@@ -69,8 +69,8 @@ impl RoomSpriteTable {
         let mut cells = Vec::new();
         for index in 0..16 {
             let at = index * 3;
-            let (y, x, id) = (records[at], records[at + 1], records[at + 2]);
-            if y == 0xFF || id == 0xFF {
+            let (x, y, id) = (records[at], records[at + 1], records[at + 2]);
+            if x == 0xFF || id == 0xFF {
                 continue;
             }
             cells.extend(self.expand(id, x, y));
@@ -135,6 +135,43 @@ impl SpriteMetas {
 mod tests {
     use super::*;
 
+    /// `$6109B` adds `(dy, dx)` to room records stored as `(x, y, id)`.
+    #[test]
+    fn room_records_place_the_claw_and_powerup_cells_on_their_rom_axes() {
+        let scripts = crate::castle::CastleScripts::from_parts(
+            include_bytes!("../../../extracted/map/castle_scripts.bin").to_vec(),
+            include_str!("../../../extracted/map/castle_scripts.json"),
+        )
+        .expect("castle scripts asset");
+        let table = RoomSpriteTable::new(0x51B1, scripts.blob("room_metasprites").unwrap());
+        let mut records = [0xFF; 48];
+        // `$66D4` record 2: x=$98, y=$64, claw frame 5. The top cells
+        // have dy=-24 and dx=-2/+6, so swapping either axis changes bytes.
+        records[..3].copy_from_slice(&scripts.blob("coin_room_9_sprites").unwrap()[6..9]);
+        assert_eq!(
+            table.expand_records(&records),
+            vec![
+                (150, 76, 0xBE, 0),
+                (158, 76, 0xBF, 0),
+                (150, 84, 0xC0, 0),
+                (158, 84, 0xC1, 0),
+                (152, 92, 0xC7, 0),
+                (152, 100, 0xC6, 0),
+            ]
+        );
+        // ROM frame $0C is the mushroom: distinct top-left/top-right tiles.
+        records[..3].copy_from_slice(&[40, 100, 0x0C]);
+        assert_eq!(
+            table.expand_records(&records),
+            vec![
+                (40, 100, 0x90, 0),
+                (48, 100, 0x91, 0),
+                (40, 108, 0x92, 0),
+                (48, 108, 0x92, 0x20),
+            ]
+        );
+    }
+
     #[test]
     fn the_sprite_table_expands_a_mario_frame() {
         let rom = std::fs::read("../../extracted/map/castle_scripts.bin")
@@ -186,7 +223,7 @@ mod tests {
         // the hardware hides above the screen.
         assert_eq!(cells.len(), 10);
         assert_eq!(cells[0], (0xA0, 0x20, 0x7F, 0x20));
-        assert_eq!(cells[7], (0xB8, 0x28, 0x7F, 0x20));
+        assert_eq!(cells[7], (0xA8, 0x38, 0x7F, 0x20));
         assert_eq!(cells[8], (0x80, 0x00, 0x7F, 0x20), "hidden by y = 0");
 
         let bell = RoomSpriteTable::new(0x62E6, blob("bell_metasprites"));
