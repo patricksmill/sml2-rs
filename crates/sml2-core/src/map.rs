@@ -555,7 +555,8 @@ impl CastleRevealTiles {
 #[path = "map/castle_render.rs"]
 mod castle_render;
 pub use castle_render::{
-    render_castle_reveal, render_castle_sequence, render_castle_sequence_output,
+    game_over_sprites, render_castle_reveal, render_castle_sequence, render_castle_sequence_output,
+    render_game_over_output, GameOverView,
 };
 
 impl BellRoomTiles {

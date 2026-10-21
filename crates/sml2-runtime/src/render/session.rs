@@ -270,7 +270,18 @@ impl Session {
                 (vw, vh),
                 output,
             ),
-            SessionState::GameOver => vec![output.blank(3); vw * vh],
+            SessionState::GameOver(screen) => sml2_core::map::render_game_over_output(
+                &self.assets.castle_reveal,
+                &self.assets.sprite_metas,
+                sml2_core::map::GameOverView {
+                    fade_timer: screen.sim.fade_timer,
+                    frame_counter: screen.sim.frame_counter,
+                    golden_coin_flags: screen.sim.golden_coin_flags,
+                    obp: screen.obp,
+                },
+                (vw, vh),
+                output,
+            ),
         }
     }
 }

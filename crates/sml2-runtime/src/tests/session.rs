@@ -248,49 +248,119 @@ fn save_file_persistence_writes_disk_record_and_reloads_accurately() {
     let _ = fs::remove_file(&tmp_save);
 }
 
-#[test]
-fn game_over_when_lives_exhausted() {
-    let tmp_save = temp_save_path("test_game_over");
-    let _ = fs::remove_file(&tmp_save);
+/// Walk right into level 1's first enemy and run out the death fade. Returns
+/// the outcome that ended the level, with nothing rewritten mid-level.
+fn die_walking_right(runner: &mut SessionRunner) -> StepOutcome {
+    assert!(matches!(
+        press_a_and_wait_for_level(runner),
+        StepOutcome::LevelEntered(0)
+    ));
+    let right = PlayerKeys {
+        right: true,
+        ..Default::default()
+    };
+    for _ in 0..3000 {
+        let outcome = runner.step_frame(right);
+        if !matches!(outcome, StepOutcome::Continue) {
+            return outcome;
+        }
+    }
+    panic!("walking right must meet an enemy and end the level");
+}
 
+/// `$311A`: `sub 1 / daa` borrows only from 0, so the last life's death
+/// continues to the map with 0 lives.
+#[test]
+fn the_last_life_death_continues_with_zero_lives() {
+    let tmp_save = temp_save_path("test_last_life");
+    let _ = fs::remove_file(&tmp_save);
     let assets = SessionAssets::load().expect("session assets must load");
     let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
-    runner.lives = 0; // Will become game over on death
+    runner.lives = 1;
+    let outcome = die_walking_right(&mut runner);
+    assert!(
+        matches!(outcome, StepOutcome::LevelExited { cleared: false, .. }),
+        "{outcome:?}"
+    );
+    assert_eq!(runner.lives, 0);
+    assert!(matches!(runner.state, SessionState::Overworld(_)));
+    let _ = fs::remove_file(&tmp_save);
+}
 
-    let _ = press_a_and_wait_for_level(&mut runner);
+/// A death at 0 lives borrows into `$27AF` (state `$05`): lives back to 5,
+/// coins and money bags cleared, the golden coins folded, charged against the
+/// tally and wiped, the `$2934` save, music 7. State `$07` then draws the
+/// castle picture with Mario until the 255-frame fade ends and START goes to
+/// state `$00`, the title.
+#[test]
+fn a_death_at_zero_lives_runs_game_over_to_the_title() {
+    let tmp_save = temp_save_path("test_game_over");
+    let _ = fs::remove_file(&tmp_save);
+    let assets = SessionAssets::load().expect("session assets must load");
+    let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
+    runner.lives = 0;
+    runner.level_tally = 0x12;
+    runner.money_bag = 3;
+    let SessionState::Overworld(map) = &mut runner.state else {
+        panic!("map")
+    };
+    // Golden coins 1 and 2 (`sGoldenCoin1`/`sGoldenCoin2`).
+    map.level_progress[5] = 0x80;
+    map.level_progress[9] = 0x80;
+    let outcome = die_walking_right(&mut runner);
+    assert_eq!(outcome, StepOutcome::GameOver);
+    let SessionState::GameOver(screen) = &runner.state else {
+        panic!("game over")
+    };
+    assert_eq!(screen.sim.golden_coin_flags, 0b11_0000);
+    assert_eq!(
+        (screen.sim.level_progress[5], screen.sim.level_progress[9]),
+        (0, 0)
+    );
+    assert_eq!(screen.sim.fade_timer, 255);
+    assert!(
+        !screen.sim.map_handoff_done,
+        "a borrow leaves state $05; the $14 map hand-off never runs"
+    );
+    assert_eq!(
+        (runner.lives, runner.level_tally, runner.money_bag),
+        (5, 0x10, 0)
+    );
+    assert_eq!((runner.coins_low, runner.coins_high), (0, 0));
+    assert_eq!(
+        runner.session.sound_driver.active_song, 7,
+        "$27AF requests music 7"
+    );
+    let saved = fs::read(&tmp_save).expect("$2934 writes the save");
+    assert_eq!(saved.as_slice(), runner.save_record().as_slice());
+    assert_eq!(saved[0x43], 5, "sLives in the save");
+    assert_eq!((saved[8 + 5], saved[8 + 9]), (0, 0), "golden coins wiped");
 
-    match &mut runner.state {
-        SessionState::InLevel(ctx) => {
-            ctx.sim.dead = 0xFF;
-            ctx.sim.dead_fade = true;
-            ctx.sim.fade_timer = 2;
-        }
-        _ => panic!("expected InLevel state"),
+    let first = runner.render_frame();
+    assert!(
+        first.iter().any(|&p| p != first[0]),
+        "the castle screen draws"
+    );
+    let start = PlayerKeys {
+        start: true,
+        ..Default::default()
+    };
+    // START is ignored while the fade runs; release it between presses.
+    for frame in 0..254 {
+        let keys = if frame % 2 == 0 {
+            start
+        } else {
+            PlayerKeys::default()
+        };
+        runner.step_frame(keys);
+        assert!(
+            matches!(runner.state, SessionState::GameOver(_)),
+            "frame {frame}"
+        );
     }
-
-    let mut game_over = false;
-    for _ in 0..100 {
-        let outcome = runner.step_frame(PlayerKeys::default());
-        if outcome == StepOutcome::GameOver {
-            game_over = true;
-            break;
-        }
-    }
-    assert!(game_over, "must trigger GameOver when lives reach 0");
-    assert!(matches!(runner.state, SessionState::GameOver));
-
-    // Stepping past GameOver restarts at Hub with 5 lives.
-    let outcome = runner.step_frame(PlayerKeys::default());
-    assert_eq!(outcome, StepOutcome::Continue);
-    assert_eq!(runner.lives, 5);
-    match &runner.state {
-        SessionState::Overworld(map) => {
-            assert_eq!(map.screen_id, 0);
-            assert_eq!(map.node, 0);
-        }
-        _ => panic!("expected Overworld after game over reset"),
-    }
-
+    // The fade reaches 0 on its 255th frame, and START there hands off.
+    runner.step_frame(start);
+    assert!(matches!(runner.state, SessionState::Title(_)));
     let _ = fs::remove_file(&tmp_save);
 }
 

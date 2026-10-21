@@ -184,3 +184,61 @@ fn castle_palette_frame_retains_both_object_sources_and_background() {
         );
     }
 }
+
+fn game_over(fade_timer: u16, golden_coin_flags: u8) -> Vec<u8> {
+    let (reveal, _, metas) = assets();
+    render_game_over_output(
+        &reveal,
+        &metas,
+        GameOverView {
+            fade_timer,
+            frame_counter: 0,
+            golden_coin_flags,
+            obp: [0xD0, 0xE4],
+        },
+        (160, 144),
+        crate::video::OutputMode::Grayscale,
+    )
+}
+
+/// `$30884`: a collected coin sits at its castle spot while the fade is at
+/// least 128, then rises off the top; at fade 0 it has left the screen.
+#[test]
+fn game_over_coins_hold_then_rise_off_the_screen() {
+    assert_ne!(game_over(200, 0b10_0000), game_over(200, 0), "coin 1 drawn");
+    assert_ne!(
+        game_over(100, 0b10_0000),
+        game_over(200, 0b10_0000),
+        "rising"
+    );
+    assert_eq!(game_over(0, 0b10_0000), game_over(0, 0), "gone at fade 0");
+}
+
+/// `$28A7`: Mario slides down while the fade is above 191, then stays at y 32.
+#[test]
+fn game_over_mario_slides_in_during_the_first_64_frames() {
+    assert_ne!(game_over(255, 0), game_over(200, 0));
+    assert_ne!(game_over(200, 0), game_over(192, 0));
+    assert_eq!(game_over(192, 0), game_over(100, 0));
+}
+
+/// The exact `$30884`/`$28A7` sprite calls: coin 1 at its spot, then one
+/// pixel up on the spin frame once the fade drops to 127; Mario from y 1 at
+/// fade 255, alternating frames every 16 `$FF97` ticks.
+#[test]
+fn game_over_sprite_calls_match_the_rom_tables() {
+    let view = |fade_timer, frame_counter| GameOverView {
+        fade_timer,
+        frame_counter,
+        golden_coin_flags: 0b10_0001,
+        obp: [0, 0],
+    };
+    assert_eq!(
+        game_over_sprites(view(255, 0)),
+        vec![(59, 121, 0xC4), (71, 70, 0xD9), (68, 1, 227)]
+    );
+    assert_eq!(
+        game_over_sprites(view(127, 0x10)),
+        vec![(59, 120, 225), (71, 69, 225), (68, 32, 228)]
+    );
+}

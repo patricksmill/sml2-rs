@@ -2255,12 +2255,12 @@ impl PlayerSim {
     }
 
     /// `$27AF` (state `$05`) — the GAME OVER screen's entry, run by the caller
-    /// on the frame after the fade raised [`PlayerSim::game_over`]. Not
-    /// modelled: the bank-12 body (the `$4C92` graphics → `$8000`, the `$6492`
-    /// tilemap → `$9800`, `sBGPalette = $E4`, `sSavedLCDC = $C3`, and the
-    /// `$2874` "GAME OVER" string that `$30884` draws from state `$07`). What
-    /// is: `sLives` back to 5, the coin/money counters cleared, the 255-frame
-    /// fade armed, and `sMusicRequest = 7` before the hand-off to `$07`.
+    /// on the frame after the fade raised [`PlayerSim::game_over`]. The screen
+    /// it loads (the bank-12 `$4C92` graphics and `$6492` castle tilemap,
+    /// `sBGPalette = $E4`) is the session's to draw. What is modelled here:
+    /// `sLives` back to 5, the coin counters cleared (`sMoneyBagCount` lives in
+    /// the session), the 255-frame fade armed, and `sMusicRequest = 7` before
+    /// the hand-off to `$07`. The `$2874` "GAME OVER" string has no reader.
     ///
     /// Its tail is more than a reset, and is modelled here: it folds the six
     /// golden-coin bytes into `sGoldenCoinFlags`, subtracts that popcount from
@@ -2285,8 +2285,9 @@ impl PlayerSim {
     }
 
     /// `$287E` (state `$07`) — one frame of the GAME OVER screen's poll: the
-    /// `$27AF` 255-frame fade ticks down (VBlank keeps decrementing
-    /// `sFadeTimer`), and once it reads 0 the screen waits for START.
+    /// `$27AF` 255-frame fade ticks down (VBlank decrements `sFadeTimer`
+    /// before the state handler runs), and once it reads 0 the screen waits
+    /// for START — so START counts on the very frame the fade reaches 0.
     /// Returns true on the frame that hands back to state `$00` (`Init`), which
     /// also requests `sMusicRequest = $FF`.
     ///
@@ -2298,11 +2299,8 @@ impl PlayerSim {
         if !self.game_over {
             return false;
         }
-        if self.fade_timer > 0 {
-            self.fade_timer -= 1;
-            return false;
-        }
-        if keys_pressed != 0x08 {
+        self.fade_timer = self.fade_timer.saturating_sub(1);
+        if self.fade_timer != 0 || keys_pressed != 0x08 {
             return false;
         }
         self.game_over = false;

@@ -1,6 +1,6 @@
 {
   "active_milestone": "full_integration",
-  "milestone_note": "15 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+  "milestone_note": "14 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
     {
       "id": "f-routes-b",
@@ -149,20 +149,6 @@
       ],
       "dependencies": [],
       "verification_gate": "Cause identified with ROM evidence; if a port bug, LEGACY removed and traj4_ff0 gates at zero mismatches; captures/sweep.sh passes",
-      "status": "pending"
-    },
-    {
-      "id": "f-game-over-session",
-      "title": "Wire the ported game over into Session: $27AF state-$05 effects, the GAME OVER screen, START -> $00, and fix the last-life off-by-one",
-      "asm_refs": [
-        "home.asm:$311A lives borrow",
-        "home.asm:$27AF game over ($05)",
-        "home.asm:$287E ($07)",
-        "home.asm:$2874 GAME OVER text",
-        "home.asm:$2934 save"
-      ],
-      "dependencies": [],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; a session test that dies on the last life (lives=1) continues with 0 lives; a death at 0 calls game_over_enter (golden coins cleared, tally penalty, save written, music 7), renders the $4C92/$6492 screen, waits for START and goes to state $00; mutations rejected; cargo test --workspace passes",
       "status": "pending"
     },
     {

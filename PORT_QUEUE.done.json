@@ -1453,6 +1453,20 @@
       "dependencies": [],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; session test proves DIV continuity across map -> level -> map and Wario random draws consume the shared clock",
       "status": "done"
+    },
+    {
+      "id": "f-game-over-session",
+      "title": "Wire the ported game over into Session: $27AF state-$05 effects, the GAME OVER screen, START -> $00, and fix the last-life off-by-one",
+      "asm_refs": [
+        "home.asm:$311A lives borrow",
+        "home.asm:$27AF game over ($05)",
+        "home.asm:$287E ($07)",
+        "home.asm:$2874 GAME OVER text",
+        "home.asm:$2934 save"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; a session test that dies on the last life (lives=1) continues with 0 lives; a death at 0 calls game_over_enter (golden coins cleared, tally penalty, save written, music 7), renders the $4C92/$6492 screen, waits for START and goes to state $00; mutations rejected; cargo test --workspace passes",
+      "status": "done"
     }
   ]
 }

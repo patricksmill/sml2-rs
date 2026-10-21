@@ -315,8 +315,12 @@ impl DesktopApp {
                                 seq.state, seq.menu, seq.fade_high, seq.fade_low
                             ));
                         }
-                        SessionState::GameOver => {
+                        SessionState::GameOver(screen) => {
                             ui.label("Game over");
+                            ui.monospace(format!(
+                                "Fade {:03}  coins {:06b}",
+                                screen.sim.fade_timer, screen.sim.golden_coin_flags
+                            ));
                         }
                     }
                     if !game.diagnostics.is_empty() {

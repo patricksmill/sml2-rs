@@ -99,6 +99,86 @@ pub fn render_castle_sequence_output(
     )
 }
 
+/// What the GAME OVER screen (state `$07`) draws from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GameOverView {
+    /// `sFadeTimer`, armed to 255 by `$27AF`.
+    pub fade_timer: u16,
+    /// `$FF97`, which picks Mario's frame.
+    pub frame_counter: u8,
+    /// `sGoldenCoinFlags`, folded by `$27AF` before it clears the coins.
+    pub golden_coin_flags: u8,
+    /// `sOAMPalette1`/`sOAMPalette2`, which `$27AF` leaves as they were.
+    pub obp: [u8; 2],
+}
+
+/// `$27AF`'s backdrop is the castle picture (`$4C92` tiles, `$6492` tilemap,
+/// `sBGPalette = $E4`). Each `$07` frame `$30884` draws the collected coins
+/// at their castle-screen spots, rising off the top through the spinning
+/// frames once the fade drops below 128, then `$28A7` draws Mario, who slides
+/// down while the fade is above 191.
+pub fn render_game_over_output(
+    reveal: &CastleRevealTiles,
+    metas: &SpriteMetas,
+    view_state: GameOverView,
+    view: (usize, usize),
+    output: crate::video::OutputMode,
+) -> Vec<u8> {
+    draw(
+        &reveal.vram_tiles(),
+        &reveal.tilemap,
+        0xE4,
+        view_state.obp,
+        &game_over_sprites(view_state),
+        metas,
+        view,
+        output,
+    )
+}
+
+/// The `$5297` calls of one `$07` frame, as `(x, y, id)` in draw order.
+pub fn game_over_sprites(view_state: GameOverView) -> Vec<(u8, u8, u8)> {
+    let fade_high = (view_state.fade_timer >> 8) as u8;
+    let fade_low = view_state.fade_timer as u8;
+    // `sCoinIconDropY`: `fade - 128` once the fade is below 128, added to y.
+    let rise = if fade_high == 0 && fade_low < 0x80 {
+        fade_low.wrapping_sub(0x80)
+    } else {
+        0
+    };
+    let mut sprites = Vec::new();
+    // `sGoldenCoinFlags` bits 5..0, the `$498A..$49CC` entries (the same
+    // per-level spots `$307BC` uses).
+    for (bit, x, y, id) in [
+        (5, 59, 121u8, 0xC4),
+        (4, 105, 70, 0xDA),
+        (3, 117, 93, 0xDB),
+        (2, 117, 121, 0xD8),
+        (1, 59, 93, 0xD7),
+        (0, 71, 70, 0xD9),
+    ] {
+        if view_state.golden_coin_flags & (1 << bit) == 0 {
+            continue;
+        }
+        // `$3097C`: a rising coin spins through ids 222..225.
+        let id = if rise == 0 {
+            id
+        } else {
+            222 + ((rise & 6) >> 1)
+        };
+        sprites.push((x, y.wrapping_add(rise), id));
+    }
+    if fade_high == 0 {
+        let id = 227 + ((view_state.frame_counter & 0x10) >> 4);
+        let y = match fade_low.checked_sub(192) {
+            Some(over) => 32 - (over >> 1),
+            None => 32,
+        };
+        sprites.push((68, y, id));
+    }
+    sprites
+}
+
 /// Compatibility static-frame renderer used by callers without sequence state.
 pub fn render_castle_reveal(
     reveal: &CastleRevealTiles,

@@ -42,7 +42,7 @@ fn state(session: &Session) -> String {
         SessionState::Overworld(_) => "map".into(),
         SessionState::InLevel(ctx) => format!("level-{}", ctx.manifest.level_id),
         SessionState::Castle(_) => "castle".into(),
-        SessionState::GameOver => "game-over".into(),
+        SessionState::GameOver(_) => "game-over".into(),
     }
 }
 

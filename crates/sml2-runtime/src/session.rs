@@ -282,7 +282,8 @@ impl LevelContext {
                 self.sim.exit_fade_step();
             } else if self.sim.dead_fade {
                 self.sim.fade_step();
-                if self.sim.fade_timer == 0 {
+                // A borrow leaves `$FF9B = $05`; only a continue reaches `$14`.
+                if self.sim.fade_timer == 0 && !self.sim.game_over {
                     // A death ends in the same `$FF9B = $14` hand-off as a
                     // clear: its zone band reloads the screen Mario died from
                     // (PyBoy: a Tree Zone time-out lands on screen 2, node $23).
@@ -556,7 +557,7 @@ impl LevelContext {
 
     /// True if the level has completed fade-out and finished the handoff.
     pub fn is_finished(&self) -> bool {
-        self.sim.map_handoff_done
+        self.sim.map_handoff_done || (self.sim.game_over && self.sim.fade_timer == 0)
     }
 }
 
@@ -597,7 +598,16 @@ pub enum SessionState {
     InLevel(Box<LevelContext>),
     /// `$1B`-`$21`: the golden-coin castle reveal.
     Castle(sml2_core::castle_sequence::CastleSequence),
-    GameOver,
+    /// `$05`/`$07`: the GAME OVER screen.
+    GameOver(Box<GameOverScreen>),
+}
+
+/// State `$07`'s inputs: the player record `$27AF` reset, which carries the
+/// fade, `$FF97` and the folded golden-coin flags, and the level's sprite
+/// palettes, which `$27AF` leaves untouched.
+pub struct GameOverScreen {
+    pub sim: PlayerSim,
+    pub obp: [u8; 2],
 }
 
 /// Which state a fresh session starts in.
@@ -1013,7 +1023,7 @@ impl Session {
     pub fn saveable(&self) -> bool {
         matches!(
             self.state,
-            SessionState::Overworld(_) | SessionState::InLevel(_) | SessionState::GameOver
+            SessionState::Overworld(_) | SessionState::InLevel(_) | SessionState::GameOver(_)
         )
     }
 
@@ -1073,11 +1083,11 @@ impl Session {
                 map.coins_high = self.coins_high;
                 map.save_record(self.lives, self.level_tally, self.money_bag)
             }
-            SessionState::GameOver => {
-                let map = MapSim::new();
-                map.save_record(self.lives, self.level_tally, self.money_bag)
-            }
-            SessionState::Title(_) | SessionState::FileSelectLoading(_) | SessionState::FileSelect(_) | SessionState::Demo(_) => {
+            SessionState::GameOver(screen) => screen.sim.save_record(self.money_bag),
+            SessionState::Title(_)
+            | SessionState::FileSelectLoading(_)
+            | SessionState::FileSelect(_)
+            | SessionState::Demo(_) => {
                 match self
                     .active_slot
                     .and_then(|slot| self.slots.slot(slot as usize))
@@ -1527,7 +1537,33 @@ impl Session {
 
                 self.object_clock.observe(&ctx.obj);
                 self.tile_animation = ctx.tile_animation;
-                if ctx.is_finished() {
+                if ctx.is_finished() && ctx.sim.game_over {
+                    // `$311A`'s lives borrow: state `$05` (`$27AF`), not the map.
+                    let mut sim = ctx.sim.clone();
+                    let obp = [
+                        ctx.manifest.header.palettes[1],
+                        ctx.manifest.header.palettes[2],
+                    ];
+                    self.flutter = sim.flutter;
+                    self.flutter_armed = sim.flutter_armed;
+                    self.flutter_charge = sim.flutter_charge;
+                    sim.game_over_enter();
+                    self.lives = sim.lives;
+                    self.coins_low = sim.coins_low;
+                    self.coins_high = sim.coins_high;
+                    self.level_tally = sim.level_tally;
+                    self.money_bag = 0;
+                    self.powerup = 0;
+                    self.sound_driver.music_request = sim.music_request;
+                    self.state = SessionState::GameOver(Box::new(GameOverScreen { sim, obp }));
+                    // `$2934`: the save the level-clear hand-off also makes.
+                    let rec = self.save_record();
+                    if let Some(slot) = self.active_slot {
+                        self.slots.write_slot(slot as usize, &rec);
+                    }
+                    saves.push(rec);
+                    StepOutcome::GameOver
+                } else if ctx.is_finished() {
                     self.flutter = ctx.sim.flutter;
                     self.flutter_armed = ctx.sim.flutter_armed;
                     self.flutter_charge = ctx.sim.flutter_charge;
@@ -1539,11 +1575,8 @@ impl Session {
                     // ($3D573, for example). The completed exit identifies the
                     // bell path independently of that map-arrival latch.
                     if ctx.sim.dead != 0 && !ctx.sim.exit_completed {
-                        // Player died in level
-                        if ctx.sim.lives == 0 || ctx.sim.game_over || ctx.sim.lives == 0x99 {
-                            self.state = SessionState::GameOver;
-                            StepOutcome::GameOver
-                        } else {
+                        // Player died in level; 0 lives still continues.
+                        {
                             self.lives = ctx.sim.lives;
                             self.powerup = 0; // Death resets powerup
                             let target_node = handoff.node;
@@ -1750,14 +1783,25 @@ impl Session {
                 self.advance_castle(pressed, &mut saves, &mut diagnostics)
             }
 
-            SessionState::GameOver => {
-                self.lives = 5;
-                self.powerup = 0;
-                let mut map_sim = MapSim::new();
-                map_sim.set_castle_scripts(self.assets.castle_scripts.clone());
-                map_sim.lives = 5;
-                map_sim.load_screen(0, 0, &self.assets.node_records);
-                self.state = SessionState::Overworld(map_sim);
+            SessionState::GameOver(screen) => {
+                // `$0300`: `$FF97` ticks every frame, VBlank runs the fade.
+                screen.sim.frame_counter = screen.sim.frame_counter.wrapping_add(1);
+                let held = pack_joypad(
+                    keys.right,
+                    keys.left,
+                    keys.up,
+                    keys.down,
+                    keys.a,
+                    keys.b,
+                    keys.select,
+                    keys.start,
+                );
+                let pressed = held & !self.prev_keys_held;
+                self.prev_keys_held = held;
+                if screen.sim.game_over_step(pressed) {
+                    // `$287E` → state `$00`, which reboots to the title.
+                    self.enter_title();
+                }
                 StepOutcome::Continue
             }
         };

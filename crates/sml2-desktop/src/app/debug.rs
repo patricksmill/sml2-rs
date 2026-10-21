@@ -366,7 +366,7 @@ fn state_label(state: &SessionState) -> String {
         SessionState::FileSelect(_) => "file select".into(),
         SessionState::Demo(demo) => format!("demo {}", demo.index),
         SessionState::Castle(seq) => format!("castle reveal {:02X}", seq.state),
-        SessionState::GameOver => "game over".into(),
+        SessionState::GameOver(_) => "game over".into(),
     }
 }
 

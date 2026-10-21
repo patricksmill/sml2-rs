@@ -2761,6 +2761,18 @@ fn game_over_step_ticks_the_fade_then_waits_for_start() {
     assert!(!sim.game_over_step(0x08));
 }
 
+/// VBlank decrements `sFadeTimer` before `$287E` tests it, so START on the
+/// frame the fade reaches 0 already hands off.
+#[test]
+fn game_over_accepts_start_on_the_frame_the_fade_reaches_zero() {
+    let mut sim = PlayerSim::new();
+    sim.game_over = true;
+    sim.fade_timer = 2;
+    assert!(!sim.game_over_step(0x08), "fade 2 -> 1 still runs");
+    assert!(sim.game_over_step(0x08), "fade 1 -> 0 and START");
+    assert_eq!(sim.fade_timer, 0);
+}
+
 /// Outside the game-over phase the poll is inert (the flag gates it), and
 /// a level reload clears the flag like the other phase flags.
 #[test]

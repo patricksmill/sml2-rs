@@ -55,13 +55,18 @@ fn session_palette_producer_reaches_title_file_select_all_maps_rooms_and_castle(
     }
     let file_select = assert_gray_parity(&session);
     assert!(file_select.iter().any(|p| p.source == PaletteSource::Obj0));
-    session.state = SessionState::GameOver;
-    let fallback = assert_gray_parity(&session);
-    assert!(fallback.iter().all(|p| *p
-        == PalettePixel {
-            source: PaletteSource::Bg,
-            shade: 3
-        }));
+    let mut sim = sml2_core::player_sim::PlayerSim::new();
+    sim.game_over_enter();
+    session.state = SessionState::GameOver(Box::new(crate::session::GameOverScreen {
+        sim,
+        obp: [0xD0, 0xE4],
+    }));
+    let game_over = assert_gray_parity(&session);
+    assert!(game_over.iter().any(|p| p.source == PaletteSource::Bg));
+    assert!(
+        game_over.iter().any(|p| p.source == PaletteSource::Obj0),
+        "Mario is drawn over the castle"
+    );
 }
 
 #[test]
