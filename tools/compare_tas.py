@@ -203,9 +203,9 @@ def step_masks(mask, phases, st4_keys, frame_held=None):
     return keys + [mask] * (len(phases) - len(keys))
 
 
-# Every address `check_divergence` reads.
+# Every address `check_divergence` and `--trace` read.
 SNAPSHOT_ADDRS = (0xFF9B, 0xA269, 0xFFC0, 0xFFC1, 0xFFC2, 0xFFC3, 0xFFC8, 0xFFC9,
-                  0xFFCA, 0xFFCB, 0xFFF0, 0xAF08, 0xA26B, 0xA28E, 0xA28F)
+                  0xFFCA, 0xFFCB, 0xFFF0, 0xAF08, 0xA26B, 0xA28E, 0xA28F, 0xA200, 0xA201)
 
 
 class Snapshot(dict):
@@ -236,6 +236,33 @@ def completed_sample(memory, events, states):
     pending = sum(kind == 'u' for kind, _ in events[done[-1] + 1:])
     return (Snapshot(memory, events[done[-1]][1]),
             states[max(0, len(states) - 1 - pending)])
+
+
+def trace_range(value):
+    """An inclusive, nonnegative input-row range for argparse."""
+    try:
+        start, end = (int(part) for part in value.split(':'))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError('expected START:END with integer endpoints') from exc
+    if not 0 <= start <= end:
+        raise argparse.ArgumentTypeError('expected 0 <= START <= END')
+    return start, end
+
+
+def trace_line(index, mask, rom, port):
+    """One `--trace` row: the paired ROM sample and port state side by side."""
+    held = '+'.join(name for bit, name in BUTTONS if mask & bit) or '-'
+    x = rom[0xFFC2] | rom[0xFFC3] << 8
+    y = rom[0xFFC0] | rom[0xFFC1] << 8
+    line = (f'{index} {held:<10} ROM st={rom[0xFF9B]:02x} x={x} y={y} hv={rom[0xA200]:02x} '
+            f'vv={rom[0xA201]:02x} fff0={rom[0xFFF0]} up={rom[0xAF08]}')
+    if port is None:
+        return line + ' | port -'
+    line += (f" | port x={port['x']} y={port['y']} hv={port.get('hvel', 0):02x} "
+             f"vv={port.get('vvel', 0):02x}")
+    if 'fff0' in port:
+        line += f" fff0={port['fff0']} up={port['update_phase']}"
+    return line
 
 
 def check_divergence(frame, memory, native, threshold, live=False, player_ran=True,
@@ -323,7 +350,10 @@ def main():
     parser.add_argument('--paused', action='store_true')
     parser.add_argument('--headless', action='store_true', help='check protocol without opening windows')
     parser.add_argument('--frames', type=int)
+    parser.add_argument('--trace', metavar='START:END', type=trace_range,
+                        help='print ROM and port state for this inclusive input-row range')
     args = parser.parse_args()
+    trace = args.trace
     movie = json.loads(args.movie.read_text())
     if movie.get('format') != 'sml2-tas-v1' or not movie.get('frames'):
         parser.error('unsupported or empty movie')
@@ -364,7 +394,7 @@ def main():
         threshold = comparison_threshold(args.diverge_threshold, args.exact_position, args.no_diverge)
         watch = threshold is not None
         phase_lock = not args.no_phase_lock
-        state_rows = watch or args.debug_state or phase_lock
+        state_rows = watch or args.debug_state or phase_lock or trace is not None
         if state_rows:
             bridge_args.append('--state')
         if args.debug_state:
@@ -552,6 +582,12 @@ def main():
                         divergence = check_divergence(
                             index - 1, pyboy.memory, previous_native, threshold,
                             native_step=previous_native_step)
+                if trace is not None and trace[0] <= index <= trace[1]:
+                    if phase_lock:
+                        sample, (paired, _) = completed_sample(pyboy.memory, events, states)
+                    else:
+                        sample, paired = pyboy.memory, native_state
+                    print(trace_line(index, mask, sample, paired), flush=True)
                 if divergence is not None and previous_divergence is None:
                     paused = True
                     print(f'FIRST DIVERGENCE at input {divergence["frame"]}: {divergence["detail"]}',

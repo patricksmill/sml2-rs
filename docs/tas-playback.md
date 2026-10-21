@@ -123,6 +123,12 @@ inclusive tolerance; **`--diverge-threshold 0` disables it**. Use
 `--exact-position` to pause on any world X/Y difference, including one pixel.
 `--no-diverge` disables comparison even with `--exact-position`.
 
+`--trace START:END` prints ROM and native state for an inclusive range of
+zero-based movie input rows. Both endpoints must be nonnegative and ordered.
+With phase lock, the trace pairs the last completed ROM update with its native
+step; with `--no-phase-lock`, it prints the live state after each hardware tick
+and native step. Add `--debug-state` to include native object-clock fields.
+
 ```bash
 python tools/compare_tas.py recordings/<recording>.json --rom ../sml2decomp/baserom.gb --exact-position --debug-state
 ```

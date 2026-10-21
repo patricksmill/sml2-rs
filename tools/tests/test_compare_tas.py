@@ -1,14 +1,96 @@
 """Comparison bridge protocol, button delivery, and logic phase selection."""
+import argparse
+from contextlib import redirect_stderr, redirect_stdout
+import hashlib
 import io
+import json
 from pathlib import Path
 import sys
+import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from compare_tas import (apply_buttons, logic_phases, read_state,
                          check_divergence, comparison_threshold, rom_keys_mask,
                          step_masks, completed_sample, frame_read, frame_timing)
 from compare_tas import boss_div_field, BOSS_DIV_READ_HOOKS
+import compare_tas
+
+
+class TraceTests(unittest.TestCase):
+    def test_inclusive_ranges_require_two_ordered_nonnegative_endpoints(self):
+        self.assertEqual(compare_tas.trace_range('0:0'), (0, 0))
+        self.assertEqual(compare_tas.trace_range('12:34'), (12, 34))
+        for value in ('', '5', '1:2:3', 'x:y', ':4', '4:', '-1:4', '9:1'):
+            with self.subTest(value=value), self.assertRaises(argparse.ArgumentTypeError):
+                compare_tas.trace_range(value)
+
+    def test_invalid_ranges_exit_through_argparse_before_reading_files(self):
+        for value in ('5', '1:2:3', 'x:y', '-1:4', '9:1'):
+            error = io.StringIO()
+            with self.subTest(value=value), patch.object(sys, 'argv', [
+                'compare_tas.py', 'unused.json', '--rom', 'unused.gb', f'--trace={value}'
+            ]), patch.object(Path, 'read_text') as read, redirect_stderr(error):
+                with self.assertRaises(SystemExit) as exited:
+                    compare_tas.main()
+                self.assertEqual(exited.exception.code, 2)
+                read.assert_not_called()
+                self.assertIn('error: argument --trace:', error.getvalue())
+
+    def test_trace_uses_completed_snapshot_velocities_and_optional_native_state(self):
+        memory = dict.fromkeys(compare_tas.SNAPSHOT_ADDRS, 0)
+        memory.update({0xFF9B: 4, 0xFFC2: 34, 0xFFC0: 212, 0xFFC1: 1,
+                       0xA200: 0x80, 0xA201: 0x18, 0xFFF0: 3, 0xAF08: 1})
+        values = {address: memory[address] for address in compare_tas.SNAPSHOT_ADDRS}
+        memory.update({0xA200: 0xFF, 0xA201: 0x5F})
+        port = dict(x=34, y=468, hvel=0x80, vvel=0x18, fff0=3, update_phase=1)
+        sample, (paired, _) = completed_sample(
+            memory, [('d', values), ('u', None)], [(port, 5), (None, 6)])
+        self.assertEqual(compare_tas.trace_line(12, 33, sample, paired),
+                         '12 right+b    ROM st=04 x=34 y=468 hv=80 vv=18 fff0=3 up=1'
+                         ' | port x=34 y=468 hv=80 vv=18 fff0=3 up=1')
+        self.assertTrue(compare_tas.trace_line(12, 0, sample, None).endswith(' | port -'))
+
+    def test_trace_without_phase_lock_or_divergence_requests_state_and_prints_range(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rom = root / 'test.gb'
+            rom.write_bytes(b'trace protocol fixture')
+            movie = root / 'movie.json'
+            movie.write_text(json.dumps(dict(format='sml2-tas-v1', frames=[0, 33, 0],
+                                             rom_sha1=hashlib.sha1(rom.read_bytes()).hexdigest())))
+            memory = bytearray(65536)
+            memory[0xFF9B] = 4
+            memory[0xFFC0:0xFFC2] = (468).to_bytes(2, 'little')
+            memory[0xFFC2] = 34
+            memory[0xA200:0xA202] = bytes([0x80, 0x18])
+            emulator = Mock(memory=memory)
+
+            def tick(*_):
+                memory[0xFFC2] += 1
+                return True
+
+            emulator.tick.side_effect = tick
+            bridge = Mock(stdin=io.BytesIO(), stdout=io.BytesIO())
+            states = [None] + [dict(x=x, y=468, hvel=0x80, vvel=0x18) for x in (35, 36, 37)]
+            output = io.StringIO()
+            with patch.object(sys, 'argv', [
+                'compare_tas.py', str(movie), '--rom', str(rom), '--headless',
+                '--no-phase-lock', '--no-diverge', '--trace', '1:1'
+            ]), patch.dict(sys.modules, {'pyboy': SimpleNamespace(PyBoy=Mock(return_value=emulator))}), \
+                    patch.object(compare_tas.subprocess, 'Popen', return_value=bridge) as popen, \
+                    patch.object(compare_tas, 'read_state', side_effect=states), \
+                    patch.object(compare_tas, 'read_frame'), redirect_stdout(output):
+                compare_tas.main()
+            self.assertIn('--state', popen.call_args.args[0])
+            rows = [line for line in output.getvalue().splitlines() if line[:1].isdigit()]
+            self.assertEqual(len(rows), 1)
+            self.assertTrue(rows[0].startswith('1 right+b '))
+            self.assertIn('ROM st=04 x=36 y=468 hv=80 vv=18', rows[0])
+            self.assertIn('| port x=36 y=468 hv=80 vv=18', rows[0])
+            emulator.stop.assert_called_once_with(save=False)
 
 
 class BossDividerTests(unittest.TestCase):
