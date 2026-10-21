@@ -130,8 +130,13 @@ python tools/compare_tas.py recordings/<recording>.json --rom ../sml2decomp/base
 Reports identify the zero-based **movie input index** and the **native update
 count**, which starts at zero before any `Session::advance`. Those indices can
 differ: phase lock is on by default and may send zero, one, or several native
-updates for one movie row. A gameplay update (`$05D5`) uses the buttons the ROM
-latched at its last `ReadJoypad` (hooked at `$38B9`); other updates use the row.
+updates for one movie row. The port takes no step until the ROM's main loop
+first dispatches (`$0279`, after the boot ROM and `Init`), so its title starts
+on the ROM's title loader. A gameplay update (`$05D5`) uses the buttons the ROM
+latched at its last `ReadJoypad` (hooked at `$38B9`). The once-per-frame step
+outside a level uses the read that frame's state handler acts on: one taken
+before line 144 of that frame, or at the end of the previous tick, since the
+tick ends at frame start. Scene steps use the row.
 The two agree until a ROM frame overruns the hardware tick: the next read then
 happens before the next row is applied, and the ROM acts on the previous row.
 The ROM-supplied phases are diagnostic alignment, not proof of native clock

@@ -130,16 +130,35 @@ def rom_keys_mask(held):
     return sum(bit for k, bit in enumerate(ROM_KEY_BITS) if held >> k & 1)
 
 
-def step_masks(mask, phases, st4_keys):
+def frame_read(carried, early_reads, latch):
+    """`hKeysHeld` for the once-per-frame step outside a level.
+
+    The main loop reads the joypad just after its VBlank wait, and PyBoy's tick
+    ends at the start of the frame, so the read lands either at the end of a
+    tick (LY >= 144) or at the start of the next (LY 0). Either way the state
+    handler runs in the frame after the boundary. A read is therefore this
+    frame's when it happened here before line 144 (`early_reads`), or at the
+    end of the previous tick (`carried`). The last one wins; without one, the
+    latest latch stands.
+    """
+    reads = ([] if carried is None else [carried]) + list(early_reads)
+    return reads[-1] if reads else latch
+
+
+def step_masks(mask, phases, st4_keys, frame_held=None):
     """Buttons for each port step from `logic_phases`.
 
-    A gameplay update uses the keys the ROM latched at its last `ReadJoypad`
-    (`$38B9` runs right after the read). While frames keep up, that is this
-    row. Once a frame overruns the hardware tick, the next read happens before
-    the next row is applied, so the ROM acts on the previous row. Other steps,
-    and updates before any read, use the movie row.
+    The ROM acts on `hKeysHeld` from its last `ReadJoypad` (`$38B9` runs right
+    after the read), which can trail the movie row by a frame: the read can
+    miss a row just applied, and once a frame overruns the hardware tick the
+    next read happens before the next row. So a gameplay update uses the keys
+    latched at its `$05D5` entry, and the once-per-frame step outside a level
+    uses `frame_held`, from `frame_read`. Scene steps, and steps before any
+    read, use the movie row.
     """
     keys = [mask if held is None else rom_keys_mask(held) for held in st4_keys]
+    if not st4_keys and frame_held is not None and len(phases) > 0:
+        keys = [rom_keys_mask(frame_held)]
     return keys + [mask] * (len(phases) - len(keys))
 
 
@@ -330,6 +349,9 @@ def main():
         scene_running = [False]
         scene_phases = []
         joypad_latch = [None]
+        late_read = [None]
+        main_loop = [False]
+        early_reads = []
         events = []
         if phase_lock:
             def state4_entry(_ctx):
@@ -340,9 +362,21 @@ def main():
             pyboy.hook_register(0, 0x05D5, state4_entry, None)
 
             def joypad_read(_ctx):
-                joypad_latch[0] = pyboy.memory[0xFF80]
+                held = pyboy.memory[0xFF80]
+                joypad_latch[0] = held
+                if pyboy.memory[0xFF44] >= 144:
+                    late_read[0] = held
+                else:
+                    early_reads.append(held)
 
             pyboy.hook_register(0, 0x38B9, joypad_read, None)
+
+            # The port starts on the title loader (state `$00`); the boot ROM and
+            # `Init` run first, so hold the port until the main loop dispatches.
+            def dispatch(_ctx):
+                main_loop[0] = True
+
+            pyboy.hook_register(0, 0x0279, dispatch, None)
 
             def post_state(_ctx):
                 events.append(('d', {a: pyboy.memory[a] for a in SNAPSHOT_ADDRS}))
@@ -409,12 +443,17 @@ def main():
                     st4_keys.clear()
                     scene_phases.clear()
                     events.clear()
+                    carried, late_read[0] = late_read[0], None
+                    early_reads.clear()
                     states = [(native_state, native_step)]
                 if not pyboy.tick(1, True, False):
                     raise RuntimeError('PyBoy stopped before end of movie')
                 if phase_lock:
-                    phases = logic_phases(before_state, before_ff97, st4_phases, scene_phases)
-                    for phase, keys in zip(phases, step_masks(mask, phases, st4_keys)):
+                    phases = (logic_phases(before_state, before_ff97, st4_phases, scene_phases)
+                              if main_loop[0] else [])
+                    predicted = (frame_read(carried, early_reads, joypad_latch[0])
+                                 if len(phases) > len(scene_phases) else None)
+                    for phase, keys in zip(phases, step_masks(mask, phases, st4_keys, predicted)):
                         bridge.stdin.write(f'{keys} {phase}\n'.encode())
                         bridge.stdin.flush()
                         if state_rows:

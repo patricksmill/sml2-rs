@@ -7,7 +7,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from compare_tas import (apply_buttons, logic_phases, read_state,
                          check_divergence, comparison_threshold, rom_keys_mask,
-                         step_masks, completed_sample)
+                         step_masks, completed_sample, frame_read)
 
 
 class BridgeStateTests(unittest.TestCase):
@@ -219,6 +219,19 @@ class StepMaskTests(unittest.TestCase):
     def test_player_update_uses_the_keys_the_rom_read(self):
         # The row adds Left, but the overrunning frame read the previous row (B).
         self.assertEqual(step_masks(2 | 32, [1], [0b0000_0010]), [32])
+
+    def test_a_read_at_the_end_of_a_tick_belongs_to_the_next_frame(self):
+        # Level 10 map entry: A read at LY 149, acted on the next frame.
+        self.assertEqual(frame_read(0b0000_0001, [], 0b0000_0001), 0b0000_0001)
+        # First entry: A read at LY 0 of the frame that acts on it.
+        self.assertEqual(frame_read(None, [0b0000_0001], 0), 0b0000_0001)
+        self.assertEqual(frame_read(0, [0b0000_0001], 0b0000_0001), 0b0000_0001)
+        self.assertEqual(frame_read(None, [], 0b0010_0000), 0b0010_0000)
+
+    def test_frame_step_outside_a_level_uses_the_frame_read(self):
+        # Map: the row adds A, but this frame's `ReadJoypad` still saw nothing.
+        self.assertEqual(step_masks(16, [3], [], 0), [0])
+        self.assertEqual(step_masks(16, [3, 4], [], 0b0000_0001), [16, 16])
 
     def test_steps_without_a_read_use_the_movie_row(self):
         self.assertEqual(step_masks(34, [1], [None]), [34])
