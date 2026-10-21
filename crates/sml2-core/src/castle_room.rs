@@ -1372,10 +1372,10 @@ impl CastleRoom {
         self.bell_b_commit(input, rewards);
     }
 
-    /// `$60097`: A → state 4; held bit 5 → state 2; held bit 4 → state 3.
+    /// `$60097`: held A → state 4; held bit 5 → state 2; held bit 4 → state 3.
     fn bell_b_state1(&mut self, input: RoomInput, rewards: &mut RoomRewards) {
         self.bell_b_decor_walk(input);
-        if input.keys_pressed & 0x01 != 0 {
+        if input.keys_held & 0x01 != 0 {
             self.state = 4;
             self.timer = 16;
             self.bell_b_state4(input, rewards);
@@ -1978,7 +1978,13 @@ mod tests {
         let mut room = CastleRoom::bell_b(&scripts, &tiled());
         let mut rewards = RoomRewards::default();
         room.state = 1;
-        room.tick(input(0, 0x01), &mut rewards);
+        room.tick(
+            RoomInput {
+                keys_held: 1,
+                ..input(0, 0)
+            },
+            &mut rewards,
+        );
         assert_eq!((room.state, room.timer), (4, 16), "A -> the $60182 slide");
 
         let mut room = CastleRoom::bell_b(&scripts, &tiled());
@@ -2006,6 +2012,51 @@ mod tests {
         };
         room.tick(held4, &mut rewards);
         assert_eq!((room.state, room.timer), (3, 32), "held bit 4");
+    }
+
+    /// `$60174` returns to idle; `$6009A` tests held A on the following update.
+    #[test]
+    fn bell_room_b_accepts_a_held_through_the_end_of_a_column_walk() {
+        let mut room = CastleRoom::enter_bell_b(&scripts(), &tiled());
+        let mut rewards = RoomRewards::default();
+        room.state = 3;
+        room.timer = 0;
+        room.oam = [124, 104, 0, 0];
+
+        // `$60174` returns to state 1 without testing A on this update.
+        room.tick(
+            RoomInput {
+                keys_held: 1,
+                ..input(3, 1)
+            },
+            &mut rewards,
+        );
+        assert_eq!(
+            (room.state, room.timer, room.oam),
+            (1, 0, [124, 104, 32, 0])
+        );
+
+        // `$6009A` reads `$FF80`, so A still starts the slide without an edge.
+        room.tick(
+            RoomInput {
+                keys_held: 1,
+                ..input(4, 0)
+            },
+            &mut rewards,
+        );
+        assert_eq!(
+            (room.state, room.timer, room.oam),
+            (4, 16, [124, 104, 32, 0])
+        );
+
+        // A stale pressed byte alone cannot start the held-button branch.
+        room.state = 1;
+        room.timer = 0;
+        room.tick(input(5, 1), &mut rewards);
+        assert_eq!(
+            (room.state, room.timer, room.oam),
+            (1, 0, [124, 104, 32, 0])
+        );
     }
 
     /// `$60290`: a `$3D` tile at the computed `$9800` offset starts the wobble.
