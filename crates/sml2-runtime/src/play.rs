@@ -3,12 +3,12 @@
 use crate::content::{load_arena_layout, load_map_nodes, load_scene_scripts, load_tilesets};
 use crate::divider_clock::{NativeDividerClock, VirtualDividerClock};
 use crate::game::{
-    build_contact, note_handoff_screen, sample_level_player_inputs, scene_frame_head, BellArm,
-    TimedFloatUse,
+    build_contact, note_handoff_screen, sample_level_player_inputs, scene_frame_head,
+    update_tile_animation, BellArm, TimedFloatUse,
 };
 use crate::play_tape::PlayTape;
 use crate::present::letterbox_gray;
-use crate::render::{apply_tile_anim, hud_row_status, render_view, HudDigits, SpriteCtx, SpriteInst};
+use crate::render::{hud_row_status, render_view, HudDigits, SpriteCtx, SpriteInst};
 use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest};
 use sml2_core::objects::FireHit;
@@ -573,17 +573,17 @@ pub(crate) fn run_play(
         if let Some(s) = spr.as_mut() {
             s.obp0 = flash.unwrap_or(manifest.header.palettes[1]);
         }
-        anim_timer += 1;
-        if manifest.tile_anim.enabled && anim_timer >= manifest.tile_anim.speed as u32 * 2 {
-            anim_timer = 0;
-            anim_phase = (anim_phase + 1) & 3;
-        }
+        update_tile_animation(
+            &sim,
+            &mut bg_live,
+            anim_rows,
+            &mut anim_timer,
+            &mut anim_phase,
+        );
         // Headless runs skip the whole render path: the frame loop's job in a
         // smoke run is the simulation, and rendering a 160x144 frame per level
         // would dominate the runtime.
         if let Some(w) = window.as_mut() {
-            let mut bg = bg_live.clone();
-            apply_tile_anim(&mut bg, &manifest.tile_anim, anim_rows, anim_phase);
             // $076B: lives, coins, money bags, and the countdown, every frame.
             let hud_live = hud_row_status(
                 hud,
@@ -600,7 +600,7 @@ pub(crate) fn run_play(
                 &manifest,
                 &layout_live,
                 &sim.layout_writes,
-                &bg,
+                &bg_live,
                 cam.x,
                 cam.y,
                 vw,

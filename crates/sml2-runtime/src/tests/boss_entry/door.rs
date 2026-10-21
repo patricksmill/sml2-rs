@@ -14,6 +14,7 @@ fn door_boss_real_level_scene_entry_selects_portable_definition() {
     assert_eq!(manifest.level_id, 9);
     let mut player = PlayerSim::new();
     seed_level_timer(&mut player, &manifest);
+    assert_eq!(player.tile_anim_config, 0x4C);
     // Direct placement at the source entrance cell: right edge of (14,1).
     player.x = 0x0EF1;
     player.y = 0x01D4;
@@ -148,6 +149,7 @@ fn door_boss_real_level_scene_entry_selects_portable_definition() {
     assert!(entered, "source entrance did not reach arena");
     assert_eq!(ran, vec![0x62, 0x20, 0x30, 0x40]);
     assert_eq!(player.level_gfx_index, 2);
+    assert_eq!(player.tile_anim_config, 0, "$20EB disables the level animation");
     assert_eq!((player.music_request, player.level_song), (32, 32));
     assert!(camera.boss_mode());
     assert!(!camera.take_blocked_scene_load());

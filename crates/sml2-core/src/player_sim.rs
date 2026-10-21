@@ -566,8 +566,8 @@ pub struct PlayerSim {
     /// (`$2756`/`$2760`). The driver consumes it on the frame's `_UpdateSound`
     /// and clears it again in `$10067`, exactly like the ROM's byte.
     pub sound_mode: u8,
-    /// `sTileAnimConfig` ($A299) — the exit bell clears it. Fidelity only:
-    /// the port's tile animation comes from the level manifest.
+    /// `sTileAnimConfig` ($A299): seeded at level load; cleared by boss
+    /// entry and the exit bell to stop writes to the live tile data.
     pub tile_anim_config: u8,
 }
 

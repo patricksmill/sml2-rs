@@ -1,7 +1,7 @@
 //! Read-only session presentation; view dimensions never enter simulation state.
 
 use super::render_view;
-use super::{apply_tile_anim, hud_row_status, HudDigits};
+use super::{hud_row_status, HudDigits};
 use crate::session::{LevelContext, Session, SessionState, MAP_FADE_STEP};
 use std::error::Error;
 
@@ -20,13 +20,6 @@ fn fade_palette(pal: u8, steps: u8) -> u8 {
 impl LevelContext {
     /// Render one level view without advancing the session.
     pub fn render_frame(&self, vw: usize, vh: usize) -> Result<Vec<u8>, Box<dyn Error>> {
-        let mut bg = self.bg_live.clone();
-        apply_tile_anim(
-            &mut bg,
-            &self.manifest.tile_anim,
-            &self.anim_rows,
-            self.anim_phase,
-        );
         let hud_live = hud_row_status(
             &self.hud,
             HudDigits {
@@ -47,7 +40,7 @@ impl LevelContext {
             &self.manifest,
             &self.layout_live,
             &self.sim.layout_writes,
-            &bg,
+            &self.bg_live,
             self.cam.x,
             self.cam.y,
             vw,

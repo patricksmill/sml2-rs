@@ -34,8 +34,8 @@ use sml2_core::scene::{boss_def_index, boss_def_portable, SceneScripts, SceneSte
 use sml2_core::tileset::Tilesets;
 
 use crate::game::{
-    apply_level_entry, build_contact, note_handoff_screen, sample_level_player_inputs,
-    scene_frame_head, seed_level_timer, BellArm,
+    apply_level_entry, build_contact, note_handoff_screen, sample_level_player_inputs, scene_frame_head,
+    seed_level_timer, update_tile_animation, BellArm,
 };
 use crate::render::{SpriteCtx, SpriteInst};
 
@@ -528,13 +528,13 @@ impl LevelContext {
         if let Some(s) = self.spr.as_mut() {
             s.obp0 = flash.unwrap_or(self.manifest.header.palettes[1]);
         }
-        self.anim_timer += 1;
-        if self.manifest.tile_anim.enabled
-            && self.anim_timer >= self.manifest.tile_anim.speed as u32 * 2
-        {
-            self.anim_timer = 0;
-            self.anim_phase = (self.anim_phase + 1) & 3;
-        }
+        update_tile_animation(
+            &self.sim,
+            &mut self.bg_live,
+            &self.anim_rows,
+            &mut self.anim_timer,
+            &mut self.anim_phase,
+        );
     }
 
     /// True if the level has completed fade-out and finished the handoff.

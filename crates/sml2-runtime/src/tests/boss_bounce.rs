@@ -1,6 +1,35 @@
 use super::*;
 use sml2_core::{level::LAYOUT_SIZE, objects::*};
 
+#[test]
+fn disabled_tile_animation_preserves_vram_and_cannot_overwrite_arena_fire() {
+    let mut player = PlayerSim::new();
+    // Level 9: `$35EA` = $4B, stored as $4C at level load.
+    player.tile_anim_config = 0x4C;
+    let mut bg = vec![0xA5; 0x1000];
+    let mut rows = vec![0; 16 * 0x100];
+    rows[0xB40..0xB80].fill(0x39);
+    let mut timer = 7;
+    let mut phase = 0;
+    update_tile_animation(&player, &mut bg, &rows, &mut timer, &mut phase);
+    assert_eq!((timer, phase), (0, 1));
+    assert_eq!(&bg[0xA00..0xA40], &[0x39; 64]);
+
+    // `$20EB` clears the config. No later write, including the render pass,
+    // may revert the last frame or paste the old level's row into arena art.
+    player.tile_anim_config = 0;
+    for _ in 0..16 {
+        update_tile_animation(&player, &mut bg, &rows, &mut timer, &mut phase);
+    }
+    assert_eq!(&bg[0xA00..0xA40], &[0x39; 64]);
+    bg[0xA00..0xA40].fill(0x6D); // `$25AF` reloads the arena's fire tiles.
+    for _ in 0..32 {
+        update_tile_animation(&player, &mut bg, &rows, &mut timer, &mut phase);
+    }
+    assert_eq!(&bg[0xA00..0xA40], &[0x6D; 64]);
+    assert_eq!(phase, 1);
+}
+
 /// `$2E5C` sets the scene bounce's no-cut latch before `$2D7D` writes
 /// the final 48/75 jump index. Exercise contact production, collision,
 /// write-back, and `$14FA` on the following frame with A released.

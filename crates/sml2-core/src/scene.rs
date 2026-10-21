@@ -371,6 +371,7 @@ impl SceneVm {
     fn op_2x(&mut self, sim: &mut PlayerSim, cam: &mut CameraSim) {
         cam.scene_state = 15;
         sim.fade_timer = 0x0160;
+        sim.tile_anim_config = 0;
         self.boss_arena = true;
     }
 
@@ -695,7 +696,9 @@ mod tests {
         step_prologue(&mut vm, &mut sim, &mut cam, &s);
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Ran(0x60));
         assert_eq!(sim.level_gfx_index, 0, "$6x's nibble is the tileset index");
+        sim.tile_anim_config = 0x4C;
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Ran(0x20));
+        assert_eq!(sim.tile_anim_config, 0, "$20EB stops level tile animation");
         assert_eq!(cam.scene_state, 15, "$20EB's arm");
         assert_eq!(sim.fade_timer, 0x0160, "sFadeTimerHigh=1, sFadeTimerLow=96");
         assert!(
