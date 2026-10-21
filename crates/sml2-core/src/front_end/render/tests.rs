@@ -32,7 +32,9 @@ fn assets() -> FrontEndAssets {
 
     let mut vram = vec![0u8; VRAM_LEN];
     paint(&mut vram, 0x1000, 3);
-    for tile in [0u8, 1, 16, 17, 36, 37, 52, 57, 64, 65, 80, 81, 96, 97, 0x83, 0x84, 209] {
+    for tile in [
+        0u8, 1, 16, 17, 36, 37, 52, 57, 64, 65, 80, 81, 96, 97, 0x83, 0x84, 209,
+    ] {
         paint(&mut vram, tile as usize * 16, 1);
     }
     let tilemap = vec![0u8; TILEMAP_LEN];
@@ -122,4 +124,86 @@ fn the_easy_banner_draws_at_its_rom_position() {
     // The cursor switches to the small-Mario frame 32 (base 40,124 ->
     // first cell's screen 24,104).
     assert_eq!(frame[104 * 160 + 24], 255);
+}
+
+#[test]
+fn palette_frames_keep_front_end_sources_even_when_the_sprite_shade_is_white() {
+    use crate::video::{OutputMode, PalettePixel, PaletteSource};
+    let assets = assets();
+    let (fs, slots) = dropped_file_select();
+    let gray = render_file_select(&fs, &slots, &assets, &tables(), (160, 144));
+    let tokens = render_file_select_output(
+        &fs,
+        &slots,
+        &assets,
+        &tables(),
+        (160, 144),
+        OutputMode::PaletteIndices,
+    );
+    assert_eq!(tokens[0], 3, "mapped BG shade 3");
+    assert_eq!(
+        tokens[96 * 160 + 24],
+        4,
+        "OBP0 mapped shade 0 is still an OBJ pixel"
+    );
+    assert_eq!(
+        tokens
+            .iter()
+            .map(|&p| PalettePixel::from_token(p).grayscale())
+            .collect::<Vec<_>>(),
+        gray
+    );
+    let title = render_title_output(&assets, (160, 144), OutputMode::PaletteIndices);
+    assert!(title.iter().all(|&p| p == 3));
+    assert_eq!(PalettePixel::from_token(title[0]).source, PaletteSource::Bg);
+
+    let mut frame = vec![1; 24 * 8];
+    let mut vram = vec![0; VRAM_LEN];
+    paint(&mut vram, 0, 1);
+    draw_cell(
+        &mut frame,
+        24,
+        8,
+        &vram,
+        OutputMode::PaletteIndices,
+        Cell {
+            x: 8,
+            y: 16,
+            tile: 0,
+            attr: 0x10,
+        },
+    );
+    assert_eq!(
+        frame[0],
+        8 | ((FILE_SELECT_OBP1 >> 2) & 3),
+        "attr bit 4 selects OBP1"
+    );
+    draw_cell(
+        &mut frame,
+        24,
+        8,
+        &vram,
+        OutputMode::PaletteIndices,
+        Cell {
+            x: 16,
+            y: 16,
+            tile: 0,
+            attr: 0x80,
+        },
+    );
+    assert_eq!(frame[8], 1, "behind-background sprite preserves BG source");
+    draw_cell(
+        &mut frame,
+        24,
+        8,
+        &vram,
+        OutputMode::PaletteIndices,
+        Cell {
+            x: 24,
+            y: 16,
+            tile: 1,
+            attr: 0x10,
+        },
+    );
+    assert_eq!(frame[16], 1, "transparent OBJ colour preserves BG source");
 }

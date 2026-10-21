@@ -14,6 +14,7 @@
 //! 3. Emit one structured manifest per level plus a usage index:
 //!    `extracted/levels/levelNN.manifest.json` and `index.json`.
 
+mod cartridge;
 mod castle;
 mod ending;
 mod front_end;
@@ -257,6 +258,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let baserom = fs::read(decomp.join("baserom.gb"))?;
+    cartridge::emit(&baserom, &extracted)?;
     ending::emit(&baserom, &extracted)?;
     front_end::emit(&baserom, &decomp, &extracted)?;
     let main_src = fs::read_to_string(decomp.join("main.asm"))?;

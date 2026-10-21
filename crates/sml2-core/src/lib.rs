@@ -16,6 +16,7 @@ pub mod ending_scene;
 pub mod ending_sequence;
 pub mod ending_sprites;
 pub mod front_end;
+pub mod hardware_palettes;
 pub mod level;
 pub mod level_timer;
 pub mod map;

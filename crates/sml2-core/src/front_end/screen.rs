@@ -5,7 +5,7 @@
 //! covers a 256x256-pixel plane that wraps. No window, no sprites here — the
 //! file select's OAM pass is added by its own renderer.
 
-use crate::video::{bgp_shades, tile_colors};
+use crate::video::{tile_colors, OutputMode, PaletteSource};
 
 /// The `$8000-$97FF` background window.
 pub const VRAM_LEN: usize = 0x1800;
@@ -44,6 +44,28 @@ pub fn render_bg_mode(
     view: (usize, usize),
     tile_data: TileData,
 ) -> Result<Vec<u8>, String> {
+    render_bg_output(
+        vram,
+        tilemap,
+        bgp,
+        scroll,
+        view,
+        tile_data,
+        OutputMode::Grayscale,
+    )
+}
+
+/// Render background pixels in the requested output representation.
+#[allow(clippy::too_many_arguments)]
+pub fn render_bg_output(
+    vram: &[u8],
+    tilemap: &[u8],
+    bgp: u8,
+    scroll: (u8, u8),
+    view: (usize, usize),
+    tile_data: TileData,
+    output: OutputMode,
+) -> Result<Vec<u8>, String> {
     if vram.len() < VRAM_LEN {
         return Err(format!(
             "background VRAM is {} bytes, expected {VRAM_LEN}",
@@ -57,7 +79,7 @@ pub fn render_bg_mode(
         ));
     }
     let (vw, vh) = view;
-    let shades = bgp_shades(bgp);
+    let shades = output.palette(bgp, PaletteSource::Bg);
     let (scroll_x, scroll_y) = (scroll.0 as usize, scroll.1 as usize);
     let mut out = vec![shades[0]; vw * vh];
     for y in 0..vh {

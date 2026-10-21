@@ -101,6 +101,7 @@ fn object_palette_bit_selects_the_second_hardware_palette() {
         &[(8, 16, 7)],
         &metas,
         (160, 144),
+        crate::video::OutputMode::Grayscale,
     );
     assert_eq!(
         (image[0], image[8]),
@@ -125,4 +126,61 @@ fn congratulations_uses_its_own_tilemap_and_hides_gameplay_sprites() {
     );
     assert_ne!(castle, image);
     assert!(image.iter().any(|&p| p != image[0]));
+}
+
+#[test]
+fn castle_palette_frame_retains_both_object_sources_and_background() {
+    use crate::video::{OutputMode, PalettePixel};
+    let mut bytes = vec![0; SpriteMetas::ENTRIES * 2];
+    bytes[14..16].copy_from_slice(&0x41E4u16.to_le_bytes());
+    bytes.extend_from_slice(&[0, 0, 0, 0, 0, 8, 0, 0x10, 0x80, 0, 0, 0]);
+    let metas = SpriteMetas::new(&bytes);
+    let tokens = draw(
+        &vec![[1; 64]; 384],
+        &vec![0; 0x300],
+        0xE4,
+        [0xE4; 2],
+        &[(8, 16, 7)],
+        &metas,
+        (160, 144),
+        OutputMode::PaletteIndices,
+    );
+    assert_eq!((tokens[0], tokens[8], tokens[16]), (5, 9, 1));
+    let gray = draw(
+        &vec![[1; 64]; 384],
+        &vec![0; 0x300],
+        0xE4,
+        [0xE4; 2],
+        &[(8, 16, 7)],
+        &metas,
+        (160, 144),
+        OutputMode::Grayscale,
+    );
+    assert_eq!(
+        tokens
+            .iter()
+            .map(|&p| PalettePixel::from_token(p).grayscale())
+            .collect::<Vec<_>>(),
+        gray
+    );
+    let (reveal, scripts, metas) = assets();
+    let mut seq = CastleSequence::default();
+    for state in [STATE_MENU, STATE_WAIT_START] {
+        seq.state = state;
+        let tokens = render_castle_sequence_output(
+            &reveal,
+            &scripts,
+            &metas,
+            &seq,
+            (160, 144),
+            OutputMode::PaletteIndices,
+        );
+        assert_eq!(
+            tokens
+                .iter()
+                .map(|&p| PalettePixel::from_token(p).grayscale())
+                .collect::<Vec<_>>(),
+            render_castle_sequence(&reveal, &scripts, &metas, &seq, (160, 144))
+        );
+    }
 }

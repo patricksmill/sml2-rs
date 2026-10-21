@@ -90,3 +90,91 @@ fn zone_tile_writes_change_only_the_current_screen_copy() {
     assert_eq!(live.screen_tile(5, 4, 7), 0);
     assert_eq!(live.hub_tile(4, 7), 0);
 }
+
+#[test]
+fn palette_sources_survive_all_map_room_paths_and_status_strip_composition() {
+    use crate::video::{OutputMode, PalettePixel};
+    let maps = OverworldTilemaps::from_bytes(&vec![0; OverworldTilemaps::TOTAL_LEN]).unwrap();
+    let manifest = OverworldManifest::default();
+    let mut tiles = vec![[0; 64]; 384];
+    tiles[signed_bg_tile_index(0)] = [1; 64];
+    tiles[1] = [1; 64];
+    let video = MapVideo {
+        obj_palette1: 0xE4,
+        ..Default::default()
+    };
+    let cells = [
+        (32, 24, 1, 0),
+        (32, 40, 1, 0x10),
+        (32, 56, 0, 0x10),
+        (32, 72, 1, 0x80),
+    ];
+    for screen in 0..=14 {
+        let draw = |cells: &[(u8, u8, u8, u8)], output| {
+            render_overworld_view_output(
+                screen,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                cells,
+                None,
+                false,
+                0,
+                &maps,
+                &manifest,
+                &[0; 42],
+                &tiles,
+                0xE4,
+                0xE4,
+                160,
+                144,
+                Some(&video),
+                output,
+            )
+        };
+        let tokens = draw(&cells, OutputMode::PaletteIndices);
+        assert_eq!(tokens[16 * 160 + 16], 5, "screen {screen}: OBP0 shade 1");
+        assert_eq!(tokens[16 * 160 + 32], 9, "screen {screen}: OBP1 shade 1");
+        assert_eq!(
+            tokens[16 * 160 + 48],
+            1,
+            "screen {screen}: transparent OBJ preserves BG"
+        );
+        assert_eq!(
+            tokens[16 * 160 + 64],
+            1,
+            "screen {screen}: BG priority preserves source"
+        );
+        assert_eq!(
+            tokens[16 * 160 + 80],
+            1,
+            "screen {screen}: BG has the same shade as objects"
+        );
+        let gray = draw(&cells, OutputMode::Grayscale);
+        assert_eq!(
+            tokens
+                .iter()
+                .map(|&p| PalettePixel::from_token(p).grayscale())
+                .collect::<Vec<_>>(),
+            gray
+        );
+        let next = draw(&[], OutputMode::PaletteIndices);
+        assert_eq!(
+            next[16 * 160 + 32],
+            1,
+            "screen {screen}: source resets with each frame"
+        );
+        if screen == 0 {
+            assert_eq!(
+                tokens[136 * 160 + 80],
+                0,
+                "hub HUD strip restores mapped BG colour zero"
+            );
+        }
+    }
+}

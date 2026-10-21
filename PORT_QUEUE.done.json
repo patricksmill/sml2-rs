@@ -1415,6 +1415,17 @@
       ],
       "verification_gate": "helpers.rs keeps only engine-level slot operations (tile probes, slot removal, record bookkeeping, BCD) with a module doc naming that boundary; interaction.rs and spawning stay engine code; no dead_code allowances; cargo test -p sml2-core passes; captures/sweep.sh unchanged",
       "status": "done"
+    },
+    {
+      "id": "g-gbc-sgb-palettes",
+      "title": "Replace the invented 'SGB color' filter with real hardware palettes: the GBC boot ROM's automatic SML2 palette (separate BG/OBJ0/OBJ1) and the SGB built-in presets (1-A default)",
+      "asm_refs": [
+        "cartridge header $0134-$014B (title checksum, licensee $01)",
+        "CGB boot ROM compatibility palette table"
+      ],
+      "dependencies": [],
+      "verification_gate": "Renderer keeps the source palette register (BGP/OBP0/OBP1) per pixel; GBC palette selection derives from the title checksum per the documented boot-ROM algorithm and is unit-tested; SGB presets are byte-checked against a documented source; settings migrate the old filter; native frame tests per filter",
+      "status": "done"
     }
   ]
 }

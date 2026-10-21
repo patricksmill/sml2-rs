@@ -25,6 +25,24 @@ pub fn render_castle_sequence(
     seq: &CastleSequence,
     view: (usize, usize),
 ) -> Vec<u8> {
+    render_castle_sequence_output(
+        reveal,
+        scripts,
+        metas,
+        seq,
+        view,
+        crate::video::OutputMode::Grayscale,
+    )
+}
+
+pub fn render_castle_sequence_output(
+    reveal: &CastleRevealTiles,
+    scripts: &CastleScripts,
+    metas: &SpriteMetas,
+    seq: &CastleSequence,
+    view: (usize, usize),
+    output: crate::video::OutputMode,
+) -> Vec<u8> {
     let mut vram = reveal.vram_tiles();
     let congrats = matches!(seq.state, STATE_CONGRATS | STATE_WAIT_START);
     let map = if congrats {
@@ -77,6 +95,7 @@ pub fn render_castle_sequence(
         &sprites,
         metas,
         view,
+        output,
     )
 }
 
@@ -105,6 +124,7 @@ pub fn render_castle_reveal(
         &mario.into_iter().collect::<Vec<_>>(),
         metas,
         (vw, vh),
+        crate::video::OutputMode::Grayscale,
     )
 }
 
@@ -116,8 +136,9 @@ fn draw(
     sprites: &[(u8, u8, u8)],
     metas: &SpriteMetas,
     (vw, vh): (usize, usize),
+    output: crate::video::OutputMode,
 ) -> Vec<u8> {
-    let shades = crate::video::bgp_shades(bgp);
+    let shades = output.palette(bgp, crate::video::PaletteSource::Bg);
     let mut img = vec![shades[0]; vw * vh];
     for y in 0..vh.min(144) {
         for x in 0..vw.min(256) {
@@ -138,7 +159,14 @@ fn draw(
     let mut cells: Vec<_> = cells.into_iter().enumerate().collect();
     cells.sort_by_key(|&(index, (x, _, _, _))| (x, index));
     for (_, (x, y, tile, attr)) in cells.into_iter().rev() {
-        let palette = crate::video::bgp_shades(obp[((attr >> 4) & 1) as usize]);
+        let palette = output.palette(
+            obp[((attr >> 4) & 1) as usize],
+            if attr & 0x10 != 0 {
+                crate::video::PaletteSource::Obj1
+            } else {
+                crate::video::PaletteSource::Obj0
+            },
+        );
         draw_obj_tile(
             &mut img,
             vram,

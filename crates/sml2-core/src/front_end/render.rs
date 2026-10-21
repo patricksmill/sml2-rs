@@ -10,12 +10,12 @@
 use super::assets::FrontEndAssets;
 use super::file_select::{FileSelect, FILE_SELECT_BGP, FILE_SELECT_OBP0, FILE_SELECT_OBP1};
 use super::save_slots::{SaveSlots, SLOT_COUNT};
-use super::screen::{render_bg_mode, TileData};
+use super::screen::{render_bg_output, TileData};
 use super::title::BGP as TITLE_BGP;
 use crate::actor::ScreenPosition;
 use crate::object::ObjectTables;
 use crate::player::{append_cells, Cell, CellStyle};
-use crate::video::{bgp_shades, tile_colors};
+use crate::video::{tile_colors, OutputMode, PaletteSource};
 
 /// `$300FE`: tally sprites' shared OAM Y.
 const TALLY_Y: u8 = 88;
@@ -28,18 +28,27 @@ const EASY_FRAME: u8 = 241;
 
 /// `$1407C`'s palette and `$59E5`'s map.
 pub fn render_title(assets: &FrontEndAssets, view: (usize, usize)) -> Vec<u8> {
+    render_title_output(assets, view, OutputMode::Grayscale)
+}
+
+pub fn render_title_output(
+    assets: &FrontEndAssets,
+    view: (usize, usize),
+    output: OutputMode,
+) -> Vec<u8> {
     // The title sign also resolves tile 0..127 through the signed `$8800`
     // method: the logo's upper tiles live at `$9000+tile*16`. The unsigned
     // lookup renders a shifted, cropped logo.
-    render_bg_mode(
+    render_bg_output(
         assets.title_vram(),
         assets.title_tilemap(),
         TITLE_BGP,
         (0, 0),
         view,
         TileData::Signed,
+        output,
     )
-    .unwrap_or_else(|_| vec![0u8; view.0 * view.1])
+    .unwrap_or_else(|_| vec![output.blank(3); view.0 * view.1])
 }
 
 /// `$30000`'s static screen plus the cursor, tally digits and Easy banner.
@@ -50,16 +59,28 @@ pub fn render_file_select(
     tables: &ObjectTables,
     view: (usize, usize),
 ) -> Vec<u8> {
+    render_file_select_output(fs, slots, assets, tables, view, OutputMode::Grayscale)
+}
+
+pub fn render_file_select_output(
+    fs: &FileSelect,
+    slots: &SaveSlots,
+    assets: &FrontEndAssets,
+    tables: &ObjectTables,
+    view: (usize, usize),
+    output: OutputMode,
+) -> Vec<u8> {
     let (vw, vh) = view;
-    let mut out = render_bg_mode(
+    let mut out = render_bg_output(
         assets.file_select_vram(),
         assets.file_select_tilemap(),
         FILE_SELECT_BGP,
         (0, 0),
         view,
         TileData::Signed,
+        output,
     )
-    .unwrap_or_else(|_| vec![0u8; vw * vh]);
+    .unwrap_or_else(|_| vec![output.blank(3); vw * vh]);
     let vram = assets.file_select_vram();
 
     // `$300FE`: high nibble then low nibble, tile + $80, X +8 between digits.
@@ -71,6 +92,7 @@ pub fn render_file_select(
             vw,
             vh,
             vram,
+            output,
             Cell {
                 y: TALLY_Y,
                 x,
@@ -83,6 +105,7 @@ pub fn render_file_select(
             vw,
             vh,
             vram,
+            output,
             Cell {
                 y: TALLY_Y,
                 x: x + 8,
@@ -98,6 +121,7 @@ pub fn render_file_select(
             vw,
             vh,
             vram,
+            output,
             tables,
             EASY_FRAME,
             (EASY_X, EASY_Y),
@@ -111,6 +135,7 @@ pub fn render_file_select(
             vw,
             vh,
             vram,
+            output,
             tables,
             frame,
             (fs.cursor().0, y),
@@ -130,6 +155,7 @@ pub fn render_file_select(
         vw,
         vh,
         vram,
+        output,
         tables,
         frame,
         (x, y),
@@ -144,6 +170,7 @@ fn draw_metasprite(
     vw: usize,
     vh: usize,
     vram: &[u8],
+    output: OutputMode,
     tables: &ObjectTables,
     sprite: u8,
     base: (u8, u8),
@@ -166,13 +193,13 @@ fn draw_metasprite(
         return;
     };
     for cell in cells {
-        draw_cell(frame, vw, vh, vram, cell);
+        draw_cell(frame, vw, vh, vram, output, cell);
     }
 }
 
 /// Draw one 8x8 OAM cell. Colour 0 is transparent; attr bit 4 selects OBP1,
 /// bit 5/6 flip X/Y, and bit 7 puts the cell behind background colour 0.
-fn draw_cell(frame: &mut [u8], vw: usize, vh: usize, vram: &[u8], cell: Cell) {
+fn draw_cell(frame: &mut [u8], vw: usize, vh: usize, vram: &[u8], output: OutputMode, cell: Cell) {
     if cell.tile as usize * 16 + 16 > vram.len() {
         return;
     }
@@ -186,7 +213,14 @@ fn draw_cell(frame: &mut [u8], vw: usize, vh: usize, vram: &[u8], cell: Cell) {
     } else {
         FILE_SELECT_OBP0
     };
-    let shades = bgp_shades(obp);
+    let shades = output.palette(
+        obp,
+        if cell.attr & 0x10 != 0 {
+            PaletteSource::Obj1
+        } else {
+            PaletteSource::Obj0
+        },
+    );
     let flip_x = cell.attr & 0x20 != 0;
     let flip_y = cell.attr & 0x40 != 0;
     let behind_bg = cell.attr & 0x80 != 0;
@@ -206,7 +240,7 @@ fn draw_cell(frame: &mut [u8], vw: usize, vh: usize, vram: &[u8], cell: Cell) {
                 continue;
             }
             let i = py as usize * vw + px as usize;
-            if behind_bg && frame[i] != 0xFF {
+            if behind_bg && !output.is_white(frame[i]) {
                 continue;
             }
             frame[i] = shades[color as usize];

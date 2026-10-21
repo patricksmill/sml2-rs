@@ -1,8 +1,9 @@
 //! Read-only session presentation; view dimensions never enter simulation state.
 
-use super::render_view;
+use super::render_view_output;
 use super::{hud_row_status, HudDigits};
 use crate::session::{LevelContext, Session, SessionState, MAP_FADE_STEP};
+use sml2_core::video::{OutputMode, PalettePixel};
 use std::error::Error;
 
 /// Bank 15 `$3E9FB`: twelve waits before each of four palette writes.
@@ -19,6 +20,15 @@ fn map_entry_palettes(frame: u16, initial: (u8, u8, u8)) -> (u8, u8, u8) {
 impl LevelContext {
     /// Render one level view without advancing the session.
     pub fn render_frame(&self, vw: usize, vh: usize) -> Result<Vec<u8>, Box<dyn Error>> {
+        self.render_output(vw, vh, OutputMode::Grayscale)
+    }
+
+    fn render_output(
+        &self,
+        vw: usize,
+        vh: usize,
+        output: OutputMode,
+    ) -> Result<Vec<u8>, Box<dyn Error>> {
         let hud_live = hud_row_status(
             &self.hud,
             HudDigits {
@@ -37,7 +47,7 @@ impl LevelContext {
         } else {
             None
         };
-        Ok(render_view(
+        Ok(render_view_output(
             &self.manifest,
             &self.layout_live,
             &self.sim.layout_writes,
@@ -49,6 +59,7 @@ impl LevelContext {
             Some((&hud_live, self.hud_y)),
             self.spr.as_ref(),
             flash,
+            output,
         )?)
     }
 }
@@ -56,26 +67,47 @@ impl LevelContext {
 impl Session {
     /// Render current view to an 8-bit grey buffer.
     pub fn render_frame(&self, view: (usize, usize)) -> Vec<u8> {
+        self.render_output(view, OutputMode::Grayscale)
+    }
+
+    /// Render winning palette sources and register-mapped hardware shades.
+    pub fn render_palette_frame(&self, view: (usize, usize)) -> Vec<PalettePixel> {
+        self.render_output(view, OutputMode::PaletteIndices)
+            .into_iter()
+            .map(PalettePixel::from_token)
+            .collect()
+    }
+
+    fn render_output(&self, view: (usize, usize), output: OutputMode) -> Vec<u8> {
         let (vw, vh) = view;
         match &self.state {
-            SessionState::Title(_) => {
-                sml2_core::front_end::render_title(&self.assets.front_end, (vw, vh))
-            }
+            SessionState::Title(_) => sml2_core::front_end::render::render_title_output(
+                &self.assets.front_end,
+                (vw, vh),
+                output,
+            ),
             SessionState::FileSelectLoading(loading) => {
                 // Pending `$19` retains title VRAM; active transfers have LCD off.
                 if loading.lcd_disabled() {
-                    vec![255; vw * vh]
+                    vec![output.blank(0); vw * vh]
                 } else {
-                    sml2_core::front_end::render_title(&self.assets.front_end, (vw, vh))
+                    sml2_core::front_end::render::render_title_output(
+                        &self.assets.front_end,
+                        (vw, vh),
+                        output,
+                    )
                 }
             }
-            SessionState::FileSelect(file_select) => sml2_core::front_end::render_file_select(
-                file_select,
-                &self.slots,
-                &self.assets.front_end,
-                &self.assets.object_tables,
-                (vw, vh),
-            ),
+            SessionState::FileSelect(file_select) => {
+                sml2_core::front_end::render::render_file_select_output(
+                    file_select,
+                    &self.slots,
+                    &self.assets.front_end,
+                    &self.assets.object_tables,
+                    (vw, vh),
+                    output,
+                )
+            }
             SessionState::Overworld(map_sim) => {
                 let map_sim = self
                     .map_screen_transition
@@ -113,7 +145,11 @@ impl Session {
                     }
                 }
                 map_sim.apply_zone_tile_animation(&mut vram, &self.assets.zone_animation_tiles);
-                if let Some(room) = map_sim.room.as_ref().filter(|_| (9..=12).contains(&map_sim.screen_id)) {
+                if let Some(room) = map_sim
+                    .room
+                    .as_ref()
+                    .filter(|_| (9..=12).contains(&map_sim.screen_id))
+                {
                     room.apply_bulb_tiles(&mut vram);
                 }
                 if map_sim.screen_id == 1
@@ -143,9 +179,10 @@ impl Session {
                         let p = pan.palettes();
                         (p.0, p.1, initial.2)
                     }
-                    None => self.pending_level.as_ref().map_or(initial, |t| {
-                        map_entry_palettes(t.frame, initial)
-                    }),
+                    None => self
+                        .pending_level
+                        .as_ref()
+                        .map_or(initial, |t| map_entry_palettes(t.frame, initial)),
                 };
                 // `$3F203` fills `sStatusBarOAM` from `$7251` on the hub; a zone
                 // screen's `$3E277` clears those nine entries first, so its bar
@@ -188,12 +225,9 @@ impl Session {
                 let video = sml2_core::map::MapVideo {
                     scroll_rows: std::array::from_fn(|y| map_sim.zone_background_scroll(y).0),
                     scroll_y: map_sim.zone_background_scroll(0).1,
-                    obj_palette1: transition_palettes.map_or_else(
-                        || obj_palette1,
-                        |p| p.2,
-                    ),
+                    obj_palette1: transition_palettes.map_or_else(|| obj_palette1, |p| p.2),
                 };
-                sml2_core::map::render_overworld_view_with_video(
+                sml2_core::map::render_overworld_view_output(
                     map_sim.screen_id,
                     map_sim.cam_x,
                     map_sim.cam_y,
@@ -218,23 +252,25 @@ impl Session {
                     vw,
                     vh,
                     Some(&video),
+                    output,
                 )
             }
             SessionState::Demo(demo) => demo
                 .ctx
-                .render_frame(vw, vh)
-                .unwrap_or_else(|_| vec![0u8; vw * vh]),
+                .render_output(vw, vh, output)
+                .unwrap_or_else(|_| vec![output.blank(3); vw * vh]),
             SessionState::InLevel(ctx) => ctx
-                .render_frame(vw, vh)
-                .unwrap_or_else(|_| vec![0u8; vw * vh]),
-            SessionState::Castle(seq) => sml2_core::map::render_castle_sequence(
+                .render_output(vw, vh, output)
+                .unwrap_or_else(|_| vec![output.blank(3); vw * vh]),
+            SessionState::Castle(seq) => sml2_core::map::render_castle_sequence_output(
                 &self.assets.castle_reveal,
                 &self.assets.castle_scripts,
                 &self.assets.sprite_metas,
                 seq,
                 (vw, vh),
+                output,
             ),
-            SessionState::GameOver => vec![0u8; vw * vh],
+            SessionState::GameOver => vec![output.blank(3); vw * vh],
         }
     }
 }
@@ -247,13 +283,22 @@ mod tests {
     fn level_entry_palette_writes_follow_the_rom_wait_boundaries() {
         let initial = (0xE1, 0xD0, 0x39);
         for (frame, expected) in [
-            (0, initial), (11, initial),
-            (12, (0xE4, 0xD0, 0xD0)), (23, (0xE4, 0xD0, 0xD0)),
-            (24, (0x90, 0x80, 0x80)), (35, (0x90, 0x80, 0x80)),
-            (36, (0x40, 0x40, 0x40)), (47, (0x40, 0x40, 0x40)),
-            (48, (0, 0, 0)), (73, (0, 0, 0)),
+            (0, initial),
+            (11, initial),
+            (12, (0xE4, 0xD0, 0xD0)),
+            (23, (0xE4, 0xD0, 0xD0)),
+            (24, (0x90, 0x80, 0x80)),
+            (35, (0x90, 0x80, 0x80)),
+            (36, (0x40, 0x40, 0x40)),
+            (47, (0x40, 0x40, 0x40)),
+            (48, (0, 0, 0)),
+            (73, (0, 0, 0)),
         ] {
-            assert_eq!(map_entry_palettes(frame, initial), expected, "frame {frame}");
+            assert_eq!(
+                map_entry_palettes(frame, initial),
+                expected,
+                "frame {frame}"
+            );
         }
     }
 }

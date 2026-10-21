@@ -1,4 +1,3 @@
-use crate::settings::Filter;
 use eframe::egui::ColorImage;
 
 pub(super) fn save(path: &std::path::Path, image: &ColorImage) -> Result<(), String> {
@@ -14,15 +13,12 @@ pub(super) fn save(path: &std::path::Path, image: &ColorImage) -> Result<(), Str
 /// Compare the actual GPU screenshot with the CPU frame submitted on that render.
 /// GPU presentation may round a grey level by one (sRGB conversion on Windows),
 /// so each channel is allowed a single level of error.
-pub(super) fn verify(
-    image: &ColorImage,
-    frame: &[u8],
-    rect: [u32; 4],
-    filter: Filter,
-) -> Result<(), String> {
+pub(super) fn verify(image: &ColorImage, frame: &ColorImage, rect: [u32; 4]) -> Result<(), String> {
     let [x, y, w, h] = rect.map(|n| n as usize);
     let scale = w / 160;
-    if scale == 0
+    if frame.size != [160, 144]
+        || frame.pixels.len() != 160 * 144
+        || scale == 0
         || w != scale * 160
         || h != scale * 144
         || x + w > image.size[0]
@@ -32,8 +28,8 @@ pub(super) fn verify(
     }
     for py in 0..h {
         for px in 0..w {
-            let expected = frame[(py / scale) * 160 + px / scale];
-            let [er, eg, eb] = filter.rgb(expected);
+            let expected = frame.pixels[(py / scale) * 160 + px / scale].to_array();
+            let [er, eg, eb, _] = expected;
             let actual = image.pixels[(y + py) * image.size[0] + x + px].to_array();
             let close = actual[3] == 255
                 && (i32::from(actual[0]) - i32::from(er)).abs() <= 1
@@ -41,7 +37,7 @@ pub(super) fn verify(
                 && (i32::from(actual[2]) - i32::from(eb)).abs() <= 1;
             if !close {
                 return Err(format!(
-                    "GPU pixel mismatch at {},{}: {:?}, expected {}",
+                    "GPU pixel mismatch at {},{}: {:?}, expected {:?}",
                     x + px,
                     y + py,
                     actual,
@@ -64,23 +60,22 @@ mod tests {
 
     #[test]
     fn verify_accepts_one_level_of_gpu_rounding() {
-        assert!(verify(&image(84), &[85u8; 160 * 144], [0, 0, 160, 144], Filter::Gray).is_ok());
-        assert!(verify(&image(85), &[85u8; 160 * 144], [0, 0, 160, 144], Filter::Gray).is_ok());
+        assert!(verify(&image(84), &image(85), [0, 0, 160, 144]).is_ok());
+        assert!(verify(&image(85), &image(85), [0, 0, 160, 144]).is_ok());
     }
 
     #[test]
     fn verify_rejects_a_real_mismatch() {
-        assert!(verify(&image(82), &[85u8; 160 * 144], [0, 0, 160, 144], Filter::Gray).is_err());
+        assert!(verify(&image(82), &image(85), [0, 0, 160, 144]).is_err());
     }
 
     #[test]
-    fn verify_checks_the_selected_filter_palette() {
-        let [r, g, b] = Filter::Sgb.rgb(85);
-        let colored = ColorImage::new(
-            [160, 144],
-            vec![Color32::from_rgb(r, g, b); 160 * 144],
-        );
-        assert!(verify(&colored, &[85u8; 160 * 144], [0, 0, 160, 144], Filter::Sgb).is_ok());
-        assert!(verify(&image(85), &[85u8; 160 * 144], [0, 0, 160, 144], Filter::Sgb).is_err());
+    fn verify_rejects_incomplete_native_frames() {
+        assert!(verify(
+            &image(85),
+            &ColorImage::new([1, 1], vec![Color32::BLACK]),
+            [0, 0, 160, 144]
+        )
+        .is_err());
     }
 }

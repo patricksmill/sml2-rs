@@ -43,3 +43,71 @@ pub fn bg_tile_offset(tile: u8) -> usize {
         (tile as usize - 128) * 16
     }
 }
+
+/// Hardware palette that supplied the winning pixel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum PaletteSource {
+    Bg = 0,
+    Obj0 = 1,
+    Obj1 = 2,
+}
+
+/// A composed pixel after the BGP/OBP register has mapped its tile colour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PalettePixel {
+    pub source: PaletteSource,
+    /// Hardware shade, from lightest (0) to darkest (3).
+    pub shade: u8,
+}
+
+impl PalettePixel {
+    /// Decode the compact tokens emitted by palette-aware rasterizers.
+    pub fn from_token(token: u8) -> Self {
+        let source = match token >> 2 {
+            0 => PaletteSource::Bg,
+            1 => PaletteSource::Obj0,
+            2 => PaletteSource::Obj1,
+            _ => panic!("invalid palette pixel token"),
+        };
+        Self {
+            source,
+            shade: token & 3,
+        }
+    }
+
+    pub fn grayscale(self) -> u8 {
+        SHADES[self.shade as usize]
+    }
+}
+
+/// Rasterizer output representation. Palette indices retain source provenance
+/// in bits 2..3 and the register-mapped hardware shade in bits 0..1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputMode {
+    Grayscale,
+    PaletteIndices,
+}
+
+impl OutputMode {
+    pub fn palette(self, register: u8, source: PaletteSource) -> [u8; 4] {
+        std::array::from_fn(|color| {
+            let shade = (register >> (color * 2)) & 3;
+            match self {
+                Self::Grayscale => SHADES[shade as usize],
+                Self::PaletteIndices => (source as u8) * 4 + shade,
+            }
+        })
+    }
+
+    pub fn blank(self, shade: u8) -> u8 {
+        self.palette(0xE4, PaletteSource::Bg)[shade as usize]
+    }
+
+    pub fn is_white(self, pixel: u8) -> bool {
+        match self {
+            Self::Grayscale => pixel == 255,
+            Self::PaletteIndices => pixel & 3 == 0,
+        }
+    }
+}

@@ -88,6 +88,8 @@ impl LevelContent {
 
 /// All assets required for running both overworld navigation and any level.
 pub struct SessionAssets {
+    /// Cartridge $0134..=$014B metadata for GBC boot-palette selection.
+    pub cartridge_header: [u8; 0x18],
     pub music_bank: Vec<u8>,
     pub nodes: MapNodes,
     pub node_records: MapNodeRecords,
@@ -127,6 +129,7 @@ impl SessionAssets {
     }
 
     pub fn load_from(source: &dyn ContentSource) -> Result<Self, Box<dyn Error>> {
+        let cartridge_header = load_cartridge_header(source)?;
         let music_bank = source.read("audio/music_bank04.bin")?;
         if music_bank.len() != 0x4000 {
             return Err(io::Error::new(
@@ -191,6 +194,7 @@ impl SessionAssets {
             })
             .collect();
         Ok(Self {
+            cartridge_header,
             music_bank,
             nodes,
             node_records,
@@ -228,6 +232,28 @@ impl SessionAssets {
     /// Replace one level before constructing a session (e.g. editor playtest).
     pub fn insert_level(&mut self, id: u8, level: LevelContent) {
         self.levels.insert(id, Ok(level));
+    }
+}
+
+// Legacy extracted trees predate cartridge_header.bin. This is the exact
+// supported baserom.gb $0134..=$014B header (MARIOLAND2, title sum $C9, Nintendo
+// old licensee $01), used only when metadata is absent. Malformed metadata and
+// all other read errors remain errors; no ROM is opened by the runtime.
+const LEGACY_SML2_HEADER: [u8; 0x18] = [
+    0x4D, 0x41, 0x52, 0x49, 0x4F, 0x4C, 0x41, 0x4E, 0x44, 0x32, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 3, 4, 2, 1, 1,
+];
+
+fn load_cartridge_header(source: &dyn ContentSource) -> io::Result<[u8; 0x18]> {
+    match source.read("cartridge_header.bin") {
+        Ok(bytes) => bytes.try_into().map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "cartridge_header.bin must contain 24 bytes ($0134..=$014B)",
+            )
+        }),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(LEGACY_SML2_HEADER),
+        Err(error) => Err(error),
     }
 }
 

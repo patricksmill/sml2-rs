@@ -87,6 +87,16 @@ window if the platform limits its size. Auto fit follows window dimensions.
 Debug inspection shows map/player/camera/scene state, object slots, sound-driver
 state and diagnostics. Debug stepping advances exactly one outer session tick.
 
+F4 cycles display palettes: Grayscale, DMG green, Pocket, GBC auto, the 32 SGB
+presets (1-A through 4-H), and Amber. The settings menu provides the same choices.
+GBC auto uses separate background and sprite palettes selected from the ROM's
+title checksum. The old `SGB color` setting migrates to the real SGB 1-A preset.
+See [hardware palettes](hardware-palettes.md) for exact colours and source tables.
+
+Select a palette at startup with `--filter gbc`, `--filter sgb` (1-A), or
+`--filter sgb-1a` through `--filter sgb-4h`. The existing `gray`, `dmg`, `pocket`,
+and `amber` values are also supported.
+
 Settings are JSON in the platform user configuration directory; saves are in the
 platform user data directory. On Linux these normally resolve to
 `~/.config/sml2-rs/settings.json` and

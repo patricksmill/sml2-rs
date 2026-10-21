@@ -35,7 +35,7 @@ impl DesktopApp {
                         }
                     }
                     if let Some((frame, rect)) = self.screenshot_check.take() {
-                        match screenshot::verify(image, &frame, rect, self.settings.filter) {
+                        match screenshot::verify(image, &frame, rect) {
                             Ok(()) => eprintln!("GPU game pixels match the CPU frame exactly"),
                             Err(e) => {
                                 eprintln!("{e}");

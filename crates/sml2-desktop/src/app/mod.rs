@@ -9,6 +9,7 @@ use crate::{
 use eframe::egui::{
     self, Color32, ColorImage, Context, RawInput, TextureHandle, TextureOptions, ViewportCommand,
 };
+use sml2_core::video::PalettePixel;
 use sml2_runtime::content::{ExtractedContent, SessionAssets};
 #[cfg(test)]
 use std::path::PathBuf;
@@ -64,7 +65,7 @@ pub struct DesktopApp {
     effective_scale: u32,
     redraws: u64,
     screenshot_pending: bool,
-    screenshot_check: Option<(Vec<u8>, [u32; 4])>,
+    screenshot_check: Option<(ColorImage, [u32; 4])>,
     game_rect: [u32; 4],
     validation_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
 }
@@ -291,6 +292,7 @@ impl DesktopApp {
         if self.paused {
             self.input.suppress_until_release();
         }
+        let mut submitted_frame = None;
         if let Some(game) = &mut self.game {
             game.audio_running(running && !self.settings.muted);
             for _ in 0..ticks {
@@ -308,11 +310,14 @@ impl DesktopApp {
                     },
                 );
             }
-            let pixels = game.session.render_frame((160, 144));
-            self.texture.set(
-                colorized(&pixels, self.settings.filter),
-                TextureOptions::NEAREST,
+            let pixels = game.session.render_palette_frame((160, 144));
+            let image = colorized(
+                &pixels,
+                self.settings.filter,
+                &game.session.assets.cartridge_header,
             );
+            self.texture.set(image.clone(), TextureOptions::NEAREST);
+            submitted_frame = Some(image);
         }
         if !self.settings.fullscreen && ctx.input(|i| i.viewport().maximized != Some(true)) {
             let size = ctx.input(|i| {
@@ -333,10 +338,8 @@ impl DesktopApp {
                 if self.options.screenshot.is_some() && self.redraws == frames {
                     self.screenshot_pending = true;
                     if self.screen == Screen::Game && !self.debug && !self.paused {
-                        if let Some(game) = &self.game {
-                            self.screenshot_check =
-                                Some((game.session.render_frame((160, 144)), self.game_rect));
-                        }
+                        self.screenshot_check =
+                            submitted_frame.map(|frame| (frame, self.game_rect));
                     }
                     ctx.send_viewport_cmd(ViewportCommand::Screenshot(Default::default()));
                 } else {
@@ -399,12 +402,13 @@ impl DesktopApp {
     }
 }
 
-/// Map the simulation's four DMG shades into RGB for presentation.
-fn colorized(frame: &[u8], filter: Filter) -> ColorImage {
+/// Keep the winning BG/OBJ source until its mapped shade reaches presentation.
+fn colorized(frame: &[PalettePixel], filter: Filter, header: &[u8; 0x18]) -> ColorImage {
+    let palette = filter.palette(header);
     let pixels = frame
         .iter()
-        .map(|&gray| {
-            let [r, g, b] = filter.rgb(gray);
+        .map(|&pixel| {
+            let [r, g, b] = palette.rgb(pixel);
             Color32::from_rgb(r, g, b)
         })
         .collect();

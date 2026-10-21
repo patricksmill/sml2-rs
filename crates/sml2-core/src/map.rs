@@ -554,7 +554,9 @@ impl CastleRevealTiles {
 
 #[path = "map/castle_render.rs"]
 mod castle_render;
-pub use castle_render::{render_castle_reveal, render_castle_sequence};
+pub use castle_render::{
+    render_castle_reveal, render_castle_sequence, render_castle_sequence_output,
+};
 
 impl BellRoomTiles {
     pub const LEN: usize = 0x1000;
@@ -1294,7 +1296,70 @@ pub fn render_overworld_view_with_video(
     vh: usize,
     video: Option<&MapVideo>,
 ) -> Vec<u8> {
-    let bg_shades = crate::video::bgp_shades(bg_palette);
+    render_overworld_view_output(
+        screen_id,
+        cam_x,
+        cam_y,
+        cursor_x,
+        cursor_y,
+        cursor_move,
+        cursor_walking,
+        walk_frame,
+        cursor_pose,
+        decor_cells,
+        status_bar,
+        camera_pan,
+        frame_counter,
+        tilemaps,
+        manifest,
+        level_progress,
+        tiles_vram,
+        bg_palette,
+        obj_palette,
+        vw,
+        vh,
+        video,
+        crate::video::OutputMode::Grayscale,
+    )
+}
+
+/// Render map pixels with optional hardware palette provenance.
+#[allow(clippy::too_many_arguments)]
+pub fn render_overworld_view_output(
+    screen_id: u8,
+    cam_x: u16,
+    cam_y: u16,
+    cursor_x: u8,
+    cursor_y: u8,
+    cursor_move: u8,
+    cursor_walking: u8,
+    walk_frame: u8,
+    cursor_pose: u8,
+    // Decor OAM cells `(y, x, tile, attr)` in the order the console stages them:
+    // the hub's `$3CFC8` starts at entry 13, a zone screen's `$3E277` at entry 4.
+    // Either way they draw before the cursor, which owns entries 0-3.
+    decor_cells: &[(u8, u8, u8, u8)],
+    // `$3F203`'s status bar, present on the hub and cleared by `$3E277` on the
+    // zone screens. `None` leaves the strip alone.
+    status_bar: Option<&StatusBar>,
+    // `sMapScrollOnlyLatch != 0`: B is panning the hub camera, which replaces
+    // the cursor with the `$4A11` border arrows. `frame_counter` stands in for
+    // `$FF97`: bit 4 picks `$4A11` (visible) or `$4A21` (blank), a 16-frame
+    // half-period.
+    camera_pan: bool,
+    frame_counter: u8,
+    tilemaps: &OverworldTilemaps,
+    manifest: &OverworldManifest,
+    level_progress: &[u8],
+    tiles_vram: &[[u8; 64]],
+    bg_palette: u8,
+    obj_palette: u8,
+    vw: usize,
+    vh: usize,
+    video: Option<&MapVideo>,
+    output: crate::video::OutputMode,
+) -> Vec<u8> {
+    let bg_shades = output.palette(bg_palette, crate::video::PaletteSource::Bg);
     let mut img = vec![bg_shades[0]; vw * vh];
     let mut bg_colors = vec![0; vw * vh];
     let _ = &img;
@@ -1371,7 +1436,7 @@ pub fn render_overworld_view_with_video(
     }
 
     if screen_id >= 9 {
-        draw_map_objects_with_palette(
+        draw_map_objects_output(
             &mut img,
             &bg_colors,
             tiles_vram,
@@ -1380,6 +1445,7 @@ pub fn render_overworld_view_with_video(
             video.map_or(0x39, |v| v.obj_palette1),
             vw,
             vh,
+            output,
         );
         return img;
     }
@@ -1391,7 +1457,7 @@ pub fn render_overworld_view_with_video(
             oam.extend(PAN_ARROWS);
         }
         oam.extend_from_slice(decor_cells);
-        draw_map_objects_with_palette(
+        draw_map_objects_output(
             &mut img,
             &bg_colors,
             tiles_vram,
@@ -1400,6 +1466,7 @@ pub fn render_overworld_view_with_video(
             video.map_or(0x39, |v| v.obj_palette1),
             vw,
             vh,
+            output,
         );
         return img;
     }
@@ -1458,7 +1525,7 @@ pub fn render_overworld_view_with_video(
         oam.extend(bar.cells());
     }
     oam.extend_from_slice(decor_cells);
-    draw_map_objects_with_palette(
+    draw_map_objects_output(
         &mut img,
         &bg_colors,
         tiles_vram,
@@ -1467,6 +1534,7 @@ pub fn render_overworld_view_with_video(
         video.map_or(0x39, |v| v.obj_palette1),
         vw,
         vh,
+        output,
     );
 
     img
@@ -1484,6 +1552,7 @@ mod zone_video_tests;
 
 /// Compose map and room OAM using the DMG hardware palette and priority rules.
 /// Smaller OAM X wins overlaps, then earlier entries; bit 4 selects OBP1 ($39).
+#[cfg(test)]
 fn draw_map_objects_with_palette(
     img: &mut [u8],
     bg: &[u8],
@@ -1494,6 +1563,30 @@ fn draw_map_objects_with_palette(
     vw: usize,
     vh: usize,
 ) {
+    draw_map_objects_output(
+        img,
+        bg,
+        tiles,
+        cells,
+        obp0,
+        obp1,
+        vw,
+        vh,
+        crate::video::OutputMode::Grayscale,
+    )
+}
+
+fn draw_map_objects_output(
+    img: &mut [u8],
+    bg: &[u8],
+    tiles: &[[u8; 64]],
+    cells: &[(u8, u8, u8, u8)],
+    obp0: u8,
+    obp1: u8,
+    vw: usize,
+    vh: usize,
+    output: crate::video::OutputMode,
+) {
     // Select the winning OBJ before applying its BG priority. An obscured
     // foreground OBJ still prevents lower-priority objects showing through.
     let mut occupied = vec![false; img.len()];
@@ -1503,7 +1596,14 @@ fn draw_map_objects_with_palette(
         let Some(data) = tiles.get(tile as usize) else {
             continue;
         };
-        let pal = crate::video::bgp_shades(if attr & 0x10 != 0 { obp1 } else { obp0 });
+        let pal = output.palette(
+            if attr & 0x10 != 0 { obp1 } else { obp0 },
+            if attr & 0x10 != 0 {
+                crate::video::PaletteSource::Obj1
+            } else {
+                crate::video::PaletteSource::Obj0
+            },
+        );
         for dy in 0..8 {
             for dx in 0..8 {
                 let x = ox as i32 - 8 + dx;

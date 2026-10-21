@@ -6,73 +6,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const SETTINGS_VERSION: u32 = 1;
+pub const SETTINGS_VERSION: u32 = 2;
+
+mod filter;
+pub use filter::Filter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Zoom {
     #[default]
     Auto,
     Integer(u8),
-}
-
-/// Display colour filter. The simulation always produces the four DMG shades
-/// (`$FF`, `$AA`, `$55`, `$00`); a filter maps them to RGB at presentation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum Filter {
-    #[default]
-    Gray,
-    Dmg,
-    Pocket,
-    Sgb,
-    Amber,
-}
-
-impl Filter {
-    pub const ALL: [Filter; 5] = [
-        Filter::Gray,
-        Filter::Dmg,
-        Filter::Pocket,
-        Filter::Sgb,
-        Filter::Amber,
-    ];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Filter::Gray => "Grayscale",
-            Filter::Dmg => "DMG green",
-            Filter::Pocket => "Pocket",
-            Filter::Sgb => "SGB color",
-            Filter::Amber => "Amber",
-        }
-    }
-
-    pub fn cycle(self, delta: i32) -> Self {
-        let index = Self::ALL.iter().position(|f| *f == self).unwrap_or(0) as i32;
-        Self::ALL[(index + delta).rem_euclid(Self::ALL.len() as i32) as usize]
-    }
-
-    /// The SGB palette is the cream/cyan/brown title reference; Pocket is a
-    /// cooler grey ramp than the raw DMG shades.
-    pub fn rgb(self, gray: u8) -> [u8; 3] {
-        let shade = match gray {
-            255 => 0,
-            170 => 1,
-            85 => 2,
-            0 => 3,
-            v if v >= 213 => 0,
-            v if v >= 128 => 1,
-            v if v >= 43 => 2,
-            _ => 3,
-        };
-        let palette: [[u8; 3]; 4] = match self {
-            Filter::Gray => [[255, 255, 255], [170, 170, 170], [85, 85, 85], [0, 0, 0]],
-            Filter::Dmg => [[155, 188, 15], [139, 172, 15], [48, 98, 48], [15, 56, 15]],
-            Filter::Pocket => [[255, 255, 255], [192, 192, 192], [96, 96, 96], [0, 0, 0]],
-            Filter::Sgb => [[248, 240, 200], [88, 216, 232], [168, 120, 48], [56, 56, 56]],
-            Filter::Amber => [[255, 235, 180], [230, 170, 80], [140, 80, 20], [30, 15, 0]],
-        };
-        palette[shade]
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -113,6 +56,9 @@ impl Settings {
         if self.version != SETTINGS_VERSION {
             return Err(format!("Settings version {} is unsupported", self.version));
         }
+        if matches!(self.filter, Filter::Sgb(index) if index >= 32) {
+            return Err("SGB preset must be in 1-A through 4-H".into());
+        }
         for (value, minimum) in self.window_size.iter_mut().zip([480.0, 400.0]) {
             if !value.is_finite() {
                 return Err("Invalid window size".into());
@@ -138,7 +84,18 @@ impl Settings {
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Self::default()),
             Err(e) => return Err(e.to_string()),
         };
-        let mut settings: Self = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        let version = value.get("version");
+        if value.is_object()
+            && (version.is_none() || version.and_then(serde_json::Value::as_u64) == Some(1))
+        {
+            value["version"] = SETTINGS_VERSION.into();
+            if value.get("filter").and_then(serde_json::Value::as_str) == Some("Sgb") {
+                value["filter"] = serde_json::json!({"Sgb": 0});
+            }
+        }
+        let mut settings: Self = serde_json::from_value(value).map_err(|e| e.to_string())?;
         settings.validate()?;
         Ok(settings)
     }
@@ -193,13 +150,13 @@ mod tests {
         let path = std::env::temp_dir().join(format!("sml2_settings_{}.json", std::process::id()));
         let mut settings = Settings {
             zoom: Zoom::Integer(3),
-            filter: Filter::Sgb,
+            filter: Filter::Sgb(0),
             ..Default::default()
         };
         settings.bindings.0[4] = vec![crate::input::Button::key("K")];
         settings.save(&path).unwrap();
         assert_eq!(Settings::load(&path).unwrap(), settings);
-        let future = br#"{"version":999}"#;
+        let future = br#"{"version":999,"filter":"Sgb"}"#;
         fs::write(&path, future).unwrap();
         assert!(Settings::load(&path).is_err());
         assert_eq!(fs::read(&path).unwrap(), future);
@@ -207,14 +164,42 @@ mod tests {
     }
 
     #[test]
-    fn filters_cycle_and_map_the_four_dmg_shades() {
-        assert_eq!(Filter::Gray.cycle(1), Filter::Dmg);
-        assert_eq!(Filter::Gray.cycle(-1), Filter::Amber);
-        assert_eq!(Filter::Sgb.cycle(5), Filter::Sgb);
-        assert_eq!(Filter::Sgb.rgb(255), [248, 240, 200]);
-        assert_eq!(Filter::Sgb.rgb(170), [88, 216, 232]);
-        assert_eq!(Filter::Sgb.rgb(85), [168, 120, 48]);
-        assert_eq!(Filter::Sgb.rgb(0), [56, 56, 56]);
-        assert_eq!(Filter::Dmg.rgb(85), [48, 98, 48]);
+    fn version_one_sgb_migrates_without_losing_other_settings() {
+        let path =
+            std::env::temp_dir().join(format!("sml2_settings_v1_{}.json", std::process::id()));
+        let original = Settings {
+            filter: Filter::Sgb(0),
+            zoom: Zoom::Integer(4),
+            volume: 0.25,
+            muted: true,
+            preferred_controller: Some("controller".into()),
+            ..Default::default()
+        };
+        let mut value = serde_json::to_value(&original).unwrap();
+        value["version"] = 1.into();
+        value["filter"] = "Sgb".into();
+        fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        assert_eq!(Settings::load(&path).unwrap(), original);
+        value.as_object_mut().unwrap().remove("version");
+        fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        assert_eq!(
+            Settings::load(&path).unwrap(),
+            original,
+            "versionless SGB settings also migrate"
+        );
+        fs::write(&path, br#"{"filter":"Gray"}"#).unwrap();
+        assert_eq!(Settings::load(&path).unwrap(), Settings::default());
+        original.save(&path).unwrap();
+        assert_eq!(Settings::load(&path).unwrap(), original);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn rejects_invalid_sgb_presets() {
+        let mut settings = Settings {
+            filter: Filter::Sgb(32),
+            ..Default::default()
+        };
+        assert!(settings.validate().is_err());
     }
 }

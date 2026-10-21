@@ -189,10 +189,16 @@ fn debug_actions_edit_the_session_and_persist_the_active_pipe() {
     let game = app.game.as_ref().unwrap();
     assert!(game.session.debug_golden_coins().iter().all(|&held| held));
     assert!(
-        game.session.slots.load_slot(0).is_none_or(|record| record[0x08 + 5] & 0x80 == 0),
+        game.session
+            .slots
+            .load_slot(0)
+            .is_none_or(|record| record[0x08 + 5] & 0x80 == 0),
         "an edit alone does not touch the pipe"
     );
-    assert!(!path.join("save.sav").exists(), "nor the slot image on disk");
+    assert!(
+        !path.join("save.sav").exists(),
+        "nor the slot image on disk"
+    );
 
     app.apply_debug(DebugAction::Save);
     let game = app.game.as_ref().unwrap();
@@ -283,5 +289,166 @@ fn output_zoom_uses_physical_pixels_at_high_ui_dpi() {
     assert_eq!(ctx.pixels_per_point(), 2.0);
     assert_eq!(&app.game_rect[2..], &[320, 288]);
     assert_eq!(app.game.as_ref().unwrap().session.frame_n, 0);
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn every_filter_colorizes_the_native_source_and_shade_frame() {
+    use sml2_core::{
+        hardware_palettes::{gbc_auto, rgb555, sgb_preset},
+        video::PaletteSource,
+    };
+    let (app, _, path) = app();
+    let header = &app.game.as_ref().unwrap().session.assets.cartridge_header;
+    let sources = [PaletteSource::Bg, PaletteSource::Obj0, PaletteSource::Obj1];
+    let native: Vec<_> = (0..160 * 144)
+        .map(|i| PalettePixel {
+            source: sources[i % 3],
+            shade: ((i / 3) % 4) as u8,
+        })
+        .collect();
+    for filter in Filter::ALL {
+        let image = colorized(&native, filter, header);
+        assert_eq!(image.size, [160, 144]);
+        let hardware = match filter {
+            Filter::Gbc => Some(gbc_auto(header)),
+            Filter::Sgb(index) => Some(sgb_preset(index as usize).unwrap()),
+            _ => None,
+        };
+        if let Some(hardware) = hardware {
+            for (pixel, actual) in native.iter().zip(&image.pixels) {
+                let ramp = match pixel.source {
+                    PaletteSource::Bg => hardware.bg,
+                    PaletteSource::Obj0 => hardware.obj0,
+                    PaletteSource::Obj1 => hardware.obj1,
+                };
+                let [r, g, b] = rgb555(ramp[pixel.shade as usize]);
+                assert_eq!(
+                    *actual,
+                    Color32::from_rgb(r, g, b),
+                    "{} {:?}",
+                    filter.label(),
+                    pixel
+                );
+            }
+        }
+        // Verify the actual expanded native image, including the OBJ sources.
+        let expanded = ColorImage::new(
+            [320, 288],
+            (0..288)
+                .flat_map(|y| {
+                    let image = &image;
+                    (0..320).map(move |x| image.pixels[(y / 2) * 160 + x / 2])
+                })
+                .collect(),
+        );
+        assert!(screenshot::verify(&expanded, &image, [0, 0, 320, 288]).is_ok());
+    }
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn actual_session_frames_use_the_extracted_cartridge_palette_for_every_filter() {
+    let (mut app, _, path) = app();
+    app.apply_debug(DebugAction::WarpLevel(4));
+    let game = app.game.as_ref().unwrap();
+    let native = game.session.render_palette_frame((160, 144));
+    assert_eq!(native.len(), 160 * 144);
+    assert!(native
+        .iter()
+        .any(|p| p.source != sml2_core::video::PaletteSource::Bg));
+    for filter in Filter::ALL {
+        let image = colorized(&native, filter, &game.session.assets.cartridge_header);
+        assert!(screenshot::verify(&image, &image, [0, 0, 160, 144]).is_ok());
+        // A changed channel at any native pixel must invalidate screenshot verification.
+        let mut changed = image.clone();
+        let [r, g, b, _] = changed.pixels[123].to_array();
+        changed.pixels[123] = Color32::from_rgb(if r < 128 { r + 2 } else { r - 2 }, g, b);
+        assert!(screenshot::verify(&changed, &image, [0, 0, 160, 144]).is_err());
+    }
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn screenshot_verification_keeps_the_submitted_filter_when_settings_change() {
+    let (mut app, ctx, path) = app();
+    app.screen = Screen::Game;
+    app.settings.filter = Filter::Sgb(0);
+    app.options.smoke_frames = Some(1);
+    app.options.screenshot = Some(path.join("frame.png"));
+    frame(&mut app, &ctx, vec![]);
+    let (submitted, rect) = app.screenshot_check.clone().expect("submitted RGB frame");
+    let game = app.game.as_ref().unwrap();
+    let expected = colorized(
+        &game.session.render_palette_frame((160, 144)),
+        Filter::Sgb(0),
+        &game.session.assets.cartridge_header,
+    );
+    assert_eq!(
+        submitted, expected,
+        "verification keeps the exact submitted colors"
+    );
+    app.settings.filter = Filter::Gray;
+    app.options.screenshot = None;
+    // Build the native screenshot using the exact image submitted before the change.
+    let [x, y, w, h] = rect.map(|v| v as usize);
+    let mut screenshot_image =
+        ColorImage::new([x + w, y + h], vec![Color32::BLACK; (x + w) * (y + h)]);
+    let scale = w / 160;
+    for py in 0..h {
+        for px in 0..w {
+            screenshot_image.pixels[(y + py) * (x + w) + x + px] =
+                submitted.pixels[(py / scale) * 160 + px / scale];
+        }
+    }
+    app.receive_input(&RawInput {
+        events: vec![egui::Event::Screenshot {
+            viewport_id: egui::ViewportId::ROOT,
+            user_data: Default::default(),
+            image: std::sync::Arc::new(screenshot_image),
+        }],
+        ..Default::default()
+    });
+    assert!(app.validation_error.lock().unwrap().is_none());
+    assert!(app.screenshot_check.is_none());
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn sml2_gbc_colors_keep_three_distinct_sources_and_sgb_1a_uses_the_hardware_ramp() {
+    use sml2_core::video::PaletteSource;
+    let (app, _, path) = app();
+    let header = &app.game.as_ref().unwrap().session.assets.cartridge_header;
+    let sources = [PaletteSource::Bg, PaletteSource::Obj0, PaletteSource::Obj1];
+    // Independent RGB888 expectations from the boot RGB555 triples, with bit replication.
+    let expected = [
+        [
+            [255, 255, 206],
+            [99, 239, 239],
+            [156, 132, 49],
+            [90, 90, 90],
+        ],
+        [[255, 255, 255], [255, 115, 0], [148, 66, 0], [0, 0, 0]],
+        [[255, 255, 255], [99, 165, 255], [0, 0, 255], [0, 0, 0]],
+    ];
+    let palette = Filter::Gbc.palette(header);
+    for (source, colors) in sources.into_iter().zip(expected) {
+        for shade in 0..4 {
+            assert_eq!(
+                palette.rgb(PalettePixel { source, shade }),
+                colors[shade as usize]
+            );
+        }
+    }
+    let palette = Filter::Sgb(0).palette(header);
+    let expected = [[255, 239, 206], [222, 148, 74], [173, 41, 33], [49, 24, 82]];
+    for source in sources {
+        for shade in 0..4 {
+            assert_eq!(
+                palette.rgb(PalettePixel { source, shade }),
+                expected[shade as usize]
+            );
+        }
+    }
     let _ = std::fs::remove_dir_all(path);
 }

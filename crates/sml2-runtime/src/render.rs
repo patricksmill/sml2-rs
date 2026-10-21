@@ -105,6 +105,41 @@ pub fn render_view(
     // which is every frame any replay sees, so the gate is unaffected.
     pal_override: Option<u8>,
 ) -> Result<Vec<u8>, String> {
+    render_view_output(
+        manifest,
+        layout,
+        overlay,
+        bg,
+        cam_x,
+        cam_y,
+        vw,
+        vh,
+        hud,
+        spr,
+        pal_override,
+        video::OutputMode::Grayscale,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn render_view_output(
+    manifest: &LevelManifest,
+    layout: &LevelLayout,
+    overlay: &[(u32, u8)],
+    bg: &[u8],
+    cam_x: u16,
+    cam_y: u16,
+    vw: usize,
+    vh: usize,
+    hud: Option<(&[u8], u8)>,
+    spr: Option<&SpriteCtx>,
+    // `$2756`'s pause flash: the byte the ROM writes to `sBGPalette` (and to
+    // `sOAMPalette1`, which the caller applies to `spr.obp0`) while paused,
+    // standing in for the level's BG palette. `None` on every other frame —
+    // which is every frame any replay sees, so the gate is unaffected.
+    pal_override: Option<u8>,
+    output: video::OutputMode,
+) -> Result<Vec<u8>, String> {
     // Decode every tile in the composed block once.
     let tiles: Vec<[u8; 64]> = (0..256u16)
         .map(|t| {
@@ -113,7 +148,10 @@ pub fn render_view(
             video::tile_colors(&bytes)
         })
         .collect();
-    let shades = video::bgp_shades(pal_override.unwrap_or(manifest.header.palettes[0]));
+    let shades = output.palette(
+        pal_override.unwrap_or(manifest.header.palettes[0]),
+        video::PaletteSource::Bg,
+    );
     let world_w = (LAYOUT_WIDTH * 16) as i32;
     let world_h = (LAYOUT_HEIGHT * 16) as i32;
     // The engine never clamps the view to the level: it leaves the camera where it is and
@@ -148,10 +186,7 @@ pub fn render_view(
             let (cx, tx) = ((wx as usize) >> 4, (wx as usize) & 15);
             let (cy, ty) = ((wy as usize) >> 4, (wy as usize) & 15);
             let key = (cy * 256 + cx) as u32;
-            let rewritten = overlay
-                .iter()
-                .find(|(k, _)| *k == key)
-                .map(|(_, v)| *v);
+            let rewritten = overlay.iter().find(|(k, _)| *k == key).map(|(_, v)| *v);
             let Some(id) = rewritten.or_else(|| layout.get(cx, cy)) else {
                 continue;
             };
@@ -205,8 +240,8 @@ pub fn render_view(
     // earlier instance; BG wins where attr bit 7 is set and the BG pixel is
     // non-transparent.
     if let Some(s) = spr {
-        let pal0 = video::bgp_shades(s.obp0);
-        let pal1 = video::bgp_shades(s.obp1);
+        let pal0 = output.palette(s.obp0, video::PaletteSource::Obj0);
+        let pal1 = output.palette(s.obp1, video::PaletteSource::Obj1);
         let mut taken = vec![false; vw * vh];
         if let Some((mx, my, frame)) = s.player {
             let cells = sml2_core::player::draw_cells_styled(
@@ -264,13 +299,7 @@ pub fn render_view(
         }
         if let (Some((mx, my, _)), Some((timer, chain))) = (s.player, s.streak_counter) {
             let cells = sml2_core::player::draw_streak_counter(
-                &s.tables,
-                timer,
-                chain,
-                mx,
-                my,
-                cam_x,
-                cam_y,
+                &s.tables, timer, chain, mx, my, cam_x, cam_y,
             );
             for c in cells {
                 blit_obj_cell(
@@ -561,6 +590,13 @@ mod tests {
         assert_eq!(&row[2..4], &[0x81, 0x85], "lives");
         assert_eq!(&row[7..10], &[0x82, 0x83, 0x84], "coins, high nibble only");
         assert_eq!(&row[13..15], &[0x80, 0x87], "money bags");
-        assert_eq!(&row[17..20], &[0x94, 0x85, 0x89], "timer high is the whole byte");
+        assert_eq!(
+            &row[17..20],
+            &[0x94, 0x85, 0x89],
+            "timer high is the whole byte"
+        );
     }
 }
+
+#[cfg(test)]
+mod palette_tests;
