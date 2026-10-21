@@ -114,8 +114,8 @@ impl ObjectSim {
                 if st.b[B_SCRY] < 0xD0 {
                     return;
                 }
-                self.remove_mode = 2;
                 if self.boss_slot_ptr_lo != 0 {
+                    self.remove_mode = 2;
                     self.boss_finish_counted(st); // $9399 -> $B157
                     return;
                 }
@@ -130,6 +130,7 @@ impl ObjectSim {
                     return;
                 }
                 self.boss_finish_blank(st); // $B15B
+                self.remove_mode = 2;
             }
             s => self.note_unported(0x5354 + (s as u32) * 2),
         }
@@ -287,3 +288,7 @@ impl ObjectSim {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/fanfare.rs"]
+mod fanfare_tests;

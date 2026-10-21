@@ -2238,6 +2238,7 @@ fn the_primary_boss_slot_plays_the_fanfare_before_it_blanks() {
     let mut obj = ObjectSim::new(Vec::new(), 0);
     obj.configure(0);
     obj.boss_def_count = 0;
+    obj.remove_mode = 1;
     obj.slots[0].b[B_DEF] = 3;
     obj.slots[0].b[B_SCRY] = 0xC0;
     obj.boss_engine(0, 0, &layout, &t);
@@ -2258,12 +2259,16 @@ fn the_primary_boss_slot_plays_the_fanfare_before_it_blanks() {
             assert_eq!(obj.slots[0].b[B_T28], 208, "the fanfare is 208 frames");
             assert_eq!(obj.music_request, Some(12), "and it asks for track 12");
         }
+        if state == 3 {
+            assert_eq!(obj.remove_mode, 1, "reward waits until the fanfare ends");
+        }
         prev_state = state;
     }
     assert!(fanfare_seen, "the fanfare ran");
     assert!(frames < 400, "the primary slot left too");
     assert_eq!(obj.boss_def_count, 0, "$B15B leaves the count alone");
     assert_eq!(obj.slots[0].b, [0u8; 32]);
+    assert_eq!(obj.remove_mode, 2, "timer expiry releases the reward");
 }
 
 /// `$B264`-`$B276`: eight-bit screen movers (the world-coord
