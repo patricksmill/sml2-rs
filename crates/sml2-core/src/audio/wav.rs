@@ -43,6 +43,21 @@ pub fn encode_wav_pcm16(samples: &[f32], sample_rate: u32) -> Vec<u8> {
     buf
 }
 
+/// The peak `tools/dump_pyboy_audio.py` scales every reference WAV to:
+/// `pcm16 = filtered / peak * 32000`.
+pub const PYBOY_DUMP_PEAK: f32 = 32000.0 / 32767.0;
+
+/// Scales `samples` so their largest magnitude is `peak`; silence is left as is.
+pub fn peak_normalize(samples: &mut [f32], peak: f32) {
+    let current = samples.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+    if current > 0.0 {
+        let scale = peak / current;
+        for s in samples {
+            *s *= scale;
+        }
+    }
+}
+
 /// Write interleaved stereo floating-point samples to a WAV file at `path`.
 pub fn write_wav_file(
     path: impl AsRef<Path>,
@@ -78,5 +93,19 @@ mod tests {
         assert!((pcm2 - -16383).abs() <= 1);
         let pcm3 = i16::from_le_bytes([bytes[50], bytes[51]]);
         assert_eq!(pcm3, 32767);
+    }
+
+    #[test]
+    fn peak_normalize_matches_the_pyboy_dump_scale() {
+        let mut samples = [0.1f32, -0.25, 0.2, 0.0];
+        peak_normalize(&mut samples, PYBOY_DUMP_PEAK);
+        assert_eq!(samples[1], -PYBOY_DUMP_PEAK);
+        assert!((samples[0] - PYBOY_DUMP_PEAK * 0.4).abs() < 1e-6);
+        let pcm = (samples[1] * 32767.0) as i16;
+        assert_eq!(pcm, -32000, "the dump script's 16-bit peak");
+
+        let mut silence = [0.0f32; 4];
+        peak_normalize(&mut silence, PYBOY_DUMP_PEAK);
+        assert_eq!(silence, [0.0; 4]);
     }
 }

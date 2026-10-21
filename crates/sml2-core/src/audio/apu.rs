@@ -22,6 +22,27 @@ use crate::audio::wave::WaveWrite;
 /// uses `factor^(4194304 / r)`: about 0.996 at 44.1 kHz.
 const HPF_CHARGE_PER_CYCLE: f64 = 0.999958;
 
+/// Output gain over the hardware-proportional mix, where full scale is all
+/// four channels at level 15 with NR50 at 7. Over 30 s of each of the 42
+/// songs that mix peaks at 0.652 (song 32) with a median of 0.365; x1.5 puts
+/// the loudest song near full scale, about where the peak-normalized pyboy
+/// references sit.
+pub const OUTPUT_GAIN: f32 = 1.5;
+/// Above this magnitude the output bends smoothly into [-1, 1] instead of
+/// clipping, for the rare SFX that land on top of a loud passage.
+const SOFT_CLIP_KNEE: f32 = 0.8;
+
+/// Identity up to the knee, then a tanh curve that meets it with slope 1 and
+/// approaches 1.0.
+fn soft_clip(x: f32) -> f32 {
+    let magnitude = x.abs();
+    if magnitude <= SOFT_CLIP_KNEE {
+        return x;
+    }
+    let room = 1.0 - SOFT_CLIP_KNEE;
+    (SOFT_CLIP_KNEE + room * ((magnitude - SOFT_CLIP_KNEE) / room).tanh()).copysign(x)
+}
+
 const DUTY_TABLE: [[u8; 8]; 4] = [
     [0, 0, 0, 0, 0, 0, 0, 1], // 12.5%
     [1, 0, 0, 0, 0, 0, 0, 1], // 25.0%
@@ -415,6 +436,9 @@ pub struct Apu {
     /// Each channel's last contribution to the left/right mix, in level × NR50
     /// units: a change is drawn as the difference from this.
     pub mix: [[i32; 2]; 4],
+    /// Gain applied after the high-pass filter, before the soft clip.
+    /// [`OUTPUT_GAIN`] by default; 1.0 gives the unscaled mix.
+    pub output_gain: f32,
 }
 
 impl Default for Apu {
@@ -437,6 +461,7 @@ impl Default for Apu {
             cap_right: 0.0,
             synth: StereoBlip::default(),
             mix: [[0; 2]; 4],
+            output_gain: OUTPUT_GAIN,
         }
     }
 }
@@ -838,6 +863,7 @@ impl Apu {
         // and the capacitor holds its charge.
         let charge = HPF_CHARGE_PER_CYCLE.powf(4_194_304.0 / rate as f64) as f32;
         let connected = self.any_dac_on();
+        let gain = self.output_gain;
         let (cap_l, cap_r) = (&mut self.cap_left, &mut self.cap_right);
         self.synth.read(num_frames, |[l, r]| {
             if !connected {
@@ -849,7 +875,7 @@ impl Apu {
             let out_r = raw_r - *cap_r;
             *cap_l = raw_l - out_l * charge;
             *cap_r = raw_r - out_r * charge;
-            out.extend([out_l.clamp(-1.0, 1.0), out_r.clamp(-1.0, 1.0)]);
+            out.extend([soft_clip(out_l * gain), soft_clip(out_r * gain)]);
         });
     }
 }

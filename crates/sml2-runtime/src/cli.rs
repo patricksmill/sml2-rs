@@ -16,10 +16,34 @@ use sml2_core::video;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
+/// `--normalize` renders at unity gain (no soft clip) and peak-normalizes the
+/// file the way `tools/dump_pyboy_audio.py` does, so it compares one-to-one
+/// with the pyboy references.
+fn write_export(
+    out_path: &Path,
+    samples: &mut [f32],
+    normalize: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if normalize {
+        sml2_core::audio::peak_normalize(samples, sml2_core::audio::PYBOY_DUMP_PEAK);
+    }
+    sml2_core::audio::write_wav_file(out_path, samples, 44100)?;
+    Ok(())
+}
+
+fn export_apu(normalize: bool) -> sml2_core::audio::Apu {
+    let mut apu = sml2_core::audio::Apu::new();
+    if normalize {
+        apu.output_gain = 1.0;
+    }
+    apu
+}
+
 /// Native GB screen; the HUD strip and the parity checks are anchored to it.
 fn export_song(
     song_id: u8,
     seconds: f32,
+    normalize: bool,
     out_path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if song_id == 0 || song_id > 42 {
@@ -28,7 +52,7 @@ fn export_song(
     let mut driver = sml2_core::audio::SoundDriver::with_music_bank(fs::read(
         extracted_dir().join("audio/music_bank04.bin"),
     )?);
-    let mut apu = sml2_core::audio::Apu::new();
+    let mut apu = export_apu(normalize);
 
     driver.music_request = song_id;
 
@@ -42,7 +66,7 @@ fn export_song(
         apu.generate_samples(44100, frame_samples, &mut samples);
     }
 
-    sml2_core::audio::write_wav_file(out_path, &samples, 44100)?;
+    write_export(out_path, &mut samples, normalize)?;
     println!(
         "Exported Song {song_id} to {} ({:.1}s, {} samples)",
         out_path.display(),
@@ -52,11 +76,16 @@ fn export_song(
     Ok(())
 }
 
-fn export_sfx(slot: u8, sfx_id: u8, out_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn export_sfx(
+    slot: u8,
+    sfx_id: u8,
+    normalize: bool,
+    out_path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut driver = sml2_core::audio::SoundDriver::with_music_bank(fs::read(
         extracted_dir().join("audio/music_bank04.bin"),
     )?);
-    let mut apu = sml2_core::audio::Apu::new();
+    let mut apu = export_apu(normalize);
 
     match slot {
         0 => {
@@ -90,7 +119,7 @@ fn export_sfx(slot: u8, sfx_id: u8, out_path: &Path) -> Result<(), Box<dyn std::
         apu.generate_samples(44100, frame_samples, &mut samples);
     }
 
-    sml2_core::audio::write_wav_file(out_path, &samples, 44100)?;
+    write_export(out_path, &mut samples, normalize)?;
     println!(
         "Exported SFX slot {slot} id {sfx_id} to {} ({} samples)",
         out_path.display(),
@@ -121,6 +150,7 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
     let mut export_song_id: Option<u8> = None;
     let mut export_sfx_pair: Option<(u8, u8)> = None;
     let mut export_seconds: f32 = 15.0;
+    let mut export_normalize = false;
     let mut view = (SCREEN_W, SCREEN_H);
     let mut boot = crate::session::Boot::Overworld;
     let mut args = env::args().skip(1);
@@ -149,6 +179,7 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
                     .parse::<u8>()?;
                 export_sfx_pair = Some((slot, id));
             }
+            "--normalize" => export_normalize = true,
             "--seconds" => {
                 export_seconds = args
                     .next()
@@ -260,11 +291,11 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
     };
     if let Some(song_id) = export_song_id {
         let out_path = resolve_out(format!("song{song_id:02}.wav"));
-        return export_song(song_id, export_seconds, &out_path);
+        return export_song(song_id, export_seconds, export_normalize, &out_path);
     }
     if let Some((slot, sfx_id)) = export_sfx_pair {
         let out_path = resolve_out(format!("sfx_slot{slot}_id{sfx_id}.wav"));
-        return export_sfx(slot, sfx_id, &out_path);
+        return export_sfx(slot, sfx_id, export_normalize, &out_path);
     }
     let tape = keys_tape.clone().map(PlayTape::Ascii);
     if map_mode || level.is_none() {

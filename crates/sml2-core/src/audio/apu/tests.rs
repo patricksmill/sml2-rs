@@ -536,3 +536,38 @@ fn band_limited_steps_integrate_exactly() {
     synth.read(WIDTH + 2, |l| levels.push(l));
     assert_eq!(*levels.last().unwrap(), [5 * 3 * UNIT, 5 * -5 * UNIT]);
 }
+
+/// The soft clip is the identity up to its knee, continuous with slope 1
+/// there, and never exceeds full scale.
+#[test]
+fn soft_clip_is_transparent_below_the_knee_and_bounded_above() {
+    for x in [0.0f32, 0.3, -0.5, 0.8, -0.8] {
+        assert_eq!(soft_clip(x), x);
+    }
+    let just_above = soft_clip(0.801);
+    assert!((just_above - 0.801).abs() < 1e-5, "slope 1 at the knee");
+    for x in [0.9f32, 1.2, 3.0, -2.0] {
+        let y = soft_clip(x);
+        assert!(y.abs() <= 1.0 && y.abs() > 0.8 && y.signum() == x.signum());
+    }
+    assert!(soft_clip(1.2) > soft_clip(0.9), "monotonic");
+}
+
+/// `output_gain` scales the high-passed mix linearly below the knee.
+#[test]
+fn output_gain_scales_the_mix() {
+    let render = |gain: f32| {
+        let mut apu = Apu::new();
+        apu.output_gain = gain;
+        apu.apply_pulse_write(PulseWrite::DutyLength(0x80));
+        apu.apply_pulse_write(PulseWrite::Envelope(0x80));
+        apu.apply_pulse_write(PulseWrite::FrequencyControl(0x86));
+        let mut samples = Vec::new();
+        apu.generate_samples(44_100, 400, &mut samples);
+        samples
+    };
+    let (unity, default) = (render(1.0), render(OUTPUT_GAIN));
+    for (u, d) in unity.iter().zip(&default) {
+        assert!((u * OUTPUT_GAIN - d).abs() < 1e-6);
+    }
+}
