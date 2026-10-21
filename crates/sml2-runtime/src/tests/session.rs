@@ -10,7 +10,7 @@ use crate::session::{
 };
 
 /// Press A on the map and run out the console's entry transition: the map
-/// freezes, the palettes fade to white, and the level goes live 74 frames in.
+/// freezes, the palettes fade to white, and the level goes live 73 frames in.
 fn press_a_and_wait_for_level(runner: &mut SessionRunner) -> StepOutcome {
     runner.step_frame(PlayerKeys {
         a: true,
@@ -444,8 +444,8 @@ fn map_level_entry_runs_the_console_transition() {
         }
     }
     // `$3E9FB` plus the `$0B`/`$02`/`$03` tail: the level's first frame is the
-    // 74th after the press.
-    assert_eq!(entered, Some((74, 0)));
+    // 73rd after the press.
+    assert_eq!(entered, Some((73, 0)));
     assert!(matches!(runner.state, SessionState::InLevel(_)));
     let _ = fs::remove_file(&tmp_save);
 }

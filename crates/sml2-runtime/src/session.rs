@@ -602,11 +602,12 @@ pub struct MapTransition {
 /// Frames from the map's A press to the first state-`$04` frame. `$3C1EC`
 /// calls `$3E9FB` (four palette steps, twelve `$3E9EC` waits each) and then
 /// clears the tilemap before state `$0B`; `$02` lasts two frames and `$03`
-/// twenty. Measured on this movie: level 0 goes `$04` 73 frames after A, the
-/// post-bell level 74 frames after A, and the first `$181C` is the frame
-/// after `$04`. 74 lands the level on that `$04` frame, so the next step is
-/// the first player update.
-pub const MAP_ENTRY_FRAMES: u16 = 74;
+/// twenty. Measured live: the frame whose `ReadJoypad` first sees A is 50
+/// frames before `$0B` and 73 before `$04`, and the first `$181C` is the frame
+/// after `$04`. The read can trail the input row by a frame, which is where an
+/// earlier "74" came from. 73 lands the level on that `$04` frame, so the next
+/// step is the first player update.
+pub const MAP_ENTRY_FRAMES: u16 = 73;
 
 /// Frames after the bell script reaches state `$0A` before the hub cursor
 /// runs. Measured on the level-1 clear: `$3E9FB`'s fade, the `$3F156`
