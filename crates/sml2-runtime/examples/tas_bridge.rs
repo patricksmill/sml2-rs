@@ -53,6 +53,22 @@ fn main() -> Result<(), Box<dyn Error>> {
             Some(value) if phase_lock => Some(value.parse()?),
             _ => None,
         };
+        // Optional `f97=N div=a,b,...`: the console's whole `$FF97` and the
+        // frame's `rDIV` reads, so the map's shared random byte can follow it.
+        let mut rom_timing: Option<sml2_runtime::session::RomTiming> = None;
+        for field in fields {
+            let timing = rom_timing.get_or_insert_with(Default::default);
+            match field.split_once('=') {
+                Some(("f97", value)) => timing.ff97 = value.parse()?,
+                Some(("div", "")) => {}
+                Some(("div", values)) => {
+                    for value in values.split(',') {
+                        timing.div_reads.push(value.parse()?);
+                    }
+                }
+                _ => return Err(format!("unknown bridge field {field:?}").into()),
+            }
+        }
         let keys = PlayerKeys {
             right: mask & 1 != 0,
             left: mask & 2 != 0,
@@ -81,6 +97,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     eprintln!("comparison: first level initial movement phase = {phase}");
                 }
             }
+        }
+        if let Some(timing) = rom_timing {
+            session.set_rom_timing(timing);
         }
         let effects = session.advance(FrameInput {
             keys,

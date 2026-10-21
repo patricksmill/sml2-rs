@@ -145,6 +145,28 @@ def frame_read(carried, early_reads, latch):
     return reads[-1] if reads else latch
 
 
+# The `rDIV` reads the port takes in order (`MapSim::div_reads`), hooked on
+# the instruction after each read so A holds the value: `$3C13E`'s two
+# (`ld c, 4 / ld a, [$FF00+c]`), the Space blink `$3DB40`, the Turtle patch
+# `$3DE25`, and bell room B's two rung picks `$60481`/`$604C1`.
+DIV_READ_HOOKS = ((0x0F, 0x4141), (0x0F, 0x4160), (0x0F, 0x5B50), (0x0F, 0x5E2F),
+                  (0x18, 0x4484), (0x18, 0x44C4))
+
+
+def frame_timing(iterations, frame):
+    """`(ff97, div_reads)` for the main-loop iterations belonging to `frame`.
+
+    Each iteration records the frame it belongs to by `frame_read`'s rule (a
+    dispatch at LY >= 144 belongs to the next frame), its `$FF97`, and the
+    `rDIV` reads made until the next dispatch. Several iterations in one frame
+    keep the last `$FF97` and all reads in order; none gives `None`.
+    """
+    mine = [it for it in iterations if it['frame'] == frame]
+    if not mine:
+        return None
+    return mine[-1]['ff97'], [value for it in mine for value in it['reads']]
+
+
 def step_masks(mask, phases, st4_keys, frame_held=None):
     """Buttons for each port step from `logic_phases`.
 
@@ -351,6 +373,8 @@ def main():
         joypad_latch = [None]
         late_read = [None]
         main_loop = [False]
+        iterations = []
+        tick = [0]
         early_reads = []
         events = []
         if phase_lock:
@@ -375,6 +399,17 @@ def main():
             # `Init` run first, so hold the port until the main loop dispatches.
             def dispatch(_ctx):
                 main_loop[0] = True
+                ly = pyboy.memory[0xFF44]
+                iterations.append({'frame': tick[0] + (ly >= 144),
+                                   'ff97': pyboy.memory[0xFF97], 'reads': []})
+                del iterations[:-4]
+
+            def div_read(_ctx):
+                if iterations:
+                    iterations[-1]['reads'].append(pyboy.register_file.A)
+
+            for bank, address in DIV_READ_HOOKS:
+                pyboy.hook_register(bank, address, div_read, None)
 
             pyboy.hook_register(0, 0x0279, dispatch, None)
 
@@ -446,15 +481,22 @@ def main():
                     carried, late_read[0] = late_read[0], None
                     early_reads.clear()
                     states = [(native_state, native_step)]
+                    tick[0] = index
                 if not pyboy.tick(1, True, False):
                     raise RuntimeError('PyBoy stopped before end of movie')
                 if phase_lock:
                     phases = (logic_phases(before_state, before_ff97, st4_phases, scene_phases)
                               if main_loop[0] else [])
+                    has_frame_step = not st4_phases and len(phases) > len(scene_phases)
                     predicted = (frame_read(carried, early_reads, joypad_latch[0])
                                  if len(phases) > len(scene_phases) else None)
-                    for phase, keys in zip(phases, step_masks(mask, phases, st4_keys, predicted)):
-                        bridge.stdin.write(f'{keys} {phase}\n'.encode())
+                    timing = frame_timing(iterations, index) if has_frame_step else None
+                    for k, (phase, keys) in enumerate(
+                            zip(phases, step_masks(mask, phases, st4_keys, predicted))):
+                        extra = ''
+                        if k == 0 and timing is not None:
+                            extra = f' f97={timing[0]} div={",".join(map(str, timing[1]))}'
+                        bridge.stdin.write(f'{keys} {phase}{extra}\n'.encode())
                         bridge.stdin.flush()
                         if state_rows:
                             native_state = read_state(bridge.stdout)

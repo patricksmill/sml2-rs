@@ -133,7 +133,12 @@ differ: phase lock is on by default and may send zero, one, or several native
 updates for one movie row. The port takes no step until the ROM's main loop
 first dispatches (`$0279`, after the boot ROM and `Init`), so its title starts
 on the ROM's title loader. A gameplay update (`$05D5`) uses the buttons the ROM
-latched at its last `ReadJoypad` (hooked at `$38B9`). The once-per-frame step
+latched at its last `ReadJoypad` (hooked at `$38B9`). Map frames also carry
+the ROM's whole `$FF97` and the `rDIV` values its random-state reads returned
+(`$3C13E`, the Space and Turtle zone animations, bell room B's rung picks), as
+`f97=` and `div=` fields after the phase; the port's `MapSim::div_reads` takes
+them in order, so `sMapRandAccum` and the bonus-game rungs follow the console.
+The once-per-frame step
 outside a level uses the read that frame's state handler acts on: one taken
 before line 144 of that frame, or at the end of the previous tick, since the
 tick ends at frame start. Scene steps use the row.

@@ -7,7 +7,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from compare_tas import (apply_buttons, logic_phases, read_state,
                          check_divergence, comparison_threshold, rom_keys_mask,
-                         step_masks, completed_sample, frame_read)
+                         step_masks, completed_sample, frame_read, frame_timing)
 
 
 class BridgeStateTests(unittest.TestCase):
@@ -264,6 +264,19 @@ class CompletedSampleTests(unittest.TestCase):
             [('a', 0), ('b', 1), ('c', 2)])
         self.assertEqual(state, ('c', 2))
 
+
+
+class FrameTimingTests(unittest.TestCase):
+    def test_iteration_reads_go_to_the_frame_they_belong_to(self):
+        iterations = [{'frame': 9, 'ff97': 7, 'reads': [1]},
+                      {'frame': 10, 'ff97': 8, 'reads': [2, 3]}]
+        self.assertEqual(frame_timing(iterations, 10), (8, [2, 3]))
+        self.assertIsNone(frame_timing(iterations, 11))
+
+    def test_two_iterations_in_one_frame_keep_every_read(self):
+        iterations = [{'frame': 4, 'ff97': 1, 'reads': [5]},
+                      {'frame': 4, 'ff97': 2, 'reads': []}]
+        self.assertEqual(frame_timing(iterations, 4), (2, [5]))
 
 if __name__ == '__main__':
     unittest.main()
