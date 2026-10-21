@@ -163,7 +163,7 @@ python3 tools/handler_task.py --addr 0x26D7 --entry-contract ending-transfer-vbl
 These contracts check caller and body witnesses against ROM bytes and SourceIndex,
 preserve the VBlank saved-register frame, and close interrupt control flow at `reti`
 without following the opaque interrupted PC or inventing native helper bindings.
-Generic traversal without `--entry-contract` continues to report `INCOMPLETE`.
+Generic traversal without `--entry-contract` continues to report `INCOMPLETE` for these interrupt entries.
 
 For the reviewed mixed declaration used by anim A:53, opt in explicitly:
 
@@ -176,9 +176,30 @@ This contract scopes COMPLETE to entry FFDF in {0,1,2,3,4}, selected bank $16,
 stable ROM, ordinary calls/returns, and no external staging mutation. It overrides
 only dispatch 0x59079: four pointers occupy [0x5907A,0x59082); the remaining 16
 bytes are two eight-byte displacement arrays. SourceIndex retains the entire
-[0x5907A,0x59092) declaration. Generic slicing remains INCOMPLETE, including when
-trailing offset pairs happen to look like valid pointers. No first-invalid-pointer
-heuristic or Rust dependency binding supplies the bound.
+[0x5907A,0x59092) declaration. No first-invalid-pointer heuristic or Rust
+dependency binding supplies the bound.
+
+### State-bounded `rst $28` tables
+
+Without a contract, an `rst $28` whose index comes from the object state byte
+(`$FFDF`) is bounded by the state values that reach it, not by pointer shape.
+This applies when the table has no source declaration, or when its declaration
+holds a word that is not a valid in-bank pointer (a mixed pointer/data run).
+The slicer tracks A as a function of `$FFDF` (`ldh`, `inc`/`dec`, `add`/`sub`,
+`and`/`or`/`xor`/`cp`, `cpl`, rotates, `swap`, `set`/`res`), narrows the possible
+values at each conditional branch, and takes the entry set as a fixed point:
+spawn state 0 plus every value written anywhere in the closure, bound helpers
+included. Narrowing never drops code; it only bounds tables.
+
+A dispatch stays INCOMPLETE when its index is not state-derived, when the
+closure writes a non-constant state (for example a saved-state restore), when
+state 0 can reach a `dec a` dispatch unguarded, or when the bound runs past a
+declaration. Writers outside the closure are not modelled; the brief lists the
+entry set so a reviewer can confirm none exist. The state-tracked walk only runs
+when the plain walk is INCOMPLETE and is kept only when COMPLETE, so it never
+changes an existing complete slice. Generic slicing now reaches the anim53
+contract's exact four pointers and 356-instruction closure; the contract remains
+the stronger, byte-witnessed form.
 
 `state_table_contracts.py` records immutable SHA256 witnesses for every byte in
 the audited handler/helper instruction closure (including conservative removal

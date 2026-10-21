@@ -98,10 +98,16 @@ class CheckedStateTableTests(unittest.TestCase):
                              self.source if source is None else source, 0x5902D,
                              state_table_contract=NAME, **kwargs)
 
-    def test_complete_scoped_and_default_incomplete(self):
+    def test_complete_scoped_and_generic_state_bound_agree(self):
+        # The generic state bound reaches the same four pointers and closure as the
+        # reviewed contract, from the closure's own state writes alone.
         generic = slice_handler(self.rom, self.source, 0x5902D)
-        self.assertFalse(generic.complete)
+        self.assertTrue(generic.complete, generic.unresolved)
+        self.assertEqual(generic.tables, {0x5907A: [0x5092, 0x50A8, 0x50BE, 0x50D8]})
+        self.assertEqual(generic.inferred_tables, {0x5907A: (0, 1, 2, 3)})
+        self.assertEqual(generic.entry_states, (0, 1, 2, 3, 4))
         result = self.checked()
+        self.assertEqual(generic.instructions, result.instructions)
         self.assertTrue(result.complete, result.unresolved)
         self.assertEqual(result.tables, {0x5907A: [0x5092, 0x50A8, 0x50BE, 0x50D8]})
         self.assertEqual(len(result.instructions), 356)
@@ -176,12 +182,12 @@ class CheckedStateTableTests(unittest.TestCase):
         self.assertIn('## Checked mixed state-table contract', brief)
         self.assertIn('## Existing helper dependencies supplied by the supervisor\n\n- None.', brief)
         with tempfile.TemporaryDirectory() as d:
-            for flags, status in (([], 2), (['--state-table-contract', NAME], 0),
+            for flags, status in (([], 0), (['--state-table-contract', NAME], 0),
                                   (['--state-table-contract', NAME, '--max-states', '1'], 2)):
                 with patch.object(sys, 'argv', ['handler_task', '--addr', '0x5902D', '--out-dir', d] + flags):
                     with redirect_stderr(io.StringIO()):
                         self.assertEqual(handler_task.main(), status)
-            for flags, status in (([], 2), (['--state-table-contract', NAME], 0)):
+            for flags, status in (([], 0), (['--state-table-contract', NAME], 0)):
                 run = subprocess.run([sys.executable, str(ROOT / 'tools/handler_task.py'),
                                       '--addr', '0x5902D', '--out-dir', d] + flags,
                                      capture_output=True, text=True)

@@ -1,20 +1,7 @@
 {
   "active_milestone": "full_integration",
-  "milestone_note": "17 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+  "milestone_note": "23 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
-    {
-      "id": "g-slicer-state-tables",
-      "title": "Bound rst $28 state tables generically from the state values that reach each dispatch (path-refined $FFDF value sets)",
-      "asm_refs": [
-        "home.asm:$0028 rst $28",
-        "main.asm:$5A872",
-        "main.asm:$59689",
-        "main.asm:$59079"
-      ],
-      "dependencies": [],
-      "verification_gate": "tools/asm_slice.py infers table bounds without a source dw declaration; 0x5A85C and 0x5966C briefs regenerate COMPLETE; anim53 inference matches the reviewed anim53-state0-4 contract; non-constant state writes and unknown dispatch indices still report INCOMPLETE; tools/tests pass",
-      "status": "pending"
-    },
     {
       "id": "g-actor-wario",
       "title": "Migrate Wario form 1, children 22/25 and phase-1 exit from raw slot bytes to typed Actor state",

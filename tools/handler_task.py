@@ -74,6 +74,18 @@ def make_brief(root: Path, decomp: Path, addr: int, *, bank=None, budget=800, de
     scope = f' under entry contract `{entry_contract}`' if entry_contract else ''
     if state_table_contract:
         scope += f' under state-table contract `{state_table_contract}` (entry FFDF in {{0,1,2,3,4}})'
+    if result.inferred_tables:
+        entry_set = ','.join(map(str, result.entry_states))
+        scope += f' with state-bounded tables (entry FFDF in {{{entry_set}}})'
+    inferred = '\n'.join(f'- ROM 0x{pc:05X}: indices {", ".join(map(str, reach))} reachable'
+                         for pc, reach in sorted(result.inferred_tables.items()))
+    if inferred:
+        inferred += (f'\n\nEntry FFDF values: {{{", ".join(map(str, result.entry_states))}}}: '
+                     'spawn state 0 plus every value this closure writes, bound helpers '
+                     'included. Writers outside the closure (other objects, interaction '
+                     'code) are not modelled; confirm none set this state byte.')
+    else:
+        inferred = '- None.'
     state_evidence = result.state_table_evidence or ('Contract validation failed; see unresolved work.' if state_table_contract else '- None.')
     entry_evidence = result.contract_evidence or ('Contract validation failed; see unresolved work.' if entry_contract else '- None.')
     exits = ', '.join(f'0x{pc:05X}' for pc in sorted(result.interrupt_exits)) or 'None'
@@ -118,6 +130,10 @@ Structurally checked interrupt terminal entries: {exits}.
 ## Recovered rst $28 state tables (CPU targets)
 
 {tables}
+
+## State-bounded rst $28 tables
+
+{inferred}
 
 ## Existing helper dependencies supplied by the supervisor
 

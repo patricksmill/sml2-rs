@@ -180,6 +180,46 @@ class SliceTests(unittest.TestCase):
             self.code(0x58000, data)
             self.assertFalse(slice_handler(self.rom, self.source, 0x58000).complete)
 
+    def state_machine(self, arm2):
+        # ldh a,[$FFDF] / and a / jr nz dispatch; state 0 initializes to 1.
+        self.code(0x58000, [0xF0, 0xDF, 0xA7, 0x20, 0x05, 0x3E, 0x01, 0xE0, 0xDF, 0xC9,
+                            0xF0, 0xDF, 0x3D, 0xEF])
+        self.rom[0x5800E:0x58014] = bytes([0x00, 0x41, 0x00, 0x42, 0xFF, 0xFF])
+        self.code(0x58100, [0x3E, 0x02, 0xE0, 0xDF, 0xC9])  # state 1 -> 2
+        self.code(0x58200, arm2)
+        return slice_handler(self.rom, self.source, 0x58000)
+
+    def test_undeclared_state_table_is_bounded_by_written_states(self):
+        result = self.state_machine([0xF0, 0xDF, 0xEE, 0x03, 0xE0, 0xDF, 0xC9])  # 2 -> 2^3
+        self.assertTrue(result.complete, result.unresolved)
+        self.assertEqual(result.tables, {0x5800E: [0x4100, 0x4200]})
+        self.assertEqual(result.inferred_tables, {0x5800E: (0, 1)})
+        self.assertEqual(result.entry_states, (0, 1, 2))
+
+    def test_non_constant_state_write_leaves_the_bound_unresolved(self):
+        result = self.state_machine([0xFA, 0x00, 0xC0, 0xE0, 0xDF, 0xC9])  # ld a,[$C000]
+        self.assertFalse(result.complete)
+        self.assertTrue(any('unbounded' in r for r in result.unresolved), result.unresolved)
+
+    def test_unguarded_state_zero_wraps_and_stays_unresolved(self):
+        self.code(0x58000, [0xF0, 0xDF, 0x3D, 0xEF])
+        self.rom[0x58004:0x58006] = bytes([0x00, 0x41])
+        self.code(0x58100, [0xC9])
+        result = slice_handler(self.rom, self.source, 0x58000)
+        self.assertFalse(result.complete)
+        self.assertTrue(any('wraps' in r for r in result.unresolved), result.unresolved)
+
+    def test_state_bound_never_replaces_a_complete_declared_slice(self):
+        self.code(0x58000, [0xF0, 0xDF, 0xEF])
+        self.rom[0x58003:0x58007] = bytes([0x00, 0x41, 0x00, 0x42])
+        self.source.tables[0x58003] = 0x58007
+        self.code(0x58100, [0xC9])
+        self.code(0x58200, [0xC9])
+        result = slice_handler(self.rom, self.source, 0x58000)
+        self.assertTrue(result.complete, result.unresolved)
+        self.assertEqual(result.tables, {0x58003: [0x4100, 0x4200]})  # state 0 alone would give one arm
+        self.assertEqual(result.inferred_tables, {})
+
     def test_reviewed_helper_contract_bounds_slice(self):
         self.code(0x58000, [0xCD, 0, 0x42, 0xC9])
         result = slice_handler(self.rom, self.source, 0x58000,

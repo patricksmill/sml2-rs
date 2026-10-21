@@ -191,18 +191,85 @@ class Slice:
     state_table_contract: str | None = None
     state_table_evidence: str = ''
     interrupt_exits: set[int] = field(default_factory=set)
+    # rst $28 table start -> table indices reachable from the state byte's values.
+    inferred_tables: dict[int, tuple[int, ...]] = field(default_factory=dict)
+    entry_states: tuple[int, ...] = ()
 
     @property
     def complete(self) -> bool:
         return not self.unresolved
 
 
+# Object state byte (`$FFDF`). An `rst $28` table without a source declaration is
+# bounded by the state values that can reach its dispatch, never by pointer shape.
+STATE = 0xFFDF
+ALL_VALUES = frozenset(range(256))
+# Opcodes that leave every flag unchanged (loads, 16-bit inc/dec, stack, control flow).
+FLAGS_KEPT = (set(range(0x40, 0x80)) - {0x76}) | {
+    0x00, 0x01, 0x02, 0x03, 0x06, 0x08, 0x0A, 0x0B, 0x0E, 0x11, 0x12, 0x13, 0x16, 0x18,
+    0x1A, 0x1B, 0x1E, 0x20, 0x21, 0x22, 0x23, 0x26, 0x28, 0x2A, 0x2B, 0x2E, 0x30, 0x31,
+    0x32, 0x33, 0x36, 0x38, 0x3A, 0x3B, 0x3E, 0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC8,
+    0xC9, 0xCA, 0xCC, 0xCD, 0xD0, 0xD1, 0xD2, 0xD4, 0xD5, 0xD8, 0xD9, 0xDA, 0xDC, 0xE0,
+    0xE1, 0xE2, 0xE5, 0xEA, 0xF0, 0xF2, 0xF3, 0xF5, 0xF9, 0xFA, 0xFB}
+# Opcodes that leave A unchanged, beyond the flag-preserving ones that do not load A.
+A_KEPT = (FLAGS_KEPT - set(range(0x78, 0x7F)) - {0x0A, 0x1A, 0x2A, 0x3A, 0x3E, 0xF0, 0xF2, 0xFA}) | {
+    0x04, 0x05, 0x0C, 0x0D, 0x14, 0x15, 0x1C, 0x1D, 0x24, 0x25, 0x2C, 0x2D, 0x34, 0x35,
+    0x37, 0x3F, 0x09, 0x19, 0x29, 0x39, 0xA7, 0xB7, 0xFE, 0xE8, 0xF8} | set(range(0xB8, 0xC0))
+# Branch condition -> (flag, taken when set): nz/z/nc/c for jr, jp, call and ret.
+CONDITIONS = {0x20: ('z', False), 0x28: ('z', True), 0x30: ('c', False), 0x38: ('c', True),
+              0xC2: ('z', False), 0xCA: ('z', True), 0xD2: ('c', False), 0xDA: ('c', True),
+              0xC4: ('z', False), 0xCC: ('z', True), 0xD4: ('c', False), 0xDC: ('c', True),
+              0xC0: ('z', False), 0xC8: ('z', True), 0xD0: ('c', False), 0xD8: ('c', True)}
+
+
 def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | None = None,
                   bindings: dict[int, str] | None = None, budget: int = 800,
-                  entry_contract: str | None = None, state_table_contract: str | None = None) -> Slice:
+                  entry_contract: str | None = None, state_table_contract: str | None = None,
+                  entry_states: frozenset[int] = frozenset({0})) -> Slice:
+    """Slice `entry`. Undeclared state tables are bounded by a fixed point over the
+    state values written anywhere in the full closure (bound helpers included),
+    starting from `entry_states` (the spawn state). Writers outside the closure,
+    such as another object's code, are not modelled and are listed in the brief."""
+    kwargs = dict(bank=bank, budget=budget, entry_contract=entry_contract,
+                  state_table_contract=state_table_contract)
+    states = frozenset(entry_states)
+    # Untracked first: state tracking splits paths, so it only ever upgrades an
+    # incomplete slice and never costs a complete one its budget.
+    legacy, _ = _walk(rom, source, entry, bindings=bindings, entry_sv=states, track=False, **kwargs)
+    if legacy.complete or entry_contract or state_table_contract:
+        return legacy
+    result, _ = _walk(rom, source, entry, bindings=bindings, entry_sv=states, **kwargs)
+    if not result.inferred_tables:
+        return legacy
+    for _ in range(32):
+        scan, writes = _walk(rom, source, entry, bindings={}, entry_sv=states, **kwargs)
+        if writes <= states:
+            break
+        states |= writes
+    else:
+        legacy.unresolved.add('state bound: state-table inference did not reach a fixed point')
+        return legacy
+    result, _ = _walk(rom, source, entry, bindings=bindings, entry_sv=states, **kwargs)
+    result.entry_states = tuple(sorted(states))
+    for start, reach in sorted(result.inferred_tables.items()):
+        if not reach:
+            result.unresolved.add(f'0x{start:X}: no state value reaches this rst $28 table')
+    for reason in sorted(scan.unresolved):
+        result.unresolved.add(f'state-table write scan (bound helpers traversed): {reason}')
+    if result.complete:
+        return result
+    legacy.unresolved.update(f'state bound: {reason}' for reason in result.unresolved)
+    return legacy
+
+
+def _walk(rom: bytes, source: SourceIndex, entry: int, *, bank: int | None,
+          bindings: dict[int, str] | None, budget: int, entry_contract: str | None,
+          state_table_contract: str | None, entry_sv: frozenset[int],
+          track: bool = True) -> tuple[Slice, frozenset[int]]:
     if not 0 <= entry < len(rom) or budget < 1:
         raise ValueError('invalid entry address or instruction budget')
     bindings = bindings or {}
+    writes: set[int] = set()
     contract = CONTRACTS[entry_contract] if entry_contract in CONTRACTS else None
     if entry_contract is not None and contract is None:
         raise ValueError(f'unknown entry contract: {entry_contract}')
@@ -218,7 +285,10 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
         raise ValueError('selected bank contradicts banked entry ROM offset')
     # Each stack word is a known CPU address or an unknown saved register. This
     # resolves immediate HL push/ret and ordinary register save/restore patterns.
-    pending = [(entry, initial_bank, None, None, ())]
+    # The last three fields track the state byte (see `_track_state`): A as a
+    # function of the state, the state values possible here, and the state
+    # values that set Z and C.
+    pending = [(entry, initial_bank, None, None, (), None, entry_sv, (None, None))]
     seen = set()
     result = Slice({}, {}, {}, set())
     allowed_state_code = frozenset()
@@ -229,7 +299,7 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
             result.state_table_evidence = state_contract.describe(source)
         except ValueError as exc:
             result.unresolved.add(str(exc))
-            return result
+            return result, frozenset()
     if contract:
         result.entry_contract = contract.name
         try:
@@ -237,7 +307,7 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
             result.contract_evidence = contract.describe(source)
         except ValueError as exc:
             result.unresolved.add(str(exc))
-            return result
+            return result, frozenset()
     while pending:
         state = pending.pop()
         if state in seen:
@@ -246,7 +316,7 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
             result.unresolved.add(f'control-flow budget ({budget} states) exhausted; split prerequisite helpers')
             break
         seen.add(state)
-        pc, selected, a, hl, stack = state
+        pc, selected, a, hl, stack, amap, sv, flags = state
         if state_contract and (pc not in allowed_state_code or selected != state_contract.bank):
             result.unresolved.add(f'0x{pc:X}: transfer outside checked state-table closure/bank')
             continue
@@ -267,7 +337,9 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
             result.dependencies[pc] = bindings[pc]
             if stack:
                 try:
-                    pending.append((rom_address(selected, stack[-1]), selected, None, None, stack[:-1]))
+                    # A bound helper may write the state byte; only the closure-wide set is sound.
+                    pending.append((rom_address(selected, stack[-1]), selected, None, None, stack[:-1],
+                                    None, entry_sv, (None, None)))
                 except (ValueError, TypeError):
                     result.unresolved.add(f'0x{pc:X}: unknown return through bound helper')
             continue
@@ -288,8 +360,23 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
             result.instructions[pc] = f'{raw.hex(" ").upper():8s} {location}'
             cpu = bank_cpu(pc)[1]
             next_cpu = cpu + size
-            def emit(target: int, *, bank=selected, av=a, hv=hl, words=stack):
-                pending.append((rom_address(bank, target), bank, av, hv, words))
+            a0, hl0, amap0 = a, hl, amap
+            amap, sv, flags = _track_state(op, raw, a0, hl0, amap, sv, flags, writes)
+            if not track:
+                amap0, amap, sv, flags = None, None, entry_sv, (None, None)
+            def emit(target: int, *, bank=selected, av=a, hv=hl, words=stack, k=amap, s=sv, f=flags):
+                pending.append((rom_address(bank, target), bank, av, hv, words, k, s, f))
+            def split(taken_target: int | None, fall_target: int | None, *, words=stack):
+                # A conditional edge narrows the state values when its flag tests the state byte.
+                flag, when_set = CONDITIONS[op]
+                tested = flags[0] if flag == 'z' else flags[1]
+                taken = sv if tested is None else (sv & tested if when_set else sv - tested)
+                fall = sv if tested is None else sv - taken
+                # Narrowing never drops code: an empty set only means no state reaches it.
+                if taken_target is not None:
+                    emit(taken_target, words=words, s=taken)
+                if fall_target is not None:
+                    emit(fall_target, av=a, hv=hl, s=fall)
             if op == 0x3E:
                 a = raw[1]
             elif op == 0xAF:
@@ -319,12 +406,15 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
                     raise ValueError('pop consumes unknown caller stack')
                 emit(next_cpu, bank=selected, av=None, hv=stack[-1] if op == 0xE1 else hl, words=stack[:-1])
             elif op in {0xC9, 0xD9, 0xC0, 0xC8, 0xD0, 0xD8}:
-                if stack:
-                    if stack[-1] is None:
+                if op in {0xC9, 0xD9}:
+                    if stack:
+                        if stack[-1] is None:
+                            raise ValueError('ret target is an unknown stack value')
+                        emit(stack[-1], bank=selected, av=a, hv=hl, words=stack[:-1])
+                else:
+                    if stack and stack[-1] is None:
                         raise ValueError('ret target is an unknown stack value')
-                    emit(stack[-1], bank=selected, av=a, hv=hl, words=stack[:-1])
-                if op not in {0xC9, 0xD9}:
-                    emit(next_cpu, bank=selected, av=a, hv=hl)
+                    split(stack[-1] if stack else None, next_cpu, words=stack[:-1])
             elif op in {0xCD, 0xC4, 0xCC, 0xD4, 0xDC}:
                 if contract and pc in contract.skipped_calls:
                     # Exact LDH/CP/CALL guard and unchanged state19 fact were
@@ -333,17 +423,22 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
                     continue
                 if len(stack) >= 24:
                     raise ValueError('call-stack budget exceeded')
-                emit(int.from_bytes(raw[1:], 'little'), bank=selected, words=stack + (next_cpu,))
-                if op != 0xCD:
-                    emit(next_cpu, bank=selected, av=a, hv=hl)
+                target = int.from_bytes(raw[1:], 'little')
+                if op == 0xCD:
+                    emit(target, bank=selected, words=stack + (next_cpu,))
+                else:
+                    split(target, next_cpu, words=stack + (next_cpu,))
             elif op in {0xC3, 0xC2, 0xCA, 0xD2, 0xDA}:
-                emit(int.from_bytes(raw[1:], 'little'), bank=selected)
-                if op != 0xC3:
-                    emit(next_cpu, bank=selected)
+                if op == 0xC3:
+                    emit(int.from_bytes(raw[1:], 'little'), bank=selected)
+                else:
+                    split(int.from_bytes(raw[1:], 'little'), next_cpu)
             elif op in {0x18, 0x20, 0x28, 0x30, 0x38}:
-                emit(next_cpu + int.from_bytes(raw[1:], 'little', signed=True), bank=selected)
-                if op != 0x18:
-                    emit(next_cpu, bank=selected)
+                target = next_cpu + int.from_bytes(raw[1:], 'little', signed=True)
+                if op == 0x18:
+                    emit(target, bank=selected)
+                else:
+                    split(target, next_cpu)
             elif op == 0xE9:
                 if hl is None:
                     raise ValueError('computed jp hl requires a dependency or exact target evidence')
@@ -358,13 +453,35 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
                             or end != state_contract.declaration[1]):
                         raise ValueError('checked state-table dispatch mismatch')
                     end = state_contract.pointers[1]
+                indices = None if amap0 is None else frozenset(amap0[v] for v in sv)
+                declared = None
+                if (end is not None and indices is not None and not (contract or state_contract)
+                        and any(not _in_bank(selected, int.from_bytes(rom[i:i + 2], 'little'))
+                                for i in range(start, min(end, len(rom) - 1), 2))):
+                    # A declaration that mixes pointers with data is bounded by state instead.
+                    declared, end = end, None
+                if end is None and track and not (contract or state_contract):
+                    if indices is None:
+                        raise ValueError('rst $28 has no source table and its index is not the state byte')
+                    reach = indices | frozenset(result.inferred_tables.get(start, ()))
+                    result.inferred_tables[start] = tuple(sorted(reach))
+                    if not reach:
+                        continue  # no state value reaches this dispatch yet
+                    if len(entry_sv) == 256:
+                        raise ValueError('rst $28 state index is unbounded: the closure writes a non-constant state')
+                    if max(reach) >= 0x80:
+                        raise ValueError(f'rst $28 state index {max(reach)} wraps; guard the state first')
+                    end = start + 2 * (max(reach) + 1)
+                    if declared is not None and end > declared:
+                        raise ValueError('state-bounded table runs past its source declaration')
                 if (end is None or end <= start or end > len(rom)
                         or start // 0x4000 != (end - 1) // 0x4000 or (end - start) % 2):
                     raise ValueError('rst $28 has no complete, even-length source table')
                 targets = [int.from_bytes(rom[i:i + 2], 'little') for i in range(start, end, 2)]
                 result.tables[start] = targets
-                for target in targets:
-                    emit(target, bank=selected)
+                for index, target in enumerate(targets):
+                    arm = sv if indices is None else frozenset(v for v in sv if amap0[v] == index)
+                    emit(target, bank=selected, av=None, hv=None, k=None, s=arm, f=(None, None))
             elif op & 0xC7 == 0xC7:
                 raise ValueError(f'rst ${op & 0x38:02X} requires explicit semantics')
             elif op in {0x10, 0x76}:
@@ -373,4 +490,104 @@ def slice_handler(rom: bytes, source: SourceIndex, entry: int, *, bank: int | No
                 emit(next_cpu, bank=selected, av=a, hv=hl)
         except (ValueError, TypeError) as exc:
             result.unresolved.add(f'0x{pc:X}: {exc}')
-    return result
+    return result, frozenset(writes)
+
+
+def _in_bank(bank: int, cpu: int) -> bool:
+    return cpu < 0x4000 or (bank != 0 and cpu < 0x8000)
+
+
+IDENTITY = tuple(range(256))
+# A-register operations as (result, Z predicate, C predicate) over the old A value x.
+# A predicate of None keeps that flag; 'clear'/'set' are constant flags.
+_UNARY = {
+    0x3C: (lambda x: (x + 1) & 0xFF, 'z', None),
+    0x3D: (lambda x: (x - 1) & 0xFF, 'z', None),
+    0x2F: (lambda x: ~x & 0xFF, None, None),
+    0xA7: (lambda x: x, 'z', 'clear'),
+    0xB7: (lambda x: x, 'z', 'clear'),
+    0x07: (lambda x: ((x << 1) | (x >> 7)) & 0xFF, 'clear', lambda x: x >> 7),
+    0x0F: (lambda x: ((x >> 1) | (x << 7)) & 0xFF, 'clear', lambda x: x & 1),
+}
+_IMMEDIATE = {
+    0xC6: (lambda x, n: (x + n) & 0xFF, 'z', lambda x, n: x + n > 0xFF),
+    0xD6: (lambda x, n: (x - n) & 0xFF, 'z', lambda x, n: x < n),
+    0xE6: (lambda x, n: x & n, 'z', 'clear'),
+    0xEE: (lambda x, n: x ^ n, 'z', 'clear'),
+    0xF6: (lambda x, n: x | n, 'z', 'clear'),
+    0xFE: (lambda x, n: x, lambda x, n: x == n, lambda x, n: x < n),
+}
+_CB_A = {  # CB-prefixed operations on A (low three bits 7)
+    0x07: (lambda x: ((x << 1) | (x >> 7)) & 0xFF, 'z', lambda x: x >> 7),
+    0x0F: (lambda x: ((x >> 1) | (x << 7)) & 0xFF, 'z', lambda x: x & 1),
+    0x27: (lambda x: (x << 1) & 0xFF, 'z', lambda x: x >> 7),
+    0x2F: (lambda x: (x >> 1) | (x & 0x80), 'z', lambda x: x & 1),
+    0x37: (lambda x: ((x << 4) | (x >> 4)) & 0xFF, 'z', 'clear'),
+    0x3F: (lambda x: x >> 1, 'z', lambda x: x & 1),
+}
+
+
+def _in_bank(bank: int, cpu: int) -> bool:
+    return cpu < 0x4000 or (bank != 0 and cpu < 0x8000)
+
+
+def _track_state(op, raw, a, hl, amap, sv, flags, writes):
+    """Advance (amap, sv, flags) over one instruction; record state-byte writes.
+
+    amap[v] is A's value when the state byte holds v (None: A is not a function
+    of the state); sv is the state values possible here; flags are the state
+    values that set Z and C (None: the flag says nothing about the state)."""
+    if amap is None and a is not None:
+        amap = (a,) * 256  # a known constant is a (constant) function of the state
+    stored = None
+    if (op == 0xE0 and raw[1] == STATE & 0xFF) or (op == 0xEA and int.from_bytes(raw[1:], 'little') == STATE) \
+            or (op in {0x77, 0x22, 0x32} and hl == STATE):
+        # Any other A is e.g. a saved-state restore; a bound that depends on it fails.
+        stored = ALL_VALUES if amap is None else frozenset(amap[v] for v in sv)
+    elif op == 0x36 and hl == STATE:
+        stored = frozenset({raw[1]})
+    elif op in {0x34, 0x35} and hl == STATE:
+        stored = frozenset((v + (1 if op == 0x34 else -1)) & 0xFF for v in sv)
+    if stored is not None:
+        writes |= stored
+        # After an A store, A is the new state; flags described the old value.
+        return (IDENTITY if op in {0xE0, 0xEA, 0x77, 0x22, 0x32} and amap is not None else None), stored, (None, None)
+    if op == 0xF0 and raw[1] == STATE & 0xFF:
+        return IDENTITY, sv, flags
+    if op == 0x3E:
+        return (raw[1],) * 256, sv, flags
+    if op == 0xAF:
+        return (0,) * 256, sv, (ALL_VALUES, frozenset())
+    rule = None
+    if amap is not None:
+        if op in _UNARY:
+            rule = _UNARY[op]
+        elif op in _IMMEDIATE:
+            fn2, z2, c2 = _IMMEDIATE[op]
+            n = raw[1]
+            rule = (lambda x, f=fn2: f(x, n),
+                    z2 if isinstance(z2, str) else (lambda x, f=z2: f(x, n)),
+                    c2 if isinstance(c2, str) else (lambda x, f=c2: f(x, n)))
+        elif op == 0xCB and raw[1] in _CB_A:
+            rule = _CB_A[raw[1]]
+        elif op == 0xCB and raw[1] & 7 == 7 and raw[1] >= 0x40:
+            bit = 1 << ((raw[1] >> 3) & 7)
+            if raw[1] < 0x80:
+                rule = (lambda x: x, lambda x: not x & bit, None)
+            else:
+                rule = ((lambda x: x & ~bit) if raw[1] < 0xC0 else (lambda x: x | bit), None, None)
+    if rule is not None:
+        fn, z, c = rule
+        new = tuple(fn(x) for x in amap)
+        def flag(spec, old, result):
+            if spec is None:
+                return old
+            if spec == 'clear':
+                return frozenset()
+            if spec == 'z':
+                return frozenset(v for v in range(256) if result[v] == 0)
+            return frozenset(v for v in range(256) if spec(amap[v]))
+        return new, sv, (flag(z, flags[0], new), flag(c, flags[1], new))
+    new_flags = flags if op in FLAGS_KEPT else (None, None)
+    keeps_a = op in A_KEPT or (op == 0xCB and raw[1] & 7 != 7)
+    return (amap if keeps_a else None), sv, new_flags

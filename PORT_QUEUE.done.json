@@ -1293,6 +1293,19 @@
       "dependencies": [],
       "verification_gate": "Every row's remaining-gap text either cites a passing test or names a pending f-* queue id; tools/handler_coverage.py exits 0; tools/smoke_levels.py clean",
       "status": "done"
+    },
+    {
+      "id": "g-slicer-state-tables",
+      "title": "Bound rst $28 state tables generically from the state values that reach each dispatch (path-refined $FFDF value sets)",
+      "asm_refs": [
+        "home.asm:$0028 rst $28",
+        "main.asm:$5A872",
+        "main.asm:$59689",
+        "main.asm:$59079"
+      ],
+      "dependencies": [],
+      "verification_gate": "tools/asm_slice.py infers table bounds without a source dw declaration; 0x5A85C and 0x5966C briefs regenerate COMPLETE; anim53 inference matches the reviewed anim53-state0-4 contract; non-constant state writes and unknown dispatch indices still report INCOMPLETE; tools/tests pass",
+      "status": "done"
     }
   ]
 }
