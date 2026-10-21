@@ -6,8 +6,6 @@ use crate::actor::{Actor, RiseProfile};
 impl ObjectSim {
     /// `$B1C8`: read the full profile, then advance `B_PHASE` unless it equals 36.
     /// The caller supplies the ROM's reachable phase range `0..=36`.
-    // Deferred: the only caller is anim 23's handler at `$ACB2`.
-    #[allow(dead_code)]
     pub(super) fn boss_reverse_picker_b1c8(&self, st: &mut Staging) -> (u8, u8) {
         self.boss_rise_step(st, RiseProfile::Full)
     }

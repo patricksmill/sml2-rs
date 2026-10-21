@@ -1,5 +1,4 @@
-use super::*;
-use crate::objects::B_FLAGS;
+use crate::objects::*;
 
 fn tables() -> ObjectTables {
     serde_json::from_str(include_str!(concat!(

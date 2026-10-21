@@ -9,6 +9,7 @@ mod drop_child_adapter;
 #[path = "tests/drop_child.rs"]
 mod drop_child_tests;
 mod form1;
+mod form1_adapter;
 #[cfg(test)]
 #[path = "tests/form1_integration.rs"]
 mod form1_integration;

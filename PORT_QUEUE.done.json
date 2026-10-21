@@ -1306,6 +1306,20 @@
       "dependencies": [],
       "verification_gate": "tools/asm_slice.py infers table bounds without a source dw declaration; 0x5A85C and 0x5966C briefs regenerate COMPLETE; anim53 inference matches the reviewed anim53-state0-4 contract; non-constant state writes and unknown dispatch indices still report INCOMPLETE; tools/tests pass",
       "status": "done"
+    },
+    {
+      "id": "g-actor-wario",
+      "title": "Migrate Wario form 1, children 22/25 and phase-1 exit from raw slot bytes to typed Actor state",
+      "asm_refs": [
+        "bank $02:$A8AB",
+        "bank $02:$AB30/$AB4D/$AB6E",
+        "bank $02:$A96D"
+      ],
+      "dependencies": [
+        "g-slicer-state-tables"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/bosses/wario/form1.rs, child22.rs, child25.rs, phase1_exit.rs",
+      "status": "done"
     }
   ]
 }

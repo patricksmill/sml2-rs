@@ -1,6 +1,6 @@
 //! Shared Wario child fall at ROM `$AB4D`, including counted removal `$B157`.
 
-use crate::actor::{Actor, FrameTick};
+use crate::actor::{Actor, FlashFlags, FrameTick};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FallEffect {
@@ -25,19 +25,55 @@ fn update(actor: &mut Actor, frame: FrameTick, primary_screen_y: u8) -> FallEffe
     FallEffect::CountedRemoval
 }
 
+/// Child state 0 (`$AB30`/`$AB6E`): appear at the top of the screen above Wario.
+fn appear(actor: &mut Actor, sprite: u8, primary_screen_x: u8) {
+    actor.sprite = sprite;
+    actor.screen.x = primary_screen_x;
+    actor.screen.y = 0x10;
+    actor.state = 1;
+    actor.flash = FlashFlags::from_bits(0x10);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct UnsupportedState;
+
+/// One falling child: appear, then fall (`$AB4D`) until counted removal.
+fn update_child(
+    actor: &mut Actor,
+    sprite: u8,
+    frame: FrameTick,
+    primary: &Actor,
+) -> Result<FallEffect, UnsupportedState> {
+    match actor.state {
+        0 => {
+            appear(actor, sprite, primary.screen.x);
+            Ok(FallEffect::None)
+        }
+        1 => Ok(update(actor, frame, primary.screen.y)),
+        _ => Err(UnsupportedState),
+    }
+}
+
 /// Slot compatibility and legacy world effects stay at this boundary.
-pub(super) fn update_legacy(sim: &mut crate::objects::ObjectSim, st: &mut crate::objects::Staging) {
+/// `rom` is the child's handler address, reported for an unsupported state.
+pub(super) fn update_legacy(
+    sim: &mut crate::objects::ObjectSim,
+    st: &mut crate::objects::Staging,
+    sprite: u8,
+    rom: u32,
+) {
     let mut child = Actor::from_raw_slot(&st.b);
     let primary = Actor::from_raw_slot(&sim.slots[0].b);
-    let effect = update(&mut child, FrameTick(u64::from(sim.fff0)), primary.screen.y);
+    let effect = update_child(&mut child, sprite, FrameTick(u64::from(sim.fff0)), &primary);
     st.b = child.to_raw_slot();
     match effect {
-        FallEffect::None => {}
-        FallEffect::CountedRemoval => {
+        Ok(FallEffect::None) => {}
+        Ok(FallEffect::CountedRemoval) => {
             sim.boss_delay = 1;
             sim.boss_def_count = sim.boss_def_count.wrapping_sub(1);
             sim.done = 1;
         }
+        Err(UnsupportedState) => sim.note_unported(rom),
     }
 }
 

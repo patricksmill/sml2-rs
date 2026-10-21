@@ -1,26 +1,17 @@
 //! Wario's second falling child, ROM `$0AB6E` (boss animation 25).
 
-use crate::objects::{ObjectSim, Staging, B_FLASH, B_FSTATE, B_SCRX, B_SCRY, B_SPRITE};
+use crate::objects::{ObjectSim, Staging};
 
 impl ObjectSim {
     pub(in crate::objects) fn boss_anim25(&mut self, st: &mut Staging) {
-        match st.b[B_FSTATE] {
-            0 => {
-                st.b[B_SPRITE] = 0x71;
-                st.b[B_SCRX] = self.slots[0].b[B_SCRX];
-                st.b[B_SCRY] = 0x10;
-                st.b[B_FSTATE] = 1;
-                st.b[B_FLASH] = 0x10;
-            }
-            1 => self.wario_child_fall_ab4d(st),
-            _ => self.note_unported(0xAB6E),
-        }
+        super::child_fall::update_legacy(self, st, 0x71, 0xAB6E);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::objects::{B_FLASH, B_FSTATE, B_SCRX, B_SCRY, B_SPRITE};
 
     fn fixture() -> (ObjectSim, Staging) {
         let mut sim = ObjectSim::new(Vec::new(), 0);

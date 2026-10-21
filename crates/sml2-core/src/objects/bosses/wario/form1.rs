@@ -1,170 +1,222 @@
-//! Wario's first form, ROM `$A8AB` (bank 2 CPU `$68AB`).
+//! Native first-form Wario, ROM `$A8AB` (bank 2 CPU `$68AB`); slot/world mapping
+//! lives in `form1_adapter`.
+use crate::actor::{Actor, ContactKind, Facing, FrameTick, RiseProfile, SpriteFlipFlags};
+use crate::objects::boss_stun::{update_hit_stun, HitStunContext};
 
-use crate::objects::{
-    ObjectSim, ObjectTables, Staging, B_ANIMFRAME, B_FLASH, B_FLIP, B_FSTATE, B_PHASE, B_SCRX,
-    B_SCRY, B_SPRITE, B_T24, B_T25, B_T28, B_TYPE,
-};
+/// The fade low byte that starts the door intro and its blink.
+const INTRO_FADE_LOW: u8 = 0x61;
+/// Screen Y at which a descent lands on the arena floor.
+const FLOOR_Y: u8 = 0x8A;
+/// Side walk turnaround bounds.
+const LEFT_WALL_X: u8 = 0x10;
+const RIGHT_WALL_X: u8 = 0x98;
 
-impl ObjectSim {
-    pub(in crate::objects) fn handler_wario20(&mut self, st: &mut Staging, tables: &ObjectTables) {
-        self.boss_damage_pass(st);
-        if self.done != 0 {
-            self.spawn_sprite = st.b[B_SPRITE];
-            self.saved_frame_state = st.b[B_FSTATE];
-            self.saved_type = st.b[B_TYPE];
-            if self.boss_hit_latch != 0 {
-                st.b[B_SPRITE] = 0x52;
-                st.b[B_T28] = self.boss_timer_reload;
-            }
-            self.boss_type0_state1(st);
-            return;
-        }
-        match st.b[B_FSTATE] {
-            0 => {
-                if self.fade_timer as u8 == 0x61 {
-                    self.sfx1 = 0x0F;
-                    self.ending_door_active = 1;
-                }
-                if self.ending_door_active != 0 {
-                    self.sprite_blink(st, 7, 1);
-                }
-                if !self.fade_idle() {
-                    return;
-                }
-                self.ending_door_active = 0;
-                st.b[B_FSTATE] = 3;
-                st.b[B_TYPE] = 0x41;
-                st.b[B_SPRITE] = 0x4F;
-            }
-            1 => self.boss_hit_stun(st),
-            2 => {
-                self.boss_flash_b40e(st);
-                let (step, _) = self.step_picker(st, &tables.boss_picker_profile, 21);
-                self.scr_y_add(st, step);
-                if st.b[B_SCRY] >= 0x8A {
-                    st.b[B_FSTATE] = 6;
-                    st.b[B_T28] = 0x80;
-                }
-            }
-            3 => {
-                if st.b[B_T24] == 0 {
-                    let (step, cap) = self.boss_reverse_picker_b1e4(st);
-                    self.scr_y_sub(st, step);
-                    if st.b[B_PHASE] == cap {
-                        st.b[B_PHASE] = 0;
-                        st.b[B_T24] = 1;
-                    }
-                } else {
-                    let (step, _) = self.step_picker(st, &tables.boss_picker_profile, 24);
-                    self.scr_y_add(st, step);
-                    if st.b[B_SCRY] >= 0x8A {
-                        st.b[B_PHASE] = 0;
-                        st.b[B_T24] = 0;
-                        self.wario20_impact(st, 0x34, 0x30);
-                    }
-                }
-            }
-            4 => {
-                if self.timer_low & 7 == 0 {
-                    st.b[B_FSTATE] = 5;
-                    st.b[B_SPRITE] = 0x4F;
-                    return;
-                }
-                self.boss_sprite_cycle_b339(st);
-                if st.b[B_T25] == 0 {
-                    self.scr_x_sub(st, 2);
-                    if st.b[B_SCRX] >= 0x10 {
-                        return;
-                    }
-                } else {
-                    self.scr_x_add(st, 2);
-                    if st.b[B_SCRX] < 0x98 {
-                        return;
-                    }
-                }
-                st.b[B_FLIP] ^= 0x20;
-                st.b[B_T25] ^= 1;
-                st.b[B_T28] = 8;
-            }
-            5 => {
-                let cap = if st.b[B_T24] == 0 {
-                    let (step, cap) = self.boss_reverse_picker_b1d6(st);
-                    self.scr_y_sub(st, step);
-                    cap
-                } else {
-                    let (step, cap) = self.step_picker(st, &tables.boss_picker_profile, 21);
-                    self.scr_y_add(st, step);
-                    cap
-                };
-                if st.b[B_PHASE] == cap {
-                    st.b[B_PHASE] = 0;
-                    st.b[B_T24] ^= 1;
-                    if st.b[B_T24] == 0 {
-                        self.wario20_impact(st, 0x38, 0x38);
-                    }
-                }
-            }
-            6 => {
-                self.boss_flash_b40e(st);
-                st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
-                if st.b[B_T28] == 0 {
-                    st.b[B_ANIMFRAME] = 0;
-                    st.b[B_FLASH] = 0;
-                    st.b[B_FSTATE] = 8;
-                    st.b[B_SPRITE] = 0x4C;
-                    st.b[B_FLIP] = 0x20;
-                }
-            }
-            7 => {
-                if self.boss_delay == 0 {
-                    return;
-                }
-                self.sprite_blink(st, 7, 0x1F);
-                st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
-                if st.b[B_T28] == 0 {
-                    st.b[B_FSTATE] = 11;
-                    st.b[B_SPRITE] = 0x72;
-                    self.boss_delay = 0;
-                }
-            }
-            8 => self.wario_phase1_exit(st, tables),
-            9 => {
-                if st.b[B_T28] != 0 {
-                    st.b[B_T28] -= 1;
-                    return;
-                }
-                let cap = if st.b[B_T24] == 0 {
-                    let (step, cap) = self.boss_reverse_picker_b1e4(st);
-                    self.scr_y_sub(st, step);
-                    cap
-                } else {
-                    let (step, cap) = self.step_picker(st, &tables.boss_picker_profile, 12);
-                    self.scr_y_add(st, step);
-                    cap
-                };
-                if st.b[B_PHASE] == cap {
-                    st.b[B_PHASE] = 0;
-                    st.b[B_ANIMFRAME] = 0;
-                    st.b[B_SPRITE] = 0x4C;
-                    st.b[B_T24] ^= 1;
-                    if st.b[B_T24] == 0 {
-                        st.b[B_FSTATE] = 4;
-                    }
-                }
-            }
-            _ => self.note_unported(0xA8AB),
-        }
-    }
-
-    fn wario20_impact(&mut self, st: &mut Staging, pan: u8, wait: u8) {
-        st.b[B_FSTATE] = 9;
-        self.camera_pan_set = Some(pan);
-        self.boss_transition = 1;
-        self.sfx0 = 0x18;
-        st.b[B_T28] = wait;
-    }
+#[derive(Clone, Copy)]
+pub(super) struct Context {
+    pub frame: FrameTick,
+    pub hit_processed: bool,
+    pub stomp_latched: bool,
+    pub stun_reload: u8,
+    pub stun: HitStunContext,
+    pub fade_timer: u16,
+    pub intro_active: bool,
+    pub child_landed: bool,
+    pub level_timer_low: u8,
 }
 
-#[cfg(test)]
-#[path = "tests/form1.rs"]
-mod tests;
+#[derive(Default, Debug)]
+pub(super) struct Effects {
+    pub save_hit: Option<(u8, u8, ContactKind)>,
+    pub intro_active: Option<bool>,
+    pub consume_child_latch: bool,
+    /// Landing shake: camera pan distance, with the boss transition latch.
+    pub camera_impact: Option<u8>,
+    pub sound0: Option<u8>,
+    pub sound1: Option<u8>,
+    /// State 8 hands the slot to the shared phase-1 exit.
+    pub phase1_exit: bool,
+}
+
+#[derive(Debug)]
+pub(super) enum UpdateError {
+    UnsupportedState,
+    InvalidMotionProfile,
+}
+
+pub(super) fn update(
+    actor: &mut Actor,
+    context: Context,
+    forward: &[u8],
+) -> Result<Effects, UpdateError> {
+    let mut effects = Effects::default();
+    if context.hit_processed {
+        effects.save_hit = Some((actor.sprite, actor.state, actor.contact_kind));
+        if context.stomp_latched {
+            actor.sprite = 0x52;
+            actor.timer = context.stun_reload;
+        }
+        actor.contact_kind = ContactKind::NONE;
+        actor.state = 1;
+        return Ok(effects);
+    }
+    let descend = |actor: &mut Actor, cap: u8| -> Result<(), UpdateError> {
+        let step = actor
+            .motion_step(forward, cap)
+            .map_err(|_| UpdateError::InvalidMotionProfile)?;
+        actor.screen.move_y(i16::from(step));
+        Ok(())
+    };
+    let rise = |actor: &mut Actor, profile: RiseProfile| -> Result<(), UpdateError> {
+        let step = actor
+            .rise_step(profile)
+            .map_err(|_| UpdateError::InvalidMotionProfile)?;
+        actor.screen.move_y(-i16::from(step));
+        Ok(())
+    };
+    match actor.state {
+        // Door intro: blink until the fade finishes, then start the first jump.
+        0 => {
+            let mut intro = context.intro_active;
+            if context.fade_timer as u8 == INTRO_FADE_LOW {
+                effects.sound1 = Some(0x0F);
+                effects.intro_active = Some(true);
+                intro = true;
+            }
+            if intro {
+                actor.animate_sprite_blink(context.frame, 8, 1);
+            }
+            if context.fade_timer != 0 {
+                return Ok(effects);
+            }
+            effects.intro_active = Some(false);
+            actor.state = 3;
+            actor.contact_kind = ContactKind::from_raw(0x41);
+            actor.sprite = 0x4F;
+        }
+        1 => update_hit_stun(actor, context.frame, context.stun),
+        // Defeat fall.
+        2 => {
+            actor.flash.animate_palette(context.frame);
+            descend(actor, 21)?;
+            if actor.screen.y >= FLOOR_Y {
+                actor.state = 6;
+                actor.timer = 0x80;
+            }
+        }
+        // Short hop: rise, then fall to the floor and shake the arena.
+        3 => {
+            if actor.motion_leg == 0 {
+                rise(actor, RiseProfile::Short)?;
+                if actor.motion_phase == RiseProfile::Short.cap() {
+                    actor.motion_phase = 0;
+                    actor.motion_leg = 1;
+                }
+            } else {
+                descend(actor, 24)?;
+                if actor.screen.y >= FLOOR_Y {
+                    actor.motion_phase = 0;
+                    actor.motion_leg = 0;
+                    impact(actor, &mut effects, 0x34, 0x30);
+                }
+            }
+        }
+        // Walk between the walls until the level timer's low byte is a multiple of 8.
+        4 => {
+            if context.level_timer_low & 7 == 0 {
+                actor.state = 5;
+                actor.sprite = 0x4F;
+                return Ok(effects);
+            }
+            actor
+                .animate_four_step_bob(context.frame)
+                .map_err(|_| UpdateError::InvalidMotionProfile)?;
+            let walking_right = actor.travel_direction.is_right();
+            if walking_right {
+                actor.screen.move_x(2);
+                if actor.screen.x < RIGHT_WALL_X {
+                    return Ok(effects);
+                }
+            } else {
+                actor.screen.move_x(-2);
+                if actor.screen.x >= LEFT_WALL_X {
+                    return Ok(effects);
+                }
+            }
+            actor.sprite_flip.toggle_horizontal();
+            actor.travel_direction = Facing::from_raw(actor.travel_direction.raw() ^ 1);
+            actor.timer = 8;
+        }
+        // High jump: medium rise, full fall, then shake.
+        5 => {
+            if actor.motion_leg == 0 {
+                rise(actor, RiseProfile::Medium)?;
+            } else {
+                descend(actor, 21)?;
+            }
+            if actor.motion_phase == 21 {
+                actor.motion_phase = 0;
+                actor.motion_leg ^= 1;
+                if actor.motion_leg == 0 {
+                    impact(actor, &mut effects, 0x38, 0x38);
+                }
+            }
+        }
+        // Defeated: flash, then face right for the exit.
+        6 => {
+            actor.flash.animate_palette(context.frame);
+            actor.timer = actor.timer.wrapping_sub(1);
+            if actor.timer == 0 {
+                actor.animation_frame = 0;
+                actor.flash.clear();
+                actor.state = 8;
+                actor.sprite = 0x4C;
+                actor.sprite_flip = SpriteFlipFlags::from_bits(0x20);
+            }
+        }
+        // `$A952`: shared with Wario23; Wario20 never enters it (see feature inventory).
+        7 => {
+            if !context.child_landed {
+                return Ok(effects);
+            }
+            actor.animate_sprite_blink(context.frame, 8, 0x1F);
+            actor.timer = actor.timer.wrapping_sub(1);
+            if actor.timer == 0 {
+                actor.state = 11;
+                actor.sprite = 0x72;
+                effects.consume_child_latch = true;
+            }
+        }
+        8 => effects.phase1_exit = true,
+        // Post-landing wait, then a short bounce before walking again.
+        9 => {
+            if actor.timer != 0 {
+                actor.timer -= 1;
+                return Ok(effects);
+            }
+            if actor.motion_leg == 0 {
+                rise(actor, RiseProfile::Short)?;
+            } else {
+                descend(actor, 12)?;
+            }
+            if actor.motion_phase == 12 {
+                actor.motion_phase = 0;
+                actor.animation_frame = 0;
+                actor.sprite = 0x4C;
+                actor.motion_leg ^= 1;
+                if actor.motion_leg == 0 {
+                    actor.state = 4;
+                }
+            }
+        }
+        _ => return Err(UpdateError::UnsupportedState),
+    }
+    Ok(effects)
+}
+
+/// Landing: wait, shake the camera and play the thud.
+fn impact(actor: &mut Actor, effects: &mut Effects, pan: u8, wait: u8) {
+    actor.state = 9;
+    actor.timer = wait;
+    effects.camera_impact = Some(pan);
+    effects.sound0 = Some(0x18);
+}

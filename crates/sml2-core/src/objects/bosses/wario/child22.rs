@@ -1,31 +1,17 @@
 //! Wario's falling child, bank 2 ROM `$0AB30` (boss animation 22).
 
-use crate::objects::{ObjectSim, Staging, B_FLASH, B_FSTATE, B_SCRX, B_SCRY, B_SPRITE};
+use crate::objects::{ObjectSim, Staging};
 
 impl ObjectSim {
     pub(in crate::objects) fn boss_anim22(&mut self, st: &mut Staging) {
-        match st.b[B_FSTATE] {
-            0 => {
-                st.b[B_SPRITE] = 0x70;
-                st.b[B_SCRX] = self.slots[0].b[B_SCRX];
-                st.b[B_SCRY] = 0x10;
-                st.b[B_FSTATE] = 1;
-                st.b[B_FLASH] = 0x10;
-            }
-            1 => self.wario_child_fall_ab4d(st),
-            _ => self.note_unported(0xAB30),
-        }
-    }
-
-    /// Shared state-one target `$AB4D` used by boss animations 22 and 25.
-    pub(super) fn wario_child_fall_ab4d(&mut self, st: &mut Staging) {
-        super::child_fall::update_legacy(self, st);
+        super::child_fall::update_legacy(self, st, 0x70, 0xAB30);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::objects::{B_FLASH, B_FSTATE, B_SCRX, B_SCRY, B_SPRITE};
 
     fn fixture() -> (ObjectSim, Staging) {
         let mut sim = ObjectSim::new(Vec::new(), 0);

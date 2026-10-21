@@ -1,6 +1,26 @@
 //! Wario phase exit, ROM `$A96D..$A9BC` (bank 2 CPU `$696D`).
 
-use crate::objects::{ObjectSim, ObjectTables, SpawnRecord, Staging, B_SCRX};
+use crate::actor::{Actor, AnimationFrameError, FrameTick};
+
+/// Source writes the fade low byte before animating.
+const FADE_LOW: u8 = 5;
+/// Wario walks off the right edge; at this screen X the slot is cleared.
+const EXIT_X: u8 = 0xC0;
+
+/// Flash, bob and walk right; returns whether Wario left the screen.
+fn update_exit(actor: &mut Actor, frame: FrameTick) -> Result<bool, AnimationFrameError> {
+    actor.flash.animate_palette(frame);
+    actor.animate_four_step_bob(frame)?;
+    actor.screen.move_x(2);
+    if actor.screen.x < EXIT_X {
+        return Ok(false);
+    }
+    *actor = Actor::default();
+    Ok(true)
+}
+
+// Compatibility adapter: owns fade/event writes and the legacy stream boundary.
+use crate::objects::{ObjectSim, ObjectTables, SpawnRecord, Staging};
 
 impl ObjectSim {
     pub(in crate::objects) fn wario_phase1_exit(
@@ -10,15 +30,15 @@ impl ObjectSim {
     ) {
         // $A96F writes only the low byte; expose the write to subsequent slots
         // immediately as well as to the owner's deferred fade write consumer.
-        self.fade_timer = (self.fade_timer & 0xFF00) | 5;
+        self.fade_timer = (self.fade_timer & 0xFF00) | u16::from(FADE_LOW);
         self.fade_timer_set = Some(self.fade_timer);
-        self.boss_flash_b40e(st);
-        self.boss_sprite_cycle_b339(st);
-        self.scr_x_add(st, 2);
-        if st.b[B_SCRX] < 0xC0 {
+        let mut actor = Actor::from_raw_slot(&st.b);
+        let exited = update_exit(&mut actor, FrameTick(u64::from(self.fff0)));
+        st.b = actor.to_raw_slot();
+        if !exited.expect("boss sprite cycle index must address the four-entry ROM table") {
             return;
         }
-        self.boss_finish_blank(st);
+        self.done = 1; // $B15B blanks without decrementing the definition count.
         self.scene_phase_set = Some(1);
 
         // $A9B9 forces sprite mode B, independent of this level's initial mode.
@@ -47,7 +67,7 @@ impl ObjectSim {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::objects::{B_ANIMFRAME, B_FLASH, B_SPRITE};
+    use crate::objects::{B_ANIMFRAME, B_FLASH, B_SCRX, B_SPRITE};
 
     fn tables() -> ObjectTables {
         serde_json::from_str(include_str!(concat!(
