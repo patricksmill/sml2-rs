@@ -1,17 +1,7 @@
 {
   "active_milestone": "full_integration",
-  "milestone_note": "20 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+  "milestone_note": "23 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
-    {
-      "id": "g-actor-enemy-core",
-      "title": "Migrate the generic walker, stun, death, hit-reaction and land-or-remove handlers from raw slot bytes to typed Actor state",
-      "asm_refs": [
-        "bank $16 generic walker/death handlers"
-      ],
-      "dependencies": [],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/compat/enemies/dispatch.rs: walker_state, handler_stun, handler_death, hit_reaction, land_or_remove",
-      "status": "pending"
-    },
     {
       "id": "g-actor-shell",
       "title": "Migrate the carried and kicked shell (carry, release, follow, knock-out overlap, kick placement and fall) from raw slot bytes to typed Actor state",

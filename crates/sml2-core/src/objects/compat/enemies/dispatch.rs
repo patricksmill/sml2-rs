@@ -2,6 +2,46 @@
 
 use super::*;
 
+/// Probe the level for a native actor: the slot's position is synced first,
+/// since the ROM probes read the slot after any move.
+struct SimWalkerWorld<'a> {
+    sim: &'a mut ObjectSim,
+    st: &'a mut Staging,
+    layout: &'a LevelLayout,
+}
+
+impl<'a> SimWalkerWorld<'a> {
+    fn new(sim: &'a mut ObjectSim, st: &'a mut Staging, layout: &'a LevelLayout) -> Self {
+        Self { sim, st, layout }
+    }
+
+    fn sync(&mut self, actor: &crate::actor::Actor) {
+        set_x(&mut self.st.b, actor.position.x);
+        set_y(&mut self.st.b, actor.position.y);
+    }
+}
+
+impl walker::WalkerWorld for SimWalkerWorld<'_> {
+    fn probe_left_wall(&mut self, actor: &crate::actor::Actor) -> bool {
+        self.sync(actor);
+        self.sim.m_left_wall(self.st, self.layout);
+        self.sim.move_flags & 0x02 != 0
+    }
+    fn probe_right_wall(&mut self, actor: &crate::actor::Actor) -> bool {
+        self.sync(actor);
+        self.sim.m_right_wall(self.st, self.layout);
+        self.sim.move_flags & 0x01 != 0
+    }
+    fn probe_ground(&mut self, actor: &crate::actor::Actor) -> bool {
+        self.sync(actor);
+        self.sim.m_ground_own(self.st, self.layout);
+        self.sim.move_flags & 0x08 != 0
+    }
+    fn step_fall(&mut self, actor: &mut crate::actor::Actor) -> u8 {
+        falling_dropper::step_fall_speed(actor)
+    }
+}
+
 impl ObjectSim {
     pub(super) fn handler_walker(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
@@ -9,92 +49,30 @@ impl ObjectSim {
             frame: crate::actor::FrameTick(u64::from(self.fff0)),
             mario_ref_x: self.mario_ref_x,
         };
-        struct WalkerSimWorld<'a> {
-            sim: &'a mut ObjectSim,
-            st: &'a mut Staging,
-            layout: &'a LevelLayout,
-        }
-        impl<'a> walker::WalkerWorld for WalkerSimWorld<'a> {
-            fn probe_left_wall(&mut self, _actor: &crate::actor::Actor) -> bool {
-                self.sim.m_left_wall(self.st, self.layout);
-                self.sim.move_flags & 0x02 != 0
-            }
-            fn probe_right_wall(&mut self, _actor: &crate::actor::Actor) -> bool {
-                self.sim.m_right_wall(self.st, self.layout);
-                self.sim.move_flags & 0x01 != 0
-            }
-            fn probe_ground(&mut self, actor: &crate::actor::Actor) -> bool {
-                set_x(&mut self.st.b, actor.position.x);
-                set_y(&mut self.st.b, actor.position.y);
-                self.sim.m_ground_own(self.st, self.layout);
-                self.sim.move_flags & 0x08 != 0
-            }
-            fn step_fall(&mut self, actor: &mut crate::actor::Actor) -> u8 {
-                let dy = self.sim.fall_step(self.st);
-                actor.motion_phase = self.st.b[B_PHASE];
-                dy
-            }
-        }
-        let mut world = WalkerSimWorld {
-            sim: self,
-            st,
-            layout,
-        };
-        let effect = walker::update(&mut actor, context, &mut world);
+        let effect = walker::update(
+            &mut actor,
+            context,
+            &mut SimWalkerWorld::new(self, st, layout),
+        );
         if let walker::WalkerEffect::Initialized { facing } = effect {
             self.facing = facing;
         }
         st.b = actor.to_raw_slot();
     }
 
-    pub(super) fn walker_state(&mut self, st: &mut Staging, layout: &LevelLayout, state: u8) {
-        match state {
-            // $4226: walk left; wall on the left → turn; no ground → fall.
-            1 => {
-                self.m_left_wall(st, layout);
-                if self.move_flags & 0x02 != 0 {
-                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_add(1);
-                    st.b[B_FLIP] ^= 0x20;
-                    return;
-                }
-                self.mv_x_sub(st, 1);
-                self.walk_ground_check(st, layout);
-            }
-            // $4253: walk right; wall on the right → turn.
-            2 => {
-                self.m_right_wall(st, layout);
-                if self.move_flags & 0x01 != 0 {
-                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_sub(1);
-                    st.b[B_FLIP] ^= 0x20;
-                    return;
-                }
-                self.mv_x_add(st, 1);
-                self.walk_ground_check(st, layout);
-            }
-            // $4271: falling left.
-            3 => {
-                self.m_left_wall(st, layout);
-                if self.move_flags & 0x02 != 0 {
-                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_add(1);
-                    st.b[B_FLIP] ^= 0x20;
-                    return;
-                }
-                self.mv_x_sub(st, 1);
-                self.fall_step_and_land(st, layout);
-            }
-            // $4282: falling right.
-            4 => {
-                self.m_right_wall(st, layout);
-                if self.move_flags & 0x01 != 0 {
-                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_sub(1);
-                    st.b[B_FLIP] ^= 0x20;
-                    return;
-                }
-                self.mv_x_add(st, 1);
-                self.fall_step_and_land(st, layout);
-            }
-            _ => {}
-        }
+    /// The `$5821E` walk legs over a slot whose frame state may sit above the
+    /// leg number (the hopper's legs are states 2..=5).
+    pub(super) fn walker_state(&mut self, st: &mut Staging, layout: &LevelLayout, leg: u8) {
+        let leg = match leg {
+            1 => walker::WalkLeg::WalkLeft,
+            2 => walker::WalkLeg::WalkRight,
+            3 => walker::WalkLeg::FallLeft,
+            4 => walker::WalkLeg::FallRight,
+            _ => return,
+        };
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        walker::step_walk(&mut actor, leg, &mut SimWalkerWorld::new(self, st, layout));
+        st.b = actor.to_raw_slot();
     }
 
     pub(super) fn handler_fallwalker(&mut self, st: &mut Staging, layout: &LevelLayout) {
@@ -165,40 +143,16 @@ impl ObjectSim {
         layout: &LevelLayout,
         tables: &ObjectTables,
     ) {
-        match st.b[B_FSTATE] {
-            // $58364: count down; fall when airborne.
-            1 => {
-                st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
-                if st.b[B_T28] == 0 {
-                    st.b[B_FSTATE] = 2;
-                    return;
-                }
-                self.m_ground_own(st, layout);
-                if self.move_flags & 0x08 != 0 {
-                    return;
-                }
-                let b = self.fall_step(st);
-                self.mv_y_add(st, b);
-            }
-            // $58380: spin, then revive to anim 1 ($3AA0 sprite re-derive).
-            2 => {
-                if self.fff0 & 3 != 0 {
-                    return;
-                }
-                st.b[B_SPRITE] ^= 0x0B;
-                st.b[B_T28] = st.b[B_T28].wrapping_add(1);
-                if st.b[B_T28] != 8 {
-                    return;
-                }
-                st.b[B_DEF] = 1;
-                self.finish_sprite_swap(st, tables);
-            }
-            // fstate 0: init.
-            _ => {
-                st.b[B_TYPE] = 0x06;
-                st.b[B_FSTATE] = 1;
-                st.b[B_T28] = 192;
-            }
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let frame = crate::actor::FrameTick(u64::from(self.fff0));
+        let effect = reactions::update_stun(
+            &mut actor,
+            frame,
+            &mut SimWalkerWorld::new(self, st, layout),
+        );
+        st.b = actor.to_raw_slot();
+        if effect == reactions::StunEffect::Revive {
+            self.finish_sprite_swap(st, tables);
         }
     }
 
@@ -809,35 +763,19 @@ impl ObjectSim {
         tables: &ObjectTables,
     ) {
         let _ = layout;
-        match st.b[B_FSTATE] {
-            // $581CE: rise on 2x the $74AB curve.
-            1 => {
-                let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
-                if actor.advance_defeat_rise().is_err() {
-                    self.note_unported(0x581CE);
-                }
-                st.b = actor.to_raw_slot();
-            }
-            // $581E2: fall on 2x the $5B451 curve; off the bottom of the
-            // screen -> `$5B2D7` with remove-mode 2.
-            2 => {
-                let b = self.fall_step(st);
-                self.mv_y_add(st, b.wrapping_mul(2));
-                if st.b[B_SCRY] < 0xA0 {
-                    return;
-                }
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let result = reactions::update_defeat(&mut actor);
+        st.b = actor.to_raw_slot();
+        match result {
+            Ok(reactions::DefeatEffect::None) => {}
+            // $581E2's tail also counts `sBossDefeated` down; the port models
+            // that byte as a bool (the boss item), so there is nothing to
+            // decrement here yet.
+            Ok(reactions::DefeatEffect::Remove) => {
                 self.remove_mode = 2;
                 self.remove_object(st, tables);
-                // $581E2's tail also counts `sBossDefeated` down; the port
-                // models that byte as a bool (the boss item), so there is
-                // nothing to decrement here yet.
             }
-            // $581B9: the hop + the flip.
-            _ => {
-                let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
-                actor.begin_defeat_hop();
-                st.b = actor.to_raw_slot();
-            }
+            Err(_) => self.note_unported(0x581CE),
         }
     }
 
@@ -915,87 +853,33 @@ impl ObjectSim {
         layout: &LevelLayout,
         tables: &ObjectTables,
     ) {
-        if st.b[B_FSTATE] == 0 {
-            self.face_mario(st);
-            st.b[B_FLIP] ^= 0x20;
-            return;
-        }
-        match st.b[B_FSTATE].wrapping_sub(1) {
-            // $411A: knocked right — X+1, wall probe; bounce up; the state
-            // advances +2 every 15 phases.
-            0 => {
-                self.mv_x_add(st, 1);
-                self.m_right_wall(st, layout);
-                if self.move_flags & 0x01 != 0 {
-                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_add(1);
-                }
-                let b = self.bounce_step(st);
-                self.mv_y_sub(st, b);
-                if st.b[B_PHASE] == 15 {
-                    st.b[B_PHASE] = 0;
-                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_add(2);
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let mario_ref_x = self.mario_ref_x;
+        let effect = reactions::update_knockback(
+            &mut actor,
+            mario_ref_x,
+            &mut SimWalkerWorld::new(self, st, layout),
+        );
+        st.b = actor.to_raw_slot();
+        match effect {
+            reactions::KnockbackEffect::None => {}
+            reactions::KnockbackEffect::Faced(side) => {
+                self.facing = match side {
+                    std::cmp::Ordering::Greater => 1,
+                    std::cmp::Ordering::Less => 0xFF,
+                    std::cmp::Ordering::Equal => 0,
+                };
+            }
+            // `$5819B`: the landing re-derives the sprite but leaves the
+            // slot's handled flag alone.
+            reactions::KnockbackEffect::Landed { resume } => {
+                self.derive_sprite(st, tables);
+                if let Some(contact_kind) = resume {
+                    let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+                    reactions::resume_walk(&mut actor, contact_kind);
+                    st.b = actor.to_raw_slot();
                 }
             }
-            // $4142: knocked left.
-            1 => {
-                self.mv_x_sub(st, 1);
-                self.m_left_wall(st, layout);
-                if self.move_flags & 0x02 != 0 {
-                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_sub(1);
-                }
-                let b = self.bounce_step(st);
-                self.mv_y_sub(st, b);
-                if st.b[B_PHASE] == 15 {
-                    st.b[B_PHASE] = 0;
-                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_add(2);
-                }
-            }
-            // $4158: airborne right — fall; land (revive or remove).
-            2 => {
-                self.mv_x_add(st, 1);
-                self.m_right_wall(st, layout);
-                if self.move_flags & 0x01 != 0 {
-                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_add(1);
-                }
-                self.land_or_remove(st, layout, tables);
-            }
-            // $4185: airborne left.
-            _ => {
-                self.mv_x_sub(st, 1);
-                self.m_left_wall(st, layout);
-                if self.move_flags & 0x02 != 0 {
-                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_sub(1);
-                }
-                self.land_or_remove(st, layout, tables);
-            }
-        }
-    }
-
-    pub(super) fn land_or_remove(
-        &mut self,
-        st: &mut Staging,
-        layout: &LevelLayout,
-        tables: &ObjectTables,
-    ) {
-        let b = self.fall_step(st);
-        self.mv_y_add(st, b);
-        self.m_ground_own(st, layout);
-        if self.move_flags & 0x08 == 0 {
-            return;
-        }
-        if st.b[B_HITREACT] == 2 {
-            // $5819B: revive — sprite re-derive, then the frame state is set
-            // from the flip byte ($3CB1: 1/2) and advanced.
-            let saved_type = st.b[B_TYPE];
-            let d = self.done;
-            self.finish_sprite_swap(st, tables);
-            self.done = d;
-            st.b[B_TYPE] = saved_type;
-            st.b[B_FSTATE] = if st.b[B_FLIP] & 0x20 != 0 { 3 } else { 2 };
-        } else {
-            let d = self.done;
-            self.finish_sprite_swap(st, tables);
-            self.done = d;
         }
     }
 
@@ -1003,15 +887,6 @@ impl ObjectSim {
         self.m_ground_own(st, layout);
         if self.move_flags & 0x08 == 0 {
             st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_add(2);
-        }
-    }
-
-    pub(super) fn fall_step_and_land(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        let b = self.fall_step(st);
-        self.mv_y_add(st, b);
-        self.m_ground_own(st, layout);
-        if self.move_flags & 0x08 != 0 {
-            st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_sub(2);
         }
     }
 }

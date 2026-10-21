@@ -551,6 +551,8 @@ mod record_reset;
 #[path = "tests/record_reset.rs"]
 mod record_reset_tests;
 mod reward_spawn;
+#[path = "enemies/reactions.rs"]
+mod reactions;
 #[path = "platforms/rising.rs"]
 mod rising_platform;
 #[path = "compat/platforms/rising.rs"]

@@ -81,97 +81,78 @@ where
         return WalkerEffect::None;
     }
 
-    match state {
-        WalkerState::WalkLeft => {
-            if world.probe_left_wall(actor) {
-                actor.state = WalkerState::WalkRight.to_raw();
-                actor.sprite_flip.toggle_horizontal();
-                WalkerEffect::Turned {
-                    state: WalkerState::WalkRight,
-                }
-            } else {
-                actor.position.move_x(-1);
-                if !world.probe_ground(actor) {
-                    actor.state = WalkerState::FallLeft.to_raw();
-                    WalkerEffect::StartedFalling {
-                        state: WalkerState::FallLeft,
-                    }
-                } else {
-                    WalkerEffect::Moved {
-                        state: WalkerState::WalkLeft,
-                    }
-                }
-            }
-        }
-        WalkerState::WalkRight => {
-            if world.probe_right_wall(actor) {
-                actor.state = WalkerState::WalkLeft.to_raw();
-                actor.sprite_flip.toggle_horizontal();
-                WalkerEffect::Turned {
-                    state: WalkerState::WalkLeft,
-                }
-            } else {
-                actor.position.move_x(1);
-                if !world.probe_ground(actor) {
-                    actor.state = WalkerState::FallRight.to_raw();
-                    WalkerEffect::StartedFalling {
-                        state: WalkerState::FallRight,
-                    }
-                } else {
-                    WalkerEffect::Moved {
-                        state: WalkerState::WalkRight,
-                    }
-                }
-            }
-        }
-        WalkerState::FallLeft => {
-            if world.probe_left_wall(actor) {
-                actor.state = WalkerState::FallRight.to_raw();
-                actor.sprite_flip.toggle_horizontal();
-                WalkerEffect::Turned {
-                    state: WalkerState::FallRight,
-                }
-            } else {
-                actor.position.move_x(-1);
-                let dy = world.step_fall(actor);
-                actor.position.move_y(i16::from(dy));
-                if world.probe_ground(actor) {
-                    actor.state = WalkerState::WalkLeft.to_raw();
-                    WalkerEffect::Landed {
-                        state: WalkerState::WalkLeft,
-                    }
-                } else {
-                    WalkerEffect::Moved {
-                        state: WalkerState::FallLeft,
-                    }
-                }
-            }
-        }
-        WalkerState::FallRight => {
-            if world.probe_right_wall(actor) {
-                actor.state = WalkerState::FallLeft.to_raw();
-                actor.sprite_flip.toggle_horizontal();
-                WalkerEffect::Turned {
-                    state: WalkerState::FallLeft,
-                }
-            } else {
-                actor.position.move_x(1);
-                let dy = world.step_fall(actor);
-                actor.position.move_y(i16::from(dy));
-                if world.probe_ground(actor) {
-                    actor.state = WalkerState::WalkRight.to_raw();
-                    WalkerEffect::Landed {
-                        state: WalkerState::WalkRight,
-                    }
-                } else {
-                    WalkerEffect::Moved {
-                        state: WalkerState::FallRight,
-                    }
-                }
-            }
-        }
+    let leg = match state {
+        WalkerState::WalkLeft => WalkLeg::WalkLeft,
+        WalkerState::WalkRight => WalkLeg::WalkRight,
+        WalkerState::FallLeft => WalkLeg::FallLeft,
+        WalkerState::FallRight => WalkLeg::FallRight,
         WalkerState::Init => unreachable!(),
+    };
+    let step = step_walk(actor, leg, world);
+    let state = WalkerState::from_raw(actor.state);
+    match step {
+        WalkStep::Turned => WalkerEffect::Turned { state },
+        WalkStep::Moved => WalkerEffect::Moved { state },
+        WalkStep::StartedFalling => WalkerEffect::StartedFalling { state },
+        WalkStep::Landed => WalkerEffect::Landed { state },
     }
+}
+
+/// One leg of the `$5821E` walk table: which way the actor walks and whether
+/// it is falling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WalkLeg {
+    WalkLeft,
+    WalkRight,
+    FallLeft,
+    FallRight,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WalkStep {
+    Turned,
+    Moved,
+    StartedFalling,
+    Landed,
+}
+
+/// `$58226..$58293`: one pixel of walking or falling. The legs move the frame
+/// state relative to its current value (turn +-1, fall +2, land -2), so hosts
+/// whose walk legs start above state 1 (the hopper) share the same body.
+pub fn step_walk<W>(actor: &mut Actor, leg: WalkLeg, world: &mut W) -> WalkStep
+where
+    W: WalkerWorld,
+{
+    let leftward = matches!(leg, WalkLeg::WalkLeft | WalkLeg::FallLeft);
+    let blocked = if leftward {
+        world.probe_left_wall(actor)
+    } else {
+        world.probe_right_wall(actor)
+    };
+    if blocked {
+        actor.state = if leftward {
+            actor.state.wrapping_add(1)
+        } else {
+            actor.state.wrapping_sub(1)
+        };
+        actor.sprite_flip.toggle_horizontal();
+        return WalkStep::Turned;
+    }
+    actor.position.move_x(if leftward { -1 } else { 1 });
+    if matches!(leg, WalkLeg::WalkLeft | WalkLeg::WalkRight) {
+        if world.probe_ground(actor) {
+            return WalkStep::Moved;
+        }
+        actor.state = actor.state.wrapping_add(2);
+        return WalkStep::StartedFalling;
+    }
+    let dy = world.step_fall(actor);
+    actor.position.move_y(i16::from(dy));
+    if !world.probe_ground(actor) {
+        return WalkStep::Moved;
+    }
+    actor.state = actor.state.wrapping_sub(2);
+    WalkStep::Landed
 }
 
 #[cfg(test)]
