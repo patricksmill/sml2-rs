@@ -1607,6 +1607,7 @@ fn moon_zone_entry_and_hvel_clamp() {
     let mut sim = small_sim();
     sim.moon = 0x04; // moon shield armed
     sim.flutter_armed = true;
+    sim.flutter_charge = 4;
     sim.hvel = 0xC5; // > 191 -> clamped to 191
     sim.vvel = 24;
     sim.in_air = false;
@@ -1623,6 +1624,7 @@ fn moon_zone_entry_and_hvel_clamp() {
         !sim.flutter_armed,
         "flutter_armed cleared on entering moon zone"
     );
+    assert_eq!(sim.flutter_charge, 4, "$1CFB never writes sFlutterCharge");
     assert_eq!(sim.hvel, 191, "hvel clamped from 0xC5 to 191 ($BF)");
     assert_eq!(sim.vvel, 24, "entry transition does not alter vvel");
     assert!(!sim.in_air, "entry transition does not set in_air");
@@ -2275,6 +2277,17 @@ fn a_lone_bump_slot_leaves_frame_66_and_the_coin_slot_overrides_it() {
 
 /// The level reload clears the bump scratch — including the pass's arming
 /// and its pending coin.
+/// `$0F2A` and `$04F1` leave the flutter timer, latch, and charge alone.
+#[test]
+fn respawn_keeps_the_flutter_state() {
+    let mut sim = small_sim();
+    sim.flutter = 3;
+    sim.flutter_armed = true;
+    sim.flutter_charge = 4;
+    sim.respawn(34, 468);
+    assert_eq!((sim.flutter, sim.flutter_armed, sim.flutter_charge), (3, true, 4));
+}
+
 #[test]
 fn respawn_clears_the_below_hit_scratch() {
     let mut sim = PlayerSim::new();

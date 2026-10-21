@@ -896,8 +896,8 @@ impl PlayerSim {
         self.moon &= !0x02;
         if (0x52..=0x57).contains(&t) {
             self.moon |= 0x02;
+            // `$1CFB` drops the armed latch only; `sFlutterCharge` survives.
             self.flutter_armed = false;
-            self.flutter_charge = 0;
             self.moon &= !0x04;
         }
         let new_bit1 = self.moon & 0x02;
@@ -2884,9 +2884,7 @@ impl PlayerSim {
         self.fade_timer = 0;
         self.powerup = 0;
         self.invincibility = 0;
-        self.flutter = 0;
-        self.flutter_armed = false;
-        self.flutter_charge = 0;
+        // Neither `$0F2A` nor `$04F1` writes the flutter timer, latch, or charge.
         self.goal_bell = false;
         self.pipe_dir = 0;
         self.spin_jump_bounce = 0;
