@@ -302,3 +302,18 @@ fn the_stop_all_silences_a_sounding_channel() {
         );
     }
 }
+
+/// A retrigger keeps the duty position; SML2 retriggers every note and every
+/// software-envelope step, so a reset would put a phase jump in each one.
+#[test]
+fn trigger_keeps_the_duty_position_and_power_off_resets_it() {
+    let mut apu = Apu::new();
+    apu.apply_pulse_write(PulseWrite::Envelope(0xF0));
+    apu.apply_pulse_write(PulseWrite::FrequencyControl(0x86));
+    apu.ch1.duty_step = 5;
+    apu.apply_pulse_write(PulseWrite::FrequencyControl(0x86));
+    assert_eq!(apu.ch1.duty_step, 5, "NR14 trigger leaves the duty step");
+
+    apu.set_nr52(0x00);
+    assert_eq!(apu.ch1.duty_step, 0, "NR52 power-off resets it");
+}

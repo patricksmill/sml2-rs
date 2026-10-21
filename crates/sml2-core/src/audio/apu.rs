@@ -96,7 +96,8 @@ impl PulseChannel {
         self.enabled = true;
         self.volume = self.env_initial;
         self.env_timer = self.env_period;
-        self.duty_step = 0;
+        // A trigger reloads the frequency timer but leaves the duty position
+        // where it was; only APU power-off resets it (Pan Docs, Audio details).
         self.timer = self.period();
         if self.length_timer == 0 {
             self.length_timer = 64;
@@ -385,6 +386,8 @@ impl Apu {
         if self.nr52 == 0 {
             self.ch1.enabled = false;
             self.ch2.enabled = false;
+            self.ch1.duty_step = 0;
+            self.ch2.duty_step = 0;
             self.ch3.enabled = false;
             self.ch4.enabled = false;
         }
