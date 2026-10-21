@@ -778,72 +778,6 @@ impl ObjectSim {
             Err(_) => self.note_unported(0x581CE),
         }
     }
-
-    pub(super) fn handler_kicked(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        if st.b[B_TYPE] & 0x40 != 0 {
-            self.ko_overlap(st);
-        }
-        self.spin_step(st); // $5B607 - byte-identical to $5B545's wobble
-        match st.b[B_FSTATE] {
-            0 => {
-                // $5B3C6 + type $5F.
-                self.face_mario(st);
-                st.b[B_TYPE] = 0x5F;
-            }
-            // $83BC / $83E6: walk. The probes are the *low* pair ($3BA4/$3C08),
-            // not the anim-9 walker's Y-11 ones.
-            1 => {
-                self.m_right_wall_low(st, layout);
-                if self.move_flags & 0x01 != 0 {
-                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_add(1); // $583DB
-                    return;
-                }
-                self.mv_x_add(st, 3);
-                self.walk_ground_check(st, layout); // $583CB: no ground -> state += 2
-            }
-            2 => {
-                self.m_left_wall_low(st, layout);
-                if self.move_flags & 0x02 != 0 {
-                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_sub(1); // $583F7
-                    return;
-                }
-                self.mv_x_sub(st, 3);
-                self.walk_ground_check(st, layout);
-            }
-            // $8402 / $8433: the falls.
-            3 => {
-                self.m_right_wall_low(st, layout);
-                if self.move_flags & 0x01 != 0 {
-                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_add(1);
-                    return;
-                }
-                self.mv_x_add(st, 3);
-                self.kick_fall(st, layout);
-            }
-            4 => {
-                self.m_left_wall_low(st, layout);
-                if self.move_flags & 0x02 != 0 {
-                    st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_sub(1);
-                    return;
-                }
-                self.mv_x_sub(st, 3);
-                self.kick_fall(st, layout);
-            }
-            _ => {}
-        }
-    }
-
-    pub(super) fn kick_fall(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.m_ground_own(st, layout);
-        if self.move_flags & 0x08 != 0 {
-            st.b[B_PHASE] = 0;
-            st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_sub(2);
-            st.b[B_YLO] &= 0xF0;
-            return;
-        }
-        let b = self.fall_step(st);
-        self.mv_y_add(st, b.wrapping_add(1));
-    }
 }
 
 impl ObjectSim {
@@ -880,13 +814,6 @@ impl ObjectSim {
                     st.b = actor.to_raw_slot();
                 }
             }
-        }
-    }
-
-    pub(super) fn walk_ground_check(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.m_ground_own(st, layout);
-        if self.move_flags & 0x08 == 0 {
-            st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_add(2);
         }
     }
 }

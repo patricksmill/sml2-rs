@@ -559,6 +559,8 @@ mod rising_platform;
 mod rising_platform_adapter;
 mod scratch;
 mod shell;
+#[path = "enemies/shell.rs"]
+mod shell_behavior;
 #[cfg(test)]
 #[path = "tests/carried_release.rs"]
 mod carried_release_tests;
