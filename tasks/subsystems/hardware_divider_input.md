@@ -53,3 +53,11 @@ ticks once because its triggering record already advanced one tick. Conversion
 uses total ticks, avoiding accumulated fractional-second rounding. These are
 explicit runtime origins and replay policy, not evidence of original console
 DIV phase; the frozen corpus has no initial phase or sampling-time evidence.
+
+Ownership (2026-10-21): the session runner owns the only native or virtual
+clock, and the map, entry transition, levels, castle and map returns all
+sample it per frame. `run_play` takes its headless clock from the caller, so
+a route harness hands it the clock already advanced through the map entry;
+the CLI's `--play` starts the level at tick 0. Pinned by
+`one_divider_clock_spans_map_entry_level_and_map_return` and
+`wario_level_object_divider_is_the_shared_clock`.

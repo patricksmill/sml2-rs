@@ -190,9 +190,50 @@ pub(super) struct RouteAssets {
     edge: Vec<u8>,
     scene: Vec<u8>,
     pub(super) nodes: MapNodes,
+    /// Divider ticks the map-entered session spends before the level's
+    /// first frame, per entry progress byte.
+    entry_ticks: std::sync::Mutex<std::collections::HashMap<u8, u64>>,
 }
 
 impl RouteAssets {
+    /// Frames a map-entered session steps (the A press, then the entry
+    /// transition) before this level's first frame. Each step ticks the
+    /// session's divider once.
+    fn map_entry_ticks(&self, node: u8, progress: u8) -> u64 {
+        use crate::session::{SessionAssets, StepOutcome, MAP_ENTRY_FRAMES};
+        *self
+            .entry_ticks
+            .lock()
+            .unwrap()
+            .entry(progress)
+            .or_insert_with(|| {
+                let path = std::env::temp_dir().join(format!(
+                    "sml2_route_entry_{}_{node}_{progress}.sav",
+                    std::process::id()
+                ));
+                let (mut runner, ..) = continuous::map_entry_runner(
+                    SessionAssets::load().unwrap(),
+                    node,
+                    progress,
+                    &path,
+                );
+                runner.step_frame(PlayerKeys {
+                    a: true,
+                    ..Default::default()
+                });
+                let entry = (1..=u64::from(MAP_ENTRY_FRAMES) + 8)
+                    .find(|_| {
+                        matches!(
+                            runner.step_frame(PlayerKeys::default()),
+                            StepOutcome::LevelEntered(_)
+                        )
+                    })
+                    .expect("the level loads from its map node");
+                let _ = fs::remove_file(path);
+                1 + entry
+            })
+    }
+
     pub(super) fn load(level: u8) -> Self {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../extracted");
         let levels = root.join("levels");
@@ -213,6 +254,7 @@ impl RouteAssets {
             edge: read(format!("level{level:02}.edge.bin")),
             scene: read(format!("level{level:02}.scene.bin")),
             nodes: load_map_nodes(),
+            entry_ticks: Default::default(),
             manifest,
         }
     }
@@ -278,6 +320,9 @@ impl RouteAssets {
         };
         let frames = tape.len() as u64;
         let map_node = sim.map_node;
+        // The level continues the clock the map entry was running on.
+        let mut divider = crate::divider_clock::VirtualDividerClock::new(0);
+        divider.advance_ticks(self.map_entry_ticks(map_node, progress));
         let outcome = run_play(
             manifest,
             &self.layout,
@@ -295,6 +340,7 @@ impl RouteAssets {
             Some(self.scene.clone()),
             Some(tape),
             Some(frames),
+            divider,
         )
         .expect("source route must use implemented native paths");
         (outcome, map_node)

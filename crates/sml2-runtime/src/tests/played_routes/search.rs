@@ -53,12 +53,13 @@ fn env<T: std::str::FromStr>(name: &str, default: T) -> T {
         .unwrap_or(default)
 }
 
-/// A route must hold on both live paths: `run_play` from the header entry, and
-/// the session entering from its map node, whose divider has run through the
-/// map's entry frames and so drives enemy randomness differently.
+/// `run_play` continues the map entry's divider, so it sees the session's
+/// enemy randomness; `ROUTE_SESSION=1` also replays every candidate through
+/// the map-entered session itself.
 fn judge(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerKeys]) -> Verdict {
     match play_judge(assets, progress, flag, tape) {
         Verdict::Failed => Verdict::Failed,
+        verdict if !env("ROUTE_SESSION", false) => verdict,
         verdict => match (session_judge(assets, progress, flag, tape), verdict) {
             (Verdict::Arrived { frame: a }, Verdict::Arrived { frame: b }) => {
                 Verdict::Arrived { frame: a.max(b) }

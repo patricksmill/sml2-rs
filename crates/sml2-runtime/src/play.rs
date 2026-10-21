@@ -86,6 +86,7 @@ pub(crate) fn run_play(
     scene_map: Option<Vec<u8>>,
     keys_tape: Option<PlayTape>,
     headless_frames: Option<u64>,
+    mut virtual_clock: VirtualDividerClock,
 ) -> Result<PlayOutcome, Box<dyn std::error::Error>> {
     let (vw, vh) = view;
     if let Some(e) = edge_map.as_ref() {
@@ -122,10 +123,10 @@ pub(crate) fn run_play(
     let mut layout_live = layout.clone();
     use minifb::{Key, Window, WindowOptions};
     // One free-running hardware-input origin spans pauses, fades and reloads.
-    // A headless run has no hardware to sample, so it uses the replay clock:
-    // one explicit tick per frame keeps the run deterministic.
+    // A headless run has no hardware to sample, so it uses the caller's replay
+    // clock, already advanced by whatever ran before the level (a map entry,
+    // say): one explicit tick per frame keeps the run deterministic.
     let native_clock = NativeDividerClock::new(0);
-    let mut virtual_clock = VirtualDividerClock::new(0);
     let headless = headless_frames.is_some();
     let mut window = if headless {
         None

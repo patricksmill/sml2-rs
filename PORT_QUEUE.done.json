@@ -1441,6 +1441,18 @@
       ],
       "verification_gate": "route-matrix.md rows 1-5 hand-reviewed and marked; played_routes tests for each (start, exit cell) pair that survives both run_play and the map-entered session, zero unported diagnostics, no state rewrites after input begins; gaps documented in route-matrix.md; cargo test --workspace passes",
       "status": "done"
+    },
+    {
+      "id": "f-divider-clock-ownership",
+      "title": "Single shared DIV clock across map, level and game-state transitions (no per-subsystem clock origins)",
+      "asm_refs": [
+        "hardware:$FF04",
+        "bank $02:$AB1D reader",
+        "tasks/subsystems/hardware_divider_input.md"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; session test proves DIV continuity across map -> level -> map and Wario random draws consume the shared clock",
+      "status": "done"
     }
   ]
 }

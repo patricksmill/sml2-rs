@@ -168,7 +168,9 @@ named tests.
 
 Reviewed 2026-10-21 against the source layout, the `$377B` overlay and played
 routes (`crates/sml2-runtime/src/tests/played_routes/levels_1_to_5.rs`). Each
-route runs through live `run_play` and again through the map-entered session.
+route runs through live `run_play`, which continues the map entry's divider
+clock, and again through the map-entered session; both must arm the bell on
+the same frame with the same object-engine divider byte.
 Every start reaches every exit cell except level 3's header start to `$4B`;
 that bell is covered from the secret start (see below).
 
@@ -188,10 +190,9 @@ that bell is covered from the secret start (see below).
   (226..239, 7..10) is sealed: the route climbs to the row-3 corridor, enters
   the side pipe at (221,2) and leaves its (226,2) mouth above the room's
   shaft. `$4B` returns to node 37 with tally unchanged and slot 2 = `$01`.
-  The secret start's `$4B` route is pinned. A header-start `$4B` tape exists
-  for `run_play`, but the map-entered session's divider differs, an anim-88
-  enemy reaches Mario near (1000,468), and no tape surviving both was found;
-  `f-divider-clock-ownership` removes the two clock origins.
+  The secret start's `$4B` route is pinned; no header-start `$4B` tape has
+  been found yet. The search stalls below the (218..220,4) pipe ledge, which
+  a small Mario must reach with a running jump from the (3392,100) foothold.
 - **Level 4.** Ground route east; the secret start lands on the upper ledge
   near the bell and takes 812 frames.
 - **Level 5.** A vertical climb with no secret entry. The only way onto the

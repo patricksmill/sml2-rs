@@ -1,6 +1,6 @@
 {
   "active_milestone": "full_integration",
-  "milestone_note": "16 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+  "milestone_note": "15 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
     {
       "id": "f-routes-b",
@@ -138,18 +138,6 @@
       ],
       "dependencies": [],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one unit test per sEasyMode reader with a sensitivity mutation; Easy session reaches a level and shows the effect",
-      "status": "pending"
-    },
-    {
-      "id": "f-divider-clock-ownership",
-      "title": "Single shared DIV clock across map, level and game-state transitions (no per-subsystem clock origins)",
-      "asm_refs": [
-        "hardware:$FF04",
-        "bank $02:$AB1D reader",
-        "tasks/subsystems/hardware_divider_input.md"
-      ],
-      "dependencies": [],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; session test proves DIV continuity across map -> level -> map and Wario random draws consume the shared clock",
       "status": "pending"
     },
     {

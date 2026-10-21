@@ -175,3 +175,53 @@ fn holding_the_map_entry_button_cannot_also_confirm_the_castle_door() {
     step(&mut session, a);
     assert!(matches!(&session.state, SessionState::Castle(seq) if seq.menu == 3));
 }
+
+/// The castle door and the Wario level run on the same free-running divider:
+/// every live Wario-level frame hands the object engine (whose `$AAA5` child
+/// picks its respawn side from `$FF04` bit 0) the one clock's value.
+#[test]
+fn wario_level_object_divider_is_the_shared_clock() {
+    use crate::divider_clock::VirtualDividerClock;
+    let mut session = at_castle_node(6);
+    let mut clock = VirtualDividerClock::new(0);
+    let mut advance = |session: &mut Session, keys: PlayerKeys| {
+        clock.advance_tick();
+        let div = clock.sample();
+        if let SessionState::InLevel(ctx) = &mut session.state {
+            // A frozen frame keeps the byte; mark it so a live write shows.
+            ctx.obj.div = div.wrapping_add(0x80);
+        }
+        let effects = session.advance(FrameInput { keys, div });
+        assert!(effects.diagnostics.is_empty(), "{:?}", effects.diagnostics);
+        (effects.outcome, div)
+    };
+    let a = PlayerKeys {
+        a: true,
+        ..Default::default()
+    };
+    let mut entered = false;
+    for frame in 0..400 {
+        let keys = match &session.state {
+            SessionState::Castle(seq) if seq.menu == 2 && frame % 2 == 0 => a,
+            _ if frame == 0 => a,
+            _ => PlayerKeys::default(),
+        };
+        if matches!(advance(&mut session, keys).0, StepOutcome::LevelEntered(24)) {
+            entered = true;
+            break;
+        }
+    }
+    assert!(entered, "the six-coin door must load the Wario level");
+    let mut live = 0;
+    for _ in 0..600 {
+        let (_, div) = advance(&mut session, PlayerKeys::default());
+        let SessionState::InLevel(ctx) = &session.state else {
+            panic!("Wario level")
+        };
+        if ctx.obj.div != div.wrapping_add(0x80) {
+            assert_eq!(ctx.obj.div, div);
+            live += 1;
+        }
+    }
+    assert!(live > 0, "the Wario level must run live object frames");
+}

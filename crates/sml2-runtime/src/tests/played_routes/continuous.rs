@@ -219,8 +219,14 @@ pub(super) fn verify_map_entry_completion_and_reload(
         (0x12, 7, 0x42)
     );
     let mut exited = false;
+    let mut session_arm = None;
     for &keys in tape {
         if let SessionState::InLevel(ctx) = &runner.session.state {
+            if let (Some(arm), None) = (&ctx.bell_arm, session_arm) {
+                // The fade freezes the engine, so its divider byte stays the
+                // arm frame's sample.
+                session_arm = Some((arm.frame, arm.position, arm.exit_tile_flag, ctx.obj.div));
+            }
             if !ctx.sim.exit_phase {
                 assert_eq!(
                     ctx.sim.dead, 0,
@@ -252,6 +258,19 @@ pub(super) fn verify_map_entry_completion_and_reload(
         exited,
         "level {} must complete through ordinary input",
         manifest.level_id
+    );
+    // `run_play` continues the map entry's divider, so both paths see the
+    // same enemy randomness, arm the bell identically, and leave the same
+    // divider byte in the object engine.
+    let play_arm = expected.bell_arm.as_ref().expect("run_play armed the bell");
+    assert_eq!(
+        session_arm,
+        Some((
+            play_arm.frame,
+            play_arm.position,
+            play_arm.exit_tile_flag,
+            expected.obj.div
+        ))
     );
     // A midpoint bell can select a real bonus room before the deferred landing.
     for frame in 0..6000 {
@@ -297,4 +316,66 @@ pub(super) fn verify_map_entry_completion_and_reload(
         "reload must select the source zone, not the hub"
     );
     fs::remove_file(path).unwrap();
+}
+
+/// `$FF04` is one free-running counter: the map, the entry transition, the
+/// level and the map return all sample the runner's single clock, which never
+/// restarts. Every live level frame hands the object engine (where Wario's
+/// `$AB1D` and the other random readers sample it) that clock's value.
+#[test]
+fn one_divider_clock_spans_map_entry_level_and_map_return() {
+    use crate::divider_clock::VirtualDividerClock;
+    let path = std::env::temp_dir().join(format!(
+        "sml2_divider_continuity_{}.sav",
+        std::process::id()
+    ));
+    // Level 28's right-only route from node 120 (`level28_header_spawn_to_bell`).
+    let (mut runner, ..) = map_entry_runner(SessionAssets::load().unwrap(), 120, 0, &path);
+    let mut mirror = VirtualDividerClock::new(0);
+    let mut phases = Vec::new();
+    let mut live_level_frames = 0;
+    for frame in 0..1700 {
+        let keys = match &runner.session.state {
+            SessionState::Overworld(_) if frame == 0 => PlayerKeys {
+                a: true,
+                ..Default::default()
+            },
+            SessionState::InLevel(_) => PlayerKeys {
+                right: true,
+                ..Default::default()
+            },
+            _ => PlayerKeys::default(),
+        };
+        // A frozen frame leaves the engine's divider byte alone; mark it so
+        // a live frame's write is visible even when the value repeats.
+        let sentinel = mirror.sample().wrapping_add(0x80);
+        if let SessionState::InLevel(ctx) = &mut runner.session.state {
+            ctx.obj.div = sentinel;
+        }
+        let outcome = runner.step_frame(keys);
+        mirror.advance_tick();
+        assert_eq!(
+            runner.virtual_clock.sample(),
+            mirror.sample(),
+            "frame {frame}"
+        );
+        let phase = match (&runner.session.state, outcome) {
+            (_, StepOutcome::LevelEntered(_)) => "level",
+            (SessionState::InLevel(ctx), _) => {
+                if ctx.obj.div != sentinel {
+                    assert_eq!(ctx.obj.div, mirror.sample(), "level frame {frame}");
+                    live_level_frames += 1;
+                }
+                "level"
+            }
+            (SessionState::Overworld(_), _) => "map",
+            _ => "other",
+        };
+        if phases.last() != Some(&phase) {
+            phases.push(phase);
+        }
+    }
+    assert_eq!(phases, ["map", "level", "map"]);
+    assert!(live_level_frames > 1000, "{live_level_frames}");
+    let _ = fs::remove_file(path);
 }

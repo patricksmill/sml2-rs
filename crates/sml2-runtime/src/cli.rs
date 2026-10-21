@@ -495,6 +495,8 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
             scene_map,
             keys_tape.map(PlayTape::Ascii),
             headless_frames,
+            // `--play` starts at the level, so the level owns the origin.
+            crate::divider_clock::VirtualDividerClock::new(0),
         )
         .map(|_| ());
     }
