@@ -3,29 +3,73 @@
   "milestone_note": "20 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
     {
-      "id": "g-actor-object-core",
-      "title": "Migrate object-core helpers: derive_sprite/finish_sprite_swap, interaction, shell and dynamic spawning from raw slot bytes to typed Actor state",
+      "id": "g-actor-enemy-core",
+      "title": "Migrate the generic walker, stun, death, hit-reaction and land-or-remove handlers from raw slot bytes to typed Actor state",
       "asm_refs": [
-        "bank $02:$863C/$8240",
-        "bank $02:$85D7/$8633",
-        "bank $16:$5B36D"
+        "bank $16 generic walker/death handlers"
       ],
-      "dependencies": [
-        "g-slicer-state-tables"
-      ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/helpers.rs, interaction.rs, shell.rs, spawning/dynamic.rs",
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/compat/enemies/dispatch.rs: walker_state, handler_stun, handler_death, hit_reaction, land_or_remove",
       "status": "pending"
     },
     {
-      "id": "g-actor-compat-logic",
-      "title": "Migrate behavior that lives in compat adapters (vertical_bobber, square_patroller, buried, dispatch tables) into native modules from raw slot bytes to typed Actor state",
+      "id": "g-actor-shell",
+      "title": "Migrate the carried and kicked shell (carry, release, follow, knock-out overlap, kick placement and fall) from raw slot bytes to typed Actor state",
       "asm_refs": [
-        "bank $16 level-table handlers"
+        "bank $02 carried/kicked object handlers"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/shell.rs, objects/compat/enemies/dispatch.rs: handler_kicked, kick_fall",
+      "status": "pending"
+    },
+    {
+      "id": "g-actor-crawlers",
+      "title": "Migrate the crawler family (shared crawl body, vertical crawl) and the rising crawler $5A2D0 from raw slot bytes to typed Actor state",
+      "asm_refs": [
+        "bank $16:$58642",
+        "bank $16:$5A2D0"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/compat/enemies/dispatch.rs: handler_crawler, crawler_body, crawler_vertical, objects/compat/enemies/rising_crawler.rs",
+      "status": "pending"
+    },
+    {
+      "id": "g-actor-hopper-bobber",
+      "title": "Migrate the hopper, bobber and square patroller $5B0D5 from raw slot bytes to typed Actor state",
+      "asm_refs": [
+        "bank $16:$5B0D5"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/compat/enemies/dispatch.rs: handler_hopper, handler_bobber, objects/compat/enemies/square_patroller.rs",
+      "status": "pending"
+    },
+    {
+      "id": "g-actor-items",
+      "title": "Migrate item poses, markers, pickup, squashed, grower and floaters, and the animated marker $586EB from raw slot bytes to typed Actor state",
+      "asm_refs": [
+        "bank $16 item handlers",
+        "bank $16:$586EB"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/compat/items/dispatch.rs, objects/compat/items/animated_marker.rs",
+      "status": "pending"
+    },
+    {
+      "id": "g-actor-helpers-cleanup",
+      "title": "Delete the byte helpers the migrations leave dead and document the engine boundary that stays slot-based",
+      "asm_refs": [
+        "objects/helpers.rs",
+        "objects/interaction.rs",
+        "objects/spawning/dynamic.rs"
       ],
       "dependencies": [
-        "g-slicer-state-tables"
+        "g-actor-enemy-core",
+        "g-actor-shell",
+        "g-actor-crawlers",
+        "g-actor-hopper-bobber",
+        "g-actor-items"
       ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/compat/enemies/*.rs, objects/compat/items/*.rs",
+      "verification_gate": "helpers.rs keeps only engine-level slot operations (tile probes, slot removal, record bookkeeping, BCD) with a module doc naming that boundary; interaction.rs and spawning stay engine code; no dead_code allowances; cargo test -p sml2-core passes; captures/sweep.sh unchanged",
       "status": "pending"
     },
     {
