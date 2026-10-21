@@ -33,6 +33,38 @@ fn temp_save_path(name: &str) -> PathBuf {
 }
 
 #[test]
+fn arena_reload_discards_terrain_edits_from_the_previous_map() {
+    let assets = SessionAssets::load().expect("session assets must load");
+    let mut runner = SessionRunner::new(
+        assets,
+        temp_save_path("arena_terrain_reload"),
+        1,
+        (160, 144),
+        true,
+    );
+    press_a_and_wait_for_level(&mut runner);
+    if let SessionState::InLevel(ctx) = &mut runner.state {
+        // Scene 12's first opcode is `$62`: `$25AF` calls `$0361` to
+        // replace the whole decompressed map before displaying the arena.
+        ctx.sim.layout_writes.push((7 * 256 + 18, 0x60));
+        ctx.cam.scene_id = 12;
+        ctx.scene_vm.start();
+    } else {
+        panic!("expected level entry");
+    }
+    for _ in 0..128 {
+        runner.step_frame(PlayerKeys::default());
+        if let SessionState::InLevel(ctx) = &runner.state {
+            if ctx.sim.level_gfx_index == 2 {
+                assert!(ctx.sim.layout_writes.is_empty(), "$0361 replaced the map");
+                return;
+            }
+        }
+    }
+    panic!("scene did not reach its arena reload");
+}
+
+#[test]
 fn hub_navigation_to_level_1_entry_and_clear_bell_return() {
     let tmp_save = temp_save_path("test_hub_level1_clear");
     let _ = fs::remove_file(&tmp_save);

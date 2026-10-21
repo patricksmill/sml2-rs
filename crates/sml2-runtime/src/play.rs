@@ -438,6 +438,7 @@ pub(crate) fn run_play(
                 let room = match arena_layout.as_ref() {
                     Some(a) => {
                         layout_live = a.clone();
+                        sim.layout_writes.clear();
                         true
                     }
                     None => false,

@@ -411,6 +411,8 @@ impl LevelContext {
                 };
                 if let Some(a) = self.arena_layout.as_ref() {
                     self.layout_live = a.clone();
+                    // `$25AF` calls `$0361`, replacing the decompressed map.
+                    self.sim.layout_writes.clear();
                 }
             }
         }
