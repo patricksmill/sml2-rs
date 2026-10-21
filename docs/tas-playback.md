@@ -147,6 +147,10 @@ The once-per-frame step
 outside a level uses the read that frame's state handler acts on: one taken
 before line 144 of that frame, or at the end of the previous tick, since the
 tick ends at frame start. Scene steps use the row.
+If the native loader finishes before ROM states `$02`/`$03` return, phase
+lock holds the native level until the first `$05D5` dispatch. Loading ticks
+must not advance its object clock. This is comparison alignment; the native
+loader's fixed transition duration is not validated by this mode.
 The two agree until a ROM frame overruns the hardware tick: the next read then
 happens before the next row is applied, and the ROM acts on the previous row.
 The ROM-supplied phases are diagnostic alignment, not proof of native clock

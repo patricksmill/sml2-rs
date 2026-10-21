@@ -233,6 +233,20 @@ class LogicPhaseTests(unittest.TestCase):
     def test_outside_a_level_steps_once_per_hardware_frame(self):
         self.assertEqual(logic_phases(0x0C, 0x20, [], []), [1])
 
+    def test_finished_native_loader_waits_for_the_first_gameplay_dispatch(self):
+        # $04F1 stores state $04 and returns without calling $05D5. If the
+        # native loader finished on the previous row, this is still no game
+        # update: $AF08 and $FFF0 must remain at their loader values.
+        for state in (2, 3):
+            self.assertEqual(logic_phases(state, 6, [], native_in_level=False), [7])
+            self.assertEqual(logic_phases(state, 6, [], native_in_level=True), [])
+            self.assertEqual(logic_phases(state, 6, [7], native_in_level=True), [7])
+        self.assertEqual(logic_phases(4, 7, [0], native_in_level=True), [0])
+
+    def test_loader_alignment_preserves_scene_resumes_and_pause_updates(self):
+        self.assertEqual(logic_phases(3, 6, [], [7], native_in_level=True), [7])
+        self.assertEqual(logic_phases(8, 6, [], native_in_level=True), [7])
+
 
 
 class StepMaskTests(unittest.TestCase):

@@ -99,7 +99,8 @@ def apply_buttons(pyboy, previous, mask):
             (pyboy.button_press if mask & bit else pyboy.button_release)(name)
 
 
-def logic_phases(before_state, before_ff97, st4_phases, scene_phases=()):
+def logic_phases(before_state, before_ff97, st4_phases, scene_phases=(),
+                 native_in_level=False):
     """Port steps for one hardware frame while phase-lock is on.
 
     Every state-`$04` entry (`$05D5`) is one gameplay update, whether it reaches
@@ -113,9 +114,13 @@ def logic_phases(before_state, before_ff97, st4_phases, scene_phases=()):
     bypassing `$05D5`. Append those steps in execution order, including
     multiple waits completed in one hardware frame. Outside a level, step once
     per hardware frame; in a level with neither kind of update, do not step.
+    If the native loader has finished before ROM states $02/$03 return, hold
+    it until $05D5: a loader tick must not become a native gameplay update.
     """
     if st4_phases:
         phases = list(st4_phases)
+    elif native_in_level and before_state in (2, 3):
+        phases = []
     elif before_state != 4:
         phases = [(before_ff97 + 1) & 7]
     else:
@@ -358,8 +363,8 @@ def main():
             bridge_args.extend(['--initial-phase', str(args.port_initial_phase)])
         threshold = comparison_threshold(args.diverge_threshold, args.exact_position, args.no_diverge)
         watch = threshold is not None
-        state_rows = watch or args.debug_state
         phase_lock = not args.no_phase_lock
+        state_rows = watch or args.debug_state or phase_lock
         if state_rows:
             bridge_args.append('--state')
         if args.debug_state:
@@ -509,7 +514,8 @@ def main():
                 if not pyboy.tick(1, True, False):
                     raise RuntimeError('PyBoy stopped before end of movie')
                 if phase_lock:
-                    phases = (logic_phases(before_state, before_ff97, st4_phases, scene_phases)
+                    phases = (logic_phases(before_state, before_ff97, st4_phases, scene_phases,
+                                           native_in_level=native_state is not None)
                               if main_loop[0] else [])
                     has_frame_step = not st4_phases and len(phases) > len(scene_phases)
                     predicted = (frame_read(carried, early_reads, joypad_latch[0])
