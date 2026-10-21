@@ -351,6 +351,10 @@ impl LevelContext {
                             self.sim.music_request = music;
                             self.sim.level_song = level_song;
                             self.obj.spawn_boss(def_index);
+                            // `$3C94` runs inside this update and outlasts its
+                            // frame: a VBlank lands before it returns and
+                            // decrements `sFadeTimer` with no update of its own.
+                            self.sim.fade_timer = self.sim.fade_timer.saturating_sub(BOSS_LOAD_VBLANKS);
                         }
                     } else if self.cam.take_blocked_scene_load() {
                         self.obj.note_blocked_scene_load();
@@ -613,6 +617,12 @@ pub struct MapTransition {
 /// earlier "74" came from. 73 lands the level on that `$04` frame, so the next
 /// step is the first player update.
 pub const MAP_ENTRY_FRAMES: u16 = 73;
+
+/// VBlank interrupts taken inside the gameplay update that runs the boss load
+/// (`$3C94`). Measured on the level-9 arena (2026-10-20 recording): the update
+/// spans two frame boundaries, but `sFadeTimer` reads 306 at its `$05D5` and
+/// 304 at the next one, so one extra decrement lands in it.
+const BOSS_LOAD_VBLANKS: u16 = 1;
 
 /// Frames after the bell script reaches state `$0A` before the hub cursor
 /// runs. Measured on the level-1 clear: `$3E9FB`'s fade, the `$3F156`
