@@ -1312,8 +1312,10 @@ impl ObjectSim {
         self.pending_kick = false;
         // $81A7 (slot → staging) + $3A50 (bank 16).
         self.bank16_update(i, &mut st, layout, tables);
-        // `$C014`: the draw is skipped while this slot's `sObjectDone` is set.
-        self.slot_done[i] = self.done != 0;
+        // `$C014`: the draw is skipped while this slot's `sObjectDone` is set,
+        // and for a staged type of exactly `$80` — the item still inside its
+        // block, which `$8611` ignores until `$86E4` releases it.
+        self.slot_done[i] = self.done != 0 || st.b[B_TYPE] == 0x80;
         // `$8611`'s B-not-held tail, which needs the layout.
         if self.pending_kick {
             self.pending_kick = false;

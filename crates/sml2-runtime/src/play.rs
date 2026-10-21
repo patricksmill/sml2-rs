@@ -511,7 +511,8 @@ pub(crate) fn run_play(
                     .enumerate()
                     .filter(|(i, o)| {
                         // `$C000`/`$C014`: only state 2 slots draw, and never one
-                        // whose handler set `sObjectDone` this frame (a defeat).
+                        // whose handler set `sObjectDone` this frame (a defeat)
+                        // or whose type is `$80` (an item inside its block).
                         o.state() == sml2_core::objects::SlotState::Active && !obj.slot_done[*i]
                     })
                     .map(|(_, o)| SpriteInst {

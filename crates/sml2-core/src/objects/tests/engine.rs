@@ -2791,6 +2791,46 @@ fn a_defeated_slot_is_not_drawn() {
     assert!(obj.slot_done[0], "and it is not drawn");
 }
 
+/// `$C014`'s type gate: a slot whose staged type (`$FFE2`) is exactly `$80`
+/// is not drawn. That is the item still inside its block — `$58758` parks
+/// it there (type `$80`, frame state 2) and `$8611` ignores Mario's touch on
+/// it — so it stays invisible until the hit from below (`$86E4` -> `$8708`)
+/// turns the type into anim + `$70` and the rise starts.
+#[test]
+fn an_item_inside_its_block_is_not_drawn_until_released() {
+    let layout = blank_layout();
+    let t = tables();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.active = 1;
+    obj.spawned = vec![true];
+    obj.mario = MarioContact::default();
+    {
+        let s = &mut obj.slots[0];
+        s.b[B_STATE] = 2;
+        s.b[B_DEF] = 18; // `$58758`, the item pose
+        s.b[B_SPRITE] = 26;
+        set_x(&mut s.b, 100);
+        set_y(&mut s.b, 96);
+    }
+    // Frame 1: `$58758`'s init parks the item (type `$80`) and sets
+    // `sObjectDone`, so it is skipped on this frame either way.
+    obj.engine(0, 0, &layout, &t);
+    assert_eq!(obj.slots[0].b[B_TYPE], 0x80);
+    assert_eq!(obj.slots[0].b[B_FSTATE], 2);
+    // Later frames: `sObjectDone` is clear, but the type is still `$80`.
+    for _ in 0..4 {
+        obj.engine(0, 0, &layout, &t);
+        assert_eq!(obj.slots[0].b[B_TYPE], 0x80);
+        assert!(obj.slot_done[0], "an item inside its block is not drawn");
+    }
+    // The block is hit from below: the item is released and drawn.
+    obj.slots[0].b[B_FLAGS] = 0x20;
+    obj.engine(0, 0, &layout, &t);
+    assert_eq!(obj.slots[0].b[B_TYPE], 0x82, "anim 18 + $70");
+    assert!(!obj.slot_done[0], "the released item draws");
+}
+
 /// The same chain through the engine, with the *committed* extraction's
 /// anim-0 handler ($581B1, the death animation): the frames after a
 /// fireball defeat flip the enemy, hop it up and draw it again as it falls,
