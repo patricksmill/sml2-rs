@@ -397,3 +397,33 @@ fn all_dacs_off_disconnects_the_high_pass_output() {
     apu.generate_samples(44_100, 1, &mut samples);
     assert!(samples[0] < -0.4, "reconnected output {}", samples[0]);
 }
+
+/// Pan Docs: a pulse/noise DAC is on while `NRx2 & $F8 != 0`. Writing a value
+/// that clears those bits turns the channel off, and a trigger cannot start
+/// it again until the DAC is powered. The ROM's pulse silence frame (`$106A2`)
+/// and a noise stop both write NRx2 = 0.
+#[test]
+fn nrx2_dac_off_disables_the_channel_until_a_powered_trigger() {
+    let mut apu = Apu::new();
+    apu.apply_pulse_write(PulseWrite::Envelope(0xF0));
+    apu.apply_pulse_write(PulseWrite::FrequencyControl(0x86));
+    assert!(apu.ch1.enabled);
+
+    apu.apply_pulse_write(PulseWrite::Envelope(0x00));
+    assert!(!apu.ch1.enabled, "NR12 = 0 powers the DAC off");
+    apu.apply_pulse_write(PulseWrite::FrequencyControl(0x86));
+    assert!(!apu.ch1.enabled, "a trigger with the DAC off stays disabled");
+
+    // $08 (volume 0, increase) keeps the DAC powered, so the trigger holds.
+    apu.apply_pulse_write(PulseWrite::Envelope(0x08));
+    apu.apply_pulse_write(PulseWrite::FrequencyControl(0x86));
+    assert!(apu.ch1.enabled, "NR12 = $08 is silent but powered");
+
+    apu.apply_noise_write(NoiseWrite::Envelope(0xA0));
+    apu.apply_noise_write(NoiseWrite::Control(0x80));
+    assert!(apu.ch4.enabled);
+    apu.apply_noise_write(NoiseWrite::Envelope(0x00));
+    assert!(!apu.ch4.enabled, "NR42 = 0 powers the DAC off");
+    apu.apply_noise_write(NoiseWrite::Control(0x80));
+    assert!(!apu.ch4.enabled);
+}

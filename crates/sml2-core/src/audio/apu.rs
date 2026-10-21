@@ -98,7 +98,8 @@ impl PulseChannel {
     }
 
     pub fn trigger(&mut self) {
-        self.enabled = true;
+        // A trigger with the DAC off leaves the channel disabled.
+        self.enabled = self.dac_on();
         self.volume = self.env_initial;
         self.env_timer = self.env_period;
         // A trigger reloads the frequency timer but leaves the duty position
@@ -129,6 +130,19 @@ impl PulseChannel {
     #[inline]
     pub fn dac_on(&self) -> bool {
         self.env_initial != 0 || self.env_direction
+    }
+
+    /// NRx2 write. Clearing the upper five bits powers the DAC off, which
+    /// also turns the channel off (Pan Docs, Audio details: DACs).
+    pub fn write_envelope(&mut self, val: u8) {
+        self.env_initial = val >> 4;
+        self.env_direction = (val & 0x08) != 0;
+        self.env_period = val & 0x07;
+        self.env_timer = self.env_period;
+        self.volume = self.env_initial;
+        if !self.dac_on() {
+            self.enabled = false;
+        }
     }
 
     pub fn advance_cycles(&mut self, cycles: u32) {
@@ -287,7 +301,8 @@ impl Default for NoiseChannel {
 
 impl NoiseChannel {
     pub fn trigger(&mut self) {
-        self.enabled = true;
+        // A trigger with the DAC off leaves the channel disabled.
+        self.enabled = self.dac_on();
         self.volume = self.env_initial;
         self.env_timer = self.env_period;
         self.lfsr = 0x7FFF;
@@ -310,6 +325,19 @@ impl NoiseChannel {
     #[inline]
     pub fn dac_on(&self) -> bool {
         self.env_initial != 0 || self.env_direction
+    }
+
+    /// NRx2 write. Clearing the upper five bits powers the DAC off, which
+    /// also turns the channel off (Pan Docs, Audio details: DACs).
+    pub fn write_envelope(&mut self, val: u8) {
+        self.env_initial = val >> 4;
+        self.env_direction = (val & 0x08) != 0;
+        self.env_period = val & 0x07;
+        self.env_timer = self.env_period;
+        self.volume = self.env_initial;
+        if !self.dac_on() {
+            self.enabled = false;
+        }
     }
 
     pub fn advance_cycles(&mut self, cycles: u32) {
@@ -465,13 +493,7 @@ impl Apu {
                 self.ch1.duty = val >> 6;
                 self.ch1.length_timer = 64 - (val & 0x3F);
             }
-            PulseWrite::Envelope(val) => {
-                self.ch1.env_initial = val >> 4;
-                self.ch1.env_direction = (val & 0x08) != 0;
-                self.ch1.env_period = val & 0x07;
-                self.ch1.env_timer = self.ch1.env_period;
-                self.ch1.volume = self.ch1.env_initial;
-            }
+            PulseWrite::Envelope(val) => self.ch1.write_envelope(val),
             PulseWrite::FrequencyLow(lo) => {
                 self.ch1.freq = (self.ch1.freq & 0x0700) | (lo as u16);
             }
@@ -486,13 +508,7 @@ impl Apu {
                 self.ch2.duty = val >> 6;
                 self.ch2.length_timer = 64 - (val & 0x3F);
             }
-            PulseWrite::Ch2Envelope(val) => {
-                self.ch2.env_initial = val >> 4;
-                self.ch2.env_direction = (val & 0x08) != 0;
-                self.ch2.env_period = val & 0x07;
-                self.ch2.env_timer = self.ch2.env_period;
-                self.ch2.volume = self.ch2.env_initial;
-            }
+            PulseWrite::Ch2Envelope(val) => self.ch2.write_envelope(val),
             PulseWrite::Ch2FrequencyLow(lo) => {
                 self.ch2.freq = (self.ch2.freq & 0x0700) | (lo as u16);
             }
@@ -541,13 +557,7 @@ impl Apu {
             NoiseWrite::Length(val) => {
                 self.ch4.length_timer = 64 - (val & 0x3F);
             }
-            NoiseWrite::Envelope(val) => {
-                self.ch4.env_initial = val >> 4;
-                self.ch4.env_direction = (val & 0x08) != 0;
-                self.ch4.env_period = val & 0x07;
-                self.ch4.env_timer = self.ch4.env_period;
-                self.ch4.volume = self.ch4.env_initial;
-            }
+            NoiseWrite::Envelope(val) => self.ch4.write_envelope(val),
             NoiseWrite::Polynomial(val) => {
                 self.ch4.shift_clock = val >> 4;
                 self.ch4.width_mode_7bit = (val & 0x08) != 0;
@@ -569,13 +579,7 @@ impl Apu {
                 self.ch1.duty = val >> 6;
                 self.ch1.length_timer = 64 - (val & 0x3F);
             }
-            MusicWrite::Ch1Envelope(val) => {
-                self.ch1.env_initial = val >> 4;
-                self.ch1.env_direction = (val & 0x08) != 0;
-                self.ch1.env_period = val & 0x07;
-                self.ch1.env_timer = self.ch1.env_period;
-                self.ch1.volume = self.ch1.env_initial;
-            }
+            MusicWrite::Ch1Envelope(val) => self.ch1.write_envelope(val),
             MusicWrite::Ch1FrequencyLow(lo) => {
                 self.ch1.freq = (self.ch1.freq & 0x0700) | (lo as u16);
             }
@@ -590,13 +594,7 @@ impl Apu {
                 self.ch2.duty = val >> 6;
                 self.ch2.length_timer = 64 - (val & 0x3F);
             }
-            MusicWrite::Ch2Envelope(val) => {
-                self.ch2.env_initial = val >> 4;
-                self.ch2.env_direction = (val & 0x08) != 0;
-                self.ch2.env_period = val & 0x07;
-                self.ch2.env_timer = self.ch2.env_period;
-                self.ch2.volume = self.ch2.env_initial;
-            }
+            MusicWrite::Ch2Envelope(val) => self.ch2.write_envelope(val),
             MusicWrite::Ch2FrequencyLow(lo) => {
                 self.ch2.freq = (self.ch2.freq & 0x0700) | (lo as u16);
             }
@@ -635,13 +633,7 @@ impl Apu {
             MusicWrite::Ch4Length(val) => {
                 self.ch4.length_timer = 64 - (val & 0x3F);
             }
-            MusicWrite::Ch4Envelope(val) => {
-                self.ch4.env_initial = val >> 4;
-                self.ch4.env_direction = (val & 0x08) != 0;
-                self.ch4.env_period = val & 0x07;
-                self.ch4.env_timer = self.ch4.env_period;
-                self.ch4.volume = self.ch4.env_initial;
-            }
+            MusicWrite::Ch4Envelope(val) => self.ch4.write_envelope(val),
             MusicWrite::Ch4Polynomial(val) => {
                 self.ch4.shift_clock = val >> 4;
                 self.ch4.width_mode_7bit = (val & 0x08) != 0;
