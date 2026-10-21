@@ -297,7 +297,7 @@ fn the_stop_all_silences_a_sounding_channel() {
     let left: Vec<f32> = buffer.iter().step_by(2).copied().collect();
     for w in left.windows(2) {
         assert!(
-            (w[1].abs() - w[0].abs()).abs() < 1e-4,
+            w[1].abs() <= w[0].abs() + 1e-6,
             "a tone survives the stop-all: {w:?}"
         );
     }
@@ -354,4 +354,46 @@ fn an_ultrasonic_pulse_averages_instead_of_aliasing() {
     for w in left.windows(2) {
         assert!((w[1] - w[0]).abs() < 0.02, "sample jump {w:?}");
     }
+}
+
+/// gbdev wiki: `out = in - cap; cap = in - out * 0.999958^cycles`. A constant
+/// level therefore decays by the charge factor every sample — about 0.996 at
+/// 44.1 kHz on the DMG, and a per-sample constant at any host rate.
+#[test]
+fn high_pass_charge_matches_the_dmg_capacitor_at_each_rate() {
+    for rate in [44_100u32, 48_000] {
+        let mut apu = Apu::new();
+        // Wave DAC on with volume code 0: the mix is a constant 0, so seed the
+        // capacitor and watch it discharge.
+        apu.apply_wave_write(WaveWrite::Enable(0x80));
+        apu.cap_left = 0.5;
+        let mut samples = Vec::new();
+        apu.generate_samples(rate, 200, &mut samples);
+        let left: Vec<f64> = samples.iter().step_by(2).map(|&s| s as f64).collect();
+        let expected = 0.999958f64.powf(4_194_304.0 / rate as f64);
+        let measured = (left[199] / left[0]).powf(1.0 / 199.0);
+        assert!(
+            (measured - expected).abs() < 1e-5,
+            "{rate} Hz: charge {measured} vs {expected}"
+        );
+    }
+}
+
+/// With every DAC off the mixer is disconnected: silence, not the decaying
+/// capacitor, and the charge is held for when a DAC powers back on.
+#[test]
+fn all_dacs_off_disconnects_the_high_pass_output() {
+    let mut apu = Apu::new();
+    apu.cap_left = 0.5;
+    let mut samples = Vec::new();
+    apu.generate_samples(44_100, 50, &mut samples);
+    assert!(samples.iter().all(|&s| s == 0.0));
+    assert_eq!(apu.cap_left, 0.5);
+
+    // NRx2 = $08 (volume 0, increase) powers the DAC even though it is silent.
+    apu.apply_pulse_write(PulseWrite::Envelope(0x08));
+    assert!(apu.ch1.dac_on());
+    samples.clear();
+    apu.generate_samples(44_100, 1, &mut samples);
+    assert!(samples[0] < -0.4, "reconnected output {}", samples[0]);
 }

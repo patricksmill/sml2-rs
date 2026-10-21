@@ -16,6 +16,11 @@ use crate::audio::noise::NoiseWrite;
 use crate::audio::pulse::PulseWrite;
 use crate::audio::wave::WaveWrite;
 
+/// DMG AC-coupling capacitor charge factor per 4.194 MHz cycle (gbdev wiki,
+/// "Gameboy sound hardware"; MGB/CGB use 0.998943). A PCM sample spanning `n`
+/// cycles uses `factor^n`: about 0.996 at 44.1 kHz.
+const HPF_CHARGE_PER_CYCLE: f64 = 0.999958;
+
 const DUTY_TABLE: [[u8; 8]; 4] = [
     [0, 0, 0, 0, 0, 0, 0, 1], // 12.5%
     [1, 0, 0, 0, 0, 0, 0, 1], // 25.0%
@@ -118,6 +123,12 @@ impl PulseChannel {
     #[inline]
     pub fn period(&self) -> u32 {
         (2048 - (self.freq as u32).min(2047)) * 4
+    }
+
+    /// The DAC is powered while NRx2's upper five bits are not all clear.
+    #[inline]
+    pub fn dac_on(&self) -> bool {
+        self.env_initial != 0 || self.env_direction
     }
 
     pub fn advance_cycles(&mut self, cycles: u32) {
@@ -293,6 +304,12 @@ impl NoiseChannel {
             n => (n as u32) * 16,
         };
         divisor << (self.shift_clock as u32)
+    }
+
+    /// The DAC is powered while NR42's upper five bits are not all clear.
+    #[inline]
+    pub fn dac_on(&self) -> bool {
+        self.env_initial != 0 || self.env_direction
     }
 
     pub fn advance_cycles(&mut self, cycles: u32) {
@@ -737,6 +754,10 @@ impl Apu {
         }
     }
 
+    fn any_dac_on(&self) -> bool {
+        self.ch1.dac_on() || self.ch2.dac_on() || self.ch3.dac_enabled || self.ch4.dac_on()
+    }
+
     /// Samples one console frame is worth at `sample_rate`: 70,224 cycles at
     /// 4,194,304 Hz is 738.3533 samples at 44.1 kHz. The remainder carries, so
     /// the sequence is 738/738/739/738/... and the audio clock stays locked to
@@ -750,7 +771,7 @@ impl Apu {
 
     /// Generates interleaved stereo f32 audio samples in `[-1.0, 1.0]`.
     /// `num_frames` is the number of stereo pairs (so `2 * num_frames` floats are appended to `out`).
-    pub fn generate_samples(&mut self, _sample_rate: u32, num_frames: usize, out: &mut Vec<f32>) {
+    pub fn generate_samples(&mut self, sample_rate: u32, num_frames: usize, out: &mut Vec<f32>) {
         out.reserve(num_frames * 2);
 
         // Scaling constants (4 channels, max combined magnitude 4.0)
@@ -768,7 +789,7 @@ impl Apu {
         let pan_ch3_l = (self.nr51 & 0x40) != 0;
         let pan_ch4_l = (self.nr51 & 0x80) != 0;
 
-        let safe_sample_rate = _sample_rate.max(1);
+        let safe_sample_rate = sample_rate.max(1);
 
         for _ in 0..num_frames {
             self.cycle_acc += 4_194_304;
@@ -821,12 +842,19 @@ impl Apu {
             let raw_l = left * norm * master_l;
             let raw_r = right * norm * master_r;
 
-            // High-pass DC-blocking filter (simulates Game Boy AC-coupling capacitors)
-            self.cap_left += (raw_l - self.cap_left) * 0.002;
-            self.cap_right += (raw_r - self.cap_right) * 0.002;
-
-            let out_l = (raw_l - self.cap_left).clamp(-1.0, 1.0);
-            let out_r = (raw_r - self.cap_right).clamp(-1.0, 1.0);
+            // AC-coupling capacitor: `out = in - cap; cap = in - out * charge`.
+            // With every DAC off the amplifier is disconnected: the output is
+            // 0 and the capacitor holds its charge.
+            let (out_l, out_r) = if self.any_dac_on() {
+                let charge = HPF_CHARGE_PER_CYCLE.powi(cycles as i32) as f32;
+                let out_l = raw_l - self.cap_left;
+                let out_r = raw_r - self.cap_right;
+                self.cap_left = raw_l - out_l * charge;
+                self.cap_right = raw_r - out_r * charge;
+                (out_l.clamp(-1.0, 1.0), out_r.clamp(-1.0, 1.0))
+            } else {
+                (0.0, 0.0)
+            };
 
             out.push(out_l);
             out.push(out_r);
