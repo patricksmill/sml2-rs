@@ -35,7 +35,9 @@ def read_state(pipe):
                          on_ground=int(parts[7]), phase=int(parts[8]))
             for field in parts[9:]:
                 key, value = field.split("=", 1)
-                if key not in {"step", "fff0", "update_phase", "standing", "scene", "owns", "pc"}:
+                if key not in {"step", "fff0", "update_phase", "standing", "scene", "owns", "pc",
+                               "boss_x", "boss_state", "door_phase", "door_parity",
+                               "platform_sprite", "tile_anim", "writes"}:
                     raise ValueError("unknown diagnostic field")
                 state[key] = int(value)
     except ValueError as exc:
@@ -151,6 +153,18 @@ def frame_read(carried, early_reads, latch):
 # `$3DE25`, and bell room B's two rung picks `$60481`/`$604C1`.
 DIV_READ_HOOKS = ((0x0F, 0x4141), (0x0F, 0x4160), (0x0F, 0x5B50), (0x0F, 0x5E2F),
                   (0x18, 0x4484), (0x18, 0x44C4))
+
+# Witch appearance ($97FE) and fire trajectory ($979D), after `ld a,[$FF04]`.
+BOSS_DIV_READ_HOOKS = ((2, 0x5801), (2, 0x57A0))
+
+
+def boss_div_field(reads, step):
+    """One witch decision per gameplay update, paired with that update only."""
+    if step >= len(reads) or not reads[step]:
+        return ''
+    if len(reads[step]) != 1:
+        raise RuntimeError('multiple witch divider reads in one gameplay update')
+    return f' boss_div={reads[step][0]}'
 
 
 def frame_timing(iterations, frame):
@@ -368,6 +382,7 @@ def main():
         print(f"Inputs by {movie.get('author', 'unknown')}; same input index in both windows.", flush=True)
         st4_phases = []
         st4_keys = []
+        st4_divs = []
         scene_running = [False]
         scene_phases = []
         joypad_latch = [None]
@@ -381,9 +396,17 @@ def main():
             def state4_entry(_ctx):
                 st4_phases.append(pyboy.memory[0xFF97] & 7)
                 st4_keys.append(joypad_latch[0])
+                st4_divs.append([])
                 events.append(('u', None))
 
             pyboy.hook_register(0, 0x05D5, state4_entry, None)
+
+            def boss_div_read(_ctx):
+                if st4_divs:
+                    st4_divs[-1].append(pyboy.register_file.A)
+
+            for bank, address in BOSS_DIV_READ_HOOKS:
+                pyboy.hook_register(bank, address, boss_div_read, None)
 
             def joypad_read(_ctx):
                 held = pyboy.memory[0xFF80]
@@ -476,6 +499,7 @@ def main():
                     before_state = pyboy.memory[0xFF9B]
                     st4_phases.clear()
                     st4_keys.clear()
+                    st4_divs.clear()
                     scene_phases.clear()
                     events.clear()
                     carried, late_read[0] = late_read[0], None
@@ -496,6 +520,7 @@ def main():
                         extra = ''
                         if k == 0 and timing is not None:
                             extra = f' f97={timing[0]} div={",".join(map(str, timing[1]))}'
+                        extra += boss_div_field(st4_divs, k)
                         bridge.stdin.write(f'{keys} {phase}{extra}\n'.encode())
                         bridge.stdin.flush()
                         if state_rows:

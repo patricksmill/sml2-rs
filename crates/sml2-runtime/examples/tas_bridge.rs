@@ -56,7 +56,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Optional `f97=N div=a,b,...`: the console's whole `$FF97` and the
         // frame's `rDIV` reads, so the map's shared random byte can follow it.
         let mut rom_timing: Option<sml2_runtime::session::RomTiming> = None;
+        let mut boss_div: Option<u8> = None;
         for field in fields {
+            // Comparison-only environmental input: the witch reads DIV once
+            // when choosing her side or fire trajectory. Keep it separate
+            // from the map's ordered random-read stream and frame clock.
+            if let Some(value) = field.strip_prefix("boss_div=") {
+                boss_div = Some(value.parse()?);
+                continue;
+            }
             let timing = rom_timing.get_or_insert_with(Default::default);
             match field.split_once('=') {
                 Some(("f97", value)) => timing.ff97 = value.parse()?,
@@ -103,7 +111,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         let effects = session.advance(FrameInput {
             keys,
-            div: Divider::from_elapsed(0, elapsed).sample(),
+            div: boss_div.unwrap_or_else(|| Divider::from_elapsed(0, elapsed).sample()),
         });
         if effects.outcome != sml2_runtime::session::StepOutcome::Continue {
             eprintln!("input frame {index}: {:?}", effects.outcome);
@@ -152,6 +160,13 @@ fn write_frame(
                     c.cam.scene_id,
                     u8::from(c.scene_vm.owns_gameplay()),
                     c.scene_vm.pc
+                ));
+                let boss = &c.obj.slots[0].b;
+                let platform = &c.obj.slots[1].b;
+                line.push_str(&format!(
+                    " boss_x={} boss_state={} door_phase={} door_parity={} platform_sprite={} tile_anim={} writes={}",
+                    boss[10], boss[15], c.obj.door_phase, c.obj.door_parity,
+                    platform[11], c.sim.tile_anim_config, c.sim.layout_writes.len()
                 ));
             }
         }

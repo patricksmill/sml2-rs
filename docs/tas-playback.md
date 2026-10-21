@@ -138,6 +138,11 @@ the ROM's whole `$FF97` and the `rDIV` values its random-state reads returned
 (`$3C13E`, the Space and Turtle zone animations, bell room B's rung picks), as
 `f97=` and `div=` fields after the phase; the port's `MapSim::div_reads` takes
 them in order, so `sMapRandAccum` and the bonus-game rungs follow the console.
+The witch's side and fire-trajectory decisions (`$97FE`/`$979D`) also carry
+their divider sample as `boss_div=` on the corresponding gameplay update.
+This comparison-only input keeps random choices aligned; ordinary play uses
+the native divider. `--debug-state` includes the witch's side, state, attack
+phase, platform sprite, tile-animation configuration, and terrain-edit count.
 The once-per-frame step
 outside a level uses the read that frame's state handler acts on: one taken
 before line 144 of that frame, or at the end of the previous tick, since the

@@ -8,6 +8,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from compare_tas import (apply_buttons, logic_phases, read_state,
                          check_divergence, comparison_threshold, rom_keys_mask,
                          step_masks, completed_sample, frame_read, frame_timing)
+from compare_tas import boss_div_field, BOSS_DIV_READ_HOOKS
+
+
+class BossDividerTests(unittest.TestCase):
+    def test_decisions_stay_with_their_gameplay_update(self):
+        reads = [[], [0], [255]]
+        self.assertEqual(boss_div_field(reads, 0), '')
+        self.assertEqual(boss_div_field(reads, 1), ' boss_div=0')
+        self.assertEqual(boss_div_field(reads, 2), ' boss_div=255')
+        self.assertEqual(boss_div_field(reads, 3), '')
+        with self.assertRaises(RuntimeError):
+            boss_div_field([[1, 2]], 0)
+
+    def test_hooks_follow_the_rom_divider_read_instructions(self):
+        rom = Path(__file__).resolve().parents[2] / '../sml2decomp/baserom.gb'
+        data = rom.read_bytes()
+        for bank, cpu in BOSS_DIV_READ_HOOKS:
+            address = bank * 0x4000 + cpu - 0x4000
+            self.assertEqual(data[address - 3:address], bytes.fromhex('FA 04 FF'))
 
 
 class BridgeStateTests(unittest.TestCase):
@@ -28,7 +47,9 @@ class BridgeStateTests(unittest.TestCase):
     def test_debug_fields_share_the_state_line_and_preserve_pixel_boundary(self):
         pixels = bytes(range(256)) * 90
         pipe = io.BytesIO(b'STATE 10 498 164 499 160 00 00 1 2 '
-                          b'step=8102 fff0=174 update_phase=0 standing=1 scene=17 owns=1 pc=24700\n'
+                          b'step=8102 fff0=174 update_phase=0 standing=1 scene=17 owns=1 pc=24700 '
+                          b'boss_x=24 boss_state=4 door_phase=3 door_parity=1 '
+                          b'platform_sprite=19 tile_anim=0 writes=12\n'
                           + pixels + b'STATE - - - - -\n' + pixels)
         state = read_state(pipe)
         self.assertEqual(state['step'], 8102)
@@ -38,6 +59,11 @@ class BridgeStateTests(unittest.TestCase):
         self.assertEqual(state['scene'], 17)
         self.assertEqual(state['owns'], 1)
         self.assertEqual(state['pc'], 24700)
+        self.assertEqual(state['boss_x'], 24)
+        self.assertEqual(state['door_phase'], 3)
+        self.assertEqual(state['platform_sprite'], 19)
+        self.assertEqual(state['tile_anim'], 0)
+        self.assertEqual(state['writes'], 12)
         self.assertEqual(pipe.read(len(pixels)), pixels)
         self.assertIsNone(read_state(pipe))
         self.assertEqual(pipe.read(len(pixels)), pixels)
