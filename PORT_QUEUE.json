@@ -3,6 +3,95 @@
   "milestone_note": "17 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
     {
+      "id": "g-slicer-state-tables",
+      "title": "Bound rst $28 state tables generically from the state values that reach each dispatch (path-refined $FFDF value sets)",
+      "asm_refs": [
+        "home.asm:$0028 rst $28",
+        "main.asm:$5A872",
+        "main.asm:$59689",
+        "main.asm:$59079"
+      ],
+      "dependencies": [],
+      "verification_gate": "tools/asm_slice.py infers table bounds without a source dw declaration; 0x5A85C and 0x5966C briefs regenerate COMPLETE; anim53 inference matches the reviewed anim53-state0-4 contract; non-constant state writes and unknown dispatch indices still report INCOMPLETE; tools/tests pass",
+      "status": "pending"
+    },
+    {
+      "id": "g-actor-wario",
+      "title": "Migrate Wario form 1, children 22/25 and phase-1 exit from raw slot bytes to typed Actor state",
+      "asm_refs": [
+        "bank $02:$A8AB",
+        "bank $02:$AB30/$AB4D/$AB6E",
+        "bank $02:$A96D"
+      ],
+      "dependencies": [
+        "g-slicer-state-tables"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/bosses/wario/form1.rs, child22.rs, child25.rs, phase1_exit.rs",
+      "status": "pending"
+    },
+    {
+      "id": "g-actor-mario-zone",
+      "title": "Migrate the Mario Zone boss parts, controller and child from raw slot bytes to typed Actor state",
+      "asm_refs": [
+        "objects/bosses/mario_zone ROM refs"
+      ],
+      "dependencies": [
+        "g-slicer-state-tables"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/bosses/mario_zone/part.rs, controller.rs, child.rs",
+      "status": "pending"
+    },
+    {
+      "id": "g-actor-boss-shared",
+      "title": "Migrate shared boss handlers and the reverse picker from raw slot bytes to typed Actor state",
+      "asm_refs": [
+        "bank $02:$B1C8/$B1D6/$B1E4",
+        "bank $02:$9285-$9CAC shared boss helpers"
+      ],
+      "dependencies": [
+        "g-slicer-state-tables"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/bosses/shared/handlers.rs, reverse_picker.rs",
+      "status": "pending"
+    },
+    {
+      "id": "g-actor-object-core",
+      "title": "Migrate object-core helpers: derive_sprite/finish_sprite_swap, interaction, shell and dynamic spawning from raw slot bytes to typed Actor state",
+      "asm_refs": [
+        "bank $02:$863C/$8240",
+        "bank $02:$85D7/$8633",
+        "bank $16:$5B36D"
+      ],
+      "dependencies": [
+        "g-slicer-state-tables"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/helpers.rs, interaction.rs, shell.rs, spawning/dynamic.rs",
+      "status": "pending"
+    },
+    {
+      "id": "g-actor-compat-logic",
+      "title": "Migrate behavior that lives in compat adapters (vertical_bobber, square_patroller, buried, dispatch tables) into native modules from raw slot bytes to typed Actor state",
+      "asm_refs": [
+        "bank $16 level-table handlers"
+      ],
+      "dependencies": [
+        "g-slicer-state-tables"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/compat/enemies/*.rs, objects/compat/items/*.rs",
+      "status": "pending"
+    },
+    {
+      "id": "g-gbc-sgb-palettes",
+      "title": "Replace the invented 'SGB color' filter with real hardware palettes: the GBC boot ROM's automatic SML2 palette (separate BG/OBJ0/OBJ1) and the SGB built-in presets (1-A default)",
+      "asm_refs": [
+        "cartridge header $0134-$014B (title checksum, licensee $01)",
+        "CGB boot ROM compatibility palette table"
+      ],
+      "dependencies": [],
+      "verification_gate": "Renderer keeps the source palette register (BGP/OBP0/OBP1) per pixel; GBC palette selection derives from the title checksum per the documented boot-ROM algorithm and is unit-tested; SGB presets are byte-checked against a documented source; settings migrate the old filter; native frame tests per filter",
+      "status": "pending"
+    },
+    {
       "id": "f-routes-a",
       "title": "Played approaches and route-matrix review for levels 1, 2, 3, 4, 5: header and secret-entry starts to every exit cell",
       "asm_refs": [
