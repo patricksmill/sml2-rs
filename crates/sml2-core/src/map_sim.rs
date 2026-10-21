@@ -1462,6 +1462,18 @@ impl MapSim {
             return;
         };
         room.tick(room_input, &mut rewards);
+        // `$3C0DF`/`$3C10E`: after the script, holding Left skips a bell room
+        // to its state-9 close (`hKeysHeld & $20`). Room A skips from states
+        // 4-6; room B only from state 5, which also reloads the timer.
+        let left_held = input.keys_held & 0x20 != 0;
+        match self.screen_id {
+            13 if left_held && (4..7).contains(&room.state) => room.state = 9,
+            14 if left_held && room.state == 5 => {
+                room.state = 9;
+                room.timer = 20;
+            }
+            _ => {}
+        }
         // `$3EAFF` runs `$3EBD5` on screens 9-12 at the frame sync.
         if self.screen_id <= 12 {
             room.frame_sync();
@@ -2939,6 +2951,42 @@ mod tests {
         assert_eq!(map.node, 0x70);
         assert_eq!(map.cursor_pose, 12, "the idle block");
         assert!(!out.saved);
+    }
+
+    /// `$3C0DF`/`$3C10E`: Left held after the script skips a bell room to
+    /// state 9 — room A from states 4-6, room B only from 5 (timer 20).
+    #[test]
+    fn holding_left_skips_a_bell_room_to_its_close() {
+        let (n, walk) = (nodes(), walk_blob());
+        let scripts = crate::castle::CastleScripts::from_parts(
+            include_bytes!("../../../extracted/map/castle_scripts.bin").to_vec(),
+            include_str!("../../../extracted/map/castle_scripts.json"),
+        )
+        .expect("castle scripts asset");
+        let run = |screen: u8, state: u8, held: u8| {
+            let mut map = MapSim::new();
+            map.screen_id = screen;
+            let mut room = if screen == 13 {
+                crate::castle_room::CastleRoom::bell_a(&scripts)
+            } else {
+                crate::castle_room::CastleRoom::bell_b(&scripts, &[])
+            };
+            room.state = state;
+            room.timer = 50;
+            map.room = Some(room);
+            let input = MapInput {
+                keys_held: held,
+                ..Default::default()
+            };
+            map.tick(input, &n, &walk, &recs());
+            let room = map.room.unwrap();
+            (room.state, room.timer)
+        };
+        assert_eq!(run(13, 5, 0x20).0, 9, "room A skips from state 5");
+        assert_ne!(run(13, 5, 0x00).0, 9, "only while Left is held");
+        assert_eq!(run(13, 8, 0x20).0, 8, "room A's state 8 is past the skip");
+        assert_eq!(run(14, 5, 0x20), (9, 20), "room B skips from 5 and reloads");
+        assert_ne!(run(14, 5, 0x00).0, 9);
     }
 
     /// Screens 9-14 dispatch to the bank-24 room script (`$3C0C3`..`$3C10E`),
