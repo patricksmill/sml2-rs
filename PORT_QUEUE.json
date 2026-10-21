@@ -1,17 +1,7 @@
 {
   "active_milestone": "full_integration",
-  "milestone_note": "Milestone F: completion criteria from rust-completion-workflow.md §7.",
+  "milestone_note": "17 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
-    {
-      "id": "f-inventory-reconcile",
-      "title": "Reconcile stale 'pending' notes in docs/feature-inventory.md against current code; close verified rows, list true gaps",
-      "asm_refs": [
-        "docs/feature-inventory.md"
-      ],
-      "dependencies": [],
-      "verification_gate": "Every row's remaining-gap text either cites a passing test or names a pending f-* queue id; tools/handler_coverage.py exits 0; tools/smoke_levels.py clean",
-      "status": "pending"
-    },
     {
       "id": "f-routes-a",
       "title": "Played approaches and route-matrix review for levels 1, 2, 3, 4, 5: header and secret-entry starts to every exit cell",
@@ -24,7 +14,7 @@
       "dependencies": [
         "f-inventory-reconcile"
       ],
-      "verification_gate": "PORTING.md § What “done” means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
       "status": "pending"
     },
     {
@@ -39,7 +29,7 @@
       "dependencies": [
         "f-inventory-reconcile"
       ],
-      "verification_gate": "PORTING.md § What “done” means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
       "status": "pending"
     },
     {
@@ -54,7 +44,7 @@
       "dependencies": [
         "f-inventory-reconcile"
       ],
-      "verification_gate": "PORTING.md § What “done” means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
       "status": "pending"
     },
     {
@@ -69,7 +59,7 @@
       "dependencies": [
         "f-inventory-reconcile"
       ],
-      "verification_gate": "PORTING.md § What “done” means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
       "status": "pending"
     },
     {
@@ -84,7 +74,7 @@
       "dependencies": [
         "f-inventory-reconcile"
       ],
-      "verification_gate": "PORTING.md § What “done” means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
       "status": "pending"
     },
     {
@@ -97,7 +87,7 @@
       "dependencies": [
         "f-inventory-reconcile"
       ],
-      "verification_gate": "PORTING.md § What “done” means; no direct boss_clear/phase writes; coin progress byte saved and reloaded; through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; no direct boss_clear/phase writes; coin progress byte saved and reloaded; through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
       "status": "pending"
     },
     {
@@ -110,7 +100,7 @@
       "dependencies": [
         "f-inventory-reconcile"
       ],
-      "verification_gate": "PORTING.md § What “done” means; no direct boss_clear/phase writes; coin progress byte saved and reloaded; through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; no direct boss_clear/phase writes; coin progress byte saved and reloaded; through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
       "status": "pending"
     },
     {
@@ -125,7 +115,7 @@
         "f-boss-routes-a",
         "f-boss-routes-b"
       ],
-      "verification_gate": "PORTING.md § What “done” means; replaces the direct-state six_coins_wario_and_ending_tape with live input (no boss_clear/fade/phase writes); route-matrix row 25 reviewed; zero unported diagnostics",
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; replaces the direct-state six_coins_wario_and_ending_tape with live input (no boss_clear/fade/phase writes); route-matrix row 25 reviewed; zero unported diagnostics",
       "status": "pending"
     },
     {
@@ -144,7 +134,7 @@
         "f-routes-d",
         "f-routes-e"
       ],
-      "verification_gate": "PORTING.md § What “done” means; session tests reach every course node from the hub by map input only; unlocked-path bytes match a ROM-derived table",
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; session tests reach every course node from the hub by map input only; unlocked-path bytes match a ROM-derived table",
       "status": "pending"
     },
     {
@@ -158,7 +148,7 @@
         "ram.asm:sEasyMode"
       ],
       "dependencies": [],
-      "verification_gate": "PORTING.md § What “done” means; one unit test per sEasyMode reader with a sensitivity mutation; Easy session reaches a level and shows the effect",
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one unit test per sEasyMode reader with a sensitivity mutation; Easy session reaches a level and shows the effect",
       "status": "pending"
     },
     {
@@ -170,7 +160,7 @@
         "tasks/subsystems/hardware_divider_input.md"
       ],
       "dependencies": [],
-      "verification_gate": "PORTING.md § What “done” means; session test proves DIV continuity across map -> level -> map and Wario random draws consume the shared clock",
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; session test proves DIV continuity across map -> level -> map and Wario random draws consume the shared clock",
       "status": "pending"
     },
     {
@@ -185,6 +175,33 @@
       "status": "pending"
     },
     {
+      "id": "f-game-over-session",
+      "title": "Wire the ported game over into Session: $27AF state-$05 effects, the GAME OVER screen, START -> $00, and fix the last-life off-by-one",
+      "asm_refs": [
+        "home.asm:$311A lives borrow",
+        "home.asm:$27AF game over ($05)",
+        "home.asm:$287E ($07)",
+        "home.asm:$2874 GAME OVER text",
+        "home.asm:$2934 save"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; a session test that dies on the last life (lives=1) continues with 0 lives; a death at 0 calls game_over_enter (golden coins cleared, tally penalty, save written, music 7), renders the $4C92/$6492 screen, waits for START and goes to state $00; mutations rejected; cargo test --workspace passes",
+      "status": "pending"
+    },
+    {
+      "id": "f-ending-render",
+      "title": "Render the ending and credits from EndingScene: tiles and tilemap, sprite batch, raster scroll split and ending palettes",
+      "asm_refs": [
+        "bank $1A:$6800F ending sequence",
+        "bank $1A:$68400/$6844F raster",
+        "bank $01:$52E7 sprite batch",
+        "home.asm:$29DD scene load"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; the session renderer draws EndingScene for all 20 substates; native-size frame tests at logo, walk, burst and credits pages assert tile, sprite and per-scanline scroll output; no renderer change to other states",
+      "status": "pending"
+    },
+    {
       "id": "f-visual-parity",
       "title": "Native-size pixel comparison against the ROM (emulator reference) at title, file select, each zone map, one level per zone, each boss arena, castle and ending",
       "asm_refs": [
@@ -193,7 +210,8 @@
       ],
       "dependencies": [
         "f-overworld-navigation",
-        "f-wario-played"
+        "f-wario-played",
+        "f-ending-render"
       ],
       "verification_gate": "Scripted reference frames compared with the runtime renderer; every checkpoint pixel-identical or each difference explained in docs; evidence recorded in feature-inventory visual-audio row",
       "status": "pending"
@@ -213,10 +231,12 @@
       "id": "f-full-playthrough",
       "title": "Final integration: fresh extraction and build, then one uninterrupted boot -> new game -> all six coins -> Wario -> credits run, with a mid-game save/reload",
       "asm_refs": [
-        "docs/plans/2026-10-15-rust-completion-workflow.md §7"
+        "docs/plans/2026-10-15-rust-completion-workflow.md \u00a77"
       ],
       "dependencies": [
         "f-inventory-reconcile",
+        "f-game-over-session",
+        "f-ending-render",
         "f-overworld-navigation",
         "f-wario-played",
         "f-easy-mode-audit",
@@ -235,9 +255,9 @@
       "Canonical workflow: PORTING.md (supersedes long queue notes for how to work).",
       "One ticket = one handler address OR one PORT_QUEUE id; max ~15k tokens context.",
       "No new captures/traj*.json; unit-test slot bytes; sweep once per work package.",
-      "Cheap/flash models: scripts and scaffolding only — not handler logic."
+      "Cheap/flash models: scripts and scaffolding only \u2014 not handler logic."
     ],
-    "gate_standard": "PORTING.md § What “done” means",
+    "gate_standard": "PORTING.md \u00a7 What \u201cdone\u201d means",
     "policy": "PORTING.md",
     "plan": "docs/plans/2026-10-15-port-finish-reset.md"
   },

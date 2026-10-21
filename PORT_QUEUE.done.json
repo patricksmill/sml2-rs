@@ -1283,6 +1283,16 @@
       ],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; 9 acceptance tapes through the live session; cargo test --workspace; captures/sweep.sh; desktop title/file-select smoke on Linux and Windows",
       "status": "verified"
+    },
+    {
+      "id": "f-inventory-reconcile",
+      "title": "Reconcile stale 'pending' notes in docs/feature-inventory.md against current code; close verified rows, list true gaps",
+      "asm_refs": [
+        "docs/feature-inventory.md"
+      ],
+      "dependencies": [],
+      "verification_gate": "Every row's remaining-gap text either cites a passing test or names a pending f-* queue id; tools/handler_coverage.py exits 0; tools/smoke_levels.py clean",
+      "status": "done"
     }
   ]
 }
