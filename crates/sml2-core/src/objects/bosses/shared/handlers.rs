@@ -22,22 +22,27 @@ impl ObjectSim {
         self.boss_finish_blank(st);
     }
 
+    #[cfg(test)]
     pub(super) fn scr_x_sub(&self, st: &mut Staging, b: u8) {
         st.b[B_SCRX] = st.b[B_SCRX].wrapping_sub(b);
     }
 
+    #[cfg(test)]
     pub(super) fn scr_x_add(&self, st: &mut Staging, b: u8) {
         st.b[B_SCRX] = st.b[B_SCRX].wrapping_add(b);
     }
 
+    #[cfg(test)]
     pub(super) fn scr_y_sub(&self, st: &mut Staging, b: u8) {
         st.b[B_SCRY] = st.b[B_SCRY].wrapping_sub(b);
     }
 
+    #[cfg(test)]
     pub(super) fn scr_y_add(&self, st: &mut Staging, b: u8) {
         st.b[B_SCRY] = st.b[B_SCRY].wrapping_add(b);
     }
 
+    #[cfg(test)]
     pub(super) fn sprite_blink(&self, st: &mut Staging, mask: u8, xor: u8) {
         if self.fff0 & mask == 0 {
             st.b[B_SPRITE] ^= xor;
@@ -61,11 +66,6 @@ impl ObjectSim {
         st.b[B_FSTATE] = 1;
     }
 
-    pub(super) fn boss_type0_state1(&mut self, st: &mut Staging) {
-        st.b[B_TYPE] = 0;
-        st.b[B_FSTATE] = 1;
-    }
-
     pub(super) fn boss_defeat_fall(&mut self, st: &mut Staging) {
         st.b[B_FSTATE] = 2;
         st.b[B_T28] = 0x20;
@@ -81,59 +81,9 @@ impl ObjectSim {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn boss_hit_stun(&mut self, st: &mut Staging) {
         self.apply_boss_hit_stun(st);
-    }
-
-    pub(super) fn handler_boss_anim3(&mut self, st: &mut Staging, tables: &ObjectTables) {
-        if st.b[B_FSTATE] == 0 {
-            self.scr_y_sub(st, 32); // $B270
-            st.b[B_FLIP] ^= 0x40; // $FFDD ^= $40
-            st.b[B_PHASE] = 0; // $FFE0
-            st.b[B_TYPE] = 0; // $FFE2
-            st.b[B_FSTATE] = 1;
-            // `sSfxRequest0`: 13, or 23 for a slot that is not the primary one.
-            self.sfx0 = if self.boss_slot_ptr_lo == 0 { 13 } else { 23 };
-            return;
-        }
-        match st.b[B_FSTATE] {
-            // $5354
-            1 => {
-                let (b, c) = self.step_picker(st, &tables.boss_picker_profile_15, 15);
-                self.scr_y_sub(st, b);
-                if st.b[B_PHASE] != c {
-                    return;
-                }
-                st.b[B_FSTATE] = 2;
-                st.b[B_PHASE] = 0;
-            }
-            // $5366
-            2 => {
-                let (b, _) = self.step_picker(st, &tables.boss_picker_profile, 21);
-                self.scr_y_add(st, b);
-                if st.b[B_SCRY] < 0xD0 {
-                    return;
-                }
-                if self.boss_slot_ptr_lo != 0 {
-                    self.remove_mode = 2;
-                    self.boss_finish_counted(st); // $9399 -> $B157
-                    return;
-                }
-                st.b[B_FSTATE] = 3;
-                st.b[B_T28] = 208;
-                self.music_request = Some(12);
-            }
-            // $5385
-            3 => {
-                st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
-                if st.b[B_T28] != 0 {
-                    return;
-                }
-                self.boss_finish_blank(st); // $B15B
-                self.remove_mode = 2;
-            }
-            s => self.note_unported(0x5354 + (s as u32) * 2),
-        }
     }
 
     pub fn boss_engine(

@@ -1,20 +1,7 @@
 {
   "active_milestone": "full_integration",
-  "milestone_note": "21 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+  "milestone_note": "20 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
-    {
-      "id": "g-actor-boss-shared",
-      "title": "Migrate shared boss handlers and the reverse picker from raw slot bytes to typed Actor state",
-      "asm_refs": [
-        "bank $02:$B1C8/$B1D6/$B1E4",
-        "bank $02:$9285-$9CAC shared boss helpers"
-      ],
-      "dependencies": [
-        "g-slicer-state-tables"
-      ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/bosses/shared/handlers.rs, reverse_picker.rs",
-      "status": "pending"
-    },
     {
       "id": "g-actor-object-core",
       "title": "Migrate object-core helpers: derive_sprite/finish_sprite_swap, interaction, shell and dynamic spawning from raw slot bytes to typed Actor state",

@@ -31,7 +31,9 @@ pub(super) fn update_hit_stun(actor: &mut Actor, frame: FrameTick, context: HitS
     }
 }
 
-// Snapshot the legacy world's reaction context at the conversion boundary.
+// Snapshot the legacy world's reaction context at the conversion boundary;
+// every production caller now builds its own context, so this serves tests.
+#[cfg(test)]
 mod adapter {
     use super::*;
     use crate::objects::{ObjectSim, Staging};

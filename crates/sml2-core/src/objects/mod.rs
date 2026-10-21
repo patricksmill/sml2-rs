@@ -105,6 +105,8 @@ pub use staging::*;
 use staging::{BOUNCE_SPEED, FALL_SPEED, HOVER_SPEED, SPIN_WOBBLE, STEP_74A1};
 #[path = "enemies/boo.rs"]
 mod boo;
+#[path = "bosses/shared/defeat_fall.rs"]
+mod boss_defeat_fall;
 #[path = "bosses/shared/handlers.rs"]
 mod boss;
 #[path = "bosses/shared/damage.rs"]
@@ -116,10 +118,6 @@ mod boss_flash;
 mod boss_flash_paths;
 #[path = "bosses/shared/morph.rs"]
 mod boss_morph;
-// Test-only ROM facades; behavior lives on `Actor` (g-actor-boss-shared folds these).
-#[cfg(test)]
-#[path = "bosses/shared/reverse_picker.rs"]
-mod boss_reverse_picker;
 #[path = "bosses/shared/reward.rs"]
 mod boss_reward;
 #[cfg(test)]
@@ -127,10 +125,6 @@ mod boss_reward;
 mod boss_screen_input_tests;
 #[path = "bosses/shared/spawn.rs"]
 mod boss_spawn;
-// Test-only ROM facades; behavior lives on `Actor` (g-actor-boss-shared folds these).
-#[cfg(test)]
-#[path = "bosses/shared/sprite_cycle.rs"]
-mod boss_sprite_cycle;
 #[path = "bosses/shared/stun.rs"]
 mod boss_stun;
 #[path = "enemies/cannon_ant.rs"]
