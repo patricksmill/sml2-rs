@@ -1320,6 +1320,18 @@
       ],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/bosses/wario/form1.rs, child22.rs, child25.rs, phase1_exit.rs",
       "status": "done"
+    },
+    {
+      "id": "g-actor-mario-zone",
+      "title": "Migrate the Mario Zone boss parts, controller and child from raw slot bytes to typed Actor state",
+      "asm_refs": [
+        "objects/bosses/mario_zone ROM refs"
+      ],
+      "dependencies": [
+        "g-slicer-state-tables"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/bosses/mario_zone/part.rs, controller.rs, child.rs",
+      "status": "done"
     }
   ]
 }
