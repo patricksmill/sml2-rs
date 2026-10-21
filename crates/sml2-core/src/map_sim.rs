@@ -572,6 +572,11 @@ pub struct MapRam {
     pub keys_xor: u8,
     /// `sMapRandAccum` (`$A7B7`).
     pub rand_accum: u8,
+    /// `sCastleRevealProgress` (`$A7A5`): no room loader resets it, so a coin
+    /// room's wheel starts from the last room's value or the level's byte.
+    pub reveal_progress: u8,
+    /// `sCastleRevealTick` (`$A7AD`), carried the same way.
+    pub reveal_tick: u8,
 }
 
 impl MapRam {
@@ -588,6 +593,8 @@ impl MapRam {
             tick_timer: byte(0x97),
             keys_xor: byte(0xB2),
             rand_accum: byte(0x1B7),
+            reveal_progress: byte(0x1A5),
+            reveal_tick: byte(0x1AD),
         }
     }
 }
@@ -660,6 +667,10 @@ pub struct MapSim {
     pub tick_timer: u8,
     /// `sMapRandLatch` (`$A696`).
     pub rand_latch: u8,
+    /// `sCastleRevealProgress` (`$A7A5`) between coin rooms; `$3F307` leaves it.
+    pub reveal_progress: u8,
+    /// `sCastleRevealTick` (`$A7AD`) between coin rooms.
+    pub reveal_tick: u8,
     /// The map camera *staging* (`$FFBA:B9` X, `$FFB8:B7` Y). `$3EEA4` seeds it
     /// from the node's record, the pan helpers move it, and `$3ED4C` latches it
     /// into `sMapCamX/Y` — which the port does not model, because the port's map
@@ -735,6 +746,8 @@ impl MapSim {
             frame_counter: 0,
             tick_timer: 40,
             rand_latch: 0,
+            reveal_progress: 0,
+            reveal_tick: 0,
             cam_x: 0,
             cam_y: 0,
             mario_dead: 0,
@@ -1452,7 +1465,12 @@ impl MapSim {
         };
         let consumed = if self.screen_id == 0 {
             let c = self.cursor_chain(input, nodes, walk, records, &mut out);
-            self.bookkeeping(input.div);
+            // `$3C04D`: a door that loaded another screen jumps past `$3C13E`,
+            // so its loader's `sMapFrameCounter = 0` is what the room's first
+            // frame increments.
+            if self.screen_id == 0 {
+                self.bookkeeping(input.div);
+            }
             c
         } else if (9..=14).contains(&self.screen_id) {
             // `$3C0C3`..`$3C10E`: the bonus screens run the bank-24 room
@@ -1537,6 +1555,8 @@ impl MapSim {
         // `$3EAFF` runs `$3EBD5` on screens 9-12 at the frame sync.
         if self.screen_id <= 12 {
             room.frame_sync();
+            self.reveal_progress = room.reveal_progress;
+            self.reveal_tick = room.reveal_tick;
         }
         if room.music != 0 {
             out.music = Some(room.music);
@@ -1837,6 +1857,8 @@ impl MapSim {
             self.room = self.castle_scripts.as_ref().map(|scripts| {
                 let mut room = crate::castle_room::CastleRoom::enter_coin(scripts, d.screen_id);
                 room.powerup = self.powerup;
+                room.reveal_progress = self.reveal_progress;
+                room.reveal_tick = self.reveal_tick;
                 room.refresh_oam_tile(scripts);
                 room
             });
@@ -3014,8 +3036,10 @@ mod tests {
     }
 
     /// `$03F1` copies a level's metatile map over `$A600`-`$A7FF`, so the map's
-    /// latch, tick timer, keys XOR and shared random byte are its bytes at
-    /// `$96`, `$97`, `$B2` and `$1B7` (level 8: 56, 37, 116, 76 in PyBoy).
+    /// latch, tick timer, keys XOR, shared random byte and coin-room reveal
+    /// bytes are its bytes at `$96`, `$97`, `$B2`, `$1B7`, `$1A5` and `$1AD`
+    /// (level 8: 56, 37, 116, 76; the shop entry at movie input 72001 reads
+    /// `$23`/`$43` in PyBoy).
     #[test]
     fn a_level_load_leaves_its_metatile_bytes_in_the_map_ram() {
         let mut bytes = [0u8; 512];
@@ -3023,10 +3047,19 @@ mod tests {
         bytes[0x97] = 37;
         bytes[0xB2] = 116;
         bytes[0x1B7] = 76;
+        bytes[0x1A5] = 0x23;
+        bytes[0x1AD] = 0x43;
         let table = crate::level::MetatileTable::from_bytes(&bytes).unwrap();
         assert_eq!(
             MapRam::from_level(&table),
-            MapRam { rand_latch: 56, tick_timer: 37, keys_xor: 116, rand_accum: 76 }
+            MapRam {
+                rand_latch: 56,
+                tick_timer: 37,
+                keys_xor: 116,
+                rand_accum: 76,
+                reveal_progress: 0x23,
+                reveal_tick: 0x43,
+            }
         );
     }
 
@@ -3126,10 +3159,10 @@ mod tests {
         assert_eq!(map.screen_id, 9);
 
         let (mut lowest_y, mut state2_at) = (u8::MAX, None);
-        // The player's A lands a fixed time after the door: tick 202, which is
+        // The player's A lands a fixed time after the door: tick 203, which is
         // counter 204 once `$3F307` has reset it.
         for tick in 0..700 {
-            let a = if tick == 202 { 0x01 } else { 0 };
+            let a = if tick == 203 { 0x01 } else { 0 };
             map.tick(press(a), &n, &walk, &recs());
             let Some(room) = map.room.as_ref() else { break };
             if room.state == 5 || room.state == 1 {
@@ -3143,6 +3176,52 @@ mod tests {
         assert_eq!(state2_at, Some((105, 11)));
         assert_eq!(map.lives, 0x25);
         assert_eq!(map.screen_id, 8, "the room hands back to the castle screen");
+    }
+
+    /// `$3F307` leaves `sCastleRevealProgress`/`Tick` alone, so the wheel starts
+    /// where the last level's metatile bytes or the last coin room left it.
+    /// PyBoy, movie inputs 72001-73096: node `$70` enters with `$23`/`$43`,
+    /// takes A `$31` frames after its state-0 idle begins and decodes item 5
+    /// with progress `$24`; node `$6F` starts from that `$24`, takes A `$11`
+    /// frames into state 0 and decodes item 5 again with `$65`. Each decode is
+    /// `$9E` frames after the press. Lives $12 -> $15 -> $18.
+    #[test]
+    fn coin_rooms_carry_the_reveal_wheel_between_visits() {
+        let (n, walk) = (nodes(), walk_blob());
+        let scripts = crate::castle::CastleScripts::from_parts(
+            include_bytes!("../../../extracted/map/castle_scripts.bin").to_vec(),
+            include_str!("../../../extracted/map/castle_scripts.json"),
+        )
+        .expect("castle scripts asset");
+        let mut map = MapSim::new();
+        map.set_castle_scripts(scripts);
+        map.set_map_ram(MapRam { reveal_progress: 0x23, reveal_tick: 0x43, ..Default::default() });
+        map.lives = 0x12;
+        map.coins_low = 0x99;
+        map.coins_high = 0x09;
+        let press = |pressed: u8| MapInput { keys_pressed: pressed, ..Default::default() };
+        for (node, idle, reveal) in [(0x70, 0x31, 0x24), (0x6F, 0x11, 0x65)] {
+            map.screen_id = 0;
+            map.node = node;
+            map.tick(press(0x01), &n, &walk, &recs());
+            assert!((9..=12).contains(&map.screen_id), "node {node:02X} opens a coin room");
+            let (mut idle_at, mut decoded) = (None, None);
+            for tick in 0..700 {
+                let a = if idle_at.is_some_and(|at| tick == at + idle) { 0x01 } else { 0 };
+                map.tick(press(a), &n, &walk, &recs());
+                let Some(room) = map.room.as_ref() else { break };
+                if room.state == 0 && idle_at.is_none() {
+                    idle_at = Some(tick);
+                }
+                if room.state == 2 && decoded.is_none() {
+                    let after_a = tick - idle_at.unwrap() - idle;
+                    decoded = Some((after_a, room.item_index, room.reveal_progress));
+                }
+            }
+            assert_eq!(decoded, Some((0x9E, 5, reveal)), "node {node:02X}");
+            assert_eq!(map.map_ram().reveal_progress, reveal);
+        }
+        assert_eq!(map.lives, 0x18);
     }
 
     /// `$3F3F0` stages a coin room; `$3F4A0` returns to the castle loader once

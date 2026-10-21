@@ -92,6 +92,8 @@ impl MapSim {
             tick_timer: self.tick_timer,
             keys_xor: self.keys_xor,
             rand_accum: self.zone_animation.random_accum,
+            reveal_progress: self.reveal_progress,
+            reveal_tick: self.reveal_tick,
         }
     }
 
@@ -101,6 +103,8 @@ impl MapSim {
         self.tick_timer = ram.tick_timer;
         self.keys_xor = ram.keys_xor;
         self.zone_animation.random_accum = ram.rand_accum;
+        self.reveal_progress = ram.reveal_progress;
+        self.reveal_tick = ram.reveal_tick;
     }
 
     /// `$FF97` is free-running across screen loads; native hosts supply it.
