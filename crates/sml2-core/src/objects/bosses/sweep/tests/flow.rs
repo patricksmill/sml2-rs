@@ -138,7 +138,7 @@ fn sweep_arena_all_divider_choices_defeat_reward_map_and_reentry() {
         let handoff = player.map_handoff(&nodes);
         assert_eq!(
             (handoff.node, handoff.screen, handoff.saves),
-            (0x3D, Some(4), 2)
+            (0x1A, Some(0), 1)
         );
         let record = player.save_record(0);
         assert_eq!(

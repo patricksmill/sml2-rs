@@ -738,8 +738,8 @@ pub struct Session {
     bell_return_hold: u16,
     /// Hold frames already spent before the bell script's first step.
     bell_entry: Option<u16>,
-    /// Where the castle reveal lands: `(screen, node, exit_tile_flag)`.
-    castle_return: Option<(u8, u8, u8)>,
+    /// Where the castle reveal lands: `(screen, node, exit_tile_flag, move)`.
+    castle_return: Option<(u8, u8, u8, Option<u8>)>,
     /// `sLevelProgress` while the reveal owns it.
     castle_progress: [u8; 42],
 }
@@ -765,7 +765,7 @@ impl Session {
         {
             self.castle_progress[off] = seq.coins[index];
         }
-        self.castle_return = Some((screen, node, exit_tile_flag));
+        self.castle_return = Some((screen, node, exit_tile_flag, None));
         self.state = SessionState::Castle(seq);
     }
 
@@ -1036,7 +1036,7 @@ impl Session {
             SessionState::Castle(_) => {
                 let mut map = MapSim::new();
                 map.level_progress = self.castle_progress;
-                if let Some((screen, node, _)) = self.castle_return {
+                if let Some((screen, node, _, _)) = self.castle_return {
                     map.load_screen(screen, 0, &self.assets.node_records);
                     map.node = node;
                     map.load_node(node, &self.assets.node_records);
@@ -1166,6 +1166,9 @@ impl Session {
                             &self.assets.node_records,
                         );
                         map_sim.load_node(handoff.node, &self.assets.node_records);
+                        if let Some(direction) = handoff.cursor_move {
+                            map_sim.cursor_move = direction;
+                        }
                         map_sim.pending_save = handoff.saves > 0;
                     }
                 }
@@ -1315,7 +1318,7 @@ impl Session {
                     );
                     seq.level_tally = self.level_tally;
                     self.castle_progress = map_sim.level_progress;
-                    self.castle_return = Some((map_sim.screen_id, map_sim.node, 0));
+                    self.castle_return = Some((map_sim.screen_id, map_sim.node, 0, None));
                     self.state = SessionState::Castle(seq);
                     break 'map StepOutcome::Continue;
                 }
@@ -1579,8 +1582,12 @@ impl Session {
                             seq.state = sml2_core::castle_sequence::STATE_REVEAL_D;
                             self.castle_progress = ctx.sim.level_progress;
                             self.castle_progress[offset] = ctx.sim.level_progress_flags;
-                            self.castle_return =
-                                Some((target_screen, target_node, ctx.sim.exit_tile_flag));
+                            self.castle_return = Some((
+                                target_screen,
+                                target_node,
+                                ctx.sim.exit_tile_flag,
+                                handoff.cursor_move,
+                            ));
                             self.state = SessionState::Castle(seq);
                         } else {
                             let mut map_sim = MapSim::from_player(&ctx.sim);
@@ -1620,6 +1627,9 @@ impl Session {
                                 );
                                 map_sim.node = target_node;
                                 map_sim.load_node(target_node, &self.assets.node_records);
+                                if let Some(direction) = handoff.cursor_move {
+                                    map_sim.cursor_move = direction;
+                                }
                             }
                             self.state = SessionState::Overworld(map_sim);
                         }

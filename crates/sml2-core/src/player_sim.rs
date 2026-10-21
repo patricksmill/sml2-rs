@@ -243,7 +243,7 @@ pub struct MapHandoffOutcome {
     pub saves: u8,
     /// The node the hand-off ended on.
     pub node: u8,
-    /// The zone screen the tail selected (`sMapScreenId`), when it selected one.
+    /// The map screen selected (`sMapScreenId`), including screen 0 for a hub return.
     ///
     /// The ROM's `$3F04D` bands and the castle arm both write `sMapScreenId` and
     /// then call that screen's loader (`$3D0FF`/`$3D208`/`$3D371`/`$3D49F`/
@@ -251,6 +251,8 @@ pub struct MapHandoffOutcome {
     pub screen: Option<u8>,
     /// The music track ID requested by the screen loader ($2AAA / sMusicRequest).
     pub music: Option<u8>,
+    /// `$3C6BD..$3C7BD`: facing/move byte staged by a boss's hub return.
+    pub cursor_move: Option<u8>,
 }
 
 /// Buttons held for one frame (plus a separate press edge for A/Mario).
@@ -2478,7 +2480,31 @@ impl PlayerSim {
             }
         }
 
-        // $3F003 — the node tail. The ROM splits on `sMapNode >= $1E` FIRST:
+        // `$3EFD8..$3F000`: a live boss return branches by the node's
+        // progress slot BEFORE the ordinary zone bands. `$3C7CA` loads its
+        // hub node, then `$3C7BD` loads the hub and requests track 6. These
+        // branches return without the ordinary tail's second `$2934` save.
+        if self.dead == 0 {
+            let hub_return = nodes.progress_slot(self.map_node).and_then(|slot| match slot {
+                5 => Some((0x19, 8)),
+                9 => Some((0x1C, 8)),
+                14 => Some((0x1B, 34)),
+                17 => Some((0x1A, 2)),
+                23 => Some((0x1E, 4)),
+                29 => Some((0x1D, 2)),
+                _ => None,
+            });
+            if let Some((node, direction)) = hub_return {
+                self.map_node = node;
+                out.node = node;
+                out.screen = Some(0);
+                out.music = Some(6);
+                out.cursor_move = Some(direction);
+                return out;
+            }
+        }
+
+        // $3F003 — the ordinary node tail splits on `sMapNode >= $1E` first:
         // at or above it every zone/castle node takes the band tree, below it
         // only $05/$1A and node 0 have a branch, and everything else is the
         // plain `$3F03D` tail.

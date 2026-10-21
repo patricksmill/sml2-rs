@@ -156,10 +156,47 @@ fn boss_clear_handoff_transitions_to_exit_completed_and_saves_coin() {
     assert_eq!(sim.golden_coin_count(), 1);
 
     let handoff = sim.map_handoff(&nodes);
-    assert_eq!(handoff.node, 0x53);
-    assert_eq!(handoff.screen, Some(6), "Mario Zone screen 6");
-    assert_eq!(handoff.saves, 2, "saved to SRAM (progress + tail)");
+    assert_eq!(handoff.node, 0x1D);
+    assert_eq!(handoff.screen, Some(0), "boss return goes to the hub");
+    assert_eq!(handoff.cursor_move, Some(2));
+    assert_eq!(handoff.saves, 1, "hub branch skips the ordinary tail save");
     assert!(sim.map_handoff_done);
+}
+
+#[test]
+fn live_boss_returns_use_the_hub_branch_before_the_zone_bands() {
+    let nodes = crate::map::MapNodes::from_bytes(include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../extracted/map/nodes.bin"
+    )))
+    .unwrap();
+    // `$3EFD8..$3F000` progress slots and `$3C6BD..$3C77C` hub targets.
+    for (node, progress, hub, direction, zone) in [
+        (0x20, 5, 0x19, 8, 2),
+        (0x2B, 9, 0x1C, 8, 1),
+        (0x35, 14, 0x1B, 34, 3),
+        (0x3D, 17, 0x1A, 2, 4),
+        (0x49, 23, 0x1E, 4, 5),
+        (0x53, 29, 0x1D, 2, 6),
+    ] {
+        assert_eq!(nodes.progress_slot(node), Some(progress as u8));
+        let mut sim = PlayerSim::new();
+        sim.map_node = node;
+        sim.level_progress[progress] = 8;
+        let out = sim.map_handoff(&nodes);
+        assert_eq!((sim.map_node, out.node, out.screen), (hub, hub, Some(0)));
+        assert_eq!(out.cursor_move, Some(direction));
+        assert_eq!((out.music, out.saves), (Some(6), 1));
+        assert_eq!(sim.level_progress[progress], 0x80);
+
+        // `$3EFDA` skips all six branches for a dead Mario.
+        let mut dead = PlayerSim::new();
+        dead.map_node = node;
+        dead.dead = 0xFF;
+        let out = dead.map_handoff(&nodes);
+        assert_eq!((out.node, out.screen, out.cursor_move), (node, Some(zone), None));
+        assert_eq!(dead.level_progress[progress], 0);
+    }
 }
 
 #[test]

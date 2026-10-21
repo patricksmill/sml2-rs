@@ -34,7 +34,7 @@ impl Session {
         match out.transition {
             Some(CastleTransition::EnterLevel(id)) => {
                 // $46C7 -> $3573: level 24 now follows the ordinary level loader.
-                let Some((_, node, _)) = self.castle_return else {
+                let Some((_, node, _, _)) = self.castle_return else {
                     unreachable!()
                 };
                 if let Err(error) = self.begin_level(id, 0) {
@@ -50,7 +50,7 @@ impl Session {
                 StepOutcome::LevelEntered(id)
             }
             Some(CastleTransition::ReturnToMap { walked_out }) => {
-                if let Some((screen, node, flag)) = self.castle_return.take() {
+                if let Some((screen, node, flag, direction)) = self.castle_return.take() {
                     let mut map = MapSim::new();
                     map.set_castle_scripts(self.assets.castle_scripts.clone());
                     map.lives = self.lives;
@@ -61,6 +61,9 @@ impl Session {
                     map.load_screen(screen, flag, &self.assets.node_records);
                     map.node = node;
                     map.load_node(node, &self.assets.node_records);
+                    if let Some(direction) = direction {
+                        map.cursor_move = direction;
+                    }
                     if walked_out {
                         map.mario_dead = 1;
                     }

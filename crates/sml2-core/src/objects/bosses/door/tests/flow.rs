@@ -115,9 +115,9 @@ fn door_boss_all_phases_stomp_defeat_reward_and_map_handoff() {
         assert_eq!(player.golden_coin_count(), 1);
         assert_eq!(player.level_tally, 1);
         let handoff = player.map_handoff(&nodes);
-        assert_eq!(handoff.node, 0x2B);
-        assert_eq!(handoff.screen, Some(1));
-        assert_eq!(handoff.saves, 2);
+        assert_eq!(handoff.node, 0x1C);
+        assert_eq!(handoff.screen, Some(0));
+        assert_eq!(handoff.saves, 1);
         assert!(player.map_handoff_done);
         player.apply_object_result(&mut objects, false);
         assert_eq!(player.level_tally, 1);
