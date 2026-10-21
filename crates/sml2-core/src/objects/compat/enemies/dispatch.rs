@@ -570,6 +570,7 @@ impl ObjectSim {
         st.b = actor.to_raw_slot();
     }
 
+    /// `$58712`: the hopper.
     pub(super) fn handler_hopper(
         &mut self,
         st: &mut Staging,
@@ -577,28 +578,11 @@ impl ObjectSim {
         tables: &ObjectTables,
     ) {
         let _ = tables;
-        match st.b[B_FSTATE] {
-            1 => {
-                // $58734: rise 1 px per call; at 8 → state 3, clear +12.
-                self.mv_y_sub(st, 1);
-                st.b[B_T24] = st.b[B_T24].wrapping_add(1);
-                if st.b[B_T24] != 8 {
-                    return;
-                }
-                st.b[B_FSTATE] = 3;
-                st.b[B_DEFEAT] = 0;
-            }
-            2 => self.walker_state(st, layout, 1),
-            3 => self.walker_state(st, layout, 2),
-            4 => self.walker_state(st, layout, 3),
-            5 => self.walker_state(st, layout, 4),
-            _ => {
-                // state 0: item setup.
-                st.b[B_TYPE] = 0x80;
-                st.b[B_T24] = 0;
-                st.b[B_DEFEAT] = 0x80;
-                self.done = 1;
-            }
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let effect = hopper::update(&mut actor, &mut SimWalkerWorld::new(self, st, layout));
+        st.b = actor.to_raw_slot();
+        if effect == hopper::Effect::Parked {
+            self.done = 1;
         }
     }
 

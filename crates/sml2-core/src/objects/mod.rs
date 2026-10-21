@@ -187,6 +187,8 @@ mod handler_0x587a1_adapter;
 mod handler_0x58804;
 #[path = "compat/items/floating_pickup.rs"]
 mod handler_0x58804_adapter;
+#[path = "enemies/hopper.rs"]
+mod hopper;
 #[path = "enemies/hopping.rs"]
 mod handler_0x58848;
 #[path = "compat/enemies/hopping.rs"]
@@ -501,8 +503,10 @@ mod handler_0x5afd7_adapter;
 mod handler_0x5b06d;
 #[path = "compat/enemies/hardening_walker.rs"]
 mod handler_0x5b06d_adapter;
-#[path = "compat/enemies/square_patroller.rs"]
+#[path = "enemies/square_patroller.rs"]
 mod handler_0x5b0d5;
+#[path = "compat/enemies/square_patroller.rs"]
+mod handler_0x5b0d5_adapter;
 #[path = "enemies/bobbing_flyer.rs"]
 mod handler_0x5b177;
 #[path = "compat/enemies/bobbing_flyer.rs"]
