@@ -1,16 +1,243 @@
 {
-  "active_milestone": "presentation_and_audio",
-  "milestone_note": "All 5 audio engine tickets verified. Milestone complete.",
-  "queue": [],
+  "active_milestone": "full_integration",
+  "milestone_note": "Milestone F: completion criteria from rust-completion-workflow.md §7.",
+  "queue": [
+    {
+      "id": "f-inventory-reconcile",
+      "title": "Reconcile stale 'pending' notes in docs/feature-inventory.md against current code; close verified rows, list true gaps",
+      "asm_refs": [
+        "docs/feature-inventory.md"
+      ],
+      "dependencies": [],
+      "verification_gate": "Every row's remaining-gap text either cites a passing test or names a pending f-* queue id; tools/handler_coverage.py exits 0; tools/smoke_levels.py clean",
+      "status": "pending"
+    },
+    {
+      "id": "f-routes-a",
+      "title": "Played approaches and route-matrix review for levels 1, 2, 3, 4, 5: header and secret-entry starts to every exit cell",
+      "asm_refs": [
+        "home.asm:$5579/$55C0 secret-entry overlay",
+        "home.asm:$377B entry table",
+        "home.asm:$3573 level hand-off",
+        "docs/route-matrix.md"
+      ],
+      "dependencies": [
+        "f-inventory-reconcile"
+      ],
+      "verification_gate": "PORTING.md § What “done” means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "status": "pending"
+    },
+    {
+      "id": "f-routes-b",
+      "title": "Played approaches and route-matrix review for levels 7, 8, 9, 11, 12: header and secret-entry starts to every exit cell",
+      "asm_refs": [
+        "home.asm:$5579/$55C0 secret-entry overlay",
+        "home.asm:$377B entry table",
+        "home.asm:$3573 level hand-off",
+        "docs/route-matrix.md"
+      ],
+      "dependencies": [
+        "f-inventory-reconcile"
+      ],
+      "verification_gate": "PORTING.md § What “done” means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "status": "pending"
+    },
+    {
+      "id": "f-routes-c",
+      "title": "Played approaches and route-matrix review for levels 13, 15, 16, 18, 21: header and secret-entry starts to every exit cell",
+      "asm_refs": [
+        "home.asm:$5579/$55C0 secret-entry overlay",
+        "home.asm:$377B entry table",
+        "home.asm:$3573 level hand-off",
+        "docs/route-matrix.md"
+      ],
+      "dependencies": [
+        "f-inventory-reconcile"
+      ],
+      "verification_gate": "PORTING.md § What “done” means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "status": "pending"
+    },
+    {
+      "id": "f-routes-d",
+      "title": "Played approaches and route-matrix review for levels 22, 23, 26, 27: header and secret-entry starts to every exit cell",
+      "asm_refs": [
+        "home.asm:$5579/$55C0 secret-entry overlay",
+        "home.asm:$377B entry table",
+        "home.asm:$3573 level hand-off",
+        "docs/route-matrix.md"
+      ],
+      "dependencies": [
+        "f-inventory-reconcile"
+      ],
+      "verification_gate": "PORTING.md § What “done” means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "status": "pending"
+    },
+    {
+      "id": "f-routes-e",
+      "title": "Played approaches and route-matrix review for levels 30, 31, 32: header and secret-entry starts to every exit cell",
+      "asm_refs": [
+        "home.asm:$5579/$55C0 secret-entry overlay",
+        "home.asm:$377B entry table",
+        "home.asm:$3573 level hand-off",
+        "docs/route-matrix.md"
+      ],
+      "dependencies": [
+        "f-inventory-reconcile"
+      ],
+      "verification_gate": "PORTING.md § What “done” means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "status": "pending"
+    },
+    {
+      "id": "f-boss-routes-a",
+      "title": "Zone boss levels 6, 10, 14 played end to end: header spawn, arena entry, defeat by live input, coin reward, map return",
+      "asm_refs": [
+        "$9285/$5D6A/$5E12 boss flow",
+        "home.asm:$3573 level hand-off"
+      ],
+      "dependencies": [
+        "f-inventory-reconcile"
+      ],
+      "verification_gate": "PORTING.md § What “done” means; no direct boss_clear/phase writes; coin progress byte saved and reloaded; through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "status": "pending"
+    },
+    {
+      "id": "f-boss-routes-b",
+      "title": "Zone boss levels 17, 20, 24 played end to end: header spawn, arena entry, defeat by live input, coin reward, map return",
+      "asm_refs": [
+        "$9285/$5D6A/$5E12 boss flow",
+        "home.asm:$3573 level hand-off"
+      ],
+      "dependencies": [
+        "f-inventory-reconcile"
+      ],
+      "verification_gate": "PORTING.md § What “done” means; no direct boss_clear/phase writes; coin progress byte saved and reloaded; through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "status": "pending"
+    },
+    {
+      "id": "f-wario-played",
+      "title": "Wario castle (level 25, id 24) played from the six-coin castle door through all three forms to the credits terminal substate",
+      "asm_refs": [
+        "$AD93 ($02/$01) final Wario",
+        "bank $0C:$3046F/$30697/$309CD castle door",
+        "ending states $1B-$21"
+      ],
+      "dependencies": [
+        "f-boss-routes-a",
+        "f-boss-routes-b"
+      ],
+      "verification_gate": "PORTING.md § What “done” means; replaces the direct-state six_coins_wario_and_ending_tape with live input (no boss_clear/fade/phase writes); route-matrix row 25 reviewed; zero unported diagnostics",
+      "status": "pending"
+    },
+    {
+      "id": "f-overworld-navigation",
+      "title": "Continuous overworld navigation: title -> file select -> hub -> walk zone maps between courses, including paths unlocked by $4B exits and zone transitions, without seeded map nodes",
+      "asm_refs": [
+        "bank $0F:$3F04D/$3F07E selection bands",
+        "bank $0F:$3D0FF-$3D880 zone loaders",
+        "bank $0F:$3C169 map entry",
+        "bank $0F:$3E1D7 entry gate"
+      ],
+      "dependencies": [
+        "f-routes-a",
+        "f-routes-b",
+        "f-routes-c",
+        "f-routes-d",
+        "f-routes-e"
+      ],
+      "verification_gate": "PORTING.md § What “done” means; session tests reach every course node from the hub by map input only; unlocked-path bytes match a ROM-derived table",
+      "status": "pending"
+    },
+    {
+      "id": "f-easy-mode-audit",
+      "title": "Audit and port Easy mode's in-level gameplay effects (every sEasyMode reader)",
+      "asm_refs": [
+        "home.asm:7221-7234 .CheckEasyMode",
+        "main.asm:3356",
+        "main.asm:3476",
+        "main.asm:7174",
+        "ram.asm:sEasyMode"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md § What “done” means; one unit test per sEasyMode reader with a sensitivity mutation; Easy session reaches a level and shows the effect",
+      "status": "pending"
+    },
+    {
+      "id": "f-divider-clock-ownership",
+      "title": "Single shared DIV clock across map, level and game-state transitions (no per-subsystem clock origins)",
+      "asm_refs": [
+        "hardware:$FF04",
+        "bank $02:$AB1D reader",
+        "tasks/subsystems/hardware_divider_input.md"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md § What “done” means; session test proves DIV continuity across map -> level -> map and Wario random draws consume the shared clock",
+      "status": "pending"
+    },
+    {
+      "id": "f-traj4-legacy-exception",
+      "title": "Root-cause the frozen traj4_ff0 replay exception (y=53, objslots=490, odd=204) and either fix the port or document it as a capture artifact",
+      "asm_refs": [
+        "tools/replay_gate.py LEGACY",
+        "captures/traj4_ff0.json (read-only)"
+      ],
+      "dependencies": [],
+      "verification_gate": "Cause identified with ROM evidence; if a port bug, LEGACY removed and traj4_ff0 gates at zero mismatches; captures/sweep.sh passes",
+      "status": "pending"
+    },
+    {
+      "id": "f-visual-parity",
+      "title": "Native-size pixel comparison against the ROM (emulator reference) at title, file select, each zone map, one level per zone, each boss arena, castle and ending",
+      "asm_refs": [
+        "home.asm VBlank/OAM DMA",
+        "DESIGN.md renderer seams"
+      ],
+      "dependencies": [
+        "f-overworld-navigation",
+        "f-wario-played"
+      ],
+      "verification_gate": "Scripted reference frames compared with the runtime renderer; every checkpoint pixel-identical or each difference explained in docs; evidence recorded in feature-inventory visual-audio row",
+      "status": "pending"
+    },
+    {
+      "id": "f-audio-evidence",
+      "title": "Deterministic audio-parity evidence: register-write and PCM comparison against the emulator for every song and SFX id",
+      "asm_refs": [
+        "main.asm:$112E0-$118A0 sound driver",
+        "tools/dump_pyboy_audio.py"
+      ],
+      "dependencies": [],
+      "verification_gate": "Per-id APU register-write streams match the emulator exactly; PCM within a documented tolerance; evidence recorded in feature-inventory visual-audio row",
+      "status": "pending"
+    },
+    {
+      "id": "f-full-playthrough",
+      "title": "Final integration: fresh extraction and build, then one uninterrupted boot -> new game -> all six coins -> Wario -> credits run, with a mid-game save/reload",
+      "asm_refs": [
+        "docs/plans/2026-10-15-rust-completion-workflow.md §7"
+      ],
+      "dependencies": [
+        "f-inventory-reconcile",
+        "f-overworld-navigation",
+        "f-wario-played",
+        "f-easy-mode-audit",
+        "f-divider-clock-ownership",
+        "f-traj4-legacy-exception",
+        "f-visual-parity",
+        "f-audio-evidence"
+      ],
+      "verification_gate": "Clean-checkout sml2-extract + cargo build; one recorded input tape plays from boot to credits with save/reload; zero unported diagnostics; captures/sweep.sh passes; feature-inventory final-integration row verified",
+      "status": "pending"
+    }
+  ],
   "workflow_rules": {
     "set": "2026-10-15",
     "rules": [
       "Canonical workflow: PORTING.md (supersedes long queue notes for how to work).",
       "One ticket = one handler address OR one PORT_QUEUE id; max ~15k tokens context.",
       "No new captures/traj*.json; unit-test slot bytes; sweep once per work package.",
-      "Cheap/flash models: scripts and scaffolding only \u2014 not handler logic."
+      "Cheap/flash models: scripts and scaffolding only — not handler logic."
     ],
-    "gate_standard": "PORTING.md \u00a7 What \u201cdone\u201d means",
+    "gate_standard": "PORTING.md § What “done” means",
     "policy": "PORTING.md",
     "plan": "docs/plans/2026-10-15-port-finish-reset.md"
   },
