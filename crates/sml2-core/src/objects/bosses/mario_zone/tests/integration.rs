@@ -352,3 +352,45 @@ fn pig3_speed_escalates_and_bounces_between_walls() {
     obj.handler_boss_def2_controller(&mut st, &layout, &t);
     assert_eq!((st.b[B_FSTATE], st.b[B_FLIP]), (4, 0x20));
 }
+
+#[test]
+fn pig3_hop_matches_rom_steps_and_preserves_landing_height() {
+    // Bank 2 $9E9A calls $B1EB/$B187, adds two, then shares $9DC7.
+    // Literal $B214 rise and first 15 bytes of $B1A3 fall.
+    let rise = [3, 3, 2, 3, 2, 1, 2, 2, 1, 2, 1, 1, 1, 0, 0];
+    let fall = [0, 0, 1, 1, 1, 2, 1, 2, 2, 1, 2, 3, 2, 3, 3];
+    let t = tables();
+    let layout = blank_layout();
+    for (state, dx) in [(4, 255u8), (5, 1)] {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.boss_hits_remaining = 6;
+        let mut st = streamed_slot(0, 0, 41);
+        st.b[B_DEF] = 12;
+        st.b[B_FSTATE] = state;
+        st.b[B_SCRX] = 88;
+        st.b[B_SCRY] = 150; // Source completes by phase, with no floor clamp.
+        let mut expected = st.b;
+        for (leg, curve) in [(0, rise), (1, fall)] {
+            for (phase, step) in curve.into_iter().enumerate() {
+                obj.fff0 = 1;
+                obj.handler_boss_def2_controller(&mut st, &layout, &t);
+                assert_eq!(st.b, expected, "odd frames hold the hop");
+                expected[B_SCRX] = expected[B_SCRX].wrapping_add(dx);
+                expected[B_SCRY] = if leg == 0 {
+                    expected[B_SCRY].wrapping_sub(step + 2)
+                } else {
+                    expected[B_SCRY].wrapping_add(step + 2)
+                };
+                expected[B_PHASE] = (phase as u8 + 1) % 15;
+                expected[B_T24] = if phase == 14 { leg ^ 1 } else { leg };
+                if leg == 1 && phase == 14 {
+                    expected[B_T28] = 8;
+                }
+                obj.fff0 = 2;
+                obj.handler_boss_def2_controller(&mut st, &layout, &t);
+                assert_eq!(st.b, expected, "state {state}, leg {leg}, phase {phase}");
+            }
+        }
+        assert_eq!((st.b[B_SCRY], obj.sfx1), (150, 12));
+    }
+}

@@ -3,7 +3,7 @@
 use crate::level::LevelLayout;
 use crate::object::ObjectTables;
 use crate::objects::{
-    ObjectSim, Staging, B_DEF, B_FSTATE, B_PHASE, B_SCRX, B_SCRY, B_SPRITE, B_T24, B_T28, B_TYPE,
+    ObjectSim, Staging, B_DEF, B_FSTATE, B_PHASE, B_SCRX, B_SPRITE, B_T24, B_T28, B_TYPE,
 };
 
 impl ObjectSim {
@@ -99,7 +99,7 @@ impl ObjectSim {
                         st.b[B_PHASE] = 0;
                         st.b[B_T24] = 0;
                         st.b[B_T28] = 8;
-                        st.b[B_SCRY] = 0x90;
+                        // $9DC7 completes by phase; keep the resulting height.
                         self.sfx1 = st.b[B_DEF];
                     }
                 }
