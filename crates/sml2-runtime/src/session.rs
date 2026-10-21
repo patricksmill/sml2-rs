@@ -220,6 +220,10 @@ impl LevelContext {
         self.sim.pan_timer = self.cam.pan_timer;
         self.sim.phase = (self.sim.phase + 1) & 7;
         self.sim.frame_counter = self.sim.frame_counter.wrapping_add(1);
+        // `$05D5` runs after this frame's VBlank decrement and before `$20A4`'s
+        // scene, and clears `hKeysHeld`/`hKeysPressed` while `sFadeTimer` is
+        // nonzero, so the arena intro holds Mario still.
+        let fade_locks_input = self.sim.fade_timer > 1;
 
         let ending_frame = scene_frame_head(
             &mut self.scene_vm,
@@ -239,6 +243,7 @@ impl LevelContext {
         );
         let gameplay = matches!(ending_frame, Some(EndingFrame::Gameplay(_)));
         let input = match ending_frame {
+            Some(EndingFrame::Gameplay(_)) if fade_locks_input => EndingInput::default(),
             Some(EndingFrame::Gameplay(input)) => input,
             _ => EndingInput::default(),
         };
