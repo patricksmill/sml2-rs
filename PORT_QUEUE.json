@@ -1,18 +1,7 @@
 {
   "active_milestone": "full_integration",
-  "milestone_note": "20 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+  "milestone_note": "19 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
-    {
-      "id": "g-actor-items",
-      "title": "Migrate item poses, markers, pickup, squashed, grower and floaters, and the animated marker $586EB from raw slot bytes to typed Actor state",
-      "asm_refs": [
-        "bank $16 item handlers",
-        "bank $16:$586EB"
-      ],
-      "dependencies": [],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/compat/items/dispatch.rs, objects/compat/items/animated_marker.rs",
-      "status": "pending"
-    },
     {
       "id": "g-actor-helpers-cleanup",
       "title": "Delete the byte helpers the migrations leave dead and document the engine boundary that stays slot-based",

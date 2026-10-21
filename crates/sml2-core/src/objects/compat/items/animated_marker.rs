@@ -1,21 +1,7 @@
-//! Handler ROM `0x586EB` (bank `$16`, CPU `$46EB`) — anim 30 in both profile tables.
-//!
-//! `$5B6EB`: `call $7684; ldh a,[$FFD5]; add $66; ldh [$FFE2],a; ret`.
-//! `$7684` is the 4-frame flash toggle (`$FFDE ^= $10` when `$FFF0 & 3 == 0`);
-//! it is *not* `helpers.rs::flash_toggle`, whose gate is mask 1.
+//! Byte tests for ROM `0x586EB` (anim 30); the slot conversion is in the
+//! `items` adapter and the behaviour in `items/animated_marker.rs`.
 
 use super::*;
-
-impl ObjectSim {
-    pub(super) fn handler_0x586eb(&mut self, st: &mut Staging) {
-        // $5B684: `ldh a,[$FFF0]; and $03; ret nz` — the 4-frame gate.
-        if self.fff0 & 3 == 0 {
-            st.b[B_FLASH] ^= 0x10;
-        }
-        // `ldh a,[$FFD5]; add $66; ldh [$FFE2],a`.
-        st.b[B_TYPE] = st.b[B_DEF].wrapping_add(0x66);
-    }
-}
 
 #[cfg(test)]
 mod tests {

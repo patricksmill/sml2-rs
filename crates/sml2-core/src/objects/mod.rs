@@ -177,8 +177,11 @@ mod groundwalker;
 mod handler_0x586e6;
 #[path = "compat/items/contact_marker.rs"]
 mod handler_0x586e6_adapter;
-#[path = "compat/items/animated_marker.rs"]
+#[path = "items/animated_marker.rs"]
 mod handler_0x586eb;
+#[cfg(test)]
+#[path = "compat/items/animated_marker.rs"]
+mod handler_0x586eb_tests;
 #[path = "items/moneybag.rs"]
 mod handler_0x587a1;
 #[path = "compat/items/moneybag.rs"]
@@ -521,6 +524,12 @@ mod helpers;
 #[path = "platforms/horizontal.rs"]
 mod horizontal_platform;
 mod interaction;
+#[path = "items/floater.rs"]
+mod floater;
+#[path = "items/grower.rs"]
+mod grower;
+#[path = "items/poses.rs"]
+mod item_poses;
 #[path = "compat/items/dispatch.rs"]
 mod items;
 #[path = "enemies/left_marcher.rs"]
