@@ -38,6 +38,7 @@ impl ObjectSim {
         // B released: `$3AB4` (`$85DC`) drops the anim, then the placement.
         self.action_latch = 0;
         st.b[B_DEF] = st.b[B_DEF].wrapping_sub(1);
+        self.finish_sprite_swap(st, tables); // `$85DC` -> `$863C` -> `$8240`.
         self.kick_placement(st, layout);
     }
 

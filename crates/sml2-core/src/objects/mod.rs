@@ -559,6 +559,9 @@ mod rising_platform;
 mod rising_platform_adapter;
 mod scratch;
 mod shell;
+#[cfg(test)]
+#[path = "tests/carried_release.rs"]
+mod carried_release_tests;
 #[path = "bosses/door/side/behavior.rs"]
 mod side_door;
 #[path = "effects/squashed.rs"]

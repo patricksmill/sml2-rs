@@ -2905,13 +2905,14 @@ fn the_shell_chain_pickup_carry_release_walks() {
     assert_eq!(st.b[B_DEF], 3, "the kicked walker");
     assert_eq!(st.x(), 124, "nudged 16 px out of Mario");
 
-    // 4. And it *moves* — the bug was that it froze mid-air instead. A
-    //    release in open air keeps type 0 and the state the carried arm
-    //    left (1 = the right walk); the ROM arms the live `$5F` type only
-    //    from the anim-3 state-0 arm or a wall placement.
+    // 4. `$3AB4` calls `$8240`: the new anim starts in state 0. Its first
+    //    update arms contact $5F before the later walking updates move it.
     let x0 = st.x();
+    assert_eq!(st.b[B_FSTATE], 0, "release resets the handler state");
     obj.handler_kicked(&mut st, &layout);
-    assert_eq!(st.b[B_TYPE], 0, "open-air release: still inert");
+    assert_eq!(st.b[B_TYPE], 0x5F, "the released shell is live");
+    assert_eq!(st.x(), x0, "initialization precedes movement");
+    obj.handler_kicked(&mut st, &layout);
     assert_eq!(st.x(), x0 + 3, "but it walks 3 px");
     obj.handler_kicked(&mut st, &layout);
     assert_eq!(st.x(), x0 + 6, "and keeps walking");
