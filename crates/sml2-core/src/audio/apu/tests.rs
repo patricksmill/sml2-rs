@@ -317,3 +317,41 @@ fn trigger_keeps_the_duty_position_and_power_off_resets_it() {
     apu.set_nr52(0x00);
     assert_eq!(apu.ch1.duty_step, 0, "NR52 power-off resets it");
 }
+
+/// `render_cycles` integrates level × cycles, so a whole duty cycle sums to
+/// exactly the high steps' share whatever phase it starts at.
+#[test]
+fn render_cycles_integrates_whole_duty_cycles() {
+    for (duty, high_steps) in [(0x00u8, 1u32), (0x40, 2), (0x80, 4), (0xC0, 6)] {
+        let mut apu = Apu::new();
+        apu.apply_pulse_write(PulseWrite::DutyLength(duty));
+        apu.apply_pulse_write(PulseWrite::Envelope(0xF0));
+        apu.apply_pulse_write(PulseWrite::FrequencyLow(0x00));
+        apu.apply_pulse_write(PulseWrite::FrequencyControl(0x87)); // freq $700
+        apu.ch1.render_cycles(37); // arbitrary phase
+        let cycle = apu.ch1.period() * 8;
+        assert_eq!(
+            apu.ch1.render_cycles(cycle * 3),
+            15 * high_steps * apu.ch1.period() * 3,
+            "duty {duty:#04X}"
+        );
+    }
+}
+
+/// A pulse far above Nyquist (freq 2047: 131 kHz) is averaged to a steady
+/// level. Point sampling instead jumped between silence and full volume,
+/// aliasing the tone down into the audible band.
+#[test]
+fn an_ultrasonic_pulse_averages_instead_of_aliasing() {
+    let mut apu = Apu::new();
+    apu.apply_pulse_write(PulseWrite::DutyLength(0x80));
+    apu.apply_pulse_write(PulseWrite::Envelope(0xF0));
+    apu.apply_pulse_write(PulseWrite::FrequencyLow(0xFF));
+    apu.apply_pulse_write(PulseWrite::FrequencyControl(0x87));
+    let mut samples = Vec::new();
+    apu.generate_samples(44_100, 200, &mut samples);
+    let left: Vec<f32> = samples.iter().step_by(2).copied().collect();
+    for w in left.windows(2) {
+        assert!((w[1] - w[0]).abs() < 0.02, "sample jump {w:?}");
+    }
+}

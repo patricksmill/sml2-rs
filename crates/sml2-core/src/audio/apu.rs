@@ -120,17 +120,28 @@ impl PulseChannel {
         (2048 - (self.freq as u32).min(2047)) * 4
     }
 
-    pub fn advance_cycles(&mut self, mut cycles: u32) {
+    pub fn advance_cycles(&mut self, cycles: u32) {
+        self.render_cycles(cycles);
+    }
+
+    /// Advances `cycles` and returns the output integrated over them (level ×
+    /// cycles), so the mixer box-filters each PCM interval instead of
+    /// point-sampling it.
+    pub fn render_cycles(&mut self, mut cycles: u32) -> u32 {
         if !self.enabled || self.volume == 0 {
-            return;
+            return 0;
         }
         let period = self.period().max(1);
+        let mut acc = 0;
         while cycles >= self.timer {
+            acc += self.sample() as u32 * self.timer;
             cycles -= self.timer;
             self.duty_step = (self.duty_step + 1) & 7;
             self.timer = period;
         }
+        acc += self.sample() as u32 * cycles;
         self.timer -= cycles;
+        acc
     }
 
     pub fn sample(&self) -> u8 {
@@ -179,17 +190,26 @@ impl WaveChannel {
         (2048 - (self.freq as u32).min(2047)) * 2
     }
 
-    pub fn advance_cycles(&mut self, mut cycles: u32) {
+    pub fn advance_cycles(&mut self, cycles: u32) {
+        self.render_cycles(cycles);
+    }
+
+    /// Advances `cycles` and returns the output integrated over them.
+    pub fn render_cycles(&mut self, mut cycles: u32) -> u32 {
         if !self.enabled || !self.dac_enabled || self.volume_code == 0 {
-            return;
+            return 0;
         }
         let period = self.period().max(1);
+        let mut acc = 0;
         while cycles >= self.timer {
+            acc += self.sample() as u32 * self.timer;
             cycles -= self.timer;
             self.sample_step = (self.sample_step + 1) & 31;
             self.timer = period;
         }
+        acc += self.sample() as u32 * cycles;
         self.timer -= cycles;
+        acc
     }
 
     pub fn sample(&self) -> u8 {
@@ -275,16 +295,24 @@ impl NoiseChannel {
         divisor << (self.shift_clock as u32)
     }
 
-    pub fn advance_cycles(&mut self, mut cycles: u32) {
+    pub fn advance_cycles(&mut self, cycles: u32) {
+        self.render_cycles(cycles);
+    }
+
+    /// Advances `cycles` and returns the output integrated over them.
+    pub fn render_cycles(&mut self, mut cycles: u32) -> u32 {
         if !self.enabled || self.volume == 0 {
-            return;
+            return 0;
         }
         let period = self.period().max(1);
+        let mut acc = 0;
         while cycles > 0 {
             if cycles < self.timer {
+                acc += self.sample() as u32 * cycles;
                 self.timer -= cycles;
                 break;
             }
+            acc += self.sample() as u32 * self.timer;
             cycles -= self.timer;
             self.timer = period;
             let b0 = self.lfsr & 1;
@@ -295,6 +323,7 @@ impl NoiseChannel {
                 self.lfsr = (self.lfsr & !(1 << 6)) | (feedback << 6);
             }
         }
+        acc
     }
 
     pub fn sample(&self) -> u8 {
@@ -748,35 +777,14 @@ impl Apu {
 
             self.advance_frame_sequencer(cycles);
 
-            self.ch1.advance_cycles(cycles);
-            self.ch2.advance_cycles(cycles);
-            self.ch3.advance_cycles(cycles);
-            self.ch4.advance_cycles(cycles);
-
-            // True DAC outputs in [0.0, 1.0]
-            let s1 = if self.ch1.enabled && self.ch1.volume > 0 {
-                (self.ch1.sample() as f32) / 15.0
-            } else {
-                0.0
-            };
-
-            let s2 = if self.ch2.enabled && self.ch2.volume > 0 {
-                (self.ch2.sample() as f32) / 15.0
-            } else {
-                0.0
-            };
-
-            let s3 = if self.ch3.enabled && self.ch3.dac_enabled && self.ch3.volume_code > 0 {
-                (self.ch3.sample() as f32) / 15.0
-            } else {
-                0.0
-            };
-
-            let s4 = if self.ch4.enabled && self.ch4.volume > 0 {
-                (self.ch4.sample() as f32) / 15.0
-            } else {
-                0.0
-            };
+            // Box-filter each channel over the interval instead of reading one
+            // instant: averaging attenuates the pulse harmonics and fast noise
+            // that point sampling folds back below Nyquist.
+            let scale = 1.0 / (cycles.max(1) as f32 * 15.0);
+            let s1 = self.ch1.render_cycles(cycles) as f32 * scale;
+            let s2 = self.ch2.render_cycles(cycles) as f32 * scale;
+            let s3 = self.ch3.render_cycles(cycles) as f32 * scale;
+            let s4 = self.ch4.render_cycles(cycles) as f32 * scale;
 
             let mut left = 0.0f32;
             let mut right = 0.0f32;
