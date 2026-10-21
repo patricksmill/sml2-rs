@@ -43,8 +43,12 @@ impl ObjectSim {
                     self.note_unported(0x59376);
                     return;
                 }
-                self.face_mario(st);
                 let mut tail = Actor::from_raw_slot(&st.b);
+                self.facing = match tail.face_toward(self.mario_ref_x) {
+                    std::cmp::Ordering::Greater => 1,
+                    std::cmp::Ordering::Less => 0xFF,
+                    std::cmp::Ordering::Equal => 0,
+                };
                 handler_0x59376::arm_tail(&mut tail);
                 st.b = tail.to_raw_slot();
             }

@@ -7,7 +7,7 @@ impl ObjectSim {
         if reward_spawn::add_money_bag(&mut self.money_bag) {
             self.spawn_sprite = 28;
             self.spawn_anim = 26;
-            self.bonus_spawn();
+            self.spawn_reward_from_camera();
             self.sfx0 = 8;
         }
     }

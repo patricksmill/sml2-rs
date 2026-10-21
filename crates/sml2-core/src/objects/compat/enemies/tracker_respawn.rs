@@ -9,7 +9,7 @@ impl ObjectSim {
         st.b = actor.to_raw_slot();
         match result {
             Ok(handler_0x5917a::Effect::Continue) => {}
-            Ok(handler_0x5917a::Effect::MoneyBag) => self.money_bag_add(),
+            Ok(handler_0x5917a::Effect::MoneyBag) => self.add_money_bag_reward(),
             Ok(handler_0x5917a::Effect::Respawn) => self.respawn_object_5b2bf(st, tables),
             Err(handler_0x5917a::Error::Rise(_)) => self.note_unported(0x581CE),
             Err(_) => self.note_unported(0x5917A),

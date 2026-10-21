@@ -128,9 +128,7 @@ impl ObjectSim {
                 self.sim.move_flags & 0x08 != 0
             }
             fn step_fall(&mut self, actor: &mut crate::actor::Actor) -> u8 {
-                let dy = self.sim.fall_step(self.st);
-                actor.motion_phase = self.st.b[B_PHASE];
-                dy
+                falling_dropper::step_fall_speed(actor)
             }
         }
         let mut world = FallWalkerSimWorld {
@@ -345,9 +343,7 @@ impl ObjectSim {
         }
         impl<'a> carrier::CarrierWorld for CarrierSimWorld<'a> {
             fn step_fall(&mut self, actor: &mut crate::actor::Actor) -> u8 {
-                let dy = self.sim.fall_step(self.st);
-                actor.motion_phase = self.st.b[B_PHASE];
-                dy
+                falling_dropper::step_fall_speed(actor)
             }
             fn probe_ground(&mut self, actor: &crate::actor::Actor) -> bool {
                 set_x(&mut self.st.b, actor.position.x);

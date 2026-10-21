@@ -1,25 +1,7 @@
 {
   "active_milestone": "full_integration",
-  "milestone_note": "19 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+  "milestone_note": "18 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
-    {
-      "id": "g-actor-helpers-cleanup",
-      "title": "Delete the byte helpers the migrations leave dead and document the engine boundary that stays slot-based",
-      "asm_refs": [
-        "objects/helpers.rs",
-        "objects/interaction.rs",
-        "objects/spawning/dynamic.rs"
-      ],
-      "dependencies": [
-        "g-actor-enemy-core",
-        "g-actor-shell",
-        "g-actor-crawlers",
-        "g-actor-hopper-bobber",
-        "g-actor-items"
-      ],
-      "verification_gate": "helpers.rs keeps only engine-level slot operations (tile probes, slot removal, record bookkeeping, BCD) with a module doc naming that boundary; interaction.rs and spawning stay engine code; no dead_code allowances; cargo test -p sml2-core passes; captures/sweep.sh unchanged",
-      "status": "pending"
-    },
     {
       "id": "g-gbc-sgb-palettes",
       "title": "Replace the invented 'SGB color' filter with real hardware palettes: the GBC boot ROM's automatic SML2 palette (separate BG/OBJ0/OBJ1) and the SGB built-in presets (1-A default)",

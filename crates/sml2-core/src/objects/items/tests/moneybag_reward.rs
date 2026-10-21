@@ -56,7 +56,7 @@ fn helper_0x5b31d_overflow_nonoverflow_invalid_decimal_and_capacity_sound() {
                 slot.b[B_STATE] = u8::from(full) * 2;
             }
             let before = sim.slots.clone();
-            sim.money_bag_add();
+            sim.add_money_bag_reward();
             assert_eq!(sim.money_bag, expected);
             assert_eq!(sim.sfx0, if reward { 8 } else { 0x41 });
             assert_eq!(sim.standby, if reward && !full { 20 } else { 19 });

@@ -1397,6 +1397,24 @@
       "dependencies": [],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; domain logic uses typed Actor/context state only, with raw slot offsets confined to the compat adapter; existing whole-slot byte tests pass unchanged; one sensitivity mutation per migrated module rejected; cargo test -p sml2-core passes; captures/sweep.sh unchanged; files: objects/compat/items/dispatch.rs, objects/compat/items/animated_marker.rs",
       "status": "done"
+    },
+    {
+      "id": "g-actor-helpers-cleanup",
+      "title": "Delete the byte helpers the migrations leave dead and document the engine boundary that stays slot-based",
+      "asm_refs": [
+        "objects/helpers.rs",
+        "objects/interaction.rs",
+        "objects/spawning/dynamic.rs"
+      ],
+      "dependencies": [
+        "g-actor-enemy-core",
+        "g-actor-shell",
+        "g-actor-crawlers",
+        "g-actor-hopper-bobber",
+        "g-actor-items"
+      ],
+      "verification_gate": "helpers.rs keeps only engine-level slot operations (tile probes, slot removal, record bookkeeping, BCD) with a module doc naming that boundary; interaction.rs and spawning stay engine code; no dead_code allowances; cargo test -p sml2-core passes; captures/sweep.sh unchanged",
+      "status": "done"
     }
   ]
 }

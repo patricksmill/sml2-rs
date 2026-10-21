@@ -45,7 +45,8 @@ impl ObjectSim {
                 self.spawn_attr = flip.bits();
                 // $5B36D copies the parent's pre-lift position.
                 self.spawn_dynamic_5b36d(st);
-                self.mv_y_sub(st, lift);
+                let y = st.y().wrapping_sub(u16::from(lift));
+                set_y(&mut st.b, y);
                 self.sfx1 = sfx1;
             }
             Err(_) => self.note_unported(0x5A8E4),

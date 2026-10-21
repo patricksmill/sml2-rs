@@ -1,4 +1,7 @@
-//! Object interaction routines.
+//! Object interaction: Mario, block-bonk and fireball collision over every
+//! live slot, and the dispatch of the resulting stomp, defeat and bonk flags.
+//! This is engine code, not per-actor behaviour, so it stays slot-based
+//! alongside `helpers.rs` and `spawning/`.
 
 use super::*;
 
@@ -111,7 +114,7 @@ impl ObjectSim {
     }
 
     pub(super) fn defeat(&mut self, st: &mut Staging) {
-        self.money_bag_add();
+        self.add_money_bag_reward();
         st.b[B_DEF] = 0;
         st.b[B_FSTATE] = 0;
         st.b[B_DEFEAT] = 0;
@@ -142,7 +145,8 @@ impl ObjectSim {
             // $8708: type = anim + $70, frame state 1, Y += 16, marker $10.
             st.b[B_TYPE] = st.b[B_DEF].wrapping_add(0x70);
             st.b[B_FSTATE] = 1;
-            self.mv_y_add(st, 16);
+            let y = st.y().wrapping_add(16);
+            set_y(&mut st.b, y);
             st.b[B_MARKER] = 0x10;
             return;
         }

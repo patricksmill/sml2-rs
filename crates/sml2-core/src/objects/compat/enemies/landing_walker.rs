@@ -32,9 +32,7 @@ impl fallwalker::FallWalkerWorld for Inputs<'_> {
         self.sim.move_flags & 0x08 != 0
     }
     fn step_fall(&mut self, actor: &mut Actor) -> u8 {
-        let dy = self.sim.fall_step(self.st);
-        actor.motion_phase = self.st.b[B_PHASE];
-        dy
+        falling_dropper::step_fall_speed(actor)
     }
 }
 

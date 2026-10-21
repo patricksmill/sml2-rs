@@ -114,6 +114,7 @@ fn handler_0x59376_flash_end_rebirths_as_anim62_with_the_tail() {
     assert_eq!(st.b[5], 62, "definition is rewritten before the reset");
     assert_eq!(u16::from_be_bytes([st.b[0], st.b[1]]), 0x0100);
     assert_eq!((st.b[15], st.b[13]), (2, 0x20), "faces Mario");
+    assert_eq!(sim.facing, 1);
     assert_eq!((st.b[18], st.b[11], st.b[28]), (82, 112, 48));
     assert_eq!((st.b[14], st.b[24]), (16, 8));
     assert_eq!(sim.done, 1);
