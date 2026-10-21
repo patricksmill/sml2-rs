@@ -146,6 +146,8 @@ mod circuit_boss_adapter;
 mod circuit_boss_flow_tests;
 #[path = "bosses/circuit/motion.rs"]
 mod circuit_boss_motion;
+#[path = "enemies/crawler.rs"]
+mod crawler;
 #[path = "enemies/dashing_walker.rs"]
 mod dashing_walker;
 #[cfg(test)]

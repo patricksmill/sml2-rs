@@ -18,39 +18,8 @@ impl ObjectSim {
                     Ordering::Greater => 1,
                 };
             }
-            Ok(handler_0x5a2d0::Effect::Crawl) => self.crawler_patrol(st, layout),
+            Ok(handler_0x5a2d0::Effect::Crawl) => self.crawler_body(st, layout),
             Err(_) => self.note_unported(0x5A2D0),
-        }
-    }
-
-    /// `$5864E` / `$5866D`, without the anim-8 entry's sprite toggle.
-    fn crawler_patrol(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        match st.b[B_FSTATE] {
-            1 | 3 => {
-                if self.fff0 & 1 == 0 {
-                    self.mv_x_sub(st, 1);
-                    self.m_left_wall(st, layout);
-                    if self.move_flags & 0x02 != 0 {
-                        st.b[B_FSTATE] = 2;
-                        st.b[B_FLIP] ^= 0x20;
-                    }
-                    return;
-                }
-                self.crawler_vertical(st, layout);
-            }
-            2 | 4 => {
-                if self.fff0 & 1 == 0 {
-                    self.mv_x_add(st, 1);
-                    self.m_right_wall(st, layout);
-                    if self.move_flags & 0x01 != 0 {
-                        st.b[B_FSTATE] = 1;
-                        st.b[B_FLIP] ^= 0x20;
-                    }
-                    return;
-                }
-                self.crawler_vertical(st, layout);
-            }
-            _ => {}
         }
     }
 }

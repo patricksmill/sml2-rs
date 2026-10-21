@@ -21,6 +21,14 @@ impl<'a> SimWalkerWorld<'a> {
     }
 }
 
+impl crawler::CrawlerWorld for SimWalkerWorld<'_> {
+    fn probe_ceiling(&mut self, actor: &crate::actor::Actor) -> bool {
+        self.sync(actor);
+        self.sim.m_ceil_own(self.st, self.layout, 18);
+        self.sim.move_flags & 0x04 != 0
+    }
+}
+
 impl walker::WalkerWorld for SimWalkerWorld<'_> {
     fn probe_left_wall(&mut self, actor: &crate::actor::Actor) -> bool {
         self.sync(actor);
@@ -670,90 +678,35 @@ impl ObjectSim {
         }
     }
 
+    /// `$5862E` (anim 8).
     pub(super) fn handler_crawler(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        self.sprite_toggle1(st);
-        if st.b[B_FSTATE] == 0 {
-            self.face_mario(st);
-            st.b[B_FLASH] = 16;
-            st.b[B_TYPE] = 0x56;
-            return;
-        }
-        self.crawler_body(st, layout);
+        self.run_crawler(st, layout, true);
     }
 
-    /// `$58642`: the shared crawl dispatch entered by anim 82 (and the crawler).
+    /// `$58642`: the shared crawl body the other crawlers enter.
     pub(super) fn crawler_body(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        match st.b[B_FSTATE] {
-            1 | 3 => {
-                // $5864E
-                if self.fff0 & 1 == 0 {
-                    self.mv_x_sub(st, 1);
-                    self.m_left_wall(st, layout);
-                    if self.move_flags & 0x02 != 0 {
-                        st.b[B_FSTATE] = 2;
-                        st.b[B_FLIP] ^= 0x20;
-                    }
-                    return;
-                }
-                self.crawler_vertical(st, layout);
-            }
-            2 | 4 => {
-                // $5866D
-                if self.fff0 & 1 == 0 {
-                    self.mv_x_add(st, 1);
-                    self.m_right_wall(st, layout);
-                    if self.move_flags & 0x01 != 0 {
-                        st.b[B_FSTATE] = 1;
-                        st.b[B_FLIP] ^= 0x20;
-                    }
-                    return;
-                }
-                self.crawler_vertical(st, layout);
-            }
-            _ => {}
-        }
+        self.run_crawler(st, layout, false);
     }
 
-    pub(super) fn crawler_vertical(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        if st.b[B_T24] == 1 {
-            // $586AD — falling.
-            let b = self.fall_step(st);
-            self.mv_y_add(st, b);
-            self.m_ground_own(st, layout);
-            if self.move_flags & 0x08 == 0 {
-                return;
-            }
-            st.b[B_T24] = 0;
-            st.b[B_T25] = st.b[B_T25].wrapping_add(1);
-            if st.b[B_T25] == 4 {
-                // $586D6: restarted cycle, face Mario.
-                st.b[B_PHASE] = 0;
-                st.b[B_T24] = 0;
-                st.b[B_T25] = 0;
-                self.face_mario(st);
-                return;
-            }
-            st.b[B_PHASE] = 10;
-            if st.b[B_FSTATE] >= 3 {
-                return;
-            }
-            st.b[B_FSTATE] = st.b[B_FSTATE].wrapping_add(2);
-            return;
+    /// `entry` runs anim 8's own blink and facing before the crawl.
+    fn run_crawler(&mut self, st: &mut Staging, layout: &LevelLayout, entry: bool) {
+        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+        let frame = crate::actor::FrameTick(u64::from(self.fff0));
+        let mario_ref_x = self.mario_ref_x;
+        let world = &mut SimWalkerWorld::new(self, st, layout);
+        let faced = if entry {
+            crawler::update(&mut actor, frame, mario_ref_x, world)
+        } else {
+            crawler::crawl(&mut actor, frame, mario_ref_x, world)
+        };
+        st.b = actor.to_raw_slot();
+        if let Some(side) = faced {
+            self.facing = match side {
+                std::cmp::Ordering::Greater => 1,
+                std::cmp::Ordering::Less => 0xFF,
+                std::cmp::Ordering::Equal => 0,
+            };
         }
-        // $5868C — hovering.
-        let b = self.hover_step(st);
-        if st.b[B_PHASE] == 21 {
-            st.b[B_PHASE] = 0;
-            st.b[B_T24] = 1;
-            return;
-        }
-        self.mv_y_sub(st, b);
-        self.m_ceil_own(st, layout, 18);
-        if self.move_flags & 0x04 == 0 {
-            return;
-        }
-        st.b[B_PHASE] = 0;
-        st.b[B_T24] = 1;
     }
 
     pub(super) fn handler_death(
