@@ -1,25 +1,10 @@
 {
   "active_milestone": "full_integration",
-  "milestone_note": "17 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+  "milestone_note": "16 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
     {
-      "id": "f-routes-a",
-      "title": "Played approaches and route-matrix review for levels 1, 2, 3, 4, 5: header and secret-entry starts to every exit cell",
-      "asm_refs": [
-        "home.asm:$5579/$55C0 secret-entry overlay",
-        "home.asm:$377B entry table",
-        "home.asm:$3573 level hand-off",
-        "docs/route-matrix.md"
-      ],
-      "dependencies": [
-        "f-inventory-reconcile"
-      ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
-      "status": "pending"
-    },
-    {
       "id": "f-routes-b",
-      "title": "Played approaches and route-matrix review for levels 7, 8, 9, 11, 12: header and secret-entry starts to every exit cell",
+      "title": "Route-matrix review for levels 7, 8, 9, 11, 12, with played approaches only where a level relies on a special mechanic",
       "asm_refs": [
         "home.asm:$5579/$55C0 secret-entry overlay",
         "home.asm:$377B entry table",
@@ -27,14 +12,15 @@
         "docs/route-matrix.md"
       ],
       "dependencies": [
+        "f-divider-clock-ownership",
         "f-inventory-reconcile"
       ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "verification_gate": "route-matrix.md rows hand-reviewed and marked; a played_routes test (search::search_route, both run_play and the map-entered session) only for levels whose route needs a special mechanic (hidden blocks, pipe or side-pipe warps, water, float, autoscroll), zero unported diagnostics; cargo test --workspace passes",
       "status": "pending"
     },
     {
       "id": "f-routes-c",
-      "title": "Played approaches and route-matrix review for levels 13, 15, 16, 18, 21: header and secret-entry starts to every exit cell",
+      "title": "Route-matrix review for levels 13, 15, 16, 18, 21, with played approaches only where a level relies on a special mechanic",
       "asm_refs": [
         "home.asm:$5579/$55C0 secret-entry overlay",
         "home.asm:$377B entry table",
@@ -42,14 +28,15 @@
         "docs/route-matrix.md"
       ],
       "dependencies": [
+        "f-divider-clock-ownership",
         "f-inventory-reconcile"
       ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "verification_gate": "route-matrix.md rows hand-reviewed and marked; a played_routes test (search::search_route, both run_play and the map-entered session) only for levels whose route needs a special mechanic (hidden blocks, pipe or side-pipe warps, water, float, autoscroll), zero unported diagnostics; cargo test --workspace passes",
       "status": "pending"
     },
     {
       "id": "f-routes-d",
-      "title": "Played approaches and route-matrix review for levels 22, 23, 26, 27: header and secret-entry starts to every exit cell",
+      "title": "Route-matrix review for levels 22, 23, 26, 27, with played approaches only where a level relies on a special mechanic",
       "asm_refs": [
         "home.asm:$5579/$55C0 secret-entry overlay",
         "home.asm:$377B entry table",
@@ -57,14 +44,15 @@
         "docs/route-matrix.md"
       ],
       "dependencies": [
+        "f-divider-clock-ownership",
         "f-inventory-reconcile"
       ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "verification_gate": "route-matrix.md rows hand-reviewed and marked; a played_routes test (search::search_route, both run_play and the map-entered session) only for levels whose route needs a special mechanic (hidden blocks, pipe or side-pipe warps, water, float, autoscroll), zero unported diagnostics; cargo test --workspace passes",
       "status": "pending"
     },
     {
       "id": "f-routes-e",
-      "title": "Played approaches and route-matrix review for levels 30, 31, 32: header and secret-entry starts to every exit cell",
+      "title": "Route-matrix review for levels 30, 31, 32, with played approaches only where a level relies on a special mechanic",
       "asm_refs": [
         "home.asm:$5579/$55C0 secret-entry overlay",
         "home.asm:$377B entry table",
@@ -72,9 +60,10 @@
         "docs/route-matrix.md"
       ],
       "dependencies": [
+        "f-divider-clock-ownership",
         "f-inventory-reconcile"
       ],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one played_routes test per (start, exit cell) pair through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "verification_gate": "route-matrix.md rows hand-reviewed and marked; a played_routes test (search::search_route, both run_play and the map-entered session) only for levels whose route needs a special mechanic (hidden blocks, pipe or side-pipe warps, water, float, autoscroll), zero unported diagnostics; cargo test --workspace passes",
       "status": "pending"
     },
     {

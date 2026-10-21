@@ -7,6 +7,72 @@ mod level19_header;
 
 mod level19_header_alternate;
 
+mod levels_1_to_5;
+
+mod search;
+
+/// Held-button spans written `KEYS*frames`, space separated: `R` `L` `U` `D`
+/// `A` `B` `S` (start) `E` (select), or `-` for nothing held.
+pub(super) fn spans(text: &str) -> Vec<PlayerKeys> {
+    text.split_whitespace()
+        .flat_map(|span| {
+            let (held, frames) = span.split_once('*').expect("KEYS*frames");
+            let mut keys = PlayerKeys::default();
+            for button in held.chars() {
+                match button {
+                    'R' => keys.right = true,
+                    'L' => keys.left = true,
+                    'U' => keys.up = true,
+                    'D' => keys.down = true,
+                    'A' => keys.a = true,
+                    'B' => keys.b = true,
+                    'S' => keys.start = true,
+                    'E' => keys.select = true,
+                    '-' => {}
+                    other => panic!("unknown button {other:?} in {span:?}"),
+                }
+            }
+            vec![keys; frames.parse().expect("frame count")]
+        })
+        .collect()
+}
+
+/// The inverse of [`spans`].
+pub(super) fn to_spans(tape: &[PlayerKeys]) -> String {
+    let name = |k: &PlayerKeys| {
+        let held: String = [
+            (k.right, 'R'),
+            (k.left, 'L'),
+            (k.up, 'U'),
+            (k.down, 'D'),
+            (k.a, 'A'),
+            (k.b, 'B'),
+            (k.start, 'S'),
+            (k.select, 'E'),
+        ]
+        .iter()
+        .filter(|(on, _)| *on)
+        .map(|(_, c)| *c)
+        .collect();
+        if held.is_empty() {
+            "-".to_string()
+        } else {
+            held
+        }
+    };
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < tape.len() {
+        let mut j = i;
+        while j < tape.len() && name(&tape[j]) == name(&tape[i]) {
+            j += 1;
+        }
+        out.push(format!("{}*{}", name(&tape[i]), j - i));
+        i = j;
+    }
+    out.join(" ")
+}
+
 /// Extracted level28 (decimal CLI id 27), ordinary header entry. The fixed
 /// right-only tape descends from the upper starting ledge and walks the lower
 /// corridor to the source $4A cell (78,30). Objects, scenes, camera, fade and
@@ -95,93 +161,144 @@ fn run_entry_route(
         &MapNodes,
     ),
 ) -> PlayOutcome {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../extracted");
-    let levels = root.join("levels");
-    let manifest: LevelManifest = serde_json::from_str(
-        &fs::read_to_string(levels.join(format!("level{level:02}.manifest.json"))).unwrap(),
-    )
-    .unwrap();
-    let layout =
-        LevelLayout::from_bytes(&fs::read(levels.join(&manifest.layout.file)).unwrap()).unwrap();
-    let mut sim = PlayerSim::new();
-    seed_level_timer(&mut sim, &manifest);
-    sim.powerup = 0;
-    let nodes = load_map_nodes();
-    seed_unique_level_map_node(&mut sim, manifest.level_id, &nodes).expect("unique source node");
-    let slot = nodes
-        .progress_slot(sim.map_node)
-        .expect("source progress slot");
-    sim.level_progress[slot as usize] = progress;
-    let entry = manifest
-        .header
-        .entry(sim.level_progress[slot as usize], manifest.secret_entry);
-    let mut cam = sml2_core::camera::CameraSim::new(entry.start.camera_x, entry.start.camera_y);
-    apply_level_entry(&mut sim, &mut cam, entry);
-    cam.prev_mario_y_lo = sim.y as u8;
-    cam.map_scroll_limit = manifest.properties.unknown != 0;
-    cam.auto_scroll = manifest.properties.auto_scroll;
-    cam.scene_state = manifest.header.scene_state;
-    sim.seed_moon_physics(manifest.properties.space_physics);
-    check_entry(&manifest, &layout, &sim, &cam, &nodes);
-    assert_eq!((sim.powerup, sim.dead, sim.invincibility), (0, 0, 0));
-    let mut obj = sml2_core::objects::ObjectSim::new(manifest.spawns.records.clone(), cam.x);
-    crate::game::initialize_level_objects(&mut obj, 0);
-    assert_eq!(sim.moon_float_timer, 0);
-    let spr = SpriteCtx {
-        insts: Vec::new(),
-        objblock: fs::read(levels.join(format!("level{level:02}.objblock.bin"))).unwrap(),
-        tables: serde_json::from_str(&fs::read_to_string(root.join("objects.json")).unwrap())
-            .unwrap(),
-        level_id: manifest.level_id,
-        obp0: manifest.header.palettes[1],
-        obp1: manifest.header.palettes[2],
-        player: None,
-        player_shield: None,
-        streak_counter: None,
-        player_behind_bg: false,
-        pipe_background: None,
-        player_star_flash: false,
-        player_pan: 0,
-        scroll_pan: 0,
-        bumpers: Vec::new(),
-        fireballs: Vec::new(),
-        boss_oam: Vec::new(),
-    };
-    let hud: HudStrip =
-        serde_json::from_str(&fs::read_to_string(root.join("hud.json")).unwrap()).unwrap();
+    let assets = RouteAssets::load(level);
     let tape = tape.into();
-    let frames = tape.len() as u64;
     let session_tape: Vec<_> = (0..tape.len())
         .map(|frame| tape.frame(frame).unwrap())
         .collect();
-    let map_node = sim.map_node;
-    let outcome = run_play(
-        &manifest,
-        &layout,
-        &fs::read(levels.join(format!("level{level:02}.bgblock.bin"))).unwrap(),
-        &fs::read(root.join("tileanim.bin")).unwrap(),
-        &hud,
-        hud.window_y,
-        1,
-        (SCREEN_W, SCREEN_H),
-        Some(spr),
-        sim,
-        cam,
-        obj,
-        Some(fs::read(levels.join(format!("level{level:02}.edge.bin"))).unwrap()),
-        Some(fs::read(levels.join(format!("level{level:02}.scene.bin"))).unwrap()),
-        Some(tape),
-        Some(frames),
-    )
-    .expect("source route must use implemented native paths");
+    let (outcome, map_node) = assets.play(progress, tape, check_entry);
     continuous::verify_map_entry_completion_and_reload(
-        &manifest,
+        &assets.manifest,
         map_node,
         progress,
         &session_tape,
         &outcome,
     );
     outcome
+}
+
+/// One extracted level's original assets, loaded once so a route can be
+/// replayed many times from its source map node.
+pub(super) struct RouteAssets {
+    pub(super) manifest: LevelManifest,
+    layout: LevelLayout,
+    objblock: Vec<u8>,
+    tables: sml2_core::object::ObjectTables,
+    hud: HudStrip,
+    bg_base: Vec<u8>,
+    tile_anim: Vec<u8>,
+    edge: Vec<u8>,
+    scene: Vec<u8>,
+    pub(super) nodes: MapNodes,
+}
+
+impl RouteAssets {
+    pub(super) fn load(level: u8) -> Self {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../extracted");
+        let levels = root.join("levels");
+        let read = |name: String| fs::read(levels.join(name)).unwrap();
+        let manifest: LevelManifest = serde_json::from_str(
+            &fs::read_to_string(levels.join(format!("level{level:02}.manifest.json"))).unwrap(),
+        )
+        .unwrap();
+        let layout = LevelLayout::from_bytes(&read(manifest.layout.file.clone())).unwrap();
+        Self {
+            layout,
+            objblock: read(format!("level{level:02}.objblock.bin")),
+            tables: serde_json::from_str(&fs::read_to_string(root.join("objects.json")).unwrap())
+                .unwrap(),
+            hud: serde_json::from_str(&fs::read_to_string(root.join("hud.json")).unwrap()).unwrap(),
+            bg_base: read(format!("level{level:02}.bgblock.bin")),
+            tile_anim: fs::read(root.join("tileanim.bin")).unwrap(),
+            edge: read(format!("level{level:02}.edge.bin")),
+            scene: read(format!("level{level:02}.scene.bin")),
+            nodes: load_map_nodes(),
+            manifest,
+        }
+    }
+
+    /// Enter from the unique source map node with `progress` in its slot,
+    /// then run the tape through live `run_play`. Returns the source node.
+    pub(super) fn play(
+        &self,
+        progress: u8,
+        tape: PlayTape,
+        check_entry: impl FnOnce(
+            &LevelManifest,
+            &LevelLayout,
+            &PlayerSim,
+            &sml2_core::camera::CameraSim,
+            &MapNodes,
+        ),
+    ) -> (PlayOutcome, u8) {
+        let manifest = &self.manifest;
+        let mut sim = PlayerSim::new();
+        seed_level_timer(&mut sim, manifest);
+        sim.powerup = 0;
+        seed_unique_level_map_node(&mut sim, manifest.level_id, &self.nodes)
+            .expect("unique source node");
+        let slot = self
+            .nodes
+            .progress_slot(sim.map_node)
+            .expect("source progress slot");
+        sim.level_progress[slot as usize] = progress;
+        let entry = manifest
+            .header
+            .entry(sim.level_progress[slot as usize], manifest.secret_entry);
+        let mut cam = sml2_core::camera::CameraSim::new(entry.start.camera_x, entry.start.camera_y);
+        apply_level_entry(&mut sim, &mut cam, entry);
+        cam.prev_mario_y_lo = sim.y as u8;
+        cam.map_scroll_limit = manifest.properties.unknown != 0;
+        cam.auto_scroll = manifest.properties.auto_scroll;
+        cam.scene_state = manifest.header.scene_state;
+        sim.seed_moon_physics(manifest.properties.space_physics);
+        check_entry(manifest, &self.layout, &sim, &cam, &self.nodes);
+        assert_eq!((sim.powerup, sim.dead, sim.invincibility), (0, 0, 0));
+        let mut obj = sml2_core::objects::ObjectSim::new(manifest.spawns.records.clone(), cam.x);
+        crate::game::initialize_level_objects(&mut obj, 0);
+        assert_eq!(sim.moon_float_timer, 0);
+        let spr = SpriteCtx {
+            insts: Vec::new(),
+            objblock: self.objblock.clone(),
+            tables: self.tables.clone(),
+            level_id: manifest.level_id,
+            obp0: manifest.header.palettes[1],
+            obp1: manifest.header.palettes[2],
+            player: None,
+            player_shield: None,
+            streak_counter: None,
+            player_behind_bg: false,
+            pipe_background: None,
+            player_star_flash: false,
+            player_pan: 0,
+            scroll_pan: 0,
+            bumpers: Vec::new(),
+            fireballs: Vec::new(),
+            boss_oam: Vec::new(),
+        };
+        let frames = tape.len() as u64;
+        let map_node = sim.map_node;
+        let outcome = run_play(
+            manifest,
+            &self.layout,
+            &self.bg_base,
+            &self.tile_anim,
+            &self.hud,
+            self.hud.window_y,
+            1,
+            (SCREEN_W, SCREEN_H),
+            Some(spr),
+            sim,
+            cam,
+            obj,
+            Some(self.edge.clone()),
+            Some(self.scene.clone()),
+            Some(tape),
+            Some(frames),
+        )
+        .expect("source route must use implemented native paths");
+        (outcome, map_node)
+    }
 }
 
 #[test]

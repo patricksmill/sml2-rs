@@ -102,20 +102,17 @@ fn every_ordinary_source_map_origin_loads_both_header_and_secret_entries() {
     );
 }
 
-pub(super) fn verify_map_entry_completion_and_reload(
-    manifest: &LevelManifest,
+/// A live session over `assets` standing on source map node `node` with
+/// `progress` in its slot, saving to `path`, before the A press that enters
+/// the level. Returns
+/// the runner, the node's progress slot, a bystander slot holding another
+/// level's secret-route bit, and the whole progress block at entry.
+pub(super) fn map_entry_runner(
+    assets: SessionAssets,
     node: u8,
     progress: u8,
-    tape: &[PlayerKeys],
-    expected: &PlayOutcome,
-) {
-    static NEXT: AtomicUsize = AtomicUsize::new(0);
-    let path = std::env::temp_dir().join(format!(
-        "sml2_continuous_{}_{}.sav",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
-    let assets = SessionAssets::load().unwrap();
+    path: &Path,
+) -> (SessionRunner, usize, usize, [u8; 42]) {
     let slot = assets.nodes.progress_slot(node).unwrap() as usize;
     let screen = match node {
         0x1E..=0x27 => 2,
@@ -134,7 +131,9 @@ pub(super) fn verify_map_entry_completion_and_reload(
     for off in GOLDEN_COIN_OFFSETS {
         map.level_progress[off] = 0x80;
     }
-    map.level_progress[2] = 0x08;
+    // Another level's secret-route bit, which the route must leave alone.
+    let bystander = if slot == 2 { 1 } else { 2 };
+    map.level_progress[bystander] = 0x08;
     map.coins_low = 0x42;
     map.lives = 7;
     map.mario_dead = 0xFF; // source arrival already handled at this standing node
@@ -144,7 +143,7 @@ pub(super) fn verify_map_entry_completion_and_reload(
     map.node = node;
     map.load_node(node, &assets.node_records);
     let initial_progress = map.level_progress;
-    let mut runner = SessionRunner::new(assets, path.clone(), 1, (160, 144), true);
+    let mut runner = SessionRunner::new(assets, path.to_path_buf(), 1, (160, 144), true);
     runner.session.state = SessionState::Overworld(map);
     runner.session.lives = 7;
     runner.session.coins_low = 0x42;
@@ -153,6 +152,24 @@ pub(super) fn verify_map_entry_completion_and_reload(
     runner.session.active_slot = Some(1);
     let record = runner.save_record();
     runner.session.slots.write_slot(1, &record);
+    (runner, slot, bystander, initial_progress)
+}
+
+pub(super) fn verify_map_entry_completion_and_reload(
+    manifest: &LevelManifest,
+    node: u8,
+    progress: u8,
+    tape: &[PlayerKeys],
+    expected: &PlayOutcome,
+) {
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let path = std::env::temp_dir().join(format!(
+        "sml2_continuous_{}_{}.sav",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let (mut runner, slot, bystander, initial_progress) =
+        map_entry_runner(SessionAssets::load().unwrap(), node, progress, &path);
     let untouched_a = *runner.session.slots.slot(0).unwrap();
     let untouched_c = *runner.session.slots.slot(2).unwrap();
     runner.step_frame(PlayerKeys {
@@ -252,7 +269,7 @@ pub(super) fn verify_map_entry_completion_and_reload(
     assert!(map.room.is_none());
     assert_eq!(map.node, expected.sim.map_node);
     assert_eq!(map.level_progress[slot], expected.sim.level_progress[slot]);
-    assert_eq!(map.level_progress[2], 0x08);
+    assert_eq!(map.level_progress[bystander], 0x08);
     for off in GOLDEN_COIN_OFFSETS {
         assert_eq!(map.level_progress[off], 0x80);
     }

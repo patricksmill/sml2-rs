@@ -1,7 +1,7 @@
 # Level route matrix
 
-**Status: all 32 rows measured 2026-10-18; the first slice (12, 19, 28, 29) is
-reviewed, every exit cell is test-pinned, levels 28/29 have played header
+**Status: all 32 rows measured 2026-10-18; levels 1-5 and the first slice
+(12, 19, 28, 29) are reviewed, every exit cell is test-pinned, levels 28/29 have played header
 approaches, and level 19 has played both its header and secret starts to
 both bells. The live session now checks all 64 header/secret-entry cases at
 32 ordinary map origins (31 level IDs), plus normal map entry through Wario's
@@ -163,6 +163,48 @@ named tests.
   `properties = $08`.
 - **Objects.** 6 records; anims 15/21/90 — the smallest stream in the game;
   `$5B0D5` (anim 90) is the only distinctive handler. No boss arena scene.
+
+## Reviewed slice (levels 1-5)
+
+Reviewed 2026-10-21 against the source layout, the `$377B` overlay and played
+routes (`crates/sml2-runtime/src/tests/played_routes/levels_1_to_5.rs`). Each
+route runs through live `run_play` and again through the map-entered session.
+Every start reaches every exit cell except level 3's header start to `$4B`;
+that bell is covered from the secret start (see below).
+
+| level | id | entry | exit(s) | secret entry | boss |
+|---|---:|---|---|---|---|
+| 1 | 0 | node 0, (34,468), cam (80,448), time 4 | `$4A` (254,30) | (2778,420), cam (2811,438) | none |
+| 2 | 1 | node 35, (34,468), cam (80,448), time 5 | `$4A` (253,30) | (2144,468), cam (2177,448) | none |
+| 3 | 2 | node 34, (46,164), cam (80,176), time 6 | `$4A` (238,30); `$4B` (238,10) | (1807,132), cam (1823,142) | none |
+| 4 | 3 | node 33, (49,468), cam (80,448), time 4 | `$4A` (222,30) | (2572,132), cam (2605,167) | none |
+| 5 | 4 | node 36, (61,676), cam (80,673), time 4 | `$4A` (78,14) | none | none |
+
+- **Level 1.** A run east to the floor bell. Clearing it from node 0 hands
+  off at node 20 with music 6 and no screen load.
+- **Level 2.** A ground route east past the row-28 ledges. Node 35, screen 2,
+  music 16.
+- **Level 3.** The `$4A` bell is on the lower floor. The `$4B` room at
+  (226..239, 7..10) is sealed: the route climbs to the row-3 corridor, enters
+  the side pipe at (221,2) and leaves its (226,2) mouth above the room's
+  shaft. `$4B` returns to node 37 with tally unchanged and slot 2 = `$01`.
+  The secret start's `$4B` route is pinned. A header-start `$4B` tape exists
+  for `run_play`, but the map-entered session's divider differs, an anim-88
+  enemy reaches Mario near (1000,468), and no tape surviving both was found;
+  `f-divider-clock-ownership` removes the two clock origins.
+- **Level 4.** Ground route east; the secret start lands on the upper ledge
+  near the bell and takes 812 frames.
+- **Level 5.** A vertical climb with no secret entry. The only way onto the
+  bell's row-15 platforms is the hidden `$7E` block at (62,19): bonk it from
+  the (62,23) block, stand on its `$07` overlay, then jump up through the
+  one-way row-15 slope tiles (`$38..$47` are not ceilings, `$1DFE`). Small
+  Mario needs Up+A or a running jump (69 px) for both 64 px climbs; a plain
+  standing jump rises 49 px.
+
+The tapes were found by the ignored `search::search_route` tool, which grows
+held-button tapes through both live paths and keeps the shortest surviving
+tape per 16-pixel cell. They are native fixtures, not recorded ROM input.
+`search::trace_route` prints a tape's per-frame position for reviewing one.
 
 ## Acceptance evidence
 
