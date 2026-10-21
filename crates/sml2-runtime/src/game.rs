@@ -174,21 +174,13 @@ pub(crate) fn update_tile_animation(
     scene_active: bool,
     bg: &mut [u8],
     rows: &[u8],
-    timer: &mut u32,
-    phase: &mut u8,
+    clock: &mut sml2_core::tile_animation::TileAnimationClock,
 ) {
-    *timer += 1;
     // `$01BF` is bypassed while `sSceneId != 0` (`$26C3` handles the
     // scene instead). In particular, `$6x` must not be overwritten before
     // the following `$2x` opcode disables animation permanently.
-    if scene_active {
-        return;
-    }
-    let anim = sml2_core::level::TileAnim::from_table_value(sim.tile_anim_config.wrapping_sub(1));
-    if anim.enabled && *timer >= u32::from(anim.speed) * 2 {
-        *timer = 0;
-        *phase = phase.wrapping_add(1) & 3;
-        crate::render::apply_tile_anim(bg, &anim, rows, *phase);
+    if let Some(anim) = clock.tick(sim.tile_anim_config, scene_active) {
+        crate::render::apply_tile_anim(bg, &anim, rows, clock.phase);
     }
 }
 

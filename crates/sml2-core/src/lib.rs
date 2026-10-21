@@ -31,6 +31,7 @@ pub mod player_sim;
 mod route_matrix_tests;
 pub mod scene;
 pub mod sprite_batch;
+pub mod tile_animation;
 pub mod tileset;
 pub mod video;
 pub mod vram_transfer;

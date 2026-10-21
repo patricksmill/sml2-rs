@@ -31,6 +31,7 @@ use sml2_core::object::ObjectTables;
 use sml2_core::objects::{FireHit, ObjectSim};
 use sml2_core::player_sim::{MapHandoffOutcome, PlayerKeys, PlayerSim};
 use sml2_core::scene::{boss_def_index, boss_def_portable, SceneScripts, SceneStep, SceneVm};
+use sml2_core::tile_animation::TileAnimationClock;
 use sml2_core::tileset::Tilesets;
 
 use crate::game::{
@@ -87,8 +88,7 @@ pub struct LevelContext {
     pub scripts: SceneScripts,
     pub tilesets: Tilesets,
     pub arena_layout: Option<LevelLayout>,
-    pub anim_timer: u32,
-    pub anim_phase: u8,
+    pub tile_animation: TileAnimationClock,
     pub frame_n: u64,
     pub map_handoff: Option<MapHandoffOutcome>,
     pub map_handoff_frame: Option<u64>,
@@ -193,8 +193,7 @@ impl LevelContext {
             scripts,
             tilesets,
             arena_layout,
-            anim_timer: 0,
-            anim_phase: 0,
+            tile_animation: TileAnimationClock::default(),
             frame_n: 0,
             map_handoff: None,
             map_handoff_frame: None,
@@ -551,8 +550,7 @@ impl LevelContext {
             self.cam.scene_id != 0,
             &mut self.bg_live,
             &self.anim_rows,
-            &mut self.anim_timer,
-            &mut self.anim_phase,
+            &mut self.tile_animation,
         );
     }
 
@@ -703,6 +701,8 @@ pub(crate) fn player_behind_bg(pipe_dir: u8) -> bool {
 /// Native session state. Advancing it performs no I/O or clock sampling.
 pub struct Session {
     object_clock: ObjectClock,
+    /// `$A298` and `$A2CD` survive map time and level loads.
+    tile_animation: TileAnimationClock,
     /// Console timing for the next `advance` only ([`Session::set_rom_timing`]).
     rom_timing: Option<RomTiming>,
     /// The map work bytes that outlive a `MapSim` and that level loads
@@ -761,6 +761,15 @@ pub struct Session {
 }
 
 impl Session {
+    fn remember_clocks(&mut self) {
+        self.object_clock.remember(&self.state);
+        match &self.state {
+            SessionState::InLevel(ctx) => self.tile_animation = ctx.tile_animation,
+            SessionState::Demo(demo) => self.tile_animation = demo.ctx.tile_animation,
+            _ => {}
+        }
+    }
+
     /// Start the golden-coin castle reveal and remember where it lands.
     pub fn begin_castle_sequence(
         &mut self,
@@ -769,7 +778,7 @@ impl Session {
         node: u8,
         exit_tile_flag: u8,
     ) {
-        self.object_clock.remember(&self.state);
+        self.remember_clocks();
         self.castle_progress = match &self.state {
             SessionState::Overworld(map) => map.level_progress,
             SessionState::InLevel(ctx) => ctx.sim.level_progress,
@@ -788,7 +797,7 @@ impl Session {
     /// Put a level live immediately (the map's own 37-frame transition is
     /// skipped), for acceptance tapes.
     pub fn begin_level(&mut self, level_id: u8, progress_flags: u8) -> Result<(), String> {
-        self.object_clock.remember(&self.state);
+        self.remember_clocks();
         let content = self.assets.level(level_id)?.clone();
         let ctx = LevelContext::from_content(
             level_id,
@@ -808,6 +817,7 @@ impl Session {
         );
         let mut ctx = Box::new(ctx);
         self.object_clock.initialize_level(&mut ctx.obj);
+        ctx.tile_animation = self.tile_animation;
         self.map_ram = sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
         ctx.obj.easy_mode = self.easy_mode;
         ctx.credits_text = self.assets.credits_text.clone();
@@ -822,7 +832,7 @@ impl Session {
 
     /// Stage a bell room the way the goal-bell exit does, for acceptance tapes.
     pub fn begin_bell_room(&mut self, screen: u8, node: u8, exit_tile_flag: u8) {
-        self.object_clock.remember(&self.state);
+        self.remember_clocks();
         let mut map = MapSim::new();
         map.set_castle_scripts(self.assets.castle_scripts.clone());
         map.lives = self.lives;
@@ -863,7 +873,7 @@ impl Session {
     }
 
     pub fn begin_coin_room(&mut self, screen: u8) {
-        self.object_clock.remember(&self.state);
+        self.remember_clocks();
         let mut map = MapSim::new();
         map.set_castle_scripts(self.assets.castle_scripts.clone());
         map.lives = self.lives;
@@ -889,6 +899,7 @@ impl Session {
         Self {
             state: SessionState::Overworld(map),
             object_clock: ObjectClock::default(),
+            tile_animation: TileAnimationClock::default(),
             rom_timing: None,
             map_ram: Default::default(),
             last_map_screen: None,
@@ -927,7 +938,7 @@ impl Session {
 
     /// `$30000`: enter the file select directly (desktop smoke/evidence).
     pub fn enter_file_select(&mut self) {
-        self.object_clock.remember(&self.state);
+        self.remember_clocks();
         let mut file_select = FileSelect::new(&mut self.slots);
         self.sound_driver.music_request = file_select.take_music();
         self.state = SessionState::FileSelect(file_select);
@@ -943,7 +954,7 @@ impl Session {
 
     /// `$00`: enter the title screen instead of the overworld.
     pub fn enter_title(&mut self) {
-        self.object_clock.remember(&self.state);
+        self.remember_clocks();
         self.state = SessionState::Title(TitleScreen::new());
         self.last_map_screen = None;
         self.active_slot = None;
@@ -953,7 +964,7 @@ impl Session {
 
     /// `$140D6`/`$140A8`: load the demo's level and copy its tape page.
     pub fn start_demo(&mut self, index: u8) -> bool {
-        self.object_clock.remember(&self.state);
+        self.remember_clocks();
         let index = index & 0x03;
         let level_id = DEMO_LEVELS[index as usize];
         let Ok(content) = self.assets.level(level_id) else {
@@ -976,6 +987,7 @@ impl Session {
             self.assets.object_tables.clone(),
         );
         self.object_clock.initialize_level(&mut ctx.obj);
+        ctx.tile_animation = self.tile_animation;
         self.map_ram = sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
         self.state = SessionState::Demo(Box::new(DemoContext {
             ctx: Box::new(ctx),
@@ -1007,7 +1019,7 @@ impl Session {
 
     /// Apply an already-read ROM-format progress record.
     pub fn apply_save_record(&mut self, data: &[u8]) -> bool {
-        self.object_clock.remember(&self.state);
+        self.remember_clocks();
         if !sml2_core::map::save_record_valid(data) {
             return false;
         }
@@ -1084,9 +1096,12 @@ impl Session {
     }
 
     pub fn advance(&mut self, input: FrameInput) -> FrameEffects {
-        self.object_clock.remember(&self.state);
+        self.remember_clocks();
         let FrameInput { keys, div } = input;
         let rom_timing = self.rom_timing.take();
+        if !matches!(self.state, SessionState::InLevel(_) | SessionState::Demo(_)) {
+            self.tile_animation.tick(0, false);
+        }
         self.frame_n += 1;
         let mut saves = Vec::new();
         let mut diagnostics = Vec::new();
@@ -1511,6 +1526,7 @@ impl Session {
                 self.sound_driver.low_time_flag = ctx.sim.low_time_flag != 0;
 
                 self.object_clock.observe(&ctx.obj);
+                self.tile_animation = ctx.tile_animation;
                 if ctx.is_finished() {
                     self.flutter = ctx.sim.flutter;
                     self.flutter_armed = ctx.sim.flutter_armed;
@@ -1692,6 +1708,7 @@ impl Session {
                                 &self.assets.nodes,
                             );
                             self.object_clock.observe(&demo.ctx.obj);
+                            self.tile_animation = demo.ctx.tile_animation;
                             if demo.ctx.sim.sfx0 != 0 {
                                 self.sound_driver.sfx_request_0 = demo.ctx.sim.sfx0;
                                 demo.ctx.sim.sfx0 = 0;
@@ -1750,7 +1767,8 @@ impl Session {
         // first InLevel frame).
         if let Some(t) = self.pending_level.as_mut() {
             if t.frame >= MAP_ENTRY_FRAMES {
-                let t = self.pending_level.take().expect("checked above");
+                let mut t = self.pending_level.take().expect("checked above");
+                t.ctx.tile_animation = self.tile_animation;
                 self.state = SessionState::InLevel(t.ctx);
                 outcome = StepOutcome::LevelEntered(t.level_id);
             }

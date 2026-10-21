@@ -150,8 +150,7 @@ pub(crate) fn run_play(
         w.set_target_fps(60);
     }
     let mut buf = vec![0u32; vw * scale * vh * scale];
-    let mut anim_timer: u32 = 0;
-    let mut anim_phase: u8 = 0;
+    let mut tile_animation = sml2_core::tile_animation::TileAnimationClock::default();
     let mut prev_a = false;
     let mut prev_b = false;
     let mut prev_start = false;
@@ -579,8 +578,7 @@ pub(crate) fn run_play(
             cam.scene_id != 0,
             &mut bg_live,
             anim_rows,
-            &mut anim_timer,
-            &mut anim_phase,
+            &mut tile_animation,
         );
         // Headless runs skip the whole render path: the frame loop's job in a
         // smoke run is the simulation, and rendering a 160x144 frame per level

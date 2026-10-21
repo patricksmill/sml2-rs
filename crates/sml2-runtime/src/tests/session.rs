@@ -1102,3 +1102,70 @@ fn boss_entry_hides_the_tileset_reload_until_the_scroll_finishes() {
     assert!(white_frames > 20, "reload and door scroll stay hidden");
     assert!(restored, "the arena becomes visible when the scroll ends");
 }
+
+/// `$0669` only changes `$A299`; `$3042D` only clears it on map return.
+/// The clock bytes from the preceding level must reach Pumpkin Zone 1.
+#[test]
+fn pumpkin_tile_animation_inherits_phase_and_map_time() {
+    use crate::session::{FrameInput, Session};
+    use sml2_core::tile_animation::TileAnimationClock;
+
+    let mut session = Session::new(SessionAssets::load().expect("session assets"));
+    session.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        unreachable!()
+    };
+    ctx.tile_animation = TileAnimationClock {
+        timer: 250,
+        phase: 2,
+    };
+
+    session.debug_warp_map(1, 0x28).unwrap();
+    let tick = |session: &mut Session, keys| session.advance(FrameInput { keys, div: 0 }).outcome;
+    // The disabled map clock wraps at 256 instead of accumulating host frames.
+    for _ in 0..10 {
+        tick(&mut session, PlayerKeys::default());
+    }
+    let entry_frame = session.frame_n;
+    tick(
+        &mut session,
+        PlayerKeys {
+            a: true,
+            ..Default::default()
+        },
+    );
+    let mut entered = false;
+    for _ in 0..MAP_ENTRY_FRAMES + 8 {
+        if tick(&mut session, PlayerKeys::default()) == StepOutcome::LevelEntered(6) {
+            entered = true;
+            break;
+        }
+    }
+    assert!(entered, "Pumpkin node $28 enters level 6");
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        unreachable!()
+    };
+    let elapsed = (session.frame_n - entry_frame) as u8;
+    assert_eq!(
+        (ctx.tile_animation.timer, ctx.tile_animation.phase),
+        (4 + elapsed, 2)
+    );
+    assert_eq!(ctx.sim.tile_anim_config, 0xFF);
+    assert!(ctx.tile_animation.timer >= 30);
+    let expected = ctx.anim_rows[0xEC0..0xF00].to_vec();
+    ctx.sim.paused = true;
+    tick(&mut session, PlayerKeys::default());
+    let SessionState::InLevel(ctx) = &session.state else {
+        unreachable!()
+    };
+    assert_eq!((ctx.tile_animation.timer, ctx.tile_animation.phase), (1, 3));
+    assert_eq!(&ctx.bg_live[0xA00..0xA40], expected);
+
+    // A direct warp/reload also preserves both bytes, rather than starting
+    // phase 0 and waiting another full 30 frames.
+    session.begin_level(6, 0).unwrap();
+    let SessionState::InLevel(ctx) = &session.state else {
+        unreachable!()
+    };
+    assert_eq!((ctx.tile_animation.timer, ctx.tile_animation.phase), (1, 3));
+}
