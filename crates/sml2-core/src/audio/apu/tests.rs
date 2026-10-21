@@ -276,7 +276,10 @@ fn the_stop_all_silences_a_sounding_channel() {
         buffer.clear();
         apu.generate_samples(44_100, 735, &mut buffer);
     }
-    assert_eq!(driver.pulse_effect.active_effect, 4, "the walk SFX is active");
+    assert_eq!(
+        driver.pulse_effect.active_effect, 4,
+        "the walk SFX is active"
+    );
     assert!(
         buffer.iter().any(|&s| s.abs() > 1e-3),
         "SFX 4 sounds before the stop"
@@ -293,8 +296,9 @@ fn the_stop_all_silences_a_sounding_channel() {
     buffer.clear();
     apu.generate_samples(44_100, 735, &mut buffer);
     // What remains is only the AC-coupling capacitor's decaying DC offset:
-    // no periodic tone, so the magnitude falls monotonically.
-    let left: Vec<f32> = buffer.iter().step_by(2).copied().collect();
+    // no periodic tone, so the magnitude falls monotonically. The first 40
+    // samples still carry the band-limited tails of the last steps.
+    let left: Vec<f32> = buffer.iter().step_by(2).skip(40).copied().collect();
     for w in left.windows(2) {
         assert!(
             w[1].abs() <= w[0].abs() + 1e-6,
@@ -318,28 +322,29 @@ fn trigger_keeps_the_duty_position_and_power_off_resets_it() {
     assert_eq!(apu.ch1.duty_step, 0, "NR52 power-off resets it");
 }
 
-/// `render_cycles` integrates level × cycles, so a whole duty cycle sums to
-/// exactly the high steps' share whatever phase it starts at.
+/// `run_cycles` reports every duty step at its cycle offset with the new
+/// level, which is what the band-limited mixer places its steps from.
 #[test]
-fn render_cycles_integrates_whole_duty_cycles() {
-    for (duty, high_steps) in [(0x00u8, 1u32), (0x40, 2), (0x80, 4), (0xC0, 6)] {
-        let mut apu = Apu::new();
-        apu.apply_pulse_write(PulseWrite::DutyLength(duty));
-        apu.apply_pulse_write(PulseWrite::Envelope(0xF0));
-        apu.apply_pulse_write(PulseWrite::FrequencyLow(0x00));
-        apu.apply_pulse_write(PulseWrite::FrequencyControl(0x87)); // freq $700
-        apu.ch1.render_cycles(37); // arbitrary phase
-        let cycle = apu.ch1.period() * 8;
-        assert_eq!(
-            apu.ch1.render_cycles(cycle * 3),
-            15 * high_steps * apu.ch1.period() * 3,
-            "duty {duty:#04X}"
-        );
-    }
+fn run_cycles_reports_each_duty_step_at_its_offset() {
+    let mut apu = Apu::new();
+    apu.apply_pulse_write(PulseWrite::DutyLength(0x80)); // 50%: 1,0,0,0,0,1,1,1
+    apu.apply_pulse_write(PulseWrite::Envelope(0xF0));
+    apu.apply_pulse_write(PulseWrite::FrequencyLow(0x00));
+    apu.apply_pulse_write(PulseWrite::FrequencyControl(0x87)); // freq $700
+    let period = apu.ch1.period();
+    let mut steps = Vec::new();
+    apu.ch1
+        .run_cycles(period * 8, |at, level| steps.push((at, level)));
+    let expected: Vec<(u32, u8)> = [0, 0, 0, 0, 15, 15, 15, 15]
+        .iter()
+        .enumerate()
+        .map(|(i, &level)| (period * (i as u32 + 1), level))
+        .collect();
+    assert_eq!(steps, expected);
 }
 
-/// A pulse far above Nyquist (freq 2047: 131 kHz) is averaged to a steady
-/// level. Point sampling instead jumped between silence and full volume,
+/// A pulse far above Nyquist (freq 2047: 131 kHz) comes out as its steady
+/// mean. Point sampling instead jumped between silence and full volume,
 /// aliasing the tone down into the audible band.
 #[test]
 fn an_ultrasonic_pulse_averages_instead_of_aliasing() {
@@ -349,10 +354,11 @@ fn an_ultrasonic_pulse_averages_instead_of_aliasing() {
     apu.apply_pulse_write(PulseWrite::FrequencyLow(0xFF));
     apu.apply_pulse_write(PulseWrite::FrequencyControl(0x87));
     let mut samples = Vec::new();
-    apu.generate_samples(44_100, 200, &mut samples);
-    let left: Vec<f32> = samples.iter().step_by(2).copied().collect();
+    apu.generate_samples(44_100, 400, &mut samples);
+    // Skip the note's onset: its step rings for the kernel's width.
+    let left: Vec<f32> = samples.iter().step_by(2).skip(64).copied().collect();
     for w in left.windows(2) {
-        assert!((w[1] - w[0]).abs() < 0.02, "sample jump {w:?}");
+        assert!((w[1] - w[0]).abs() < 1e-3, "sample jump {w:?}");
     }
 }
 
@@ -412,7 +418,10 @@ fn nrx2_dac_off_disables_the_channel_until_a_powered_trigger() {
     apu.apply_pulse_write(PulseWrite::Envelope(0x00));
     assert!(!apu.ch1.enabled, "NR12 = 0 powers the DAC off");
     apu.apply_pulse_write(PulseWrite::FrequencyControl(0x86));
-    assert!(!apu.ch1.enabled, "a trigger with the DAC off stays disabled");
+    assert!(
+        !apu.ch1.enabled,
+        "a trigger with the DAC off stays disabled"
+    );
 
     // $08 (volume 0, increase) keeps the DAC powered, so the trigger holds.
     apu.apply_pulse_write(PulseWrite::Envelope(0x08));
@@ -447,7 +456,11 @@ fn wave_trigger_plays_the_stale_buffer_then_nibble_one() {
     apu.ch3.advance_cycles(period);
     assert_eq!((apu.ch3.sample_step, apu.ch3.sample()), (1, 0xA));
     apu.ch3.advance_cycles(period * 31);
-    assert_eq!((apu.ch3.sample_step, apu.ch3.sample()), (0, 0x9), "after the loop");
+    assert_eq!(
+        (apu.ch3.sample_step, apu.ch3.sample()),
+        (0, 0x9),
+        "after the loop"
+    );
 }
 
 /// Channel timers run at volume 0 (and wave volume code 0); only the output
@@ -471,4 +484,55 @@ fn channel_timers_run_while_silent() {
     apu.ch3.advance_cycles(apu.ch3.period() * 5);
     assert_eq!(apu.ch3.sample_step, 5);
     assert_eq!(apu.ch3.sample(), 0, "volume code 0 still mutes");
+}
+
+/// Goertzel power of `x` at `freq` Hz.
+fn tone_power(x: &[f32], freq: f64, rate: f64) -> f64 {
+    let w = 2.0 * std::f64::consts::PI * freq / rate;
+    let (mut s1, mut s2) = (0.0f64, 0.0f64);
+    for &v in x {
+        let s0 = v as f64 + 2.0 * w.cos() * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+    }
+    s1 * s1 + s2 * s2 - 2.0 * w.cos() * s1 * s2
+}
+
+/// An 8192 Hz square (freq $7F0) has odd harmonics at 24576, 40960, 57344 Hz
+/// ... which a 44.1 kHz stream folds to 19524, 3140 and 13244 Hz. The
+/// per-sample box filter left those at -14, -36 and -30 dB against the
+/// fundamental; band-limited steps put them below -78 dB.
+#[test]
+fn a_bright_square_has_no_audible_aliases() {
+    let mut apu = Apu::new();
+    apu.apply_pulse_write(PulseWrite::DutyLength(0x80));
+    apu.apply_pulse_write(PulseWrite::Envelope(0xF0));
+    apu.apply_pulse_write(PulseWrite::FrequencyLow(0xF0));
+    apu.apply_pulse_write(PulseWrite::FrequencyControl(0x07)); // freq $7F0, no length
+    apu.apply_pulse_write(PulseWrite::FrequencyControl(0x87));
+    let mut samples = Vec::new();
+    apu.generate_samples(44_100, 44_100, &mut samples);
+    let left: Vec<f32> = samples.iter().step_by(2).skip(4_100).copied().collect();
+    let fundamental = tone_power(&left, 8192.0, 44_100.0);
+    for alias in [3140.0, 13244.0, 19524.0] {
+        let db = 10.0 * (tone_power(&left, alias, 44_100.0) / fundamental).log10();
+        assert!(db < -60.0, "{alias} Hz alias at {db:.1} dB");
+    }
+}
+
+/// Every step integrates back to exactly its delta, whatever its sub-sample
+/// time and however the block is split, so the output cannot drift.
+#[test]
+fn band_limited_steps_integrate_exactly() {
+    use crate::audio::blip::{StereoBlip, UNIT, WIDTH};
+    let mut synth = StereoBlip::default();
+    let mut levels = Vec::new();
+    for time in [0.0, 0.3, 7.77, 15.999, -0.9] {
+        synth.begin(16);
+        synth.add_step(time, [3, -5]);
+        synth.read(16, |l| levels.push(l));
+    }
+    synth.begin(WIDTH + 2);
+    synth.read(WIDTH + 2, |l| levels.push(l));
+    assert_eq!(*levels.last().unwrap(), [5 * 3 * UNIT, 5 * -5 * UNIT]);
 }

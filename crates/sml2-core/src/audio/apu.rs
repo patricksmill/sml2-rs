@@ -10,6 +10,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::audio::blip::{self, StereoBlip};
 use crate::audio::driver::SoundDriver;
 use crate::audio::music::MusicWrite;
 use crate::audio::noise::NoiseWrite;
@@ -17,8 +18,8 @@ use crate::audio::pulse::PulseWrite;
 use crate::audio::wave::WaveWrite;
 
 /// DMG AC-coupling capacitor charge factor per 4.194 MHz cycle (gbdev wiki,
-/// "Gameboy sound hardware"; MGB/CGB use 0.998943). A PCM sample spanning `n`
-/// cycles uses `factor^n`: about 0.996 at 44.1 kHz.
+/// "Gameboy sound hardware"; MGB/CGB use 0.998943). A PCM sample at rate `r`
+/// uses `factor^(4194304 / r)`: about 0.996 at 44.1 kHz.
 const HPF_CHARGE_PER_CYCLE: f64 = 0.999958;
 
 const DUTY_TABLE: [[u8; 8]; 4] = [
@@ -146,28 +147,27 @@ impl PulseChannel {
     }
 
     pub fn advance_cycles(&mut self, cycles: u32) {
-        self.render_cycles(cycles);
+        self.run_cycles(cycles, |_, _| {});
     }
 
-    /// Advances `cycles` and returns the output integrated over them (level ×
-    /// cycles), so the mixer box-filters each PCM interval instead of
-    /// point-sampling it.
-    pub fn render_cycles(&mut self, mut cycles: u32) -> u32 {
+    /// Advances `cycles`, calling `stepped(at, level)` after each duty step
+    /// with its cycle offset and the new output level, so the mixer can place
+    /// the change exactly.
+    pub fn run_cycles(&mut self, mut cycles: u32, mut stepped: impl FnMut(u32, u8)) {
         // The timer runs at volume 0 too; only the output is silent.
         if !self.enabled {
-            return 0;
+            return;
         }
         let period = self.period().max(1);
-        let mut acc = 0;
+        let mut at = 0;
         while cycles >= self.timer {
-            acc += self.sample() as u32 * self.timer;
+            at += self.timer;
             cycles -= self.timer;
             self.duty_step = (self.duty_step + 1) & 7;
             self.timer = period;
+            stepped(at, self.sample());
         }
-        acc += self.sample() as u32 * cycles;
         self.timer -= cycles;
-        acc
     }
 
     pub fn sample(&self) -> u8 {
@@ -221,19 +221,19 @@ impl WaveChannel {
     }
 
     pub fn advance_cycles(&mut self, cycles: u32) {
-        self.render_cycles(cycles);
+        self.run_cycles(cycles, |_, _| {});
     }
 
-    /// Advances `cycles` and returns the output integrated over them.
-    pub fn render_cycles(&mut self, mut cycles: u32) -> u32 {
+    /// Advances `cycles`, calling `stepped(at, level)` after each position step.
+    pub fn run_cycles(&mut self, mut cycles: u32, mut stepped: impl FnMut(u32, u8)) {
         // The position advances at volume code 0 too; only the output mutes.
         if !self.enabled || !self.dac_enabled {
-            return 0;
+            return;
         }
         let period = self.period().max(1);
-        let mut acc = 0;
+        let mut at = 0;
         while cycles >= self.timer {
-            acc += self.sample() as u32 * self.timer;
+            at += self.timer;
             cycles -= self.timer;
             self.sample_step = (self.sample_step + 1) & 31;
             let byte = self.wave_ram[(self.sample_step as usize) / 2];
@@ -243,10 +243,9 @@ impl WaveChannel {
                 byte & 0x0F
             };
             self.timer = period;
+            stepped(at, self.sample());
         }
-        acc += self.sample() as u32 * cycles;
         self.timer -= cycles;
-        acc
     }
 
     pub fn sample(&self) -> u8 {
@@ -347,24 +346,19 @@ impl NoiseChannel {
     }
 
     pub fn advance_cycles(&mut self, cycles: u32) {
-        self.render_cycles(cycles);
+        self.run_cycles(cycles, |_, _| {});
     }
 
-    /// Advances `cycles` and returns the output integrated over them.
-    pub fn render_cycles(&mut self, mut cycles: u32) -> u32 {
+    /// Advances `cycles`, calling `stepped(at, level)` after each LFSR clock.
+    pub fn run_cycles(&mut self, mut cycles: u32, mut stepped: impl FnMut(u32, u8)) {
         // The timer runs at volume 0 too; only the output is silent.
         if !self.enabled {
-            return 0;
+            return;
         }
         let period = self.period().max(1);
-        let mut acc = 0;
-        while cycles > 0 {
-            if cycles < self.timer {
-                acc += self.sample() as u32 * cycles;
-                self.timer -= cycles;
-                break;
-            }
-            acc += self.sample() as u32 * self.timer;
+        let mut at = 0;
+        while cycles >= self.timer {
+            at += self.timer;
             cycles -= self.timer;
             self.timer = period;
             let b0 = self.lfsr & 1;
@@ -374,8 +368,9 @@ impl NoiseChannel {
             if self.width_mode_7bit {
                 self.lfsr = (self.lfsr & !(1 << 6)) | (feedback << 6);
             }
+            stepped(at, self.sample());
         }
-        acc
+        self.timer -= cycles;
     }
 
     pub fn sample(&self) -> u8 {
@@ -415,6 +410,11 @@ pub struct Apu {
     pub sample_frame_acc: u64,
     pub cap_left: f32, // High-pass DC-blocking filter state
     pub cap_right: f32,
+    /// Band-limited step synthesizer the channels' level changes are drawn into.
+    pub synth: StereoBlip,
+    /// Each channel's last contribution to the left/right mix, in level × NR50
+    /// units: a change is drawn as the difference from this.
+    pub mix: [[i32; 2]; 4],
 }
 
 impl Default for Apu {
@@ -435,6 +435,8 @@ impl Default for Apu {
             sample_frame_acc: 0,
             cap_left: 0.0,
             cap_right: 0.0,
+            synth: StereoBlip::default(),
+            mix: [[0; 2]; 4],
         }
     }
 }
@@ -770,93 +772,94 @@ impl Apu {
 
     /// Generates interleaved stereo f32 audio samples in `[-1.0, 1.0]`.
     /// `num_frames` is the number of stereo pairs (so `2 * num_frames` floats are appended to `out`).
+    ///
+    /// Channel level changes are drawn as band-limited steps at their exact
+    /// cycle times ([`blip`]), so the output is free of the aliasing point
+    /// sampling folds below Nyquist. It lags the APU by about 17 samples.
     pub fn generate_samples(&mut self, sample_rate: u32, num_frames: usize, out: &mut Vec<f32>) {
         out.reserve(num_frames * 2);
+        let rate = sample_rate.max(1);
 
-        // Scaling constants (4 channels, max combined magnitude 4.0)
-        let master_l = ((self.left_volume as f32) + 1.0) / 8.0;
-        let master_r = ((self.right_volume as f32) + 1.0) / 8.0;
-        let norm = 0.25f32;
+        // NR51 routes a channel to a side; NR50 scales that side by (v+1)/8.
+        // A channel's contribution is level × gain, at most 15 × 8 per channel.
+        let side_gain = [self.left_volume as i32 + 1, self.right_volume as i32 + 1];
+        let gains: [[i32; 2]; 4] = std::array::from_fn(|ch| {
+            let left = (self.nr51 >> (ch + 4)) & 1;
+            let right = (self.nr51 >> ch) & 1;
+            [left as i32 * side_gain[0], right as i32 * side_gain[1]]
+        });
 
-        let pan_ch1_r = (self.nr51 & 0x01) != 0;
-        let pan_ch2_r = (self.nr51 & 0x02) != 0;
-        let pan_ch3_r = (self.nr51 & 0x04) != 0;
-        let pan_ch4_r = (self.nr51 & 0x08) != 0;
+        // Cycle `c` of this block lands at sample `(c * rate - acc0) / 4194304`:
+        // `cycle_acc` is the part of a cycle the last block already used.
+        let acc0 = self.cycle_acc as f64;
+        let to_time = |c: u64| (c as f64 * rate as f64 - acc0) / 4_194_304.0;
 
-        let pan_ch1_l = (self.nr51 & 0x10) != 0;
-        let pan_ch2_l = (self.nr51 & 0x20) != 0;
-        let pan_ch3_l = (self.nr51 & 0x40) != 0;
-        let pan_ch4_l = (self.nr51 & 0x80) != 0;
-
-        let safe_sample_rate = sample_rate.max(1);
-
+        self.synth.begin(num_frames);
+        let mut elapsed = 0u64;
         for _ in 0..num_frames {
             self.cycle_acc += 4_194_304;
-            let cycles = self.cycle_acc / safe_sample_rate;
-            self.cycle_acc %= safe_sample_rate;
+            let cycles = self.cycle_acc / rate;
+            self.cycle_acc %= rate;
 
+            // Register writes and the frame sequencer change levels at the
+            // interval start; the channel timers then step within it.
             self.advance_frame_sequencer(cycles);
-
-            // Box-filter each channel over the interval instead of reading one
-            // instant: averaging attenuates the pulse harmonics and fast noise
-            // that point sampling folds back below Nyquist.
-            let scale = 1.0 / (cycles.max(1) as f32 * 15.0);
-            let s1 = self.ch1.render_cycles(cycles) as f32 * scale;
-            let s2 = self.ch2.render_cycles(cycles) as f32 * scale;
-            let s3 = self.ch3.render_cycles(cycles) as f32 * scale;
-            let s4 = self.ch4.render_cycles(cycles) as f32 * scale;
-
-            let mut left = 0.0f32;
-            let mut right = 0.0f32;
-
-            if pan_ch1_l {
-                left += s1;
+            let start = to_time(elapsed);
+            let levels = [
+                self.ch1.sample(),
+                self.ch2.sample(),
+                self.ch3.sample(),
+                self.ch4.sample(),
+            ];
+            for (ch, &level) in levels.iter().enumerate() {
+                draw_level(&mut self.synth, &mut self.mix[ch], gains[ch], start, level);
             }
-            if pan_ch1_r {
-                right += s1;
-            }
-
-            if pan_ch2_l {
-                left += s2;
-            }
-            if pan_ch2_r {
-                right += s2;
-            }
-
-            if pan_ch3_l {
-                left += s3;
-            }
-            if pan_ch3_r {
-                right += s3;
-            }
-
-            if pan_ch4_l {
-                left += s4;
-            }
-            if pan_ch4_r {
-                right += s4;
-            }
-
-            // Normalize and scale with master volume
-            let raw_l = left * norm * master_l;
-            let raw_r = right * norm * master_r;
-
-            // AC-coupling capacitor: `out = in - cap; cap = in - out * charge`.
-            // With every DAC off the amplifier is disconnected: the output is
-            // 0 and the capacitor holds its charge.
-            let (out_l, out_r) = if self.any_dac_on() {
-                let charge = HPF_CHARGE_PER_CYCLE.powi(cycles as i32) as f32;
-                let out_l = raw_l - self.cap_left;
-                let out_r = raw_r - self.cap_right;
-                self.cap_left = raw_l - out_l * charge;
-                self.cap_right = raw_r - out_r * charge;
-                (out_l.clamp(-1.0, 1.0), out_r.clamp(-1.0, 1.0))
-            } else {
-                (0.0, 0.0)
-            };
-
-            out.push(out_l);
-            out.push(out_r);
+            let (synth, mix) = (&mut self.synth, &mut self.mix);
+            let at = |offset: u32| to_time(elapsed + offset as u64);
+            self.ch1.run_cycles(cycles, |o, level| {
+                draw_level(synth, &mut mix[0], gains[0], at(o), level)
+            });
+            self.ch2.run_cycles(cycles, |o, level| {
+                draw_level(synth, &mut mix[1], gains[1], at(o), level)
+            });
+            self.ch3.run_cycles(cycles, |o, level| {
+                draw_level(synth, &mut mix[2], gains[2], at(o), level)
+            });
+            self.ch4.run_cycles(cycles, |o, level| {
+                draw_level(synth, &mut mix[3], gains[3], at(o), level)
+            });
+            elapsed += cycles as u64;
         }
+
+        // Full scale is all four channels at level 15 with NR50 at 7.
+        let scale = 1.0 / (blip::UNIT as f64 * (4 * 15 * 8) as f64);
+        // AC-coupling capacitor: `out = in - cap; cap = in - out * charge`.
+        // With every DAC off the amplifier is disconnected: the output is 0
+        // and the capacitor holds its charge.
+        let charge = HPF_CHARGE_PER_CYCLE.powf(4_194_304.0 / rate as f64) as f32;
+        let connected = self.any_dac_on();
+        let (cap_l, cap_r) = (&mut self.cap_left, &mut self.cap_right);
+        self.synth.read(num_frames, |[l, r]| {
+            if !connected {
+                out.extend([0.0, 0.0]);
+                return;
+            }
+            let (raw_l, raw_r) = ((l as f64 * scale) as f32, (r as f64 * scale) as f32);
+            let out_l = raw_l - *cap_l;
+            let out_r = raw_r - *cap_r;
+            *cap_l = raw_l - out_l * charge;
+            *cap_r = raw_r - out_r * charge;
+            out.extend([out_l.clamp(-1.0, 1.0), out_r.clamp(-1.0, 1.0)]);
+        });
+    }
+}
+
+/// Draws a channel's move to `level` at `time` as the change in its
+/// contribution to each side.
+fn draw_level(synth: &mut StereoBlip, last: &mut [i32; 2], gain: [i32; 2], time: f64, level: u8) {
+    let next = [level as i32 * gain[0], level as i32 * gain[1]];
+    if next != *last {
+        synth.add_step(time, [next[0] - last[0], next[1] - last[1]]);
+        *last = next;
     }
 }

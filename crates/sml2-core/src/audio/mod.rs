@@ -1,6 +1,7 @@
 //! Native sound sequencing, channel dispatch, and ordered channel-control outputs.
 
 pub mod apu;
+pub mod blip;
 pub mod driver;
 pub mod music;
 pub mod noise;
