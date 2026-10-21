@@ -77,6 +77,8 @@ pub struct LevelContext {
     pub cam: CameraSim,
     pub obj: ObjectSim,
     pub scene_vm: SceneVm,
+    /// `$25AF` leaves all three palettes white until `$0EF3` ends the scroll.
+    pub(crate) scene_reload_blank: bool,
     pub ending_entry: EndingEntry,
     pub ending_sequence: EndingSequenceController,
     pub ending_scene: EndingScene,
@@ -183,6 +185,7 @@ impl LevelContext {
             cam,
             obj,
             scene_vm: SceneVm::new(),
+            scene_reload_blank: false,
             ending_entry: EndingEntry::default(),
             ending_sequence: EndingSequenceController::new(),
             ending_scene: EndingScene::default(),
@@ -331,7 +334,11 @@ impl LevelContext {
                 }
                 self.sim.resolve_fire_hit(i, hit != FireHit::None);
             }
+            let transition_before = self.cam.transition;
             self.cam.step(&mut self.sim);
+            if transition_before != 0 && self.cam.transition == 0 {
+                self.scene_reload_blank = false;
+            }
             self.cam.update_enables(self.sim.x);
         }
         self.cam.update_player_pan(self.sim.y, was_dead, !frozen);
@@ -398,6 +405,8 @@ impl LevelContext {
         }
         if let SceneStep::Ran(op) = stepped {
             if op >> 4 == 0x6 {
+                // `$266D` clears BGP, OBP0 and OBP1 before re-enabling LCD.
+                self.scene_reload_blank = true;
                 let index = self.sim.level_gfx_index;
                 let obj_tiles = self.spr.as_mut().map(|s| &mut s.objblock);
                 let _ = match obj_tiles {
@@ -522,13 +531,20 @@ impl LevelContext {
             self.map_handoff_frame = Some(self.frame_n);
         }
 
-        let flash = if self.sim.paused {
+        let flash = if self.scene_reload_blank {
+            Some(0)
+        } else if self.sim.paused {
             Some(self.sim.pause_flash())
         } else {
             None
         };
         if let Some(s) = self.spr.as_mut() {
             s.obp0 = flash.unwrap_or(self.manifest.header.palettes[1]);
+            s.obp1 = if self.scene_reload_blank {
+                0
+            } else {
+                self.manifest.header.palettes[2]
+            };
         }
         update_tile_animation(
             &self.sim,

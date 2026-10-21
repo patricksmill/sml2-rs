@@ -5,16 +5,15 @@ use super::{hud_row_status, HudDigits};
 use crate::session::{LevelContext, Session, SessionState, MAP_FADE_STEP};
 use std::error::Error;
 
-/// `rBGP`/`rOBP` fade step: subtract `steps` from each 2-bit shade field,
-/// clamped at 0. The console's map-to-level fade runs `$90` -> `$40` -> `$00`.
-fn fade_palette(pal: u8, steps: u8) -> u8 {
-    let mut out = 0u8;
-    for i in 0..4 {
-        let shift = i * 2;
-        let field = (pal >> shift) & 0x03;
-        out |= field.saturating_sub(steps) << shift;
+/// Bank 15 `$3E9FB`: twelve waits before each of four palette writes.
+fn map_entry_palettes(frame: u16, initial: (u8, u8, u8)) -> (u8, u8, u8) {
+    if frame < MAP_FADE_STEP {
+        return initial;
     }
-    out
+    let step = (frame / MAP_FADE_STEP - 1).min(3) as usize;
+    let bg = [0xE4, 0x90, 0x40, 0x00][step];
+    let obj = [0xD0, 0x80, 0x40, 0x00][step];
+    (bg, obj, obj)
 }
 
 impl LevelContext {
@@ -31,7 +30,9 @@ impl LevelContext {
                 timer_low: self.sim.level_timer.low,
             },
         );
-        let flash = if self.sim.paused {
+        let flash = if self.scene_reload_blank {
+            Some(0)
+        } else if self.sim.paused {
             Some(self.sim.pause_flash())
         } else {
             None
@@ -131,19 +132,20 @@ impl Session {
                     .find(|s| s.id == map_sim.screen_id)
                     .map(|s| s.bg_palette)
                     .unwrap_or(0xE4);
-                // While a level entry runs, the console walks every palette
-                // field toward shade 0 one step every MAP_FADE_STEP frames and
-                // holds the white screen until the level goes live.
-                let fade = match self.pending_level.as_ref() {
-                    Some(t) if t.frame < MAP_FADE_STEP => 1,
-                    Some(_) => 2,
-                    None => 0,
-                };
                 let zone_palettes = map_sim.zone_palettes();
-                let bg_pal = zone_palettes.map_or(bg_pal, |p| p.0);
-                let (bg_pal, obp) = match &self.map_pan_return {
-                    Some(pan) => pan.palettes(),
-                    None => (fade_palette(bg_pal, fade), fade_palette(0xD0, fade)),
+                let initial = (
+                    zone_palettes.map_or(bg_pal, |p| p.0),
+                    0xD0,
+                    zone_palettes.map_or(0x39, |p| p.1),
+                );
+                let (bg_pal, obp, obj_palette1) = match &self.map_pan_return {
+                    Some(pan) => {
+                        let p = pan.palettes();
+                        (p.0, p.1, initial.2)
+                    }
+                    None => self.pending_level.as_ref().map_or(initial, |t| {
+                        map_entry_palettes(t.frame, initial)
+                    }),
                 };
                 // `$3F203` fills `sStatusBarOAM` from `$7251` on the hub; a zone
                 // screen's `$3E277` clears those nine entries first, so its bar
@@ -187,7 +189,7 @@ impl Session {
                     scroll_rows: std::array::from_fn(|y| map_sim.zone_background_scroll(y).0),
                     scroll_y: map_sim.zone_background_scroll(0).1,
                     obj_palette1: transition_palettes.map_or_else(
-                        || fade_palette(zone_palettes.map_or(0x39, |p| p.1), fade),
+                        || obj_palette1,
                         |p| p.2,
                     ),
                 };
@@ -233,6 +235,25 @@ impl Session {
                 (vw, vh),
             ),
             SessionState::GameOver => vec![0u8; vw * vh],
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn level_entry_palette_writes_follow_the_rom_wait_boundaries() {
+        let initial = (0xE1, 0xD0, 0x39);
+        for (frame, expected) in [
+            (0, initial), (11, initial),
+            (12, (0xE4, 0xD0, 0xD0)), (23, (0xE4, 0xD0, 0xD0)),
+            (24, (0x90, 0x80, 0x80)), (35, (0x90, 0x80, 0x80)),
+            (36, (0x40, 0x40, 0x40)), (47, (0x40, 0x40, 0x40)),
+            (48, (0, 0, 0)), (73, (0, 0, 0)),
+        ] {
+            assert_eq!(map_entry_palettes(frame, initial), expected, "frame {frame}");
         }
     }
 }

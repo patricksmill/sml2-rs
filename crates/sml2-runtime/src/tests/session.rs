@@ -447,8 +447,6 @@ fn map_level_entry_runs_the_console_transition() {
     let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
     let _ = runner.step_frame(PlayerKeys::default());
 
-    let plain_mean = runner.render_frame().iter().map(|&p| p as u32).sum::<u32>() / (160 * 144);
-
     // Pressing A queues the entry: the map stays on screen and its theme stops
     // ($3C1A2 requests $FF before the load), but the level is not live yet.
     let _ = runner.step_frame(PlayerKeys {
@@ -459,18 +457,15 @@ fn map_level_entry_runs_the_console_transition() {
     assert!(runner.pending_level.is_some(), "entry queued");
     assert_eq!(runner.sound_driver.active_song, 0, "map theme stopped");
 
-    // The first transition frame is one fade step brighter than the map; the
-    // second step lands at the boundary of the hold, and the level goes live
-    // MAP_ENTRY_FRAMES frames after the press.
-    let faded_mean = runner.render_frame().iter().map(|&p| p as u32).sum::<u32>() / (160 * 144);
-    assert!(
-        faded_mean > plain_mean,
-        "fade step lightens the map ({faded_mean} vs {plain_mean})"
-    );
-
+    // `$3E9FB` waits before each palette write. By frame 48 every layer
+    // must be white, including OBJ palette 1 and the status bar.
     let mut entered = None;
     for i in 1..=80 {
-        if let StepOutcome::LevelEntered(id) = runner.step_frame(PlayerKeys::default()) {
+        let outcome = runner.step_frame(PlayerKeys::default());
+        if (48..73).contains(&i) {
+            assert!(runner.render_frame().iter().all(|&p| p == 255), "frame {i}");
+        }
+        if let StepOutcome::LevelEntered(id) = outcome {
             entered = Some((i, id));
             break;
         }
@@ -1072,4 +1067,38 @@ fn object_clock_exit_retains_the_final_engine_pass() {
         panic!()
     };
     assert_eq!((ctx.obj.fff0, ctx.obj.update_phase), (73, 0));
+}
+
+/// Boss scripts reload the tileset with LCD disabled and leave all palettes
+/// zero. `$0EF3` restores the header palettes only after the door scroll ends.
+#[test]
+fn boss_entry_hides_the_tileset_reload_until_the_scroll_finishes() {
+    use crate::session::{FrameInput, Session};
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(13, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else { panic!() };
+    ctx.cam.scene_id = 14; // `$65 $20 $30 $60 $68 $40 $03 $FF`
+    ctx.cam.transition = 1;
+    ctx.cam.x = 0x6B0;
+    ctx.scene_vm.start();
+    let mut white_frames = 0;
+    let mut restored = false;
+    for _ in 0..80 {
+        session.advance(FrameInput::default());
+        let SessionState::InLevel(ctx) = &session.state else { panic!() };
+        if ctx.scene_reload_blank {
+            white_frames += 1;
+            assert_eq!((ctx.spr.as_ref().unwrap().obp0, ctx.spr.as_ref().unwrap().obp1), (0, 0));
+            assert!(session.render_frame((160, 144)).iter().all(|&p| p == 255));
+        } else if white_frames != 0 {
+            assert_eq!(ctx.cam.transition, 0);
+            assert_eq!((ctx.spr.as_ref().unwrap().obp0, ctx.spr.as_ref().unwrap().obp1),
+                       (ctx.manifest.header.palettes[1], ctx.manifest.header.palettes[2]));
+            assert!(session.render_frame((160, 144)).iter().any(|&p| p != 255));
+            restored = true;
+            break;
+        }
+    }
+    assert!(white_frames > 20, "reload and door scroll stay hidden");
+    assert!(restored, "the arena becomes visible when the scroll ends");
 }
