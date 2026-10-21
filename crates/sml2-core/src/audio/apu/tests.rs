@@ -427,3 +427,48 @@ fn nrx2_dac_off_disables_the_channel_until_a_powered_trigger() {
     apu.apply_noise_write(NoiseWrite::Control(0x80));
     assert!(!apu.ch4.enabled);
 }
+
+/// Pan Docs: a CH3 trigger resets the position without refilling the sample
+/// buffer, so the stale nibble plays first, then nibble 1; nibble 0 only
+/// plays once the wave loops.
+#[test]
+fn wave_trigger_plays_the_stale_buffer_then_nibble_one() {
+    let mut apu = Apu::new();
+    let mut pattern = [0u8; 16];
+    pattern[0] = 0x9A; // nibble 0 = 9, nibble 1 = A
+    apu.apply_wave_write(WaveWrite::Enable(0x80));
+    apu.apply_wave_write(WaveWrite::Level(0x20));
+    apu.apply_wave_write(WaveWrite::WavePattern(pattern));
+    apu.ch3.sample_buffer = 0x3;
+    apu.apply_wave_write(WaveWrite::FrequencyControl(0x87)); // freq $700
+    let period = apu.ch3.period();
+
+    assert_eq!(apu.ch3.sample(), 0x3, "stale buffer first");
+    apu.ch3.advance_cycles(period);
+    assert_eq!((apu.ch3.sample_step, apu.ch3.sample()), (1, 0xA));
+    apu.ch3.advance_cycles(period * 31);
+    assert_eq!((apu.ch3.sample_step, apu.ch3.sample()), (0, 0x9), "after the loop");
+}
+
+/// Channel timers run at volume 0 (and wave volume code 0); only the output
+/// is silent. Freezing them shifted the phase a later note started from.
+#[test]
+fn channel_timers_run_while_silent() {
+    let mut apu = Apu::new();
+    apu.apply_pulse_write(PulseWrite::Envelope(0x08)); // powered, volume 0
+    apu.apply_pulse_write(PulseWrite::FrequencyControl(0x87));
+    apu.ch1.advance_cycles(apu.ch1.period() * 3);
+    assert_eq!(apu.ch1.duty_step, 3);
+
+    apu.apply_noise_write(NoiseWrite::Envelope(0x08));
+    apu.apply_noise_write(NoiseWrite::Control(0x80));
+    apu.ch4.advance_cycles(apu.ch4.period());
+    assert_ne!(apu.ch4.lfsr, 0x7FFF, "LFSR clocks at volume 0");
+
+    apu.apply_wave_write(WaveWrite::Enable(0x80));
+    apu.apply_wave_write(WaveWrite::Level(0x00));
+    apu.apply_wave_write(WaveWrite::FrequencyControl(0x87));
+    apu.ch3.advance_cycles(apu.ch3.period() * 5);
+    assert_eq!(apu.ch3.sample_step, 5);
+    assert_eq!(apu.ch3.sample(), 0, "volume code 0 still mutes");
+}

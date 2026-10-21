@@ -153,7 +153,8 @@ impl PulseChannel {
     /// cycles), so the mixer box-filters each PCM interval instead of
     /// point-sampling it.
     pub fn render_cycles(&mut self, mut cycles: u32) -> u32 {
-        if !self.enabled || self.volume == 0 {
+        // The timer runs at volume 0 too; only the output is silent.
+        if !self.enabled {
             return 0;
         }
         let period = self.period().max(1);
@@ -197,12 +198,16 @@ pub struct WaveChannel {
     pub freq: u16,
     pub wave_ram: [u8; 16],
     pub sample_step: u8,
+    /// The last nibble read from wave RAM; the DAC plays this, not RAM.
+    pub sample_buffer: u8,
     pub timer: u32,
 }
 
 impl WaveChannel {
     pub fn trigger(&mut self) {
         self.enabled = self.dac_enabled;
+        // The position resets but the buffer is not refilled: the stale
+        // nibble plays first and nibble 0 waits until the wave loops.
         self.sample_step = 0;
         self.timer = self.period();
         if self.length_timer == 0 {
@@ -221,7 +226,8 @@ impl WaveChannel {
 
     /// Advances `cycles` and returns the output integrated over them.
     pub fn render_cycles(&mut self, mut cycles: u32) -> u32 {
-        if !self.enabled || !self.dac_enabled || self.volume_code == 0 {
+        // The position advances at volume code 0 too; only the output mutes.
+        if !self.enabled || !self.dac_enabled {
             return 0;
         }
         let period = self.period().max(1);
@@ -230,6 +236,12 @@ impl WaveChannel {
             acc += self.sample() as u32 * self.timer;
             cycles -= self.timer;
             self.sample_step = (self.sample_step + 1) & 31;
+            let byte = self.wave_ram[(self.sample_step as usize) / 2];
+            self.sample_buffer = if self.sample_step & 1 == 0 {
+                byte >> 4
+            } else {
+                byte & 0x0F
+            };
             self.timer = period;
         }
         acc += self.sample() as u32 * cycles;
@@ -241,13 +253,7 @@ impl WaveChannel {
         if !self.enabled || !self.dac_enabled || self.volume_code == 0 {
             return 0;
         }
-        let byte = self.wave_ram[(self.sample_step as usize) / 2];
-        let raw = if self.sample_step & 1 == 0 {
-            byte >> 4
-        } else {
-            byte & 0x0F
-        };
-
+        let raw = self.sample_buffer;
         match self.volume_code {
             1 => raw,      // 100%
             2 => raw >> 1, // 50%
@@ -346,7 +352,8 @@ impl NoiseChannel {
 
     /// Advances `cycles` and returns the output integrated over them.
     pub fn render_cycles(&mut self, mut cycles: u32) -> u32 {
-        if !self.enabled || self.volume == 0 {
+        // The timer runs at volume 0 too; only the output is silent.
+        if !self.enabled {
             return 0;
         }
         let period = self.period().max(1);
