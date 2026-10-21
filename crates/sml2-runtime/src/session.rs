@@ -550,6 +550,15 @@ pub struct FrameInput {
     pub div: u8,
 }
 
+/// Timing a host observed on the console for one frame (a ROM comparison):
+/// the full `$FF97` and every `rDIV` value read, in order. The map's random
+/// state then follows the console exactly; without it the port derives both.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RomTiming {
+    pub ff97: u8,
+    pub div_reads: Vec<u8>,
+}
+
 /// Effects are data: the host decides when and where to apply them.
 pub struct FrameEffects {
     pub outcome: StepOutcome,
@@ -624,11 +633,36 @@ pub const MAP_ENTRY_FRAMES: u16 = 73;
 /// 304 at the next one, so one extra decrement lands in it.
 const BOSS_LOAD_VBLANKS: u16 = 1;
 
-/// Frames after the bell script reaches state `$0A` before the hub cursor
-/// runs. Measured on the level-1 clear: `$3E9FB`'s fade, the `$3F156`
-/// landing, and `$3EA9A`'s fade-in keep the map handler inside that call
-/// for 84 frames, and the next frame is the first `$3C000`.
-const BELL_RETURN_HOLD: u16 = 84;
+/// Frames after the bell script reaches state `$0A` before the map handler
+/// runs again: `$3E9FB`'s fade, then `$3EF2B` loads the cleared node's screen.
+/// Measured in PyBoy on every bell-room return in the local recordings: the
+/// hub (`$3F156` and `$3EA9A`'s fade-in) takes 84 on five returns; screen 6
+/// takes 59 on three and screen 1 takes 58 on one. Other zone screens are
+/// assumed to load like screen 6.
+fn bell_return_hold(screen: u8) -> u16 {
+    match screen {
+        0 => 84,
+        1 => 58,
+        _ => 59,
+    }
+}
+
+/// `$3EF2B` run again for a bell room's return: the progress write and the
+/// screen the cleared node belongs to.
+fn bell_handoff(
+    map_sim: &MapSim,
+    node: u8,
+    flag: u8,
+    nodes: &sml2_core::map::MapNodes,
+) -> (PlayerSim, sml2_core::player_sim::MapHandoffOutcome) {
+    let mut sim = PlayerSim::new();
+    map_sim.to_player(&mut sim);
+    sim.map_node = node;
+    sim.dead = map_sim.mario_dead;
+    sim.exit_tile_flag = flag;
+    let handoff = sim.map_handoff(nodes);
+    (sim, handoff)
+}
 
 /// Frames `$3F4B1` spends in its graphics copy before the bell script runs.
 /// The setup begins on the frame state becomes `$14`; the script's first step
@@ -650,6 +684,12 @@ pub(crate) fn player_behind_bg(pipe_dir: u8) -> bool {
 /// Native session state. Advancing it performs no I/O or clock sampling.
 pub struct Session {
     object_clock: ObjectClock,
+    /// Console timing for the next `advance` only ([`Session::set_rom_timing`]).
+    rom_timing: Option<RomTiming>,
+    /// The map work bytes that outlive a `MapSim` and that level loads
+    /// overwrite ([`sml2_core::map_sim::MapRam`]); zero after boot. Each new
+    /// map is seeded from it once and the live map writes it back every tick.
+    map_ram: sml2_core::map_sim::MapRam,
     pub state: SessionState,
     /// Screen whose loader-run music request was last applied, so a screen's
     /// song is requested once per load instead of every frame.
@@ -691,6 +731,8 @@ pub struct Session {
     bell_return: Option<(u8, u8)>,
     /// Hold frames already spent after the bell script reached state `$0A`.
     bell_fade: Option<u16>,
+    /// The current bell return's hold ([`bell_return_hold`]).
+    bell_return_hold: u16,
     /// Hold frames already spent before the bell script's first step.
     bell_entry: Option<u16>,
     /// Where the castle reveal lands: `(screen, node, exit_tile_flag)`.
@@ -747,6 +789,7 @@ impl Session {
         );
         let mut ctx = Box::new(ctx);
         self.object_clock.initialize_level(&mut ctx.obj);
+        self.map_ram = sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
         ctx.obj.easy_mode = self.easy_mode;
         ctx.credits_text = self.assets.credits_text.clone();
         if let Some(assets) = self.assets.ending_scene.clone() {
@@ -822,10 +865,13 @@ impl Session {
         map.set_castle_scripts(assets.castle_scripts.clone());
         map.lives = 5;
         map.load_screen(0, 0, &assets.node_records);
+        map.set_map_ram(Default::default());
         let sound_driver = SoundDriver::with_music_bank(assets.music_bank.clone());
         Self {
             state: SessionState::Overworld(map),
             object_clock: ObjectClock::default(),
+            rom_timing: None,
+            map_ram: Default::default(),
             last_map_screen: None,
             map_wave: None,
             pending_level: None,
@@ -853,6 +899,7 @@ impl Session {
             easy_mode: false,
             bell_return: None,
             bell_fade: None,
+            bell_return_hold: 0,
             bell_entry: None,
             castle_return: None,
             castle_progress: [0; 42],
@@ -910,6 +957,7 @@ impl Session {
             self.assets.object_tables.clone(),
         );
         self.object_clock.initialize_level(&mut ctx.obj);
+        self.map_ram = sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
         self.state = SessionState::Demo(Box::new(DemoContext {
             ctx: Box::new(ctx),
             tape: DemoTape::new(self.assets.front_end.demo_tape(index)),
@@ -1011,9 +1059,15 @@ impl Session {
     }
 
     /// Advance exactly one tick from explicit inputs, emitting deferred host effects.
+    /// Supply the console's `$FF97` and `rDIV` reads for the next `advance`.
+    pub fn set_rom_timing(&mut self, timing: RomTiming) {
+        self.rom_timing = Some(timing);
+    }
+
     pub fn advance(&mut self, input: FrameInput) -> FrameEffects {
         self.object_clock.remember(&self.state);
         let FrameInput { keys, div } = input;
+        let rom_timing = self.rom_timing.take();
         self.frame_n += 1;
         let mut saves = Vec::new();
         let mut diagnostics = Vec::new();
@@ -1080,7 +1134,7 @@ impl Session {
                     self.bell_entry = None;
                 }
                 if let Some(held) = self.bell_fade {
-                    if held < BELL_RETURN_HOLD {
+                    if held < self.bell_return_hold {
                         self.prev_keys_held = pack_joypad(
                             keys.right,
                             keys.left,
@@ -1098,12 +1152,7 @@ impl Session {
                     // The room clears sGoalBell; its return runs $3EF2B
                     // again, including the progress write and zone selection.
                     if let Some((node, flag)) = self.bell_return.take() {
-                        let mut sim = PlayerSim::new();
-                        map_sim.to_player(&mut sim);
-                        sim.map_node = node;
-                        sim.dead = map_sim.mario_dead;
-                        sim.exit_tile_flag = flag;
-                        let handoff = sim.map_handoff(&self.assets.nodes);
+                        let (sim, handoff) = bell_handoff(map_sim, node, flag, &self.assets.nodes);
                         map_sim.room = None;
                         map_sim.level_progress = sim.level_progress;
                         map_sim.mario_dead = sim.dead;
@@ -1155,7 +1204,14 @@ impl Session {
 
                 let input = sml2_core::map_sim::MapInput::new(keys_held, keys_pressed, div);
 
-                map_sim.set_zone_animation_clock(self.frame_n as u8, 0);
+                let ff97 = rom_timing.as_ref().map_or(self.frame_n as u8, |t| t.ff97);
+                map_sim.set_zone_animation_clock(ff97, 0);
+                if !map_sim.ram_seeded {
+                    map_sim.set_map_ram(self.map_ram);
+                }
+                if let Some(timing) = &rom_timing {
+                    map_sim.div_reads = timing.div_reads.iter().copied().collect();
+                }
 
                 // A door replaces the screen inside `tick`, and its walk still
                 // shows the screen it left. Snapshot without the room scripts:
@@ -1169,6 +1225,7 @@ impl Session {
                     &self.assets.walk,
                     &self.assets.node_records,
                 );
+                self.map_ram = map_sim.map_ram();
 
                 if let Some(direction) = entry.transition {
                     let destination = map_sim.screen_id;
@@ -1184,6 +1241,10 @@ impl Session {
                     && map_sim.room.as_ref().is_some_and(|r| r.state >= 10)
                 {
                     self.bell_fade = Some(0);
+                    let screen = self.bell_return.map_or(0, |(node, flag)| {
+                        bell_handoff(map_sim, node, flag, &self.assets.nodes).1.screen.unwrap_or(0)
+                    });
+                    self.bell_return_hold = bell_return_hold(screen);
                 }
                 // A bonus room writes `sLives`/`sCurPowerup`/`sCoin*`; mirror
                 // them back while the room owns the screen.
@@ -1276,6 +1337,7 @@ impl Session {
                     }) {
                         Ok(mut ctx) => {
                             self.object_clock.initialize_level(&mut ctx.obj);
+                            self.map_ram = sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
                             ctx.obj.easy_mode = self.easy_mode;
                             // The level loader shares the map's persistent block;
                             // entering one level must retain every other clear.

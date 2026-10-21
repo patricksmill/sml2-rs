@@ -85,6 +85,24 @@ impl MapSim {
             .tiles
             .apply(self.screen_id, vram, source)
     }
+    /// The work bytes a host keeps across map rebuilds ([`super::MapRam`]).
+    pub fn map_ram(&self) -> super::MapRam {
+        super::MapRam {
+            rand_latch: self.rand_latch,
+            tick_timer: self.tick_timer,
+            keys_xor: self.keys_xor,
+            rand_accum: self.zone_animation.random_accum,
+        }
+    }
+
+    pub fn set_map_ram(&mut self, ram: super::MapRam) {
+        self.ram_seeded = true;
+        self.rand_latch = ram.rand_latch;
+        self.tick_timer = ram.tick_timer;
+        self.keys_xor = ram.keys_xor;
+        self.zone_animation.random_accum = ram.rand_accum;
+    }
+
     /// `$FF97` is free-running across screen loads; native hosts supply it.
     pub fn set_zone_animation_clock(&mut self, frame: u8, timer: u8) {
         self.zone_animation.global_frame = frame;

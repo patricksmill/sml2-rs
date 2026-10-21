@@ -22,6 +22,7 @@ pub(super) fn tick(map: &mut MapSim, div: u8) {
     if map.level_progress[37] & 0x80 == 0 {
         map.zone_slots[0].2 = 38 + ((frame & 0x60) >> 5);
     } else if frame & 15 == 0 {
+        let div = map.next_div(div);
         let animation = &mut map.zone_animation;
         animation.random_accum = animation
             .random_accum

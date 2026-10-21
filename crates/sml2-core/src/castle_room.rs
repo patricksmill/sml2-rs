@@ -59,8 +59,11 @@ pub struct RoomInput {
     pub keys_held: u8,
     pub frame: u8,
     pub node: u8,
-    /// `rDIV` as the room's shuffle reads it.
+    /// `rDIV` for reads the frame has no queued value for
+    /// ([`CastleRoom::div_reads`]).
     pub div: u8,
+    /// `$FF97`, which the shuffle adds after `rDIV`.
+    pub ff97: u8,
 }
 
 /// The bytes the scripts touch outside their own RAM block.
@@ -159,14 +162,21 @@ pub struct CastleRoom {
     /// `sCastleDecorSlotA`/`B` (`$A7B0`/`$A7B1`).
     pub decor_a: u8,
     pub decor_b: u8,
-    /// `sMapRandAccum` (`$A7B7`).
+    /// `sMapRandAccum` (`$A7B7`), shared with the map's zone animations; the
+    /// map hands its value in and takes it back around each tick.
     pub rand_accum: u8,
+    /// This frame's `rDIV` reads in ROM order, when the host knows them; each
+    /// shuffle read takes the next one, then falls back to [`RoomInput::div`].
+    pub div_reads: std::collections::VecDeque<u8>,
     /// The room's `$9800` tilemap, for `$60290`'s tile scan.
     tilemap: Vec<u8>,
     /// `$6734`/`$6761`: the two bell rooms' sprite lists.
     sprite_lists: [Vec<u8>; 2],
     /// `$51B1`: the metasprite table `$6106D` uses in all six minigame rooms.
     metasprites: RoomSpriteTable,
+    /// The same bank-24 block from `$51B1`, read raw for `$610DD`'s patch
+    /// shapes (pointer table at `$5213`).
+    room_block: Vec<u8>,
     /// `$5297`: `$FFC6` is a sprite id into this table, not a tile number.
     sprite_metas: crate::room_sprites::SpriteMetas,
     /// `$3EBD5`'s bank-16 prize strips, one per coin door.
@@ -223,6 +233,7 @@ impl CastleRoom {
             decor_a: 0,
             decor_b: 0,
             rand_accum: 0,
+            div_reads: std::collections::VecDeque::new(),
             tilemap: Vec::new(),
             sprite_lists: [
                 scripts.blob("bell_room_a_sprites").unwrap_or(&[]).to_vec(),
@@ -232,6 +243,7 @@ impl CastleRoom {
                 0x51B1,
                 scripts.blob("room_metasprites").unwrap_or(&[]),
             ),
+            room_block: scripts.blob("room_metasprites").unwrap_or(&[]).to_vec(),
             sprite_metas: crate::room_sprites::SpriteMetas::new(
                 scripts.blob("sprite_metasprites").unwrap_or(&[]),
             ),
@@ -366,10 +378,14 @@ impl CastleRoom {
                 return;
             };
             if record[0] == 0xFF {
-                at += 3;
                 break;
             }
             self.sprites[index * 3..index * 3 + 3].copy_from_slice(record);
+            at += 3;
+        }
+        // The `$FF` separator follows even a full table: bell room B's list
+        // has exactly 16 sprite records before its patches.
+        if list.get(at) == Some(&0xFF) {
             at += 3;
         }
         for index in 0..16 {
@@ -385,18 +401,12 @@ impl CastleRoom {
     }
 
     /// `$3E2A2`'s sprite list: 3-byte records until an `$FF` record.
+    /// `$3E2A2` on a bell room's list: its sprite records and then the patch
+    /// records after the `$FF` separator (the nine rung slots, the four start
+    /// markers), which [`Self::bg_tile`] draws for the bell's tile scan.
     fn load_sprite_list(&mut self, which: usize) {
         let list = self.sprite_lists[which].clone();
-        for index in 0..16 {
-            let at = index * 3;
-            let Some(record) = list.get(at..at + 3) else {
-                break;
-            };
-            if record[0] == 0xFF {
-                break;
-            }
-            self.sprites[at..at + 3].copy_from_slice(record);
-        }
+        self.stage_list(&list);
     }
 
     /// The `$4A1A`/`$4A2F`/`$4A58` byte at a bank-24 address.
@@ -1447,7 +1457,8 @@ impl CastleRoom {
         self.oam[0] = self.oam[0].wrapping_add(slide);
         self.oam[2] = self.bell_preview().wrapping_add(8);
         if self.timer == 0x08 {
-            let index = ((self.oam[1].wrapping_sub(40) & 0x60) >> 4) as usize;
+            // `$601BA`: the start column's marker is record 9 + column.
+            let index = 9 + ((self.oam[1].wrapping_sub(40) & 0x60) >> 5) as usize;
             self.patches[2 + 3 * index] = 1;
             self.music = 8;
         }
@@ -1468,11 +1479,16 @@ impl CastleRoom {
             }
             self.set_sprite(0xA6E1, page);
         }
-        match self.anim_state {
-            3 => self.bell_b_scan(),
-            1 => self.bell_b_anim_up(),
-            2 => self.bell_b_anim_down(),
-            _ => {}
+        // `$6024B` tests the state three times in a row, so a scan that finds
+        // a rung starts the move in the same frame.
+        if self.anim_state == 3 {
+            self.bell_b_scan();
+        }
+        if self.anim_state == 1 {
+            self.bell_b_anim_up();
+        }
+        if self.anim_state == 2 {
+            self.bell_b_anim_down();
         }
         self.bell_b_decor_sprite(input.frame);
         self.bell_b_commit(input, rewards);
@@ -1486,8 +1502,8 @@ impl CastleRoom {
             let offset = ((id & 0xF8).wrapping_sub(16) as u16) << 2;
             let row = self.sprite(0xA6DF).wrapping_sub(12) >> 3;
             let at = offset.wrapping_add(row as u16) as usize;
-            let first = self.tilemap.get(at).copied().unwrap_or(0);
-            let second = self.tilemap.get(at + 1).copied().unwrap_or(0);
+            let first = self.bg_tile(at);
+            let second = self.bg_tile(at + 1);
             if second == 0x3D {
                 self.anim_state = 1;
                 self.anim_timer = 32;
@@ -1502,10 +1518,46 @@ impl CastleRoom {
         if self.sprite(0xA6E0) < 0x2A {
             self.state = 6;
             self.set_sprite(0xA6E2, self.sprite(0xA6DF).wrapping_sub(4));
-            self.item_index = (self.sprite(0xA6DF).wrapping_sub(36) & 0x60) >> 4;
+            // `$602E9`: `and $60 / swap a / rrca`, one prize per 32px column.
+            self.item_index = (self.sprite(0xA6DF).wrapping_sub(36) & 0x60) >> 5;
             self.set_sprite(0xA6E1, 255);
             self.set_sprite(0xA6E4, 39);
         }
+    }
+
+    /// One `$9800` tile as the scan reads it: the room tilemap with `$610DD`'s
+    /// patches drawn over it. Each of the 15 `$A7D0` records is `(x, y, id)`
+    /// (`id = $FF` draws nothing); `id` indexes the `$5213` pointer table, whose
+    /// shapes are `(dx, dy, tile)` runs ending in `$FF`, wrapping at 32. In bell
+    /// room B patch 0 is a bare wire that erases one of the nine rungs.
+    fn bg_tile(&self, at: usize) -> u8 {
+        let byte = |addr: u16| {
+            addr.checked_sub(0x51B1)
+                .and_then(|i| self.room_block.get(i as usize).copied())
+        };
+        let (row, col) = ((at / 32) as u8, (at % 32) as u8);
+        let mut tile = self.tilemap.get(at).copied().unwrap_or(0);
+        for record in self.patches.chunks(3).take(15) {
+            let (x, y, id) = (record[0], record[1], record[2]);
+            if id == 0xFF {
+                continue;
+            }
+            let entry = 0x5213 + 2 * u16::from(id);
+            let (Some(lo), Some(hi)) = (byte(entry), byte(entry + 1)) else {
+                continue;
+            };
+            let mut addr = u16::from_le_bytes([lo, hi]);
+            while let Some(dx) = byte(addr).filter(|&dx| dx != 0xFF) {
+                let (Some(dy), Some(value)) = (byte(addr + 1), byte(addr + 2)) else {
+                    break;
+                };
+                if (x.wrapping_add(dx) & 0x1F, y.wrapping_add(dy) & 0x1F) == (col, row) {
+                    tile = value;
+                }
+                addr += 3;
+            }
+        }
+        tile
     }
 
     /// `$60314`: the bell rises.
@@ -1608,30 +1660,43 @@ impl CastleRoom {
 
     fn bell_b_commit(&mut self, _input: RoomInput, _rewards: &mut RoomRewards) {}
 
-    /// `$6046A`: the random decor slot walk.
+    /// `$6046A`: every eighth frame, re-pick both decor slots. Slot A is
+    /// hidden and redrawn on a fresh pick in `0..9` that is not slot B, then
+    /// slot B the same way against the new A. Each try reads `rDIV` again.
     fn bell_b_decor_walk(&mut self, input: RoomInput) {
-        let a = 0xA6C6 + 3 * self.decor_a as u16;
-        let b = 0xA6C6 + 3 * self.decor_b as u16;
         if input.frame & 0x07 != 0 {
+            let a = 0xA6C6 + 3 * self.decor_a as u16;
+            let b = 0xA6C6 + 3 * self.decor_b as u16;
             self.set_sprite(a, 37);
             self.set_sprite(b, 37);
             return;
         }
-        self.set_sprite(a, 255);
-        for _ in 0..64 {
-            let mut value = input.div;
-            value = value.rotate_left(4).wrapping_add(value);
-            value = self.rand_accum.wrapping_add(value);
-            self.rand_accum = 0x97u8.wrapping_add(value);
+        self.set_sprite(0xA6C6 + 3 * self.decor_a as u16, 255);
+        self.decor_a = self.bell_b_pick(input, self.decor_b);
+        self.set_sprite(0xA6C6 + 3 * self.decor_a as u16, 37);
+        self.set_sprite(0xA6C6 + 3 * self.decor_b as u16, 255);
+        self.decor_b = self.bell_b_pick(input, self.decor_a);
+        self.set_sprite(0xA6C6 + 3 * self.decor_b as u16, 37);
+    }
+
+    /// `$60481`/`$604C1`: `sMapRandAccum += swap(DIV) + DIV + $FF97` until its
+    /// low nibble is below 9 and differs from `other`. The ROM loop has no
+    /// bound because `rDIV` ticks every 64 M-cycles and a try costs 36, so an
+    /// unqueued read advances the fallback by that much per try.
+    fn bell_b_pick(&mut self, input: RoomInput, other: u8) -> u8 {
+        for tries in 0u32.. {
+            let fallback = input.div.wrapping_add((tries * 36 / 64) as u8);
+            let div = self.div_reads.pop_front().unwrap_or(fallback);
+            self.rand_accum = self
+                .rand_accum
+                .wrapping_add(div.rotate_left(4).wrapping_add(div))
+                .wrapping_add(input.ff97);
             let pick = self.rand_accum & 0x0F;
-            if pick < 9 && pick != self.decor_b {
-                self.decor_a = pick;
-                break;
+            if pick < 9 && pick != other {
+                return pick;
             }
         }
-        let a = 0xA6C6 + 3 * self.decor_a as u16;
-        self.set_sprite(a, 37);
-        self.set_sprite(b, 37);
+        unreachable!("the fallback rDIV advances, so some try lands")
     }
 
     /// `$60269`: both decor slots flash between frames 37 and 38.
@@ -1678,7 +1743,40 @@ mod tests {
             frame,
             node: 0x70,
             div: 0,
+            ff97: 0,
         }
+    }
+
+    /// `$6046A`: every eighth frame both rungs are re-picked from
+    /// `sMapRandAccum += swap(DIV) + DIV + $FF97`, A avoiding B, then B
+    /// avoiding the new A; each try takes the next queued `rDIV` read.
+    #[test]
+    fn bell_b_repicks_both_rungs_from_the_shared_shuffle() {
+        let scripts = scripts();
+        let mut rewards = RoomRewards::default();
+        let mut room = CastleRoom::bell_b(&scripts, &tiled());
+        room.state = 1;
+        room.decor_a = 0;
+        room.decor_b = 5;
+        room.div_reads = [0x01, 0x02].into();
+        room.tick(input(0, 0), &mut rewards);
+        assert_eq!((room.decor_a, room.decor_b), (1, 3), "0x11, then 0x33");
+        assert_eq!(room.rand_accum, 0x33);
+
+        // A pick equal to the other rung, or 9 and up, takes another read;
+        // `$FF97` is added on every try.
+        let mut room = CastleRoom::bell_b(&scripts, &tiled());
+        room.state = 1;
+        room.decor_b = 1;
+        room.div_reads = [0x01, 0x01, 0x00].into();
+        let mut held = input(0, 0);
+        held.ff97 = 0x10;
+        room.tick(held, &mut rewards);
+        // 0x01: 0x11 + 0x10 = 0x21 (1 = B, retry); 0x01: 0x21 + 0x11 + 0x10 = 0x42.
+        assert_eq!(room.decor_a, 2);
+        // B: 0x00 adds only $FF97: 0x52 → 2 = A, retry on the fallback div 0.
+        assert_eq!(room.decor_b, 3, "0x62 after the unqueued try");
+        assert!(room.div_reads.is_empty());
     }
 
     /// `$4C4D`: the twelve preview tiles, pinned from the ROM.
@@ -1891,6 +1989,7 @@ mod tests {
             frame: 0,
             node: 0x70,
             div: 0,
+            ff97: 0,
         };
         room.tick(held5, &mut rewards);
         assert_eq!((room.state, room.timer), (2, 32), "held bit 5");
@@ -1903,6 +2002,7 @@ mod tests {
             frame: 0,
             node: 0x70,
             div: 0,
+            ff97: 0,
         };
         room.tick(held4, &mut rewards);
         assert_eq!((room.state, room.timer), (3, 32), "held bit 4");
@@ -1915,6 +2015,7 @@ mod tests {
         let mut map = vec![0u8; 576];
         map[1] = 0x3D;
         let mut room = CastleRoom::bell_b(&scripts, &map);
+        room.patches = [0xFF; 48]; // a staged list with no patches
         let mut rewards = RoomRewards::default();
         room.state = 5;
         room.anim_state = 3;
@@ -1922,8 +2023,33 @@ mod tests {
         room.set_sprite(0xA6DF, 12);
         room.tick(input(1, 0), &mut rewards);
         assert_eq!(room.anim_state, 1);
-        assert_eq!(room.anim_timer, 32);
+        // `$6024B` runs the rise in the scan's frame.
+        assert_eq!((room.anim_timer, room.sprite(0xA6DF)), (31, 13));
         assert_eq!(room.sprite(0xA6E0), 0x10, "the id stepped first");
+    }
+
+    /// `$610DD`: patch 0 draws bare wire (`$4C $7F $7F $4D`) over a rung, so the
+    /// scan reads the erased row and the bell keeps falling.
+    #[test]
+    fn bell_room_b_scan_skips_a_rung_its_patch_erased() {
+        let scripts = scripts();
+        let mut map = vec![0u8; 576];
+        map[4..8].copy_from_slice(&[0x3D, 0x42, 0x42, 0x3C]);
+        let mut room = CastleRoom::bell_b(&scripts, &map);
+        room.patches = [0xFF; 48];
+        room.patches[..3].copy_from_slice(&[4, 0, 0]);
+        let mut rewards = RoomRewards::default();
+        room.state = 5;
+        room.anim_state = 3;
+        room.set_sprite(0xA6E0, 0x11); // row 0
+        room.set_sprite(0xA6DF, 12 + 8 * 3); // column 3: tiles 3 and 4
+        room.tick(input(1, 0), &mut rewards);
+        assert_eq!(room.anim_state, 3, "the $3D under the bell was erased");
+        room.patches[2] = 0xFF;
+        room.state = 5;
+        room.set_sprite(0xA6E0, 0x11);
+        room.tick(input(1, 0), &mut rewards);
+        assert_eq!(room.anim_state, 1, "an unpatched rung starts the wobble");
     }
 
     /// `$4340`: the item icon at `$27` asks for music 22 and advances.
@@ -1983,6 +2109,7 @@ mod tests {
                     frame: 0,
                     node,
                     div: 0,
+                    ff97: 0,
                 },
                 &mut rewards,
             );

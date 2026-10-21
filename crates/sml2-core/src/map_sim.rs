@@ -558,6 +558,40 @@ pub fn screen_music(screen_id: u8) -> u8 {
     SCREEN_MUSIC.get(screen_id as usize).copied().unwrap_or(0)
 }
 
+/// The map work bytes that live inside `sMetatileMap` (`$A600`-`$A7FF`) and
+/// that no screen loader rewrites. They are console RAM, not screen state:
+/// they run on across map rebuilds, and a level load overwrites them when
+/// `$03F1` copies the level's 512-byte metatile map there.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MapRam {
+    /// `sMapRandLatch` (`$A696`).
+    pub rand_latch: u8,
+    /// `sMapTickTimer` (`$A697`).
+    pub tick_timer: u8,
+    /// `sMapKeysXor` (`$A6B2`).
+    pub keys_xor: u8,
+    /// `sMapRandAccum` (`$A7B7`).
+    pub rand_accum: u8,
+}
+
+impl MapRam {
+    /// What a level load leaves: the metatile map's bytes at those offsets.
+    pub fn from_level(metatiles: &crate::level::MetatileTable) -> Self {
+        let byte = |offset: usize| {
+            metatiles
+                .metatiles
+                .get(offset / 4)
+                .map_or(0, |m| m.tiles[offset % 4])
+        };
+        Self {
+            rand_latch: byte(0x96),
+            tick_timer: byte(0x97),
+            keys_xor: byte(0xB2),
+            rand_accum: byte(0x1B7),
+        }
+    }
+}
+
 /// The overworld's live state: the `$A840` block (the save image's first 64 bytes)
 /// plus the map's own screen/work bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -644,6 +678,15 @@ pub struct MapSim {
     pub pending_save: bool,
     /// The active bank-24 room script (screens 9-14), started by the loader.
     pub room: Option<crate::castle_room::CastleRoom>,
+    /// This frame's `rDIV` reads in ROM order, when the host knows them (a
+    /// comparison against the ROM). The reads that feed `sMapKeysXor`,
+    /// `sMapRandLatch` and `sMapRandAccum` take them in turn; without one they
+    /// use [`MapInput::div`]. Cleared at the end of every tick.
+    pub div_reads: std::collections::VecDeque<u8>,
+    /// A host has handed this map its [`MapRam`] (`set_map_ram`). A host that
+    /// keeps those bytes across rebuilds seeds each new map once, then lets
+    /// the live map own them.
+    pub ram_seeded: bool,
     /// `sLives` (BCD) as the room scripts read and write it.
     pub lives: u8,
     /// `sCurPowerup`.
@@ -699,6 +742,8 @@ impl MapSim {
             coins_high: 0,
             pending_save: false,
             room: None,
+            div_reads: std::collections::VecDeque::new(),
+            ram_seeded: false,
             lives: 0,
             powerup: 0,
             castle_scripts: None,
@@ -1359,14 +1404,20 @@ impl MapSim {
         }
     }
 
+    /// The next queued `rDIV` read of this frame, else the frame's `div`.
+    pub(crate) fn next_div(&mut self, div: u8) -> u8 {
+        self.div_reads.pop_front().unwrap_or(div)
+    }
+
     pub fn bookkeeping(&mut self, div: u8) {
-        self.keys_xor ^= div;
+        // `$3C13E` reads `rDIV` first thing, and again on the 40th frame.
+        self.keys_xor ^= self.next_div(div);
         self.frame_counter = self.frame_counter.wrapping_add(1);
         self.hub_decor_tick(div);
         self.tick_timer = self.tick_timer.wrapping_sub(1);
         if self.tick_timer == 0 {
             self.tick_timer = 40;
-            self.rand_latch ^= div;
+            self.rand_latch ^= self.next_div(div);
         }
         if self.screen_id == 1 {
             self.pumpkin_decor_tick();
@@ -1439,6 +1490,8 @@ impl MapSim {
         if self.zone_animation.sfx0 != 0 && out.sfx.is_none() {
             out.sfx = Some(self.zone_animation.sfx0);
         }
+        // Reads past the ones the port consumes (cosmetic decor) are dropped.
+        self.div_reads.clear();
         out
     }
 
@@ -1457,11 +1510,18 @@ impl MapSim {
             frame: self.frame_counter,
             node: self.node,
             div: input.div,
+            ff97: self.zone_animation.global_frame,
         };
         let Some(room) = self.room.as_mut() else {
             return;
         };
+        // `sMapRandAccum` is one byte the zone animations and the bell-room
+        // shuffle share; the room borrows it and the frame's `rDIV` reads.
+        room.rand_accum = self.zone_animation.random_accum;
+        room.div_reads = std::mem::take(&mut self.div_reads);
         room.tick(room_input, &mut rewards);
+        self.zone_animation.random_accum = room.rand_accum;
+        self.div_reads = std::mem::take(&mut room.div_reads);
         // `$3C0DF`/`$3C10E`: after the script, holding Left skips a bell room
         // to its state-9 close (`hKeysHeld & $20`). Room A skips from states
         // 4-6; room B only from state 5, which also reloads the timer.
@@ -2951,6 +3011,23 @@ mod tests {
         assert_eq!(map.node, 0x70);
         assert_eq!(map.cursor_pose, 12, "the idle block");
         assert!(!out.saved);
+    }
+
+    /// `$03F1` copies a level's metatile map over `$A600`-`$A7FF`, so the map's
+    /// latch, tick timer, keys XOR and shared random byte are its bytes at
+    /// `$96`, `$97`, `$B2` and `$1B7` (level 8: 56, 37, 116, 76 in PyBoy).
+    #[test]
+    fn a_level_load_leaves_its_metatile_bytes_in_the_map_ram() {
+        let mut bytes = [0u8; 512];
+        bytes[0x96] = 56;
+        bytes[0x97] = 37;
+        bytes[0xB2] = 116;
+        bytes[0x1B7] = 76;
+        let table = crate::level::MetatileTable::from_bytes(&bytes).unwrap();
+        assert_eq!(
+            MapRam::from_level(&table),
+            MapRam { rand_latch: 56, tick_timer: 37, keys_xor: 116, rand_accum: 76 }
+        );
     }
 
     /// `$3C0DF`/`$3C10E`: Left held after the script skips a bell room to

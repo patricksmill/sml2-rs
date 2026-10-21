@@ -81,9 +81,13 @@ pub(super) fn tick(map: &mut MapSim, div: u8) {
         Sprite::from(map.zone_slots[3]),
     ];
     let mut drifter = Sprite::from(map.zone_slots[6]);
+    // `$3DB40`'s blink roll is this screen's first `rDIV` read after `$3C13E`.
+    let blink_div =
+        (frame & 3 == 0 && map.zone_animation.space.blink_timer == 0).then(|| map.next_div(div));
     let state = &mut map.zone_animation;
     if frame & 3 == 0 {
         if state.space.blink_timer == 0 {
+            let div = blink_div.unwrap_or(div);
             state.random_accum = state
                 .random_accum
                 .wrapping_add(div.rotate_left(4))
