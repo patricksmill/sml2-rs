@@ -171,12 +171,19 @@ pub(crate) fn seed_level_timer(sim: &mut PlayerSim, manifest: &LevelManifest) {
 /// Disabling animation preserves the last write until a tileset reload.
 pub(crate) fn update_tile_animation(
     sim: &PlayerSim,
+    scene_active: bool,
     bg: &mut [u8],
     rows: &[u8],
     timer: &mut u32,
     phase: &mut u8,
 ) {
     *timer += 1;
+    // `$01BF` is bypassed while `sSceneId != 0` (`$26C3` handles the
+    // scene instead). In particular, `$6x` must not be overwritten before
+    // the following `$2x` opcode disables animation permanently.
+    if scene_active {
+        return;
+    }
     let anim = sml2_core::level::TileAnim::from_table_value(sim.tile_anim_config.wrapping_sub(1));
     if anim.enabled && *timer >= u32::from(anim.speed) * 2 {
         *timer = 0;

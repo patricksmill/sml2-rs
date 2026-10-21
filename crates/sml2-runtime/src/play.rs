@@ -576,6 +576,7 @@ pub(crate) fn run_play(
         }
         update_tile_animation(
             &sim,
+            cam.scene_id != 0,
             &mut bg_live,
             anim_rows,
             &mut anim_timer,

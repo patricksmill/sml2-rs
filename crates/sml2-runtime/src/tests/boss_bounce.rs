@@ -11,20 +11,29 @@ fn disabled_tile_animation_preserves_vram_and_cannot_overwrite_arena_fire() {
     rows[0xB40..0xB80].fill(0x39);
     let mut timer = 7;
     let mut phase = 0;
-    update_tile_animation(&player, &mut bg, &rows, &mut timer, &mut phase);
+    update_tile_animation(&player, false, &mut bg, &rows, &mut timer, &mut phase);
     assert_eq!((timer, phase), (0, 1));
     assert_eq!(&bg[0xA00..0xA40], &[0x39; 64]);
+
+    // `$6x` precedes `$2x` in the arena intro. `$01BF` skips animation
+    // throughout that scene, even before `$2x` clears the config.
+    bg[0xA00..0xA40].fill(0x6D);
+    timer = 7;
+    update_tile_animation(&player, true, &mut bg, &rows, &mut timer, &mut phase);
+    assert_eq!((timer, phase), (8, 1));
+    assert_eq!(&bg[0xA00..0xA40], &[0x6D; 64]);
+    bg[0xA00..0xA40].fill(0x39);
 
     // `$20EB` clears the config. No later write, including the render pass,
     // may revert the last frame or paste the old level's row into arena art.
     player.tile_anim_config = 0;
     for _ in 0..16 {
-        update_tile_animation(&player, &mut bg, &rows, &mut timer, &mut phase);
+        update_tile_animation(&player, false, &mut bg, &rows, &mut timer, &mut phase);
     }
     assert_eq!(&bg[0xA00..0xA40], &[0x39; 64]);
     bg[0xA00..0xA40].fill(0x6D); // `$25AF` reloads the arena's fire tiles.
     for _ in 0..32 {
-        update_tile_animation(&player, &mut bg, &rows, &mut timer, &mut phase);
+        update_tile_animation(&player, false, &mut bg, &rows, &mut timer, &mut phase);
     }
     assert_eq!(&bg[0xA00..0xA40], &[0x6D; 64]);
     assert_eq!(phase, 1);

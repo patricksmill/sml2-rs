@@ -532,6 +532,7 @@ impl LevelContext {
         }
         update_tile_animation(
             &self.sim,
+            self.cam.scene_id != 0,
             &mut self.bg_live,
             &self.anim_rows,
             &mut self.anim_timer,
