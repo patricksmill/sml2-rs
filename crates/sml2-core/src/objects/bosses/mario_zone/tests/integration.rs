@@ -169,67 +169,37 @@ fn child_anim13_morphs_to_anim4_under_remove_mode_2() {
 }
 
 #[test]
-fn pig2_hops_left_preserves_state5_and_turns_at_boundary() {
+fn pig2_intro_lands_in_source_leftward_state_then_crouches() {
     let t = tables();
     let layout = blank_layout();
     let mut obj = ObjectSim::new(Vec::new(), 0);
-    obj.configure(0);
     obj.boss_def_index = 2;
-
-    let mut st = streamed_slot(0, 0, 0x20);
+    let mut st = Staging::default();
     st.b[B_DEF] = 11;
     st.b[B_STATE] = 6;
+    st.b[B_SPRITE] = 0x20;
     st.b[B_SCRX] = 0x88;
     st.b[B_SCRY] = 0x8E;
     st.b[B_T24] = 1;
-    st.b[B_FSTATE] = 3; // intro drop from chimney
-                        // Step until descent completes at 0x90: lands into state 5 (facing left) with crouch pose
+    st.b[B_FSTATE] = 3;
     for _ in 0..20 {
         obj.handler_boss_def2_pig2(&mut st, &layout, &t);
-        if st.b[B_SCRY] >= 0x90 {
+        if st.b[B_FSTATE] == 4 {
             break;
         }
     }
-    assert_eq!(st.b[B_SCRY], 0x90);
-    assert_eq!(st.b[B_FSTATE], 5, "lands into leftward hop state");
-    assert_eq!(st.b[B_FLIP], 0, "facing left");
-    assert_eq!(st.b[B_SPRITE], 0x28, "crouch pose");
-    assert_eq!(st.b[B_T28], 8, "crouch countdown reload");
-
-    // Spend the 8-frame crouch:
-    for i in (1..=7).rev() {
+    assert_eq!((st.b[B_SCRY], st.b[B_FSTATE], st.b[B_FLIP]), (0x90, 4, 0x20));
+    assert_eq!((st.b[B_SPRITE], st.b[B_T28]), (0x20, 8));
+    let x = st.b[B_SCRX];
+    for remaining in (1..=7).rev() {
         obj.handler_boss_def2_pig2(&mut st, &layout, &t);
-        assert_eq!(st.b[B_T28], i as u8);
-        assert_eq!(st.b[B_SPRITE], 0x28, "crouching pose");
-        assert_eq!(st.b[B_SCRY], 0x90, "stays grounded while crouching");
+        assert_eq!((st.b[B_T28], st.b[B_SPRITE]), (remaining, 0x28));
+        assert_eq!((st.b[B_SCRX], st.b[B_SCRY]), (x, 0x90));
     }
-    // Next call: B_T28 reaches 0, sprite swaps to 0x20, and jump begins
     obj.handler_boss_def2_pig2(&mut st, &layout, &t);
-    assert_eq!(st.b[B_T28], 0);
-    assert_eq!(st.b[B_SPRITE], 0x20, "swaps to jump sprite");
-    assert_eq!(st.b[B_FSTATE], 5, "still in state 5 (moving left)");
-
-    // Complete the hop and verify that landing does NOT force state 4:
-    st.b[B_T24] = 1;
-    st.b[B_SCRY] = 0x8E;
-    for _ in 0..20 {
-        obj.handler_boss_def2_pig2(&mut st, &layout, &t);
-        if st.b[B_SCRY] >= 0x90 {
-            break;
-        }
-    }
-    assert_eq!(st.b[B_SCRY], 0x90);
-    assert_eq!(st.b[B_FSTATE], 5, "landing preserves state 5 (leftward)");
-    assert_eq!(st.b[B_FLIP], 0, "preserves leftward flip");
-    assert_eq!(st.b[B_T28], 8, "reloads crouch countdown for next hop");
-    assert_eq!(st.b[B_SPRITE], 0x28);
-
-    // When hitting left arena boundary, flips to state 4 (moving right):
-    st.b[B_SCRX] = 0x10;
-    st.b[B_T28] = 0; // in air
-    obj.handler_boss_def2_pig2(&mut st, &layout, &t);
-    assert_eq!(st.b[B_FSTATE], 4, "flipped to rightward hop");
-    assert_eq!(st.b[B_FLIP], 0x20, "flipped to right-facing");
+    assert_eq!((st.b[B_T28], st.b[B_SPRITE]), (0, 0x20));
+    assert_eq!((st.b[B_SCRX], st.b[B_SCRY]), (x - 1, 0x8D));
+    assert_eq!((st.b[B_FSTATE], st.b[B_PHASE]), (4, 1));
 }
 
 #[test]

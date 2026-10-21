@@ -10,9 +10,14 @@
 mod child;
 mod controller;
 mod part;
+mod pig2_motion;
 mod reward;
 mod reward_motion;
 mod spawner;
 #[cfg(test)]
 #[path = "tests/integration.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/pig2_motion.rs"]
+mod pig2_motion_tests;

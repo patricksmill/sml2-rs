@@ -187,44 +187,14 @@ impl ObjectSim {
                 self.sprite_blink(st, 0x01, 0x01); // $B2F6
                 self.boss_morph_to_anim3(st); // $9443
             }
-            3 => {
-                self.scr_x_sub(st, 1);
-                st.b[B_T28] = 8;
-                let before_y = st.b[B_SCRY];
-                self.boss_bob(st, tables); // $9CDF
-                if before_y < 0x90 && st.b[B_SCRY] == 0x90 {
-                    // Landed from right-side chimney; face and hop left.
-                    st.b[B_FSTATE] = 5;
-                    st.b[B_FLIP] = 0;
-                    st.b[B_SPRITE] = 0x28;
-                }
-            }
-            4 | 5 => {
-                let hp = st.b[B_STATE] >> 1;
-                let b = 4u8.wrapping_sub(hp);
-                if st.b[B_T28] != 0 {
-                    st.b[B_SPRITE] = if st.b[B_T28] == 1 { 0x20 } else { 0x28 };
-                    st.b[B_T28] = st.b[B_T28].wrapping_sub(1);
-                    if st.b[B_T28] != 0 {
-                        return;
-                    }
-                }
-                if st.b[B_FSTATE] == 4 {
-                    self.scr_x_add(st, b);
-                    if st.b[B_SCRX] >= 0xA0 {
-                        self.boss_end_flip(st);
-                    }
-                } else {
-                    self.scr_x_sub(st, b);
-                    if st.b[B_SCRX] < 0x10 {
-                        self.boss_end_flip(st);
-                    }
-                }
-                let before_y = st.b[B_SCRY];
-                self.boss_bob(st, tables);
-                if before_y < 0x90 && st.b[B_SCRY] == 0x90 {
-                    st.b[B_T28] = 8;
-                    st.b[B_SPRITE] = 0x28;
+            3..=5 => {
+                let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
+                let result = super::pig2_motion::update(&mut actor, &tables.boss_picker_profile);
+                st.b = actor.to_raw_slot();
+                match result {
+                    Ok(Some(sound)) => self.sfx1 = sound,
+                    Ok(None) => {}
+                    Err(()) => self.note_unported(0x9D4F),
                 }
             }
             s => self.note_unported(0x9D78 + (s as u32) * 2),
