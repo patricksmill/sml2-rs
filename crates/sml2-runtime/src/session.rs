@@ -338,7 +338,7 @@ impl LevelContext {
 
         if let Some(tables) = &obj_tables {
             if !frozen {
-                let mario = build_contact(&self.sim, &keys, self.cam.scroll_pan);
+                let mario = build_contact(&self.sim, &keys, self.cam.scroll_pan, self.cam.scene_state);
                 sample_level_player_inputs(&mut self.obj, &self.sim);
                 self.obj.div = div;
                 if self.cam.scene_load_pending {

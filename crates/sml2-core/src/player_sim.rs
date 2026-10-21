@@ -2759,13 +2759,18 @@ impl PlayerSim {
         if obj.flutter_disarmed {
             self.flutter_armed = false;
         }
-        if obj.stomp_jump {
-            self.in_air = true;
-            self.vvel = if keys_a { 75 } else { 48 };
-        }
         if obj.stomp_bounce {
+            // `$2E5C`: the boss-scene bounce also sets `sNoJumpCut`, so
+            // releasing A does not cut the arc at `$14FA`.
             self.in_air = true;
             self.vvel = 49;
+            self.no_jump_cut = true;
+        }
+        if obj.stomp_jump {
+            // `$2D7D`'s tail runs after `$2E5C` returns and sets the stomp
+            // jump over the bounce's 49; `sNoJumpCut` stays set.
+            self.in_air = true;
+            self.vvel = if keys_a { 75 } else { 48 };
         }
     }
 

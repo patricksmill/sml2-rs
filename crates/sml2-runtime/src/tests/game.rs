@@ -115,7 +115,7 @@ fn ending_entry_frame_head_keeps_trigger_player_and_objects_then_dispatches() {
     );
     cam.step(&mut sim);
     let before_object_phase = obj.phase;
-    let contact = build_contact(&sim, &input.held, cam.scroll_pan);
+    let contact = build_contact(&sim, &input.held, cam.scroll_pan, cam.scene_state);
     obj.sample_player_inputs(&sim);
     obj.step(cam.x, cam.y, &layout, &tables, &contact, cam.boss_mode());
     assert_ne!(

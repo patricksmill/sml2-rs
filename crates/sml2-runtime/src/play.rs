@@ -362,7 +362,7 @@ pub(crate) fn run_play(
         cam.update_player_pan(sim.y, was_dead, !frozen);
         if let Some(tables) = &obj_tables {
             if !frozen {
-                let mario = build_contact(&sim, &keys, cam.scroll_pan);
+                let mario = build_contact(&sim, &keys, cam.scroll_pan, cam.scene_state);
                 sample_level_player_inputs(&mut obj, &sim);
                 obj.div = if headless {
                     virtual_clock.sample()

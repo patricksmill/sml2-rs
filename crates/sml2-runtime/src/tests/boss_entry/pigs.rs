@@ -93,7 +93,7 @@ fn pigs_boss_real_level_scene_entry_selects_portable_definition() {
                     camera.y,
                     &arena,
                     &tables,
-                    &build_contact(&player, &PlayerKeys::default(), 0),
+                    &build_contact(&player, &PlayerKeys::default(), 0, 0),
                     camera.boss_mode(),
                 );
                 player.apply_object_result(&mut objects, false);

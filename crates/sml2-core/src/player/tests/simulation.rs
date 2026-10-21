@@ -533,6 +533,16 @@ fn the_object_write_back_covers_every_field() {
     obj3.stomp_bounce = true;
     sim3.apply_object_result(&mut obj3, false);
     assert_eq!(sim3.vvel, 49, "the brick/bounce arm's fixed 49");
+    assert!(sim3.no_jump_cut, "$2E5C: the scene bounce ignores the A release");
+    assert!(!sim2.no_jump_cut, "the ordinary stomp jump can still be cut");
+    // In a boss scene `$2E5C` and `$2D7D`'s stomp tail both run: the stomp's
+    // 48 lands last, and the bounce's no-cut flag stays.
+    let mut sim5 = small_sim();
+    let mut obj5 = crate::objects::ObjectSim::new(Vec::new(), 0);
+    obj5.stomp_bounce = true;
+    obj5.stomp_jump = true;
+    sim5.apply_object_result(&mut obj5, false);
+    assert_eq!((sim5.vvel, sim5.no_jump_cut), (48, true));
 
     // An already-dead Mario keeps his byte: `$8000`'s dispatcher gate read it
     // on this pass, and the write-back does not re-raise it.

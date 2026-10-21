@@ -26,6 +26,7 @@ mod acceptance;
 mod castle_flow;
 mod conveyor;
 mod boss_entry;
+mod boss_bounce;
 mod debug;
 mod death_audio;
 mod front_end;

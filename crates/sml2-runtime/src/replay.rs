@@ -550,7 +550,7 @@ pub(crate) fn run_replay(
         // tautology — the missing-table note above is what fails the gate.
         let edge_derived = if own_edges { cam_edge_before } else { f.edge };
         cam.update_player_pan(sim.y, was_dead, !fade_at_entry);
-        let mario = build_contact(&sim, &keys, cam.scroll_pan);
+        let mario = build_contact(&sim, &keys, cam.scroll_pan, cam.scene_state);
         // $2D0A: the frame selection runs *before* the interaction pass, so
         // on the contact frame the sprite still shows the grounded pose.
         let frame_idx = if was_dead {

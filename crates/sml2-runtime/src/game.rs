@@ -27,12 +27,13 @@ pub(crate) fn initialize_level_objects(
 ///
 /// `pan` is `sCameraPanTimer` (`$A2B3`, the `$2062` scroll-Y nudge): the replay
 /// path takes it from its capture, play mode has no source for it yet and
-/// passes 0. `scene_state` and `flutter` are 0 in both paths for the same
-/// reason — nothing in the port drives `sSceneState` or `sFlutterTimer` yet.
+/// passes 0. `scene_state` is `sSceneState` (`CameraSim::scene_state`, which
+/// the scene VM's `$2x` arms); `$2E5C`'s boss-scene bounce depends on it.
 pub(crate) fn build_contact(
     sim: &PlayerSim,
     keys: &PlayerKeys,
     pan: u8,
+    scene_state: u8,
 ) -> sml2_core::objects::MarioContact {
     sml2_core::objects::MarioContact {
         x: sim.x,
@@ -51,7 +52,7 @@ pub(crate) fn build_contact(
         on_object: sim.on_ground_obj,
         b_held: keys.b,
         a_held: keys.a,
-        scene_state: 0,
+        scene_state,
         moon_physics: sim.moon,
         pan,
         travelling: sim.pipe_dir >= 0x10,
