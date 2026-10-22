@@ -226,6 +226,40 @@ fn wario_level_object_divider_is_the_shared_clock() {
     assert!(live > 0, "the Wario level must run live object frames");
 }
 
+/// `$3573`'s path into level 24 is an ordinary level load, which never
+/// writes the flutter bytes: Bunny Mario's held-A charge carries in.
+#[test]
+fn castle_door_level_keeps_the_flutter_bytes() {
+    let mut session = at_castle_node(6);
+    session.flutter = 3;
+    session.flutter_armed = true;
+    session.flutter_charge = 11;
+    let a = PlayerKeys {
+        a: true,
+        ..Default::default()
+    };
+    let mut entered = false;
+    for frame in 0..400 {
+        let keys = match &session.state {
+            SessionState::Castle(seq) if seq.menu == 2 && frame % 2 == 0 => a,
+            _ if frame == 0 => a,
+            _ => PlayerKeys::default(),
+        };
+        if matches!(step(&mut session, keys).outcome, StepOutcome::LevelEntered(24)) {
+            entered = true;
+            break;
+        }
+    }
+    assert!(entered, "the six-coin door must load the Wario level");
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!("Wario level")
+    };
+    assert_eq!(
+        (ctx.sim.flutter, ctx.sim.flutter_armed, ctx.sim.flutter_charge),
+        (3, true, 11)
+    );
+}
+
 /// The six-coin door also passes `$3573`: in Easy mode the card shows for
 /// its 64 frames before the Wario level loads.
 #[test]

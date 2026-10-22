@@ -822,9 +822,9 @@ pub struct Session {
     /// `sFlutterTimer` `$A24D`, `sFlutterArmed` `$A284`, `sFlutterCharge`
     /// `$A27C`. Level load and the map never write these, so the next level
     /// starts with whatever the previous one left.
-    flutter: u8,
-    flutter_armed: bool,
-    flutter_charge: u8,
+    pub(crate) flutter: u8,
+    pub(crate) flutter_armed: bool,
+    pub(crate) flutter_charge: u8,
     /// `sMarioWalkAnimTimer` `$A222`: likewise untouched by level load and the
     /// map, so the next level's walk cycle continues from the last one.
     walk_timer: u8,
@@ -899,6 +899,11 @@ impl Session {
     fn seed_level_state(&self, ctx: &mut LevelContext) {
         ctx.tile_animation = self.tile_animation;
         (ctx.cam.right_enabled, ctx.cam.left_enabled) = self.scroll_enables;
+        // No level loader writes `$A24D`/`$A284`/`$A27C`, including the
+        // castle door's `$3573` path into level 24.
+        ctx.sim.flutter = self.flutter;
+        ctx.sim.flutter_armed = self.flutter_armed;
+        ctx.sim.flutter_charge = self.flutter_charge;
     }
 
     /// Whether this frame runs the `$0300` frame wait that increments `$FF97`
@@ -1593,9 +1598,6 @@ impl Session {
                             // entering one level must retain every other clear.
                             ctx.sim.level_progress = map_sim.level_progress;
                             ctx.sim.level_tally = self.level_tally;
-                            ctx.sim.flutter = self.flutter;
-                            ctx.sim.flutter_armed = self.flutter_armed;
-                            ctx.sim.flutter_charge = self.flutter_charge;
                             ctx.sim.walk_timer = self.walk_timer;
                             // $3C1A2 stops the map theme before loading. `$3E9FB`
                             // fades the map out and the level goes live on the
