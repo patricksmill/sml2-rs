@@ -13,7 +13,7 @@ pub mod render;
 pub mod session;
 
 mod cli;
-mod divider_clock;
+pub mod divider_clock;
 mod game;
 mod image_output;
 mod play;

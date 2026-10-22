@@ -16,6 +16,8 @@ pub struct Divider {
 
 impl Divider {
     pub const CLOCK_HZ: u64 = 4_194_304;
+    /// Cycles per console frame: 154 lines of 456 dots.
+    pub const FRAME_CYCLES: u64 = 70_224;
 
     pub const fn new(initial_counter: u16) -> Self {
         Self {

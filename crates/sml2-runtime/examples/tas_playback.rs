@@ -1,15 +1,17 @@
 //! Literal TAS input playback through a fresh native session; no emulator or save I/O.
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use serde::Deserialize;
-use sml2_core::{divider::Divider, player_sim::PlayerKeys};
-use sml2_runtime::session::{FrameInput, Session, SessionAssets, SessionState, StepOutcome};
+use sml2_core::player_sim::PlayerKeys;
+use sml2_runtime::{
+    divider_clock::VirtualDividerClock,
+    session::{FrameInput, Session, SessionAssets, SessionState, StepOutcome},
+};
 use std::{
     error::Error,
     fs,
     io::Write,
     path::PathBuf,
     process::{Command, Stdio},
-    time::Duration,
 };
 
 #[derive(Deserialize)]
@@ -199,11 +201,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             true
         };
         if step {
-            let tick = index as u64 + 1;
-            let elapsed = Duration::new(tick / 60, ((tick % 60) * 1_000_000_000 / 60) as u32);
+            // One console frame per row, from the same origin as the bridge.
+            let mut div_clock = VirtualDividerClock::new(0);
+            div_clock.advance_ticks(index as u64 + 1);
             let effects = session.advance(FrameInput {
                 keys: keys(movie.frames[index]),
-                div: Divider::from_elapsed(0, elapsed).sample(),
+                div: div_clock.sample(),
             });
             let current = state(&session);
             if current != previous || effects.outcome != StepOutcome::Continue {

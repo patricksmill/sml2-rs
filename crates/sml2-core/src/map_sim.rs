@@ -3641,6 +3641,26 @@ mod hub_decor_tests {
         assert_eq!(n.sparkle_timer, 0);
         assert_eq!(n.decor_slots[16].3, 0xFF);
     }
+
+    /// `$3CEC4` picks each shown sparkle's position from its own `rDIV` read:
+    /// bits 1-3 index `$4FA8` and bits 5-7 index `$4FB8`.
+    #[test]
+    fn sparkle_positions_come_from_separate_divider_bits() {
+        let mut m = map();
+        for _ in 0..4 {
+            m.bookkeeping(0x00);
+        }
+        // Two more beats: hidden at timer 2, shown again at timer 1.
+        for _ in 0..8 {
+            m.bookkeeping(0x8C);
+        }
+        assert_eq!(m.sparkle_timer, 1);
+        assert_eq!(m.decor_slots[16].3, 0x0A);
+        assert_eq!(m.decor_slots[16].1, crate::map::SPARKLE_SLOT_16[12]);
+        assert_eq!(m.decor_slots[16].2, crate::map::SPARKLE_SLOT_16[13]);
+        assert_eq!(m.decor_slots[17].1, crate::map::SPARKLE_SLOT_17[8]);
+        assert_eq!(m.decor_slots[17].2, crate::map::SPARKLE_SLOT_17[9]);
+    }
 }
 
 #[cfg(test)]

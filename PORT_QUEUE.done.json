@@ -1506,6 +1506,17 @@
       "dependencies": [],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; $FF97 and sTileAnimTimer advance only on frames the session's modelled loads and fades run the $0300 wait, matching the ROM's start/stop rows in the three manual PyBoy recordings apart from the documented joypad shift, unmodelled loads and lag (docs/frame-clock.md); unit tests per interval; mutations rejected; cargo test --workspace passes; sweep unchanged",
       "status": "done"
+    },
+    {
+      "id": "f-randomness-audit",
+      "title": "Audit every rDIV/rTIMA read: map each to the port, pin it with a test, and check the port's divider clock gives the ROM's rates",
+      "asm_refs": [
+        "main.asm rDIV / ldh_a_n $04 readers",
+        "main.asm:22394 rTIMA"
+      ],
+      "dependencies": [],
+      "verification_gate": "Every code DIV read in baserom.gb listed in docs/randomness.md with its port site and a test that a sensitivity mutation fails; masked checks fire at the ROM's rate under the runtime clock; workspace tests and captures/sweep.sh unchanged",
+      "status": "done"
     }
   ]
 }

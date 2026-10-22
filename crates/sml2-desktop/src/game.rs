@@ -1,12 +1,14 @@
 use crate::settings::atomic_write;
 use sml2_core::{
     audio::Apu,
-    divider::Divider,
     front_end::{SaveSlots, SAVE_IMAGE_LEN, SLOT_LEN},
     player_sim::PlayerKeys,
 };
-use sml2_runtime::{audio_output::AudioOutput, content::SessionAssets, FrameInput, Session};
-use std::{fs, path::PathBuf, time::Instant};
+use sml2_runtime::{
+    audio_output::AudioOutput, content::SessionAssets, divider_clock::VirtualDividerClock,
+    FrameInput, Session,
+};
+use std::{fs, path::PathBuf};
 
 pub struct Game {
     pub session: Session,
@@ -15,7 +17,7 @@ pub struct Game {
     buffer: Vec<f32>,
     output: Option<AudioOutput>,
     audio_enabled: bool,
-    origin: Instant,
+    div_clock: VirtualDividerClock,
     pub diagnostics: Vec<String>,
 }
 
@@ -65,7 +67,7 @@ impl Game {
             buffer: Vec::new(),
             output: None,
             audio_enabled,
-            origin: Instant::now(),
+            div_clock: VirtualDividerClock::seeded_from_time(),
             diagnostics,
         };
         // Rewrite a migrated legacy save in the slot image immediately, so the
@@ -109,7 +111,8 @@ impl Game {
     }
 
     pub fn tick(&mut self, keys: PlayerKeys, volume: f32) {
-        let div = Divider::from_elapsed(0, self.origin.elapsed()).sample();
+        self.div_clock.advance_tick();
+        let div = self.div_clock.sample();
         let effects = self.session.advance(FrameInput { keys, div });
         let saved = !effects.saves.is_empty();
         if saved {

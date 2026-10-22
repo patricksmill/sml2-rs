@@ -1,38 +1,16 @@
-//! Runtime clocks for sampled `$FF04`; their explicit seeds are native/replay
-//! origins, not reconstructed console boot or capture phases.
+//! The runtime clock for sampled `$FF04`. Its explicit seed is a native or
+//! replay origin, not a reconstructed console boot or capture phase.
 
 use sml2_core::divider::Divider;
-use std::time::{Duration, Instant};
 
-pub struct NativeDividerClock {
-    origin: Instant,
-    initial_counter: u16,
-}
-
-impl NativeDividerClock {
-    pub fn new(initial_counter: u16) -> Self {
-        Self {
-            origin: Instant::now(),
-            initial_counter,
-        }
-    }
-
-    pub fn sample(&self) -> u8 {
-        self.sample_elapsed(self.origin.elapsed())
-    }
-
-    fn sample_elapsed(&self, elapsed: Duration) -> u8 {
-        Divider::from_elapsed(self.initial_counter, elapsed).sample()
-    }
-
-    /// Construct sampled map input from the native clock.
-    pub fn map_input(&self, keys_held: u8, keys_pressed: u8) -> sml2_core::map_sim::MapInput {
-        sml2_core::map_sim::MapInput::new(keys_held, keys_pressed, self.sample())
-    }
-}
-
-/// Replay time advances independently of object/player update gates. The
-/// repository's nominal 60 Hz loop defines this clock, not console timing.
+/// `rDIV` advanced by one console frame per game tick.
+///
+/// The ROM's random reads mask DIV (`& 3`, `& $3F`, `& $7E`, ...) and expect
+/// every value to come up at its share of frames. A console frame is 70,224
+/// cycles, which moves DIV by 274.31 and visits all 256 values. Wall time does
+/// not: at exactly 60 Hz DIV moves by 273.07, so only 15 values ever appear
+/// and a masked check fires four times too often or never. The clock counts
+/// game ticks, not host time, so host frame pacing cannot change it either.
 pub struct VirtualDividerClock {
     initial_counter: u16,
     ticks: u64,
@@ -46,6 +24,15 @@ impl VirtualDividerClock {
         }
     }
 
+    /// A clock whose origin comes from the host's wall clock, so each native
+    /// launch starts from its own DIV phase.
+    pub fn seeded_from_time() -> Self {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.subsec_nanos());
+        Self::new(nanos as u16 ^ (nanos >> 16) as u16)
+    }
+
     pub fn advance_tick(&mut self) {
         self.advance_ticks(1);
     }
@@ -55,13 +42,9 @@ impl VirtualDividerClock {
     }
 
     pub fn sample(&self) -> u8 {
-        // Convert total ticks once, retaining the fractional-second phase;
-        // repeated rounded 1/60-second additions would accumulate drift.
-        let elapsed = Duration::new(
-            self.ticks / 60,
-            ((self.ticks % 60) * 1_000_000_000 / 60) as u32,
-        );
-        Divider::from_elapsed(self.initial_counter, elapsed).sample()
+        let mut divider = Divider::new(self.initial_counter);
+        divider.advance_cycles(self.ticks.wrapping_mul(Divider::FRAME_CYCLES));
+        divider.sample()
     }
 
     /// Construct sampled map input from the virtual clock.
@@ -75,39 +58,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn native_elapsed_sampling_retains_seed_and_crosses_both_divider_parities() {
-        let clock = NativeDividerClock::new(0x12FF);
-        assert_eq!(clock.sample_elapsed(Duration::ZERO), 0x12);
-        // 238 ns is less than one 4,194,304 Hz cycle, 239 ns exceeds it.
-        assert_eq!(clock.sample_elapsed(Duration::from_nanos(238)), 0x12);
-        assert_eq!(clock.sample_elapsed(Duration::from_nanos(239)), 0x13);
-        assert_eq!(clock.sample_elapsed(Duration::from_secs(1)), 0x12);
-        // Sampling and changing game-owned objects cannot reset the origin.
-        let mut objects = sml2_core::objects::ObjectSim::new(vec![], 0);
-        objects.reset_level_start();
-        assert_eq!(clock.sample_elapsed(Duration::from_nanos(239)), 0x13);
-        assert_eq!(clock.initial_counter, 0x12FF);
-    }
-
-    #[test]
-    fn virtual_total_time_has_explicit_snapshot_phase_and_both_parities() {
+    fn each_tick_advances_one_console_frame() {
         let mut clock = VirtualDividerClock::new(0);
         assert_eq!(clock.sample(), 0);
         clock.advance_tick();
-        // floor(4,194,304 * 0.016666666) = 69,905 = $11111.
-        assert_eq!(clock.sample(), 0x11);
+        // 70,224 cycles = $11250.
+        assert_eq!(clock.sample(), 0x12);
         clock.advance_tick();
-        assert_eq!(clock.sample(), 0x22);
-        clock.advance_ticks(13);
-        // Exactly a quarter second: 1,048,576 cycles, a complete counter wrap.
-        // Rounding each tick before summing would leave DIV at $FF instead.
-        assert_eq!(clock.sample(), 0);
-        clock.advance_ticks(45);
+        // 140,448 = $224A0.
+        assert_eq!(clock.sample(), 0x24);
+        // 4,096 frames is a whole number of counter wraps (70,224 * 4,096 =
+        // 4,389 * 65,536).
+        clock.advance_ticks(4094);
         assert_eq!(clock.sample(), 0);
         let mut seeded = VirtualDividerClock::new(0xA57E);
         assert_eq!(seeded.sample(), 0xA5);
-        seeded.advance_ticks(60 * 3600);
+        seeded.advance_ticks(4096 * 100);
         assert_eq!(seeded.sample(), 0xA5);
+    }
+
+    /// Every DIV byte appears equally often over the clock's 4,096-frame
+    /// period, so each masked random check fires at the ROM's rate.
+    #[test]
+    fn the_clock_visits_every_divider_value_equally() {
+        let mut clock = VirtualDividerClock::new(0x1234);
+        let mut counts = [0u32; 256];
+        for _ in 0..4096 {
+            counts[clock.sample() as usize] += 1;
+            clock.advance_tick();
+        }
+        assert!(counts.iter().all(|&count| count == 16), "{counts:?}");
+        // The resting walker's `& $3F == 0` on even frames: 1 in 64.
+        let mut clock = VirtualDividerClock::new(0);
+        let mut rests = 0;
+        for _ in 0..4096 {
+            rests += u32::from(clock.sample() & 63 == 0);
+            clock.advance_ticks(2);
+        }
+        assert_eq!(rests, 64);
     }
 
     #[test]
@@ -119,8 +107,8 @@ mod tests {
         let total_gap: u64 = 193;
         clock.advance_ticks(total_gap.saturating_sub(1));
         assert_eq!(clock.ticks, 193);
-        // 193/60 seconds yields 13,491,677 cycles: $DE5D after seed $80.
-        assert_eq!(clock.sample(), 0xDE);
+        // 193 frames are 13,553,232 cycles: $CE50 after seed $80, so $CE.
+        assert_eq!(clock.sample(), 0xCE);
         let before = clock.sample();
         let mut objects = sml2_core::objects::ObjectSim::new(vec![], 0);
         objects.reset_level_start();
@@ -130,7 +118,7 @@ mod tests {
     }
 
     #[test]
-    fn native_and_virtual_clocks_supply_map_inputs_across_frames_and_game_transitions() {
+    fn the_clock_supplies_map_inputs_across_frames_and_game_transitions() {
         use sml2_core::map_sim::MapSim;
 
         let mut vclock = VirtualDividerClock::new(0);
@@ -168,12 +156,5 @@ mod tests {
             vclock.ticks, ticks_before,
             "game transitions do not reset clock"
         );
-
-        // Native clock map input produces valid MapInput and samples without mutating origin
-        let nclock = NativeDividerClock::new(0x3412);
-        let n_input = nclock.map_input(0x10, 0x01);
-        assert_eq!(n_input.keys_held, 0x10);
-        assert_eq!(n_input.keys_pressed, 0x01);
-        assert_eq!(n_input.div, nclock.sample());
     }
 }

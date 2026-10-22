@@ -44,15 +44,18 @@ and sampling-time evidence, which the frozen corpus does not currently supply.
 
 ## Runtime virtual-time policy
 
-Native play samples total monotonic elapsed time from one explicit counter-zero
-origin established before creating its play window; pauses, fades and level
-reloads do not restart it. Replay instead chooses counter zero at its initial
-snapshot and advances virtual time at the repository's nominal 60 Hz, including
-frozen/dead records. A compressed gap advances its entire `total - 1` remaining
-ticks once because its triggering record already advanced one tick. Conversion
-uses total ticks, avoiding accumulated fractional-second rounding. These are
-explicit runtime origins and replay policy, not evidence of original console
-DIV phase; the frozen corpus has no initial phase or sampling-time evidence.
+Every host advances DIV by one console frame (70,224 cycles) per game tick,
+from one explicit origin, including frozen/dead records; pauses, fades and
+level reloads do not restart it. Replay and headless runs start at counter
+zero; native play (desktop and the windowed CLI) seeds the origin from the
+wall clock once at launch. A compressed gap advances its entire `total - 1`
+remaining ticks once because its triggering record already advanced one tick.
+
+Before 2026-10-21 native play sampled wall time and replay advanced 1/60 s
+per tick. At exactly 60 Hz DIV moves by 273.07 per tick and takes only 15
+values, so masked checks fired four times too often or never; see
+[`docs/randomness.md`](../../docs/randomness.md). These are explicit runtime
+origins, not evidence of the console's DIV phase.
 
 Ownership (2026-10-21): the session runner owns the only native or virtual
 clock, and the map, entry transition, levels, castle and map returns all

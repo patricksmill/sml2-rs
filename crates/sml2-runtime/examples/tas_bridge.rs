@@ -6,12 +6,14 @@
 //! against the emulator and stop at the first divergence. `-` marks a frame
 //! outside a level. `--debug-state` appends decimal `key=value` diagnostics to
 //! that same line, preserving the following pixel frame boundary.
-use sml2_core::{divider::Divider, player_sim::PlayerKeys};
-use sml2_runtime::session::{FrameInput, Session, SessionAssets};
+use sml2_core::player_sim::PlayerKeys;
+use sml2_runtime::{
+    divider_clock::VirtualDividerClock,
+    session::{FrameInput, Session, SessionAssets},
+};
 use std::{
     error::Error,
     io::{self, BufRead, Write},
-    time::Duration,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -41,6 +43,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut session = Session::new(SessionAssets::load()?);
     session.enter_title();
     let mut out = io::BufWriter::new(io::stdout().lock());
+    let mut div_clock = VirtualDividerClock::new(0);
     write_frame(&mut out, &session, state_lines, debug_state, 0)?;
     for (index, line) in io::stdin().lock().lines().enumerate() {
         // `--phase-lock` rows are `mask phase`: the ROM's own `$FF97 & 7`, which
@@ -88,7 +91,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             select: mask & 128 != 0,
         };
         let tick = index as u64 + 1;
-        let elapsed = Duration::new(tick / 60, ((tick % 60) * 1_000_000_000 / 60) as u32);
+        div_clock.advance_tick();
         // Explicit comparison origin, applied once before the first gameplay
         // update. This is not a fix for the session's missing shared frame clock.
         if let (Some(phase), sml2_runtime::session::SessionState::InLevel(ctx)) =
@@ -111,7 +114,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         let effects = session.advance(FrameInput {
             keys,
-            div: boss_div.unwrap_or_else(|| Divider::from_elapsed(0, elapsed).sample()),
+            div: boss_div.unwrap_or_else(|| div_clock.sample()),
         });
         if effects.outcome != sml2_runtime::session::StepOutcome::Continue {
             eprintln!("input frame {index}: {:?}", effects.outcome);

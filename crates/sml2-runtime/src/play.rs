@@ -1,7 +1,7 @@
 //! Existing single-level diagnostic play host and input-tape results.
 
 use crate::content::{load_arena_layout, load_map_nodes, load_scene_scripts, load_tilesets};
-use crate::divider_clock::{NativeDividerClock, VirtualDividerClock};
+use crate::divider_clock::VirtualDividerClock;
 use crate::game::{
     build_contact, note_handoff_screen, sample_level_player_inputs, scene_frame_head,
     update_tile_animation, BellArm, TimedFloatUse,
@@ -122,11 +122,8 @@ pub(crate) fn run_play(
     let arena_layout = load_arena_layout();
     let mut layout_live = layout.clone();
     use minifb::{Key, Window, WindowOptions};
-    // One free-running hardware-input origin spans pauses, fades and reloads.
-    // A headless run has no hardware to sample, so it uses the caller's replay
-    // clock, already advanced by whatever ran before the level (a map entry,
-    // say): one explicit tick per frame keeps the run deterministic.
-    let native_clock = NativeDividerClock::new(0);
+    // The caller's clock is already advanced by whatever ran before the level
+    // (a map entry, say); one console frame per tick, windowed or headless.
     let headless = headless_frames.is_some();
     let mut window = if headless {
         None
@@ -177,9 +174,7 @@ pub(crate) fn run_play(
             print_play_state("headless end", frame_n, &sim, &cam, &obj);
             break;
         }
-        if headless {
-            virtual_clock.advance_tick();
-        }
+        virtual_clock.advance_tick();
         let held = |k: Key| window.as_ref().is_some_and(|w| w.is_key_down(k));
         let mut a_down = held(Key::Z) || held(Key::Space);
         let mut b_down = held(Key::X) || held(Key::LeftShift);
@@ -364,11 +359,7 @@ pub(crate) fn run_play(
             if !frozen {
                 let mario = build_contact(&sim, &keys, cam.scroll_pan, cam.scene_state);
                 sample_level_player_inputs(&mut obj, &sim);
-                obj.div = if headless {
-                    virtual_clock.sample()
-                } else {
-                    native_clock.sample()
-                };
+                obj.div = virtual_clock.sample();
                 // `$0EB0`'s scene branch; see the replay loop.
                 if cam.scene_load_pending {
                     let def_index = boss_def_index(manifest.level_id, cam.boss_fight_phase);

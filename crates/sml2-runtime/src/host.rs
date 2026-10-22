@@ -1,7 +1,7 @@
 //! Existing CLI host: clock policy, persistence, audio output and window loop.
 //! New frontends can instead drive `Session::advance` and consume its effects.
 
-use crate::divider_clock::{NativeDividerClock, VirtualDividerClock};
+use crate::divider_clock::VirtualDividerClock;
 use crate::play_tape::PlayTape;
 use crate::session::{Boot, FrameInput, Session, SessionAssets, StepOutcome};
 use minifb::{Key, Window, WindowOptions};
@@ -34,7 +34,6 @@ impl AudioClock {
 pub struct SessionRunner {
     pub session: Session,
     pub save_path: PathBuf,
-    pub native_clock: NativeDividerClock,
     pub virtual_clock: VirtualDividerClock,
     pub vw: usize,
     pub vh: usize,
@@ -82,8 +81,11 @@ impl SessionRunner {
         let mut runner = Self {
             session: Session::new(assets),
             save_path,
-            native_clock: NativeDividerClock::new(0),
-            virtual_clock: VirtualDividerClock::new(0),
+            virtual_clock: if headless {
+                VirtualDividerClock::new(0)
+            } else {
+                VirtualDividerClock::seeded_from_time()
+            },
             vw: view.0,
             vh: view.1,
             scale,
@@ -136,12 +138,8 @@ impl SessionRunner {
 
     /// The CLI clock and device policy lives here, outside simulation.
     pub fn step_frame(&mut self, keys: PlayerKeys) -> StepOutcome {
-        let div = if self.headless {
-            self.virtual_clock.advance_tick();
-            self.virtual_clock.sample()
-        } else {
-            self.native_clock.sample()
-        };
+        self.virtual_clock.advance_tick();
+        let div = self.virtual_clock.sample();
         let effects = self.session.advance(FrameInput { keys, div });
         for record in effects.saves {
             let _ = fs::write(&self.save_path, record);
