@@ -6,6 +6,8 @@
 //! and alternate palettes without touching stored tile data — see
 //! `sml2-rs/DESIGN.md`.
 
+pub mod cgb;
+
 /// Greyscale value for each GB color value (0 = lightest).
 pub const SHADES: [u8; 4] = [255, 170, 85, 0];
 /// Size of the composed BG tile block (`$8800-$97FF`).
