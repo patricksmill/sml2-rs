@@ -124,6 +124,20 @@ class BossDividerTests(unittest.TestCase):
             after_read = 0x4000 + address % 0x4000 + 3
             self.assertIn((bank, after_read), BOSS_DIV_READ_HOOKS)
 
+    def test_patrol_boss_shot_divider_read_is_hooked(self):
+        rom = Path(__file__).resolve().parents[2] / '../sml2decomp/baserom.gb'
+        data = rom.read_bytes()
+        # Boss anim 14 ($9EF4..$A028) chooses whether to fire when a
+        # rising leg ends. Its child handler starts at $A029.
+        start, end = 0x9EF4, 0xA029
+        reads = [address for address in range(start, end - 2)
+                 if data[address:address + 3] == bytes.fromhex('FA 04 FF')]
+        self.assertEqual(len(reads), 1)
+        for address in reads:
+            bank = address // 0x4000
+            after_read = 0x4000 + address % 0x4000 + 3
+            self.assertIn((bank, after_read), BOSS_DIV_READ_HOOKS)
+
 
 class BridgeStateTests(unittest.TestCase):
     def test_extended_state_leaves_pixels_and_next_frame_aligned(self):

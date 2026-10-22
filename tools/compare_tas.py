@@ -167,9 +167,11 @@ def frame_read(carried, early_reads, latch):
 DIV_READ_HOOKS = ((0x0F, 0x4141), (0x0F, 0x4160), (0x0F, 0x5B50), (0x0F, 0x5E2F),
                   (0x18, 0x4484), (0x18, 0x44C4))
 
-# Witch appearance ($97FE), fire trajectory ($979D), and Tatanga's volley
-# counts ($A220/$A275), after `ld a,[$FF04]` in bank 2.
-BOSS_DIV_READ_HOOKS = ((2, 0x5801), (2, 0x57A0), (2, 0x6223), (2, 0x6278))
+# Witch appearance ($97FE), fire trajectory ($979D), patrol-boss shots
+# ($9F75), and Tatanga's volley counts ($A220/$A275), after each bank-2
+# `ld a,[$FF04]`.
+BOSS_DIV_READ_HOOKS = ((2, 0x5801), (2, 0x57A0), (2, 0x5F78),
+                       (2, 0x6223), (2, 0x6278))
 
 
 def boss_div_field(reads, step):
