@@ -226,12 +226,11 @@ pub(crate) fn run_play(
         // `$05D5` clears the held and pressed keys while `sFadeTimer` is
         // nonzero, so the arena intro holds Mario still; see the session.
         let fade_locks_input = sim.fade_timer > 1;
-        // $05E4/$0640: dead → the arc only; the death fade freezes everything.
-        let ending_frame = scene_frame_head(
-            &mut scene_vm,
-            &mut ending_entry,
-            &mut sim,
-            &mut cam,
+        // `$5E12` (inside `$2C61`) writes its scripted keys after that clear,
+        // so the lock masks only the joypad the ending head may replace.
+        let joypad = if fade_locks_input {
+            EndingInput::default()
+        } else {
             EndingInput {
                 held: keys,
                 pressed: PlayerKeys {
@@ -241,11 +240,18 @@ pub(crate) fn run_play(
                     select: select_pressed,
                     ..PlayerKeys::default()
                 },
-            },
+            }
+        };
+        // $05E4/$0640: dead → the arc only; the death fade freezes everything.
+        let ending_frame = scene_frame_head(
+            &mut scene_vm,
+            &mut ending_entry,
+            &mut sim,
+            &mut cam,
+            joypad,
         );
         let gameplay = matches!(ending_frame, Some(EndingFrame::Gameplay(_)));
         let input = match ending_frame {
-            Some(EndingFrame::Gameplay(_)) if fade_locks_input => EndingInput::default(),
             Some(EndingFrame::Gameplay(input)) => input,
             _ => EndingInput::default(),
         };

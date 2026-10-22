@@ -1534,6 +1534,28 @@ fn pumpkin_tile_animation_inherits_phase_and_map_time() {
     assert_eq!((ctx.tile_animation.timer, ctx.tile_animation.phase), (0, 3));
 }
 
+/// `$05D5` clears the joypad while `sFadeTimer` runs, but `$5E12` writes
+/// its scripted Right+B after that clear: once Wario's exit sets phase 3,
+/// Mario walks even though the fade still holds the player's own keys.
+#[test]
+fn the_scripted_exit_walks_through_the_fade_input_lock() {
+    let mut session = crate::session::Session::new(SessionAssets::load().unwrap());
+    session.begin_level(24, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!("Wario level")
+    };
+    ctx.cam.boss_fight_phase = 3;
+    ctx.sim.fade_timer = 5;
+    ctx.sim.x = 0x0950;
+    ctx.sim.hvel = 0x80;
+    session.advance(crate::session::FrameInput::default());
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!("Wario level")
+    };
+    assert!(ctx.sim.fade_timer > 0, "the fade lock was still active");
+    assert!(ctx.sim.dir_right && ctx.sim.hvel > 0x80, "hvel {:02x}", ctx.sim.hvel);
+}
+
 /// State 19 draws the ending's own scene in all 20 substates:
 /// the session frame is the `EndingScene` projection, never the level. The
 /// Wario level is entered with the boss already beaten and Mario past the

@@ -226,12 +226,11 @@ impl LevelContext {
         // scene, and clears `hKeysHeld`/`hKeysPressed` while `sFadeTimer` is
         // nonzero, so the arena intro holds Mario still.
         let fade_locks_input = self.sim.fade_timer > 1;
-
-        let ending_frame = scene_frame_head(
-            &mut self.scene_vm,
-            &mut self.ending_entry,
-            &mut self.sim,
-            &mut self.cam,
+        // `$5E12` (inside `$2C61`) writes its scripted keys after that clear,
+        // so the lock masks only the joypad the ending head may replace.
+        let joypad = if fade_locks_input {
+            EndingInput::default()
+        } else {
             EndingInput {
                 held: keys,
                 pressed: PlayerKeys {
@@ -241,11 +240,18 @@ impl LevelContext {
                     select: select_pressed,
                     ..PlayerKeys::default()
                 },
-            },
+            }
+        };
+
+        let ending_frame = scene_frame_head(
+            &mut self.scene_vm,
+            &mut self.ending_entry,
+            &mut self.sim,
+            &mut self.cam,
+            joypad,
         );
         let gameplay = matches!(ending_frame, Some(EndingFrame::Gameplay(_)));
         let input = match ending_frame {
-            Some(EndingFrame::Gameplay(_)) if fade_locks_input => EndingInput::default(),
             Some(EndingFrame::Gameplay(input)) => input,
             _ => EndingInput::default(),
         };
