@@ -68,7 +68,7 @@ impl MapScreenTransition {
         let fixed = self.entering && destination.screen_id == FIXED_PALETTE_SCREEN;
         let walk_frame = if self.entering { frame - 48 } else { frame };
         let map = if self.entering {
-            destination
+            &mut *destination
         } else {
             &mut self.source
         };
@@ -85,7 +85,13 @@ impl MapScreenTransition {
         if moving {
             map.transition_walk_step(self.direction);
         }
-        walk_frame + 1 >= if fixed { 96 } else { 100 }
+        let done = walk_frame + 1 >= if fixed { 96 } else { 100 };
+        if done && !self.entering {
+            // The walk out ran `$3C13E` on the screen it left; the hub reload
+            // keeps those bytes.
+            destination.set_map_ram(self.source.map_ram());
+        }
+        done
     }
 }
 

@@ -90,6 +90,7 @@ impl MapSim {
         super::MapRam {
             rand_latch: self.rand_latch,
             tick_timer: self.tick_timer,
+            frame_counter: self.frame_counter,
             keys_xor: self.keys_xor,
             rand_accum: self.zone_animation.random_accum,
             reveal_progress: self.reveal_progress,
@@ -101,6 +102,9 @@ impl MapSim {
         self.ram_seeded = true;
         self.rand_latch = ram.rand_latch;
         self.tick_timer = ram.tick_timer;
+        if self.screen_id == 0 {
+            self.frame_counter = ram.frame_counter;
+        }
         self.keys_xor = ram.keys_xor;
         self.zone_animation.random_accum = ram.rand_accum;
         self.reveal_progress = ram.reveal_progress;

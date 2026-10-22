@@ -568,6 +568,9 @@ pub struct MapRam {
     pub rand_latch: u8,
     /// `sMapTickTimer` (`$A697`).
     pub tick_timer: u8,
+    /// `sMapFrameCounter` (`$A69A`): the zone loaders zero it, the hub loader
+    /// `$3F156` does not, so the hub's animations continue from this byte.
+    pub frame_counter: u8,
     /// `sMapKeysXor` (`$A6B2`).
     pub keys_xor: u8,
     /// `sMapRandAccum` (`$A7B7`).
@@ -591,6 +594,7 @@ impl MapRam {
         Self {
             rand_latch: byte(0x96),
             tick_timer: byte(0x97),
+            frame_counter: byte(0x9A),
             keys_xor: byte(0xB2),
             rand_accum: byte(0x1B7),
             reveal_progress: byte(0x1A5),
@@ -870,7 +874,10 @@ impl MapSim {
         self.screen_id = screen_id;
         self.cursor_walking = 0;
         self.scroll_only_latch = 0;
-        self.frame_counter = 0;
+        if screen_id != 0 {
+            // Each zone loader zeroes `sMapFrameCounter`; `$3F156` keeps it.
+            self.frame_counter = 0;
+        }
         // `$3CBE7` clears the drift counter and `$CBE7`'s tail reseeds the list.
         self.decor_slots = crate::map::HUB_DECOR_SLOTS;
         if self.screen_id == 0 {
@@ -3045,6 +3052,7 @@ mod tests {
         let mut bytes = [0u8; 512];
         bytes[0x96] = 56;
         bytes[0x97] = 37;
+        bytes[0x9A] = 60;
         bytes[0xB2] = 116;
         bytes[0x1B7] = 76;
         bytes[0x1A5] = 0x23;
@@ -3055,12 +3063,33 @@ mod tests {
             MapRam {
                 rand_latch: 56,
                 tick_timer: 37,
+                frame_counter: 60,
                 keys_xor: 116,
                 rand_accum: 76,
                 reveal_progress: 0x23,
                 reveal_tick: 0x43,
             }
         );
+    }
+
+    /// The zone loaders zero `sMapFrameCounter`; the hub loader `$3F156` keeps
+    /// it, so the hub continues from a level's `$A69A` byte.
+    #[test]
+    fn only_zone_loaders_reset_the_map_frame_counter() {
+        let records = MapNodeRecords::default();
+        let mut map = MapSim::new();
+        map.frame_counter = 77;
+        map.load_screen(0, 0, &records);
+        assert_eq!(map.frame_counter, 77, "hub");
+        map.load_screen(2, 0, &records);
+        assert_eq!(map.frame_counter, 0, "Tree Zone");
+
+        let ram = MapRam { frame_counter: 60, ..Default::default() };
+        map.set_map_ram(ram);
+        assert_eq!(map.frame_counter, 0, "a zone keeps its loader's zero");
+        map.load_screen(0, 0, &records);
+        map.set_map_ram(ram);
+        assert_eq!(map.frame_counter, 60, "the hub takes the level's byte");
     }
 
     /// `$3C0DF`/`$3C10E`: Left held after the script skips a bell room to

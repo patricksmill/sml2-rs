@@ -98,6 +98,7 @@ fn tree_door_walks_out_then_reloads_and_fades_back_to_hub() {
     assert!(!transition.entering);
     assert!(transition.shows_source());
     let start_y = transition.source.cursor_y;
+    let start_frame = transition.source.frame_counter;
     for _ in 0..100 {
         tick(&mut session, PlayerKeys::default());
     }
@@ -119,6 +120,8 @@ fn tree_door_walks_out_then_reloads_and_fades_back_to_hub() {
     assert_ne!(start_y, map.cursor_y);
     assert_eq!((map.cam_x, map.cam_y), (record.cam_x, record.cam_y));
     assert_eq!(session.sound_driver.active_song, 6);
+    // `$3C13E` ran on all 100 walk frames; `$3F156` and the reload keep the count.
+    assert_eq!(map.frame_counter, start_frame.wrapping_add(100));
 }
 
 #[test]
