@@ -39,10 +39,9 @@ impl ObjectSim {
             Ok(handler_0x59376::Effect::Continue) => {}
             Ok(handler_0x59376::Effect::Sfx2) => self.sfx2 = 1,
             Ok(handler_0x59376::Effect::Rebirth) => {
-                if self.reset_record_origin(st, tables).is_err() {
-                    self.note_unported(0x59376);
-                    return;
-                }
+                // `$3AA0` -> `$863C`: re-derive in place; the fuse keeps its
+                // landed position, marker and activity.
+                self.finish_sprite_swap(st, tables);
                 let mut tail = Actor::from_raw_slot(&st.b);
                 self.facing = match tail.face_toward(self.mario_ref_x) {
                     std::cmp::Ordering::Greater => 1,

@@ -105,14 +105,18 @@ fn handler_0x59376_flash_end_rebirths_as_anim62_with_the_tail() {
     sim.configure(0x00);
     sim.mario_ref_x = 0x0200;
     sim.fff0 = 1; // odd: no sprite blink on the expiry frame
-    let mut st = staging(3, 0x0100, 0x0080);
+    let mut st = staging(3, 0x0140, 0x0090);
     st.b[28] = 1;
     st.b[6] = 0xAB;
     st.b[7] = 0x08;
+    st.b[8] = 2;
     st.b[11] = 0x10;
     sim.handler_0x59376(&mut st, &lay, &tables);
     assert_eq!(st.b[5], 62, "definition is rewritten before the reset");
-    assert_eq!(u16::from_be_bytes([st.b[0], st.b[1]]), 0x0100);
+    // `$863C` re-derives in place: the landed position and activity stay.
+    assert_eq!(u16::from_be_bytes([st.b[0], st.b[1]]), 0x0140);
+    assert_eq!(y_of(&st.b), 0x0090);
+    assert_eq!(st.b[8], 2);
     assert_eq!((st.b[15], st.b[13]), (2, 0x20), "faces Mario");
     assert_eq!(sim.facing, 1);
     assert_eq!((st.b[18], st.b[11], st.b[28]), (82, 112, 48));
