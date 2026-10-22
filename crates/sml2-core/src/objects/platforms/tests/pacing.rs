@@ -75,6 +75,29 @@ fn handler_0x5ad4d_easy_odd_frames_only_bob() {
     assert_eq!(st.b[25], span);
 }
 
+/// `$5ADB4`, the leftward leg's own `sEasyMode` read: odd frames hold too.
+#[test]
+fn handler_0x5ad4d_easy_left_leg_moves_only_on_even_frames() {
+    let (mut sim, mut st) = fixture(4);
+    sim.easy_mode = true;
+    position(&mut st.b, 100, 80);
+    st.b[25] = 40;
+    sim.fff0 = 1;
+    sim.handler_0x5ad4d(&mut st);
+    assert_eq!(
+        u16::from_be_bytes([st.b[0], st.b[1]]),
+        100,
+        "odd frame holds"
+    );
+    assert_eq!(st.b[25], 40);
+    sim.fff0 = 2;
+    sim.handler_0x5ad4d(&mut st);
+    assert!(
+        u16::from_be_bytes([st.b[0], st.b[1]]) < 100,
+        "even frame slides left"
+    );
+}
+
 #[test]
 fn handler_0x5ad4d_pause_reloads_and_the_left_leg_turns() {
     let (mut sim, mut st) = fixture(3);

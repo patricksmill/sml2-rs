@@ -1480,6 +1480,20 @@
       "dependencies": [],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; the session renderer draws EndingScene for all 20 substates; native-size frame tests at logo, walk, burst and credits pages assert tile, sprite and per-scanline scroll output; no renderer change to other states",
       "status": "done"
+    },
+    {
+      "id": "f-easy-mode-audit",
+      "title": "Audit and port Easy mode's in-level gameplay effects (every sEasyMode reader)",
+      "asm_refs": [
+        "home.asm:7221-7234 .CheckEasyMode",
+        "main.asm:3356",
+        "main.asm:3476",
+        "main.asm:7174",
+        "ram.asm:sEasyMode"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one unit test per sEasyMode reader with a sensitivity mutation; Easy session reaches a level and shows the effect",
+      "status": "done"
     }
   ]
 }

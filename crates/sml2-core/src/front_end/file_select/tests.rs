@@ -128,6 +128,19 @@ fn select_toggles_easy_mode_but_not_in_erase_mode() {
     assert!(!fs.easy_mode(), "erase mode suppresses the Easy toggle");
 }
 
+/// `$302AD`'s tail: arming erase mode also writes `sEasyMode = 0`.
+#[test]
+fn arming_erase_mode_clears_easy_mode() {
+    let mut slots = SaveSlots::new();
+    let mut fs = FileSelect::new(&mut slots);
+    drop_in(&mut fs, &mut slots);
+    fs.step(&mut slots, SELECT, SELECT);
+    assert!(fs.easy_mode());
+    enter_erase_mode(&mut fs, &mut slots);
+    assert!(fs.clear_mode());
+    assert!(!fs.easy_mode());
+}
+
 #[test]
 fn start_or_down_confirms_the_selected_slot() {
     let mut slots = SaveSlots::new();

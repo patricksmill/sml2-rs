@@ -225,3 +225,49 @@ fn wario_level_object_divider_is_the_shared_clock() {
     }
     assert!(live > 0, "the Wario level must run live object frames");
 }
+
+/// The six-coin door also passes `$3573`: in Easy mode the card shows for
+/// its 64 frames before the Wario level loads.
+#[test]
+fn easy_mode_castle_door_shows_the_card_before_the_wario_level() {
+    let mut session = at_castle_node(6);
+    session.easy_mode = true;
+    arrive(&mut session);
+    step(
+        &mut session,
+        PlayerKeys {
+            b: true,
+            ..Default::default()
+        },
+    );
+    step(
+        &mut session,
+        PlayerKeys {
+            a: true,
+            ..Default::default()
+        },
+    );
+    let mut card_frames = 0;
+    let mut entered = false;
+    for _ in 0..200 {
+        let outcome = step(&mut session, PlayerKeys::default()).outcome;
+        if session
+            .pending_level
+            .as_ref()
+            .is_some_and(|t| t.easy_card_visible())
+        {
+            card_frames += 1;
+            assert!(matches!(session.state, SessionState::Castle(_)));
+        }
+        if matches!(outcome, StepOutcome::LevelEntered(24)) {
+            entered = true;
+            break;
+        }
+    }
+    assert!(entered, "the Wario level loads after the card");
+    assert_eq!(card_frames, 64);
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!("Wario level")
+    };
+    assert!(ctx.obj.easy_mode);
+}

@@ -547,6 +547,54 @@ fn map_level_entry_runs_the_console_transition() {
     let _ = fs::remove_file(&tmp_save);
 }
 
+/// `$3573` with `sEasyMode`: the "EASY MODE" card (`$35CD`) holds for its 64
+/// frames between the map fade and `$0B`, so the level goes live 64 frames
+/// later, with the object engine in Easy mode.
+#[test]
+fn easy_mode_entry_shows_the_card_before_the_level() {
+    let tmp_save = temp_save_path("test_easy_card");
+    let _ = fs::remove_file(&tmp_save);
+    let assets = SessionAssets::load().expect("session assets must load");
+    let mut runner = SessionRunner::new(assets, tmp_save.clone(), 1, (160, 144), true);
+    runner.easy_mode = true;
+    let _ = runner.step_frame(PlayerKeys::default());
+    let _ = runner.step_frame(PlayerKeys {
+        a: true,
+        ..Default::default()
+    });
+    let card = {
+        let font = runner
+            .assets
+            .ending_scene
+            .as_ref()
+            .and_then(|a| a.transfer_source(0x1A, 0x4656, 0x300))
+            .expect("the card font");
+        sml2_core::easy_mode_card::render_easy_card_output(
+            font,
+            &runner.assets.sprite_metas,
+            (160, 144),
+            sml2_core::video::OutputMode::Grayscale,
+        )
+    };
+    assert!(card.iter().any(|&p| p != 255), "the card has ink");
+    let mut entered = None;
+    for i in 1..=150 {
+        let outcome = runner.step_frame(PlayerKeys::default());
+        let frame = runner.render_frame();
+        assert_eq!(frame == card, (50..114).contains(&i), "frame {i}");
+        if let StepOutcome::LevelEntered(id) = outcome {
+            entered = Some((i, id));
+            break;
+        }
+    }
+    assert_eq!(entered, Some((73 + 64, 0)));
+    let SessionState::InLevel(ctx) = &runner.state else {
+        panic!("level")
+    };
+    assert!(ctx.obj.easy_mode);
+    let _ = fs::remove_file(&tmp_save);
+}
+
 #[test]
 fn pipe_travel_draws_mario_behind_the_background() {
     // $530D: `sPipeTravelDirection >= $10` clears `$FFBB`, and $52D5-$52DD then

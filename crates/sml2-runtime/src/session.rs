@@ -642,6 +642,37 @@ pub struct MapTransition {
     pub ctx: Box<LevelContext>,
     pub level_id: u8,
     pub frame: u16,
+    /// Frame `$3573` hands Easy mode's card to `$35CD` (state `$17`); `None`
+    /// without Easy mode, where `$3573` goes straight to `$0B`.
+    pub easy_card: Option<u16>,
+    /// Frame the level goes live (its first state-`$04` frame).
+    pub live_at: u16,
+}
+
+/// The map's A press reaches state `$16` here: `$3C1EC` runs after the
+/// `$3E9FB` fade, one frame before the measured `$0B`.
+const MAP_EASY_CARD_START: u16 = 50;
+
+impl MapTransition {
+    /// A map entry: `MAP_ENTRY_FRAMES`, or 64 more when the card's `$17`
+    /// frames come before `$0B` and push the rest of the load back.
+    pub fn from_map(ctx: Box<LevelContext>, level_id: u8, easy: bool) -> Self {
+        let card = sml2_core::easy_mode_card::EASY_CARD_FRAMES;
+        Self {
+            ctx,
+            level_id,
+            frame: 0,
+            easy_card: easy.then_some(MAP_EASY_CARD_START),
+            live_at: MAP_ENTRY_FRAMES + if easy { card } else { 0 },
+        }
+    }
+
+    /// Whether `$35CD` draws the card on the current frame.
+    pub fn easy_card_visible(&self) -> bool {
+        self.easy_card.is_some_and(|start| {
+            (start..start + sml2_core::easy_mode_card::EASY_CARD_FRAMES).contains(&self.frame)
+        })
+    }
 }
 
 /// Frames from the map's A press to the first state-`$04` frame. `$3C1EC`
@@ -1403,11 +1434,11 @@ impl Session {
                                 ctx.ending_scene.load(assets, &mut state, &mut fade);
                             }
                             self.sound_driver.music_request = 0xFF;
-                            self.pending_level = Some(Box::new(MapTransition {
-                                ctx: Box::new(ctx),
+                            self.pending_level = Some(Box::new(MapTransition::from_map(
+                                Box::new(ctx),
                                 level_id,
-                                frame: 0,
-                            }));
+                                self.easy_mode,
+                            )));
                             StepOutcome::Continue
                         }
                         Err(e) => {
@@ -1767,6 +1798,13 @@ impl Session {
                 StepOutcome::Continue
             }
 
+            // The castle door's Easy card holds the reveal still.
+            SessionState::Castle(_) if self.pending_level.is_some() => {
+                if let Some(t) = self.pending_level.as_mut() {
+                    t.frame += 1;
+                }
+                StepOutcome::Continue
+            }
             SessionState::Castle(_) => {
                 let held = pack_joypad(
                     keys.right,
@@ -1810,7 +1848,7 @@ impl Session {
         // entry length the level goes live (its own music request starts on the
         // first InLevel frame).
         if let Some(t) = self.pending_level.as_mut() {
-            if t.frame >= MAP_ENTRY_FRAMES {
+            if t.frame >= t.live_at {
                 let mut t = self.pending_level.take().expect("checked above");
                 t.ctx.tile_animation = self.tile_animation;
                 self.state = SessionState::InLevel(t.ctx);

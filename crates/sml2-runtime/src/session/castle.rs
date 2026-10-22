@@ -37,6 +37,7 @@ impl Session {
                 let Some((_, node, _, _)) = self.castle_return else {
                     unreachable!()
                 };
+                let castle = seq.clone();
                 if let Err(error) = self.begin_level(id, 0) {
                     diagnostics.push(error);
                     return StepOutcome::Continue;
@@ -47,6 +48,22 @@ impl Session {
                     ctx.sim.level_tally = self.level_tally;
                 }
                 self.castle_return = None;
+                if self.easy_mode {
+                    // `$3573` runs the card first: the frame after `$16`
+                    // starts `$35CD`, and the level loads once it ends.
+                    let level = std::mem::replace(&mut self.state, SessionState::Castle(castle));
+                    let SessionState::InLevel(ctx) = level else {
+                        unreachable!("begin_level loaded the level")
+                    };
+                    self.pending_level = Some(Box::new(MapTransition {
+                        ctx,
+                        level_id: id,
+                        frame: 0,
+                        easy_card: Some(1),
+                        live_at: 1 + sml2_core::easy_mode_card::EASY_CARD_FRAMES,
+                    }));
+                    return StepOutcome::Continue;
+                }
                 StepOutcome::LevelEntered(id)
             }
             Some(CastleTransition::ReturnToMap { walked_out }) => {

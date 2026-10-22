@@ -89,6 +89,21 @@ impl Session {
 
     fn render_output(&self, view: (usize, usize), output: OutputMode) -> Vec<u8> {
         let (vw, vh) = view;
+        if self
+            .pending_level
+            .as_ref()
+            .is_some_and(|t| t.easy_card_visible())
+        {
+            let font = self.assets.ending_scene.as_ref().and_then(|a| {
+                a.transfer_source(0x1A, 0x4656, sml2_core::easy_mode_card::EASY_CARD_FONT_LEN)
+            });
+            return sml2_core::easy_mode_card::render_easy_card_output(
+                font.unwrap_or(&[]),
+                &self.assets.sprite_metas,
+                (vw, vh),
+                output,
+            );
+        }
         match &self.state {
             SessionState::Title(_) => sml2_core::front_end::render::render_title_output(
                 &self.assets.front_end,

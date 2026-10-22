@@ -1,6 +1,6 @@
 {
   "active_milestone": "full_integration",
-  "milestone_note": "13 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+  "milestone_note": "12 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
     {
       "id": "f-routes-b",
@@ -124,20 +124,6 @@
         "f-routes-e"
       ],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; session tests reach every course node from the hub by map input only; unlocked-path bytes match a ROM-derived table",
-      "status": "pending"
-    },
-    {
-      "id": "f-easy-mode-audit",
-      "title": "Audit and port Easy mode's in-level gameplay effects (every sEasyMode reader)",
-      "asm_refs": [
-        "home.asm:7221-7234 .CheckEasyMode",
-        "main.asm:3356",
-        "main.asm:3476",
-        "main.asm:7174",
-        "ram.asm:sEasyMode"
-      ],
-      "dependencies": [],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one unit test per sEasyMode reader with a sensitivity mutation; Easy session reaches a level and shows the effect",
       "status": "pending"
     },
     {
