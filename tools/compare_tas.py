@@ -45,7 +45,7 @@ def read_state(pipe):
                 if key not in {"step", "fff0", "update_phase", "standing", "scene", "owns", "pc",
                                "boss_x", "boss_state", "door_phase", "door_parity",
                                "platform_sprite", "tile_anim", "writes", "tile_timer", "tile_phase",
-                               "ff97", "bag", "pow", "wt"}:
+                               "ff97", "bag", "pow", "wt", "xs", "xp", "ph"}:
                     raise ValueError("unknown diagnostic field")
                 state[key] = int(value)
     except ValueError as exc:
@@ -218,7 +218,7 @@ def step_masks(mask, phases, st4_keys, frame_held=None):
 
 # Every address `check_divergence` and `--trace` read.
 SNAPSHOT_ADDRS = (0xFF9B, 0xA269, 0xFFC0, 0xFFC1, 0xFFC2, 0xFFC3, 0xFFC8, 0xFFC9,
-                  0xFFCA, 0xFFCB, 0xFFF0, 0xAF08, 0xA26B, 0xA28E, 0xA28F, 0xA200, 0xA201)
+                  0xFFCA, 0xFFCB, 0xFFF0, 0xAF08, 0xA26B, 0xA28E, 0xA28F, 0xA200, 0xA201, 0xA202, 0xA218, 0xFF97)
 
 
 class Snapshot(dict):
@@ -295,7 +295,10 @@ def trace_line(index, mask, rom, port):
         # sMoneyBagCount (the HUD's enemy counter) and sCurPowerup.
         line += (f" | bag ROM {rom[0xA28D]} port {port['bag']}"
                  f" pow ROM {rom[0xA216]} port {port['pow']}"
-                 f" wt ROM {rom[0xA222]} port {port.get('wt', 0)}")
+                 f" wt ROM {rom[0xA222]} port {port.get('wt', 0)}"
+                 f" xs ROM {rom[0xA202]:02x} port {port.get('xs', 0):02x}"
+                 f" xp ROM {rom[0xA218]} port {port.get('xp', 0)}"
+                 f" ph ROM {rom[0xFF97] & 7} port {port.get('ph', 0)}")
     return line
 
 

@@ -149,6 +149,8 @@ their divider sample as `boss_div=` on the corresponding gameplay update.
 This comparison-only input keeps random choices aligned; ordinary play uses
 the native divider. `--debug-state` includes the witch's side, state, attack
 phase, platform sprite, tile-animation configuration, and terrain-edit count.
+`--trace` rows also show Mario's `sMarioXSub` (`$A202`), push-out flag
+(`$A218`) and `$FF97 & 7` speed phase for both sides.
 The once-per-frame step
 outside a level uses the read that frame's state handler acts on: one taken
 before line 144 of that frame, or at the end of the previous tick, since the

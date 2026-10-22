@@ -159,7 +159,7 @@ class BridgeStateTests(unittest.TestCase):
         pipe = io.BytesIO(b'STATE 10 498 164 499 160 00 00 1 2 '
                           b'step=8102 fff0=174 update_phase=0 standing=1 scene=17 owns=1 pc=24700 '
                           b'boss_x=24 boss_state=4 door_phase=3 door_parity=1 '
-                          b'platform_sprite=19 tile_anim=0 writes=12\n'
+                          b'platform_sprite=19 tile_anim=0 writes=12 xs=255 xp=1 ph=3\n'
                           + pixels + b'STATE - - - - -\n' + pixels)
         state = read_state(pipe)
         self.assertEqual(state['step'], 8102)
@@ -174,6 +174,7 @@ class BridgeStateTests(unittest.TestCase):
         self.assertEqual(state['platform_sprite'], 19)
         self.assertEqual(state['tile_anim'], 0)
         self.assertEqual(state['writes'], 12)
+        self.assertEqual([state['xs'], state['xp'], state['ph']], [255, 1, 3])
         self.assertEqual(pipe.read(len(pixels)), pixels)
         self.assertIsNone(read_state(pipe))
         self.assertEqual(pipe.read(len(pixels)), pixels)
