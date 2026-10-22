@@ -24,9 +24,18 @@ bug.
 | Levels | 1–3 | Position, enemy counter, power-up and walk timer match on every row. The exception is two isolated rows in recording 3, where the same change lands one row apart. Most rows match pixel for pixel, apart from tile-animation phase. |
 | Hub return fade | 1–3 | Matches: a 12-frame fade-in. |
 | Coin room | 3 | Matches frame for frame, offset by the 8-frame load. |
+| Title | 1–3 | Matches on every row except the first two, where the screen appears. |
+| File select | 1–3 | Matches, including the drop into the pipe (`54e238f`). The opening drop runs two frames earlier than on the ROM, a load-timing difference. |
+| Level 17 | 3 | Matches since Mario's overlapping sprite cells take DMG x priority (`b1b2171`). |
 
 ## Not yet checked
 
-- Other zone maps, level 17 and the title screen.
+- Zone maps (Mario, Pumpkin, Tree, Turtle, the hub and the castle reveal):
+  everything that differs is animated, either scenery or the walking Mario.
+  The scenery runs off `$FF97` and DIV, and in recording 1 the port's `$FF97`
+  is a steady 44 ahead of the ROM's on Mario Zone. Shifting whole frames
+  can't separate the scenery's phase from Mario's walk, so whether each
+  animation shows the same frames in the same order is still unconfirmed.
+  That needs a per-object comparison keyed on `$FF97`.
 - Ending and Wario's castle: no recording covers them yet (waits on
   `f-wario-played`).
