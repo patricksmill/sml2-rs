@@ -581,6 +581,8 @@ pub struct MapRam {
     pub coin_icon_phase: u8,
     /// `sMapSparkleTimer` (`$A7A9`), never zeroed.
     pub sparkle_timer: u8,
+    /// `sMapTreeAnimTick` (`$A784`), reset only by its own ten-frame wrap.
+    pub tree_tick: u8,
     /// `sMapKeysXor` (`$A6B2`).
     pub keys_xor: u8,
     /// `sMapRandAccum` (`$A7B7`).
@@ -610,6 +612,7 @@ impl MapRam {
             anim_index: byte(0xA2),
             coin_icon_phase: byte(0x180),
             sparkle_timer: byte(0x1A9),
+            tree_tick: byte(0x184),
             keys_xor: byte(0xB2),
             rand_accum: byte(0x1B7),
             reveal_progress: byte(0x1A5),
@@ -3082,6 +3085,7 @@ mod tests {
         bytes[0xA2] = 91;
         bytes[0x180] = 2;
         bytes[0x1A9] = 3;
+        bytes[0x184] = 7;
         bytes[0xB2] = 116;
         bytes[0x1B7] = 76;
         bytes[0x1A5] = 0x23;
@@ -3098,6 +3102,7 @@ mod tests {
                 anim_index: 91,
                 coin_icon_phase: 2,
                 sparkle_timer: 3,
+                tree_tick: 7,
                 keys_xor: 116,
                 rand_accum: 76,
                 reveal_progress: 0x23,
@@ -3139,9 +3144,10 @@ mod tests {
             anim_index: 91,
             coin_icon_phase: 2,
             sparkle_timer: 3,
+            tree_tick: 7,
             ..Default::default()
         });
-        for screen in [1, 0, 6, 0] {
+        for screen in [1, 0, 6, 0, 2] {
             map.load_screen(screen, 0, &records);
             assert_eq!(
                 (map.anim_phase, map.raster_phase, map.anim_index, map.coin_icon_phase, map.sparkle_timer),
@@ -3149,6 +3155,9 @@ mod tests {
                 "screen {screen}"
             );
         }
+
+        // `$3DA2D`: Tree Zone's ten-frame tick continues from the level's byte.
+        assert_eq!(map.map_ram().tree_tick, 7);
 
         // `$3D930`: 91 + 1 is past `$4F`, so the walk restarts at 0.
         map.load_screen(1, 0, &records);

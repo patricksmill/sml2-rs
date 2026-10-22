@@ -19,6 +19,7 @@ pub(super) fn reset(map: &mut MapSim) {
 pub(super) fn tick(map: &mut MapSim, _div: u8) {
     let tree = &mut map.zone_animation.tree;
     tree.tick = tree.tick.wrapping_add(1);
+    // `$3DA2D`: any value from 10 up (a level's byte too) wraps to 0.
     if tree.tick >= 10 {
         tree.tick = 0;
         tree.step = tree.step.wrapping_add(1);
