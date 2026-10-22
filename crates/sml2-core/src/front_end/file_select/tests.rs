@@ -160,6 +160,7 @@ fn start_or_down_confirms_the_selected_slot() {
     let mut last = FileSelectOutput::default();
     for _ in 0..64 {
         last = fs.step(&mut slots, 0, 0);
+        assert!(fs.cursor_behind_bg(), "$41C6 sinks him behind the pipe");
     }
     assert_eq!(last.action, FileSelectAction::Load { slot: 1, record });
     assert_eq!(fs.save_file_index, 1);

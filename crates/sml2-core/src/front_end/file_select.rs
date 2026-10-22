@@ -317,6 +317,8 @@ impl FileSelect {
 
     /// `$41C6`: the confirm drop, then the load/erase commit.
     fn state_confirm(&mut self, slots: &mut SaveSlots) -> FileSelectAction {
+        // `$FFBB = 0`: he sinks behind the pipe.
+        self.cursor_behind_bg = true;
         self.sprite = 16;
         self.cursor_y = self.cursor_y.wrapping_add(1);
         self.timer = self.timer.wrapping_sub(1);
