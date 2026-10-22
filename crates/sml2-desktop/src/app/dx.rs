@@ -1,4 +1,5 @@
 use super::file_picker::{FilePicker, PickerResult};
+use super::theme::{self, Value};
 use super::{DesktopApp, Screen};
 use crate::{
     dx_import::{self, Event, Worker},
@@ -88,10 +89,18 @@ impl DesktopApp {
     }
 
     pub(super) fn dx_controls(&mut self, ctx: &Context, ui: &mut Ui) {
-        ui.add_space(12.0);
-        ui.strong("DX opening-level preview");
+        theme::section(ui, "SML2DX · OPENING-LEVEL PREVIEW");
         if self.dx_worker.is_none() {
-            if self.dx_picker.is_none() && self.menu.button(ui, "Import SML2DX…") {
+            let installed = self.dx_bundle.is_some();
+            let status = Value::Text(
+                if installed {
+                    "installed"
+                } else {
+                    "not installed"
+                }
+                .into(),
+            );
+            if self.dx_picker.is_none() && self.menu.row(ui, "Import SML2DX v1.8.1…", status) {
                 self.dx_message = "Choose the patched SML2DX v1.8.1 ROM…".into();
                 self.dx_worker = Some(Worker::choose_file(|| {
                     rfd::FileDialog::new()
@@ -100,12 +109,15 @@ impl DesktopApp {
                         .pick_file()
                 }));
             }
-            if self.dx_bundle.is_some() && self.menu.button(ui, "Play DX preview") {
+            if installed && self.menu.row(ui, "Play DX preview", Value::None) {
                 self.start_dx(ctx);
             }
         } else {
-            ui.spinner();
-            if self.menu.button(ui, "Cancel DX import") {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                theme::note(ui, "Working…");
+            });
+            if self.menu.row(ui, "Cancel DX import", Value::None) {
                 if let Some(worker) = &self.dx_worker {
                     worker.cancel();
                 }
@@ -113,9 +125,16 @@ impl DesktopApp {
             }
         }
         if !self.dx_message.is_empty() {
-            ui.label(&self.dx_message);
+            theme::note(ui, &self.dx_message);
         }
-        ui.label("Mario · opening level only · progress saves are isolated");
+        theme::note(
+            ui,
+            "Supply your own patched ROM. Mario · opening level only · progress saves are isolated.",
+        );
+    }
+
+    /// The in-app ROM browser, drawn over whichever screen is showing.
+    pub(super) fn dx_picker_window(&mut self, ctx: &Context) {
         let choice = self.dx_picker.as_mut().and_then(|picker| picker.show(ctx));
         match choice {
             Some(PickerResult::Selected(path)) => self.import_dx_path(path),

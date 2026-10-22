@@ -1,98 +1,213 @@
+use super::theme::{self, Value};
 use super::{DesktopApp, Screen};
 use crate::{
-    input::{Action, Bindings},
-    menu::release_focus,
+    input::{Action, Bindings, Button, PadButton},
+    menu::{pressed, release_focus},
     settings::Zoom,
 };
-use eframe::egui::{self, Context, RichText, Ui, ViewportCommand};
+use eframe::egui::{self, Context, Ui, ViewportCommand};
 use sml2_runtime::session::SessionState;
+
+/// Settings pages, in tab order.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Page {
+    Display,
+    Audio,
+    Controls,
+    Mods,
+    Debug,
+}
+
+impl Page {
+    pub(super) const ALL: [Page; 5] = [
+        Page::Display,
+        Page::Audio,
+        Page::Controls,
+        Page::Mods,
+        Page::Debug,
+    ];
+    fn label(self) -> &'static str {
+        match self {
+            Page::Display => "DISPLAY",
+            Page::Audio => "AUDIO",
+            Page::Controls => "CONTROLS",
+            Page::Mods => "MODS",
+            Page::Debug => "DEBUG",
+        }
+    }
+}
 
 impl DesktopApp {
     pub(super) fn home_panel(&mut self, ctx: &Context, ui: &mut Ui) {
-        ui.label(RichText::new("SUPER MARIO LAND 2").size(30.0).strong());
-        ui.label(RichText::new("Native Rust edition").color(egui::Color32::LIGHT_GREEN));
-        ui.add_space(24.0);
-        if self.menu.button(
-            ui,
-            if self.game.is_some() {
-                "Play / Resume"
-            } else {
-                "Retry loading game"
-            },
-        ) {
-            if self.game.is_none() {
-                self.load_game();
-            }
-            if self.game.is_some() {
-                self.navigate(ctx, Screen::Game);
-            }
-        }
-        if self.menu.button(ui, "Title / File Select") {
-            if self.game.is_none() {
-                self.load_game();
-            }
-            if let Some(game) = &mut self.game {
-                // `$00`: the original boot flow; START opens the three pipes.
-                game.session.enter_title();
-            }
-            if self.game.is_some() {
-                self.navigate(ctx, Screen::Game);
-            }
-        }
-        if self.menu.button(ui, "Settings") {
-            self.return_screen = Screen::Home;
-            self.navigate(ctx, Screen::Settings);
-        }
-        if self.menu.button(ui, "Quit") {
-            ctx.send_viewport_cmd(ViewportCommand::Close);
-        }
-        self.dx_controls(ctx, ui);
-        if let Some(game) = &self.game {
-            ui.add_space(14.0);
-            ui.label("Save pipes");
-            for (slot, label) in ["A", "B", "C"].iter().enumerate() {
-                let text = if game.session.slots.valid(slot) {
-                    let tally = game
-                        .session
-                        .slots
-                        .load_slot(slot)
-                        .map(|r| (r[0x42] >> 4) as u16 * 10 + (r[0x42] & 0x0F) as u16)
-                        .unwrap_or(0);
-                    format!("Pipe {label}: {tally} stages")
+        theme::logo(ui, "SUPER MARIO LAND 2", "6 GOLDEN COINS");
+        ui.add_space(14.0);
+        theme::card().show(ui, |ui| {
+            ui.set_width(theme::BUTTON_SIZE.x);
+            ui.spacing_mut().item_spacing.y = 6.0;
+            if self.menu.button(
+                ui,
+                if self.game.is_some() {
+                    "Play / Resume"
                 } else {
-                    format!("Pipe {label}: empty")
-                };
-                ui.label(text);
+                    "Retry loading game"
+                },
+            ) {
+                if self.game.is_none() {
+                    self.load_game();
+                }
+                if self.game.is_some() {
+                    self.navigate(ctx, Screen::Game);
+                }
             }
-        }
-        ui.add_space(20.0);
-        ui.label("Arrows / D-pad: navigate · Enter / South: confirm");
-        ui.label("Esc / Controller Start: menu · East: back");
-        if let Some(message) = &self.status {
-            ui.add_space(12.0);
-            ui.colored_label(egui::Color32::LIGHT_RED, message);
-        }
-        if !self.allow_save && ui.button("Reset unreadable settings to defaults").clicked() {
-            self.settings = Default::default();
-            self.allow_save = true;
-            // Force replacement even when the current values already match defaults.
-            self.saved_settings.version = 0;
-            self.persist();
-            self.status = None;
-        }
+            if self.menu.button(ui, "Title / File Select") {
+                if self.game.is_none() {
+                    self.load_game();
+                }
+                if let Some(game) = &mut self.game {
+                    // `$00`: the original boot flow; START opens the three pipes.
+                    game.session.enter_title();
+                }
+                if self.game.is_some() {
+                    self.navigate(ctx, Screen::Game);
+                }
+            }
+            if self.dx_bundle.is_some()
+                && self.dx_worker.is_none()
+                && self.menu.button(ui, "Play DX Preview")
+            {
+                self.start_dx(ctx);
+            }
+            if self.menu.button(ui, "Settings") {
+                self.return_screen = Screen::Home;
+                self.navigate(ctx, Screen::Settings);
+            }
+            if self.menu.button(ui, "Quit") {
+                ctx.send_viewport_cmd(ViewportCommand::Close);
+            }
+            if let Some(game) = &self.game {
+                ui.add_space(8.0);
+                theme::section(ui, "SAVE PIPES");
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 8.0;
+                    ui.add_space((theme::BUTTON_SIZE.x - 3.0 * 92.0) / 2.0);
+                    for (slot, label) in ["A", "B", "C"].iter().enumerate() {
+                        let stages = game.session.slots.valid(slot).then(|| {
+                            game.session
+                                .slots
+                                .load_slot(slot)
+                                .map(|r| (r[0x42] >> 4) as u16 * 10 + (r[0x42] & 0x0F) as u16)
+                                .unwrap_or(0)
+                        });
+                        theme::save_pipe(ui, label, stages);
+                    }
+                });
+            }
+            if let Some(message) = &self.status {
+                ui.add_space(6.0);
+                theme::error(ui, message);
+            }
+            if !self.allow_save && self.menu.button(ui, "Reset unreadable settings") {
+                self.reset_settings();
+            }
+        });
+        ui.add_space(10.0);
+        let below = ui
+            .allocate_exact_size(egui::vec2(10.0, 18.0), egui::Sense::hover())
+            .0;
+        theme::outlined(
+            ui,
+            below.center(),
+            egui::Align2::CENTER_CENTER,
+            "Native Rust edition",
+            13.0,
+            egui::Color32::WHITE,
+        );
+    }
+
+    /// Replace the settings file with defaults, even when it could not be read.
+    pub(super) fn reset_settings(&mut self) {
+        let window_size = self.settings.window_size;
+        let dx_installation = self.settings.dx_installation.clone();
+        self.settings = Default::default();
+        self.settings.window_size = window_size;
+        self.settings.dx_installation = dx_installation;
+        self.allow_save = true;
+        // Force replacement even when the current values already match defaults.
+        self.saved_settings.version = 0;
+        self.persist();
+        self.status = None;
     }
 
     pub(super) fn settings_panel(&mut self, ctx: &Context, ui: &mut Ui) {
-        ui.heading("Settings");
-        ui.label("Changes apply immediately and save automatically.");
-        ui.add_space(12.0);
-        ui.strong("Display");
+        if self.capture.is_none() && self.dx_picker.is_none() {
+            let back = pressed(
+                &mut self.input,
+                &[Button::Pad(PadButton::LeftShoulder), Button::key("PageUp")],
+            );
+            let next = pressed(
+                &mut self.input,
+                &[
+                    Button::Pad(PadButton::RightShoulder),
+                    Button::key("PageDown"),
+                ],
+            );
+            if back || next {
+                let count = Page::ALL.len() as i32;
+                let index = Page::ALL.iter().position(|p| *p == self.page).unwrap_or(0) as i32;
+                self.page = Page::ALL
+                    [(index + i32::from(next) - i32::from(back)).rem_euclid(count) as usize];
+                self.menu.selected = 0;
+                self.reset_armed = false;
+            }
+        }
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 46.0), egui::Sense::hover());
+        theme::outlined(
+            ui,
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            "SETTINGS",
+            32.0,
+            egui::Color32::WHITE,
+        );
+        ui.add_space(10.0);
+        theme::card().show(ui, |ui| {
+            ui.set_width(theme::ROW_SIZE.x);
+            ui.spacing_mut().item_spacing.y = 6.0;
+            let labels = Page::ALL.map(Page::label);
+            let mut index = Page::ALL.iter().position(|p| *p == self.page).unwrap_or(0);
+            ui.vertical_centered(|ui| {
+                if self.menu.tabs(ui, &labels, &mut index) {
+                    self.page = Page::ALL[index];
+                    self.reset_armed = false;
+                }
+            });
+            ui.add_space(4.0);
+            match self.page {
+                Page::Display => self.display_page(ctx, ui),
+                Page::Audio => self.audio_page(ui),
+                Page::Controls => self.controls_page(ui),
+                Page::Mods => self.dx_controls(ctx, ui),
+                Page::Debug => self.debug_page(ui),
+            }
+            ui.add_space(6.0);
+            if self.menu.row(ui, "Back", Value::None) && self.capture.is_none() {
+                self.persist();
+                self.navigate(ctx, self.return_screen);
+            }
+            if let Some(message) = &self.status {
+                theme::error(ui, message);
+            }
+        });
+    }
+
+    fn display_page(&mut self, ctx: &Context, ui: &mut Ui) {
+        theme::section(ui, "SCREEN");
         let adjust = self.menu.row_adjustment();
-        let label = match self.settings.zoom {
-            Zoom::Auto => "Zoom: auto integer fit".into(),
-            Zoom::Integer(n) => format!("Zoom: {n}×"),
+        let zoom = match self.settings.zoom {
+            Zoom::Auto => "Auto fit".into(),
+            Zoom::Integer(n) => format!("{n}×"),
         };
-        if self.menu.button(ui, label) || adjust != 0 {
+        if self.menu.row(ui, "Zoom", Value::Choice(zoom)) || adjust != 0 {
             let current = match self.settings.zoom {
                 Zoom::Auto => 0,
                 Zoom::Integer(n) => n as i32,
@@ -100,34 +215,38 @@ impl DesktopApp {
             let next = (current + if adjust != 0 { adjust } else { 1 }).rem_euclid(9);
             self.zoom(ctx, if next == 0 { None } else { Some(next as u8) });
         }
-        if self.menu.button(
-            ui,
-            format!(
-                "Fullscreen: {}",
-                if self.settings.fullscreen {
-                    "on"
-                } else {
-                    "off"
-                }
-            ),
-        ) {
-            self.fullscreen(ctx);
-        }
-        let adjust = self.menu.row_adjustment();
         if self
             .menu
-            .button(ui, format!("Filter: {}", self.settings.filter.label()))
-            || adjust != 0
+            .row(ui, "Fullscreen", Value::Toggle(self.settings.fullscreen))
+        {
+            self.fullscreen(ctx);
+        }
+        theme::section(ui, "COLOR");
+        let adjust = self.menu.row_adjustment();
+        if self.menu.row(
+            ui,
+            "Palette filter",
+            Value::Choice(self.settings.filter.label()),
+        ) || adjust != 0
         {
             self.cycle_filter(if adjust != 0 { adjust } else { 1 });
         }
-        ui.label("+ / − zoom · F11 fullscreen · F4 cycles filters · game view stays 160 × 144");
-        ui.add_space(10.0);
-        ui.strong("Audio");
-        let adjust = self.menu.row_adjustment();
-        if self.menu.button(
+        theme::note(
             ui,
-            format!("Volume: {:.0}%  ← / →", self.settings.volume * 100.0),
+            "The backdrop previews the filter. + / − zoom · F11 fullscreen · F4 cycles filters. The game view stays 160 × 144.",
+        );
+    }
+
+    fn audio_page(&mut self, ui: &mut Ui) {
+        theme::section(ui, "SOUND");
+        let adjust = self.menu.row_adjustment();
+        if self.menu.row(
+            ui,
+            "Volume",
+            Value::Meter(
+                self.settings.volume,
+                format!("{:.0}%", self.settings.volume * 100.0),
+            ),
         ) || adjust != 0
         {
             self.settings.volume = ((self.settings.volume * 10.0).round()
@@ -135,27 +254,32 @@ impl DesktopApp {
             .clamp(0.0, 10.0)
                 / 10.0;
         }
-        if self.menu.button(
-            ui,
-            format!("Mute: {}", if self.settings.muted { "on" } else { "off" }),
-        ) {
-            self.settings.muted = !self.settings.muted;
-        }
-        ui.add_space(10.0);
-        ui.strong("Input");
         if self
             .menu
-            .button(ui, format!("Controller: {}", self.controllers.name()))
+            .row(ui, "Mute", Value::Toggle(self.settings.muted))
         {
+            self.settings.muted = !self.settings.muted;
+        }
+        theme::note(ui, "Left / right adjust the volume in 10% steps.");
+    }
+
+    fn controls_page(&mut self, ui: &mut Ui) {
+        theme::section(ui, "CONTROLLER");
+        if self.menu.row(
+            ui,
+            "Device",
+            Value::Choice(self.controllers.name().to_string()),
+        ) {
             self.settings.preferred_controller = self.controllers.cycle(&mut self.input);
             self.input.suppress_until_release();
         }
         let adjust = self.menu.row_adjustment();
-        if self.menu.button(
+        if self.menu.row(
             ui,
-            format!(
-                "Stick dead zone: {:.0}%  ← / →",
-                self.settings.dead_zone * 100.0
+            "Stick dead zone",
+            Value::Meter(
+                (self.settings.dead_zone - 0.1) / 0.7,
+                format!("{:.0}%", self.settings.dead_zone * 100.0),
             ),
         ) || adjust != 0
         {
@@ -169,37 +293,67 @@ impl DesktopApp {
                 / 100.0;
         }
         if let Some(error) = &self.controllers.error {
-            ui.label(error);
+            theme::error(ui, error);
         }
-        ui.label("Choose an action, then press a key or controller button. Esc cancels.");
-        ui.label("Rebinding keeps the other device's controls. Controller Start opens the menu.");
+        theme::section(ui, "BUTTONS");
         for action in Action::ALL {
-            let buttons = self.settings.bindings.0[action as usize]
-                .iter()
-                .map(|b| b.label())
-                .collect::<Vec<_>>()
-                .join(" / ");
-            let label = if self.capture == Some(action) {
-                format!("{}: press a button…", action.label())
+            let value = if self.capture == Some(action) {
+                "press a button…".to_string()
             } else {
-                format!("{}: {}", action.label(), buttons)
+                self.settings.bindings.0[action as usize]
+                    .iter()
+                    .map(|b| b.label())
+                    .collect::<Vec<_>>()
+                    .join(" / ")
             };
-            if self.menu.button(ui, label) && self.capture.is_none() {
+            if self.menu.row(ui, action.label(), Value::Text(value)) && self.capture.is_none() {
                 self.capture = Some(action);
                 self.input.suppress_until_release();
             }
         }
-        if self.menu.button(ui, "Reset controls") && self.capture.is_none() {
+        if self.menu.row(ui, "Reset controls", Value::None) && self.capture.is_none() {
             self.settings.bindings = Bindings::default();
             self.input.suppress_until_release();
         }
-        if self.menu.button(ui, "Back") && self.capture.is_none() {
-            self.persist();
-            self.navigate(ctx, self.return_screen);
+        theme::note(
+            ui,
+            "Choose an action, then press a key or controller button; Esc cancels. Rebinding keeps the other device's controls. Controller Start opens the menu.",
+        );
+    }
+
+    fn debug_page(&mut self, ui: &mut Ui) {
+        theme::section(ui, "TOOLS");
+        if self
+            .menu
+            .row(ui, "Debug panel · F1", Value::Toggle(self.debug))
+        {
+            self.debug = !self.debug;
         }
-        if let Some(message) = &self.status {
-            ui.colored_label(egui::Color32::LIGHT_RED, message);
+        if self
+            .menu
+            .row(ui, "Pause game · F2", Value::Toggle(self.paused))
+        {
+            self.paused = !self.paused;
         }
+        theme::note(
+            ui,
+            "F3 steps one tick while paused. The panel warps between zones and levels, edits progress, coins and power-ups.",
+        );
+        theme::section(ui, "SETTINGS FILE");
+        let label = if self.reset_armed {
+            "Press again to reset everything"
+        } else {
+            "Reset all settings"
+        };
+        if self.menu.row(ui, label, Value::None) {
+            if self.reset_armed {
+                self.reset_settings();
+                self.reset_armed = false;
+            } else {
+                self.reset_armed = true;
+            }
+        }
+        theme::note(ui, &format!("{}", self.options.paths.settings.display()));
     }
 
     pub(super) fn debug_panel(&mut self, ctx: &Context) {

@@ -1,5 +1,6 @@
+use crate::app::theme::{self, Value};
 use crate::input::{Button, InputState, PadButton};
-use eframe::egui::{self, Button as Widget, Ui};
+use eframe::egui::{self, Response, Ui};
 
 pub fn pressed(input: &mut InputState, buttons: &[Button]) -> bool {
     buttons
@@ -88,11 +89,51 @@ impl Menu {
         self.row = 0;
     }
     pub fn button(&mut self, ui: &mut Ui, text: impl Into<String>) -> bool {
-        let selected = self.row == self.selected;
+        let text = text.into();
+        self.item(ui, |ui, selected| theme::menu_button(ui, &text, selected))
+    }
+    /// A settings row; left/right adjustments are read with [`Self::row_adjustment`]
+    /// before the call.
+    pub fn row(&mut self, ui: &mut Ui, label: &str, value: Value) -> bool {
+        self.item(ui, |ui, selected| {
+            theme::option_row(ui, label, &value, selected)
+        })
+    }
+    /// A tab strip occupying one row: left/right move between tabs while it is
+    /// selected, and a click picks a tab directly. Returns whether `current` changed.
+    pub fn tabs(&mut self, ui: &mut Ui, labels: &[&str], current: &mut usize) -> bool {
+        let focused = self.row == self.selected;
+        let before = *current;
+        if focused && self.adjustment != 0 {
+            *current = (*current as i32 + self.adjustment).rem_euclid(labels.len() as i32) as usize;
+            self.adjustment = 0;
+        }
         let response = ui
             .add_enabled_ui(self.enabled, |ui| {
-                ui.add_sized([340.0, 32.0], Widget::new(text.into()).selected(selected))
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 8.0;
+                    for (index, label) in labels.iter().enumerate() {
+                        if theme::tab(ui, label, index == *current, focused)
+                            .clicked_by(egui::PointerButton::Primary)
+                        {
+                            *current = index;
+                            self.selected = self.row;
+                        }
+                    }
+                })
+                .response
             })
+            .inner;
+        if focused && self.moved {
+            response.scroll_to_me(Some(egui::Align::Center));
+        }
+        self.row += 1;
+        *current != before
+    }
+    fn item(&mut self, ui: &mut Ui, paint: impl FnOnce(&mut Ui, bool) -> Response) -> bool {
+        let selected = self.row == self.selected;
+        let response = ui
+            .add_enabled_ui(self.enabled, |ui| paint(ui, selected))
             .inner;
         if selected && self.moved {
             response.scroll_to_me(Some(egui::Align::Center));

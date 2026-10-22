@@ -38,7 +38,11 @@ pub(super) fn app() -> (DesktopApp, Context, PathBuf) {
     (app, ctx, directory)
 }
 
-pub(super) fn frame(app: &mut DesktopApp, ctx: &Context, events: Vec<egui::Event>) -> egui::FullOutput {
+pub(super) fn frame(
+    app: &mut DesktopApp,
+    ctx: &Context,
+    events: Vec<egui::Event>,
+) -> egui::FullOutput {
     let mut raw = RawInput {
         focused: true,
         screen_rect: Some(egui::Rect::from_min_size(
@@ -453,5 +457,27 @@ fn sml2_gbc_colors_keep_three_distinct_sources_and_sgb_1a_uses_the_hardware_ramp
             );
         }
     }
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn settings_pages_cycle_with_shoulders_and_the_tab_row() {
+    let (mut app, ctx, path) = app();
+    app.screen = Screen::Settings;
+    frame(&mut app, &ctx, vec![]);
+    assert_eq!(app.page, super::panels::Page::Display);
+    app.input.event(Button::Pad(PadButton::RightShoulder), true);
+    frame(&mut app, &ctx, vec![]);
+    app.input
+        .event(Button::Pad(PadButton::RightShoulder), false);
+    assert_eq!(app.page, super::panels::Page::Audio);
+    // The tab strip is row 0: left steps back a page instead of adjusting a value.
+    frame(&mut app, &ctx, vec![key(egui::Key::ArrowLeft, true)]);
+    frame(&mut app, &ctx, vec![key(egui::Key::ArrowLeft, false)]);
+    assert_eq!(app.page, super::panels::Page::Display);
+    app.input.event(Button::Pad(PadButton::LeftShoulder), true);
+    frame(&mut app, &ctx, vec![]);
+    assert_eq!(app.page, super::panels::Page::Debug);
+    assert_eq!(app.game.as_ref().unwrap().session.frame_n, 0);
     let _ = std::fs::remove_dir_all(path);
 }

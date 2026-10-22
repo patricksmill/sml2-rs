@@ -84,8 +84,10 @@ fn selecting_rom_does_not_activate_quit_from_browser_keyboard_input() {
         std::fs::create_dir_all(&path).unwrap();
         let rom = path.join("unsupported.gbc");
         std::fs::write(&rom, [0; 16]).unwrap();
+        app.screen = Screen::Settings;
+        app.page = super::panels::Page::Mods;
         super::tests::frame(&mut app, &ctx, vec![]);
-        app.menu.selected = 4; // Import SML2DX, after Play/Title/Settings/Quit.
+        app.menu.selected = 1; // Import SML2DX, after the tab strip.
         app.dx_picker = Some(super::file_picker::FilePicker::new(path.clone()));
         super::tests::frame(
             &mut app,
@@ -107,7 +109,7 @@ fn selecting_rom_does_not_activate_quit_from_browser_keyboard_input() {
                 .any(|command| matches!(command, egui::ViewportCommand::Close))),
             "browser key activated Quit after selection"
         );
-        assert!(app.screen == Screen::Home);
+        assert!(app.screen == Screen::Settings);
         wait_for_dx(&mut app);
         let _ = std::fs::remove_dir_all(path);
     }

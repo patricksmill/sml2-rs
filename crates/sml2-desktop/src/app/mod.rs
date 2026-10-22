@@ -15,12 +15,14 @@ use sml2_runtime::content::{ExtractedContent, SessionAssets};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+mod backdrop;
 mod controls;
 mod debug;
 mod dx;
 mod file_picker;
 mod panels;
 mod startup;
+pub(crate) mod theme;
 pub use startup::{run, Options};
 #[cfg(test)]
 mod dx_tests;
@@ -34,6 +36,8 @@ enum Screen {
     Game,
     Settings,
 }
+
+use panels::Page;
 
 pub struct DesktopApp {
     options: Options,
@@ -50,6 +54,12 @@ pub struct DesktopApp {
     texture: TextureHandle,
     screen: Screen,
     return_screen: Screen,
+    /// The settings tab last shown.
+    page: Page,
+    /// "Reset all settings" was pressed once and waits for confirmation.
+    reset_armed: bool,
+    /// Level 1 behind the launcher; `None` until the game data loads.
+    backdrop: Option<backdrop::Backdrop>,
     input: InputState,
     controllers: Controllers,
     menu: Menu,
@@ -82,8 +92,8 @@ pub struct DesktopApp {
 impl DesktopApp {
     fn new(ctx: &Context, options: Options, settings: Settings, error: Option<String>) -> Self {
         let mut visuals = egui::Visuals::dark();
-        visuals.panel_fill = Color32::from_rgb(19, 24, 23);
-        visuals.selection.bg_fill = Color32::from_rgb(54, 106, 72);
+        visuals.panel_fill = Color32::from_rgb(0x2B, 0x2D, 0x38);
+        visuals.selection.bg_fill = theme::MAGENTA;
         ctx.set_visuals(visuals);
         ctx.options_mut(|o| o.zoom_with_keyboard = false);
         let texture = ctx.load_texture(
@@ -111,6 +121,9 @@ impl DesktopApp {
             texture,
             screen,
             return_screen: Screen::Home,
+            page: Page::Display,
+            reset_armed: false,
+            backdrop: None,
             input: InputState::default(),
             controllers: Controllers::new(),
             menu: Menu::default(),
@@ -170,6 +183,10 @@ impl DesktopApp {
     fn load_game(&mut self) {
         match SessionAssets::load_from(&ExtractedContent::new(&self.options.assets)) {
             Ok(assets) => {
+                match backdrop::Backdrop::new(&assets) {
+                    Ok(backdrop) => self.backdrop = Some(backdrop),
+                    Err(e) => eprintln!("Launcher backdrop unavailable: {e}"),
+                }
                 self.game = Some(Game::new(
                     assets,
                     self.options.paths.save.clone(),
@@ -187,6 +204,7 @@ impl DesktopApp {
         }
         self.screen = screen;
         self.capture = None;
+        self.reset_armed = false;
         self.menu = Menu::default();
         self.input.suppress_until_release();
         self.budget.reset();
@@ -241,53 +259,19 @@ impl DesktopApp {
             }
         }
 
-        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.strong("SML2");
-                if ui.button("Menu · Esc").clicked() {
-                    self.navigate(ctx, Screen::Home);
-                }
-                if ui.button("Settings").clicked() && self.screen != Screen::Settings {
-                    self.return_screen = self.screen;
-                    self.navigate(ctx, Screen::Settings);
-                }
-                if ui.button("Debug · F1").clicked() {
-                    self.debug = !self.debug;
-                    release_focus(ctx);
-                }
-                if ui
-                    .button(format!("Filter: {}", self.settings.filter.label()))
-                    .clicked()
-                {
-                    self.cycle_filter(1);
-                    release_focus(ctx);
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Fullscreen · F11").clicked() {
-                        self.fullscreen(ctx);
-                        release_focus(ctx);
-                    }
-                });
-            });
-        });
+        if self.screen == Screen::Game {
+            self.toolbar(ctx);
+        }
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(Color32::BLACK))
             .show(ctx, |ui| {
                 if self.screen == Screen::Game {
                     self.game_view(ui);
                 } else {
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        ui.add_space(24.0);
-                        ui.vertical_centered(|ui| {
-                            if self.screen == Screen::Settings {
-                                self.settings_panel(ctx, ui);
-                            } else {
-                                self.home_panel(ctx, ui);
-                            }
-                        });
-                    });
+                    self.launcher(ctx, ui);
                 }
             });
+        self.dx_picker_window(ctx);
         if self.screen != Screen::Game {
             self.menu.finish();
         }
@@ -396,6 +380,85 @@ impl DesktopApp {
             }
         }
         ctx.request_repaint_after(Duration::from_millis(8));
+    }
+
+    fn toolbar(&mut self, ctx: &Context) {
+        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.strong("SML2");
+                if ui.button("Menu · Esc").clicked() {
+                    self.navigate(ctx, Screen::Home);
+                }
+                if ui.button("Settings").clicked() {
+                    self.return_screen = self.screen;
+                    self.navigate(ctx, Screen::Settings);
+                }
+                if ui.button("Debug · F1").clicked() {
+                    self.debug = !self.debug;
+                    release_focus(ctx);
+                }
+                if ui
+                    .button(format!("Filter: {}", self.settings.filter.label()))
+                    .clicked()
+                {
+                    self.cycle_filter(1);
+                    release_focus(ctx);
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Fullscreen · F11").clicked() {
+                        self.fullscreen(ctx);
+                        release_focus(ctx);
+                    }
+                });
+            });
+        });
+    }
+
+    /// Home and Settings: the scrolling level behind a shell-plastic card.
+    fn launcher(&mut self, ctx: &Context, ui: &mut egui::Ui) {
+        let area = ui.max_rect();
+        let dim = if self.screen == Screen::Settings {
+            90
+        } else {
+            30
+        };
+        match &mut self.backdrop {
+            Some(backdrop) => backdrop.paint(ui, area, self.settings.filter, dim),
+            None => {
+                ui.painter().rect_filled(area, 0, theme::BEZEL);
+            }
+        }
+        let content = egui::Rect::from_min_max(area.min, area.max - egui::vec2(0.0, 34.0));
+        ui.scope_builder(egui::UiBuilder::new().max_rect(content), |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.add_space(24.0);
+                ui.vertical_centered(|ui| {
+                    if self.screen == Screen::Settings {
+                        self.settings_panel(ctx, ui);
+                    } else {
+                        self.home_panel(ctx, ui);
+                    }
+                });
+                ui.add_space(16.0);
+            });
+        });
+        use theme::Glyph;
+        let back = if self.screen == Screen::Home && self.game.is_some() {
+            "Resume · Esc"
+        } else {
+            "Back · Esc"
+        };
+        let mut hints = vec![
+            (Glyph::Pad, "Choose"),
+            (Glyph::A, "Confirm · Enter"),
+            (Glyph::B, back),
+        ];
+        if self.screen == Screen::Settings {
+            hints.push((Glyph::Shoulders, "Page · PgUp/PgDn"));
+        } else {
+            hints.push((Glyph::Start, "Menu"));
+        }
+        theme::hint_bar(ui, area, &hints);
     }
 
     fn game_view(&mut self, ui: &mut egui::Ui) {
