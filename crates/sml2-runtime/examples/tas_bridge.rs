@@ -181,6 +181,10 @@ fn write_frame(
                     clock.phase,
                     session.ff97()
                 ));
+                if let sml2_runtime::session::SessionState::Overworld(map) = &session.state {
+                    // sMapFrameCounter ($A69A).
+                    line.push_str(&format!(" map_frame={}", map.frame_counter));
+                }
             }
         }
         out.write_all(line.as_bytes())?;

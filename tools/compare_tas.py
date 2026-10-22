@@ -270,6 +270,8 @@ def trace_line(index, mask, rom, port):
             line += (f" | tiles ROM {rom[0xA298]}/{rom[0xA2CD]}/{rom[0xFF97]} "
                      f"port {OUT_OF_LEVEL['tile_timer']}/{OUT_OF_LEVEL['tile_phase']}/"
                      f"{OUT_OF_LEVEL.get('ff97', 0)}")
+        if 'map_frame' in OUT_OF_LEVEL:
+            line += f" | map frame ROM {rom[0xA69A]} port {OUT_OF_LEVEL['map_frame']}"
         return line
     line += (f" | port x={port['x']} y={port['y']} hv={port.get('hvel', 0):02x} "
              f"vv={port.get('vvel', 0):02x}")
