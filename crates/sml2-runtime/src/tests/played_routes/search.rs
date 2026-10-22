@@ -11,6 +11,9 @@
 //!
 //! `ROUTE_GOAL` lists `x,y` pixel waypoints separated by `;`, the last being
 //! the bell; `ROUTE_PREFIX` seeds the search with a spans tape;
+//! `ROUTE_BOSS=1` searches a boss level instead: the last waypoint is the
+//! arena's scene block, hits on the boss then score above position, and a
+//! route arrives when the boss clear hands the level back to the map;
 //! `ROUTE_EVALS` bounds the run; `ROUTE_LOG` names a progress log file.
 use super::*;
 use crate::session::SessionAssets;
@@ -41,9 +44,23 @@ struct Cell {
 }
 
 enum Verdict {
-    Alive { x: u16, y: u16, ground: bool },
+    /// `boss` is the boss's remaining hits once one is defined.
+    Alive {
+        x: u16,
+        y: u16,
+        ground: bool,
+        boss: Option<u8>,
+        clear: bool,
+    },
     Failed,
-    Arrived { frame: u64 },
+    Arrived {
+        frame: u64,
+    },
+}
+
+/// A switch such as `ROUTE_SESSION=1` (`bool` parsing alone rejects `1`).
+fn switch(name: &str) -> bool {
+    std::env::var(name).is_ok_and(|v| matches!(v.as_str(), "1" | "true"))
 }
 
 fn env<T: std::str::FromStr>(name: &str, default: T) -> T {
@@ -59,12 +76,14 @@ fn env<T: std::str::FromStr>(name: &str, default: T) -> T {
 fn judge(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerKeys]) -> Verdict {
     match play_judge(assets, progress, flag, tape) {
         Verdict::Failed => Verdict::Failed,
-        verdict if !env("ROUTE_SESSION", false) => verdict,
+        verdict if !switch("ROUTE_SESSION") => verdict,
         verdict => match (session_judge(assets, progress, flag, tape), verdict) {
             (Verdict::Arrived { frame: a }, Verdict::Arrived { frame: b }) => {
                 Verdict::Arrived { frame: a.max(b) }
             }
             (Verdict::Alive { .. }, verdict @ Verdict::Alive { .. }) => verdict,
+            // A boss route's session leaves the level when the clear hands off.
+            (_, verdict @ Verdict::Arrived { .. }) if switch("ROUTE_BOSS") => verdict,
             _ => Verdict::Failed,
         },
     }
@@ -130,6 +149,8 @@ fn session_judge(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerKey
                     x: ctx.sim.x,
                     y: ctx.sim.y,
                     ground: ctx.sim.on_ground,
+                    boss: (ctx.obj.boss_def_count != 0).then_some(ctx.obj.boss_hits_remaining),
+                    clear: false,
                 },
             };
         }
@@ -139,16 +160,67 @@ fn session_judge(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerKey
     verdict
 }
 
+/// Idle frames a boss route gets after its tape, so a collected reward coin
+/// can run its fade to the map handoff.
+const BOSS_SETTLE: usize = 1000;
+
+/// `tape` extended with idle frames to `len`.
+fn pad(tape: &[PlayerKeys], len: usize) -> Vec<PlayerKeys> {
+    let mut tape = tape.to_vec();
+    if tape.len() < len {
+        tape.resize(len, PlayerKeys::default());
+    }
+    tape
+}
+
 fn play_judge(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerKeys]) -> Verdict {
+    let verdict = play_judge_once(assets, progress, flag, tape);
+    match verdict {
+        // After the clear, the reward coin and fade finish without input.
+        Verdict::Alive { clear: true, .. } => {
+            match play_judge_once(assets, progress, flag, &pad(tape, tape.len() + BOSS_SETTLE)) {
+                arrived @ Verdict::Arrived { .. } => arrived,
+                _ => verdict,
+            }
+        }
+        verdict => verdict,
+    }
+}
+
+fn play_judge_once(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerKeys]) -> Verdict {
     let (outcome, _) = assets.play(
         progress,
         PlayTape::Buttons(tape.to_vec()),
         |_, _, _, _, _| {},
     );
+    if switch("ROUTE_DEBUG") {
+        eprintln!(
+            "JUDGE len {} unported {:?} death_frames {} dead {} bell {} handoff {:?} clear {}",
+            tape.len(),
+            outcome.obj.unported,
+            outcome.gameplay_death_frames,
+            outcome.sim.dead,
+            outcome.bell_arm.is_some(),
+            outcome.map_handoff_frame,
+            outcome.sim.boss_clear
+        );
+    }
     if !outcome.obj.unported.is_empty() || outcome.gameplay_death_frames != 0 {
         return Verdict::Failed;
     }
-    if let Some(arm) = outcome.bell_arm {
+    if switch("ROUTE_BOSS") {
+        // The clear's exit fade records an arm too; only the handoff counts.
+        if outcome.sim.dead != 0 {
+            return Verdict::Failed;
+        }
+        if let Some(frame) = outcome.map_handoff_frame {
+            return if outcome.sim.boss_clear {
+                Verdict::Arrived { frame }
+            } else {
+                Verdict::Failed
+            };
+        }
+    } else if let Some(arm) = outcome.bell_arm {
         return if arm.exit_tile_flag == flag && arm.dead == 0 {
             Verdict::Arrived { frame: arm.frame }
         } else {
@@ -162,11 +234,20 @@ fn play_judge(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerKeys])
         x: outcome.sim.x,
         y: outcome.sim.y,
         ground: outcome.sim.on_ground,
+        boss: (outcome.obj.boss_def_count != 0).then_some(outcome.obj.boss_hits_remaining),
+        clear: switch("ROUTE_BOSS") && outcome.sim.boss_clear,
     }
 }
 
 /// Waypoints passed count most; then closeness to the next one. A waypoint
 /// counts only once Mario stands within 16 pixels of it.
+/// A boss on the field outranks every waypoint, and each hit outranks the
+/// last.
+fn boss_score(boss: Option<u8>, clear: bool) -> i64 {
+    boss.map_or(0, |hits| 100_000_000 - i64::from(hits) * 1_000_000)
+        + if clear { 100_000_000 } else { 0 }
+}
+
 fn score(goals: &[(i64, i64)], reached: &mut usize, x: u16, y: u16, ground: bool) -> i64 {
     let (x, y) = (i64::from(x), i64::from(y));
     while *reached + 1 < goals.len() {
@@ -243,7 +324,7 @@ fn simplify(
             }
         }
         if !changed {
-            let tape = join(&list);
+            let tape = pad(&join(&list), frame as usize);
             return (tape[..frame as usize].to_vec(), frame);
         }
     }
@@ -273,13 +354,25 @@ fn search_route() {
         .unwrap_or_default();
     let mut rng = Rng(env("ROUTE_SEED", 0x9E37_79B9_7F4A_7C15));
     // Each cell remembers its waypoint progress inside its tape's score.
-    let mut archive: HashMap<(u16, u16, bool, usize), Cell> = HashMap::new();
+    let mut archive: HashMap<(u16, u16, bool, usize, u8), Cell> = HashMap::new();
     match judge(&assets, progress, flag, &prefix) {
-        Verdict::Alive { x, y, ground } => {
+        Verdict::Alive {
+            x,
+            y,
+            ground,
+            boss,
+            clear,
+        } => {
             let mut reached = 0;
-            let s = score(&goals, &mut reached, x, y, ground);
+            let s = score(&goals, &mut reached, x, y, ground) + boss_score(boss, clear);
             archive.insert(
-                (x >> 4, y >> 4, ground, reached),
+                (
+                    x >> 4,
+                    y >> 4,
+                    ground,
+                    reached,
+                    if clear { 0xFE } else { boss.unwrap_or(0xFF) },
+                ),
                 Cell {
                     tape: prefix,
                     score: s,
@@ -337,8 +430,12 @@ fn search_route() {
             match verdict {
                 Verdict::Failed => {}
                 Verdict::Arrived { frame } => {
-                    let (tape, frame) =
-                        simplify(&assets, progress, flag, tape[..frame as usize].to_vec());
+                    let (tape, frame) = simplify(
+                        &assets,
+                        progress,
+                        flag,
+                        pad(&tape, frame as usize)[..frame as usize].to_vec(),
+                    );
                     let found = format!("{} -*200", to_spans(&tape));
                     let mut entry = String::new();
                     let (outcome, node) = assets.play(
@@ -357,21 +454,31 @@ fn search_route() {
                             )
                         },
                     );
-                    let arm = outcome.bell_arm.as_ref().unwrap();
                     let slot = assets.nodes.progress_slot(node).unwrap() as usize;
                     let h = outcome.map_handoff.as_ref().unwrap();
-                    println!("FOUND level {level} progress {progress} arm frame {frame}");
+                    println!("FOUND level {level} progress {progress} frame {frame}");
                     println!("{entry}");
-                    println!(
-                        "arm {:?} fade {} music {} flag {:#04X}; done {:?} handoff {:?}; frames {}",
-                        arm.position,
-                        arm.fade_timer,
-                        arm.music_request,
-                        arm.exit_tile_flag,
-                        outcome.exit_completed_frame,
-                        outcome.map_handoff_frame,
-                        outcome.frames
-                    );
+                    match outcome.bell_arm.as_ref() {
+                        Some(arm) => println!(
+                            "arm {:?} fade {} music {} flag {:#04X}; done {:?} handoff {:?}; frames {}",
+                            arm.position,
+                            arm.fade_timer,
+                            arm.music_request,
+                            arm.exit_tile_flag,
+                            outcome.exit_completed_frame,
+                            outcome.map_handoff_frame,
+                            outcome.frames
+                        ),
+                        None => println!(
+                            "boss clear {} at ({},{}); done {:?} handoff {:?}; frames {}",
+                            outcome.sim.boss_clear,
+                            outcome.sim.x,
+                            outcome.sim.y,
+                            outcome.exit_completed_frame,
+                            outcome.map_handoff_frame,
+                            outcome.frames
+                        ),
+                    }
                     println!(
                         "after: tally {} node {} progress[{slot}] {:#04X} save {:#04X} flags {:#04X} route {} dead {}; handoff node {} screen {:?} music {:?} saves {} cutscene {}",
                         outcome.sim.level_tally,
@@ -393,9 +500,21 @@ fn search_route() {
                     }
                     return;
                 }
-                Verdict::Alive { x, y, ground } => {
-                    let s = score(&goals, &mut reached, x, y, ground);
-                    let key = (x >> 4, y >> 4, ground, reached);
+                Verdict::Alive {
+                    x,
+                    y,
+                    ground,
+                    boss,
+                    clear,
+                } => {
+                    let s = score(&goals, &mut reached, x, y, ground) + boss_score(boss, clear);
+                    let key = (
+                        x >> 4,
+                        y >> 4,
+                        ground,
+                        reached,
+                        if clear { 0xFE } else { boss.unwrap_or(0xFF) },
+                    );
                     let better = archive.get(&key).is_none_or(|c| tape.len() < c.tape.len());
                     if better {
                         archive.insert(
@@ -448,12 +567,36 @@ fn trace_route() {
             |_, _, _, _, _| {},
         );
         println!(
-            "TRACE {len} {} ({},{}) ground {} dead {}",
+            "TRACE {len} {} ({},{}) ground {} dead {} scene {} boss def {} count {} hits {} phase {} clear {} fade {}",
             to_spans(&tape[len - 1..len]),
             outcome.sim.x,
             outcome.sim.y,
             outcome.sim.on_ground,
-            outcome.sim.dead
+            outcome.sim.dead,
+            outcome.cam.scene_id,
+            outcome.obj.boss_def_index,
+            outcome.obj.boss_def_count,
+            outcome.obj.boss_hits_remaining,
+            outcome.cam.boss_fight_phase,
+            outcome.sim.boss_clear,
+            outcome.sim.fade_timer
         );
+        if switch("ROUTE_SLOTS") {
+            // Raw definition and screen position: boss pages bypass `active`.
+            let slots: Vec<_> = outcome.obj.slots[..4]
+                .iter()
+                .map(|slot| (slot.b[5], slot.b[10], slot.b[9]))
+                .collect();
+            println!(
+                "  slots {slots:?} cam ({},{}) handoff {:?} exit {} {:?} map {:?} unported {:?}",
+                outcome.cam.x,
+                outcome.cam.y,
+                outcome.obj.boss_clear_handoff,
+                outcome.sim.exit_completed,
+                outcome.exit_completed_frame,
+                outcome.map_handoff_frame,
+                outcome.obj.unported
+            );
+        }
     }
 }

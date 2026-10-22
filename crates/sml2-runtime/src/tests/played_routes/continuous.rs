@@ -127,10 +127,11 @@ pub(super) fn map_entry_runner(
     };
     let mut map = MapSim::new();
     map.node = node;
-    map.level_progress[slot] = progress;
     for off in GOLDEN_COIN_OFFSETS {
         map.level_progress[off] = 0x80;
     }
+    // A boss level's slot is its own golden coin byte: leave it unbeaten.
+    map.level_progress[slot] = progress;
     // Another level's secret-route bit, which the route must leave alone.
     let bystander = if slot == 2 { 1 } else { 2 };
     map.level_progress[bystander] = 0x08;
@@ -262,7 +263,8 @@ pub(super) fn verify_map_entry_completion_and_reload(
     // `run_play` continues the map entry's divider, so both paths see the
     // same enemy randomness, arm the bell identically, and leave the same
     // divider byte in the object engine.
-    let play_arm = expected.bell_arm.as_ref().expect("run_play armed the bell");
+    // A boss clear arms the same exit record as a bell.
+    let play_arm = expected.bell_arm.as_ref().expect("run_play armed the exit");
     assert_eq!(
         session_arm,
         Some((
