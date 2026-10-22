@@ -110,6 +110,20 @@ class BossDividerTests(unittest.TestCase):
             address = bank * 0x4000 + cpu - 0x4000
             self.assertEqual(data[address - 3:address], bytes.fromhex('FA 04 FF'))
 
+    def test_tatanga_volley_divider_reads_are_all_hooked(self):
+        rom = Path(__file__).resolve().parents[2] / '../sml2decomp/baserom.gb'
+        data = rom.read_bytes()
+        # Boss anim 16 ($A0B9..$A27D) reads DIV at the end of each sweep.
+        # Discover both read instructions independently of the hook list.
+        start, end = 0xA0B9, 0xA27E
+        reads = [address for address in range(start, end - 2)
+                 if data[address:address + 3] == bytes.fromhex('FA 04 FF')]
+        self.assertEqual(len(reads), 2)
+        for address in reads:
+            bank = address // 0x4000
+            after_read = 0x4000 + address % 0x4000 + 3
+            self.assertIn((bank, after_read), BOSS_DIV_READ_HOOKS)
+
 
 class BridgeStateTests(unittest.TestCase):
     def test_extended_state_leaves_pixels_and_next_frame_aligned(self):

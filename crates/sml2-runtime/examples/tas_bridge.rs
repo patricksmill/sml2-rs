@@ -63,9 +63,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut rom_timing: Option<sml2_runtime::session::RomTiming> = None;
         let mut boss_div: Option<u8> = None;
         for field in fields {
-            // Comparison-only environmental input: the witch reads DIV once
-            // when choosing her side or fire trajectory. Keep it separate
-            // from the map's ordered random-read stream and frame clock.
+            // Comparison-only environmental input: a boss reads DIV when
+            // choosing an appearance, fire trajectory, or volley count. Keep
+            // it separate from the map's random-read stream and frame clock.
             if let Some(value) = field.strip_prefix("boss_div=") {
                 boss_div = Some(value.parse()?);
                 continue;
