@@ -183,7 +183,16 @@ fn write_frame(
                 ));
                 if let sml2_runtime::session::SessionState::Overworld(map) = &session.state {
                     // sMapFrameCounter ($A69A).
-                    line.push_str(&format!(" map_frame={}", map.frame_counter));
+                    line.push_str(&format!(
+                        " map_frame={} map_tick={} map_phase={} map_index={} map_s2x={} map_s2y={} map_raster={}",
+                        map.frame_counter,
+                        map.tick_timer,
+                        map.anim_phase,
+                        map.anim_index,
+                        map.zone_slots[2].0,
+                        map.zone_slots[2].1,
+                        map.raster_phase
+                    ));
                 }
             }
         }

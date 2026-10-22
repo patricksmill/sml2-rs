@@ -271,7 +271,13 @@ def trace_line(index, mask, rom, port):
                      f"port {OUT_OF_LEVEL['tile_timer']}/{OUT_OF_LEVEL['tile_phase']}/"
                      f"{OUT_OF_LEVEL.get('ff97', 0)}")
         if 'map_frame' in OUT_OF_LEVEL:
-            line += f" | map frame ROM {rom[0xA69A]} port {OUT_OF_LEVEL['map_frame']}"
+            line += (f" | map frame ROM {rom[0xA69A]} port {OUT_OF_LEVEL['map_frame']}"
+                     f" tick ROM {rom[0xA697]} port {OUT_OF_LEVEL.get('map_tick', 0)}"
+                     f" phase ROM {rom[0xA699]} port {OUT_OF_LEVEL.get('map_phase', 0)}"
+                     f" index ROM {rom[0xA6A2]} port {OUT_OF_LEVEL.get('map_index', 0)}"
+                     f" slot2 ROM {rom[0xA6BB]},{rom[0xA6BC]} port"
+                     f" {OUT_OF_LEVEL.get('map_s2x', 0)},{OUT_OF_LEVEL.get('map_s2y', 0)}"
+                     f" raster ROM {rom[0xA689]} port {OUT_OF_LEVEL.get('map_raster', 0)}")
         return line
     line += (f" | port x={port['x']} y={port['y']} hv={port.get('hvel', 0):02x} "
              f"vv={port.get('vvel', 0):02x}")
