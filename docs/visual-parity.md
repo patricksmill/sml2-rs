@@ -33,7 +33,7 @@ bug.
 | Map animation bytes | 1–3 | `sMapAnimPhase`, `sMapAnimIndexA`, the witch position, `sMapTickTimer` and `sMapRasterPhase` match the ROM's when paired by frame counter, on every zone visit and every hub visit (`8907f82`). Exceptions are the hub after file select, whose load and fade-in aren't modelled, and door reloads, which arrive 4 frames sooner. |
 | Hub sea | 1 | After a bell room's return, the wave phase matches row for row. The sea's pixels match apart from a few single-pixel rows. |
 | Tree Zone | 3 | After a level, counter-paired frames match on 40 of 51 and 75 of 130 (`sMapTreeAnimTick` fix). The rest are the bird's random frame and Mario's idle frame staged a frame apart from the zone sprites. |
-| Coin-room wheels (screens 10, 11) | 3 | Match before the press. After it, the press lands at a different point in the spin (the accepted early arrival), and the prize, hand, Mario and lives follow. |
+| Coin-room wheels (screens 10, 11) | 3 | Room 10 matches frame for frame until the press (counter 84). After it, the press lands at a different point in the spin (the accepted early arrival), and the prize, hand, Mario and lives follow. Room 11 differs from its first frame, but only through room 10's outcome: lives (15 vs 13), the wheel's start (carried in `sCastleRevealProgress`) and the lamps. |
 | Map frame counter | 1–3 | Matches the ROM on every map visit, apart from skipped load time and console lag (`c202f92`). |
 | Level 17 | 3 | 31% of rows match exactly. Most of the rest is the animated cloud strip's phase. Mario's bunny ears now draw correctly, since his overlapping sprite cells take DMG x priority (`b1b2171`). Some rows still show a stray pixel at the left screen edge, not yet traced. |
 
