@@ -1,7 +1,8 @@
 # Level route matrix
 
 **Status: all 32 rows measured 2026-10-18; levels 1-5 and the first slice
-(12, 19, 28, 29) are reviewed, every exit cell is test-pinned, levels 28/29 have played header
+(12, 19, 28, 29) are reviewed, the boss levels 6, 10 and 14 are reviewed and
+played from header start to map return, every exit cell is test-pinned, levels 28/29 have played header
 approaches, and level 19 has played both its header and secret starts to
 both bells. The live session now checks all 64 header/secret-entry cases at
 32 ordinary map origins (31 level IDs), plus normal map entry through Wario's
@@ -90,6 +91,31 @@ tiles, `scroll` = scroll limit,
   moon bit 0 (the hold-A float), making it the only autoscroll + float level.
 - **Float levels**: bit 3 (timed float) on 19 and 29; bit 0 (hold-A float)
   on 20. Those are the only three levels with a non-zero `space_physics` byte.
+
+## Played boss levels (6, 10, 14)
+
+Header starts played by live input from the source map node through arena
+entry, the defeat, the reward and the map return, with no boss-clear or
+phase writes. Tapes are in
+`crates/sml2-runtime/src/tests/played_routes/boss_routes.rs`, found by
+`search::search_route` with `ROUTE_BOSS=1`. Each also replays through the
+map-entered session, writes the save and reloads it. Secret starts are not
+yet played.
+
+| level | id | entry | arena (scene block) | boss | map return |
+|---|---:|---|---|---|---|
+| 6 | 5 | node 32 (slot 5), (46,708), cam (80,704), time 5 | `$0B` at block 43 = (2816-3071, 512-767) | def 0, Tree Zone: 6 shared hits | node `$19`, hub; coin byte 5 |
+| 10 | 9 | node 43 (slot 9), (40,468), cam (80,448), time 5 | `$0C` at block 30 = (3584-3839, 256-511) | def 1, Pumpkin Zone: 4 shared hits | node `$1C`, hub; coin byte 9 |
+| 14 | 13 | node 83 (slot 29), (56,468), cam (80,448), time 3 | `$10` at block 14 = (3584-3839, 0-255) | def 2, Three Piggys: 6 shared hits on the controller, pigs 1 and 2 with 6 HP each (a stomp costs 2) | node `$1D`, hub; coin byte 29 |
+
+- **Arena entry** is an edge transition into the scene block (`$0F0B`). The
+  intro then holds input while `sFadeTimer > 1` (`$05D5`), about 300 frames.
+- **The clear.** The last hit sets the fade to `$0280` and `boss_clear`. The
+  reward (anims 4/5) rises, and its exit sets the handoff: music 15, the tally
+  plus one, the zone's golden-coin byte `|= $80`, then node and hub screen
+  from `$3F03D`.
+- **Three Piggys.** Pig 2 waits up high and is a platform until it is the
+  last part left. Pig 1 runs along the floor between `$10` and `$A0`.
 
 ## Reviewed slice (levels 12, 19, 28, 29)
 
@@ -376,8 +402,9 @@ played route's tally assertion.
    are direct-placement acceptance tests; played approaches remain pending.
 3. **Most approaches remain unplayed.** Levels 28/29 header starts and level
    19's header and secret starts to both bells have native input tests. Other
-   ordinary/secret starts and approaches to boss entrances still need played
-   tests, including the castle/night levels.
+   ordinary/secret starts and the boss levels 17, 20 and 24 still need played
+   tests, including the castle/night levels. Boss levels 6, 10 and 14 have
+   played header routes.
 4. **The 28 unreviewed rows are tool-measured, not hand-checked.** Their zone,
    node, exit and secret columns are trustworthy by construction; the
    "required mechanic" summary and any route narrative still need a review pass.

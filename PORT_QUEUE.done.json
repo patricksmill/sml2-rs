@@ -1528,6 +1528,19 @@
       "dependencies": [],
       "verification_gate": "Cause identified with ROM evidence; if a port bug, LEGACY removed and traj4_ff0 gates at zero mismatches; captures/sweep.sh passes",
       "status": "done"
+    },
+    {
+      "id": "f-boss-routes-a",
+      "title": "Zone boss levels 6, 10, 14 played end to end: header spawn, arena entry, defeat by live input, coin reward, map return",
+      "asm_refs": [
+        "$9285/$5D6A/$5E12 boss flow",
+        "home.asm:$3573 level hand-off"
+      ],
+      "dependencies": [
+        "f-inventory-reconcile"
+      ],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; no direct boss_clear/phase writes; coin progress byte saved and reloaded; through live run_play from the source map node with no state rewrites after input begins; zero unported diagnostics; route-matrix.md row hand-reviewed and marked; cargo test --workspace passes",
+      "status": "done"
     }
   ]
 }
