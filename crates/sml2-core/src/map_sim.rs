@@ -571,6 +571,16 @@ pub struct MapRam {
     /// `sMapFrameCounter` (`$A69A`): the zone loaders zero it, the hub loader
     /// `$3F156` does not, so the hub's animations continue from this byte.
     pub frame_counter: u8,
+    /// `sMapAnimPhase` (`$A699`), never reset: only incremented.
+    pub anim_phase: u8,
+    /// `sMapRasterPhase` (`$A689`), never reset: the hub's wave advances it.
+    pub raster_phase: u8,
+    /// `sMapAnimIndexA` (`$A6A2`), reset only by its own wrap.
+    pub anim_index: u8,
+    /// `sMapCoinIconPhase` (`$A780`), reset only by its own wrap.
+    pub coin_icon_phase: u8,
+    /// `sMapSparkleTimer` (`$A7A9`), never zeroed.
+    pub sparkle_timer: u8,
     /// `sMapKeysXor` (`$A6B2`).
     pub keys_xor: u8,
     /// `sMapRandAccum` (`$A7B7`).
@@ -595,6 +605,11 @@ impl MapRam {
             rand_latch: byte(0x96),
             tick_timer: byte(0x97),
             frame_counter: byte(0x9A),
+            anim_phase: byte(0x99),
+            raster_phase: byte(0x89),
+            anim_index: byte(0xA2),
+            coin_icon_phase: byte(0x180),
+            sparkle_timer: byte(0x1A9),
             keys_xor: byte(0xB2),
             rand_accum: byte(0x1B7),
             reveal_progress: byte(0x1A5),
@@ -652,6 +667,9 @@ pub struct MapSim {
     pub zone_animation: ZoneAnimation,
     /// `sMapAnimPhase` (`$A699`).
     pub anim_phase: u8,
+    /// `sMapRasterPhase` (`$A689`): the hub's wave phase ([`crate::map::MapWave`]).
+    /// No loader resets it.
+    pub raster_phase: u8,
     /// `sMapAnimIndexA` (`$A6A2`): 0..$4F walk of the `$6227` step table.
     pub anim_index: u8,
     /// `sMapAnimValueA` (`$A6A5`): the last step value read.
@@ -741,6 +759,7 @@ impl MapSim {
             zone_slots: [(0, 0, 0xFF); 16],
             zone_animation: ZoneAnimation::default(),
             anim_phase: 0,
+            raster_phase: 0,
             anim_index: 0,
             anim_value: 0,
             decor_slots: crate::map::HUB_DECOR_SLOTS,
@@ -884,12 +903,10 @@ impl MapSim {
             self.seed_hub_coin_icons();
         }
         self.seed_zone_sprites(screen_id, exit_tile_flag);
-        self.anim_phase = 0;
-        self.anim_index = 0;
+        // `sMapAnimPhase`, `sMapAnimIndexA`, `sMapCoinIconPhase` and
+        // `sMapSparkleTimer` have no loader reset; they carry on (`MapRam`).
         self.anim_value = 0;
-        self.coin_icon_phase = 0;
         self.cloud_drift = 0;
-        self.sparkle_timer = 0;
 
         let music = match screen_id {
             0 => {
@@ -1293,7 +1310,11 @@ impl MapSim {
             self.zone_slots[1].1 = self.zone_slots[1].1.wrapping_add(step);
         }
         if self.tick_timer & 0x01 != 0 {
-            self.anim_index = (self.anim_index + 1) % 0x50;
+            // `$3D930`: past `$4F` (an inherited byte too) restarts at 0.
+            self.anim_index = self.anim_index.wrapping_add(1);
+            if self.anim_index >= 0x50 {
+                self.anim_index = 0;
+            }
             let v = crate::map::PUMPKIN_STEPS[self.anim_index as usize];
             self.anim_value = v;
             // `sMapSprite1Y` is slot 2's x: `(v >> 4) & 7`, signed by bit 7.
@@ -1334,7 +1355,10 @@ impl MapSim {
         }
         let fc = self.frame_counter;
         if fc & 0x07 == 0 {
-            self.coin_icon_phase = (self.coin_icon_phase + 1) % 3;
+            self.coin_icon_phase = self.coin_icon_phase.wrapping_add(1);
+            if self.coin_icon_phase >= 3 {
+                self.coin_icon_phase = 0;
+            }
             for slot in 4..10 {
                 if self.decor_slots[slot].3 != 0xFF {
                     self.decor_slots[slot].3 = self.coin_icon_phase + 2;
@@ -3053,6 +3077,11 @@ mod tests {
         bytes[0x96] = 56;
         bytes[0x97] = 37;
         bytes[0x9A] = 60;
+        bytes[0x89] = 37;
+        bytes[0x99] = 103;
+        bytes[0xA2] = 91;
+        bytes[0x180] = 2;
+        bytes[0x1A9] = 3;
         bytes[0xB2] = 116;
         bytes[0x1B7] = 76;
         bytes[0x1A5] = 0x23;
@@ -3064,6 +3093,11 @@ mod tests {
                 rand_latch: 56,
                 tick_timer: 37,
                 frame_counter: 60,
+                anim_phase: 103,
+                raster_phase: 37,
+                anim_index: 91,
+                coin_icon_phase: 2,
+                sparkle_timer: 3,
                 keys_xor: 116,
                 rand_accum: 76,
                 reveal_progress: 0x23,
@@ -3090,6 +3124,44 @@ mod tests {
         map.load_screen(0, 0, &records);
         map.set_map_ram(ram);
         assert_eq!(map.frame_counter, 60, "the hub takes the level's byte");
+    }
+
+    /// `sMapAnimPhase`, `sMapRasterPhase`, `sMapAnimIndexA`,
+    /// `sMapCoinIconPhase` and `sMapSparkleTimer` have no loader reset, and the
+    /// index and coin phase restart at 0 from any value past their range.
+    #[test]
+    fn carried_map_bytes_survive_loads_and_wrap_like_the_rom() {
+        let records = MapNodeRecords::default();
+        let mut map = MapSim::new();
+        map.set_map_ram(MapRam {
+            anim_phase: 103,
+            raster_phase: 37,
+            anim_index: 91,
+            coin_icon_phase: 2,
+            sparkle_timer: 3,
+            ..Default::default()
+        });
+        for screen in [1, 0, 6, 0] {
+            map.load_screen(screen, 0, &records);
+            assert_eq!(
+                (map.anim_phase, map.raster_phase, map.anim_index, map.coin_icon_phase, map.sparkle_timer),
+                (103, 37, 91, 2, 3),
+                "screen {screen}"
+            );
+        }
+
+        // `$3D930`: 91 + 1 is past `$4F`, so the walk restarts at 0.
+        map.load_screen(1, 0, &records);
+        map.tick_timer = 1;
+        map.pumpkin_decor_tick();
+        assert_eq!(map.anim_index, 0);
+
+        // `$3CE6B`: the coin phase wraps from any value of 3 or more.
+        map.load_screen(0, 0, &records);
+        map.frame_counter = 0;
+        map.coin_icon_phase = 7;
+        map.hub_decor_tick(0);
+        assert_eq!(map.coin_icon_phase, 0);
     }
 
     /// `$3C0DF`/`$3C10E`: Left held after the script skips a bell room to

@@ -718,6 +718,11 @@ const BOSS_LOAD_VBLANKS: u16 = 1;
 /// hub (`$3F156` and `$3EA9A`'s fade-in) takes 84 on five returns; screen 6
 /// takes 59 on three and screen 1 takes 58 on one. Other zone screens are
 /// assumed to load like screen 6.
+/// A hub return's hold ends with `$3F156`'s blank load and the fade-in: the
+/// hub shows on the frame this many before the end, then not until the last
+/// thirteen (PyBoy, recording 1's return at input 6020).
+const BELL_HUB_RELOAD_FRAMES: u16 = 23;
+
 fn bell_return_hold(screen: u8) -> u16 {
     match screen {
         0 => 84,
@@ -728,6 +733,29 @@ fn bell_return_hold(screen: u8) -> u16 {
 
 /// `$3EF2B` run again for a bell room's return: the progress write and the
 /// screen the cleared node belongs to.
+/// `$3EAFF` -> `$3E853`: the hub's wave strips advance on every frame the hub
+/// is on screen, whether or not the map handler runs. `sMapRasterPhase`
+/// outlives the strips: no loader resets it.
+fn tick_hub_wave(
+    wave: &mut Option<sml2_core::map::MapWave>,
+    map_sim: &mut MapSim,
+    assets: &SessionAssets,
+    map_ram: sml2_core::map_sim::MapRam,
+) {
+    // A level's return fades in before the map's first tick seeds its bytes.
+    if !map_sim.ram_seeded {
+        map_sim.set_map_ram(map_ram);
+    }
+    if wave.is_none() {
+        *wave = sml2_core::map::MapWave::seed(assets.overworld_tiles.screen_raw(0));
+    }
+    if let Some(wave) = wave.as_mut() {
+        wave.phase = map_sim.raster_phase;
+        wave.tick();
+        map_sim.raster_phase = wave.phase;
+    }
+}
+
 fn bell_handoff(
     map_sim: &MapSim,
     node: u8,
@@ -1248,6 +1276,10 @@ impl Session {
                 // cursor freezes while the palettes fade and the level loads.
                 if let Some(t) = self.pending_level.as_mut() {
                     t.frame += 1;
+                    // `$3EAFF` keeps the hub's wave moving through the fade.
+                    if t.frame < MAP_EASY_CARD_START && map_sim.screen_id == 0 {
+                        tick_hub_wave(&mut self.map_wave, map_sim, &self.assets, self.map_ram);
+                    }
                     break 'map StepOutcome::Continue;
                 }
                 if let Some(transition) = self.map_screen_transition.as_mut() {
@@ -1261,6 +1293,11 @@ impl Session {
                         keys.select,
                         keys.start,
                     );
+                    if transition.entering && transition.shows_source() {
+                        // The hub fades out with its wave still running; the
+                        // zone just loaded already owns `sMapRasterPhase`.
+                        tick_hub_wave(&mut self.map_wave, map_sim, &self.assets, self.map_ram);
+                    }
                     if transition.advance(map_sim, div) {
                         let entering = transition.entering;
                         self.map_screen_transition = None;
@@ -1304,6 +1341,14 @@ impl Session {
                             keys.start,
                         );
                         self.bell_fade = Some(held + 1);
+                        // A hub return shows the hub for one frame before
+                        // `$3F156` blanks it, then through the fade-in.
+                        let hold = self.bell_return_hold;
+                        if hold == bell_return_hold(0)
+                            && (held + 1 == hold - BELL_HUB_RELOAD_FRAMES || held + 1 > hold - 14)
+                        {
+                            tick_hub_wave(&mut self.map_wave, map_sim, &self.assets, self.map_ram);
+                        }
                         break 'map StepOutcome::Continue;
                     }
                     self.bell_fade = None;
@@ -1341,11 +1386,18 @@ impl Session {
                         keys.select,
                         keys.start,
                     );
+                    if pan.frame == 0 || pan.frame >= MAP_PAN_RELOAD_FRAMES {
+                        // `$3EAFF` runs whenever the LCD shows the hub.
+                        tick_hub_wave(&mut self.map_wave, map_sim, &self.assets, self.map_ram);
+                    }
                     let finished = pan.advance();
                     if pan.frame == MAP_PAN_RELOAD_FRAMES {
                         self.sound_driver.music_request = 6;
                     }
                     if finished {
+                        // `$3EA9A` returns inside a VBlank that still runs the
+                        // wave: thirteen phases cover the twelve fade frames.
+                        tick_hub_wave(&mut self.map_wave, map_sim, &self.assets, self.map_ram);
                         self.map_pan_return = None;
                     }
                     break 'map StepOutcome::Continue;
@@ -1443,14 +1495,7 @@ impl Session {
                 // `$3EAFF`: only the hub runs the wave strips, and `$3E7BE`
                 // seeds them from the tiles the loader just copied.
                 if map_sim.screen_id == 0 {
-                    if self.map_wave.is_none() {
-                        self.map_wave = sml2_core::map::MapWave::seed(
-                            self.assets.overworld_tiles.screen_raw(0),
-                        );
-                    }
-                    if let Some(wave) = self.map_wave.as_mut() {
-                        wave.tick();
-                    }
+                    tick_hub_wave(&mut self.map_wave, map_sim, &self.assets, self.map_ram);
                 } else {
                     self.map_wave = None;
                 }

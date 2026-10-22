@@ -53,6 +53,8 @@ fn releasing_pan_blanks_stops_music_recenters_and_fades_back_before_input_resume
         _ => unreachable!(),
     };
     let frozen_wave = session.map_wave.clone();
+    let start_phase = frozen_map.raster_phase;
+    let mut phases = 0u8;
 
     for frame in 1..=32 {
         // Held directions, B and A must neither pan nor enter a level during
@@ -66,15 +68,29 @@ fn releasing_pan_blanks_stops_music_recenters_and_fades_back_before_input_resume
                 ..Default::default()
             },
         );
+        // `$3EAFF` runs the wave whenever the hub is on screen: the frame
+        // before the load blanks it, then the fade-in and its closing VBlank.
+        if frame == 1 || frame > 20 {
+            phases += 1;
+        }
+        if frame == 32 {
+            phases += 1;
+        }
         match &session.state {
-            SessionState::Overworld(map) => assert_eq!(map, &frozen_map),
+            SessionState::Overworld(map) => {
+                assert_eq!(map.raster_phase, start_phase.wrapping_add(phases), "frame {frame}");
+                let mut map = map.clone();
+                map.raster_phase = start_phase;
+                assert_eq!(map, frozen_map);
+            }
             _ => panic!("input must not enter a level during the reload"),
         }
         assert!(session.pending_level.is_none());
-        assert_eq!(
-            session.map_wave.as_ref().unwrap().strips,
-            frozen_wave.as_ref().unwrap().strips
-        );
+        let wave = session.map_wave.as_ref().unwrap();
+        assert_eq!(wave.phase, start_phase.wrapping_add(phases));
+        if phases == 0 {
+            assert_eq!(wave.strips, frozen_wave.as_ref().unwrap().strips);
+        }
         assert_eq!(
             session.sound_driver.active_song,
             if frame < 20 { 0 } else { 6 }

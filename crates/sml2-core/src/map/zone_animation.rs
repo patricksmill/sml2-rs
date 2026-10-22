@@ -91,6 +91,11 @@ impl MapSim {
             rand_latch: self.rand_latch,
             tick_timer: self.tick_timer,
             frame_counter: self.frame_counter,
+            anim_phase: self.anim_phase,
+            raster_phase: self.raster_phase,
+            anim_index: self.anim_index,
+            coin_icon_phase: self.coin_icon_phase,
+            sparkle_timer: self.sparkle_timer,
             keys_xor: self.keys_xor,
             rand_accum: self.zone_animation.random_accum,
             reveal_progress: self.reveal_progress,
@@ -105,6 +110,11 @@ impl MapSim {
         if self.screen_id == 0 {
             self.frame_counter = ram.frame_counter;
         }
+        self.anim_phase = ram.anim_phase;
+        self.raster_phase = ram.raster_phase;
+        self.anim_index = ram.anim_index;
+        self.coin_icon_phase = ram.coin_icon_phase;
+        self.sparkle_timer = ram.sparkle_timer;
         self.keys_xor = ram.keys_xor;
         self.zone_animation.random_accum = ram.rand_accum;
         self.reveal_progress = ram.reveal_progress;
