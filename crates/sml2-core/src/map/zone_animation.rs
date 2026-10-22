@@ -113,6 +113,11 @@ impl MapSim {
         self.zone_animation.sampled_timer = timer;
     }
 
+    /// The `$FF97` the zone routines last sampled.
+    pub fn zone_animation_frame(&self) -> u8 {
+        self.zone_animation.global_frame
+    }
+
     pub fn zone_render_slots(&self) -> &[(u8, u8, u8); 16] {
         self.zone_animation
             .render_slots

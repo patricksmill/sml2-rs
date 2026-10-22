@@ -145,9 +145,10 @@
         "DESIGN.md renderer seams"
       ],
       "dependencies": [
+        "f-ending-render",
+        "f-game-frame-clock",
         "f-overworld-navigation",
-        "f-wario-played",
-        "f-ending-render"
+        "f-wario-played"
       ],
       "verification_gate": "Scripted reference frames compared with the runtime renderer; every checkpoint pixel-identical or each difference explained in docs; evidence recorded in feature-inventory visual-audio row",
       "status": "pending"

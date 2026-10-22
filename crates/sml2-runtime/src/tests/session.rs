@@ -1234,13 +1234,13 @@ fn pumpkin_tile_animation_inherits_phase_and_map_time() {
         unreachable!()
     };
     ctx.tile_animation = TileAnimationClock {
-        timer: 250,
+        timer: 20,
         phase: 2,
     };
 
     session.debug_warp_map(1, 0x28).unwrap();
     let tick = |session: &mut Session, keys| session.advance(FrameInput { keys, div: 0 }).outcome;
-    // The disabled map clock wraps at 256 instead of accumulating host frames.
+    // The disabled map clock advances only on frames that run `$0300`.
     for _ in 0..10 {
         tick(&mut session, PlayerKeys::default());
     }
@@ -1263,10 +1263,15 @@ fn pumpkin_tile_animation_inherits_phase_and_map_time() {
     let SessionState::InLevel(ctx) = &mut session.state else {
         unreachable!()
     };
-    let elapsed = (session.frame_n - entry_frame) as u8;
+    // Ten map frames, the A frame and the entry's four `$0B`/`$02`/`$03`
+    // frames tick; `$3E9FB`'s fade and the `$03` loader do not.
+    assert_eq!(
+        session.frame_n - entry_frame,
+        1 + u64::from(MAP_ENTRY_FRAMES)
+    );
     assert_eq!(
         (ctx.tile_animation.timer, ctx.tile_animation.phase),
-        (4 + elapsed, 2)
+        (20 + 10 + 1 + 4, 2)
     );
     assert_eq!(ctx.sim.tile_anim_config, 0xFF);
     assert!(ctx.tile_animation.timer >= 30);
@@ -1276,7 +1281,8 @@ fn pumpkin_tile_animation_inherits_phase_and_map_time() {
     let SessionState::InLevel(ctx) = &session.state else {
         unreachable!()
     };
-    assert_eq!((ctx.tile_animation.timer, ctx.tile_animation.phase), (1, 3));
+    // `$02FF` increments, then this frame's `$3873` copies and restarts at 0.
+    assert_eq!((ctx.tile_animation.timer, ctx.tile_animation.phase), (0, 3));
     assert_eq!(&ctx.bg_live[0xA00..0xA40], expected);
 
     // A direct warp/reload also preserves both bytes, rather than starting
@@ -1285,7 +1291,7 @@ fn pumpkin_tile_animation_inherits_phase_and_map_time() {
     let SessionState::InLevel(ctx) = &session.state else {
         unreachable!()
     };
-    assert_eq!((ctx.tile_animation.timer, ctx.tile_animation.phase), (1, 3));
+    assert_eq!((ctx.tile_animation.timer, ctx.tile_animation.phase), (0, 3));
 }
 
 /// State 19 draws the ending's own scene in all 20 substates:

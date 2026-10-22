@@ -1494,6 +1494,18 @@
       "dependencies": [],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; one unit test per sEasyMode reader with a sensitivity mutation; Easy session reaches a level and shows the effect",
       "status": "done"
+    },
+    {
+      "id": "f-game-frame-clock",
+      "title": "One game-frame clock for $FF97 and sTileAnimTimer that advances only on frames the ROM's $0300 frame wait runs, with every loader and fade marked",
+      "asm_refs": [
+        "home.asm:$02FF/$0300 frame wait ($FF97, sTileAnimTimer)",
+        "bank $0F:$3E9EC fade wait",
+        "home.asm loaders that DisableVBlank"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; $FF97 and sTileAnimTimer advance only on frames the session's modelled loads and fades run the $0300 wait, matching the ROM's start/stop rows in the three manual PyBoy recordings apart from the documented joypad shift, unmodelled loads and lag (docs/frame-clock.md); unit tests per interval; mutations rejected; cargo test --workspace passes; sweep unchanged",
+      "status": "done"
     }
   ]
 }

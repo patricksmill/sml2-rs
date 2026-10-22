@@ -605,6 +605,10 @@ pub enum SessionState {
 /// State `$07`'s inputs: the player record `$27AF` reset, which carries the
 /// fade, `$FF97` and the folded golden-coin flags, and the level's sprite
 /// palettes, which `$27AF` leaves untouched.
+#[cfg(test)]
+#[path = "session/tests/frame_clock.rs"]
+mod frame_clock_tests;
+
 pub struct GameOverScreen {
     pub sim: PlayerSim,
     pub obp: [u8; 2],
@@ -653,6 +657,10 @@ pub struct MapTransition {
 /// `$3E9FB` fade, one frame before the measured `$0B`.
 const MAP_EASY_CARD_START: u16 = 50;
 
+/// `$0B`, two `$02` frames and the first `$03` frame run the frame wait
+/// before the `$03` loader turns VBlank off.
+const MAP_ENTRY_TICKING_FRAMES: u16 = 4;
+
 impl MapTransition {
     /// A map entry: `MAP_ENTRY_FRAMES`, or 64 more when the card's `$17`
     /// frames come before `$0B` and push the rest of the load back.
@@ -665,6 +673,19 @@ impl MapTransition {
             easy_card: easy.then_some(MAP_EASY_CARD_START),
             live_at: MAP_ENTRY_FRAMES + if easy { card } else { 0 },
         }
+    }
+
+    /// Whether transition frame `frame` runs the `$0300` frame wait: not
+    /// during `$3E9FB`'s fade and `$2934` save (`$3E9EC` waits), and not
+    /// during the `$03` loader with VBlank off; the `$0B`/`$02` frames and
+    /// the Easy card's `$17` frames do.
+    pub fn frame_waits(&self, frame: u16) -> bool {
+        let card = self
+            .easy_card
+            .map_or(0, |_| sml2_core::easy_mode_card::EASY_CARD_FRAMES);
+        let fade_end = MAP_EASY_CARD_START;
+        let loader_start = fade_end + card + MAP_ENTRY_TICKING_FRAMES;
+        frame > fade_end && frame <= loader_start
     }
 
     /// Whether `$35CD` draws the card on the current frame.
@@ -779,6 +800,9 @@ pub struct Session {
     pub prev_b: bool,
     pub prev_start: bool,
     pub prev_select: bool,
+    /// `$FF97`: advanced only on frames the ROM's `$0300` frame wait runs
+    /// (see [`Session::main_loop_waits`]), every level frame included.
+    ff97: u8,
     pub frame_n: u64,
     pub sound_driver: SoundDriver,
     /// The three `$2913` save slots, validated when the file select opens.
@@ -817,6 +841,46 @@ impl Session {
             SessionState::InLevel(ctx) => self.tile_animation = ctx.tile_animation,
             SessionState::Demo(demo) => self.tile_animation = demo.ctx.tile_animation,
             _ => {}
+        }
+    }
+
+    /// The session's `$FF97`, for the map and diagnostics.
+    pub fn ff97(&self) -> u8 {
+        self.ff97
+    }
+
+    /// A level continues the tile-animation bytes. Its movement phase keeps
+    /// its own origin: the console's depends on every load's length and every
+    /// lag frame since power-on, which a native port does not reproduce.
+    fn seed_level_clocks(&self, ctx: &mut LevelContext) {
+        ctx.tile_animation = self.tile_animation;
+    }
+
+    /// Whether this frame runs the `$0300` frame wait that increments `$FF97`
+    /// and `sTileAnimTimer`. Loaders that turn VBlank off, and bank 15's own
+    /// `$3E9EC` fade waits, block inside one console frame after another
+    /// without it. In-level lag frames are console CPU time, not modelled.
+    fn main_loop_waits(&self) -> bool {
+        match &self.state {
+            SessionState::Overworld(_) => {
+                if let Some(t) = &self.pending_level {
+                    return t.frame_waits(t.frame + 1);
+                }
+                // `$3E9FB`'s fade and the screen load block; the hold's last
+                // two frames already run the map's frame wait (measured on
+                // the hub return: 83 frozen frames of its 84).
+                let bell_fade_blocks = self
+                    .bell_fade
+                    .is_some_and(|held| held + 2 < self.bell_return_hold);
+                // A hold's last frame clears it and runs the map handler.
+                self.map_screen_transition.is_none()
+                    && self.map_pan_return.is_none()
+                    && !bell_fade_blocks
+                    && !self.bell_entry.is_some_and(|held| held < BELL_ENTRY_HOLD)
+            }
+            // `$19` turns VBlank off in the frame its handler first runs.
+            SessionState::FileSelectLoading(_) => false,
+            _ => true,
         }
     }
 
@@ -867,7 +931,7 @@ impl Session {
         );
         let mut ctx = Box::new(ctx);
         self.object_clock.initialize_level(&mut ctx.obj);
-        ctx.tile_animation = self.tile_animation;
+        self.seed_level_clocks(&mut ctx);
         self.map_ram = sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
         ctx.obj.easy_mode = self.easy_mode;
         ctx.credits_text = self.assets.credits_text.clone();
@@ -972,6 +1036,7 @@ impl Session {
             prev_b: false,
             prev_start: false,
             prev_select: false,
+            ff97: 0,
             frame_n: 0,
             sound_driver,
             slots: SaveSlots::new(),
@@ -1037,7 +1102,7 @@ impl Session {
             self.assets.object_tables.clone(),
         );
         self.object_clock.initialize_level(&mut ctx.obj);
-        ctx.tile_animation = self.tile_animation;
+        self.seed_level_clocks(&mut ctx);
         self.map_ram = sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
         self.state = SessionState::Demo(Box::new(DemoContext {
             ctx: Box::new(ctx),
@@ -1149,8 +1214,12 @@ impl Session {
         self.remember_clocks();
         let FrameInput { keys, div } = input;
         let rom_timing = self.rom_timing.take();
-        if !matches!(self.state, SessionState::InLevel(_) | SessionState::Demo(_)) {
-            self.tile_animation.tick(0, false);
+        if self.main_loop_waits() {
+            self.ff97 = self.ff97.wrapping_add(1);
+            // Levels and demos tick their own copy with their config.
+            if !matches!(self.state, SessionState::InLevel(_) | SessionState::Demo(_)) {
+                self.tile_animation.tick(0, false);
+            }
         }
         self.frame_n += 1;
         let mut saves = Vec::new();
@@ -1291,7 +1360,7 @@ impl Session {
 
                 let input = sml2_core::map_sim::MapInput::new(keys_held, keys_pressed, div);
 
-                let ff97 = rom_timing.as_ref().map_or(self.frame_n as u8, |t| t.ff97);
+                let ff97 = rom_timing.as_ref().map_or(self.ff97, |t| t.ff97);
                 map_sim.set_zone_animation_clock(ff97, 0);
                 if !map_sim.ram_seeded {
                     map_sim.set_map_ram(self.map_ram);
@@ -1859,7 +1928,7 @@ impl Session {
         if let Some(t) = self.pending_level.as_mut() {
             if t.frame >= t.live_at {
                 let mut t = self.pending_level.take().expect("checked above");
-                t.ctx.tile_animation = self.tile_animation;
+                self.seed_level_clocks(&mut t.ctx);
                 self.state = SessionState::InLevel(t.ctx);
                 outcome = StepOutcome::LevelEntered(t.level_id);
             }

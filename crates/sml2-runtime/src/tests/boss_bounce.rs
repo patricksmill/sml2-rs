@@ -14,7 +14,8 @@ fn disabled_tile_animation_preserves_vram_and_cannot_overwrite_arena_fire() {
         phase: 0,
     };
     update_tile_animation(&player, false, &mut bg, &rows, &mut clock);
-    assert_eq!((clock.timer, clock.phase), (1, 1));
+    // Incremented to 9, then this frame's copy restarts the timer at 0.
+    assert_eq!((clock.timer, clock.phase), (0, 1));
     assert_eq!(&bg[0xA00..0xA40], &[0x39; 64]);
 
     // `$6x` precedes `$2x` in the arena intro. `$01BF` skips animation

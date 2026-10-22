@@ -44,7 +44,8 @@ def read_state(pipe):
                 key, value = field.split("=", 1)
                 if key not in {"step", "fff0", "update_phase", "standing", "scene", "owns", "pc",
                                "boss_x", "boss_state", "door_phase", "door_parity",
-                               "platform_sprite", "tile_anim", "writes", "tile_timer", "tile_phase"}:
+                               "platform_sprite", "tile_anim", "writes", "tile_timer", "tile_phase",
+                               "ff97"}:
                     raise ValueError("unknown diagnostic field")
                 state[key] = int(value)
     except ValueError as exc:
@@ -266,16 +267,17 @@ def trace_line(index, mask, rom, port):
     if port is None:
         line += ' | port -'
         if 'tile_timer' in OUT_OF_LEVEL:
-            line += (f" | tiles ROM {rom[0xA298]}/{rom[0xA2CD]} "
-                     f"port {OUT_OF_LEVEL['tile_timer']}/{OUT_OF_LEVEL['tile_phase']}")
+            line += (f" | tiles ROM {rom[0xA298]}/{rom[0xA2CD]}/{rom[0xFF97]} "
+                     f"port {OUT_OF_LEVEL['tile_timer']}/{OUT_OF_LEVEL['tile_phase']}/"
+                     f"{OUT_OF_LEVEL.get('ff97', 0)}")
         return line
     line += (f" | port x={port['x']} y={port['y']} hv={port.get('hvel', 0):02x} "
              f"vv={port.get('vvel', 0):02x}")
     if 'fff0' in port:
         line += f" fff0={port['fff0']} up={port['update_phase']}"
     if 'tile_timer' in port:
-        line += (f" | tiles ROM {rom[0xA298]}/{rom[0xA2CD]} "
-                 f"port {port['tile_timer']}/{port['tile_phase']}")
+        line += (f" | tiles ROM {rom[0xA298]}/{rom[0xA2CD]}/{rom[0xFF97]} "
+                 f"port {port['tile_timer']}/{port['tile_phase']}/{port.get('ff97', 0)}")
     return line
 
 

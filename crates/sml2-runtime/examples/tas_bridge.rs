@@ -164,14 +164,19 @@ fn write_frame(
                 let boss = &c.obj.slots[0].b;
                 let platform = &c.obj.slots[1].b;
                 line.push_str(&format!(
-                    " boss_x={} boss_state={} door_phase={} door_parity={} platform_sprite={} tile_anim={} writes={} tile_timer={} tile_phase={}",
+                    " boss_x={} boss_state={} door_phase={} door_parity={} platform_sprite={} tile_anim={} writes={} tile_timer={} tile_phase={} ff97={}",
                     boss[10], boss[15], c.obj.door_phase, c.obj.door_parity,
                     platform[11], c.sim.tile_anim_config, c.sim.layout_writes.len(),
-                    c.tile_animation.timer, c.tile_animation.phase
+                    c.tile_animation.timer, c.tile_animation.phase, session.ff97()
                 ));
             } else {
                 let clock = session.tile_animation_clock();
-                line.push_str(&format!(" tile_timer={} tile_phase={}", clock.timer, clock.phase));
+                line.push_str(&format!(
+                    " tile_timer={} tile_phase={} ff97={}",
+                    clock.timer,
+                    clock.phase,
+                    session.ff97()
+                ));
             }
         }
         out.write_all(line.as_bytes())?;
