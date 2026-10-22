@@ -1467,6 +1467,19 @@
       "dependencies": [],
       "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; a session test that dies on the last life (lives=1) continues with 0 lives; a death at 0 calls game_over_enter (golden coins cleared, tally penalty, save written, music 7), renders the $4C92/$6492 screen, waits for START and goes to state $00; mutations rejected; cargo test --workspace passes",
       "status": "done"
+    },
+    {
+      "id": "f-ending-render",
+      "title": "Render the ending and credits from EndingScene: tiles and tilemap, sprite batch, raster scroll split and ending palettes",
+      "asm_refs": [
+        "bank $1A:$6800F ending sequence",
+        "bank $1A:$68400/$6844F raster",
+        "bank $01:$52E7 sprite batch",
+        "home.asm:$29DD scene load"
+      ],
+      "dependencies": [],
+      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; the session renderer draws EndingScene for all 20 substates; native-size frame tests at logo, walk, burst and credits pages assert tile, sprite and per-scanline scroll output; no renderer change to other states",
+      "status": "done"
     }
   ]
 }

@@ -3,9 +3,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{ending_entry::EndingPalettes, sprite_batch::SpriteBatch, video::bg_tile_offset};
 
-pub const ENDING_ASSET_SCHEMA: &str = "sml2-ending/1";
+pub const ENDING_ASSET_SCHEMA: &str = "sml2-ending/2";
 pub const ENDING_TILES_LEN: usize = 0x1800;
 pub const ENDING_TILEMAP_LEN: usize = 0x400;
+/// `VramTransfer::ending_request_1`'s source, bank `$1A` `$4656` (tiles).
+pub const ENDING_TRANSFER_TILES: (u8, u16, usize) = (0x1A, 0x4656, 0x800);
+/// `VramTransfer::ending_request_2`'s source, bank `$1A` `$5096` (tilemap).
+pub const ENDING_TRANSFER_TILEMAP: (u8, u16, usize) = (0x1A, 0x5096, 0x400);
 
 /// Original 2bpp data and tile IDs, independent of any output palette or texture pack.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -14,6 +18,10 @@ pub struct EndingAssets {
     schema: String,
     tiles: Vec<u8>,
     tilemap: Vec<u8>,
+    /// The two later VRAM transfers' ROM sources, so a host without the ROM
+    /// image can still run them; empty when a caller supplies the ROM.
+    transfer_tiles: Vec<u8>,
+    transfer_tilemap: Vec<u8>,
 }
 
 #[derive(Deserialize)]
@@ -21,6 +29,8 @@ struct AssetFile {
     schema: String,
     tiles: Vec<u8>,
     tilemap: Vec<u8>,
+    transfer_tiles: Vec<u8>,
+    transfer_tilemap: Vec<u8>,
 }
 
 impl TryFrom<AssetFile> for EndingAssets {
@@ -30,7 +40,8 @@ impl TryFrom<AssetFile> for EndingAssets {
         if file.schema != ENDING_ASSET_SCHEMA {
             return Err(format!("unsupported ending asset schema: {}", file.schema));
         }
-        Self::new(file.tiles, file.tilemap)
+        Self::new(file.tiles, file.tilemap)?
+            .with_transfer_sources(file.transfer_tiles, file.transfer_tilemap)
     }
 }
 
@@ -47,6 +58,41 @@ impl EndingAssets {
             schema: ENDING_ASSET_SCHEMA.into(),
             tiles,
             tilemap,
+            transfer_tiles: Vec::new(),
+            transfer_tilemap: Vec::new(),
+        })
+    }
+
+    /// Attach the [`ENDING_TRANSFER_TILES`] and [`ENDING_TRANSFER_TILEMAP`]
+    /// source blocks.
+    pub fn with_transfer_sources(
+        mut self,
+        tiles: Vec<u8>,
+        tilemap: Vec<u8>,
+    ) -> Result<Self, String> {
+        if tiles.len() != ENDING_TRANSFER_TILES.2 || tilemap.len() != ENDING_TRANSFER_TILEMAP.2 {
+            return Err(format!(
+                "ending transfer sources require 2048 and 1024 bytes, got {} and {}",
+                tiles.len(),
+                tilemap.len()
+            ));
+        }
+        self.transfer_tiles = tiles;
+        self.transfer_tilemap = tilemap;
+        Ok(self)
+    }
+
+    /// `len` bytes at bank `bank` CPU `addr`, when they lie inside one of the
+    /// attached transfer sources.
+    pub fn transfer_source(&self, bank: u8, addr: u16, len: usize) -> Option<&[u8]> {
+        [
+            (ENDING_TRANSFER_TILES, &self.transfer_tiles),
+            (ENDING_TRANSFER_TILEMAP, &self.transfer_tilemap),
+        ]
+        .into_iter()
+        .find_map(|((src_bank, base, _), block)| {
+            let start = usize::from(addr.checked_sub(base)?);
+            (src_bank == bank).then(|| block.get(start..start + len))?
         })
     }
 

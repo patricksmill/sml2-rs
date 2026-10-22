@@ -29,6 +29,15 @@ impl LevelContext {
         vh: usize,
         output: OutputMode,
     ) -> Result<Vec<u8>, Box<dyn Error>> {
+        // State 19 draws the ending's own VRAM, not the level.
+        if self.ending_entry.state() == sml2_core::ending_entry::EndingEntryState::Sequence {
+            return Ok(sml2_core::ending_render::render_ending_output(
+                &self.ending_scene,
+                &self.ending_sequence,
+                (vw, vh),
+                output,
+            ));
+        }
         let hud_live = hud_row_status(
             &self.hud,
             HudDigits {

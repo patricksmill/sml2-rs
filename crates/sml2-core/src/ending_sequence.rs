@@ -128,8 +128,14 @@ impl EndingSequenceController {
 
         if transfer_active {
             if let Some(t) = self.vram_transfer.as_mut() {
+                let has_source = scene.assets().is_some_and(|a| {
+                    a.transfer_source(t.source_bank, t.source_addr, t.chunk_len())
+                        .is_some()
+                });
                 if let Some(rom_data) = rom {
                     let _ = t.step_scene(rom_data, scene);
+                } else if has_source {
+                    let _ = t.step_scene_from_assets(scene);
                 } else {
                     // Headless dummy step for unit tests without full ROM
                     let chunk = t.chunk_len() as u16;

@@ -1239,3 +1239,55 @@ fn pumpkin_tile_animation_inherits_phase_and_map_time() {
     };
     assert_eq!((ctx.tile_animation.timer, ctx.tile_animation.phase), (1, 3));
 }
+
+/// State 19 draws the ending's own scene in all 20 substates:
+/// the session frame is the `EndingScene` projection, never the level. The
+/// Wario level is entered with the boss already beaten and Mario past the
+/// `$5E12` trigger; the entry fade and sequence then run unaided.
+#[test]
+fn the_session_draws_the_ending_scene_through_all_twenty_substates() {
+    use sml2_core::ending_entry::EndingEntryState;
+    use sml2_core::video::OutputMode;
+    let mut session = crate::session::Session::new(SessionAssets::load().unwrap());
+    session.begin_level(24, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!("Wario level")
+    };
+    ctx.cam.boss_fight_phase = 3;
+    ctx.sim.x = 0xC0;
+    ctx.sim.y = 0xE8;
+    let level_frame = session.render_frame((160, 144));
+    let mut seen = [false; 20];
+    let mut frames = 0u32;
+    for _ in 0..40_000 {
+        session.advance(crate::session::FrameInput::default());
+        let SessionState::InLevel(ctx) = &session.state else {
+            panic!("the ending stays in the level context")
+        };
+        if ctx.ending_entry.state() != EndingEntryState::Sequence {
+            continue;
+        }
+        let substate = ctx.ending_sequence.substate;
+        // Compare each substate's first frame, then every 256th.
+        let first = !std::mem::replace(&mut seen[usize::from(substate)], true);
+        frames += 1;
+        if !first && frames % 256 != 0 {
+            continue;
+        }
+        assert_eq!(
+            session.render_frame((160, 144)),
+            sml2_core::ending_render::render_ending_output(
+                &ctx.ending_scene,
+                &ctx.ending_sequence,
+                (160, 144),
+                OutputMode::Grayscale
+            ),
+            "substate {substate}"
+        );
+        if substate == 19 {
+            break;
+        }
+    }
+    assert_eq!(seen, [true; 20], "every substate was drawn");
+    assert_ne!(session.render_frame((160, 144)), level_frame);
+}

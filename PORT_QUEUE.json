@@ -1,6 +1,6 @@
 {
   "active_milestone": "full_integration",
-  "milestone_note": "14 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+  "milestone_note": "13 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
     {
       "id": "f-routes-b",
@@ -149,19 +149,6 @@
       ],
       "dependencies": [],
       "verification_gate": "Cause identified with ROM evidence; if a port bug, LEGACY removed and traj4_ff0 gates at zero mismatches; captures/sweep.sh passes",
-      "status": "pending"
-    },
-    {
-      "id": "f-ending-render",
-      "title": "Render the ending and credits from EndingScene: tiles and tilemap, sprite batch, raster scroll split and ending palettes",
-      "asm_refs": [
-        "bank $1A:$6800F ending sequence",
-        "bank $1A:$68400/$6844F raster",
-        "bank $01:$52E7 sprite batch",
-        "home.asm:$29DD scene load"
-      ],
-      "dependencies": [],
-      "verification_gate": "PORTING.md \u00a7 What \u201cdone\u201d means; the session renderer draws EndingScene for all 20 substates; native-size frame tests at logo, walk, burst and credits pages assert tile, sprite and per-scanline scroll output; no renderer change to other states",
       "status": "pending"
     },
     {

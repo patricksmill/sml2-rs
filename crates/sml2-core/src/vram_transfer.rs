@@ -209,7 +209,42 @@ impl VramTransfer {
                 available: rom.len(),
             });
         }
+        self.apply_chunk(&rom[src_offset..src_offset + chunk], scene)
+    }
 
+    /// [`Self::step_scene`] reading the source from the scene's own
+    /// [`crate::ending_scene::EndingAssets::transfer_source`] blocks instead of a
+    /// ROM image.
+    pub fn step_scene_from_assets(
+        &mut self,
+        scene: &mut EndingScene,
+    ) -> Result<TransferStepResult, TransferError> {
+        if !self.active || self.remaining_bytes == 0 {
+            self.active = false;
+            return Ok(TransferStepResult {
+                bytes_transferred: 0,
+                remaining_bytes: 0,
+                completed: true,
+            });
+        }
+        let chunk = self.chunk_len();
+        let assets = scene.assets().ok_or(TransferError::SceneAssetsMissing)?;
+        let source = assets
+            .transfer_source(self.source_bank, self.source_addr, chunk)
+            .ok_or(TransferError::SourceOutOfBounds {
+                required: chunk,
+                available: 0,
+            })?
+            .to_vec();
+        self.apply_chunk(&source, scene)
+    }
+
+    fn apply_chunk(
+        &mut self,
+        source: &[u8],
+        scene: &mut EndingScene,
+    ) -> Result<TransferStepResult, TransferError> {
+        let chunk = source.len();
         let dest_addr = self.dest_addr;
         let assets = scene
             .assets_mut()
@@ -218,11 +253,11 @@ impl VramTransfer {
         if dest_addr >= VRAM_TILES_BASE && dest_addr + (chunk as u16) <= VRAM_TILES_END {
             let offset = (dest_addr - VRAM_TILES_BASE) as usize;
             let tiles = assets.tiles_mut();
-            tiles[offset..offset + chunk].copy_from_slice(&rom[src_offset..src_offset + chunk]);
+            tiles[offset..offset + chunk].copy_from_slice(source);
         } else if dest_addr >= VRAM_TILEMAP_BASE && dest_addr + (chunk as u16) <= VRAM_TILEMAP_END {
             let offset = (dest_addr - VRAM_TILEMAP_BASE) as usize;
             let tilemap = assets.tilemap_mut();
-            tilemap[offset..offset + chunk].copy_from_slice(&rom[src_offset..src_offset + chunk]);
+            tilemap[offset..offset + chunk].copy_from_slice(source);
         } else {
             return Err(TransferError::DestinationOutOfBounds {
                 dest_addr,
