@@ -25,11 +25,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--rom', type=Path, required=True)
     parser.add_argument('--out', type=Path)
+    parser.add_argument('--resume', type=Path, help='replay a manual recording, then continue in a new file')
     parser.add_argument('--headless', action='store_true', help='record a neutral-input smoke check')
-    parser.add_argument('--frames', type=int, help='stop after this many recorded ticks')
+    parser.add_argument('--frames', type=int, help='stop after this many new recorded ticks')
     args = parser.parse_args()
     if args.headless and (args.frames is None or args.frames <= 0):
         parser.error('--headless requires --frames N, greater than zero')
+    if args.frames is not None and args.frames <= 0:
+        parser.error('--frames must be positive')
     output = args.out or Path('recordings') / f'pyboy-{datetime.now():%Y%m%d-%H%M%S-%f}.json'
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.exists():
@@ -43,13 +46,43 @@ def main():
              'pyboy_version': version('pyboy'),
              'bootrom_sha1': hashlib.sha1(bootrom.read_bytes()).hexdigest(),
              'sound_emulated': False, 'frames': []}
+    if args.resume:
+        resumed = json.loads(args.resume.read_text())
+        if resumed.get('format') != 'sml2-tas-v1' or resumed.get('source') != 'manual-pyboy':
+            parser.error('--resume requires a manual PyBoy recording')
+        frames = resumed.get('frames')
+        if not isinstance(frames, list) or any(type(mask) is not int or not 0 <= mask <= 255
+                                              for mask in frames):
+            parser.error('invalid recording input masks')
+        for field in ('rom_sha1', 'pyboy_version', 'bootrom_sha1', 'sound_emulated'):
+            if type(resumed.get(field)) is not type(movie[field]) or resumed[field] != movie[field]:
+                parser.error(f'recording {field} differs from the current configuration')
+        if not resumed.get('final_screen_sha256'):
+            parser.error('recording has no final screen hash to verify')
+        movie = resumed
+    prefix_length = len(movie['frames'])
     # Fresh RAM, identical boot/core settings to compare_tas.py; no existing saves.
     pyboy = PyBoy(io.BytesIO(rom), window='null', sound_emulated=False, cgb=False)
     pyboy.set_emulation_speed(0)
     sdl, display = None, None
     mask = previous = 0
     paused, focused, running = False, True, True
+    ready = False
     try:
+        if args.resume:
+            print(f'Replaying {prefix_length} frames from {args.resume}…', flush=True)
+            for previous_index, held in enumerate(movie['frames'], 1):
+                apply_buttons(pyboy, previous, held)
+                previous = held
+                if not pyboy.tick(1, True, False):
+                    raise RuntimeError(f'PyBoy stopped at replay frame {previous_index}')
+                if previous_index % 3600 == 0:
+                    print(f'Replayed {previous_index}/{prefix_length} frames', flush=True)
+            actual = hashlib.sha256(pyboy.screen.ndarray.tobytes()).hexdigest()
+            if actual != movie['final_screen_sha256']:
+                raise RuntimeError('replayed screen differs from recording; continuation was not saved')
+            print('Replay verified. Continuing from the last recorded frame.', flush=True)
+            paused = not args.headless
         if not args.headless:
             import sdl2 as sdl
             if sdl.SDL_Init(sdl.SDL_INIT_VIDEO) != 0:
@@ -59,9 +92,12 @@ def main():
             key_masks = {sdl.SDLK_RIGHT: 1, sdl.SDLK_LEFT: 2, sdl.SDLK_UP: 4,
                          sdl.SDLK_DOWN: 8, sdl.SDLK_z: 16, sdl.SDLK_x: 32,
                          sdl.SDLK_RETURN: 64, sdl.SDLK_BACKSPACE: 128}
+        ready = True
         print(f'Recording to {output.resolve()}', flush=True)
         print('Arrows move; Z = A/jump; X = B/run; Enter = Start; Backspace = Select.', flush=True)
         print('P pauses/resumes recording; Escape or close window finishes and saves. Autosave every 300 frames.', flush=True)
+        if paused:
+            print('Paused at the end of the recording. Press P when ready to play.', flush=True)
         while running:
             started = time.perf_counter()
             if sdl:
@@ -99,16 +135,18 @@ def main():
                 status = 'PAUSED' if paused or not focused else 'RECORDING'
                 display.draw(pyboy.screen.ndarray, f'PyBoy {status} | frame {len(movie["frames"])} | Arrows, Z jump, X run, Enter Start | P pause | Esc save')
                 time.sleep(max(0, 1 / 60 - (time.perf_counter() - started)))
-            if args.frames and len(movie['frames']) >= args.frames:
+            if args.frames and len(movie['frames']) - prefix_length >= args.frames:
                 break
     finally:
-        save_movie(output, movie, pyboy)
+        if ready:
+            save_movie(output, movie, pyboy)
         pyboy.stop(save=False)
         if display:
             display.close()
         if sdl:
             sdl.SDL_Quit()
-        print(f'Saved {len(movie["frames"])} input frames to {output.resolve()}', flush=True)
+        if ready:
+            print(f'Saved {len(movie["frames"])} input frames to {output.resolve()}', flush=True)
 
 
 if __name__ == '__main__':

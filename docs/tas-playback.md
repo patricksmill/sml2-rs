@@ -267,6 +267,19 @@ bytes, emulator snapshots, or memory trajectories. Existing saves are untouched.
 The recorder and comparison viewer currently run silently with sound emulation
 disabled, using identical settings.
 
+Continue playing from the end of an existing manual recording:
+
+```bash
+/home/pmill/.venvs/sml2-pyboy/bin/python tools/record_play.py --rom ../sml2decomp/baserom.gb --resume recordings/pyboy-<timestamp>.json
+```
+
+The recorder replays the existing inputs as fast as possible and verifies the
+final screen hash, using the same ROM, PyBoy version and boot ROM. It opens
+paused at the last frame; press P to take control. A new timestamped recording
+contains the original inputs followed by your new play; the original file
+stays intact. Use `--out PATH` to choose the new file. `--frames N` limits new
+ticks only, excluding the replayed prefix.
+
 Replay the resulting file using the same Python environment:
 
 ```bash
