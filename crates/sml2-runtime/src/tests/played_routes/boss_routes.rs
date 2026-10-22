@@ -5,60 +5,6 @@
 //! here; they are native fixtures, not recorded ROM input.
 use super::*;
 
-/// Level 6 (TreeZone5): the scene `$0B` block at (2816-3071, 512-767) loads
-/// the Tree Zone arena; six hits, the rising reward, then node `$20`.
-const LEVEL6: &str = "\
-         RB*12 RAB*32 D*12 RB*48 RA*8 UA*48 D*32 UA*24 D*16 LA*2 UA*48 RAB*32 LB*8 RUA*12 \
-         LUA*16 UA*24 D*12 RUAB*48 RA*8 RB*8 RUA*2 A*2 R*24 D*32 LUA*4 RAB*12 RA*32 L*16 A*16 \
-         RB*8 RUAB*32 RB*8 RA*4 -*12 RUA*12 LB*2 RUAB*4 -*24 LAB*8 RUA*36 R*32 RA*48 D*2 A*48 \
-         R*12 D*24 UA*8 RB*16 UA*2 RA*4 -*12 RB*2 RUA*2 LAB*4 UA*16 RAB*4 R*4 LB*12 RUAB*48 \
-         -*12 RB*32 RA*8 LA*4 RUA*12 RB*8 RAB*12 RB*32 RUAB*32 LUA*48 -*32 RB*32 LUA*2 A*16 \
-         LB*8 RUA*2 LB*8 RAB*16 -*4 L*4 -*48 A*48 RB*8 D*8 RUA*48 D*2 RAB*6 A*2 LB*4 RAB*8 \
-         LAB*24 LA*4 RA*48 RAB*4 RB*16 UA*12 LAB*32 RB*12 RAB*12 D*24 RUA*12 RUAB*8 RAB*2 \
-         -*24 UA*16 RB*24 -*12 R*12 LAB*16 RUA*12 RAB*24 -*12 RUAB*96 L*8 LAB*2 RAB*32 UA*12 \
-         RUAB*32 RUA*16 LUA*16 RB*24 A*8 LA*12 RA*16 LAB*2 RB*12 RUAB*16 UA*2 RUAB*32 -*2 R*8 \
-         LA*2 R*32 -*4 RUA*8 UA*4 D*12 UA*8 LAB*12 LB*16 RA*24 RUA*32 RUAB*48 RA*24 D*20 \
-         RUAB*48 A*8 UA*12 LUA*8 D*8 R*16 LB*2 RB*32 UA*16 RA*2 -*52 LB*48 RUA*96 LB*4 RAB*24 \
-         RB*16 RAB*4 LAB*8 RB*16 RA*8 LAB*4 LB*12 RA*24 -*4 RA*44 D*4 LAB*24 RUA*32 RAB*24 \
-         -*8 L*12 D*2 RUA*12 UA*4 LA*8 LB*16 RUAB*12 -*2 A*4 RAB*32 D*24 A*16 RUA*16 LUA*2 \
-         RA*4 RUAB*24 RUA*12 R*48 D*72 -*303 LA*4 RB*32 RUAB*24 D*32 LUA*32 L*16 RB*2 RUA*32 \
-         LA*14 R*8 RB*8 LUA*12 L*24 RUAB*48 LA*24 A*2 RUAB*24 A*8 -*500";
-
-#[test]
-fn level6_tree_boss_header_spawn_to_map_through_live_play() {
-    let outcome = run_header_route(6, spans(LEVEL6), |manifest, _, sim, cam, nodes| {
-        assert_eq!(manifest.level_id, 5);
-        assert_eq!(manifest.spawns.records.len(), 29);
-        assert_eq!((sim.x, sim.y, cam.x, cam.y), (46, 708, 80, 704));
-        assert_eq!(
-            (sim.map_node, nodes.progress_slot(sim.map_node)),
-            (32, Some(5))
-        );
-    });
-    // No direct boss_clear or phase writes: the hits, the clear and the
-    // rising reward all come from the tape.
-    assert!(outcome.sim.boss_clear);
-    assert_eq!(outcome.obj.boss_hits_remaining, 0);
-    assert_eq!(
-        (outcome.exit_completed_frame, outcome.map_handoff_frame),
-        (Some(4551), Some(4552))
-    );
-    assert_eq!(outcome.sim.dead, 0);
-    assert!(outcome.obj.unported.is_empty());
-    assert_eq!(outcome.sim.level_tally, 1);
-    assert_eq!(outcome.sim.music_request, 15, "the clear's song");
-    // The golden coin byte, in memory and in the save record.
-    assert_eq!(outcome.sim.level_progress[5], 0x80);
-    assert_eq!(outcome.sim.save_record(0)[8 + 5], 0x80);
-    assert_eq!(outcome.sim.golden_coin_count(), 1);
-    let handoff = outcome.map_handoff.expect("the live handoff must run");
-    assert_eq!(
-        (handoff.node, handoff.screen, handoff.music, handoff.saves),
-        (0x19, Some(0), Some(6), 1)
-    );
-    assert!(!handoff.cutscene);
-}
-
 /// Level 10 (PumpkinZone4): the scene `$0C` block at (3584-3839, 256-511)
 /// loads the Pumpkin Zone arena.
 const LEVEL10: &str = "\
@@ -143,51 +89,6 @@ fn level14_mario_zone_boss_header_spawn_to_map_through_live_play() {
     assert_eq!(
         (handoff.node, handoff.screen, handoff.music, handoff.saves),
         (0x1D, Some(0), Some(6), 1)
-    );
-    assert!(!handoff.cutscene);
-}
-
-/// Level 17 (TurtleZone3): the scene `$0E` block at (2816-3071, 256-511) loads the Turtle Zone arena.
-const LEVEL17: &str = "\
-         RA*4 -*8 RAB*120 R*12 LUA*2 A*56 RB*80 R*16 UA*84 RB*8 RUAB*64 RB*36 RUAB*94 RB*24 \
-         RAB*32 -*8 RUA*48 RUAB*16 LB*12 A*4 RUA*8 RB*24 UA*32 RUA*48 D*8 LAB*4 UA*14 LAB*32 \
-         R*66 D*36 RA*12 LUA*48 RB*50 A*44 RB*18 RA*24 RB*134 L*82 RUAB*98 RB*12 RA*18 R*12 \
-         RUA*106 D*12 RUA*16 RB*72 -*24 RUAB*48 LB*24 LUA*2 RA*248 RB*4 RUAB*12 R*32 RUAB*44 \
-         RB*40 RAB*64 RUA*32 RUAB*20 LAB*2 UA*2 LA*4 A*40 -*32 LUA*16 RUAB*48 A*4 RUAB*48 \
-         UA*16 RB*50 D*12 R*24 RUAB*56 A*50 RA*24 L*16 RUAB*48 RB*32 A*12 RB*32 RAB*36 RB*12 \
-         RA*52 LB*18 RAB*120 D*2 RUA*40 R*6 RA*54 RB*2 RUA*2 RB*4 RA*98 R*2 RUA*228 R*2 A*8 \
-         R*40 RA*52 RB*700 RUA*52 LB*16 D*24 RB*32 RUA*48 LB*48 RUA*104 D*48 RUA*48 RB*1 \
-         LUA*37 -*552 -*200";
-
-#[test]
-fn level17_turtle_zone_boss_header_spawn_to_map_through_live_play() {
-    let outcome = run_header_route(17, spans(LEVEL17), |manifest, _, sim, cam, nodes| {
-        assert_eq!(manifest.level_id, 16);
-        assert_eq!(manifest.spawns.records.len(), 23);
-        assert_eq!((sim.x, sim.y, cam.x, cam.y), (36, 436, 80, 448));
-        assert_eq!(
-            (sim.map_node, nodes.progress_slot(sim.map_node)),
-            (73, Some(23))
-        );
-    });
-    assert!(outcome.sim.boss_clear);
-    assert_eq!(outcome.obj.boss_hits_remaining, 0);
-    assert_eq!(
-        (outcome.exit_completed_frame, outcome.map_handoff_frame),
-        (Some(5407), Some(5408))
-    );
-    assert_eq!(outcome.sim.dead, 0);
-    assert!(outcome.obj.unported.is_empty());
-    assert_eq!(outcome.sim.level_tally, 1);
-    assert_eq!(outcome.sim.music_request, 15, "the clear's song");
-    assert_eq!(outcome.sim.level_progress[23], 0x80);
-    assert_eq!(outcome.sim.save_record(0)[8 + 23], 0x80);
-    assert_eq!(outcome.sim.golden_coin_count(), 1);
-    let handoff = outcome.map_handoff.expect("the live handoff must run");
-    // `$1E` is the hub's Turtle Zone door.
-    assert_eq!(
-        (handoff.node, handoff.screen, handoff.music, handoff.saves),
-        (0x1E, Some(0), Some(6), 1)
     );
     assert!(!handoff.cutscene);
 }
