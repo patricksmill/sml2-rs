@@ -14,6 +14,8 @@ CAPTURES = ('traj4_ff0', 'traj5', 'traj6', 'traj7', 'traj8', 'traj9', 'traj10',
             'traj19', 'death1', 'death2', 'death3', 'crouch_pan1', 'screen_transition1')
 # Frozen legacy exception observed before the object split. Exact fields and counts,
 # including zeros, are intentional: neither new regressions nor new notes are exempt.
+# All of them are capture artifacts (missing update phase, death-state sampling);
+# see captures/README.md.
 LEGACY = dict(x=0, y=53, hvel=0, vvel=0, ground=0, timer=0, dir=0, frame=0,
               camx=0, camy=0, edge=0, en_r=0, en_l=0, sptr=0, spx=0, sdir=0,
               standby=2, active=2, objslots=490, odd=204)

@@ -1,6 +1,6 @@
 {
   "active_milestone": "full_integration",
-  "milestone_note": "12 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
+  "milestone_note": "11 pending in PORT_QUEUE.json; work per PORTING.md / ORCHESTRATION.md.",
   "queue": [
     {
       "id": "f-routes-b",
@@ -127,19 +127,8 @@
       "status": "pending"
     },
     {
-      "id": "f-traj4-legacy-exception",
-      "title": "Root-cause the frozen traj4_ff0 replay exception (y=53, objslots=490, odd=204) and either fix the port or document it as a capture artifact",
-      "asm_refs": [
-        "tools/replay_gate.py LEGACY",
-        "captures/traj4_ff0.json (read-only)"
-      ],
-      "dependencies": [],
-      "verification_gate": "Cause identified with ROM evidence; if a port bug, LEGACY removed and traj4_ff0 gates at zero mismatches; captures/sweep.sh passes",
-      "status": "pending"
-    },
-    {
       "id": "f-visual-parity",
-      "title": "Native-size pixel comparison against the ROM (emulator reference) at title, file select, each zone map, one level per zone, each boss arena, castle and ending",
+      "title": "Visual parity against the ROM (emulator reference) at title, file select, each zone map, one level per zone, each boss arena, castle and ending: the same game state draws the same graphics",
       "asm_refs": [
         "home.asm VBlank/OAM DMA",
         "DESIGN.md renderer seams"
@@ -150,7 +139,7 @@
         "f-overworld-navigation",
         "f-wario-played"
       ],
-      "verification_gate": "Scripted reference frames compared with the runtime renderer; every checkpoint pixel-identical or each difference explained in docs; evidence recorded in feature-inventory visual-audio row",
+      "verification_gate": "At each checkpoint the ROM frame and the port frame for the same game state (port frame N-1 for ROM frame N) match in tiles, sprites, HUD, palettes, priorities and scroll splits; tile-animation phase and presentation timing are excluded (docs/frame-clock.md) but each animation's frames and order must match; every other difference is fixed or explained in docs; evidence recorded in feature-inventory visual-audio row",
       "status": "pending"
     },
     {

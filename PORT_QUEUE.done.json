@@ -1517,6 +1517,17 @@
       "dependencies": [],
       "verification_gate": "Every code DIV read in baserom.gb listed in docs/randomness.md with its port site and a test that a sensitivity mutation fails; masked checks fire at the ROM's rate under the runtime clock; workspace tests and captures/sweep.sh unchanged",
       "status": "done"
+    },
+    {
+      "id": "f-traj4-legacy-exception",
+      "title": "Root-cause the frozen traj4_ff0 replay exception (y=53, objslots=490, odd=204) and either fix the port or document it as a capture artifact",
+      "asm_refs": [
+        "tools/replay_gate.py LEGACY",
+        "captures/traj4_ff0.json (read-only)"
+      ],
+      "dependencies": [],
+      "verification_gate": "Cause identified with ROM evidence; if a port bug, LEGACY removed and traj4_ff0 gates at zero mismatches; captures/sweep.sh passes",
+      "status": "done"
     }
   ]
 }
