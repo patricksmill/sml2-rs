@@ -7,7 +7,7 @@ use crate::{
 use sml2_runtime::session::SessionState;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-fn app() -> (DesktopApp, Context, PathBuf) {
+pub(super) fn app() -> (DesktopApp, Context, PathBuf) {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     let directory = std::env::temp_dir().join(format!(
         "sml2_desktop_ui_{}_{}",

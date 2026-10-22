@@ -5,7 +5,7 @@ edition = "2021"
 
 [features]
 default = ["native"]
-native = ["dep:eframe", "dep:wgpu", "dep:gilrs", "dep:png"]
+native = ["dep:eframe", "dep:wgpu", "dep:gilrs", "dep:png", "dep:rfd"]
 
 [[bin]]
 name = "sml2-desktop"
@@ -13,6 +13,8 @@ path = "src/main.rs"
 required-features = ["native"]
 
 [dependencies]
+sml2-dx = { path = "../sml2-dx" }
+rfd = { version = "0.15", optional = true }
 sml2-core = { path = "../sml2-core" }
 sml2-runtime = { path = "../sml2-runtime" }
 serde = { version = "1", features = ["derive"] }
@@ -22,3 +24,6 @@ eframe = { version = "0.33", default-features = false, features = ["default_font
 wgpu = { version = "27", default-features = false, features = ["vulkan", "gles", "dx12", "metal", "wgsl"], optional = true }
 gilrs = { version = "0.11", optional = true }
 png = { version = "0.17", optional = true }
+
+[dev-dependencies]
+tempfile = "3"

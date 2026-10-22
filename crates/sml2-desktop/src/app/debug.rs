@@ -33,14 +33,20 @@ const POWERUPS: [(&str, u8); 4] = [("Small", 0), ("Super", 1), ("Fire", 3), ("Bu
 
 /// One debug edit, applied after the panel's frame.
 pub(super) enum DebugAction {
-    WarpMap { screen: u8, node: u8 },
+    WarpMap {
+        screen: u8,
+        node: u8,
+    },
     /// Walk into a zone through its hub door, as a played entry does.
     EnterZone(u8),
     WarpLevel(u8),
     ClearAllLevels,
     UnlockRoutes,
     WipeProgress,
-    SetGoldenCoin { index: usize, held: bool },
+    SetGoldenCoin {
+        index: usize,
+        held: bool,
+    },
     AddCoins(i32),
     AddLives(i32),
     /// Put Mario in `sCurPowerup` tier 0-3.
@@ -251,6 +257,11 @@ impl DesktopApp {
     }
 
     pub(super) fn apply_debug(&mut self, action: DebugAction) {
+        if self.dx_normal.is_some() {
+            self.debug_note = Some("End the DX preview before editing the normal game".into());
+            self.debug_note_error = true;
+            return;
+        }
         let warped = matches!(
             &action,
             DebugAction::WarpMap { .. } | DebugAction::EnterZone(_) | DebugAction::WarpLevel(_)

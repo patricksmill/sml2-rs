@@ -19,6 +19,7 @@ pub struct SpriteInst {
 }
 
 mod pipe_background;
+mod dx;
 pub use pipe_background::PipeBackground;
 
 /// Everything needed for the OBJ pass.

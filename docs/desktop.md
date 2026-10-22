@@ -45,9 +45,34 @@ native GUI/controller dependencies:
 cargo test -p sml2-desktop --no-default-features
 ```
 
-ROM import is the next work package. This shell currently consumes the existing
-extracted content, which can be produced with `cargo run -p sml2-extract`.
+The shell consumes existing extracted base content, which can be produced with
+`cargo run -p sml2-extract`.
 Use `--assets /path/to/extracted` to run from another directory.
+
+## SML2DX opening-level preview
+
+On Home, choose **Import SML2DX…** and select your patched v1.8.1 ROM built
+against the original UE v1.0 release. The importer supports the exact ROM digest
+documented in the [DX audit](sml2dx-audit.md); other revisions and modified builds
+are rejected. Existing extracted base assets are required.
+
+Import runs in the background and can be cancelled. Graphics, attributes,
+palettes and mappings are extracted locally into the application's `dx` cache
+directory. A complete bundle is validated before atomic publication. Its identity
+includes the ROM digest, base assets, importer version and schema. Failed imports
+preserve the selected installation. Settings remember the installation; startup
+checks its integrity and base assets before enabling **Play DX preview**.
+
+The preview opens the first level directly as Mario with the original native
+gameplay rules. It uses DX graphics and CGB colors, including sprite overlays,
+tile animation, star colors and pause colors. Display palette presets do not
+recolor this output. Returning to the desktop menu, dying or completing the level
+ends the preview and restores the normal game session. Preview sessions never
+read or write progress saves, and debug game edits are disabled.
+
+This is an opening-level presentation preview. Luigi, DX physics, other levels,
+title/map colorization and importing without extracted base assets remain future
+work. No ROM or imported graphics are distributed with the application.
 
 ## Controls and settings
 

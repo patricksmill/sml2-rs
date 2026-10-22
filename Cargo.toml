@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/sml2-dx",
     "crates/sml2-extract",
     "crates/sml2-core",
     "crates/sml2-runtime",

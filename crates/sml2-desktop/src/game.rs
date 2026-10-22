@@ -13,6 +13,7 @@ use std::{fs, path::PathBuf};
 pub struct Game {
     pub session: Session,
     save: PathBuf,
+    isolated_preview: bool,
     apu: Apu,
     buffer: Vec<f32>,
     output: Option<AudioOutput>,
@@ -63,6 +64,7 @@ impl Game {
         let mut game = Self {
             session,
             save,
+            isolated_preview: false,
             apu: Apu::new(),
             buffer: Vec::new(),
             output: None,
@@ -80,8 +82,41 @@ impl Game {
         game
     }
 
+    /// Construct without opening or migrating any save file.
+    pub fn preview(assets: SessionAssets, audio_enabled: bool) -> Result<Self, String> {
+        let mut session = Session::new(assets);
+        session.active_slot = None;
+        session.debug_warp_level(0)?;
+        // Populate the small-Mario sprite state before the first preview frame.
+        session.advance(FrameInput::default());
+        Ok(Self {
+            session,
+            save: PathBuf::new(),
+            isolated_preview: true,
+            apu: Apu::new(),
+            buffer: Vec::new(),
+            output: None,
+            audio_enabled,
+            div_clock: VirtualDividerClock::seeded_from_time(),
+            diagnostics: Vec::new(),
+        })
+    }
+
+    pub fn preview_finished(&self) -> bool {
+        self.isolated_preview
+            && match &self.session.state {
+                sml2_runtime::session::SessionState::InLevel(ctx) => {
+                    ctx.sim.dead != 0 || ctx.sim.exit_completed
+                }
+                _ => true,
+            }
+    }
+
     /// Write the three-slot image (`$F0` bytes) atomically.
     fn persist_slots(&self) -> Result<(), std::io::Error> {
+        if self.isolated_preview {
+            return Ok(());
+        }
         atomic_write(&self.save, &self.session.slots.image())
     }
 
@@ -89,6 +124,11 @@ impl Game {
     /// slot image. The debug panel's Save button uses this; edits are not
     /// written until it is pressed.
     pub fn save_now(&mut self) -> std::io::Result<()> {
+        if self.isolated_preview {
+            return Err(std::io::Error::other(
+                "DX preview does not use progress saves",
+            ));
+        }
         if let Some(slot) = self.session.active_slot {
             let record = self.session.save_record();
             self.session.slots.write_slot(slot as usize, &record);

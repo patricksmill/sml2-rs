@@ -32,6 +32,7 @@ pub struct Settings {
     pub dead_zone: f32,
     pub preferred_controller: Option<String>,
     pub bindings: Bindings,
+    pub dx_installation: Option<sml2_dx::cache::CacheKey>,
 }
 
 impl Default for Settings {
@@ -47,6 +48,7 @@ impl Default for Settings {
             dead_zone: 0.3,
             preferred_controller: None,
             bindings: Bindings::default(),
+            dx_installation: None,
         }
     }
 }
@@ -192,6 +194,23 @@ mod tests {
         original.save(&path).unwrap();
         assert_eq!(Settings::load(&path).unwrap(), original);
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn version_two_settings_restore_optional_dx_selection() {
+        let mut settings = Settings::default();
+        let mut value = serde_json::to_value(&settings).unwrap();
+        value.as_object_mut().unwrap().remove("dx_installation");
+        assert_eq!(
+            serde_json::from_value::<Settings>(value)
+                .unwrap()
+                .dx_installation,
+            None
+        );
+        settings.dx_installation = Some(sml2_dx::cache::CacheKey::new("1".repeat(64)));
+        let restored: Settings =
+            serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
+        assert_eq!(restored, settings);
     }
 
     #[test]

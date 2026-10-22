@@ -1,0 +1,180 @@
+# SML2DX opening-level presentation audit
+
+Audited input: 1,048,576-byte patched ROM with SHA-256
+`1dd604a91b9ee99ef381cc795da3ae28c72d04ba9de78b355df829e56ce49c46`.
+The user identified it as the ROM Claude produced by applying their IPS file.
+That provenance does not independently authenticate the IPS publisher/version;
+compatibility is restricted to this exact digest. ROM and extracted graphics
+remain local and must not be committed. Table auditing used static bounded ROM
+slices. The controlled pixel comparison below is separate presentation evidence.
+
+## Opening-level identity and base overlay
+
+`../sml2decomp/levels/levelheaders.asm`, `Level_Header_Pointers` at ROM `$55CB`,
+entry zero points to `Level_Header_01` at `$560B`. Its level number is zero,
+metatile pointer is bank8 `$4000`, and layout bank is 9. The native opening level
+is therefore ID 0 / `level01`. The original loader is documented in
+`../sml2decomp/main.asm`, `UnknownJump_0x5579`, and `../sml2decomp/home.asm`,
+`UnknownJump_0x03F1`.
+
+The following slices are identical in DX and `../sml2decomp/baserom.gb`:
+
+| Base slice | ROM range (end exclusive) | SHA-256 |
+|---|---|---|
+| Opening metatiles | `$20000..$20200` | `356423db18111680c1614e439450cd14101932b91062baef84684d060f6d1a94` |
+| Opening compressed layout | `$24500..$24E5B` | `1722ea731dddc49fbe77fabdf9b022a0914f70d5e6344ff13d1866561c4d3a6e` |
+
+These establish the opening presentation overlay's geometry compatibility;
+they do not establish full-game geometry or gameplay equivalence.
+
+## Graphics and attributes
+
+All ranges below were checked within the audited ROM; destinations fit the
+indicated VRAM bank. Sizes are hexadecimal. Banked addresses resolve as
+`bank * $4000 + cpu_address - $4000`.
+
+| Data | ROM start | Size | Destination/use |
+|---|---:|---:|---|
+| Opening tile attributes | `$84000` | `$100` | Attribute indexed by tile ID |
+| Shared bank0 graphics | `$6F600` | `$300` | VRAM0 `$8800..$8B00` |
+| Opening enemy graphics | `$19800` | `$380` | VRAM0 `$8B00..$8E80` |
+| Additional shared graphics | `$1F100` | `$380` | VRAM0 `$8E80..$9200` |
+| Opening scenery graphics | `$1C000` | `$600` | VRAM0 `$9200..$9800` |
+| Common HUD graphics | `$81D00` | `$300` | VRAM1 `$8800..$8B00` |
+| Opening extra graphics | `$90000` | `$D00` | VRAM1 `$8B00..$9800` |
+| HUD row tile IDs | `$93C24` | `$14` | Window first row |
+| HUD row attributes | `$92040` | `$14` | Window first row attributes |
+| Tile animation phases | `$77380` | `$100` | Four phases of `$40` bytes at VRAM0 `$9200` |
+
+Home `$0698` switches to bank `$21`, calls `$732C` (ROM `$8732C`), and copies
+`$100` bytes from `$4000 + level * $100` to WRAM bank2 `$D000`. This is a
+**tile-ID attribute table**, not a table indexed by metatile. Bank `$24:$79B5`
+(ROM `$939B5`) draws the metatile tile IDs, switches VRAM bank1, and looks up
+each quadrant's attribute using `$D000 + tile_id`.
+
+Opening attributes select VRAM0, palettes 0–7, without tile flips or BG
+priority. HUD attributes are `$8F` except the sixth `$89`: VRAM1, BG priority,
+palette7 or palette1 respectively. Bank `$24:$7912` (ROM `$93912`) copies the
+HUD IDs, resolves its attributes through pointer table `$6000 + 2*level`
+(entry0 `$6040`), and copies the opening extra graphics. The common HUD range
+was previously initialized at bank `$20:$6AA3` (ROM `$82AA3`).
+
+Home `LoadMarioGFX` and `$06C0..$0750` in `../sml2decomp/home.asm` document the
+bank0 transfer structure. DX config byte ROM `$360A` is `$20`, selecting shared
+pointer `$7100` from home table `$0763`; enemy entry `$362A` is
+`06 00 00 58`; scenery entry `$36AA` is `07 00 00 40`. Graphics differ from the
+base ROM and must be imported, not recolored from original art.
+
+ROM `$35EA=$4D` is incremented to animation config `$4E`. Unchanged home
+`UnknownCall_0x3873` selects bank29 `$6680 + $D00 = $7380`, four 64-byte phases,
+with an eight-tick period. Imported phases differ from base graphics.
+
+## Palettes and effects boundary
+
+Home `$1974` calls bank `$21:$7300` for attribute setup and bank `$26:$7CD6`
+(ROM `$9BCD6`) for palettes. The latter selects BG `$4000 + level*$40`, copies
+64 bytes to WRAM2 `$D200`, and selects OBJ at the same offset plus `$1000`.
+Opening BG palettes are ROM `$98000..$98040`; OBJ palettes are
+`$99000..$99040`. Home `$18AF/$18DA` select bank `$26` and write exactly 64
+bytes through CGB BG/OBJ palette ports.
+
+Literal BG RGB555 values, four per palette:
+
+```
+0: 7fff 7a89 72e6 0064
+1: 7fff 077f 0e7b 0064
+2: 7fff 27ac 0300 0180
+3: 0300 0180 2a38 1151
+4: 36fc 2a38 1151 0064
+5: 7a89 077f 0e7b 0064
+6: 7fff 2a9a 05b4 6ea3
+7: 7fff 2a9a 05b4 0064
+```
+
+The scene-color dispatcher ROM `$9AB0B` has special branches for levels
+`$19,$03,$07,$0D,$15,$16,$0C,$18`; level0 takes its default path. No opening
+specific scenery-color transition was found there. Generic star, powerup,
+damage, fade, OBJ remapping, and their frame timing require the separate OBJ
+and effects audit. Pixel parity against an independent emulator remains an
+acceptance gap and must not be claimed from this static audit.
+
+## Mario, object mappings, and generic effects
+
+Home `$5297` now jumps to `$465A`, which selects Mario bank `$2C:$5D62`
+(ROM `$B1D62`). The original bank1 `$4000` mapping table is repurposed.
+Mario's opening mapping table is ROM `$B0000`, 242 little-endian CPU pointers
+resolved within bank `$2C`. Records retain `[y,x,tile,attr]` cells terminated
+by a leading `$80`; the maximum observed list has 15 cells. Home `$3C82`
+calls `$07EA`, selecting object drawing bank `$23` for level0. Its mode-A
+mapping table is ROM `$8C0B1`, 168 pointers; the maximum list has 12 cells.
+Pointers must be resolved individually: some records moved beyond their
+original bank3 positions. The mode-B table `$8CF11` is outside this preview.
+
+ROM `$93880..$938BB` selects Mario bank `$2A` normal graphics `$A8200` or
+Fire graphics `$A9200`, `$800` bytes to VRAM0 `$8000`. Home `$1952` then
+loads `$A8A00`, `$800` bytes to VRAM1 `$8000`. Small, Super, and Bunny share
+normal graphics; their mapping frame IDs choose different tiles. Config
+`$A21A` is zero normally, one for Fire. Its high nibble selects alternate
+visual themes, not Bunny. Those themes are outside opening-level scope.
+
+Literal mapping assertions: Mario frame0 pointer `$B0000 = E4 41` resolves
+`$B01E4`, 11 cells, first `[F4,F9,01,20]`, fourth `[FE,F9,11,2C]`, last
+`[06,FE,21,29]`. Small frame32 is `$B0608`, Bunny69 `$B09F2`, Fire112
+`$B0F58`. Object sprite0 pointer `$8C0B1 = 02 42` resolves `$8C202`:
+`[F0,F8,B0,06], [F0,00,B0,26], [F8,F8,B4,07], [F8,00,B2,27], 80`.
+OBJ palette0 is `7777 7FFF 107C 0000`; palettes6/7 are
+`7777 7FFF 0137 0000` / `7777 46DA 0137 0000`.
+
+Star presentation: home `$54D8` sets `$FFC7` when `$A271 != 0` and `$A272`
+bit2 is set. Mario expander `$B1DC2` then replaces the tentative attr with
+`original_attr.wrapping_add(($A272 >> 1) & 3)`. It cycles each cell's palette;
+it does not replace palette memory. Mapping bank and flip bits are retained.
+
+Pause: home `$2756` calls bank `$31:$4000` (ROM `$C4000..$C40EA`). Each
+paused frame reads original BG palettes from WRAM2 `$D200`, subtracts RGB555
+channels with saturation, and writes the result to `$D240` for palette job6.
+When global frame `$FF97` bit4 is clear, subtract `(8,4,4)`; when set,
+subtract `(18,8,4)`. OBJ palettes are unchanged. Unpause requests job5,
+restoring original BG palettes.
+
+Legacy fade `$6442` remains unchanged and only writes DMG palette shadows;
+DX VBlank `$0154` removed their hardware uploads. These DMG values must not
+recolor the DX frame. Game-over color routine `$45C8` is outside the preview,
+which returns Home on death. Static audit does not authenticate the IPS
+publisher's release identity.
+
+## Controlled presentation check
+
+A local PyBoy run of this exact ROM reached the opening level using menu inputs
+only; Mario remained stationary at `(34, 468)`, with native camera `(80, 448)`.
+The reference used animation phase 1, HUD Y 136, five lives and timer 400.
+After the initial transfers settled, the native eight-tick opening frame matched
+all 23,040 RGB pixels, including Mario, scenery and HUD. PyBoy expands RGB555
+channels with `channel << 3`; reference pixels were normalized with
+`value | (value >> 5)` to match the native renderer's bit replication.
+
+Reference PNGs and the single emulator state remain under `/tmp`, outside the
+frozen replay corpus and Git. This comparison establishes one controlled frame;
+it does not establish full-level or full-game pixel parity. Unit tests separately
+cover bank selection, raw-index priority, palette effects and imported tables.
+
+## Acceptance commands
+
+The workspace suite passed: 1,636 core, 37 desktop, 18 DX importer/cache,
+14 extractor and 174 runtime/unit-integration tests. The desktop's 14 tests
+without default features also passed. The frozen sweep retained its documented
+`traj4_ff0` exception and completed successfully.
+
+Real-ROM tests are explicitly opt-in so the repository carries no ROM fixtures:
+
+```sh
+export SML2_DX_ROM=/path/to/the/audited/sml2dx.gbc
+cargo test -p sml2-dx --test revision -- --ignored
+cargo test -p sml2-runtime --test dx_preview -- --ignored
+cargo test -p sml2-desktop real_rom_import_restart_preview -- --ignored
+```
+
+All three passed against the audited local input. These exercise table extraction,
+bundle round trips, character graphics, palette effects, import, restart restore,
+cancellation and save isolation. Native file-dialog interaction itself was not
+automated; desktop navigation and preview transitions use the egui test harness.

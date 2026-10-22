@@ -46,6 +46,7 @@ impl DesktopApp {
         if self.menu.button(ui, "Quit") {
             ctx.send_viewport_cmd(ViewportCommand::Close);
         }
+        self.dx_controls(ctx, ui);
         if let Some(game) = &self.game {
             ui.add_space(14.0);
             ui.label("Save pipes");
@@ -113,7 +114,9 @@ impl DesktopApp {
             self.fullscreen(ctx);
         }
         let adjust = self.menu.row_adjustment();
-        if self.menu.button(ui, format!("Filter: {}", self.settings.filter.label()))
+        if self
+            .menu
+            .button(ui, format!("Filter: {}", self.settings.filter.label()))
             || adjust != 0
         {
             self.cycle_filter(if adjust != 0 { adjust } else { 1 });

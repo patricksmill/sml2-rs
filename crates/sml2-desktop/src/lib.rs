@@ -1,5 +1,6 @@
 //! Desktop policies outside the parity simulation: settings, input and timing.
 
+pub mod dx_import;
 pub mod input;
 pub mod settings;
 pub mod timing;

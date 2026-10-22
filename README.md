@@ -22,6 +22,9 @@ debug inspection/stepping around the native session:
 cargo run -p sml2-desktop
 ```
 
+Home also offers **Import SML2DX…** for a local-ROM opening-level color preview.
+See [DX preview setup and limits](docs/desktop.md#sml2dx-opening-level-preview).
+
 See [Desktop shell](docs/desktop.md) for Linux build dependencies, controls,
 storage paths and validation commands. Original CLI commands remain available.
 

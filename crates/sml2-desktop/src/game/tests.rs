@@ -8,7 +8,10 @@ use std::time::Duration;
 fn temp_save(name: &str) -> PathBuf {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     let id = COUNTER.fetch_add(1, Ordering::Relaxed);
-    std::env::temp_dir().join(format!("sml2_desktop_{name}_{}_{id}.sav", std::process::id()))
+    std::env::temp_dir().join(format!(
+        "sml2_desktop_{name}_{}_{id}.sav",
+        std::process::id()
+    ))
 }
 
 #[test]
@@ -100,4 +103,114 @@ fn saving_persists_all_three_pipes_as_one_image() {
     assert_eq!(data, game.session.slots.image());
     assert!(game.session.slots.valid(2));
     let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn dx_preview_never_opens_migrates_or_writes_normal_save() {
+    let path = temp_save("dx-isolation");
+    let legacy = MapSim::new().save_record(5, 0x12, 0);
+    std::fs::write(&path, legacy).unwrap();
+    let mut game = Game::preview(SessionAssets::load().unwrap(), false).unwrap();
+    // Even accidentally assigning the normal path cannot enable persistence.
+    game.save = path.clone();
+    assert_eq!(game.session.active_slot, None);
+    assert_eq!(game.session.level_tally, 0);
+    assert!(!game.preview_finished());
+    game.session.active_slot = Some(0);
+    assert!(game.save_now().is_err());
+    game.persist_slots().unwrap();
+    game.tick(PlayerKeys::default(), 0.0);
+    assert_eq!(std::fs::read(&path).unwrap(), legacy);
+    let sml2_runtime::session::SessionState::InLevel(ctx) = &mut game.session.state else {
+        panic!("preview must start directly in opening level");
+    };
+    assert_eq!(ctx.manifest.level_id, 0);
+    ctx.sim.dead = 1;
+    assert!(game.preview_finished());
+    if let sml2_runtime::session::SessionState::InLevel(ctx) = &mut game.session.state {
+        ctx.sim.dead = 0;
+        ctx.sim.exit_completed = true;
+    }
+    assert!(game.preview_finished());
+    game.session.enter_title();
+    assert!(game.preview_finished());
+    std::fs::remove_file(path).unwrap();
+}
+
+/// Run with SML2_DX_ROM=/path/to/audited.gbc cargo test -p sml2-desktop
+/// real_rom_import_restart_preview -- --ignored
+#[test]
+#[ignore = "requires the user-supplied audited DX ROM and extracted base assets"]
+fn real_rom_import_restart_preview_preserves_saves_and_cancelled_installation() {
+    use crate::{dx_import, settings::Settings};
+    use sml2_runtime::content::ExtractedContent;
+    use std::sync::atomic::AtomicBool;
+    let rom = PathBuf::from(std::env::var_os("SML2_DX_ROM").expect("set SML2_DX_ROM"));
+    let assets = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../extracted");
+    let temp = tempfile::tempdir().unwrap();
+    let cache = temp.path().join("cache");
+    let save = temp.path().join("normal.sav");
+    let config = temp.path().join("settings.json");
+    let mut slots = SaveSlots::new();
+    slots.write_slot(1, &MapSim::new().save_record(5, 7, 0));
+    let saved = slots.image();
+    std::fs::write(&save, saved).unwrap();
+
+    let (key, bundle) =
+        dx_import::import_path(&cache, &assets, &rom, &AtomicBool::new(false), |_| {}).unwrap();
+    let installed = bundle.encode().unwrap();
+    let mut settings = Settings::default();
+    settings.dx_installation = Some(key.clone());
+    settings.save(&config).unwrap();
+    drop(bundle);
+    drop(settings);
+
+    let restored_settings = Settings::load(&config).unwrap();
+    let (restored_key, bundle) = dx_import::restore(
+        &cache,
+        &assets,
+        restored_settings.dx_installation.unwrap(),
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert_eq!(restored_key, key);
+    assert_eq!(bundle.encode().unwrap(), installed);
+    assert!(matches!(
+        dx_import::import_path(&cache, &assets, &rom, &AtomicBool::new(true), |_| {},),
+        Err(sml2_dx::ImportError::Cancelled)
+    ));
+    let (_, unchanged) = dx_import::restore(&cache, &assets, key, &AtomicBool::new(false)).unwrap();
+    assert_eq!(unchanged.encode().unwrap(), installed);
+
+    let normal = Game::new(
+        SessionAssets::load_from(&ExtractedContent::new(&assets)).unwrap(),
+        save.clone(),
+        false,
+    );
+    // Normal loading initializes empty slot records in memory. The preview must
+    // preserve that loaded state as well as the original bytes on disk.
+    let normal_slots = normal.session.slots.image();
+    let mut preview = Game::preview(
+        SessionAssets::load_from(&ExtractedContent::new(&assets)).unwrap(),
+        false,
+    )
+    .unwrap();
+    assert_eq!(preview.session.active_slot, None);
+    assert_eq!(
+        preview.session.frame_n, 1,
+        "initial small-Mario draw state is primed"
+    );
+    assert!(matches!(&preview.session.state,
+        sml2_runtime::session::SessionState::InLevel(ctx) if ctx.sim.powerup == 0));
+    assert_eq!(
+        preview.session.render_dx_frame(&bundle).unwrap().len(),
+        160 * 144
+    );
+    preview.save = save.clone();
+    preview.session.active_slot = Some(0);
+    assert!(preview.save_now().is_err());
+    preview.tick(PlayerKeys::default(), 0.0);
+    assert_eq!(std::fs::read(save).unwrap(), saved);
+    assert_eq!(normal.session.slots.image(), normal_slots);
+    assert_eq!(normal.session.active_slot, Some(1));
 }

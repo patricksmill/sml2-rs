@@ -101,5 +101,10 @@ agrees when rendering runs at different frequencies and sizes.
 
 The separate `sml2-desktop` crate now consumes these boundaries for its window,
 settings, bindings, controllers and debug tools; see [Desktop shell](desktop.md).
-Filters, DX support, complete snapshots and multiplayer rules remain future work
-in the [feature roadmap](plans/2026-10-19-desktop-features-and-extensibility.md).
+`Session::render_dx_frame(&sml2_dx::Bundle)` renders the audited opening-level
+presentation directly to a 160 × 144 RGB888 frame. It requires an active opening
+level and never advances gameplay. The desktop hosts the isolated preview;
+`sml2-dx` owns revision recognition, extraction and local cache validation.
+Existing grayscale and palette-source rendering APIs retain their behavior.
+Full DX gameplay, complete snapshots and multiplayer rules remain future work in
+the [feature roadmap](plans/2026-10-19-desktop-features-and-extensibility.md).

@@ -17,9 +17,12 @@ use std::time::{Duration, Instant};
 
 mod controls;
 mod debug;
+mod dx;
 mod panels;
 mod startup;
 pub use startup::{run, Options};
+#[cfg(test)]
+mod dx_tests;
 mod screenshot;
 #[cfg(test)]
 mod tests;
@@ -38,6 +41,10 @@ pub struct DesktopApp {
     allow_save: bool,
     status: Option<String>,
     game: Option<Game>,
+    dx_normal: Option<Game>,
+    dx_bundle: Option<sml2_dx::Bundle>,
+    dx_worker: Option<crate::dx_import::Worker>,
+    dx_message: String,
     texture: TextureHandle,
     screen: Screen,
     return_screen: Screen,
@@ -94,6 +101,10 @@ impl DesktopApp {
             allow_save: error.is_none(),
             status: error,
             game: None,
+            dx_normal: None,
+            dx_bundle: None,
+            dx_worker: None,
+            dx_message: String::new(),
             texture,
             screen,
             return_screen: Screen::Home,
@@ -122,6 +133,7 @@ impl DesktopApp {
             validation_error: Default::default(),
         };
         app.load_game();
+        app.restore_dx();
         if app.options.boot_select {
             if let Some(game) = &mut app.game {
                 game.session.enter_file_select();
@@ -167,6 +179,9 @@ impl DesktopApp {
     }
 
     fn navigate(&mut self, ctx: &Context, screen: Screen) {
+        if screen != Screen::Game {
+            self.finish_dx();
+        }
         self.screen = screen;
         self.capture = None;
         self.menu = Menu::default();
@@ -214,6 +229,7 @@ impl DesktopApp {
         }
         self.focused = focused;
         self.shortcuts(ctx);
+        self.poll_dx();
         if self.screen != Screen::Game {
             if self.capture.is_some() {
                 self.menu.freeze();
@@ -272,7 +288,7 @@ impl DesktopApp {
         if self.screen != Screen::Game {
             self.menu.finish();
         }
-        if self.debug {
+        if self.debug && self.dx_normal.is_none() {
             self.debug_panel(ctx);
         }
 
@@ -293,6 +309,7 @@ impl DesktopApp {
             self.input.suppress_until_release();
         }
         let mut submitted_frame = None;
+        let mut dx_render_failed = false;
         if let Some(game) = &mut self.game {
             game.audio_running(running && !self.settings.muted);
             for _ in 0..ticks {
@@ -309,15 +326,43 @@ impl DesktopApp {
                         self.settings.volume
                     },
                 );
+                if game.preview_finished() {
+                    break;
+                }
             }
-            let pixels = game.session.render_palette_frame((160, 144));
-            let image = colorized(
-                &pixels,
-                self.settings.filter,
-                &game.session.assets.cartridge_header,
-            );
+            let image = if self.dx_normal.is_some() {
+                match game
+                    .session
+                    .render_dx_frame(self.dx_bundle.as_ref().expect("active DX bundle"))
+                {
+                    Ok(pixels) => ColorImage::new(
+                        [160, 144],
+                        pixels
+                            .into_iter()
+                            .map(|[r, g, b]| Color32::from_rgb(r, g, b))
+                            .collect(),
+                    ),
+                    Err(error) => {
+                        self.dx_message = error;
+                        dx_render_failed = true;
+                        ColorImage::from_gray([160, 144], &[0; 160 * 144])
+                    }
+                }
+            } else {
+                let pixels = game.session.render_palette_frame((160, 144));
+                colorized(
+                    &pixels,
+                    self.settings.filter,
+                    &game.session.assets.cartridge_header,
+                )
+            };
             self.texture.set(image.clone(), TextureOptions::NEAREST);
             submitted_frame = Some(image);
+        }
+        if self.dx_normal.is_some()
+            && (dx_render_failed || self.game.as_ref().is_some_and(Game::preview_finished))
+        {
+            self.navigate(ctx, Screen::Home);
         }
         if !self.settings.fullscreen && ctx.input(|i| i.viewport().maximized != Some(true)) {
             let size = ctx.input(|i| {
