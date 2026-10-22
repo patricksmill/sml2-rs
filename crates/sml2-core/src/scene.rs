@@ -55,7 +55,8 @@
 //!
 //! ## What is not ported
 //!
-//! `$Bx`/`$0x` (VRAM block transfers, recorded as unported) and the palette
+//! `$Bx`/`$0x` (VRAM block transfers, recorded as unported; `$Bx` retains
+//! its blocking transfer waits) and the palette
 //! writers `$1x`/`$5x`/`$Ax`. `$2x`, `$3x` and `$6x` are ported (see below). The
 //! `$4x` direction streamers (`$2359`/`$23E4`/`$2524`/`$246F`) use the resident
 //! layout instead of copying strips into the hardware BG window. Their VBlank
@@ -82,6 +83,9 @@
 
 use crate::camera::CameraSim;
 use crate::player_sim::PlayerSim;
+
+#[path = "scene_transfer.rs"]
+mod transfer;
 
 /// The operand byte count for each opcode class, read off the `$20EB`-`$21AC`
 /// dispatch chain. `None` means the ROM has no handler for that class.
@@ -206,6 +210,8 @@ pub struct SceneVm {
     enter_wait: u8,
     /// Remaining HALT waits inside the current opcode after its first wait.
     opcode_wait: u8,
+    /// Only `$4x` sets the transition flag after its opcode waits.
+    opcode_transition_tail: bool,
     /// `$0F0B` latched a scene, so the script table has been claimed and the
     /// cursor is live. While unarmed the cursor is 0 — see `step`.
     armed: bool,
@@ -238,6 +244,7 @@ impl SceneVm {
     pub fn start(&mut self) {
         self.enter_wait = Self::PROLOGUE_FRAMES;
         self.opcode_wait = 0;
+        self.opcode_transition_tail = false;
         self.armed = true;
         self.bad_cursor_scene = None;
         self.pc = 0;
@@ -254,6 +261,7 @@ impl SceneVm {
     fn disarm(&mut self) {
         self.enter_wait = 0;
         self.opcode_wait = 0;
+        self.opcode_transition_tail = false;
         self.armed = false;
         self.pc = 0;
     }
@@ -300,8 +308,9 @@ impl SceneVm {
         }
         if self.opcode_wait > 0 {
             self.opcode_wait -= 1;
-            if self.opcode_wait == 0 {
+            if self.opcode_wait == 0 && self.opcode_transition_tail {
                 cam.scene_transition_flag = 1;
+                self.opcode_transition_tail = false;
             }
             return SceneStep::Entering;
         }
@@ -344,9 +353,14 @@ impl SceneVm {
                     _ => 0,
                 };
                 self.opcode_wait = streamer_waits + 1;
+                self.opcode_transition_tail = true;
             }
             0x6 => sim.level_gfx_index = op & 0x0F,
             0x8 => cam.boss_defeated = 0xF0 | (op & 0x0F),
+            0xB => {
+                self.wait_for_tile_transfer(op);
+                self.note_unported(op); // Graphics payload is still unported.
+            }
             _ => self.note_unported(op),
         }
         self.pc = self.pc.wrapping_add(1 + len as u16);
@@ -816,8 +830,8 @@ mod tests {
     /// An unimplemented *but handled* class is stepped over with its real
     /// operand length, so the script still reaches its `$FF` — and the opcode is
     /// reported rather than silently ignored. `$Bx` is the case now that `$2x`,
-    /// `$3x` and `$6x` are ported: it is a VRAM block transfer, and its whole
-    /// effect lands in the BG window this port never draws.
+    /// `$3x` and `$6x` are ported: its VRAM payload remains unported, but its
+    /// blocking transfer waits must finish before the next instruction.
     #[test]
     fn an_unported_class_is_stepped_over_by_its_real_length() {
         // Scene 1's script `B3 11 22 33 FF`: a $Bx (three operands).
@@ -835,6 +849,9 @@ mod tests {
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Unported(0xB3));
         assert_eq!(vm.pc, 0x4169, "one opcode + three operands");
         assert_eq!(vm.unported(), &[0xB3]);
+        for _ in 0..16 {
+            assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::Entering);
+        }
         assert_eq!(vm.step(&mut sim, &mut cam, &s), SceneStep::End);
     }
 
