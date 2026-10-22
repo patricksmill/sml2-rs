@@ -1183,6 +1183,89 @@ fn the_map_inherits_the_live_metatile_bytes() {
 }
 
 #[test]
+fn camera_scroll_enables_survive_death_and_map_reentry() {
+    use crate::session::{FrameInput, Session};
+    let enable_bytes = |camera: &sml2_core::camera::CameraSim| {
+        [
+            u8::from(camera.right_enabled) * 255,
+            u8::from(camera.left_enabled) * 255,
+        ]
+    };
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!()
+    };
+    assert_eq!(enable_bytes(&ctx.cam), [0, 0]);
+    // `$54A7` can set either enable without clearing the other. `$0F2A`
+    // resets the screen-position latch, but does not write these bytes.
+    ctx.cam.right_enabled = true;
+    ctx.cam.left_enabled = true;
+    ctx.sim.dead = 0xFF;
+    ctx.sim.dead_fade = true;
+    ctx.sim.fade_timer = 1;
+    let mut exited = false;
+    for _ in 0..100 {
+        if matches!(
+            session.advance(FrameInput::default()).outcome,
+            StepOutcome::LevelExited { .. }
+        ) {
+            exited = true;
+            break;
+        }
+    }
+    assert!(exited);
+    while session.map_pan_return.is_some() {
+        session.advance(FrameInput::default());
+    }
+    session.advance(FrameInput {
+        keys: PlayerKeys {
+            a: true,
+            ..Default::default()
+        },
+        div: 0,
+    });
+    for _ in 0..MAP_ENTRY_FRAMES + 8 {
+        if matches!(
+            session.advance(FrameInput::default()).outcome,
+            StepOutcome::LevelEntered(_)
+        ) {
+            break;
+        }
+    }
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!("map reentry")
+    };
+    assert_eq!(enable_bytes(&ctx.cam), [255, 255]);
+    assert_eq!(ctx.cam.mario_screen_x, 0x40, "only the screen latch resets");
+    // `$0B90`: even with Mario left of center, the inherited right enable
+    // consumes his delta immediately and clears the opposite enable.
+    ctx.cam.x = 0x071F;
+    ctx.cam.y = 0x008E;
+    ctx.cam.edge_now = Some(0);
+    ctx.sim.x = 0x0710;
+    ctx.sim.y = 0x0084;
+    ctx.sim.x_sub = 1;
+    ctx.cam.step(&mut ctx.sim);
+    assert_eq!(ctx.cam.x.to_le_bytes(), [0x21, 7]);
+    assert_eq!(enable_bytes(&ctx.cam), [255, 0]);
+
+    // Demo loaders and direct replacement share the same persistent bytes.
+    assert!(session.start_demo(0));
+    let SessionState::Demo(demo) = &mut session.state else {
+        panic!()
+    };
+    assert!(demo.ctx.cam.right_enabled);
+    demo.ctx.cam.right_enabled = false;
+    demo.ctx.cam.left_enabled = true;
+    session.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!()
+    };
+    assert_eq!(enable_bytes(&ctx.cam), [0, 255]);
+}
+
+#[test]
 fn object_clock_survives_death_map_entry_and_demo_replacement() {
     use crate::session::{FrameInput, Session};
     let mut session = Session::new(SessionAssets::load().unwrap());

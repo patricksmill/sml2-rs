@@ -289,7 +289,7 @@ impl Session {
                 MapNodes::NODES - 1
             ));
         }
-        self.remember_clocks();
+        self.remember_level_state();
         self.debug_sync_carry();
         let mut map = MapSim::new();
         map.set_castle_scripts(self.assets.castle_scripts.clone());

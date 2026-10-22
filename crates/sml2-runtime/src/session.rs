@@ -826,6 +826,8 @@ pub struct Session {
     /// `sMarioWalkAnimTimer` `$A222`: likewise untouched by level load and the
     /// map, so the next level's walk cycle continues from the last one.
     walk_timer: u8,
+    /// `$A232/$A233`: neither the map nor the level loader clears these.
+    scroll_enables: (bool, bool),
     pub prev_keys_held: u8,
     pub prev_a: bool,
     pub prev_b: bool,
@@ -869,11 +871,17 @@ impl Session {
         }
     }
 
-    fn remember_clocks(&mut self) {
+    fn remember_level_state(&mut self) {
         self.object_clock.remember(&self.state);
         match &self.state {
-            SessionState::InLevel(ctx) => self.tile_animation = ctx.tile_animation,
-            SessionState::Demo(demo) => self.tile_animation = demo.ctx.tile_animation,
+            SessionState::InLevel(ctx) => {
+                self.tile_animation = ctx.tile_animation;
+                self.scroll_enables = (ctx.cam.right_enabled, ctx.cam.left_enabled);
+            }
+            SessionState::Demo(demo) => {
+                self.tile_animation = demo.ctx.tile_animation;
+                self.scroll_enables = (demo.ctx.cam.right_enabled, demo.ctx.cam.left_enabled);
+            }
             _ => {}
         }
     }
@@ -883,11 +891,12 @@ impl Session {
         self.ff97
     }
 
-    /// A level continues the tile-animation bytes. Its movement phase keeps
+    /// A level continues the tile-animation bytes and scroll enables. Its movement phase keeps
     /// its own origin: the console's depends on every load's length and every
     /// lag frame since power-on, which a native port does not reproduce.
-    fn seed_level_clocks(&self, ctx: &mut LevelContext) {
+    fn seed_level_state(&self, ctx: &mut LevelContext) {
         ctx.tile_animation = self.tile_animation;
+        (ctx.cam.right_enabled, ctx.cam.left_enabled) = self.scroll_enables;
     }
 
     /// Whether this frame runs the `$0300` frame wait that increments `$FF97`
@@ -926,7 +935,7 @@ impl Session {
         node: u8,
         exit_tile_flag: u8,
     ) {
-        self.remember_clocks();
+        self.remember_level_state();
         self.castle_progress = match &self.state {
             SessionState::Overworld(map) => map.level_progress,
             SessionState::InLevel(ctx) => ctx.sim.level_progress,
@@ -945,7 +954,7 @@ impl Session {
     /// Put a level live immediately (the map's own 37-frame transition is
     /// skipped), for acceptance tapes.
     pub fn begin_level(&mut self, level_id: u8, progress_flags: u8) -> Result<(), String> {
-        self.remember_clocks();
+        self.remember_level_state();
         let content = self.assets.level(level_id)?.clone();
         let ctx = LevelContext::from_content(
             level_id,
@@ -965,7 +974,7 @@ impl Session {
         );
         let mut ctx = Box::new(ctx);
         self.object_clock.initialize_level(&mut ctx.obj);
-        self.seed_level_clocks(&mut ctx);
+        self.seed_level_state(&mut ctx);
         self.map_ram = sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
         ctx.obj.easy_mode = self.easy_mode;
         ctx.obj.money_bag = self.money_bag;
@@ -981,7 +990,7 @@ impl Session {
 
     /// Stage a bell room the way the goal-bell exit does, for acceptance tapes.
     pub fn begin_bell_room(&mut self, screen: u8, node: u8, exit_tile_flag: u8) {
-        self.remember_clocks();
+        self.remember_level_state();
         let mut map = MapSim::new();
         map.set_castle_scripts(self.assets.castle_scripts.clone());
         map.lives = self.lives;
@@ -1022,7 +1031,7 @@ impl Session {
     }
 
     pub fn begin_coin_room(&mut self, screen: u8) {
-        self.remember_clocks();
+        self.remember_level_state();
         let mut map = MapSim::new();
         map.set_castle_scripts(self.assets.castle_scripts.clone());
         map.lives = self.lives;
@@ -1067,6 +1076,7 @@ impl Session {
             flutter_armed: false,
             flutter_charge: 0,
             walk_timer: 0,
+            scroll_enables: (false, false),
             prev_keys_held: 0,
             prev_a: false,
             prev_b: false,
@@ -1090,7 +1100,7 @@ impl Session {
 
     /// `$30000`: enter the file select directly (desktop smoke/evidence).
     pub fn enter_file_select(&mut self) {
-        self.remember_clocks();
+        self.remember_level_state();
         let mut file_select = FileSelect::new(&mut self.slots);
         self.sound_driver.music_request = file_select.take_music();
         self.state = SessionState::FileSelect(file_select);
@@ -1106,7 +1116,7 @@ impl Session {
 
     /// `$00`: enter the title screen instead of the overworld.
     pub fn enter_title(&mut self) {
-        self.remember_clocks();
+        self.remember_level_state();
         self.state = SessionState::Title(TitleScreen::new());
         self.last_map_screen = None;
         self.active_slot = None;
@@ -1116,7 +1126,7 @@ impl Session {
 
     /// `$140D6`/`$140A8`: load the demo's level and copy its tape page.
     pub fn start_demo(&mut self, index: u8) -> bool {
-        self.remember_clocks();
+        self.remember_level_state();
         let index = index & 0x03;
         let level_id = DEMO_LEVELS[index as usize];
         let Ok(content) = self.assets.level(level_id) else {
@@ -1139,7 +1149,7 @@ impl Session {
             self.assets.object_tables.clone(),
         );
         self.object_clock.initialize_level(&mut ctx.obj);
-        self.seed_level_clocks(&mut ctx);
+        self.seed_level_state(&mut ctx);
         self.map_ram = sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
         self.state = SessionState::Demo(Box::new(DemoContext {
             ctx: Box::new(ctx),
@@ -1171,7 +1181,7 @@ impl Session {
 
     /// Apply an already-read ROM-format progress record.
     pub fn apply_save_record(&mut self, data: &[u8]) -> bool {
-        self.remember_clocks();
+        self.remember_level_state();
         if !sml2_core::map::save_record_valid(data) {
             return false;
         }
@@ -1264,7 +1274,7 @@ impl Session {
     }
 
     pub fn advance(&mut self, input: FrameInput) -> FrameEffects {
-        self.remember_clocks();
+        self.remember_level_state();
         let FrameInput { keys, div } = input;
         let rom_timing = self.rom_timing.take();
         if self.main_loop_waits() {
@@ -1701,6 +1711,7 @@ impl Session {
                     div,
                     &self.assets.nodes,
                 );
+                self.scroll_enables = (ctx.cam.right_enabled, ctx.cam.left_enabled);
                 self.money_bag = ctx.obj.money_bag;
                 // The map's work bytes are the live metatile table's: a boss
                 // scene's tileset reload (`$266D`) replaces them mid-level.
@@ -1946,6 +1957,8 @@ impl Session {
                                 &self.assets.nodes,
                             );
                             self.object_clock.observe(&demo.ctx.obj);
+                            self.scroll_enables =
+                                (demo.ctx.cam.right_enabled, demo.ctx.cam.left_enabled);
                             self.tile_animation = demo.ctx.tile_animation;
                             if demo.ctx.sim.sfx0 != 0 {
                                 self.sound_driver.sfx_request_0 = demo.ctx.sim.sfx0;
@@ -2024,7 +2037,7 @@ impl Session {
         if let Some(t) = self.pending_level.as_mut() {
             if t.frame >= t.live_at {
                 let mut t = self.pending_level.take().expect("checked above");
-                self.seed_level_clocks(&mut t.ctx);
+                self.seed_level_state(&mut t.ctx);
                 // `sMoneyBagCount` is session state; no level load clears it.
                 t.ctx.obj.money_bag = self.money_bag;
                 self.state = SessionState::InLevel(t.ctx);
