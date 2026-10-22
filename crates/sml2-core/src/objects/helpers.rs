@@ -149,6 +149,11 @@ impl ObjectSim {
         self.wall_probe(st, layout, 11, 5, 7, 0x01);
     }
 
+    /// Bank 2 `$8484`, reached through `$3BE0` (wide actors).
+    pub(super) fn m_right_wall_wide(&mut self, st: &mut Staging, layout: &LevelLayout) {
+        self.wall_probe(st, layout, 11, 5, 19, 0x01);
+    }
+
     /// Bank 2 `$84A6`.
     pub(super) fn m_right_wall_high(&mut self, st: &mut Staging, layout: &LevelLayout) {
         self.wall_probe(st, layout, 19, 4, 11, 0x01);
@@ -162,6 +167,11 @@ impl ObjectSim {
     /// Bank 2 `$84EA`.
     pub(super) fn m_left_wall(&mut self, st: &mut Staging, layout: &LevelLayout) {
         self.wall_probe(st, layout, 11, 5, -7, 0x02);
+    }
+
+    /// Bank 2 `$8532`, reached through `$3C44` (wide actors).
+    pub(super) fn m_left_wall_wide(&mut self, st: &mut Staging, layout: &LevelLayout) {
+        self.wall_probe(st, layout, 11, 5, -19, 0x02);
     }
 
     /// Bank 2 `$8554`.

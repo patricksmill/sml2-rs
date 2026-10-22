@@ -544,13 +544,13 @@ impl ObjectSim {
             fn probe_left_wall(&mut self, actor: &crate::actor::Actor) -> bool {
                 set_x(&mut self.st.b, actor.position.x);
                 set_y(&mut self.st.b, actor.position.y);
-                self.sim.m_left_wall(self.st, self.layout);
+                self.sim.m_left_wall_wide(self.st, self.layout);
                 self.sim.move_flags & 0x02 != 0
             }
             fn probe_right_wall(&mut self, actor: &crate::actor::Actor) -> bool {
                 set_x(&mut self.st.b, actor.position.x);
                 set_y(&mut self.st.b, actor.position.y);
-                self.sim.m_right_wall(self.st, self.layout);
+                self.sim.m_right_wall_wide(self.st, self.layout);
                 self.sim.move_flags & 0x01 != 0
             }
         }

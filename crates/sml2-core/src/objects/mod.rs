@@ -151,6 +151,9 @@ mod crawler;
 #[path = "enemies/dashing_walker.rs"]
 mod dashing_walker;
 #[cfg(test)]
+#[path = "enemies/tests/dashing_walker.rs"]
+mod dashing_walker_tests;
+#[cfg(test)]
 #[path = "tests/defeat_motion.rs"]
 mod defeat_motion_tests;
 mod dispatch;
