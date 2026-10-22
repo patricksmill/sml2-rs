@@ -9,6 +9,7 @@ import io
 import json
 from pathlib import Path
 import time
+import zipfile
 
 from compare_tas import Display, apply_buttons
 
@@ -21,11 +22,52 @@ def save_movie(path, movie, pyboy):
     temp.replace(path)
 
 
+def save_checkpoint(path, movie, pyboy):
+    state = io.BytesIO()
+    pyboy.save_state(state)
+    saved_movie = dict(movie, final_screen_sha256=hashlib.sha256(
+        pyboy.screen.ndarray.tobytes()).hexdigest())
+    temp = path.with_suffix(path.suffix + '.tmp')
+    with zipfile.ZipFile(temp, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('movie.json', json.dumps(saved_movie))
+        archive.writestr('pyboy.state', state.getvalue())
+    temp.replace(path)
+
+
+def read_checkpoint(path):
+    with zipfile.ZipFile(path) as archive:
+        return json.loads(archive.read('movie.json')), archive.read('pyboy.state')
+
+
+def validate_movie(movie, config):
+    if not isinstance(movie, dict) or movie.get('format') != 'sml2-tas-v1' or movie.get('source') != 'manual-pyboy':
+        raise ValueError('requires a manual PyBoy recording')
+    frames = movie.get('frames')
+    if not isinstance(frames, list) or any(type(mask) is not int or not 0 <= mask <= 255
+                                          for mask in frames):
+        raise ValueError('invalid recording input masks')
+    for field in ('rom_sha1', 'pyboy_version', 'bootrom_sha1', 'sound_emulated'):
+        if type(movie.get(field)) is not type(config[field]) or movie[field] != config[field]:
+            raise ValueError(f'recording {field} differs from the current configuration')
+    if not movie.get('final_screen_sha256'):
+        raise ValueError('recording has no final screen hash to verify')
+
+
+def restore_checkpoint(pyboy, movie, state):
+    pyboy.load_state(io.BytesIO(state))
+    actual = hashlib.sha256(pyboy.screen.ndarray.tobytes()).hexdigest()
+    if actual != movie['final_screen_sha256']:
+        raise RuntimeError('loaded checkpoint screen differs from recording')
+    return movie['frames'][-1] if movie['frames'] else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--rom', type=Path, required=True)
     parser.add_argument('--out', type=Path)
-    parser.add_argument('--resume', type=Path, help='replay a manual recording, then continue in a new file')
+    start = parser.add_mutually_exclusive_group()
+    start.add_argument('--resume', type=Path, help='replay a manual recording, then continue in a new file')
+    start.add_argument('--load-state', type=Path, help='continue from an F5 checkpoint in a new recording')
     parser.add_argument('--headless', action='store_true', help='record a neutral-input smoke check')
     parser.add_argument('--frames', type=int, help='stop after this many new recorded ticks')
     args = parser.parse_args()
@@ -46,21 +88,25 @@ def main():
              'pyboy_version': version('pyboy'),
              'bootrom_sha1': hashlib.sha1(bootrom.read_bytes()).hexdigest(),
              'sound_emulated': False, 'frames': []}
-    if args.resume:
-        resumed = json.loads(args.resume.read_text())
-        if resumed.get('format') != 'sml2-tas-v1' or resumed.get('source') != 'manual-pyboy':
-            parser.error('--resume requires a manual PyBoy recording')
-        frames = resumed.get('frames')
-        if not isinstance(frames, list) or any(type(mask) is not int or not 0 <= mask <= 255
-                                              for mask in frames):
-            parser.error('invalid recording input masks')
-        for field in ('rom_sha1', 'pyboy_version', 'bootrom_sha1', 'sound_emulated'):
-            if type(resumed.get(field)) is not type(movie[field]) or resumed[field] != movie[field]:
-                parser.error(f'recording {field} differs from the current configuration')
-        if not resumed.get('final_screen_sha256'):
-            parser.error('recording has no final screen hash to verify')
+    config = movie.copy()
+    state = None
+    if args.resume or args.load_state:
+        if args.load_state:
+            resumed, state = read_checkpoint(args.load_state)
+        else:
+            resumed = json.loads(args.resume.read_text())
+        try:
+            validate_movie(resumed, config)
+        except ValueError as exc:
+            parser.error(str(exc))
         movie = resumed
     prefix_length = len(movie['frames'])
+    checkpoint_path = output.with_suffix('.state')
+    if checkpoint_path == output:
+        parser.error('--out must use a different extension from .state')
+    if args.load_state and checkpoint_path.resolve() == args.load_state.resolve():
+        parser.error('--out would overwrite the loaded checkpoint; choose another output path')
+    available_checkpoint = args.load_state
     # Fresh RAM, identical boot/core settings to compare_tas.py; no existing saves.
     pyboy = PyBoy(io.BytesIO(rom), window='null', sound_emulated=False, cgb=False)
     pyboy.set_emulation_speed(0)
@@ -69,7 +115,11 @@ def main():
     paused, focused, running = False, True, True
     ready = False
     try:
-        if args.resume:
+        if args.load_state:
+            previous = restore_checkpoint(pyboy, movie, state)
+            paused = not args.headless
+            print(f'Loaded checkpoint at frame {prefix_length}.', flush=True)
+        elif args.resume:
             print(f'Replaying {prefix_length} frames from {args.resume}…', flush=True)
             for previous_index, held in enumerate(movie['frames'], 1):
                 apply_buttons(pyboy, previous, held)
@@ -96,6 +146,7 @@ def main():
         print(f'Recording to {output.resolve()}', flush=True)
         print('Arrows move; Z = A/jump; X = B/run; Enter = Start; Backspace = Select.', flush=True)
         print('P pauses/resumes recording; Escape or close window finishes and saves. Autosave every 300 frames.', flush=True)
+        print(f'F5 saves checkpoint to {checkpoint_path.resolve()}; F9 loads it and pauses.', flush=True)
         if paused:
             print('Paused at the end of the recording. Press P when ready to play.', flush=True)
         while running:
@@ -119,6 +170,23 @@ def main():
                             running = False
                         elif down and key == sdl.SDLK_p and not event.key.repeat:
                             paused, mask = not paused, 0
+                        elif down and key == sdl.SDLK_F5 and not event.key.repeat:
+                            save_checkpoint(checkpoint_path, movie, pyboy)
+                            available_checkpoint = checkpoint_path
+                            print(f'Checkpoint saved at frame {len(movie["frames"])}.', flush=True)
+                        elif down and key == sdl.SDLK_F9 and not event.key.repeat:
+                            if available_checkpoint is None:
+                                print('No checkpoint yet. Press F5 to save one.', flush=True)
+                                continue
+                            restored_movie, restored_state = read_checkpoint(available_checkpoint)
+                            validate_movie(restored_movie, config)
+                            ready = False
+                            previous = restore_checkpoint(pyboy, restored_movie, restored_state)
+                            movie = restored_movie
+                            ready = True
+                            paused, mask = True, 0
+                            save_movie(output, movie, pyboy)
+                            print(f'Checkpoint loaded at frame {len(movie["frames"])}. Press P to retry.', flush=True)
                         elif key in key_masks:
                             mask = mask | key_masks[key] if down else mask & ~key_masks[key]
             if not running:
@@ -133,7 +201,7 @@ def main():
                     save_movie(output, movie, pyboy)
             if display:
                 status = 'PAUSED' if paused or not focused else 'RECORDING'
-                display.draw(pyboy.screen.ndarray, f'PyBoy {status} | frame {len(movie["frames"])} | Arrows, Z jump, X run, Enter Start | P pause | Esc save')
+                display.draw(pyboy.screen.ndarray, f'PyBoy {status} | frame {len(movie["frames"])} | Z jump, X run | F5 save state, F9 load | P pause | Esc save')
                 time.sleep(max(0, 1 / 60 - (time.perf_counter() - started)))
             if args.frames and len(movie['frames']) - prefix_length >= args.frames:
                 break

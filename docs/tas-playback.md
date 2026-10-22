@@ -256,8 +256,22 @@ The window records the exact held-button mask for every emulated tick, starting
 from fresh cartridge RAM and PyBoy's built-in DMG boot ROM. Arrows move, Z is
 A/jump, X is B/run, Enter is Start, and Backspace is Select. P pauses/resumes;
 Escape or closing the window finishes and saves. Losing focus pauses emulation
-and clears held controls. Paused time contributes no input rows. Save-state,
-rewind, and speed-up shortcuts are not bound.
+and clears held controls. Paused time contributes no input rows.
+
+**F5 saves a checkpoint; F9 loads it and pauses.** Press P to retry. Loading
+rewinds the recorded inputs as well as the game, discarding the failed attempt
+from the current recording. F5 replaces your previous checkpoint for this run.
+Checkpoints persist beside the recording as `pyboy-<timestamp>.state` files and
+include the emulator snapshot and matching input history. To return to one
+after closing the window:
+
+```bash
+/home/pmill/.venvs/sml2-pyboy/bin/python tools/record_play.py --rom ../sml2decomp/baserom.gb --load-state recordings/pyboy-<timestamp>.state
+```
+
+This opens paused, creates a new recording, and preserves the checkpoint you
+loaded. F5 then saves to a new checkpoint beside that new recording. The normal
+recording JSON still replays from fresh RAM with no snapshot required.
 
 The generated file is `recordings/pyboy-<timestamp>.json`. This local directory
 is ignored by Git and survives `cargo clean`. A complete file is published
