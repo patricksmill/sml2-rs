@@ -286,7 +286,9 @@ pub(crate) fn run_play(
                 }
             }
         } else if frozen {
-            if sim.exit_phase {
+            // The session leaves the level the frame after the exit completes,
+            // so a boss clear's leftover fade (and its tally) never runs.
+            if sim.exit_phase && !exit_done_at_entry {
                 sim.exit_fade_step();
             }
             // See the replay loop: `$FF9B = $14` comes from the fade's last
