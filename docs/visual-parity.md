@@ -39,10 +39,10 @@ bug.
 
 ## Not yet checked
 
-- Wario's Castle keeps its own copy of `sMapRasterPhase`
-  (`WarioCastleAnimation::raster_phase`), separate from the hub's. On the
-  ROM they're the same byte, so its bands should continue the hub's phase.
-  No recording covers it.
+- Wario's Castle map screen (screen 7): since `97eaea6` its sky bands share
+  `sMapRasterPhase` with the hub, run in the per-frame VBlank step, and
+  carry their unreset bytes. This follows the ROM source and unit tests;
+  no recording reaches the screen.
 - Level 17's stray left-edge pixel.
 - Ending and Wario's castle: no recording covers them yet (waits on
   `f-wario-played`).
