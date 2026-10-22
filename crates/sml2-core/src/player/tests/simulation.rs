@@ -21,6 +21,56 @@ fn small_sim() -> PlayerSim {
     sim
 }
 
+#[test]
+fn collision_samples_the_wram_mirror_below_the_level_layout() {
+    let mut layout = blank_layout();
+    layout.cells[47 * 256] = 0x31;
+    layout.cells[16 * 256] = 0x4C;
+    layout.cells[45 * 256] = 0x7F;
+    let mut sim = small_sim();
+    // `$1EFA`: row 47 -> $DF00; rows 48/77 -> $E000/$FD00,
+    // which mirror $C000/$DD00. $FE00 is outside the WRAM mirror.
+    assert_eq!(sim.tile(&layout, 8, 768), 0x31);
+    assert_eq!(sim.tile(&layout, 8, 784), 0x4C);
+    assert_eq!(sim.tile(&layout, 8, 1248), 0x7F);
+    assert_eq!(sim.tile(&layout, 8, 1264), 0);
+
+    sim.layout_writes.push((cell_index(16, 0), 0x38));
+    assert_eq!(sim.tile(&layout, 8, 784), 0x38);
+    assert_eq!(sim.tile(&layout, 8, 272), 0x38);
+}
+
+#[test]
+fn bottom_hazard_death_does_not_land_on_an_invented_floor() {
+    let mut layout = blank_layout();
+    layout.cells[47 * 256 + 169] = 0x50;
+    let mut sim = small_sim();
+    sim.x = 2702;
+    sim.y = 742;
+    sim.camx = 2736;
+    sim.camy = 704;
+    sim.powerup = 1;
+    sim.hvel = 0xB8;
+    sim.vvel = 0;
+    sim.on_ground = false;
+    // `$1C6D` kills at screen Y $88. `$129F` probes row 48, whose
+    // echo of row 16 is air; `$156B` still falls 3px before `$319F`.
+    sim.step(
+        &PlayerKeys {
+            right: true,
+            b: true,
+            ..Default::default()
+        },
+        false,
+        false,
+        &layout,
+    );
+    assert_eq!(sim.x.to_le_bytes(), [0x8F, 0x0A]);
+    assert_eq!(sim.y.to_le_bytes(), [0xE9, 0x02]);
+    assert_eq!((sim.hvel, sim.vvel, sim.dead), (0xB8, 0x5F, 0xFF));
+    assert!(!sim.on_ground);
+}
+
 /// The VBlank tail decrements `sFadeTimer` on **every** in-level frame, and
 /// that is not a detail: a scene's own fade is what the boss's parts wait
 /// out before leaving their intro state (`$9C8B`), and `$B14E`'s "the fade

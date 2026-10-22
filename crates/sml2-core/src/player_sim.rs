@@ -679,6 +679,15 @@ impl PlayerSim {
     fn tile(&self, layout: &LevelLayout, px: u16, py: u16) -> u8 {
         let row = ((py.wrapping_sub(16)) >> 4) & 0xFF;
         let col = ((px.wrapping_sub(8)) >> 4) & 0xFF;
+        // `$1EFA` does not clamp to the map: rows $30..$4D address
+        // $E000..$FDFF, the WRAM mirror of $C000..$DDFF (rows $10..$2D).
+        // Falling past the map must sample those cells, including live edits,
+        // rather than manufacture a solid tile at the bottom edge.
+        let row = if (48..78).contains(&row) {
+            row - 32
+        } else {
+            row
+        };
         if (row as usize) < 48 {
             let key = (row as u32) * 256 + col as u32;
             if let Some((_, v)) = self.layout_writes.iter().find(|(k, _)| *k == key) {
@@ -686,7 +695,7 @@ impl PlayerSim {
             }
             layout.cells[(row as usize) * 256 + col as usize]
         } else {
-            0 // out of the 48-row map: engine would read adjacent WRAM; not expected
+            0 // Outside the layout and its WRAM mirror.
         }
     }
 
