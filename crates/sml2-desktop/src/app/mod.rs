@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 mod controls;
 mod debug;
 mod dx;
+mod file_picker;
 mod panels;
 mod startup;
 pub use startup::{run, Options};
@@ -44,6 +45,7 @@ pub struct DesktopApp {
     dx_normal: Option<Game>,
     dx_bundle: Option<sml2_dx::Bundle>,
     dx_worker: Option<crate::dx_import::Worker>,
+    dx_picker: Option<file_picker::FilePicker>,
     dx_message: String,
     texture: TextureHandle,
     screen: Screen,
@@ -104,6 +106,7 @@ impl DesktopApp {
             dx_normal: None,
             dx_bundle: None,
             dx_worker: None,
+            dx_picker: None,
             dx_message: String::new(),
             texture,
             screen,
@@ -231,7 +234,7 @@ impl DesktopApp {
         self.shortcuts(ctx);
         self.poll_dx();
         if self.screen != Screen::Game {
-            if self.capture.is_some() {
+            if self.capture.is_some() || self.dx_picker.is_some() {
                 self.menu.freeze();
             } else {
                 self.menu.start(&mut self.input);

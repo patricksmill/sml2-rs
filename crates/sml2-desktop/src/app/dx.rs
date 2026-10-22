@@ -1,3 +1,4 @@
+use super::file_picker::{FilePicker, PickerResult};
 use super::{DesktopApp, Screen};
 use crate::{
     dx_import::{self, Event, Worker},
@@ -27,6 +28,26 @@ impl DesktopApp {
             .unwrap_or_default();
         for event in events {
             match event {
+                Event::FileChosen(path) => {
+                    let cancelled = self
+                        .dx_worker
+                        .as_ref()
+                        .is_some_and(|w| w.cancelled.load(std::sync::atomic::Ordering::Acquire));
+                    self.dx_worker = None;
+                    if cancelled {
+                        self.dx_message =
+                            "DX import cancelled; previous installation retained".into();
+                    } else if let Some(path) = path {
+                        self.import_dx_path(path);
+                    } else {
+                        self.dx_message =
+                            "No file selected in the system dialog. Choose a ROM in the file browser or cancel."
+                                .into();
+                        self.dx_picker = Some(FilePicker::new(
+                            std::env::current_dir().unwrap_or_else(|_| self.options.assets.clone()),
+                        ));
+                    }
+                }
                 Event::Progress(text) => self.dx_message = text.into(),
                 Event::Finished(result) => {
                     let cancelled = self
@@ -52,27 +73,26 @@ impl DesktopApp {
         }
     }
 
+    pub(super) fn import_dx_path(&mut self, path: std::path::PathBuf) {
+        let assets = self.options.assets.clone();
+        self.dx_picker = None;
+        self.dx_worker = Some(Worker::start(move |cancel, progress| {
+            dx_import::import_path(&dx_import::cache_root()?, &assets, &path, cancel, progress)
+                .map_err(|e| e.to_string())
+        }));
+    }
+
     pub(super) fn dx_controls(&mut self, ctx: &Context, ui: &mut Ui) {
         ui.add_space(12.0);
         ui.strong("DX opening-level preview");
         if self.dx_worker.is_none() {
-            if self.menu.button(ui, "Import SML2DX…") {
-                let assets = self.options.assets.clone();
+            if self.dx_picker.is_none() && self.menu.button(ui, "Import SML2DX…") {
                 self.dx_message = "Choose the patched SML2DX v1.8.1 ROM…".into();
-                self.dx_worker = Some(Worker::start(move |cancel, progress| {
-                    let path = rfd::FileDialog::new()
+                self.dx_worker = Some(Worker::choose_file(|| {
+                    rfd::FileDialog::new()
                         .set_title("Import SML2DX v1.8.1")
                         .add_filter("Game Boy Color ROM", &["gbc", "gb"])
                         .pick_file()
-                        .ok_or_else(|| "DX import cancelled".to_string())?;
-                    dx_import::import_path(
-                        &dx_import::cache_root()?,
-                        &assets,
-                        &path,
-                        cancel,
-                        progress,
-                    )
-                    .map_err(|e| e.to_string())
                 }));
             }
             if self.dx_bundle.is_some() && self.menu.button(ui, "Play DX preview") {
@@ -91,6 +111,15 @@ impl DesktopApp {
             ui.label(&self.dx_message);
         }
         ui.label("Mario · opening level only · progress saves are isolated");
+        let choice = self.dx_picker.as_mut().and_then(|picker| picker.show(ctx));
+        match choice {
+            Some(PickerResult::Selected(path)) => self.import_dx_path(path),
+            Some(PickerResult::Cancelled) => {
+                self.dx_picker = None;
+                self.dx_message = "DX import cancelled; previous installation retained".into();
+            }
+            None => {}
+        }
     }
 
     pub(super) fn start_dx(&mut self, ctx: &Context) {

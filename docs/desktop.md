@@ -56,6 +56,10 @@ against the original UE v1.0 release. The importer supports the exact ROM digest
 documented in the [DX audit](sml2dx-audit.md); other revisions and modified builds
 are rejected. Existing extracted base assets are required.
 
+If the system dialog returns no file (including when a Linux desktop portal is
+unavailable), an in-app file browser opens. Navigate folders or paste the full
+ROM path and choose **Open ROM**. **Cancel** or Escape closes the browser.
+
 Import runs in the background and can be cancelled. Graphics, attributes,
 palettes and mappings are extracted locally into the application's `dx` cache
 directory. A complete bundle is validated before atomic publication. Its identity

@@ -38,7 +38,7 @@ pub(super) fn app() -> (DesktopApp, Context, PathBuf) {
     (app, ctx, directory)
 }
 
-fn frame(app: &mut DesktopApp, ctx: &Context, events: Vec<egui::Event>) -> egui::FullOutput {
+pub(super) fn frame(app: &mut DesktopApp, ctx: &Context, events: Vec<egui::Event>) -> egui::FullOutput {
     let mut raw = RawInput {
         focused: true,
         screen_rect: Some(egui::Rect::from_min_size(

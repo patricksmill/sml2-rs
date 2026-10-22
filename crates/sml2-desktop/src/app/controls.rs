@@ -62,6 +62,15 @@ impl DesktopApp {
             &mut self.input,
             &[Button::key("Escape"), Button::Pad(PadButton::Start)],
         );
+        if self.dx_picker.is_some() {
+            if back || self.input.take_press(&Button::Pad(PadButton::East)) {
+                self.dx_picker = None;
+                self.dx_message = "DX import cancelled; previous installation retained".into();
+                self.input.suppress_until_release();
+            }
+            // Text entry and browser navigation own the keyboard while open.
+            return;
+        }
         if self.capture.is_some() {
             if back {
                 self.capture = None;

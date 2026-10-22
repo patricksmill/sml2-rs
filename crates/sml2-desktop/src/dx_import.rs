@@ -14,6 +14,7 @@ use std::{
 
 pub enum Event {
     Progress(&'static str),
+    FileChosen(Option<PathBuf>),
     Finished(Result<(CacheKey, Bundle), String>),
 }
 
@@ -92,6 +93,17 @@ pub fn restore(
 }
 
 impl Worker {
+    /// rfd uses None for both cancellation and backend failures. Let the UI
+    /// offer its own browser instead of turning either result into an error.
+    pub fn choose_file(picker: impl FnOnce() -> Option<PathBuf> + Send + 'static) -> Self {
+        let (sender, events) = mpsc::channel();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        std::thread::spawn(move || {
+            let _ = sender.send(Event::FileChosen(picker()));
+        });
+        Self { events, cancelled }
+    }
+
     pub fn start(
         job: impl FnOnce(&AtomicBool, &dyn Fn(&'static str)) -> Result<(CacheKey, Bundle), String>
             + Send

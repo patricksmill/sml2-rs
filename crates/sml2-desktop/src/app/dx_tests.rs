@@ -2,6 +2,81 @@ use super::*;
 use crate::dx_import::Worker;
 use sml2_dx::cache::CacheKey;
 
+fn wait_for_dx(app: &mut DesktopApp) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while app.dx_worker.is_some() {
+        assert!(Instant::now() < deadline, "DX worker did not finish");
+        app.poll_dx();
+        std::thread::sleep(Duration::from_millis(1));
+    }
+}
+
+#[test]
+fn system_picker_without_selection_opens_browser_and_preserves_installation() {
+    let (mut app, ctx, path) = super::tests::app();
+    let key = CacheKey::new("1".repeat(64));
+    app.settings.dx_installation = Some(key.clone());
+    app.dx_worker = Some(Worker::choose_file(|| None));
+    wait_for_dx(&mut app);
+    assert!(app.dx_picker.is_some());
+    assert_eq!(app.settings.dx_installation, Some(key.clone()));
+    assert!(!app.dx_message.contains("cancelled"));
+    let output = super::tests::frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::Key {
+            key: egui::Key::Enter,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Default::default(),
+        }],
+    );
+    assert!(!output.shapes.is_empty());
+    assert!(
+        app.screen == Screen::Home,
+        "browser Enter must not activate Play behind it"
+    );
+    assert!(app.dx_picker.is_some());
+    // Escape closes the browser instead of resuming the game behind it.
+    app.input.event(crate::input::Button::key("Escape"), true);
+    app.shortcuts(&ctx);
+    assert!(app.dx_picker.is_none());
+    assert!(app.screen == Screen::Home);
+    assert_eq!(app.settings.dx_installation, Some(key));
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn cancelling_system_picker_job_does_not_open_another_dialog() {
+    let (mut app, _, path) = super::tests::app();
+    let worker = Worker::choose_file(|| None);
+    worker.cancel();
+    app.dx_worker = Some(worker);
+    wait_for_dx(&mut app);
+    assert!(app.dx_picker.is_none());
+    assert!(app.dx_message.contains("cancelled"));
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn browser_selection_uses_existing_rom_validation_and_preserves_installation() {
+    let (mut app, _, path) = super::tests::app();
+    std::fs::create_dir_all(&path).unwrap();
+    let rom = path.join("unsupported.gbc");
+    std::fs::write(&rom, [0; 16]).unwrap();
+    let key = CacheKey::new("1".repeat(64));
+    app.settings.dx_installation = Some(key.clone());
+    app.dx_picker = Some(super::file_picker::FilePicker::new(path.clone()));
+    app.dx_worker = Some(Worker::choose_file(move || Some(rom)));
+    wait_for_dx(&mut app);
+    assert!(app.dx_picker.is_none());
+    assert!(app.dx_message.contains("Unsupported DX ROM"));
+    assert_eq!(app.settings.dx_installation, Some(key));
+    assert!(!path.join("save.sav").exists());
+    let _ = std::fs::remove_dir_all(path);
+}
+
 #[test]
 fn cancelled_and_failed_replacements_preserve_selected_installation() {
     let (mut app, _, path) = super::tests::app();
