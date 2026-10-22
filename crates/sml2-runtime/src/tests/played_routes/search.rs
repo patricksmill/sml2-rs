@@ -54,6 +54,11 @@ enum Verdict {
         /// While `$05D5` locks input (an arena intro), how long is left in
         /// 32-frame steps: waiting longer is progress the position can't show.
         lock: u8,
+        /// Screen distance from Mario to the nearest staged boss part.
+        target: Option<u16>,
+        /// Damage still owed outside the shared hit counter: live definitions
+        /// and the parts' own HP (Mario Zone's pigs take stomps in slots 1-3).
+        parts: i64,
     },
     Failed,
     Arrived {
@@ -155,6 +160,8 @@ fn session_judge(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerKey
                     boss: (ctx.obj.boss_def_count != 0).then_some(ctx.obj.boss_hits_remaining),
                     clear: false,
                     lock: lock_steps(ctx.sim.fade_timer),
+                    target: boss_target(&ctx.sim, &ctx.cam, &ctx.obj),
+                    parts: boss_parts(&ctx.obj),
                 },
             };
         }
@@ -162,6 +169,42 @@ fn session_judge(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerKey
     let _ = std::fs::remove_file(path);
     POOL.lock().unwrap().push(runner.session.assets);
     verdict
+}
+
+/// Mario's screen position is world - camera + (96, 98); the boss pages keep
+/// screen x/y at bytes 10/9 (OAM-style, +8/+16).
+fn boss_target(
+    sim: &PlayerSim,
+    cam: &sml2_core::camera::CameraSim,
+    obj: &sml2_core::objects::ObjectSim,
+) -> Option<u16> {
+    if obj.boss_def_count == 0 {
+        return None;
+    }
+    let mx = i32::from(sim.x) - i32::from(cam.x) + 96;
+    let my = i32::from(sim.y) - i32::from(cam.y) + 98;
+    obj.slots[..4]
+        .iter()
+        .filter(|slot| slot.b[5] != 0)
+        .map(|slot| {
+            let (bx, by) = (i32::from(slot.b[10]) - 8, i32::from(slot.b[9]) - 16);
+            ((bx - mx).abs() + (by - my).abs()) as u16
+        })
+        .min()
+}
+
+/// Each live definition and each point of a part's HP (`activity`, byte 8)
+/// counts below one shared hit.
+fn boss_parts(obj: &sml2_core::objects::ObjectSim) -> i64 {
+    if obj.boss_def_count == 0 {
+        return 0;
+    }
+    let hp: i64 = obj.slots[1..4]
+        .iter()
+        .filter(|slot| slot.b[5] != 0)
+        .map(|slot| i64::from(slot.b[8]))
+        .sum();
+    i64::from(obj.boss_def_count) * 500_000 + hp * 100_000
 }
 
 fn lock_steps(fade_timer: u16) -> u8 {
@@ -249,6 +292,8 @@ fn play_judge_once(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerK
         boss: (outcome.obj.boss_def_count != 0).then_some(outcome.obj.boss_hits_remaining),
         clear: switch("ROUTE_BOSS") && outcome.sim.boss_clear,
         lock: lock_steps(outcome.sim.fade_timer),
+        target: boss_target(&outcome.sim, &outcome.cam, &outcome.obj),
+        parts: boss_parts(&outcome.obj),
     }
 }
 
@@ -376,9 +421,13 @@ fn search_route() {
             boss,
             clear,
             lock,
+            target,
+            parts,
         } => {
             let mut reached = 0;
-            let s = score(&goals, &mut reached, x, y, ground) + boss_score(boss, clear);
+            let s = score(&goals, &mut reached, x, y, ground) + boss_score(boss, clear)
+                - i64::from(target.unwrap_or(0))
+                - parts;
             archive.insert(
                 (
                     x >> 4,
@@ -522,9 +571,15 @@ fn search_route() {
                     boss,
                     clear,
                     lock,
+                    target,
+                    parts,
                 } => {
+                    // Closeness to a boss part breaks ties between equal hit
+                    // counts; it never outweighs a hit.
                     let s = score(&goals, &mut reached, x, y, ground) + boss_score(boss, clear)
-                        - i64::from(lock) * 1_000;
+                        - i64::from(lock) * 1_000
+                        - i64::from(target.unwrap_or(0))
+                        - parts;
                     let key = (
                         x >> 4,
                         y >> 4,
