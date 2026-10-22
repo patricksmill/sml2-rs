@@ -361,14 +361,16 @@ def shade_indices(grey, shades):
 
 def pixel_row(index, memory, rom_screen, native, previous_native):
     """One --pixel-report record: where the ROM is, and how many of the 23,040
-    pixels differ from the port's frame (and from its previous frame, which
-    exposes a one-frame presentation offset)."""
+    pixels differ in DMG shade. The console shows a tick's result a frame
+    later than the native renderer (by design, see DESIGN.md), so `diff`
+    compares against the port's previous frame; `diff_same` against its
+    current one."""
     rom = shade_indices(rom_screen[:, :, 0], ROM_SHADES)
     port = shade_indices(native[:, :, 0], PORT_SHADES)
     row = {'row': index, 'state': memory[0xFF9B], 'level': memory[0xA269],
-           'map': memory[0xA68B], 'diff': int((rom != port).sum())}
+           'map': memory[0xA68B], 'diff_same': int((rom != port).sum())}
     if previous_native is not None:
-        row['diff_prev'] = int((rom != shade_indices(previous_native[:, :, 0], PORT_SHADES)).sum())
+        row['diff'] = int((rom != shade_indices(previous_native[:, :, 0], PORT_SHADES)).sum())
     return row
 
 
@@ -401,7 +403,8 @@ def main():
                         help='comma-separated input rows for --pixel-dump')
     parser.add_argument('--pixel-report', type=Path, metavar='PATH',
                         help='write one JSON line per input row: ROM state/level/map and the '
-                             'count of shade-differing pixels against the port frame')
+                             'count of shade-differing pixels against the port frame showing '
+                             'the same game state (the previous one)')
     args = parser.parse_args()
     trace = args.trace
     movie = json.loads(args.movie.read_text())

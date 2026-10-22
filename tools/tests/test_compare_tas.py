@@ -420,8 +420,9 @@ class PixelReportTests(unittest.TestCase):
         port[:, :, :3] = 170  # the port's light grey
         port[0, :3, :3] = 85
         row = compare_tas.pixel_row(7, memory, rom, port, None)
-        self.assertEqual(row, {'row': 7, 'state': 4, 'level': 3, 'map': 0x2B, 'diff': 3})
-        self.assertEqual(compare_tas.pixel_row(7, memory, rom, rom * 0 + 255, port)['diff_prev'], 3)
+        self.assertEqual(row, {'row': 7, 'state': 4, 'level': 3, 'map': 0x2B, 'diff_same': 3})
+        # The ROM's frame shows the state the port drew one frame earlier.
+        self.assertEqual(compare_tas.pixel_row(7, memory, rom, rom * 0 + 255, port)['diff'], 3)
 
     @unittest.skipUnless(HAVE_NUMPY, 'numpy is in the PyBoy comparison environment')
     def test_unknown_greys_are_rejected(self):

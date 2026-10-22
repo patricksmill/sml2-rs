@@ -109,6 +109,12 @@ satisfied by keeping the seams below intact — do not bake these away:
 - Practical note: OAM shadow state is already staged per tick
   (`$A100`/`$FF8D`); the interpolating renderer builds its own display list
   from slot snapshots rather than drawing the staged OAM directly.
+- **Presentation latency is not a parity target.** The console shows a
+  tick's result one frame later (it draws from the previous frame's VBlank
+  shadows); the native renderer shows it on the tick that produced it. That
+  lower latency is intentional — this is a native port, not an emulator.
+  ROM-versus-port pixel comparisons pair ROM frame N with port frame N-1
+  (`tools/compare_tas.py --pixel-report`'s `diff`).
 
 ### 3. Variable screen sizes & the display pipeline
 
