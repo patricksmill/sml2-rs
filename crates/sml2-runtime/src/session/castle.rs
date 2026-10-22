@@ -25,6 +25,8 @@ impl Session {
             &mut self.castle_progress,
         );
         self.level_tally = seq.level_tally;
+        // The reveal's coin walk steps `$A222` by 8; the next level starts there.
+        self.walk_timer = seq.walk_anim;
         if let Some(music) = out.music {
             self.sound_driver.music_request = music;
         }
@@ -46,6 +48,7 @@ impl Session {
                     ctx.sim.map_node = node;
                     ctx.sim.level_progress = self.castle_progress;
                     ctx.sim.level_tally = self.level_tally;
+                    ctx.sim.walk_timer = self.walk_timer;
                 }
                 self.castle_return = None;
                 if self.easy_mode {

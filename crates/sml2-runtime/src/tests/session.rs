@@ -842,8 +842,9 @@ fn dying_in_a_zone_level_returns_to_that_zone() {
     );
 }
 
-/// `$A27C` and `$A284` have no writer on the map or in the level load, so a
-/// clear of Mario Zone 1 (node `$50`) carries the charge into level 11.
+/// `$A27C`, `$A284` and the walk timer `$A222` have no writer on the map or in
+/// the level load, so a clear of Mario Zone 1 (node `$50`) carries them into
+/// level 11.
 #[test]
 fn flutter_charge_survives_a_level_change() {
     use crate::session::{FrameInput, Session};
@@ -875,6 +876,7 @@ fn flutter_charge_survives_a_level_change() {
         };
         ctx.sim.flutter_armed = true;
         ctx.sim.flutter_charge = 1;
+        ctx.sim.walk_timer = 7;
         ctx.sim.exit_phase = true;
         ctx.sim.exit_completed = true;
         ctx.sim.fade_timer = 0;
@@ -924,6 +926,53 @@ fn flutter_charge_survives_a_level_change() {
     };
     assert!(ctx.sim.flutter_armed, "sFlutterArmed survives the map");
     assert_eq!(ctx.sim.flutter_charge, 1, "sFlutterCharge survives the map");
+    assert_eq!(ctx.sim.walk_timer, 7, "sMarioWalkAnimTimer survives the map");
+}
+
+/// The reveal's coin walk (`$4485`) steps `$A222` by 8, and nothing on the
+/// map or in the level load writes it again: the next level's walk cycle
+/// starts from where the reveal left it.
+#[test]
+fn the_reveal_walk_timer_reaches_the_next_level() {
+    use crate::session::{FrameInput, Session};
+    let mut session = Session::new(SessionAssets::load().expect("session assets"));
+    let mut seq = sml2_core::castle_sequence::CastleSequence::default();
+    seq.enter(&[0x80, 0x80, 0, 0x80, 0x80, 0x80]);
+    seq.level = 23;
+    seq.state = sml2_core::castle_sequence::STATE_REVEAL_D;
+    session.begin_castle_sequence(seq, 6, 0x50, 0);
+    let tick = |session: &mut Session, keys: PlayerKeys| {
+        session.advance(FrameInput { keys, div: 0 }).outcome
+    };
+    let mut walk_anim = 0;
+    for _ in 0..4000 {
+        if let SessionState::Castle(seq) = &session.state {
+            walk_anim = seq.walk_anim;
+        }
+        tick(&mut session, PlayerKeys::default());
+        if matches!(session.state, SessionState::Overworld(_)) {
+            break;
+        }
+    }
+    assert!(matches!(session.state, SessionState::Overworld(_)));
+    assert_ne!(walk_anim, 0, "the coin walk stepped the timer");
+    // Press A every other frame until the map accepts it and the level loads.
+    let mut entered = None;
+    for frame in 0..600 {
+        let keys = PlayerKeys {
+            a: frame % 2 == 0,
+            ..PlayerKeys::default()
+        };
+        if let StepOutcome::LevelEntered(id) = tick(&mut session, keys) {
+            entered = Some(id);
+            break;
+        }
+    }
+    assert!(entered.is_some(), "node $50 enters its level");
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!()
+    };
+    assert_eq!(ctx.sim.walk_timer, walk_anim);
 }
 
 /// `$022A` clears HRAM only at startup; `$EBBB` resets scratch on each load.

@@ -795,6 +795,9 @@ pub struct Session {
     flutter: u8,
     flutter_armed: bool,
     flutter_charge: u8,
+    /// `sMarioWalkAnimTimer` `$A222`: likewise untouched by level load and the
+    /// map, so the next level's walk cycle continues from the last one.
+    walk_timer: u8,
     pub prev_keys_held: u8,
     pub prev_a: bool,
     pub prev_b: bool,
@@ -1032,6 +1035,7 @@ impl Session {
             flutter: 0,
             flutter_armed: false,
             flutter_charge: 0,
+            walk_timer: 0,
             prev_keys_held: 0,
             prev_a: false,
             prev_b: false,
@@ -1503,6 +1507,7 @@ impl Session {
                             ctx.sim.flutter = self.flutter;
                             ctx.sim.flutter_armed = self.flutter_armed;
                             ctx.sim.flutter_charge = self.flutter_charge;
+                            ctx.sim.walk_timer = self.walk_timer;
                             // $3C1A2 stops the map theme before loading. `$3E9FB`
                             // fades the map out and the level goes live on the
                             // first state-`$04` frame, `MAP_ENTRY_FRAMES` later.
@@ -1658,6 +1663,7 @@ impl Session {
                     self.flutter = sim.flutter;
                     self.flutter_armed = sim.flutter_armed;
                     self.flutter_charge = sim.flutter_charge;
+                    self.walk_timer = sim.walk_timer;
                     sim.game_over_enter();
                     self.lives = sim.lives;
                     self.coins_low = sim.coins_low;
@@ -1678,6 +1684,7 @@ impl Session {
                     self.flutter = ctx.sim.flutter;
                     self.flutter_armed = ctx.sim.flutter_armed;
                     self.flutter_charge = ctx.sim.flutter_charge;
+                    self.walk_timer = ctx.sim.walk_timer;
                     let handoff = ctx
                         .map_handoff
                         .unwrap_or_else(|| ctx.sim.map_handoff(&self.assets.nodes));

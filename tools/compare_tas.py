@@ -45,7 +45,7 @@ def read_state(pipe):
                 if key not in {"step", "fff0", "update_phase", "standing", "scene", "owns", "pc",
                                "boss_x", "boss_state", "door_phase", "door_parity",
                                "platform_sprite", "tile_anim", "writes", "tile_timer", "tile_phase",
-                               "ff97", "bag", "pow"}:
+                               "ff97", "bag", "pow", "wt"}:
                     raise ValueError("unknown diagnostic field")
                 state[key] = int(value)
     except ValueError as exc:
@@ -281,7 +281,8 @@ def trace_line(index, mask, rom, port):
     if 'bag' in port:
         # sMoneyBagCount (the HUD's enemy counter) and sCurPowerup.
         line += (f" | bag ROM {rom[0xA28D]} port {port['bag']}"
-                 f" pow ROM {rom[0xA216]} port {port['pow']}")
+                 f" pow ROM {rom[0xA216]} port {port['pow']}"
+                 f" wt ROM {rom[0xA222]} port {port.get('wt', 0)}")
     return line
 
 

@@ -167,11 +167,11 @@ fn write_frame(
                 let boss = &c.obj.slots[0].b;
                 let platform = &c.obj.slots[1].b;
                 line.push_str(&format!(
-                    " boss_x={} boss_state={} door_phase={} door_parity={} platform_sprite={} tile_anim={} writes={} tile_timer={} tile_phase={} ff97={} bag={} pow={}",
+                    " boss_x={} boss_state={} door_phase={} door_parity={} platform_sprite={} tile_anim={} writes={} tile_timer={} tile_phase={} ff97={} bag={} pow={} wt={}",
                     boss[10], boss[15], c.obj.door_phase, c.obj.door_parity,
                     platform[11], c.sim.tile_anim_config, c.sim.layout_writes.len(),
                     c.tile_animation.timer, c.tile_animation.phase, session.ff97(),
-                    c.obj.money_bag, c.sim.powerup
+                    c.obj.money_bag, c.sim.powerup, c.sim.walk_timer
                 ));
             } else {
                 let clock = session.tile_animation_clock();
