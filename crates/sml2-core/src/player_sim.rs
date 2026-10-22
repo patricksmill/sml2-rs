@@ -1554,17 +1554,15 @@ impl PlayerSim {
 
     /// `$129F` → `$12CE`: landing response for a floor tile.
     fn landing(&mut self, tile: u8, keys: &PlayerKeys) {
-        if tile & 0xFE == 0x04 {
+        // `$12CE`: conveyor floor. Only the odd-phase frame that moves Mario
+        // writes `sSidePushDir`; `$5D25` cleared it at the update's start.
+        if tile & 0xFE == 0x04 && self.phase & 1 == 1 {
             if tile == 0x05 {
                 self.side_push_dir = 0xFF;
-                if self.phase & 1 == 1 {
-                    self.x = self.x.wrapping_sub(1);
-                }
+                self.x = self.x.wrapping_sub(1);
             } else {
                 self.side_push_dir = 1;
-                if self.phase & 1 == 1 {
-                    self.x = self.x.wrapping_add(1);
-                }
+                self.x = self.x.wrapping_add(1);
             }
         }
         // $1327: a spinning Mario ($126F) runs the bonk classification
@@ -1721,6 +1719,8 @@ impl PlayerSim {
     ) {
         self.tick_fade_timer();
         self.phase = self.frame_phase();
+        // `$05E4` -> `$2C61` -> `$5D25` clears `sSidePushDir` before `$0F71`.
+        self.side_push_dir = 0;
         // $13FE
         self.x_sub = 0;
         self.x_pushed = false;

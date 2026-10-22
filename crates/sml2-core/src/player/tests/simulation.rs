@@ -3859,6 +3859,30 @@ fn side_pipe_entry_supports_both_right_and_left_facing_pipes() {
 }
 
 #[test]
+fn conveyor_side_push_latches_only_on_the_odd_phase_push() {
+    // `$5D25` zeroes `sSidePushDir` before every `$0F71`, and `$12CE` writes
+    // it only on the odd-phase frame that moves Mario. An even-phase frame
+    // must not start side-pipe travel from the previous frame's push.
+    let mut bytes = vec![0x60; LAYOUT_SIZE];
+    bytes[cell_index(14, 6) as usize] = 0x05;
+    bytes[cell_index(14, 7) as usize] = 0x05;
+    let layout = LevelLayout::from_bytes(&bytes).unwrap();
+    let mut sim = small_sim();
+    sim.y = 196;
+    sim.camx = 100;
+    sim.on_ground = true;
+    sim.phase = 1;
+    sim.step(&PlayerKeys::default(), false, false, &layout);
+    assert_eq!((sim.x, sim.side_push_dir), (99, 0xFF));
+    sim.phase = 2;
+    sim.step(&PlayerKeys::default(), false, false, &layout);
+    assert_eq!((sim.x, sim.side_push_dir), (99, 0));
+    sim.pipe_dir = 3;
+    sim.pipe_entry(&PlayerKeys::default());
+    assert_eq!(sim.pipe_dir, 3);
+}
+
+#[test]
 fn pipe_travel_horizontal_sets_x_sub_for_camera_follow() {
     let mut layout_bytes = vec![0x60; 256 * 48];
     // Surround x=100 with wall tiles at x=90..110 so pipe travel remains active
