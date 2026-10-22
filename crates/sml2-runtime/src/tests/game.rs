@@ -1,6 +1,48 @@
 use super::*;
 
 #[test]
+fn checkpoint_loader_scans_the_initial_edge_before_the_camera_moves() {
+    use sml2_core::level::SpawnRecord;
+    use sml2_core::objects::{MarioContact, ObjectSim};
+
+    let tables = pan_sprites(None).tables;
+    let layout = LevelLayout::from_bytes(&[0x60; 0x3000]).unwrap();
+    let record = SpawnRecord {
+        x: 0x0788,
+        y: 0x0140,
+        anim_index: 88,
+        mode_flag: 0,
+        sprite_id: 0,
+        hitbox: [0; 4],
+        raw: [7, 0x88, 0, 1, 0x40, 88],
+    };
+    // Level 2 checkpoint: camera $071F, whose right scan edge is $0788.
+    // `$EC40` clears $AF24/$AF25, so even a stationary first frame scans.
+    let mut objects = ObjectSim::new(vec![record], 0x071F);
+    objects.configure(2);
+    initialize_level_objects(&mut objects, 0x62);
+    assert_eq!(objects.prev_cam_x.to_be_bytes(), [0, 0]);
+    objects.step(
+        0x071F,
+        0x008E,
+        &layout,
+        &tables,
+        &MarioContact::default(),
+        false,
+    );
+    assert_eq!((objects.fff0, objects.update_phase), (0x63, 1));
+    assert_eq!(
+        objects.slots[0].b,
+        [
+            7, 0x88, 0, 1, 0x40, 88, 0xAB, 8, 1, 0, 0, 0x49, 0, 0, 0, 0, 0, 0, 0, 0xF3, 0xFD, 0xFA,
+            6, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]
+    );
+    assert_eq!(objects.records[0].mode_flag, 2);
+    assert!(objects.slots[1..].iter().all(|slot| slot.b == [0; 32]));
+}
+
+#[test]
 fn secret_route_entry_consumes_map_progress_and_reloads_stored_start() {
     use sml2_core::level::LevelStart;
     use sml2_core::map::{MapNodeRecords, MapNodes, MapWalk};
