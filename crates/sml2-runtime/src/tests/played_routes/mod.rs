@@ -402,7 +402,9 @@ fn level29_timed_float_header_spawn_to_bell_through_live_play() {
     let arm = outcome
         .bell_arm
         .expect("native timed-float approach must arm the bell");
-    assert_eq!((arm.frame, arm.position), (2584, (1507, 436)));
+    // $15CF cancels timed flight on ceiling contact, allowing the tape to
+    // land and resume its next jump sooner.
+    assert_eq!((arm.frame, arm.position), (2284, (1507, 436)));
     assert_eq!(outcome.frames, 3400);
     assert_eq!((outcome.cam.x, outcome.cam.y), (1456, 448));
     assert_eq!(

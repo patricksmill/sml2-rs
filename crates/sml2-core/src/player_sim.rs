@@ -1903,6 +1903,7 @@ impl PlayerSim {
                 // classification) before re-arming the pipe trigger from the
                 // bonked tile ($0A/$0B = the up-pipe mouth: dir 2).
                 self.y = saved_y;
+                self.moon_float_timer = 0; // $15CF: a bonk cancels timed flight.
                 self.vvel = 24;
                 self.collision_tile = t;
                 self.block_bonk(t);

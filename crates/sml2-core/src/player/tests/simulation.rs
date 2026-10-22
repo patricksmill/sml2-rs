@@ -1575,6 +1575,45 @@ fn the_bit3_timed_float_arms_on_the_ground_and_spends_its_budget() {
     assert_eq!(sim.vvel, 40);
 }
 
+#[test]
+fn ceiling_bonk_cancels_timed_float_before_the_next_held_a_frame() {
+    let held = PlayerKeys {
+        a: true,
+        ..Default::default()
+    };
+    for (powerup, start_y) in [(0, 196u16), (1, 206), (2, 206)] {
+        for (tile, bonks) in [(0x37, true), (0x7E, true), (0x60, false)] {
+            let mut layout = blank_layout();
+            // The one-pixel ascent puts the ceiling probe at (116, 223),
+            // row 12 / column 6. Side probes remain in empty rows below.
+            layout.cells[12 * 256 + 6] = tile;
+            let mut sim = small_sim();
+            sim.y = start_y;
+            sim.powerup = powerup;
+            sim.moon = 8;
+            sim.moon_float_timer = 20;
+            sim.vvel = 40;
+            sim.on_ground = false;
+            sim.in_air = true;
+
+            sim.step(&held, false, false, &layout);
+            if bonks {
+                // $15CF restores Y, clears $A2B2, then writes $A201 = $18.
+                assert_eq!(sim.y.to_le_bytes(), [start_y as u8, 0]);
+                assert_eq!([sim.moon_float_timer, sim.vvel], [0, 0x18]);
+                sim.step(&held, false, false, &layout);
+                // $1029 now returns with no budget. $1533 decrements to $17,
+                // whose $1947 entry is +1, even though A is still held.
+                assert_eq!(sim.y.to_le_bytes(), [start_y as u8 + 1, 0]);
+                assert_eq!([sim.moon_float_timer, sim.vvel], [0, 0x17]);
+            } else {
+                assert_eq!(sim.y.to_le_bytes(), [start_y as u8 - 1, 0]);
+                assert_eq!([sim.moon_float_timer, sim.vvel], [19, 41]);
+            }
+        }
+    }
+}
+
 /// `$1055` — inside a moon zone (bit 1) an A *press* sets vvel 52 and arms
 /// the 8-frame pose timer once; without a press the whole arm returns.
 #[test]
