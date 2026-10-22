@@ -169,6 +169,71 @@ fn handler_0x58e7e_carries_a_stood_on_rider_on_both_axes() {
 }
 
 #[test]
+fn handler_0x58e7e_horizontal_carry_publishes_direction_gated_scroll() {
+    // `$3CC0`: right carry adds scroll when hvel >= $80.
+    // `$3CF1`: left carry adds scroll when hvel < $81.
+    for (state, hvel, x, right, left) in [
+        (1, 0x80, 99u16, 0, 1),
+        (1, 0x81, 99, 0, 0),
+        (6, 0x80, 99, 0, 1),
+        (6, 0x81, 99, 0, 0),
+        (2, 0x7F, 101, 0, 0),
+        (2, 0x80, 101, 1, 0),
+        (4, 0x7F, 101, 0, 0),
+        (4, 0x80, 101, 1, 0),
+    ] {
+        let (mut sim, mut st) = fixture(state);
+        position(&mut st.b, 100, 100);
+        st.b[23] = 8;
+        st.b[25] = 2;
+        sim.mario.x = 100;
+        sim.mario.hvel = hvel;
+        let mut expected = st.b;
+        expected[0..2].copy_from_slice(&x.to_be_bytes());
+        expected[25] = 1;
+        sim.handler_0x58e7e(&mut st);
+        assert_eq!(st.b, expected);
+        assert_eq!(sim.mario_x_adjust.unwrap().to_be_bytes(), x.to_be_bytes());
+        assert_eq!(
+            [sim.scroll_delta_right, sim.scroll_delta_left],
+            [right, left]
+        );
+    }
+}
+
+#[test]
+fn handler_0x58e7e_carry_reaches_the_next_camera_step() {
+    use crate::{camera::CameraSim, player_sim::PlayerSim};
+
+    let (mut objects, mut st) = fixture(2);
+    position(&mut st.b, 332, 720);
+    st.b[23] = 8;
+    st.b[25] = 2;
+    objects.mario.x = 331;
+    objects.mario.y = 677;
+    objects.mario.hvel = 0x80;
+    objects.handler_0x58e7e(&mut st);
+    let mut player = PlayerSim::new();
+    player.x = 331;
+    player.y = 677;
+    player.apply_object_result(&mut objects, false);
+    assert_eq!(player.x.to_le_bytes(), [0x4C, 1]);
+
+    let mut camera = CameraSim::new(331, 691);
+    camera.right_enabled = true;
+    camera.edge_now = Some(0);
+    camera.apply_object_result(&mut objects);
+    assert_eq!(
+        [objects.scroll_delta_right, camera.scroll_delta_right],
+        [0, 1]
+    );
+    camera.step(&mut player);
+    // `$0B90`: inherited delta 1 plus the one-pixel centering correction.
+    assert_eq!(camera.x.to_le_bytes(), [0x4D, 1]);
+    assert_eq!(camera.scroll_delta_right, 0);
+}
+
+#[test]
 fn handler_0x58e7e_invalid_states_report_the_entry() {
     for state in 7..=255 {
         let (mut sim, mut st) = fixture(state);
