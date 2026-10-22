@@ -147,6 +147,93 @@ fn level14_mario_zone_boss_header_spawn_to_map_through_live_play() {
     assert!(!handoff.cutscene);
 }
 
+/// Level 17 (TurtleZone3): the scene `$0E` block at (2816-3071, 256-511) loads the Turtle Zone arena.
+const LEVEL17: &str = "\
+         RA*4 -*8 RAB*120 R*12 LUA*2 A*56 RB*80 R*16 UA*84 RB*8 RUAB*64 RB*36 RUAB*94 RB*24 \
+         RAB*32 -*8 RUA*48 RUAB*16 LB*12 A*4 RUA*8 RB*24 UA*32 RUA*48 D*8 LAB*4 UA*14 LAB*32 \
+         R*66 D*36 RA*12 LUA*48 RB*50 A*44 RB*18 RA*24 RB*134 L*82 RUAB*98 RB*12 RA*18 R*12 \
+         RUA*106 D*12 RUA*16 RB*72 -*24 RUAB*48 LB*24 LUA*2 RA*248 RB*4 RUAB*12 R*32 RUAB*44 \
+         RB*40 RAB*64 RUA*32 RUAB*20 LAB*2 UA*2 LA*4 A*40 -*32 LUA*16 RUAB*48 A*4 RUAB*48 \
+         UA*16 RB*50 D*12 R*24 RUAB*56 A*50 RA*24 L*16 RUAB*48 RB*32 A*12 RB*32 RAB*36 RB*12 \
+         RA*52 LB*18 RAB*120 D*2 RUA*40 R*6 RA*54 RB*2 RUA*2 RB*4 RA*98 R*2 RUA*228 R*2 A*8 \
+         R*40 RA*52 RB*700 RUA*52 LB*16 D*24 RB*32 RUA*48 LB*48 RUA*104 D*48 RUA*48 RB*1 \
+         LUA*37 -*552 -*200";
+
+#[test]
+fn level17_turtle_zone_boss_header_spawn_to_map_through_live_play() {
+    let outcome = run_header_route(17, spans(LEVEL17), |manifest, _, sim, cam, nodes| {
+        assert_eq!(manifest.level_id, 16);
+        assert_eq!(manifest.spawns.records.len(), 23);
+        assert_eq!((sim.x, sim.y, cam.x, cam.y), (36, 436, 80, 448));
+        assert_eq!(
+            (sim.map_node, nodes.progress_slot(sim.map_node)),
+            (73, Some(23))
+        );
+    });
+    assert!(outcome.sim.boss_clear);
+    assert_eq!(outcome.obj.boss_hits_remaining, 0);
+    assert_eq!(
+        (outcome.exit_completed_frame, outcome.map_handoff_frame),
+        (Some(5407), Some(5408))
+    );
+    assert_eq!(outcome.sim.dead, 0);
+    assert!(outcome.obj.unported.is_empty());
+    assert_eq!(outcome.sim.level_tally, 1);
+    assert_eq!(outcome.sim.music_request, 15, "the clear's song");
+    assert_eq!(outcome.sim.level_progress[23], 0x80);
+    assert_eq!(outcome.sim.save_record(0)[8 + 23], 0x80);
+    assert_eq!(outcome.sim.golden_coin_count(), 1);
+    let handoff = outcome.map_handoff.expect("the live handoff must run");
+    // `$1E` is the hub's Turtle Zone door.
+    assert_eq!(
+        (handoff.node, handoff.screen, handoff.music, handoff.saves),
+        (0x1E, Some(0), Some(6), 1)
+    );
+    assert!(!handoff.cutscene);
+}
+
+/// Level 24 (MacroZone4): the scene `$0F` block at (2816-3071, 256-511) loads the Macro Zone arena.
+const LEVEL24: &str = "\
+         RB*36 RA*116 -*12 RUA*24 RB*76 RUAB*60 LUA*18 R*88 L*14 R*24 UA*54 RB*12 RUAB*178 \
+         R*12 RUAB*62 R*136 RUAB*76 A*8 LB*12 RB*12 RA*132 RB*48 RUA*24 RB*48 RAB*16 R*32 \
+         UA*32 R*16 RAB*76 -*44 RUAB*12 R*28 RUA*40 RUAB*64 D*4 A*48 D*2 RA*56 LB*60 RUA*24 \
+         RB*48 RA*85 L*8 RAB*60 -*12 LA*2 RB*16 RUAB*48 LA*24 D*17 A*12 RB*48 RAB*4 RB*246 \
+         RAB*22 RB*4 RAB*116 -*4 RAB*48 -*16 RUAB*424 L*32 RUAB*240 RB*1 LA*132 RAB*98 L*16 \
+         RA*309 -*360 -*200";
+
+#[test]
+fn level24_macro_zone_boss_header_spawn_to_map_through_live_play() {
+    let outcome = run_header_route(24, spans(LEVEL24), |manifest, _, sim, cam, nodes| {
+        assert_eq!(manifest.level_id, 23);
+        assert_eq!(manifest.spawns.records.len(), 24);
+        assert_eq!((sim.x, sim.y, cam.x, cam.y), (44, 468, 80, 448));
+        assert_eq!(
+            (sim.map_node, nodes.progress_slot(sim.map_node)),
+            (53, Some(14))
+        );
+    });
+    assert!(outcome.sim.boss_clear);
+    assert_eq!(outcome.obj.boss_hits_remaining, 0);
+    assert_eq!(
+        (outcome.exit_completed_frame, outcome.map_handoff_frame),
+        (Some(4287), Some(4288))
+    );
+    assert_eq!(outcome.sim.dead, 0);
+    assert!(outcome.obj.unported.is_empty());
+    assert_eq!(outcome.sim.level_tally, 1);
+    assert_eq!(outcome.sim.music_request, 15, "the clear's song");
+    assert_eq!(outcome.sim.level_progress[14], 0x80);
+    assert_eq!(outcome.sim.save_record(0)[8 + 14], 0x80);
+    assert_eq!(outcome.sim.golden_coin_count(), 1);
+    let handoff = outcome.map_handoff.expect("the live handoff must run");
+    // `$1B` is the hub's Macro Zone door.
+    assert_eq!(
+        (handoff.node, handoff.screen, handoff.music, handoff.saves),
+        (0x1B, Some(0), Some(6), 1)
+    );
+    assert!(!handoff.cutscene);
+}
+
 /// Prints the map-entered session's state through `ROUTE_TAPE` at
 /// `ROUTE_EVERY`-frame steps, to compare with `search::trace_route`.
 #[test]
@@ -193,6 +280,21 @@ fn trace_session_route() {
                 ctx.sim.paused,
                 ctx.sim.fade_timer
             );
+            if std::env::var("ROUTE_SLOTS").is_ok() {
+                let slots: Vec<_> = ctx.obj.slots[..4]
+                    .iter()
+                    .map(|slot| (slot.b[5], slot.b[10], slot.b[9]))
+                    .collect();
+                println!(
+                    "  slots {slots:?} div {} pow {} inv {} vv {} hv {} ground {}",
+                    ctx.obj.div,
+                    ctx.sim.powerup,
+                    ctx.sim.invincibility,
+                    ctx.sim.vvel,
+                    ctx.sim.hvel,
+                    ctx.sim.on_ground
+                );
+            }
             if ctx.sim.dead != 0 {
                 break;
             }

@@ -668,7 +668,13 @@ fn trace_route() {
                 .map(|slot| (slot.b[5], slot.b[10], slot.b[9]))
                 .collect();
             println!(
-                "  slots {slots:?} cam ({},{}) handoff {:?} exit {} {:?} map {:?} unported {:?}",
+                "  slots {slots:?} div {} pow {} inv {} vv {} hv {} ground {} cam ({},{}) handoff {:?} exit {} {:?} map {:?} unported {:?}",
+                outcome.obj.div,
+                outcome.sim.powerup,
+                outcome.sim.invincibility,
+                outcome.sim.vvel,
+                outcome.sim.hvel,
+                outcome.sim.on_ground,
                 outcome.cam.x,
                 outcome.cam.y,
                 outcome.obj.boss_clear_handoff,
