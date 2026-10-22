@@ -701,12 +701,10 @@ impl ObjectSim {
         st.b = actor.to_raw_slot();
         match result {
             Ok(reactions::DefeatEffect::None) => {}
-            // $581E2's tail also counts `sBossDefeated` down; the port models
-            // that byte as a bool (the boss item), so there is nothing to
-            // decrement here yet.
             Ok(reactions::DefeatEffect::Remove) => {
                 self.remove_mode = 2;
                 self.remove_object(st, tables);
+                self.count_down_boss_defeated();
             }
             Err(_) => self.note_unported(0x581CE),
         }

@@ -367,6 +367,7 @@ impl LevelContext {
                         self.obj.note_blocked_scene_load();
                     }
                 }
+                self.obj.sample_camera_inputs(&self.cam);
                 self.obj.step(
                     self.cam.x,
                     self.cam.y,

@@ -270,7 +270,7 @@ mod tests {
         sim.money_bag = 2;
         sim.secret_route = true;
         sim.bounce = true;
-        sim.boss_defeated = true;
+        sim.boss_defeated = 1;
         sim.boss_5290 = 1;
         sim.boss_clear_flag = 1;
         sim.mario_dead = 1;
@@ -310,7 +310,7 @@ mod tests {
                 sim.boss_clear_flag,
                 sim.mario_dead,
             ),
-            (0x42, 1, 3, 2, true, true, true, 1, 1, 1)
+            (0x42, 1, 3, 2, true, true, 1, 1, 1, 1)
         );
         assert_eq!(
             (sim.music_request, sim.sfx0, sim.sfx1, sim.sfx2),

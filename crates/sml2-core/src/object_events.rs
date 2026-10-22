@@ -14,8 +14,16 @@ impl ObjectSim {
     }
 }
 
+impl ObjectSim {
+    /// Sample camera-owned WRAM immediately before the object pass.
+    pub fn sample_camera_inputs(&mut self, camera: &CameraSim) {
+        self.boss_defeated = camera.boss_defeated;
+    }
+}
+
 impl CameraSim {
     pub fn apply_object_result(&mut self, obj: &mut ObjectSim) {
+        self.boss_defeated = obj.boss_defeated;
         if let Some(timer) = obj.camera_pan_set.take() {
             // Objects run after scroll and Mario draw: their new timer first
             // affects the next frame's scroll and draw phases.
@@ -39,6 +47,20 @@ impl CameraSim {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_remaining_enemy_count_round_trips_through_the_object_pass() {
+        // `sBossDefeated` is one byte: the camera's park reads it and the
+        // object pass's `$581E2` removal counts it down.
+        let mut cam = CameraSim::new(0, 0);
+        cam.boss_defeated = 2;
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        obj.sample_camera_inputs(&cam);
+        assert_eq!(obj.boss_defeated, 2);
+        obj.boss_defeated = 0;
+        cam.apply_object_result(&mut obj);
+        assert_eq!(cam.boss_defeated, 0);
+    }
 
     #[test]
     fn the_goal_bell_reaches_the_object_engine() {

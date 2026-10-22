@@ -742,7 +742,9 @@ pub struct ObjectSim {
     pub boss_transition: u8,
     /// `$AFCF`: Wario intro door-animation latch.
     pub ending_door_active: u8,
-    pub boss_defeated: bool,
+    /// `sBossDefeated` (`$A2E0`): the room's remaining-enemy count, mirrored
+    /// from the camera for the pass and written back after it.
+    pub boss_defeated: u8,
     pub boss_slots_raw: [u8; 512],
     pub boss_oam: Vec<BossOamCell>,
     pub unported: Vec<u32>,
@@ -842,7 +844,7 @@ impl ObjectSim {
             saved_power_state: 0,
             boss_transition: 0,
             ending_door_active: 0,
-            boss_defeated: false,
+            boss_defeated: 0,
             boss_slots_raw: [0; 512],
             boss_oam: Vec::new(),
             unported: Vec::new(),
@@ -1062,6 +1064,11 @@ impl ObjectSim {
         if self.mario.hvel < 0x81 {
             self.scroll_delta_left = self.scroll_delta_left.wrapping_add(b);
         }
+    }
+
+    /// `$581E2`/`$5AC32`: count `sBossDefeated` down, stopping at zero.
+    pub(super) fn count_down_boss_defeated(&mut self) {
+        self.boss_defeated = self.boss_defeated.saturating_sub(1);
     }
 
     /// Carrier platform horizontal carry with signed dx.

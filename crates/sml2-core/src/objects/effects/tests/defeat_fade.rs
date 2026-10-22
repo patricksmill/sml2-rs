@@ -70,7 +70,7 @@ fn handler_0x5ac01_easy_mode_removes_and_counts_the_boss() {
     let tables = tables();
     let mut sim = ObjectSim::new(vec![], 0);
     sim.easy_mode = true;
-    sim.boss_defeated = true;
+    sim.boss_defeated = 2;
     sim.active = 1;
     let mut st = staging(1, 1);
     sim.handler_0x5ac01(&mut st, &tables);
@@ -80,7 +80,7 @@ fn handler_0x5ac01_easy_mode_removes_and_counts_the_boss() {
     assert_eq!(&st.b[23..], &[0; 9]);
     assert_eq!(sim.done, 2);
     assert_eq!((sim.active, sim.standby), (0, 0));
-    assert!(!sim.boss_defeated);
+    assert_eq!(sim.boss_defeated, 1);
 }
 
 #[test]

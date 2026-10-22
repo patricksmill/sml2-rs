@@ -19,9 +19,7 @@ impl ObjectSim {
             Ok(handler_0x5ac01::Effect::RemoveBoss) => {
                 self.remove_mode = 2;
                 self.remove_object(st, tables);
-                if self.boss_defeated {
-                    self.boss_defeated = false;
-                }
+                self.count_down_boss_defeated();
             }
             Err(_) => self.note_unported(0x5AC01),
         }

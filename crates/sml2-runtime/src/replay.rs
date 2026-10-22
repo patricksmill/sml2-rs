@@ -593,6 +593,7 @@ pub(crate) fn run_replay(
                     obj.note_blocked_scene_load();
                 }
             }
+            obj.sample_camera_inputs(&cam);
             obj.step(
                 cam.x,
                 cam.y,

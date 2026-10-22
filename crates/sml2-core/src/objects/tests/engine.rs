@@ -1701,6 +1701,7 @@ fn a_defeated_enemy_flips_up_and_falls_off_the_screen() {
     let layout = blank_layout();
     let mut obj = ObjectSim::new(Vec::new(), 0);
     obj.configure(0);
+    obj.boss_defeated = 2;
     let mut st = streamed(0, 0x00, 0);
     st.b[B_FSTATE] = 0;
     st.b[B_SPRITE] = 3;
@@ -1732,6 +1733,7 @@ fn a_defeated_enemy_flips_up_and_falls_off_the_screen() {
     }
     assert_eq!(st.b[B_STATE], 0, "removed once off the bottom");
     assert_eq!(obj.remove_mode, 0, "$5B2D7 resets the mode");
+    assert_eq!(obj.boss_defeated, 1, "and counts sBossDefeated down once");
 }
 
 /// `$8DA9`: the boss driver walks `sObjectDefCount + 1` slots from `$AD00`
