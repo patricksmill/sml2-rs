@@ -347,7 +347,7 @@ class LogicPhaseTests(unittest.TestCase):
         # $04F1 stores state $04 and returns without calling $05D5. If the
         # native loader finished on the previous row, this is still no game
         # update: $AF08 and $FFF0 must remain at their loader values.
-        for state in (2, 3):
+        for state in (2, 3, 0x0B, 0x16, 0x17, 0x1C):
             self.assertEqual(logic_phases(state, 6, [], native_in_level=False), [7])
             self.assertEqual(logic_phases(state, 6, [], native_in_level=True), [])
             self.assertEqual(logic_phases(state, 6, [7], native_in_level=True), [7])
@@ -356,6 +356,22 @@ class LogicPhaseTests(unittest.TestCase):
     def test_loader_alignment_preserves_scene_resumes_and_pause_updates(self):
         self.assertEqual(logic_phases(3, 6, [], [7], native_in_level=True), [7])
         self.assertEqual(logic_phases(8, 6, [], native_in_level=True), [7])
+
+    def test_castle_walk_in_cannot_advance_gameplay_before_the_loader(self):
+        # The castle visit finishes in the port while the ROM is still in
+        # $1C, then hands off through $16/$0B/$02/$03 ($3573 selects
+        # $0B directly, or $17 for the Easy card). Advancing early added
+        # 22 object updates ($FFF0 +11) before the first gameplay call.
+        states = [0x1C] * 20 + [0x16, 0x0B, 2, 3]
+        self.assertEqual(
+            [phase for state in states
+             for phase in logic_phases(state, 6, [], native_in_level=True)],
+            [])
+        self.assertEqual(logic_phases(3, 6, [7], native_in_level=True), [7])
+        # Scene continuations, death fade, and exit fade still advance.
+        self.assertEqual(logic_phases(0x1C, 6, [], [7], native_in_level=True), [7])
+        for state in (9, 0x18):
+            self.assertEqual(logic_phases(state, 6, [], native_in_level=True), [7])
 
 
 

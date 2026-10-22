@@ -122,12 +122,14 @@ def logic_phases(before_state, before_ff97, st4_phases, scene_phases=(),
     bypassing `$05D5`. Append those steps in execution order, including
     multiple waits completed in one hardware frame. Outside a level, step once
     per hardware frame; in a level with neither kind of update, do not step.
-    If the native loader has finished before ROM states $02/$03 return, hold
-    it until $05D5: a loader tick must not become a native gameplay update.
+    If the native loader has finished during ROM loading ($02/$03), the
+    castle walk-in ($1C), level preparation / Easy card ($16/$17), or the
+    entry handoff ($0B), hold it until $05D5: an entry tick must not become
+    a native gameplay update.
     """
     if st4_phases:
         phases = list(st4_phases)
-    elif native_in_level and before_state in (2, 3):
+    elif native_in_level and before_state in (2, 3, 0x0B, 0x16, 0x17, 0x1C):
         phases = []
     elif before_state != 4:
         phases = [(before_ff97 + 1) & 7]
