@@ -59,6 +59,49 @@ fn level6_tree_boss_header_spawn_to_map_through_live_play() {
     assert!(!handoff.cutscene);
 }
 
+/// Level 10 (PumpkinZone4): the scene `$0C` block at (3584-3839, 256-511)
+/// loads the Pumpkin Zone arena.
+const LEVEL10: &str = "\
+         RAB*160 D*44 RA*90 RB*76 RUAB*168 RB*32 RA*66 LAB*2 RB*372 RUA*124 RB*116 RUAB*122 \
+         R*48 LAB*12 RB*36 UA*16 LUA*16 R*36 RAB*32 D*32 R*30 LAB*36 RUAB*112 LB*12 RAB*72 \
+         R*64 LAB*2 -*88 A*8 RB*172 A*6 -*8 RAB*48 LAB*12 RB*16 LA*8 RUAB*86 RUA*78 L*4 \
+         RUAB*132 L*2 RUAB*104 RB*12 UA*28 RB*228 RA*56 RB*16 RUAB*64 -*16 RA*12 D*34 RUAB*48 \
+         D*48 RUAB*66 RB*8 RUAB*40 R*24 RA*26 LB*16 RB*12 RA*52 LB*16 RA*60 R*1 UA*8 LUA*8 \
+         RA*44 RB*542 RUAB*78 L*48 RA*236 RB*48 RUA*284 L*12 RUAB*70 -*517 -*200";
+
+#[test]
+fn level10_pumpkin_boss_header_spawn_to_map_through_live_play() {
+    let outcome = run_header_route(10, spans(LEVEL10), |manifest, _, sim, cam, nodes| {
+        assert_eq!(manifest.level_id, 9);
+        assert_eq!(manifest.spawns.records.len(), 31);
+        assert_eq!((sim.x, sim.y, cam.x, cam.y), (40, 468, 80, 448));
+        assert_eq!(
+            (sim.map_node, nodes.progress_slot(sim.map_node)),
+            (43, Some(9))
+        );
+    });
+    assert!(outcome.sim.boss_clear);
+    assert_eq!(outcome.obj.boss_hits_remaining, 0);
+    assert_eq!(
+        (outcome.exit_completed_frame, outcome.map_handoff_frame),
+        (Some(5477), Some(5478))
+    );
+    assert_eq!(outcome.sim.dead, 0);
+    assert!(outcome.obj.unported.is_empty());
+    assert_eq!(outcome.sim.level_tally, 1);
+    assert_eq!(outcome.sim.music_request, 15, "the clear's song");
+    assert_eq!(outcome.sim.level_progress[9], 0x80);
+    assert_eq!(outcome.sim.save_record(0)[8 + 9], 0x80);
+    assert_eq!(outcome.sim.golden_coin_count(), 1);
+    let handoff = outcome.map_handoff.expect("the live handoff must run");
+    // `$1C` is the hub's Pumpkin Zone door.
+    assert_eq!(
+        (handoff.node, handoff.screen, handoff.music, handoff.saves),
+        (0x1C, Some(0), Some(6), 1)
+    );
+    assert!(!handoff.cutscene);
+}
+
 /// Prints the map-entered session's state through `ROUTE_TAPE` at
 /// `ROUTE_EVERY`-frame steps, to compare with `search::trace_route`.
 #[test]
