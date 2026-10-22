@@ -257,6 +257,7 @@ pub fn render_view_output(
                 },
             )
             .ok_or_else(|| format!("player frame {frame} has no mapping"))?;
+            let cells = in_obj_priority_order(cells);
             // The player base already contains the camera (+96/+98 is world -
             // cam), so these cells are in final screen space: no `sx/sy`.
             for c in cells {
@@ -431,6 +432,13 @@ pub fn render_view_output(
     Ok(img)
 }
 
+/// DMG OBJ overlap priority: the smaller OAM x wins, then the earlier entry.
+/// Mario's own cells overlap (the bunny ears over his head).
+fn in_obj_priority_order(mut cells: Vec<sml2_core::player::Cell>) -> Vec<sml2_core::player::Cell> {
+    cells.sort_by_key(|c| c.x);
+    cells
+}
+
 /// Blit one 8x8 OAM cell at screen `(px0, py0)` with the engine's rules:
 /// colour 0 is transparent, attr bit5 = X flip / bit6 = Y flip / bit4 = OBP1 /
 /// bit7 = BG priority, earlier cells win overlaps, and OBJ tiles use the
@@ -564,8 +572,53 @@ pub(crate) fn apply_tile_anim(
 
 #[cfg(test)]
 mod tests {
-    use super::{hud_row_status, HudDigits};
+    use super::{blit_obj_cell, hud_row_status, in_obj_priority_order, HudDigits};
     use sml2_core::level::HudStrip;
+    use sml2_core::player::Cell;
+
+    /// A later OAM entry with a smaller x wins the overlap.
+    #[test]
+    fn the_smaller_oam_x_wins_overlapping_obj_pixels() {
+        // Tile 0 is solid colour 1, tile 1 solid colour 3.
+        let mut objblock = vec![0u8; 0x1000];
+        objblock[..16].copy_from_slice(&[0xFF, 0x00].repeat(8));
+        objblock[16..32].fill(0xFF);
+        let cells = vec![
+            Cell {
+                y: 16,
+                x: 9,
+                tile: 0,
+                attr: 0,
+            },
+            Cell {
+                y: 16,
+                x: 8,
+                tile: 1,
+                attr: 0,
+            },
+        ];
+        let (vw, vh) = (16, 8);
+        let pal = [0u8, 1, 2, 3];
+        let mut img = vec![0u8; vw * vh];
+        let mut taken = vec![false; vw * vh];
+        for c in in_obj_priority_order(cells) {
+            blit_obj_cell(
+                &mut img,
+                &[0; 128],
+                &mut taken,
+                &objblock,
+                &pal,
+                &pal,
+                c.x as i32 - 8,
+                c.y as i32 - 16,
+                c.tile,
+                c.attr,
+                vw,
+                vh,
+            );
+        }
+        assert_eq!(&img[..9], &[3, 3, 3, 3, 3, 3, 3, 3, 1]);
+    }
 
     /// `$076B` writes every counter. The timer's high byte is not masked.
     #[test]
