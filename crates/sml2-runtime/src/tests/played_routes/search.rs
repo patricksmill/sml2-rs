@@ -51,6 +51,9 @@ enum Verdict {
         ground: bool,
         boss: Option<u8>,
         clear: bool,
+        /// While `$05D5` locks input (an arena intro), how long is left in
+        /// 32-frame steps: waiting longer is progress the position can't show.
+        lock: u8,
     },
     Failed,
     Arrived {
@@ -151,6 +154,7 @@ fn session_judge(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerKey
                     ground: ctx.sim.on_ground,
                     boss: (ctx.obj.boss_def_count != 0).then_some(ctx.obj.boss_hits_remaining),
                     clear: false,
+                    lock: lock_steps(ctx.sim.fade_timer),
                 },
             };
         }
@@ -158,6 +162,14 @@ fn session_judge(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerKey
     let _ = std::fs::remove_file(path);
     POOL.lock().unwrap().push(runner.session.assets);
     verdict
+}
+
+fn lock_steps(fade_timer: u16) -> u8 {
+    if fade_timer > 1 {
+        (fade_timer >> 5).min(254) as u8 + 1
+    } else {
+        0
+    }
 }
 
 /// Idle frames a boss route gets after its tape, so a collected reward coin
@@ -236,6 +248,7 @@ fn play_judge_once(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerK
         ground: outcome.sim.on_ground,
         boss: (outcome.obj.boss_def_count != 0).then_some(outcome.obj.boss_hits_remaining),
         clear: switch("ROUTE_BOSS") && outcome.sim.boss_clear,
+        lock: lock_steps(outcome.sim.fade_timer),
     }
 }
 
@@ -354,7 +367,7 @@ fn search_route() {
         .unwrap_or_default();
     let mut rng = Rng(env("ROUTE_SEED", 0x9E37_79B9_7F4A_7C15));
     // Each cell remembers its waypoint progress inside its tape's score.
-    let mut archive: HashMap<(u16, u16, bool, usize, u8), Cell> = HashMap::new();
+    let mut archive: HashMap<(u16, u16, bool, usize, u8, u8), Cell> = HashMap::new();
     match judge(&assets, progress, flag, &prefix) {
         Verdict::Alive {
             x,
@@ -362,6 +375,7 @@ fn search_route() {
             ground,
             boss,
             clear,
+            lock,
         } => {
             let mut reached = 0;
             let s = score(&goals, &mut reached, x, y, ground) + boss_score(boss, clear);
@@ -372,6 +386,7 @@ fn search_route() {
                     ground,
                     reached,
                     if clear { 0xFE } else { boss.unwrap_or(0xFF) },
+                    lock,
                 ),
                 Cell {
                     tape: prefix,
@@ -506,14 +521,23 @@ fn search_route() {
                     ground,
                     boss,
                     clear,
+                    lock,
                 } => {
-                    let s = score(&goals, &mut reached, x, y, ground) + boss_score(boss, clear);
+                    let s = score(&goals, &mut reached, x, y, ground) + boss_score(boss, clear)
+                        - i64::from(lock) * 1_000;
                     let key = (
                         x >> 4,
                         y >> 4,
                         ground,
                         reached,
                         if clear { 0xFE } else { boss.unwrap_or(0xFF) },
+                        // In an arena the boss's own script can hold Mario in
+                        // place, so elapsed time is new ground too.
+                        if boss.is_some() {
+                            (tape.len() >> 6).min(255) as u8
+                        } else {
+                            lock
+                        },
                     );
                     let better = archive.get(&key).is_none_or(|c| tape.len() < c.tape.len());
                     if better {
@@ -567,7 +591,7 @@ fn trace_route() {
             |_, _, _, _, _| {},
         );
         println!(
-            "TRACE {len} {} ({},{}) ground {} dead {} scene {} boss def {} count {} hits {} phase {} clear {} fade {}",
+            "TRACE {len} {} ({},{}) ground {} dead {} scene {} boss def {} count {} hits {} phase {} clear {} fade {} tally {}",
             to_spans(&tape[len - 1..len]),
             outcome.sim.x,
             outcome.sim.y,
@@ -579,7 +603,8 @@ fn trace_route() {
             outcome.obj.boss_hits_remaining,
             outcome.cam.boss_fight_phase,
             outcome.sim.boss_clear,
-            outcome.sim.fade_timer
+            outcome.sim.fade_timer,
+            outcome.sim.level_tally
         );
         if switch("ROUTE_SLOTS") {
             // Raw definition and screen position: boss pages bypass `active`.
