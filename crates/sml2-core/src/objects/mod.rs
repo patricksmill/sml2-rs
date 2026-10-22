@@ -1007,7 +1007,6 @@ impl ObjectSim {
         self.stomp_bounce_timer = 0;
         self.stomp_chain = 0;
         self.award_lives = 0;
-        self.money_bag = 0;
         self.goal_bell = 0;
         self.mario = MarioContact::default();
         self.camera_pan_set = None;

@@ -45,7 +45,7 @@ def read_state(pipe):
                 if key not in {"step", "fff0", "update_phase", "standing", "scene", "owns", "pc",
                                "boss_x", "boss_state", "door_phase", "door_parity",
                                "platform_sprite", "tile_anim", "writes", "tile_timer", "tile_phase",
-                               "ff97"}:
+                               "ff97", "bag", "pow"}:
                     raise ValueError("unknown diagnostic field")
                 state[key] = int(value)
     except ValueError as exc:
@@ -278,6 +278,10 @@ def trace_line(index, mask, rom, port):
     if 'tile_timer' in port:
         line += (f" | tiles ROM {rom[0xA298]}/{rom[0xA2CD]}/{rom[0xFF97]} "
                  f"port {port['tile_timer']}/{port['tile_phase']}/{port.get('ff97', 0)}")
+    if 'bag' in port:
+        # sMoneyBagCount (the HUD's enemy counter) and sCurPowerup.
+        line += (f" | bag ROM {rom[0xA28D]} port {port['bag']}"
+                 f" pow ROM {rom[0xA216]} port {port['pow']}")
     return line
 
 

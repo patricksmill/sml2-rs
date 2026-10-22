@@ -1187,6 +1187,32 @@ fn object_clock_exit_retains_the_final_engine_pass() {
     assert_eq!((ctx.obj.fff0, ctx.obj.update_phase), (73, 0));
 }
 
+/// `sMoneyBagCount` (`$A28D`), the HUD's enemy counter, is written only by
+/// new game, save load, game over and the defeat credit. A level exit keeps
+/// it for the save, and the next level load does not clear it.
+#[test]
+fn the_enemy_counter_carries_across_levels_and_into_the_save() {
+    use crate::session::{FrameInput, Session};
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!()
+    };
+    ctx.obj.money_bag = 9;
+    ctx.sim.map_handoff_done = true;
+    assert!(matches!(
+        session.advance(FrameInput::default()).outcome,
+        StepOutcome::LevelExited { .. }
+    ));
+    assert_eq!(session.money_bag, 9);
+    assert_eq!(session.save_record()[0x44], 9);
+    session.begin_level(1, 0).unwrap();
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!()
+    };
+    assert_eq!(ctx.obj.money_bag, 9);
+}
+
 /// Boss scripts reload the tileset with LCD disabled and leave all palettes
 /// zero. `$0EF3` restores the header palettes only after the door scroll ends.
 #[test]

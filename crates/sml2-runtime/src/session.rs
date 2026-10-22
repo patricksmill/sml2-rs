@@ -934,6 +934,7 @@ impl Session {
         self.seed_level_clocks(&mut ctx);
         self.map_ram = sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
         ctx.obj.easy_mode = self.easy_mode;
+        ctx.obj.money_bag = self.money_bag;
         ctx.credits_text = self.assets.credits_text.clone();
         if let Some(assets) = self.assets.ending_scene.clone() {
             let mut state = 4;
@@ -1618,6 +1619,7 @@ impl Session {
                     div,
                     &self.assets.nodes,
                 );
+                self.money_bag = ctx.obj.money_bag;
 
                 if ctx.sim.sfx0 != 0 {
                     self.sound_driver.sfx_request_0 = ctx.sim.sfx0;
@@ -1929,6 +1931,8 @@ impl Session {
             if t.frame >= t.live_at {
                 let mut t = self.pending_level.take().expect("checked above");
                 self.seed_level_clocks(&mut t.ctx);
+                // `sMoneyBagCount` is session state; no level load clears it.
+                t.ctx.obj.money_bag = self.money_bag;
                 self.state = SessionState::InLevel(t.ctx);
                 outcome = StepOutcome::LevelEntered(t.level_id);
             }
