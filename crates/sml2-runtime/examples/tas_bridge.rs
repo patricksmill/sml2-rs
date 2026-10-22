@@ -6,6 +6,8 @@
 //! against the emulator and stop at the first divergence. `-` marks a frame
 //! outside a level. `--debug-state` appends decimal `key=value` diagnostics to
 //! that same line, preserving the following pixel frame boundary.
+//! With `--debug-state` and `SML2_BRIDGE_OBJECTS` set, stderr also includes
+//! each occupied object slot's raw 32 bytes.
 use sml2_core::player_sim::PlayerKeys;
 use sml2_runtime::{
     divider_clock::VirtualDividerClock,
@@ -164,6 +166,18 @@ fn write_frame(
                     u8::from(c.scene_vm.owns_gameplay()),
                     c.scene_vm.pc
                 ));
+                if std::env::var_os("SML2_BRIDGE_OBJECTS").is_some() {
+                    // Raw object slots, on stderr so the comparison's state
+                    // parser never sees them.
+                    eprintln!("OBJECTS frame {}", c.frame_n);
+                    for (index, slot) in c.obj.slots.iter().enumerate() {
+                        if slot.state() != sml2_core::objects::SlotState::Inactive {
+                            let raw: Vec<String> =
+                                slot.b.iter().map(|byte| format!("{byte:02x}")).collect();
+                            eprintln!("  slot {index} {}", raw.join(" "));
+                        }
+                    }
+                }
                 let boss = &c.obj.slots[0].b;
                 let platform = &c.obj.slots[1].b;
                 line.push_str(&format!(
