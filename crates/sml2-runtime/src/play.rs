@@ -223,6 +223,9 @@ pub(crate) fn run_play(
         // is its low three bits.
         sim.phase = (sim.phase + 1) & 7;
         sim.frame_counter = sim.frame_counter.wrapping_add(1);
+        // `$05D5` clears the held and pressed keys while `sFadeTimer` is
+        // nonzero, so the arena intro holds Mario still; see the session.
+        let fade_locks_input = sim.fade_timer > 1;
         // $05E4/$0640: dead → the arc only; the death fade freezes everything.
         let ending_frame = scene_frame_head(
             &mut scene_vm,
@@ -242,6 +245,7 @@ pub(crate) fn run_play(
         );
         let gameplay = matches!(ending_frame, Some(EndingFrame::Gameplay(_)));
         let input = match ending_frame {
+            Some(EndingFrame::Gameplay(_)) if fade_locks_input => EndingInput::default(),
             Some(EndingFrame::Gameplay(input)) => input,
             _ => EndingInput::default(),
         };
@@ -369,6 +373,10 @@ pub(crate) fn run_play(
                             sim.music_request = music;
                             sim.level_song = level_song;
                             obj.spawn_boss(def_index);
+                            // `$3C94` outlasts its frame; see the session.
+                            sim.fade_timer = sim
+                                .fade_timer
+                                .saturating_sub(crate::session::BOSS_LOAD_VBLANKS);
                         }
                     } else if cam.take_blocked_scene_load() {
                         obj.note_blocked_scene_load();

@@ -710,7 +710,7 @@ pub const MAP_ENTRY_FRAMES: u16 = 73;
 /// (`$3C94`). Measured on the level-9 arena (2026-10-20 recording): the update
 /// spans two frame boundaries, but `sFadeTimer` reads 306 at its `$05D5` and
 /// 304 at the next one, so one extra decrement lands in it.
-const BOSS_LOAD_VBLANKS: u16 = 1;
+pub(crate) const BOSS_LOAD_VBLANKS: u16 = 1;
 
 /// Frames after the bell script reaches state `$0A` before the map handler
 /// runs again: `$3E9FB`'s fade, then `$3EF2B` loads the cleared node's screen.
