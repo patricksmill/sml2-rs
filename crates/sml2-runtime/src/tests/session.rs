@@ -1104,6 +1104,50 @@ fn object_clock_first_live_pass_updates_odd_slot_conveyor_and_player_bytes() {
     }
 }
 
+/// `$3F03D` runs `$3EA9A` once the hub is loaded: the map is held while BGP
+/// steps `$00`, `$00`, `$40`, `$90` three frames apiece, then `$E4`. Measured
+/// in recording 3 at its row 11382: `$40` at +6, `$90` at +9, `$E4` at +12.
+#[test]
+fn a_level_return_fades_the_hub_in() {
+    use crate::session::{FrameInput, Session};
+    for cleared in [false, true] {
+        let mut session = Session::new(SessionAssets::load().unwrap());
+        session.begin_level(0, 0).unwrap();
+        let SessionState::InLevel(ctx) = &mut session.state else {
+            panic!()
+        };
+        if cleared {
+            ctx.sim.exit_phase = true;
+            ctx.sim.exit_completed = true;
+            ctx.sim.fade_timer = 0;
+        } else {
+            ctx.sim.dead = 0xFF;
+            ctx.sim.dead_fade = true;
+            ctx.sim.fade_timer = 1;
+        }
+        let mut exited = None;
+        for _ in 0..100 {
+            if let StepOutcome::LevelExited { screen, .. } =
+                session.advance(FrameInput::default()).outcome
+            {
+                exited = Some(screen);
+                break;
+            }
+        }
+        assert_eq!(exited, Some(0), "level 0 returns to the hub (cleared {cleared})");
+        let mut steps = Vec::new();
+        while let Some(pan) = &session.map_pan_return {
+            steps.push(pan.palettes().0);
+            session.advance(FrameInput::default());
+        }
+        assert_eq!(
+            steps,
+            [0, 0, 0, 0, 0, 0, 0x40, 0x40, 0x40, 0x90, 0x90, 0x90],
+            "cleared {cleared}"
+        );
+    }
+}
+
 #[test]
 fn object_clock_survives_death_map_entry_and_demo_replacement() {
     use crate::session::{FrameInput, Session};
@@ -1127,6 +1171,10 @@ fn object_clock_survives_death_map_entry_and_demo_replacement() {
         }
     }
     assert!(exited);
+    // `$3EA9A`'s hub fade-in blocks input until it ends.
+    while session.map_pan_return.is_some() {
+        session.advance(FrameInput::default());
+    }
     session.advance(FrameInput {
         keys: PlayerKeys {
             a: true,

@@ -11,6 +11,7 @@ frame whether that wait runs:
 | Map → level entry | `$3E9FB` fade and save (frames 1–50), then the `$03` loader (55–73); `$0B`, `$02`, `$02` and the first `$03` frame tick; the Easy card's `$17` frames tick | `MapTransition::frame_waits` |
 | Door walks | the whole `MapScreenTransition` | bank 15 door presentation |
 | Hub reload | the whole `MapPanReturn` | `$3F156` + `$3EA9A` |
+| Level return to the hub | the 12-frame fade-in (`MapPanReturn::fade_in`) | `$3F03D` → `$3EA9A` |
 | Bell room entry | `BELL_ENTRY_HOLD` (7) | `$3F4B1` copy |
 | Bell room return | all but the last two frames of the hold (83 of the hub's 84) | `$3E9FB` + screen load |
 | File select load | every `$19` frame | `$0348` LCD off |

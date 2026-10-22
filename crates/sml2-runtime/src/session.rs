@@ -1710,6 +1710,9 @@ impl Session {
                             map_sim.node = target_node;
                             map_sim.load_node(target_node, &self.assets.node_records);
                             self.state = SessionState::Overworld(map_sim);
+                            if target_screen == 0 {
+                                self.map_pan_return = Some(MapPanReturn::fade_in());
+                            }
                             if handoff.saves > 0 {
                                 let rec = self.save_record();
                                 if let Some(slot) = self.active_slot {
@@ -1812,6 +1815,9 @@ impl Session {
                                 map_sim.load_node(target_node, &self.assets.node_records);
                                 if let Some(direction) = handoff.cursor_move {
                                     map_sim.cursor_move = direction;
+                                }
+                                if target_screen == 0 {
+                                    self.map_pan_return = Some(MapPanReturn::fade_in());
                                 }
                             }
                             self.state = SessionState::Overworld(map_sim);

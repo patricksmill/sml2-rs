@@ -16,6 +16,14 @@ pub struct MapPanReturn {
 }
 
 impl MapPanReturn {
+    /// `$3F03D`: a level's return to the hub runs `$3EA9A` after the load.
+    /// That load is not modelled (docs/frame-clock.md), so start at the fade.
+    pub(crate) fn fade_in() -> Self {
+        Self {
+            frame: MAP_PAN_RELOAD_FRAMES,
+        }
+    }
+
     pub(crate) fn advance(&mut self) -> bool {
         self.frame += 1;
         self.frame >= MAP_PAN_RETURN_FRAMES
