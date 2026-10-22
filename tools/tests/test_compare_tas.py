@@ -400,5 +400,41 @@ class FrameTimingTests(unittest.TestCase):
                       {'frame': 4, 'ff97': 2, 'reads': []}]
         self.assertEqual(frame_timing(iterations, 4), (2, [5]))
 
+
+
+try:
+    import numpy  # noqa: F401  (the comparison venv has it; plain python3 may not)
+    HAVE_NUMPY = True
+except ImportError:
+    HAVE_NUMPY = False
+
+
+class PixelReportTests(unittest.TestCase):
+    @unittest.skipUnless(HAVE_NUMPY, 'numpy is in the PyBoy comparison environment')
+    def test_pixel_row_compares_dmg_shades_not_display_greys(self):
+        import numpy as np
+        memory = {0xFF9B: 4, 0xA269: 3, 0xA68B: 0x2B}
+        rom = np.zeros((144, 160, 4), dtype=np.uint8)
+        rom[:, :, :3] = 153  # PyBoy's light grey is shade 1
+        port = np.zeros((144, 160, 4), dtype=np.uint8)
+        port[:, :, :3] = 170  # the port's light grey
+        port[0, :3, :3] = 85
+        row = compare_tas.pixel_row(7, memory, rom, port, None)
+        self.assertEqual(row, {'row': 7, 'state': 4, 'level': 3, 'map': 0x2B, 'diff': 3})
+        self.assertEqual(compare_tas.pixel_row(7, memory, rom, rom * 0 + 255, port)['diff_prev'], 3)
+
+    @unittest.skipUnless(HAVE_NUMPY, 'numpy is in the PyBoy comparison environment')
+    def test_unknown_greys_are_rejected(self):
+        import numpy as np
+        with self.assertRaises(RuntimeError):
+            compare_tas.shade_indices(np.full((2, 2), 128, dtype=np.uint8), compare_tas.ROM_SHADES)
+
+    def test_out_of_level_rows_keep_clock_diagnostics(self):
+        self.addCleanup(compare_tas.OUT_OF_LEVEL.clear)
+        state = read_state(io.BytesIO(b'STATE - - - - - tile_timer=5 tile_phase=2\n'))
+        self.assertIsNone(state)
+        self.assertEqual(compare_tas.OUT_OF_LEVEL, {'tile_timer': 5, 'tile_phase': 2})
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -802,6 +802,15 @@ pub struct Session {
 }
 
 impl Session {
+    /// `$A298`/`$A2CD` as the current state runs them, for diagnostics.
+    pub fn tile_animation_clock(&self) -> TileAnimationClock {
+        match &self.state {
+            SessionState::InLevel(ctx) => ctx.tile_animation,
+            SessionState::Demo(demo) => demo.ctx.tile_animation,
+            _ => self.tile_animation,
+        }
+    }
+
     fn remember_clocks(&mut self) {
         self.object_clock.remember(&self.state);
         match &self.state {

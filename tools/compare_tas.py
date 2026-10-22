@@ -14,6 +14,9 @@ BUTTONS = [(1, 'right'), (2, 'left'), (4, 'up'), (8, 'down'),
            (16, 'a'), (32, 'b'), (64, 'start'), (128, 'select')]
 
 
+OUT_OF_LEVEL = {}
+
+
 def read_state(pipe):
     line = pipe.readline()
     if not line:
@@ -22,7 +25,11 @@ def read_state(pipe):
     if not text.startswith('STATE '):
         raise RuntimeError(f'unexpected bridge state line: {text!r}')
     parts = text.split()[1:]
-    if parts == ['-'] * 5:
+    if parts[:5] == ['-'] * 5:
+        # Outside a level there is no position; keep any clock diagnostics
+        # for --trace without making the row look like level state.
+        OUT_OF_LEVEL.clear()
+        OUT_OF_LEVEL.update((k, int(v)) for k, v in (p.split('=', 1) for p in parts[5:]))
         return None
     if len(parts) not in (5, 9) and (
             len(parts) < 10 or not all("=" in p for p in parts[9:])):
@@ -37,7 +44,7 @@ def read_state(pipe):
                 key, value = field.split("=", 1)
                 if key not in {"step", "fff0", "update_phase", "standing", "scene", "owns", "pc",
                                "boss_x", "boss_state", "door_phase", "door_parity",
-                               "platform_sprite", "tile_anim", "writes"}:
+                               "platform_sprite", "tile_anim", "writes", "tile_timer", "tile_phase"}:
                     raise ValueError("unknown diagnostic field")
                 state[key] = int(value)
     except ValueError as exc:
@@ -257,11 +264,18 @@ def trace_line(index, mask, rom, port):
     line = (f'{index} {held:<10} ROM st={rom[0xFF9B]:02x} x={x} y={y} hv={rom[0xA200]:02x} '
             f'vv={rom[0xA201]:02x} fff0={rom[0xFFF0]} up={rom[0xAF08]}')
     if port is None:
-        return line + ' | port -'
+        line += ' | port -'
+        if 'tile_timer' in OUT_OF_LEVEL:
+            line += (f" | tiles ROM {rom[0xA298]}/{rom[0xA2CD]} "
+                     f"port {OUT_OF_LEVEL['tile_timer']}/{OUT_OF_LEVEL['tile_phase']}")
+        return line
     line += (f" | port x={port['x']} y={port['y']} hv={port.get('hvel', 0):02x} "
              f"vv={port.get('vvel', 0):02x}")
     if 'fff0' in port:
         line += f" fff0={port['fff0']} up={port['update_phase']}"
+    if 'tile_timer' in port:
+        line += (f" | tiles ROM {rom[0xA298]}/{rom[0xA2CD]} "
+                 f"port {port['tile_timer']}/{port['tile_phase']}")
     return line
 
 
@@ -329,6 +343,35 @@ def comparison_threshold(threshold, exact=False, disabled=False):
     return threshold if threshold > 0 else None
 
 
+# Display greys of the two renderers, each mapped back to the DMG shade 0..3.
+ROM_SHADES = {255: 0, 153: 1, 85: 2, 0: 3}
+PORT_SHADES = {255: 0, 170: 1, 85: 2, 0: 3}
+
+
+def shade_indices(grey, shades):
+    import numpy as np
+    lut = np.full(256, 255, dtype=np.uint8)
+    for value, index in shades.items():
+        lut[value] = index
+    out = lut[grey]
+    if (out == 255).any():
+        raise RuntimeError(f'unexpected grey level in {sorted(set(grey.flatten().tolist()))}')
+    return out
+
+
+def pixel_row(index, memory, rom_screen, native, previous_native):
+    """One --pixel-report record: where the ROM is, and how many of the 23,040
+    pixels differ from the port's frame (and from its previous frame, which
+    exposes a one-frame presentation offset)."""
+    rom = shade_indices(rom_screen[:, :, 0], ROM_SHADES)
+    port = shade_indices(native[:, :, 0], PORT_SHADES)
+    row = {'row': index, 'state': memory[0xFF9B], 'level': memory[0xA269],
+           'map': memory[0xA68B], 'diff': int((rom != port).sum())}
+    if previous_native is not None:
+        row['diff_prev'] = int((rom != shade_indices(previous_native[:, :, 0], PORT_SHADES)).sum())
+    return row
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('movie', type=Path, help='JSON from import_bk2.py')
@@ -352,6 +395,13 @@ def main():
     parser.add_argument('--frames', type=int)
     parser.add_argument('--trace', metavar='START:END', type=trace_range,
                         help='print ROM and port state for this inclusive input-row range')
+    parser.add_argument('--pixel-dump', type=Path, metavar='DIR',
+                        help='with --pixel-rows, save ROM, port and previous port frames as PGM')
+    parser.add_argument('--pixel-rows', type=lambda v: {int(x) for x in v.split(',')}, default=set(),
+                        help='comma-separated input rows for --pixel-dump')
+    parser.add_argument('--pixel-report', type=Path, metavar='PATH',
+                        help='write one JSON line per input row: ROM state/level/map and the '
+                             'count of shade-differing pixels against the port frame')
     args = parser.parse_args()
     trace = args.trace
     movie = json.loads(args.movie.read_text())
@@ -385,6 +435,7 @@ def main():
                   cgb=False, bootrom=str(args.bootrom) if args.bootrom else None)
     pyboy.set_emulation_speed(0)
     bridge = None
+    pixel_report = None
     displays = []
     sdl = None
     try:
@@ -407,6 +458,8 @@ def main():
         native = read_frame(bridge.stdout)
         native_step = 0
         previous_native_step = None
+        previous_frame = None
+        pixel_report = args.pixel_report.open('w') if args.pixel_report else None
         if not args.headless:
             import sdl2 as sdl
             if sdl.SDL_Init(sdl.SDL_INIT_VIDEO) != 0:
@@ -582,6 +635,17 @@ def main():
                         divergence = check_divergence(
                             index - 1, pyboy.memory, previous_native, threshold,
                             native_step=previous_native_step)
+                if pixel_report is not None:
+                    pixel_report.write(json.dumps(pixel_row(
+                        index, pyboy.memory, pyboy.screen.ndarray, native, previous_frame)) + '\n')
+                if args.pixel_dump and index in args.pixel_rows:
+                    args.pixel_dump.mkdir(parents=True, exist_ok=True)
+                    for name, image in (('rom', pyboy.screen.ndarray), ('port', native),
+                                        ('portprev', previous_frame)):
+                        if image is not None:
+                            (args.pixel_dump / f'{index:06d}_{name}.pgm').write_bytes(
+                                b'P5\n160 144\n255\n' + image[:, :, 0].tobytes())
+                previous_frame = native
                 if trace is not None and trace[0] <= index <= trace[1]:
                     if phase_lock:
                         sample, (paired, _) = completed_sample(pyboy.memory, events, states)
@@ -623,6 +687,8 @@ def main():
                   f'({divergence["detail"]}); playback paused there.', flush=True)
         print(f'Stopped after {index} shared input rows.', flush=True)
     finally:
+        if pixel_report is not None:
+            pixel_report.close()
         if bridge:
             bridge.stdin.close()
             bridge.stdout.close()
