@@ -102,6 +102,51 @@ fn level10_pumpkin_boss_header_spawn_to_map_through_live_play() {
     assert!(!handoff.cutscene);
 }
 
+/// Level 14 (MarioZone4): the scene `$10` block at (3584-3839, 0-255) loads
+/// the Three Piggys arena; the parts take stomps against their own HP.
+const LEVEL14: &str = "\
+         LA*24 RUA*76 RUAB*50 LB*4 UA*52 -*8 UA*16 RB*100 UA*2 RB*130 RAB*74 -*24 RUA*32 \
+         RB*126 RAB*24 LA*16 RB*48 A*144 RB*60 RUA*232 RB*36 RUAB*48 R*34 RUAB*48 R*8 RUA*32 \
+         -*26 RA*4 R*36 RA*100 D*8 RAB*114 -*30 RA*40 -*4 RA*56 RB*8 RUAB*38 RB*18 RUAB*110 \
+         RB*48 RUA*100 RB*1 RA*8 R*132 RUAB*118 RB*112 RUA*190 -*8 RUAB*20 R*52 RUAB*48 R*32 \
+         UA*72 RUA*24 D*12 RAB*84 RB*124 RAB*60 R*2 UA*24 D*48 RAB*72 A*32 RB*120 R*12 \
+         RUAB*468 A*96 R*50 RUAB*112 LB*32 UA*12 RA*8 D*80 RUA*16 D*16 LA*4 R*80 RA*2 L*50 \
+         R*364 RUA*48 R*74 RAB*4 -*80 RUAB*12 RB*48 LUA*104 R*116 LAB*54 L*12 LUA*24 -*40 \
+         RUA*42 LB*16 R*24 LUA*64 R*72 LUA*4 RA*12 RB*1 LAB*32 -*538 -*200";
+
+#[test]
+fn level14_mario_zone_boss_header_spawn_to_map_through_live_play() {
+    let outcome = run_header_route(14, spans(LEVEL14), |manifest, _, sim, cam, nodes| {
+        assert_eq!(manifest.level_id, 13);
+        assert_eq!(manifest.spawns.records.len(), 32);
+        assert_eq!((sim.x, sim.y, cam.x, cam.y), (56, 468, 80, 448));
+        assert_eq!(
+            (sim.map_node, nodes.progress_slot(sim.map_node)),
+            (83, Some(29))
+        );
+    });
+    assert!(outcome.sim.boss_clear);
+    assert_eq!(outcome.obj.boss_hits_remaining, 0);
+    assert_eq!(
+        (outcome.exit_completed_frame, outcome.map_handoff_frame),
+        (Some(6405), Some(6406))
+    );
+    assert_eq!(outcome.sim.dead, 0);
+    assert!(outcome.obj.unported.is_empty());
+    assert_eq!(outcome.sim.level_tally, 1);
+    assert_eq!(outcome.sim.music_request, 15, "the clear's song");
+    assert_eq!(outcome.sim.level_progress[29], 0x80);
+    assert_eq!(outcome.sim.save_record(0)[8 + 29], 0x80);
+    assert_eq!(outcome.sim.golden_coin_count(), 1);
+    let handoff = outcome.map_handoff.expect("the live handoff must run");
+    // `$1D` is the hub's Mario Zone door.
+    assert_eq!(
+        (handoff.node, handoff.screen, handoff.music, handoff.saves),
+        (0x1D, Some(0), Some(6), 1)
+    );
+    assert!(!handoff.cutscene);
+}
+
 /// Prints the map-entered session's state through `ROUTE_TAPE` at
 /// `ROUTE_EVERY`-frame steps, to compare with `search::trace_route`.
 #[test]
@@ -154,4 +199,45 @@ fn trace_session_route() {
         }
     }
     let _ = std::fs::remove_file(path);
+}
+
+/// Runs `ROUTE_TAPE` followed by each `|`-separated ending in `ROUTE_ENDINGS`
+/// and prints the boss hits left, for probing a fight's timing.
+#[test]
+#[ignore = "authoring tool: run explicitly to probe boss endings"]
+fn probe_boss_endings() {
+    let level: u8 = std::env::var("ROUTE_LEVEL").unwrap().parse().unwrap();
+    let base = std::env::var("ROUTE_TAPE").unwrap();
+    let endings = std::env::var("ROUTE_ENDINGS").unwrap();
+    let assets = RouteAssets::load(level);
+    let endings: Vec<&str> = endings.split('|').collect();
+    let results: Vec<String> = std::thread::scope(|scope| {
+        let handles: Vec<_> = endings
+            .iter()
+            .map(|ending| {
+                let assets = &assets;
+                let tape = spans(&format!("{base} {ending}"));
+                scope.spawn(move || {
+                    let (outcome, _) = assets.play(0, PlayTape::Buttons(tape), |_, _, _, _, _| {});
+                    let parts: Vec<_> = outcome.obj.slots[1..4]
+                        .iter()
+                        .map(|slot| (slot.b[5], slot.b[8]))
+                        .collect();
+                    format!(
+                        "hits {} defs {} parts {parts:?} dead {} clear {} at ({},{}) :: {ending}",
+                        outcome.obj.boss_hits_remaining,
+                        outcome.obj.boss_def_count,
+                        outcome.sim.dead,
+                        outcome.sim.boss_clear,
+                        outcome.sim.x,
+                        outcome.sim.y
+                    )
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    for line in results {
+        println!("PROBE {line}");
+    }
 }
