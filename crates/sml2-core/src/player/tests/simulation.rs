@@ -1796,6 +1796,8 @@ fn water_tile_clears_moon_bit1_and_bypasses_transition() {
     sim.moon = 0x02;
     sim.hvel = 200;
     sim.vvel = 10;
+    // Already swimming, so `$1C82` leaves the index alone.
+    sim.swim = true;
 
     sim.environment_probe(&layout, &PlayerKeys::default());
 
@@ -1803,6 +1805,29 @@ fn water_tile_clears_moon_bit1_and_bypasses_transition() {
     assert_eq!(sim.moon & 0x02, 0, "water clears bit 1");
     assert_eq!(sim.hvel, 200, "bypassed $1CFB, so hvel was not clamped");
     assert_eq!(sim.vvel, 10, "bypassed $1CFB, so vvel was not set to 70");
+}
+
+/// `$1C82`: entering the water lifts a falling index to `$18`; once
+/// swimming, an index below `$18` lands Mario instead.
+#[test]
+fn entering_water_lifts_the_fall_index_and_swimming_lands() {
+    let mut layout = blank_layout();
+    layout.cells[EXIT_CELL] = 0x4C; // water
+    let mut sim = small_sim();
+    sim.vvel = 5;
+    sim.in_air = true;
+    sim.environment_probe(&layout, &PlayerKeys::default());
+    assert_eq!((sim.vvel, sim.in_air), (0x18, true), "entry");
+
+    sim.vvel = 5;
+    sim.environment_probe(&layout, &PlayerKeys::default());
+    assert_eq!((sim.vvel, sim.in_air), (5, false), "swimming");
+
+    let mut high = small_sim();
+    high.vvel = 0x30;
+    high.in_air = true;
+    high.environment_probe(&layout, &PlayerKeys::default());
+    assert_eq!((high.vvel, high.in_air), (0x30, true), "a rising index is kept");
 }
 
 /// `$14FA`: flutter timer is bypassed when in a bit-1 moon zone.

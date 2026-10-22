@@ -868,15 +868,23 @@ impl PlayerSim {
     /// dispatch.
     fn environment_probe(&mut self, layout: &LevelLayout, keys: &PlayerKeys) -> Option<u8> {
         // $1BFF head: `sPrevSwimming = sSwimming; sSwimming = 0`. The water
-        // arm below is the only writer of `$FF` (`sPrevSwimming` feeds its
-        // vvel nudge, which the port does not model).
+        // arm below is the only writer of `$FF`.
+        let prev_swimming = self.swim;
         self.swim = false;
         let (hazard_hit, dead) = self.hazard_probe(layout);
         if hazard_hit {
             return dead;
         }
         if self.detect_swim(layout) {
-            // $1C82 / $1CAA: water arm clears sMoonPhysics bit 1
+            // $1C82: entering the water lifts a falling index to `$18`, the
+            // top of the swim curve; already swimming, an index below it
+            // lands Mario (`sMarioInAir = 0`).
+            if !prev_swimming && self.vvel < 0x18 {
+                self.vvel = 0x18;
+            } else if self.vvel < 0x18 {
+                self.in_air = false;
+            }
+            // $1CAA: water arm clears sMoonPhysics bit 1
             self.swim = true;
             self.moon &= !0x02;
             return None;
