@@ -1986,7 +1986,11 @@ impl PlayerSim {
         // $181C horizontal integration
         let saved_x = self.x;
         let x_sub_saved = self.x_sub;
-        let htable: &[u8] = if self.swim || (self.moon & 2 != 0 && self.on_ground) {
+        // `$1826`: the goal-bell branch selects the normal table before
+        // either the swimming or grounded moon-zone checks.
+        let htable: &[u8] = if !self.goal_bell
+            && (self.swim || (self.moon & 2 != 0 && self.on_ground))
+        {
             &SPEED_H_WATER
         } else {
             &SPEED_H
