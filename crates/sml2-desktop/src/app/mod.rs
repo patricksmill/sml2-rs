@@ -318,10 +318,10 @@ impl DesktopApp {
                 }
             }
             let image = if self.dx_normal.is_some() {
-                match game
-                    .session
-                    .render_dx_frame(self.dx_bundle.as_ref().expect("active DX bundle"))
-                {
+                match game.session.render_dx_frame(
+                    self.dx_bundle.as_ref().expect("active DX bundle"),
+                    sml2_core::character::Character::Mario,
+                ) {
                     Ok(pixels) => ColorImage::new(
                         [160, 144],
                         pixels

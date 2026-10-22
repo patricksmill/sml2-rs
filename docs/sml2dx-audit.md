@@ -178,3 +178,42 @@ All three passed against the audited local input. These exercise table extractio
 bundle round trips, character graphics, palette effects, import, restart restore,
 cancellation and save isolation. Native file-dialog interaction itself was not
 automated; desktop navigation and preview transitions use the egui test harness.
+
+## Luigi opening-theme graphics
+
+The same audited ROM supports a second presentation character without changing
+opening BG/OBJ palette RAM. Character identity is HRAM `$FFF6` (Mario 0,
+Luigi 1), not `$A125`. Home `$465A` masks its low nibble and selects Luigi
+bank `$2D:$5E16` (ROM `$B5E16`). Graphics job7 ROM `$93880..$938BB` selects
+bank `$2B` when `$FFF6 == 1`; home `$1952` performs both VRAM bank transfers.
+
+| Luigi data | ROM start | Size/use |
+|---|---:|---|
+| Normal opening graphics | `$AC200` | `$800` bytes to VRAM0 `$8000` |
+| Fire opening graphics | `$AD200` | `$800` bytes to VRAM0 `$8000` |
+| Shared overlay graphics | `$ACA00` | `$800` bytes to VRAM1 `$8000` |
+| Player mapping pointers | `$B4000` | 242 little-endian pointers within bank `$2D` |
+
+Luigi mapping lists use the same four-byte cells and `$80` terminator, with a
+maximum 15 cells. The opening uses the normal-theme table. Alternate-theme
+mapping table `$B6000` and alternate-theme graphics remain outside this import.
+Luigi selects green colors using mapping palette attributes; level0 initial
+BG/OBJ palettes at `$98000`/`$99000` are shared. Frame selection
+`$5447..$54A7` is common: Small `+32`, Bunny `+69` (flutter `+26`), Fire
+`+112` (throw `+32`). Luigi star helper `$B5E73` adds
+`((star_low >> 1) & 3)` to original attributes, matching Mario. Priority and
+coordinate expansion also match. This graphics audit establishes no physics
+claim.
+
+Literal fixtures: `$B4000 = E4 41` resolves `$B41E4`, 11 cells. Its first
+cell is `[F4,F9,01,22]`, fifth `[F7,FD,10,2A]`. Small32 pointer `48 46`
+resolves `$B4648`, 10 cells; Bunny69 pointer `32 4A` resolves `$B4A32`, 11;
+Fire112 pointer `9C 4F` resolves `$B4F9C`, 13. Graphics SHA-256 values:
+
+- Normal: `12ca97a4c770daab7b1bfee26554adb3d002f4021ecc8bc1bb61a2480472ddf7`
+- Fire: `4acc7c89c4e997143403deba64d55f4e4788fe5e5d72b1503a2e3a36a5e0b517`
+- Bank1: `3dc821c8d8e1f92d98f61c2f9923b920eb071d074d9dd9f28cbe3dfac5c9e909`
+
+Importer/schema version2 includes validated Luigi graphics. Schema1 bundles
+remain readable as Mario-only bundles; adding Luigi requires re-import from
+the same exact audited ROM. No ROM or extracted graphics are committed.

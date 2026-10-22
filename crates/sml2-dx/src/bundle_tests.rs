@@ -18,6 +18,12 @@ fn fixture() -> Bundle {
         animation: vec![0; 256],
         object_mappings: vec![vec![]; 168],
         player_mappings: vec![vec![]; 242],
+        luigi: Some(CharacterGraphics {
+            normal: vec![0; 0x800],
+            fire: vec![0; 0x800],
+            bank1: vec![0; 0x800],
+            mappings: vec![vec![]; 242],
+        }),
     }
 }
 
@@ -211,4 +217,104 @@ fn fingerprint_distinguishes_literal_backslashes_from_path_separators() {
     )
     .unwrap();
     assert_ne!(base_fingerprint(root.path()).unwrap(), literal);
+}
+
+#[test]
+fn legacy_schema_without_character_field_round_trips_and_keeps_mario() {
+    let mut value = serde_json::to_value(fixture()).unwrap();
+    value["schema"] = 1.into();
+    value.as_object_mut().unwrap().remove("luigi");
+    let legacy = decode(&value).unwrap();
+    assert!(legacy.supports_character(Character::Mario));
+    assert!(!legacy.supports_character(Character::Luigi));
+    assert_eq!(legacy.schema, 1);
+    assert!(legacy.luigi.is_none());
+    let encoded = legacy.encode().unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&encoded).unwrap(),
+        value
+    );
+    assert_eq!(Bundle::decode(&encoded).unwrap().encode().unwrap(), encoded);
+}
+
+#[test]
+fn character_presence_matches_schema_and_new_bundle_supports_both() {
+    let bundle = fixture();
+    assert!(bundle.supports_character(Character::Mario));
+    assert!(bundle.supports_character(Character::Luigi));
+    let value = serde_json::to_value(bundle).unwrap();
+    for schema in [1, BUNDLE_SCHEMA] {
+        let mut bad = value.clone();
+        bad["schema"] = schema.into();
+        if schema == BUNDLE_SCHEMA {
+            bad.as_object_mut().unwrap().remove("luigi");
+        }
+        assert!(decode(&bad).is_err());
+    }
+    let mut bad = value;
+    bad["luigi"] = serde_json::Value::Null;
+    assert!(decode(&bad).is_err());
+}
+
+#[test]
+fn luigi_graphics_reject_malformed_lengths_counts_and_unknown_fields() {
+    let value = serde_json::to_value(fixture()).unwrap();
+    for field in ["normal", "fire", "bank1"] {
+        for size in [0x7ff, 0x801] {
+            let mut bad = value.clone();
+            bad["luigi"][field] = serde_json::json!(vec![0u8; size]);
+            assert!(
+                decode(&bad).is_err(),
+                "accepted Luigi {field} length {size}"
+            );
+        }
+        let mut bad = value.clone();
+        bad["luigi"].as_object_mut().unwrap().remove(field);
+        assert!(decode(&bad).is_err());
+    }
+    for count in [241, 243] {
+        let mut bundle = fixture();
+        bundle
+            .luigi
+            .as_mut()
+            .unwrap()
+            .mappings
+            .resize(count, vec![]);
+        assert!(bundle.validate().is_err());
+    }
+    let mut bundle = fixture();
+    bundle.luigi.as_mut().unwrap().mappings[0] = vec![
+        MappingEntry {
+            y: -12,
+            x: -7,
+            tile: 1,
+            attr: 0x22
+        };
+        64
+    ];
+    assert!(bundle.validate().is_ok());
+    bundle.luigi.as_mut().unwrap().mappings[0].push(MappingEntry {
+        y: 0,
+        x: 0,
+        tile: 0,
+        attr: 0,
+    });
+    assert!(bundle.validate().is_err());
+    let mut bad = value;
+    bad["luigi"]["unrecognized"] = true.into();
+    assert!(decode(&bad).is_err());
+}
+
+#[test]
+fn luigi_signed_mapping_cells_round_trip_without_losing_attributes() {
+    let mut bundle = fixture();
+    let cell = MappingEntry {
+        y: -12,
+        x: -7,
+        tile: 1,
+        attr: 0x22,
+    };
+    bundle.luigi.as_mut().unwrap().mappings[0].push(cell.clone());
+    let decoded = Bundle::decode(&bundle.encode().unwrap()).unwrap();
+    assert_eq!(decoded.luigi.unwrap().mappings[0][0], cell);
 }

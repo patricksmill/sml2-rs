@@ -2,6 +2,7 @@
 use super::{hud_row_status, window_coord, window_origin, HudDigits};
 use crate::session::{LevelContext, Session, SessionState};
 use sml2_core::{
+    character::Character,
     level::{HudStrip, LAYOUT_HEIGHT, LAYOUT_WIDTH},
     player::{self, Cell, CellStyle},
     video::{
@@ -12,15 +13,56 @@ use sml2_core::{
 use sml2_dx::Bundle;
 
 impl Session {
-    /// Render the audited opening level in direct CGB RGB888 color.
-    pub fn render_dx_frame(&self, bundle: &Bundle) -> Result<Vec<[u8; 3]>, String> {
+    /// Whether the current screen is one the audited DX data covers: the
+    /// opening level. Everything else keeps its native presentation.
+    pub fn dx_supported(&self) -> bool {
+        matches!(&self.state, SessionState::InLevel(ctx) if ctx.manifest.level_id == 0)
+    }
+
+    /// Render the audited opening level in direct CGB RGB888 color, drawing
+    /// the player with `character`'s graphics. Physics stay native either way.
+    pub fn render_dx_frame(
+        &self,
+        bundle: &Bundle,
+        character: Character,
+    ) -> Result<Vec<[u8; 3]>, String> {
         let SessionState::InLevel(ctx) = &self.state else {
-            return Err("DX preview requires an active opening level".into());
+            return Err("DX presentation requires an active opening level".into());
         };
         if ctx.manifest.level_id != 0 {
-            return Err("DX preview supports only the opening level".into());
+            return Err("DX presentation supports only the opening level".into());
         }
-        render(ctx, bundle)
+        render(ctx, bundle, character)
+    }
+}
+
+/// One character's `$8000` graphics (normal, fire, VRAM1) and player mappings.
+struct PlayerGraphics<'a> {
+    normal: &'a [u8],
+    fire: &'a [u8],
+    bank1: &'a [u8],
+    mappings: &'a [Vec<sml2_core::object::MappingEntry>],
+}
+
+fn player_graphics(bundle: &Bundle, character: Character) -> Result<PlayerGraphics<'_>, String> {
+    match character {
+        Character::Mario => Ok(PlayerGraphics {
+            normal: &bundle.mario_normal,
+            fire: &bundle.mario_fire,
+            bank1: &bundle.mario_bank1,
+            mappings: &bundle.player_mappings,
+        }),
+        Character::Luigi => {
+            let luigi = bundle.luigi.as_ref().ok_or(
+                "This DX installation predates Luigi graphics; re-import the ROM to add them",
+            )?;
+            Ok(PlayerGraphics {
+                normal: &luigi.normal,
+                fire: &luigi.fire,
+                bank1: &luigi.bank1,
+                mappings: &luigi.mappings,
+            })
+        }
     }
 }
 
@@ -39,8 +81,13 @@ fn pause_palettes(bytes: &[u8], bright_phase: bool) -> Vec<u8> {
         .collect()
 }
 
-fn render(ctx: &LevelContext, bundle: &Bundle) -> Result<Vec<[u8; 3]>, String> {
+fn render(
+    ctx: &LevelContext,
+    bundle: &Bundle,
+    character: Character,
+) -> Result<Vec<[u8; 3]>, String> {
     bundle.validate().map_err(|e| e.to_string())?;
+    let player = player_graphics(bundle, character)?;
     let bg_palettes = if ctx.sim.paused {
         pause_palettes(&bundle.bg_palettes, ctx.sim.frame_counter & 16 != 0)
     } else {
@@ -51,11 +98,11 @@ fn render(ctx: &LevelContext, bundle: &Bundle) -> Result<Vec<[u8; 3]>, String> {
     // Each assembled bank starts at $8000. Signed BG tile addressing adds $800.
     let mut banks: [Vec<u8>; 2] = std::array::from_fn(|bank| {
         let mut bytes = if bank == 1 {
-            bundle.mario_bank1.clone()
+            player.bank1.to_vec()
         } else if ctx.sim.powerup == 3 {
-            bundle.mario_fire.clone()
+            player.fire.to_vec()
         } else {
-            bundle.mario_normal.clone()
+            player.normal.to_vec()
         };
         bytes.extend_from_slice(&bundle.background[bank]);
         bytes
@@ -172,7 +219,7 @@ fn render(ctx: &LevelContext, bundle: &Bundle) -> Result<Vec<[u8; 3]>, String> {
     let mut objects = vec![None; 160 * 144];
     if let Some(s) = &ctx.spr {
         let mut tables = s.tables.clone();
-        tables.player_mappings = bundle.player_mappings.clone();
+        tables.player_mappings = player.mappings.to_vec();
         tables.sprite_mappings_a = bundle.object_mappings.clone();
         // Fireballs are staged by $0F71 before Mario's $2D0A draw.
         for &(x, y, frame) in &s.fireballs {

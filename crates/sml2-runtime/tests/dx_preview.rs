@@ -1,4 +1,5 @@
-use sml2_dx::{Bundle, BUNDLE_SCHEMA, ROM_SHA256};
+use sml2_core::character::Character::{self, Luigi, Mario};
+use sml2_dx::{Bundle, CharacterGraphics, BUNDLE_SCHEMA, ROM_SHA256};
 use sml2_runtime::{
     content::{ExtractedContent, SessionAssets},
     session::{FrameInput, Session, SessionState},
@@ -28,6 +29,12 @@ fn synthetic_bundle() -> Bundle {
         animation: vec![0; 256],
         object_mappings: vec![vec![]; 168],
         player_mappings: vec![vec![]; 242],
+        luigi: Some(CharacterGraphics {
+            normal: vec![0; 0x800],
+            fire: vec![0; 0x800],
+            bank1: vec![0; 0x800],
+            mappings: vec![vec![]; 242],
+        }),
     }
 }
 
@@ -35,17 +42,50 @@ fn synthetic_bundle() -> Bundle {
 fn dx_public_api_requires_opening_level_and_outputs_direct_rgb() {
     let bundle = synthetic_bundle();
     let mut game = session();
-    assert!(game.render_dx_frame(&bundle).is_err());
+    assert!(game.render_dx_frame(&bundle, Mario).is_err());
     game.begin_level(0, 0).unwrap();
     assert_eq!(
-        game.render_dx_frame(&bundle).unwrap(),
+        game.render_dx_frame(&bundle, Mario).unwrap(),
         vec![[255, 0, 0]; 160 * 144]
     );
+    assert!(game.dx_supported());
     let SessionState::InLevel(ctx) = &mut game.state else {
         unreachable!()
     };
     ctx.manifest.level_id = 1;
-    assert!(game.render_dx_frame(&bundle).is_err());
+    assert!(!game.dx_supported());
+    assert!(game.render_dx_frame(&bundle, Mario).is_err());
+}
+
+#[test]
+fn luigi_uses_his_own_graphics_and_needs_a_schema_two_bundle() {
+    let mut game = session();
+    game.begin_level(0, 0).unwrap();
+    game.advance(FrameInput::default());
+    let mut bundle = synthetic_bundle();
+    // One opaque Luigi cell over the start position: tile 0 is solid color 1.
+    let luigi = bundle.luigi.as_mut().unwrap();
+    luigi.normal[..16].copy_from_slice(&[0xff, 0].repeat(8));
+    luigi.mappings = vec![
+        vec![sml2_core::object::MappingEntry {
+            y: 0,
+            x: 0,
+            tile: 0,
+            attr: 0,
+        }];
+        242
+    ];
+    let mario = game.render_dx_frame(&bundle, Mario).unwrap();
+    let luigi = game.render_dx_frame(&bundle, Luigi).unwrap();
+    assert_ne!(mario, luigi);
+    assert_eq!(game.render_dx_frame(&bundle, Mario).unwrap(), mario);
+    bundle.schema = 1;
+    bundle.luigi = None;
+    assert!(game
+        .render_dx_frame(&bundle, Luigi)
+        .unwrap_err()
+        .contains("re-import"));
+    assert_eq!(game.render_dx_frame(&bundle, Mario).unwrap(), mario);
 }
 
 #[test]
@@ -58,8 +98,8 @@ fn dx_render_frequency_preserves_native_frames_gameplay_and_save_bytes() {
     for tick in 0..40u8 {
         let old_frame = displayed.render_frame((160, 144));
         let save = displayed.save_record();
-        let color = displayed.render_dx_frame(&bundle).unwrap();
-        assert_eq!(displayed.render_dx_frame(&bundle).unwrap(), color);
+        let color = displayed.render_dx_frame(&bundle, Mario).unwrap();
+        assert_eq!(displayed.render_dx_frame(&bundle, Mario).unwrap(), color);
         assert_eq!(displayed.render_frame((160, 144)), old_frame);
         assert_eq!(displayed.save_record(), save);
         let input = FrameInput {
@@ -94,7 +134,7 @@ fn audited_rom_forms_effects_and_initial_frame() {
     let bundle = sml2_dx::extract(&rom).unwrap();
     let mut game = session();
     game.begin_level(0, 0).unwrap();
-    let initial = game.render_dx_frame(&bundle).unwrap();
+    let initial = game.render_dx_frame(&bundle, Mario).unwrap();
     assert!(initial.iter().any(|p| p[0] != p[1] || p[1] != p[2]));
     if let Some(path) = std::env::var_os("DX_OUTPUT_IMAGE") {
         let mut preview = session();
@@ -106,7 +146,7 @@ fn audited_rom_forms_effects_and_initial_frame() {
         for _ in 0..ticks {
             preview.advance(FrameInput::default());
         }
-        let pixels = preview.render_dx_frame(&bundle).unwrap();
+        let pixels = preview.render_dx_frame(&bundle, Mario).unwrap();
         if let SessionState::InLevel(ctx) = &preview.state {
             eprintln!("DX comparison: ticks={ticks}, Mario=({},{}), camera=({},{}), animation={:?}, HUD={}",
                 ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y, ctx.tile_animation, ctx.hud_y);
@@ -131,8 +171,8 @@ fn audited_rom_forms_effects_and_initial_frame() {
         form.advance(FrameInput::default());
         let save = form.save_record();
         let grayscale = form.render_frame((160, 144));
-        let color = form.render_dx_frame(&bundle).unwrap();
-        assert_eq!(form.render_dx_frame(&bundle).unwrap(), color);
+        let color = form.render_dx_frame(&bundle, Mario).unwrap();
+        assert_eq!(form.render_dx_frame(&bundle, Mario).unwrap(), color);
         assert_eq!(form.render_frame((160, 144)), grayscale);
         assert_eq!(form.save_record(), save);
         frames.push(color);
@@ -145,12 +185,12 @@ fn audited_rom_forms_effects_and_initial_frame() {
     };
     ctx.sim.paused = true;
     ctx.sim.frame_counter = 0;
-    let pause0 = game.render_dx_frame(&bundle).unwrap();
+    let pause0 = game.render_dx_frame(&bundle, Mario).unwrap();
     let SessionState::InLevel(ctx) = &mut game.state else {
         unreachable!()
     };
     ctx.sim.frame_counter = 16;
-    assert_ne!(pause0, game.render_dx_frame(&bundle).unwrap());
+    assert_ne!(pause0, game.render_dx_frame(&bundle, Mario).unwrap());
     let mut stars = Vec::new();
     for low in [4, 6] {
         let SessionState::InLevel(ctx) = &mut game.state else {
@@ -160,7 +200,23 @@ fn audited_rom_forms_effects_and_initial_frame() {
         ctx.sim.star_high = 1;
         ctx.sim.star_low = low + 1; // advance decrements before staging draw.
         game.advance(FrameInput::default());
-        stars.push(game.render_dx_frame(&bundle).unwrap());
+        stars.push(game.render_dx_frame(&bundle, Mario).unwrap());
     }
     assert_ne!(stars[0], stars[1]);
+    // Luigi's forms differ from Mario's and from each other on the same native state.
+    let mut luigi_frames = Vec::<Vec<[u8; 3]>>::new();
+    for powerup in 0..=3 {
+        let mut form = session();
+        form.begin_level(0, 0).unwrap();
+        let SessionState::InLevel(ctx) = &mut form.state else {
+            unreachable!()
+        };
+        ctx.sim.powerup = powerup;
+        form.advance(FrameInput::default());
+        let color = form.render_dx_frame(&bundle, Character::Luigi).unwrap();
+        assert_ne!(color, frames[powerup as usize]);
+        luigi_frames.push(color);
+    }
+    assert_ne!(luigi_frames[0], luigi_frames[1]);
+    assert_ne!(luigi_frames[1], luigi_frames[3]);
 }

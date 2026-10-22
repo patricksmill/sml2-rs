@@ -3,6 +3,7 @@
 pub mod actor;
 pub mod audio;
 pub mod camera;
+pub mod character;
 pub mod castle;
 pub mod castle_room;
 pub mod room_sprites;

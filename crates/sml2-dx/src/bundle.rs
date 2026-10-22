@@ -3,12 +3,45 @@
 use crate::{ImportError, Rom, BUNDLE_SCHEMA, ROM_SHA256};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sml2_core::{object::MappingEntry, video::cgb::CgbPalettes};
+use sml2_core::{character::Character, object::MappingEntry, video::cgb::CgbPalettes};
 use std::{fs, io::Read, path::Path};
 
 #[cfg(test)]
 #[path = "bundle_tests.rs"]
 mod bundle_tests;
+
+/// Character-specific opening-theme graphics, separate from native physics.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CharacterGraphics {
+    pub normal: Vec<u8>,
+    pub fire: Vec<u8>,
+    pub bank1: Vec<u8>,
+    pub mappings: Vec<Vec<MappingEntry>>,
+}
+
+impl CharacterGraphics {
+    fn validate(&self) -> Result<(), ImportError> {
+        for (label, bytes) in [
+            ("normal", &self.normal),
+            ("fire", &self.fire),
+            ("bank 1", &self.bank1),
+        ] {
+            if bytes.len() != 0x800 {
+                return Err(ImportError::InvalidBundle(format!(
+                    "Luigi {label} needs 2048 bytes, got {}",
+                    bytes.len()
+                )));
+            }
+        }
+        if self.mappings.len() != 242 || self.mappings.iter().any(|m| m.len() > 64) {
+            return Err(ImportError::InvalidBundle(
+                "invalid Luigi sprite mapping count or length".into(),
+            ));
+        }
+        Ok(())
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -30,13 +63,21 @@ pub struct Bundle {
     pub animation: Vec<u8>,
     pub object_mappings: Vec<Vec<MappingEntry>>,
     pub player_mappings: Vec<Vec<MappingEntry>>,
+    /// Missing in the original Mario-only schema. Re-import to add Luigi.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub luigi: Option<CharacterGraphics>,
 }
 
 impl Bundle {
     pub fn validate(&self) -> Result<(), ImportError> {
         let bad = |s: &str| ImportError::InvalidBundle(s.into());
-        if self.schema != BUNDLE_SCHEMA || self.source_sha256 != ROM_SHA256 {
+        if !matches!(self.schema, 1 | BUNDLE_SCHEMA) || self.source_sha256 != ROM_SHA256 {
             return Err(bad("unsupported schema or source revision"));
+        }
+        match (self.schema, &self.luigi) {
+            (1, None) => {}
+            (BUNDLE_SCHEMA, Some(graphics)) => graphics.validate()?,
+            _ => return Err(bad("character graphics do not match bundle schema")),
         }
         for (label, data, length) in [
             ("background bank 0", &self.background[0], 0x1000),
@@ -71,6 +112,14 @@ impl Bundle {
         CgbPalettes::from_bytes(&self.bg_palettes, &self.obj_palettes)
             .map_err(|e| bad(&e.to_string()))?;
         Ok(())
+    }
+
+    /// Legacy bundles retain Mario support; Luigi requires an updated import.
+    pub fn supports_character(&self, character: Character) -> bool {
+        match character {
+            Character::Mario => true,
+            Character::Luigi => self.luigi.is_some(),
+        }
     }
 
     pub fn encode(&self) -> Result<Vec<u8>, ImportError> {
@@ -149,6 +198,12 @@ pub fn extract(bytes: &[u8]) -> Result<Bundle, ImportError> {
         mario_normal: rom.read(0xa8200, 0x800)?.to_vec(),
         mario_fire: rom.read(0xa9200, 0x800)?.to_vec(),
         mario_bank1: rom.read(0xa8a00, 0x800)?.to_vec(),
+        luigi: Some(CharacterGraphics {
+            normal: rom.read(0xac200, 0x800)?.to_vec(),
+            fire: rom.read(0xad200, 0x800)?.to_vec(),
+            bank1: rom.read(0xaca00, 0x800)?.to_vec(),
+            mappings: mappings(&rom, 0x2d, 0xb4000, 242)?,
+        }),
         tile_attributes: rom.read(0x84000, 256)?.to_vec(),
         hud_tiles: rom.read(0x93c24, 20)?.to_vec(),
         hud_attributes: rom.read(0x92040, 20)?.to_vec(),

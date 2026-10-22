@@ -219,7 +219,11 @@ fn real_rom_import_restart_preview_preserves_saves_and_cancelled_installation() 
     assert!(matches!(&preview.session.state,
         sml2_runtime::session::SessionState::InLevel(ctx) if ctx.sim.powerup == 0));
     assert_eq!(
-        preview.session.render_dx_frame(&bundle).unwrap().len(),
+        preview
+            .session
+            .render_dx_frame(&bundle, sml2_core::character::Character::Mario)
+            .unwrap()
+            .len(),
         160 * 144
     );
     preview.save = save.clone();

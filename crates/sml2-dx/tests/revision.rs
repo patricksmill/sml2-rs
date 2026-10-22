@@ -88,3 +88,70 @@ fn audited_opening_tables_and_bundle_round_trip() {
     mutation[0x98001] ^= 1;
     assert!(extract(&mutation).is_err());
 }
+
+#[test]
+#[ignore = "requires SML2_DX_ROM pointing to the user-supplied audited ROM"]
+fn audited_luigi_graphics_and_mapping_literals() {
+    use sml2_core::character::Character;
+    let bytes = std::fs::read(std::env::var_os("SML2_DX_ROM").expect("set SML2_DX_ROM")).unwrap();
+    let bundle = extract(&bytes).unwrap();
+    assert!(bundle.supports_character(Character::Luigi));
+    let luigi = bundle.luigi.as_ref().unwrap();
+    for (graphics, offset, hash) in [
+        (
+            &luigi.normal,
+            0xac200,
+            "12ca97a4c770daab7b1bfee26554adb3d002f4021ecc8bc1bb61a2480472ddf7",
+        ),
+        (
+            &luigi.fire,
+            0xad200,
+            "4acc7c89c4e997143403deba64d55f4e4788fe5e5d72b1503a2e3a36a5e0b517",
+        ),
+        (
+            &luigi.bank1,
+            0xaca00,
+            "3dc821c8d8e1f92d98f61c2f9923b920eb071d074d9dd9f28cbe3dfac5c9e909",
+        ),
+    ] {
+        assert_eq!(graphics, &bytes[offset..offset + 0x800]);
+        assert_eq!(sml2_dx::sha256(graphics), hash);
+    }
+    assert_eq!(luigi.mappings.len(), 242);
+    assert_eq!(luigi.mappings[0].len(), 11);
+    assert_eq!(
+        luigi.mappings[0][0],
+        MappingEntry {
+            y: -12,
+            x: -7,
+            tile: 1,
+            attr: 0x22
+        }
+    );
+    assert_eq!(
+        luigi.mappings[0][4],
+        MappingEntry {
+            y: -9,
+            x: -3,
+            tile: 0x10,
+            attr: 0x2a
+        }
+    );
+    assert_eq!(luigi.mappings[32].len(), 10);
+    assert_eq!(
+        luigi.mappings[32][3],
+        MappingEntry {
+            y: 3,
+            x: -8,
+            tile: 0x51,
+            attr: 0x2c
+        }
+    );
+    assert_eq!(luigi.mappings[69].len(), 11);
+    assert_eq!(luigi.mappings[112].len(), 13);
+    let encoded = bundle.encode().unwrap();
+    assert_eq!(
+        Bundle::decode(&encoded).unwrap().luigi.unwrap().mappings,
+        luigi.mappings
+    );
+}
