@@ -2,8 +2,8 @@
 //!
 //! State 0 starts a 56-frame timer. On expiry, easy mode removes the object and
 //! decrements the boss-defeated counter; otherwise it decrements the definition,
-//! runs the `$863C` spawn reset, sets contact 73 and restores the state from the
-//! visibility byte (`$FFEF`).
+//! runs the `$863C` sprite re-derive in place, sets contact 73 and restores the
+//! state from the visibility byte (`$FFEF`).
 use crate::actor::{Actor, ContactKind};
 
 const WAIT: u8 = 56;

@@ -47,13 +47,20 @@ fn handler_0x5ac01_hard_mode_rebirths_with_the_decremented_definition() {
     let mut sim = ObjectSim::new(vec![record()], 0);
     sim.configure(0x0A);
     let mut st = staging(1, 1);
+    st.b[..5].copy_from_slice(&[0x01, 0x58, 0, 0x00, 0xD8]);
+    st.b[8] = 2;
+    st.b[13] = 0x20;
     st.b[31] = 5;
     sim.handler_0x5ac01(&mut st, &tables);
     assert_eq!(st.b[5], 100);
     assert_eq!(st.b[18], 73);
     assert_eq!(st.b[15], 5, "state comes from the visibility byte");
     assert_eq!(st.b[11], tables.anim_to_sprite_b[100]);
-    assert_eq!(u16::from_be_bytes([st.b[0], st.b[1]]), 0x0120);
+    // `$863C`/`$8240` rebuild in place: position, marker, activity and the
+    // flip byte survive, and +14..+30 (other than the two writes) clear.
+    assert_eq!(&st.b[..5], &[0x01, 0x58, 0, 0x00, 0xD8]);
+    assert_eq!([st.b[8], st.b[13]], [2, 0x20]);
+    assert_eq!(st.b[28], 0);
     assert_eq!(sim.done, 1);
     assert!(sim.unported.is_empty());
 }

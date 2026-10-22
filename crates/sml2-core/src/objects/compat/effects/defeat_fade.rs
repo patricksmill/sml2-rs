@@ -10,10 +10,9 @@ impl ObjectSim {
         match result {
             Ok(handler_0x5ac01::Effect::Continue) => {}
             Ok(handler_0x5ac01::Effect::Rebirth) => {
-                if self.reset_record_origin(st, tables).is_err() {
-                    self.note_unported(0x5AC01);
-                    return;
-                }
+                // `$3AB4` -> `$85DC` -> `$863C`: re-derive in place; the object
+                // keeps its position, marker and activity.
+                self.finish_sprite_swap(st, tables);
                 st.b[B_TYPE] = handler_0x5ac01::CONTACT;
                 st.b[B_FSTATE] = st.b[B_MASK];
             }
