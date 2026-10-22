@@ -413,6 +413,7 @@ pub(crate) fn run_play(
         } else {
             SceneStep::Idle
         };
+        crate::game::apply_scene_transfer(&mut scene_vm, &mut bg_live, spr.as_mut());
         if let Some(s) = spr.as_mut() {
             crate::render::PipeBackground::update(
                 &mut s.pipe_background,

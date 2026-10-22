@@ -438,7 +438,17 @@ pub(crate) fn load_scene_scripts_from(source: &dyn ContentSource) -> SceneScript
         .as_deref()
         .and_then(SceneScripts::from_bytes)
     {
-        Some(s) => s,
+        Some(mut s) => {
+            match source
+                .read_text("scenes/transfers.json")
+                .map_err(|e| e.to_string())
+                .and_then(|text| sml2_core::scene::SceneTransferAssets::from_json(&text))
+            {
+                Ok(assets) => s.set_transfer_assets(assets),
+                Err(error) => println!("note: scene transfer graphics missing — {error}"),
+            }
+            s
+        }
         None => {
             println!("note: scene script table missing — no scene script can run");
             SceneScripts::default()

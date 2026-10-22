@@ -1,5 +1,7 @@
 //! Shared native frame-ordering helpers used by sessions and parity adapters.
 
+use crate::render::SpriteCtx;
+
 use sml2_core::ending_entry::{EndingEntry, EndingEntryState, EndingFrame, EndingInput};
 use sml2_core::level::LevelManifest;
 use sml2_core::map::MapNodes;
@@ -98,6 +100,19 @@ pub(crate) fn scene_frame_head(
         None
     } else {
         Some(ending_frame_head(ending, sim, cam, input))
+    }
+}
+
+/// Apply one scene DMA burst to the BG and OBJ views of the same video memory.
+pub(crate) fn apply_scene_transfer(
+    scene: &mut SceneVm,
+    bg: &mut [u8],
+    sprites: Option<&mut SpriteCtx>,
+) {
+    if let Some(write) = scene.take_transfer_write() {
+        write
+            .apply_tile_blocks(bg, sprites.map(|s| s.objblock.as_mut_slice()))
+            .expect("scene transfer fits loaded VRAM tile blocks");
     }
 }
 

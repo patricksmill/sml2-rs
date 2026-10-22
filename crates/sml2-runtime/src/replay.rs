@@ -263,6 +263,7 @@ pub(crate) fn run_replay(
     // zeros, so its `sSceneId` never latches and the VM never runs a byte.
     let scripts = load_scene_scripts();
     let mut scene_vm = SceneVm::new();
+    let mut scene_bg = bg_base.to_vec();
     let mut ending_entry = EndingEntry::default();
     let mut ending_sequence = sml2_core::ending_sequence::EndingSequenceController::new();
     let mut ending_scene = sml2_core::ending_scene::EndingScene::default();
@@ -610,6 +611,7 @@ pub(crate) fn run_replay(
         if gameplay || ending_frame.is_none() {
             let scene_camera = (cam.x, cam.y);
             let stepped = scene_vm.step(&mut sim, &mut cam, &scripts);
+            crate::game::apply_scene_transfer(&mut scene_vm, &mut scene_bg, spr.as_mut());
             if let Some(s) = spr.as_mut() {
                 crate::render::PipeBackground::update(
                     &mut s.pipe_background,
@@ -694,7 +696,7 @@ pub(crate) fn run_replay(
                     };
                     s.fireballs = sim.fire_draw.clone();
                 }
-                let mut rbg = bg_base.to_vec();
+                let mut rbg = scene_bg.clone();
                 apply_tile_anim(&mut rbg, &manifest.tile_anim, anim_rows, 0);
                 let hud_live = hud_row_status(
                     hud,

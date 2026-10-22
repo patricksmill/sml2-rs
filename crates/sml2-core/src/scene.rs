@@ -86,6 +86,7 @@ use crate::player_sim::PlayerSim;
 
 #[path = "scene_transfer.rs"]
 mod transfer;
+pub use transfer::{SceneTransferAssets, SceneTransferBlock, SceneVramWrite};
 
 /// The operand byte count for each opcode class, read off the `$20EB`-`$21AC`
 /// dispatch chain. `None` means the ROM has no handler for that class.
@@ -116,6 +117,7 @@ const TABLE_ADDR: usize = 0x4125;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SceneScripts {
     blob: Vec<u8>,
+    transfers: SceneTransferAssets,
 }
 
 impl SceneScripts {
@@ -127,6 +129,7 @@ impl SceneScripts {
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         (bytes.len() == Self::BLOB_LEN).then(|| Self {
             blob: bytes.to_vec(),
+            transfers: SceneTransferAssets::default(),
         })
     }
 
@@ -212,6 +215,8 @@ pub struct SceneVm {
     opcode_wait: u8,
     /// Only `$4x` sets the transition flag after its opcode waits.
     opcode_transition_tail: bool,
+    tile_transfer: Option<crate::vram_transfer::VramTransfer>,
+    transfer_write: Option<SceneVramWrite>,
     /// `$0F0B` latched a scene, so the script table has been claimed and the
     /// cursor is live. While unarmed the cursor is 0 — see `step`.
     armed: bool,
@@ -245,6 +250,8 @@ impl SceneVm {
         self.enter_wait = Self::PROLOGUE_FRAMES;
         self.opcode_wait = 0;
         self.opcode_transition_tail = false;
+        self.tile_transfer = None;
+        self.transfer_write = None;
         self.armed = true;
         self.bad_cursor_scene = None;
         self.pc = 0;
@@ -262,6 +269,8 @@ impl SceneVm {
         self.enter_wait = 0;
         self.opcode_wait = 0;
         self.opcode_transition_tail = false;
+        self.tile_transfer = None;
+        self.transfer_write = None;
         self.armed = false;
         self.pc = 0;
     }
@@ -282,6 +291,7 @@ impl SceneVm {
         cam: &mut CameraSim,
         scripts: &SceneScripts,
     ) -> SceneStep {
+        self.transfer_write = None;
         if scripts.is_empty() {
             return SceneStep::Idle;
         }
@@ -307,6 +317,7 @@ impl SceneVm {
             return SceneStep::Entering;
         }
         if self.opcode_wait > 0 {
+            self.copy_transfer_burst(scripts);
             self.opcode_wait -= 1;
             if self.opcode_wait == 0 && self.opcode_transition_tail {
                 cam.scene_transition_flag = 1;
@@ -337,6 +348,7 @@ impl SceneVm {
             return SceneStep::Stalled(op);
         };
         let operand = scripts.byte_at(self.pc.wrapping_add(1)).unwrap_or(0);
+        let mut implemented = matches!(class, 0x2 | 0x3 | 0x4 | 0x6 | 0x8);
         match class {
             0x2 => self.op_2x(sim, cam),
             0x3 => {
@@ -358,13 +370,15 @@ impl SceneVm {
             0x6 => sim.level_gfx_index = op & 0x0F,
             0x8 => cam.boss_defeated = 0xF0 | (op & 0x0F),
             0xB => {
-                self.wait_for_tile_transfer(op);
-                self.note_unported(op); // Graphics payload is still unported.
+                implemented = self.begin_tile_transfer(op, scripts);
+                if !implemented {
+                    self.note_unported(op);
+                }
             }
             _ => self.note_unported(op),
         }
         self.pc = self.pc.wrapping_add(1 + len as u16);
-        if matches!(class, 0x2 | 0x3 | 0x4 | 0x6 | 0x8) {
+        if implemented {
             SceneStep::Ran(op)
         } else {
             SceneStep::Unported(op)

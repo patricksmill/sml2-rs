@@ -362,6 +362,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         extracted.join("scenes/script_table.bin"),
         &baserom[script_rom..script_rom + 192],
     )?;
+    let scripts =
+        sml2_core::scene::SceneScripts::from_bytes(&baserom[script_rom..script_rom + 192])
+            .ok_or("invalid scene script table")?;
+    let transfers = sml2_core::scene::SceneTransferAssets::extract(&baserom, &scripts)?;
+    fs::write(
+        extracted.join("scenes/transfers.json"),
+        serde_json::to_string_pretty(&transfers)?,
+    )?;
 
     // The `$6x` opcode's tileset swap (`$25AF`), written once for the whole ROM
     // because all three of its tables are global and keyed only by

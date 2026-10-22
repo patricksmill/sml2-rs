@@ -395,6 +395,7 @@ impl LevelContext {
         } else {
             SceneStep::Idle
         };
+        crate::game::apply_scene_transfer(&mut self.scene_vm, &mut self.bg_live, self.spr.as_mut());
         if let Some(s) = self.spr.as_mut() {
             crate::render::PipeBackground::update(
                 &mut s.pipe_background,
