@@ -140,6 +140,34 @@ mod tests {
     }
 
     #[test]
+    fn backward_scan_spawns_every_record_in_the_edge_column() {
+        // `$8CEB`: after a spawn (and on a marker skip) the backward scan
+        // steps the pointer by `$FFFA`, so both records at the edge column
+        // spawn in one pass and the cursor stops on the record to the left.
+        let at = |x: u16, y: u16| SpawnRecord {
+            x,
+            y,
+            raw: [(x >> 8) as u8, x as u8, 0, (y >> 8) as u8, y as u8, 3],
+            ..record()
+        };
+        let records = vec![
+            at(0x0120, 0x90),
+            at(0x0128, 0x60),
+            at(0x0128, 0x90),
+            at(0x0130, 0x90),
+        ];
+        let mut sim = ObjectSim::new(records, 0);
+        sim.stream_index = 18;
+        sim.scan_dir = 2;
+        sim.spawn_x = 0x0128;
+        sim.scan(&tables());
+        assert_eq!(sim.spawned, vec![false, true, true, false]);
+        let ys: Vec<u8> = sim.slots[..2].iter().map(|s| s.b[B_YLO]).collect();
+        assert_eq!(ys, [0x90, 0x60]);
+        assert_eq!(sim.stream_index, 0);
+    }
+
+    #[test]
     fn stream_cursor_physical_address_wraps_at_sixteen_bits() {
         let mut sim = ObjectSim::new(vec![], 0);
         for (offset, pointer) in [

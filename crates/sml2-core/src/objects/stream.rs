@@ -14,6 +14,24 @@ impl ObjectSim {
         false
     }
 
+    /// `$8D05`: the backward scan steps the pointer by `$FFFA`.
+    fn retreat_stream(&mut self) -> bool {
+        if self.stream_cursor_cleared || self.stream_index == 0 {
+            return false;
+        }
+        self.stream_index -= RECORD_LEN;
+        true
+    }
+
+    /// The scan's next record: `$8C56` (+6) forward, `$8D05` (-6) backward.
+    fn step_stream(&mut self, forward: bool) -> bool {
+        if forward {
+            self.advance_stream()
+        } else {
+            self.retreat_stream()
+        }
+    }
+
     pub(super) fn scan(&mut self, tables: &ObjectTables) {
         if self.stream_cursor_cleared {
             // Scanning physical $0000 is outside the supported source paths.
@@ -59,17 +77,15 @@ impl ObjectSim {
                     if rec_x < edge {
                         return;
                     }
-                    if self.stream_index == 0 {
+                    if !self.retreat_stream() {
                         return;
                     }
-                    self.stream_index -= RECORD_LEN;
                     continue;
                 }
                 if (rec_x & 0xFF) > (edge & 0xFF) {
-                    if self.stream_index == 0 {
+                    if !self.retreat_stream() {
                         return;
                     }
-                    self.stream_index -= RECORD_LEN;
                     continue;
                 }
                 if (rec_x & 0xFF) != (edge & 0xFF) {
@@ -85,7 +101,7 @@ impl ObjectSim {
                 m & 0x0E != 0
             } || self.spawned[ri];
             if skip {
-                if !self.advance_stream() {
+                if !self.step_stream(forward) {
                     return;
                 }
                 continue;
@@ -122,8 +138,10 @@ impl ObjectSim {
             // The last record leaves the pointer parked on itself (see
             // `advance_stream`): the engine's `$FF` terminator check refuses
             // the store, and the re-scan then walks into the same record with
-            // the post-spawn marker set and stops there every frame.
-            self.advance_stream();
+            // the post-spawn marker set and stops there every frame. A
+            // backward scan (`$8D99`) steps down instead, so a second record
+            // in the same column spawns in the same pass.
+            self.step_stream(forward);
         }
     }
 }
