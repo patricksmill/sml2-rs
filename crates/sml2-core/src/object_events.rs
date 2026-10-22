@@ -8,6 +8,9 @@ impl ObjectSim {
         self.mario_dead = player.dead;
         self.fade_timer = player.fade_timer;
         self.timer_low = player.level_timer.low;
+        // `$58000` reads `sGoalBell` and clears every object's contact type
+        // while it is set, so nothing hurts Mario after the goal.
+        self.goal_bell = u8::from(player.goal_bell);
     }
 }
 
@@ -36,6 +39,18 @@ impl CameraSim {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_goal_bell_reaches_the_object_engine() {
+        let mut obj = ObjectSim::new(Vec::new(), 0);
+        let mut player = crate::player_sim::PlayerSim::new();
+        player.goal_bell = true;
+        obj.sample_player_inputs(&player);
+        assert_ne!(obj.goal_bell, 0);
+        player.goal_bell = false;
+        obj.sample_player_inputs(&player);
+        assert_eq!(obj.goal_bell, 0);
+    }
 
     #[test]
     fn pan_events_preserve_creation_frame_and_drive_next_frame_phases() {
