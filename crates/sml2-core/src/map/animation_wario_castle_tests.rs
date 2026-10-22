@@ -193,8 +193,9 @@ fn wario_castle_blink_gate_accumulator_wrap_and_random_rejection() {
 #[test]
 fn wario_castle_raster_bands_have_distinct_cadence_and_wrap() {
     let mut state = WarioCastleAnimation::default();
+    let mut raster_phase = 0u8;
     for frame in 1..=16 {
-        update_bands(&mut state);
+        update_bands(&mut state, &mut raster_phase);
         assert_eq!(
             state.band_scroll,
             [
@@ -204,10 +205,10 @@ fn wario_castle_raster_bands_have_distinct_cadence_and_wrap() {
             ]
         );
     }
-    state.raster_phase = 255;
+    raster_phase = 255;
     state.band_scroll = [0, 0, 0];
-    update_bands(&mut state);
-    assert_eq!(state.raster_phase, 0);
+    update_bands(&mut state, &mut raster_phase);
+    assert_eq!(raster_phase, 0);
     assert_eq!(state.band_scroll, [255, 23, 255]);
 }
 
@@ -221,7 +222,8 @@ fn wario_castle_loader_resets_only_source_fields() {
     state.accum = 255;
     state.movement = 4;
     state.blink_timer = 30;
-    state.raster_phase = 20;
+    map.raster_phase = 20;
+    let state = &mut map.zone_animation.wario_castle;
     state.band_scroll = [9, 4, 8];
     state.bg_palette = 0;
     state.obj_palette = 0;
@@ -232,9 +234,24 @@ fn wario_castle_loader_resets_only_source_fields() {
         (2, 3, 2, 255)
     );
     assert_eq!(
-        (state.movement, state.blink_timer, state.raster_phase),
+        (state.movement, state.blink_timer, map.raster_phase),
         (0, 1, 20)
     );
     assert_eq!(state.band_scroll, [9, 23, 8]);
     assert_eq!((state.bg_palette, state.obj_palette), (0xE1, 0x39));
+}
+
+/// `$3E7F2` runs from `$3EAFF`, not the map handler, and advances the hub
+/// wave's `sMapRasterPhase`.
+#[test]
+fn the_sky_bands_run_in_vblank_on_the_shared_raster_phase() {
+    let mut map = wario_castle();
+    map.raster_phase = 3;
+    let bands = map.zone_animation.wario_castle.band_scroll;
+    tick(&mut map, 0);
+    assert_eq!(map.raster_phase, 3, "the map handler leaves the bands alone");
+    assert_eq!(map.zone_animation.wario_castle.band_scroll, bands);
+    map.vblank_bands();
+    assert_eq!(map.raster_phase, 4);
+    assert_eq!(map.zone_animation.wario_castle.band_scroll[0], bands[0].wrapping_sub(1));
 }

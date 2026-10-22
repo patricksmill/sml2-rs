@@ -583,6 +583,15 @@ pub struct MapRam {
     pub sparkle_timer: u8,
     /// `sMapTreeAnimTick` (`$A784`), reset only by its own ten-frame wrap.
     pub tree_tick: u8,
+    /// Wario's Castle `$A796`-`$A799` (flag frame, flash, wanderer accumulator,
+    /// lightning phase): only room entries zero them.
+    pub castle_anim_count: u8,
+    pub castle_flash: u8,
+    pub castle_accum: u8,
+    pub castle_phase: u8,
+    /// `sMapBandScroll0`/`2` (`$A78A`/`$A78C`): `$3D6EB` resets only band 1.
+    pub band_scroll0: u8,
+    pub band_scroll2: u8,
     /// `sMapKeysXor` (`$A6B2`).
     pub keys_xor: u8,
     /// `sMapRandAccum` (`$A7B7`).
@@ -613,6 +622,12 @@ impl MapRam {
             coin_icon_phase: byte(0x180),
             sparkle_timer: byte(0x1A9),
             tree_tick: byte(0x184),
+            castle_anim_count: byte(0x196),
+            castle_flash: byte(0x197),
+            castle_accum: byte(0x198),
+            castle_phase: byte(0x199),
+            band_scroll0: byte(0x18A),
+            band_scroll2: byte(0x18C),
             keys_xor: byte(0xB2),
             rand_accum: byte(0x1B7),
             reveal_progress: byte(0x1A5),
@@ -3086,6 +3101,12 @@ mod tests {
         bytes[0x180] = 2;
         bytes[0x1A9] = 3;
         bytes[0x184] = 7;
+        bytes[0x196] = 1;
+        bytes[0x197] = 2;
+        bytes[0x198] = 0x41;
+        bytes[0x199] = 3;
+        bytes[0x18A] = 0x90;
+        bytes[0x18C] = 0x91;
         bytes[0xB2] = 116;
         bytes[0x1B7] = 76;
         bytes[0x1A5] = 0x23;
@@ -3103,6 +3124,12 @@ mod tests {
                 coin_icon_phase: 2,
                 sparkle_timer: 3,
                 tree_tick: 7,
+                castle_anim_count: 1,
+                castle_flash: 2,
+                castle_accum: 0x41,
+                castle_phase: 3,
+                band_scroll0: 0x90,
+                band_scroll2: 0x91,
                 keys_xor: 116,
                 rand_accum: 76,
                 reveal_progress: 0x23,

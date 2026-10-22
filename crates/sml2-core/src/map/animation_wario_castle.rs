@@ -17,7 +17,6 @@ pub(super) struct WarioCastleAnimation {
     pub(super) accum: u8,
     pub(super) movement: u8,
     pub(super) blink_timer: u8,
-    pub(super) raster_phase: u8,
     pub(super) band_scroll: [u8; 3],
     pub(super) bg_palette: u8,
     pub(super) obj_palette: u8,
@@ -32,7 +31,6 @@ impl Default for WarioCastleAnimation {
             accum: 0,
             movement: 0,
             blink_timer: 1,
-            raster_phase: 0,
             band_scroll: [0, 23, 0],
             bg_palette: 0xE1,
             obj_palette: 0x39,
@@ -85,7 +83,6 @@ pub(super) fn tick(map: &mut MapSim, div: u8) {
     let mut decor = Decorations::read(map);
     let frame = map.frame_counter;
     let state = &mut map.zone_animation.wario_castle;
-    update_bands(state);
     if frame & 7 == 0 {
         state.anim_count = state.anim_count.wrapping_add(1);
         if state.anim_count >= 3 {
@@ -134,20 +131,27 @@ pub(super) fn tick(map: &mut MapSim, div: u8) {
     decor.write(map);
 }
 
-fn update_bands(state: &mut WarioCastleAnimation) {
-    state.raster_phase = state.raster_phase.wrapping_add(1);
-    if state.raster_phase & 3 != 0 {
+/// `$3EAFF` -> `$3E7F2`, on every frame screen 7 is on screen. The phase is
+/// `sMapRasterPhase`, the byte the hub's wave also advances.
+pub(super) fn vblank_bands(map: &mut MapSim) {
+    update_bands(&mut map.zone_animation.wario_castle, &mut map.raster_phase);
+}
+
+fn update_bands(state: &mut WarioCastleAnimation, raster_phase: &mut u8) {
+    *raster_phase = raster_phase.wrapping_add(1);
+    let phase = *raster_phase;
+    if phase & 3 != 0 {
         return;
     }
     state.band_scroll[0] = state.band_scroll[0].wrapping_sub(1);
-    if state.raster_phase & 4 != 0 {
+    if phase & 4 != 0 {
         return;
     }
     state.band_scroll[1] = state.band_scroll[1].wrapping_sub(1);
     if state.band_scroll[1] >= 24 {
         state.band_scroll[1] = 23;
     }
-    if state.raster_phase & 8 == 0 {
+    if phase & 8 == 0 {
         state.band_scroll[2] = state.band_scroll[2].wrapping_sub(1);
     }
 }

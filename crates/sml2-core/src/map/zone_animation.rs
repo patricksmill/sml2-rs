@@ -97,6 +97,12 @@ impl MapSim {
             coin_icon_phase: self.coin_icon_phase,
             sparkle_timer: self.sparkle_timer,
             tree_tick: self.zone_animation.tree.tick,
+            castle_anim_count: self.zone_animation.wario_castle.anim_count,
+            castle_flash: self.zone_animation.wario_castle.flash,
+            castle_accum: self.zone_animation.wario_castle.accum,
+            castle_phase: self.zone_animation.wario_castle.phase,
+            band_scroll0: self.zone_animation.wario_castle.band_scroll[0],
+            band_scroll2: self.zone_animation.wario_castle.band_scroll[2],
             keys_xor: self.keys_xor,
             rand_accum: self.zone_animation.random_accum,
             reveal_progress: self.reveal_progress,
@@ -117,6 +123,18 @@ impl MapSim {
         self.coin_icon_phase = ram.coin_icon_phase;
         self.sparkle_timer = ram.sparkle_timer;
         self.zone_animation.tree.tick = ram.tree_tick;
+        let castle = &mut self.zone_animation.wario_castle;
+        castle.band_scroll[0] = ram.band_scroll0;
+        castle.band_scroll[2] = ram.band_scroll2;
+        if self.room.is_some() {
+            // `$3F307`/`$3F4B1`/`$3F5A4` zero `$A795`-`$A79C` on room entry.
+            (castle.anim_count, castle.flash, castle.accum, castle.phase) = (0, 0, 0, 0);
+        } else {
+            castle.anim_count = ram.castle_anim_count;
+            castle.flash = ram.castle_flash;
+            castle.accum = ram.castle_accum;
+            castle.phase = ram.castle_phase;
+        }
         self.keys_xor = ram.keys_xor;
         self.zone_animation.random_accum = ram.rand_accum;
         self.reveal_progress = ram.reveal_progress;
@@ -181,6 +199,14 @@ impl MapSim {
             self.zone_animation.wario_castle.bg_palette,
             self.zone_animation.wario_castle.obj_palette,
         ))
+    }
+
+    /// `$3EAFF`'s per-screen work outside the hub's wave: Wario's Castle
+    /// (screen 7) scrolls its sky bands on every frame it is on screen.
+    pub fn vblank_bands(&mut self) {
+        if self.screen_id == 7 {
+            animation_wario_castle::vblank_bands(self);
+        }
     }
 
     pub(super) fn zone_animation_tick(&mut self, div: u8) {

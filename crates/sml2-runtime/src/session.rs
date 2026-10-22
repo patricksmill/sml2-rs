@@ -1276,9 +1276,14 @@ impl Session {
                 // cursor freezes while the palettes fade and the level loads.
                 if let Some(t) = self.pending_level.as_mut() {
                     t.frame += 1;
-                    // `$3EAFF` keeps the hub's wave moving through the fade.
-                    if t.frame < MAP_EASY_CARD_START && map_sim.screen_id == 0 {
-                        tick_hub_wave(&mut self.map_wave, map_sim, &self.assets, self.map_ram);
+                    // `$3EAFF` keeps the hub's wave and the castle's bands
+                    // moving through the fade.
+                    if t.frame < MAP_EASY_CARD_START {
+                        if map_sim.screen_id == 0 {
+                            tick_hub_wave(&mut self.map_wave, map_sim, &self.assets, self.map_ram);
+                        } else {
+                            map_sim.vblank_bands();
+                        }
                     }
                     break 'map StepOutcome::Continue;
                 }
@@ -1297,6 +1302,12 @@ impl Session {
                         // The hub fades out with its wave still running; the
                         // zone just loaded already owns `sMapRasterPhase`.
                         tick_hub_wave(&mut self.map_wave, map_sim, &self.assets, self.map_ram);
+                    } else if transition.entering {
+                        map_sim.vblank_bands();
+                    } else {
+                        // The walk out shows the screen it left, whose bytes
+                        // the hub takes over when the walk ends.
+                        transition.source.vblank_bands();
                     }
                     if transition.advance(map_sim, div) {
                         let entering = transition.entering;
@@ -1498,6 +1509,7 @@ impl Session {
                     tick_hub_wave(&mut self.map_wave, map_sim, &self.assets, self.map_ram);
                 } else {
                     self.map_wave = None;
+                    map_sim.vblank_bands();
                 }
 
                 if map_sim.pending_save || entry.saved {
