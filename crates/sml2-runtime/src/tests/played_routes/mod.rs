@@ -1,5 +1,7 @@
 use super::*;
 
+mod boss_routes;
+
 mod continuous;
 mod level19_alternate;
 
