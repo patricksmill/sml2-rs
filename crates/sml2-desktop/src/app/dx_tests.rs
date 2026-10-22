@@ -78,6 +78,42 @@ fn browser_selection_uses_existing_rom_validation_and_preserves_installation() {
 }
 
 #[test]
+fn selecting_rom_does_not_activate_quit_from_browser_keyboard_input() {
+    for key in [egui::Key::Enter, egui::Key::Space] {
+        let (mut app, ctx, path) = super::tests::app();
+        std::fs::create_dir_all(&path).unwrap();
+        let rom = path.join("unsupported.gbc");
+        std::fs::write(&rom, [0; 16]).unwrap();
+        super::tests::frame(&mut app, &ctx, vec![]);
+        app.menu.selected = 4; // Import SML2DX, after Play/Title/Settings/Quit.
+        app.dx_picker = Some(super::file_picker::FilePicker::new(path.clone()));
+        super::tests::frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+        );
+        app.import_dx_path(rom);
+        let output = super::tests::frame(&mut app, &ctx, vec![]);
+        assert!(
+            output.viewport_output.values().all(|viewport| !viewport
+                .commands
+                .iter()
+                .any(|command| matches!(command, egui::ViewportCommand::Close))),
+            "browser key activated Quit after selection"
+        );
+        assert!(app.screen == Screen::Home);
+        wait_for_dx(&mut app);
+        let _ = std::fs::remove_dir_all(path);
+    }
+}
+
+#[test]
 fn cancelled_and_failed_replacements_preserve_selected_installation() {
     let (mut app, _, path) = super::tests::app();
     let key = CacheKey::new("1".repeat(64));

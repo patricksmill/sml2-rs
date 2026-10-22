@@ -29,6 +29,8 @@ impl DesktopApp {
         for event in events {
             match event {
                 Event::FileChosen(path) => {
+                    self.input.suppress_until_release();
+                    self.menu = Default::default();
                     let cancelled = self
                         .dx_worker
                         .as_ref()
@@ -76,6 +78,9 @@ impl DesktopApp {
     pub(super) fn import_dx_path(&mut self, path: std::path::PathBuf) {
         let assets = self.options.assets.clone();
         self.dx_picker = None;
+        // Enter/Space used by the picker must not activate a Home menu item.
+        self.input.suppress_until_release();
+        self.menu = Default::default();
         self.dx_worker = Some(Worker::start(move |cancel, progress| {
             dx_import::import_path(&dx_import::cache_root()?, &assets, &path, cancel, progress)
                 .map_err(|e| e.to_string())
@@ -116,6 +121,8 @@ impl DesktopApp {
             Some(PickerResult::Selected(path)) => self.import_dx_path(path),
             Some(PickerResult::Cancelled) => {
                 self.dx_picker = None;
+                self.input.suppress_until_release();
+                self.menu = Default::default();
                 self.dx_message = "DX import cancelled; previous installation retained".into();
             }
             None => {}

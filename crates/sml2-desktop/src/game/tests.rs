@@ -156,8 +156,24 @@ fn real_rom_import_restart_preview_preserves_saves_and_cancelled_installation() 
     let saved = slots.image();
     std::fs::write(&save, saved).unwrap();
 
-    let (key, bundle) =
-        dx_import::import_path(&cache, &assets, &rom, &AtomicBool::new(false), |_| {}).unwrap();
+    let worker_cache = cache.clone();
+    let worker_assets = assets.clone();
+    let worker_rom = rom.clone();
+    let worker = dx_import::Worker::start(move |cancel, progress| {
+        dx_import::import_path(&worker_cache, &worker_assets, &worker_rom, cancel, progress)
+            .map_err(|e| e.to_string())
+    });
+    let (key, bundle) = loop {
+        match worker
+            .events
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .unwrap()
+        {
+            dx_import::Event::Progress(message) => eprintln!("DX import: {message}"),
+            dx_import::Event::Finished(result) => break result.unwrap(),
+            dx_import::Event::FileChosen(_) => panic!("import worker unexpectedly opened a picker"),
+        }
+    };
     let installed = bundle.encode().unwrap();
     let mut settings = Settings::default();
     settings.dx_installation = Some(key.clone());
