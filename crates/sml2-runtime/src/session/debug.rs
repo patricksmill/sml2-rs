@@ -1,5 +1,5 @@
-//! Host-facing debug controls: overworld warps, level warps, progress and purse
-//! edits.
+//! Host-facing debug controls: overworld warps, level warps, progress, purse
+//! and power-up edits.
 //!
 //! Every function writes the fields the game's own handlers write — the map's
 //! `sLevelProgress`, the player's copy inside a level, the BCD purse, the BCD
@@ -22,6 +22,12 @@ use sml2_core::map_sim::MapSim;
 /// are the bank-24 room screens, which need a script staged rather than a
 /// cursor landing, so they are not warp targets.
 pub const WARP_MAX_SCREEN: u8 = 8;
+
+/// `sPendingItemId` values the `$3451` consumer turns into power-ups.
+const ITEM_MUSHROOM: u8 = 1;
+const ITEM_FLOWER: u8 = 2;
+const ITEM_CARROT: u8 = 3;
+const ITEM_STAR: u8 = 4;
 
 /// The hub door (`$3C60B`) that loads each zone screen 1-8. Where a zone has
 /// two, this is the one whose landing the debug panel names.
@@ -238,6 +244,54 @@ impl Session {
     pub fn debug_add_lives(&mut self, delta: i32) {
         let now = i32::from(self.debug_lives());
         self.debug_set_lives(now.saturating_add(delta).clamp(0, 99) as u8);
+    }
+
+    /// The live `sCurPowerup`: 0 small, 1 super, 2 bunny, 3 fire.
+    pub fn debug_powerup(&self) -> u8 {
+        match &self.state {
+            SessionState::Overworld(map) => map.powerup,
+            SessionState::InLevel(ctx) => ctx.sim.powerup,
+            _ => self.powerup,
+        }
+    }
+
+    /// Put Mario in power-up tier `tier` (0-3).
+    ///
+    /// Inside a level a gain is staged as the matching item in
+    /// `sPendingItemId`, so the next frame's `$3451` consumer grants it with
+    /// the pickup's own sound and 64 frames of invincibility. Small has no
+    /// item, so it is written directly. Elsewhere only the carried tier exists,
+    /// and the next level entry picks it up.
+    pub fn debug_set_powerup(&mut self, tier: u8) -> Result<(), String> {
+        let item = match tier {
+            0 => None,
+            1 => Some(ITEM_MUSHROOM),
+            2 => Some(ITEM_CARROT),
+            3 => Some(ITEM_FLOWER),
+            _ => return Err(format!("power-up tier {tier} does not exist (0..=3)")),
+        };
+        match &mut self.state {
+            SessionState::InLevel(ctx) => match item {
+                Some(item) => ctx.sim.pending_item = item,
+                None => ctx.sim.powerup = 0,
+            },
+            SessionState::Overworld(map) => {
+                map.powerup = tier;
+                self.powerup = tier;
+            }
+            _ => self.powerup = tier,
+        }
+        Ok(())
+    }
+
+    /// Stage a star in `sPendingItemId`: the next frame's `$3489` starts the
+    /// timer and the star music. Only a running level has a star.
+    pub fn debug_give_star(&mut self) -> Result<(), String> {
+        let SessionState::InLevel(ctx) = &mut self.state else {
+            return Err("a star only works inside a level".into());
+        };
+        ctx.sim.pending_item = ITEM_STAR;
+        Ok(())
     }
 
     /// Pull the live lives, purse and power-up into the session's carry

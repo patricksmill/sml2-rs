@@ -225,6 +225,9 @@ fn debug_actions_edit_the_session_and_persist_the_active_pipe() {
     assert_eq!(app.game.as_ref().unwrap().session.debug_coins(), 250);
     assert_eq!(app.game.as_ref().unwrap().session.debug_lives(), 7);
 
+    app.apply_debug(DebugAction::SetPowerup(3));
+    assert_eq!(app.game.as_ref().unwrap().session.debug_powerup(), 3);
+
     app.apply_debug(DebugAction::WarpLevel(4));
     match &app.game.as_ref().unwrap().session.state {
         SessionState::InLevel(level) => assert_eq!(level.manifest.level_id, 4),

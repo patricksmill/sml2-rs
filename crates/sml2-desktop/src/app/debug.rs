@@ -1,4 +1,5 @@
-//! Debug-panel controls: warps, stage progress, golden coins and the purse.
+//! Debug-panel controls: warps, stage progress, golden coins, the purse and
+//! Mario's power-up.
 //!
 //! The widgets only collect an action; [`DesktopApp::apply_debug`] runs it after
 //! the window closes, so a click never mutates the session while egui still
@@ -27,6 +28,9 @@ const ZONES: [(&str, u8, u8); 9] = [
     ("Castle", 8, 0x72),
 ];
 
+/// `(label, sCurPowerup)` in the order the panel lists them.
+const POWERUPS: [(&str, u8); 4] = [("Small", 0), ("Super", 1), ("Fire", 3), ("Bunny", 2)];
+
 /// One debug edit, applied after the panel's frame.
 pub(super) enum DebugAction {
     WarpMap { screen: u8, node: u8 },
@@ -39,6 +43,9 @@ pub(super) enum DebugAction {
     SetGoldenCoin { index: usize, held: bool },
     AddCoins(i32),
     AddLives(i32),
+    /// Put Mario in `sCurPowerup` tier 0-3.
+    SetPowerup(u8),
+    GiveStar,
     /// Write the live record into the active pipe and the slot image.
     Save,
 }
@@ -46,14 +53,15 @@ pub(super) enum DebugAction {
 impl DesktopApp {
     pub(super) fn debug_controls(&mut self, ui: &mut Ui) -> Option<DebugAction> {
         let mut action = None;
-        let (progress, coins, lives, state) = match &self.game {
+        let (progress, coins, lives, powerup, state) = match &self.game {
             Some(game) => (
                 game.session.debug_progress(),
                 game.session.debug_coins(),
                 game.session.debug_lives(),
+                game.session.debug_powerup(),
                 state_label(&game.session.state),
             ),
-            None => ([0; 42], 0, 0, "no game loaded".to_string()),
+            None => ([0; 42], 0, 0, 0, "no game loaded".to_string()),
         };
 
         ui.separator();
@@ -199,6 +207,23 @@ impl DesktopApp {
             });
 
         ui.separator();
+        egui::CollapsingHeader::new("Power-up")
+            .default_open(true)
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for (label, tier) in POWERUPS {
+                        if ui.selectable_label(powerup == tier, label).clicked() {
+                            action = Some(DebugAction::SetPowerup(tier));
+                        }
+                    }
+                    if ui.button("Star").clicked() {
+                        action = Some(DebugAction::GiveStar);
+                    }
+                });
+                ui.label("In a level a gain plays as a pickup on the next frame.");
+            });
+
+        ui.separator();
         ui.horizontal(|ui| {
             let pipe = self.game.as_ref().and_then(|game| game.session.active_slot);
             let label = match pipe {
@@ -281,6 +306,14 @@ impl DesktopApp {
                 session.debug_add_lives(delta);
                 (format!("lives {:02}", session.debug_lives()), false)
             }
+            DebugAction::SetPowerup(tier) => match session.debug_set_powerup(tier) {
+                Ok(()) => (format!("power-up: {}", powerup_name(tier)), false),
+                Err(error) => (error, true),
+            },
+            DebugAction::GiveStar => match session.debug_give_star() {
+                Ok(()) => ("star".to_string(), false),
+                Err(error) => (error, true),
+            },
             DebugAction::Save => match game.save_now() {
                 Ok(()) => ("saved".to_string(), false),
                 Err(error) => (format!("save failed: {error}"), true),
@@ -353,6 +386,14 @@ fn coin_level(index: usize) -> Option<u8> {
         .iter()
         .position(|&level_offset| level_offset == offset)
         .map(|level| level as u8)
+}
+
+fn powerup_name(tier: u8) -> &'static str {
+    POWERUPS
+        .iter()
+        .find(|(_, id)| *id == tier)
+        .map(|(name, _)| *name)
+        .unwrap_or("?")
 }
 
 fn state_label(state: &SessionState) -> String {

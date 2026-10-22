@@ -416,3 +416,51 @@ fn entering_a_zone_from_the_panel_lands_where_the_rom_door_does() {
         );
     }
 }
+
+/// A power-up edit inside a level is a pickup: the consumer grants the tier with
+/// its invincibility window, and the tier rides the hand-off to the map.
+#[test]
+fn power_up_edits_play_as_pickups_and_carry_to_the_map() {
+    use crate::session::FrameInput;
+    use sml2_core::player_sim::PlayerKeys;
+
+    let mut session = session();
+    session.debug_warp_level(0).expect("level 1 loads");
+    let idle = FrameInput { keys: PlayerKeys::default(), div: 0x3D };
+    for _ in 0..8 {
+        session.advance(idle);
+    }
+    for tier in [1u8, 3, 2] {
+        session.debug_set_powerup(tier).expect("a real tier");
+        session.advance(idle);
+        assert_eq!(session.debug_powerup(), tier);
+        match &session.state {
+            SessionState::InLevel(ctx) => {
+                assert_eq!(ctx.sim.pending_item, 0, "the consumer took the item");
+                assert!(ctx.sim.invincibility > 0, "a pickup grants invincibility");
+            }
+            _ => panic!("the level ended"),
+        }
+    }
+    session.debug_set_powerup(0).expect("small");
+    assert_eq!(session.debug_powerup(), 0, "small is written directly");
+    assert!(session.debug_set_powerup(4).is_err());
+
+    session.debug_give_star().expect("a level has a star");
+    session.advance(idle);
+    match &session.state {
+        SessionState::InLevel(ctx) => assert_ne!(ctx.sim.star_high, 0, "the star runs"),
+        _ => panic!("the level ended"),
+    }
+
+    session.debug_set_powerup(3).expect("fire");
+    session.advance(idle);
+    session.debug_warp_map(0, 0x14).expect("hub");
+    assert_eq!(session.debug_powerup(), 3, "the tier rides the warp");
+    assert!(session.debug_give_star().is_err(), "the map has no star");
+    session.debug_set_powerup(2).expect("bunny");
+    match &session.state {
+        SessionState::Overworld(map) => assert_eq!(map.powerup, 2),
+        _ => panic!("not on the map"),
+    }
+}
