@@ -852,6 +852,9 @@ pub struct Session {
     bell_entry: Option<u16>,
     /// Where the castle reveal lands: `(screen, node, exit_tile_flag, move)`.
     castle_return: Option<(u8, u8, u8, Option<u8>)>,
+    /// The node a boss clear's save keeps through the reveal: after it the ROM
+    /// runs `$3EF2B` again, whose only save (`$3EEF0`) precedes the hub move.
+    castle_saved_node: Option<u8>,
     /// `sLevelProgress` while the reveal owns it.
     castle_progress: [u8; 42],
 }
@@ -1080,6 +1083,7 @@ impl Session {
             bell_return_hold: 0,
             bell_entry: None,
             castle_return: None,
+            castle_saved_node: None,
             castle_progress: [0; 42],
         }
     }
@@ -1203,6 +1207,19 @@ impl Session {
     }
 
     /// Produce progress bytes without writing them.
+    /// The record a level's hand-off saved: the map as it returned, with the
+    /// node the last `$2934` call saw ([`MapHandoffOutcome::saved_node`]).
+    fn handoff_save_record(&self, handoff: &sml2_core::player_sim::MapHandoffOutcome) -> [u8; 0x50] {
+        match &self.state {
+            SessionState::Overworld(map) => {
+                let mut map = map.clone();
+                map.node = handoff.saved_node;
+                map.save_record(self.lives, self.level_tally, self.money_bag)
+            }
+            _ => self.save_record(),
+        }
+    }
+
     pub fn save_record(&self) -> [u8; 0x50] {
         match &self.state {
             SessionState::Overworld(map) => {
@@ -1216,6 +1233,9 @@ impl Session {
                     map.load_screen(screen, 0, &self.assets.node_records);
                     map.node = node;
                     map.load_node(node, &self.assets.node_records);
+                }
+                if let Some(node) = self.castle_saved_node {
+                    map.node = node;
                 }
                 map.coins_low = self.coins_low;
                 map.coins_high = self.coins_high;
@@ -1774,7 +1794,7 @@ impl Session {
                                 self.map_pan_return = Some(MapPanReturn::fade_in());
                             }
                             if handoff.saves > 0 {
-                                let rec = self.save_record();
+                                let rec = self.handoff_save_record(&handoff);
                                 if let Some(slot) = self.active_slot {
                                     self.slots.write_slot(slot as usize, &rec);
                                 }
@@ -1834,6 +1854,7 @@ impl Session {
                                 ctx.sim.exit_tile_flag,
                                 handoff.cursor_move,
                             ));
+                            self.castle_saved_node = Some(handoff.saved_node);
                             self.state = SessionState::Castle(seq);
                         } else {
                             let mut map_sim = MapSim::from_player(&ctx.sim);
@@ -1883,7 +1904,7 @@ impl Session {
                             self.state = SessionState::Overworld(map_sim);
                         }
                         if handoff.saves > 0 {
-                            let rec = self.save_record();
+                            let rec = self.handoff_save_record(&handoff);
                             if let Some(slot) = self.active_slot {
                                 self.slots.write_slot(slot as usize, &rec);
                             }

@@ -187,6 +187,8 @@ fn live_boss_returns_use_the_hub_branch_before_the_zone_bands() {
         assert_eq!((sim.map_node, out.node, out.screen), (hub, hub, Some(0)));
         assert_eq!(out.cursor_move, Some(direction));
         assert_eq!((out.music, out.saves), (Some(6), 1));
+        // The one save is `$3EEF0`'s, made before the hub move.
+        assert_eq!(out.saved_node, node);
         assert_eq!(sim.level_progress[progress], 0x80);
 
         // `$3EFDA` skips all six branches for a dead Mario.
@@ -195,6 +197,7 @@ fn live_boss_returns_use_the_hub_branch_before_the_zone_bands() {
         dead.dead = 0xFF;
         let out = dead.map_handoff(&nodes);
         assert_eq!((out.node, out.screen, out.cursor_move), (node, Some(zone), None));
+        assert_eq!(out.saved_node, out.node, "the tail saves the final node");
         assert_eq!(dead.level_progress[progress], 0);
     }
 }

@@ -253,6 +253,10 @@ pub struct MapHandoffOutcome {
     pub music: Option<u8>,
     /// `$3C6BD..$3C7BD`: facing/move byte staged by a boss's hub return.
     pub cursor_move: Option<u8>,
+    /// The node the last `$2934` save recorded. A boss's hub return saves only
+    /// from `$3EEF0`, before it moves the node, so the save keeps the level's
+    /// own node; every other path saves again after its final node.
+    pub saved_node: u8,
 }
 
 /// Buttons held for one frame (plus a separate press edge for A/Mario).
@@ -2493,6 +2497,7 @@ impl PlayerSim {
                 _ => None,
             });
             if let Some((node, direction)) = hub_return {
+                out.saved_node = self.map_node;
                 self.map_node = node;
                 out.node = node;
                 out.screen = Some(0);
@@ -2536,6 +2541,7 @@ impl PlayerSim {
         // every zone node and for the castle move.
         out.saves += 1;
         out.node = self.map_node;
+        out.saved_node = self.map_node;
         out
     }
 

@@ -313,6 +313,7 @@ impl Session {
         self.bell_fade = None;
         self.bell_return = None;
         self.castle_return = None;
+        self.castle_saved_node = None;
         self.last_map_screen = Some(screen);
         self.map_wave = if screen == 0 {
             sml2_core::map::MapWave::seed(self.assets.overworld_tiles.screen_raw(0))

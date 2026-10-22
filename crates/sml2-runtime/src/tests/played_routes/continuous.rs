@@ -130,7 +130,13 @@ pub(super) fn map_entry_runner(
     for off in GOLDEN_COIN_OFFSETS {
         map.level_progress[off] = 0x80;
     }
-    // A boss level's slot is its own golden coin byte: leave it unbeaten.
+    // A boss level's slot is its own golden coin byte: leave it unbeaten, and
+    // leave one other coin missing too, so its clear is not the sixth coin
+    // (whose castle reveal would make its own save).
+    if GOLDEN_COIN_OFFSETS.contains(&slot) {
+        let other = GOLDEN_COIN_OFFSETS.into_iter().find(|&off| off != slot).unwrap();
+        map.level_progress[other] = 0;
+    }
     map.level_progress[slot] = progress;
     // Another level's secret-route bit, which the route must leave alone.
     let bystander = if slot == 2 { 1 } else { 2 };
@@ -228,10 +234,17 @@ pub(super) fn verify_map_entry_completion_and_reload(
                 // arm frame's sample.
                 session_arm = Some((arm.frame, arm.position, arm.exit_tile_flag, ctx.obj.div));
             }
+            // A hit on a big Mario leaves `sMarioDead = 15` for one frame
+            // and `$319F` turns it into a powerup loss; only a small Mario
+            // or the instant-death flag dies.
+            let dying = ctx.sim.dead == 0xFF
+                || ctx.sim.dead == 0x80
+                || (ctx.sim.dead != 0 && ctx.sim.powerup == 0);
             if !ctx.sim.exit_phase {
-                assert_eq!(
-                    ctx.sim.dead, 0,
-                    "the played route must not die: frame={} xy=({}, {}) clock={} phase={} camera=({}, {}) active_objects={:?}",
+                assert!(
+                    !dying,
+                    "the played route must not die: dead={} frame={} xy=({}, {}) clock={} phase={} camera=({}, {}) active_objects={:?}",
+                    ctx.sim.dead,
                     ctx.frame_n, ctx.sim.x, ctx.sim.y, ctx.obj.fff0,
                     ctx.obj.phase, ctx.cam.x, ctx.cam.y,
                     ctx.obj.slots.iter().filter(|slot| slot.active())
@@ -292,12 +305,33 @@ pub(super) fn verify_map_entry_completion_and_reload(
     assert_eq!(map.level_progress[slot], expected.sim.level_progress[slot]);
     assert_eq!(map.level_progress[bystander], 0x08);
     for off in GOLDEN_COIN_OFFSETS {
-        assert_eq!(map.level_progress[off], 0x80);
+        let want = if off == slot {
+            expected.sim.level_progress[slot]
+        } else {
+            initial_progress[off]
+        };
+        assert_eq!(map.level_progress[off], want);
     }
     assert_eq!(runner.session.level_tally, 0x12 + expected.sim.level_tally);
     let screen = map.screen_id;
+    // A boss's hub return saves only from `$3EEF0`, before it moves the node,
+    // so the save keeps the level's node; every other return saves its own.
+    let saved_node = expected
+        .map_handoff
+        .as_ref()
+        .map_or(map.node, |handoff| handoff.saved_node);
+    let boss_return = saved_node != map.node;
+    let mut at_saved_node = map.clone();
+    at_saved_node.node = saved_node;
     let saved = fs::read(&path).expect("the actual host must have written a save");
-    assert_eq!(saved, runner.save_record());
+    assert_eq!(
+        saved,
+        at_saved_node.save_record(
+            runner.session.lives,
+            runner.session.level_tally,
+            runner.session.money_bag
+        )
+    );
     assert_eq!(runner.session.slots.slot(1).unwrap().as_slice(), saved);
     assert_eq!(runner.session.slots.slot(0).unwrap(), &untouched_a);
     assert_eq!(runner.session.slots.slot(2).unwrap(), &untouched_c);
@@ -313,10 +347,16 @@ pub(super) fn verify_map_entry_completion_and_reload(
     let SessionState::Overworld(map) = &reloaded.session.state else {
         panic!("reloaded map")
     };
-    assert_eq!(
-        map.screen_id, screen,
-        "reload must select the source zone, not the hub"
-    );
+    if boss_return {
+        // The reload lands on the cleared boss level's node, in its zone.
+        assert_eq!(map.node, saved_node);
+        assert_ne!(map.screen_id, 0, "a boss save reloads into its zone");
+    } else {
+        assert_eq!(
+            map.screen_id, screen,
+            "reload must select the source zone, not the hub"
+        );
+    }
     fs::remove_file(path).unwrap();
 }
 

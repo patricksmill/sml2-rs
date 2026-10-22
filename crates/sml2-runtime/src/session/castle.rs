@@ -51,6 +51,7 @@ impl Session {
                     ctx.sim.walk_timer = self.walk_timer;
                 }
                 self.castle_return = None;
+                self.castle_saved_node = None;
                 if self.easy_mode {
                     // `$3573` runs the card first: the frame after `$16`
                     // starts `$35CD`, and the level loads once it ends.
@@ -88,7 +89,16 @@ impl Session {
                         map.mario_dead = 1;
                     }
                     self.state = SessionState::Overworld(map);
-                    let record = self.save_record();
+                    // `$3EF2B` runs again after the reveal; a boss return's
+                    // one save keeps the level's node.
+                    let record = match (self.castle_saved_node.take(), &self.state) {
+                        (Some(node), SessionState::Overworld(map)) => {
+                            let mut map = map.clone();
+                            map.node = node;
+                            map.save_record(self.lives, self.level_tally, self.money_bag)
+                        }
+                        _ => self.save_record(),
+                    };
                     if let Some(slot) = self.active_slot {
                         self.slots.write_slot(slot as usize, &record);
                     }
@@ -98,6 +108,7 @@ impl Session {
             }
             Some(CastleTransition::Reset) => {
                 self.castle_return = None;
+                self.castle_saved_node = None;
                 self.state = SessionState::Title(TitleScreen::new());
                 self.active_slot = None;
                 self.sound_driver.music_request = 0xFF;
