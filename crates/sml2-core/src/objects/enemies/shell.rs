@@ -131,6 +131,8 @@ pub enum KickedEffect {
     None,
     /// The kick started away from Mario; the ordering is his side.
     Faced(Ordering),
+    /// `$583DB`/`$583F7`: a wall turned it round, with sound 2.
+    Bumped,
 }
 
 /// Anim 3, `$5839B`: states 1/2 slide right/left, 3/4 fall right/left. The
@@ -166,7 +168,7 @@ pub fn update_kicked<W: ShellWorld>(
         } else {
             actor.state.wrapping_sub(1)
         };
-        return KickedEffect::None;
+        return KickedEffect::Bumped;
     }
     actor
         .position
@@ -323,6 +325,26 @@ mod tests {
             (actor.state, actor.motion_phase, actor.position.y & 0x0F),
             (1, 0, 0)
         );
+    }
+
+    #[test]
+    fn a_wall_turns_the_kicked_shell_round_with_a_bump() {
+        for (state, right_wall, turned) in [(1, true, 2), (2, false, 1), (3, true, 4), (4, false, 3)] {
+            let mut actor = Actor::default();
+            actor.position.x = 0x80;
+            actor.state = state;
+            let mut world = World {
+                right_wall,
+                left_wall: !right_wall,
+                ground: true,
+                ..World::default()
+            };
+            assert_eq!(
+                update_kicked(&mut actor, FrameTick(1), 0x40, &mut world),
+                KickedEffect::Bumped
+            );
+            assert_eq!((actor.state, actor.position.x), (turned, 0x80));
+        }
     }
 
     #[test]

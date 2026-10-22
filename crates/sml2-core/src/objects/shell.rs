@@ -159,12 +159,16 @@ impl ObjectSim {
             },
         );
         st.b = actor.to_raw_slot();
-        if let KickedEffect::Faced(side) = effect {
-            self.facing = match side {
-                std::cmp::Ordering::Greater => 1,
-                std::cmp::Ordering::Less => 0xFF,
-                std::cmp::Ordering::Equal => 0,
-            };
+        match effect {
+            KickedEffect::Faced(side) => {
+                self.facing = match side {
+                    std::cmp::Ordering::Greater => 1,
+                    std::cmp::Ordering::Less => 0xFF,
+                    std::cmp::Ordering::Equal => 0,
+                };
+            }
+            KickedEffect::Bumped => self.sfx0 = 2,
+            KickedEffect::None => {}
         }
     }
 }

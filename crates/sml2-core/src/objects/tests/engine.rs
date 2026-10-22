@@ -1604,6 +1604,7 @@ fn the_kicked_shell_walks_turns_falls_and_lands() {
     obj.handler_kicked(&mut st, &layout);
     assert_eq!(st.b[B_FSTATE], 1, "turned at the wall");
     assert_eq!(st.x(), 97, "and it did not step into it");
+    assert_eq!(obj.sfx0, 2, "$583F7: the bump sound");
 
     // State 1 walks right (away from the wall) before the ledge.
     layout.cells[5 * 256 + 5] = 0x60;
