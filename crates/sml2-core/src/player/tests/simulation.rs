@@ -3883,6 +3883,28 @@ fn conveyor_side_push_latches_only_on_the_odd_phase_push() {
 }
 
 #[test]
+fn conveyor_push_scrolls_the_camera_unless_mario_runs_against_it() {
+    // `$12CE`: the left push bumps `sScrollDeltaLeft` only while
+    // `sHVelocityIndex <= $80`; the right push needs `>= $80`.
+    for (tile, hvel, expected) in [
+        (0x05, 0x80, (0, 1)),
+        (0x05, 0x81, (0, 0)),
+        (0x04, 0x80, (1, 0)),
+        (0x04, 0x7F, (0, 0)),
+    ] {
+        let mut sim = small_sim();
+        sim.phase = 1;
+        sim.hvel = hvel;
+        sim.landing(tile, &PlayerKeys::default());
+        assert_eq!(
+            (sim.conveyor_scroll_right, sim.conveyor_scroll_left),
+            expected,
+            "tile {tile:02x} hvel {hvel:02x}"
+        );
+    }
+}
+
+#[test]
 fn pipe_travel_horizontal_sets_x_sub_for_camera_follow() {
     let mut layout_bytes = vec![0x60; 256 * 48];
     // Surround x=100 with wall tiles at x=90..110 so pipe travel remains active

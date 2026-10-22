@@ -337,6 +337,10 @@ pub struct PlayerSim {
     pub pipe_dir: u8,
     /// `sSidePushDir` ($A28A): 1 pushed right, $FF pushed left.
     pub side_push_dir: u8,
+    /// `$12CE`'s conveyor increments of `sScrollDeltaRight`/`sScrollDeltaLeft`,
+    /// taken by this update's camera step.
+    pub conveyor_scroll_right: u8,
+    pub conveyor_scroll_left: u8,
     /// `sSfxRequest0` — fidelity only (not replay-compared).
     pub sfx0: u8,
     /// `sSfxRequest1` ($A470) — fidelity only. `$3451` writes 20 for the
@@ -616,6 +620,8 @@ impl PlayerSim {
             pipe_align_target: 0,
             pipe_dir: 0,
             side_push_dir: 0,
+            conveyor_scroll_right: 0,
+            conveyor_scroll_left: 0,
             sfx0: 0,
             sfx1: 0,
             sfx2: 0,
@@ -1560,9 +1566,15 @@ impl PlayerSim {
             if tile == 0x05 {
                 self.side_push_dir = 0xFF;
                 self.x = self.x.wrapping_sub(1);
+                if self.hvel <= 0x80 {
+                    self.conveyor_scroll_left = self.conveyor_scroll_left.wrapping_add(1);
+                }
             } else {
                 self.side_push_dir = 1;
                 self.x = self.x.wrapping_add(1);
+                if self.hvel >= 0x80 {
+                    self.conveyor_scroll_right = self.conveyor_scroll_right.wrapping_add(1);
+                }
             }
         }
         // $1327: a spinning Mario ($126F) runs the bonk classification

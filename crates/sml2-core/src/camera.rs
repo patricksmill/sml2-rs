@@ -387,6 +387,13 @@ impl CameraSim {
     /// Takes `&mut PlayerSim` because the `$0DED` transition handler writes
     /// Mario's position directly (the frame loop skips the player update).
     pub fn step(&mut self, sim: &mut PlayerSim) {
+        // A conveyor push incremented the same `sScrollDelta*` bytes.
+        self.scroll_delta_right = self
+            .scroll_delta_right
+            .wrapping_add(std::mem::take(&mut sim.conveyor_scroll_right));
+        self.scroll_delta_left = self
+            .scroll_delta_left
+            .wrapping_add(std::mem::take(&mut sim.conveyor_scroll_left));
         // $0B2A prologue: the scene machine / a defeated boss park the camera.
         if self.scene_state & 0xF0 != 0 {
             return;
@@ -1623,6 +1630,19 @@ mod tests {
         c.step(&mut sim);
         assert_eq!(c.x, 87);
         assert_eq!(c.scroll_delta_right, 0);
+    }
+
+    #[test]
+    fn conveyor_scroll_deltas_feed_the_same_passive_scroll() {
+        let mut c = CameraSim::new(80, 72);
+        c.right_enabled = true;
+        let mut sim = PlayerSim::new();
+        sim.x = 80;
+        sim.y = 72;
+        sim.conveyor_scroll_right = 2;
+        c.step(&mut sim);
+        assert_eq!(c.x, 83);
+        assert_eq!([sim.conveyor_scroll_right, c.scroll_delta_right], [0, 0]);
     }
 
     #[test]
