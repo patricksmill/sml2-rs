@@ -169,6 +169,64 @@ fn handler_0x59270_invalid_states_report_the_entry() {
 }
 
 #[test]
+fn handler_0x59270_rider_motion_publishes_direction_gated_scroll() {
+    // $5929D/$592C4/$5930D/$59324 call the shared horizontal rider movers.
+    // Their $80/$81 velocity gates apply even on the odd-frame X-only leg.
+    for (state, platform_x, player_x, hvel, right, left) in [
+        (1, 99u16, 199u16, 0x80, 0, 1),
+        (1, 99, 199, 0x81, 0, 0),
+        (6, 99, 199, 0x80, 0, 1),
+        (6, 99, 199, 0x81, 0, 0),
+        (2, 101, 201, 0x7F, 0, 0),
+        (2, 101, 201, 0x80, 1, 0),
+        (4, 101, 201, 0x7F, 0, 0),
+        (4, 101, 201, 0x80, 1, 0),
+    ] {
+        let (mut sim, mut st) = fixture(state);
+        sim.fff0 = 3;
+        position(&mut st.b, 100, 100);
+        st.b[23] = 8;
+        sim.mario.x = 200;
+        sim.mario.hvel = hvel;
+        let mut expected = st.b;
+        position(&mut expected, platform_x, 100);
+        check(&mut sim, &mut st, expected, 99);
+        assert_eq!(sim.mario_x_adjust, Some(player_x));
+        assert_eq!([sim.scroll_delta_right, sim.scroll_delta_left], [right, left]);
+        assert_eq!(sim.mario_y_adjust, None);
+    }
+}
+
+#[test]
+fn handler_0x59270_rider_motion_reaches_the_next_camera_step() {
+    use crate::{camera::CameraSim, player_sim::PlayerSim};
+
+    let (mut sim, mut st) = fixture(4);
+    sim.fff0 = 3;
+    position(&mut st.b, 200, 100);
+    st.b[23] = 8;
+    sim.mario.x = 200;
+    sim.mario.hvel = 0x80;
+    sim.handler_0x59270(&mut st);
+    let mut player = PlayerSim::new();
+    player.x = 200;
+    player.y = 100;
+    player.apply_object_result(&mut sim, false);
+    assert_eq!(player.x.to_le_bytes(), [0xC9, 0]);
+
+    let mut camera = CameraSim::new(200, 100);
+    camera.right_enabled = true;
+    camera.edge_now = Some(0);
+    camera.apply_object_result(&mut sim);
+    assert_eq!([sim.scroll_delta_right, camera.scroll_delta_right], [0, 1]);
+    camera.step(&mut player);
+    // $0B90 consumes the inherited carry even though Mario's own XSub is 0,
+    // then adds one pixel to center him toward the $50 screen column.
+    assert_eq!(camera.x.to_le_bytes(), [0xCA, 0]);
+    assert_eq!(camera.scroll_delta_right, 0);
+}
+
+#[test]
 fn handler_0x59270_real_anim61_step_dispatches() {
     let tables: ObjectTables = serde_json::from_str(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),

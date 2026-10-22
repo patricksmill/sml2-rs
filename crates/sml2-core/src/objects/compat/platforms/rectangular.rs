@@ -19,8 +19,7 @@ impl ObjectSim {
             }
             Ok(handler_0x59270::Effect::Moved { carry_dx, carry_dy }) => {
                 if let Some(dx) = carry_dx {
-                    let x = self.mario_x_adjust.unwrap_or(self.mario.x);
-                    self.mario_x_adjust = Some(x.wrapping_add_signed(dx));
+                    self.carry_mario_dx(dx);
                 }
                 if let Some(dy) = carry_dy {
                     let y = self.mario_y_adjust.unwrap_or(self.mario.y);
