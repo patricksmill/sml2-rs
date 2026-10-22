@@ -26,7 +26,7 @@ bug.
 | Coin room | 3 | Matches frame for frame, offset by the 8-frame load. |
 | Title | 1–3 | Matches on every row except the first two, where the screen appears. |
 | File select | 1–3 | Matches, including the drop into the pipe (`54e238f`). The opening drop runs two frames earlier than on the ROM, a load-timing difference. |
-| Level 17 | 3 | Matches since Mario's overlapping sprite cells take DMG x priority (`b1b2171`). |
+| Level 17 | 3 | 31% of rows match exactly. Most of the rest is the animated cloud strip's phase. Mario's bunny ears now draw correctly, since his overlapping sprite cells take DMG x priority (`b1b2171`). Some rows still show a stray pixel at the left screen edge, not yet traced. |
 
 ## Not yet checked
 
