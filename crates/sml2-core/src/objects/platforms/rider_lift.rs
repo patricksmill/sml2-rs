@@ -31,7 +31,7 @@ pub(super) enum Effect {
     Rising { carry_dy: Option<i16> },
     StepOffWait,
     WaitingToDescend,
-    Descending { carry_dy: Option<i16> },
+    Descending,
 }
 
 pub(super) trait World {
@@ -89,11 +89,13 @@ pub(super) fn update(
                 }
             }
             if actor.motion_leg == actor.travel_span() {
-                return Ok(Effect::Descending { carry_dy: None });
+                return Ok(Effect::Descending);
             }
             actor.motion_leg = actor.motion_leg.wrapping_add(1);
             actor.position.move_y(1);
-            Ok(Effect::Descending { carry_dy: Some(1) })
+            // $58E72 calls only the object mover ($3D3D). Mario has stepped
+            // off; unlike the rise path, this never calls a rider mover.
+            Ok(Effect::Descending)
         }
         state => Err(Error::InvalidState(state)),
     }

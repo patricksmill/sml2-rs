@@ -129,7 +129,7 @@ fn handler_0x591a3_step_off_waits_then_descends_to_the_target() {
     expected[24] = 6;
     expected[28] = 0;
     check(&mut sim, &mut st, expected);
-    assert_eq!(sim.mario_y_adjust, Some(101));
+    assert_eq!(sim.mario_y_adjust, None);
 
     // At the target: no further descent.
     let (mut sim, mut st) = fixture(2);
@@ -158,6 +158,53 @@ fn handler_0x591a3_resumes_when_the_rider_returns() {
     expected[28] = 0;
     check(&mut sim, &mut st, expected);
     assert_eq!(sim.mario_y_adjust, None);
+}
+
+#[test]
+fn handler_0x591a3_unridden_descent_leaves_the_player_alone() {
+    let tables: ObjectTables = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../extracted/objects.json"
+    )))
+    .unwrap();
+    let layout = LevelLayout::from_bytes(&[0x60; 0x3000]).unwrap();
+    // $58E57: an expired wait moves only the lift ($3D3D), including on the
+    // call that decrements the wait to zero. The final step reaches +25.
+    for (wait, descends) in [(0, true), (1, true), (2, false)] {
+        for lift_y in [0x00FFu16, 0xFFFF] {
+            let (mut sim, mut st) = fixture(2);
+            sim.fff0 = 3; // $5B5B6 does not animate on an odd frame.
+            position(&mut st.b, 100, lift_y);
+            st.b[23] = 0;
+            st.b[24] = 95;
+            st.b[25] = 96;
+            st.b[28] = wait;
+            let mut player = crate::player_sim::PlayerSim::new();
+            player.x = 200;
+            player.y = 568;
+            player.vvel = 8;
+            player.on_ground = false;
+            sim.mario.x = player.x;
+            sim.mario.y = player.y;
+            let mut expected = st.b;
+            expected[28] = wait.saturating_sub(1);
+            if descends {
+                expected[3..5].copy_from_slice(&match lift_y {
+                    0x00FF => [0x01, 0x00],
+                    _ => [0x00, 0x00],
+                });
+                expected[24] = 96;
+            }
+
+            sim.dispatch_handler(0x591A3, &mut st, &layout, &tables);
+            assert_eq!(st.b, expected);
+            assert_eq!(sim.mario_y_adjust, None);
+            player.apply_object_result(&mut sim, false);
+            assert_eq!(player.y.to_le_bytes(), [0x38, 0x02]);
+            assert_eq!((player.vvel, player.on_ground_obj), (8, false));
+            assert!(sim.unported.is_empty());
+        }
+    }
 }
 
 #[test]

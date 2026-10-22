@@ -16,8 +16,7 @@ impl ObjectSim {
         let result = handler_0x591a3::update(&mut actor, frame, &mut Inputs(self));
         st.b = actor.to_raw_slot();
         match result {
-            Ok(handler_0x591a3::Effect::Rising { carry_dy: Some(dy) })
-            | Ok(handler_0x591a3::Effect::Descending { carry_dy: Some(dy) }) => {
+            Ok(handler_0x591a3::Effect::Rising { carry_dy: Some(dy) }) => {
                 let y = self.mario_y_adjust.unwrap_or(self.mario.y);
                 self.mario_y_adjust = Some(y.wrapping_add_signed(dy));
             }
