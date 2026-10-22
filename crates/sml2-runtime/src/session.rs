@@ -1625,6 +1625,9 @@ impl Session {
                     &self.assets.nodes,
                 );
                 self.money_bag = ctx.obj.money_bag;
+                // The map's work bytes are the live metatile table's: a boss
+                // scene's tileset reload (`$266D`) replaces them mid-level.
+                self.map_ram = sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
 
                 if ctx.sim.sfx0 != 0 {
                     self.sound_driver.sfx_request_0 = ctx.sim.sfx0;

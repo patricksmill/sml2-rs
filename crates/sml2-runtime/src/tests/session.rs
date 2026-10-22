@@ -1148,6 +1148,40 @@ fn a_level_return_fades_the_hub_in() {
     }
 }
 
+/// `sCastleRevealProgress` (`$A7A5`) sits inside the metatile table, so the
+/// map inherits whatever the level left there, including a boss scene's
+/// tileset reload (recording 3: level 13's arena leaves `$23`, not the
+/// level's own `$FF`).
+#[test]
+fn the_map_inherits_the_live_metatile_bytes() {
+    use crate::session::{FrameInput, Session};
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!()
+    };
+    ctx.manifest.metatiles.metatiles[0x1A5 / 4].tiles[0x1A5 % 4] = 0x23;
+    ctx.sim.dead = 0xFF;
+    ctx.sim.dead_fade = true;
+    ctx.sim.fade_timer = 1;
+    for _ in 0..100 {
+        if matches!(
+            session.advance(FrameInput::default()).outcome,
+            StepOutcome::LevelExited { .. }
+        ) {
+            break;
+        }
+    }
+    while session.map_pan_return.is_some() {
+        session.advance(FrameInput::default());
+    }
+    session.advance(FrameInput::default());
+    let SessionState::Overworld(map) = &session.state else {
+        panic!("the death returns to the map")
+    };
+    assert_eq!(map.reveal_progress, 0x23);
+}
+
 #[test]
 fn object_clock_survives_death_map_entry_and_demo_replacement() {
     use crate::session::{FrameInput, Session};
