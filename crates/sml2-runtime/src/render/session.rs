@@ -1,6 +1,7 @@
 //! Read-only session presentation; view dimensions never enter simulation state.
 
 use super::render_view_output;
+use super::view;
 use super::{hud_row_status, HudDigits};
 use crate::session::{LevelContext, Session, SessionState, MAP_FADE_STEP};
 use sml2_core::video::{OutputMode, PalettePixel};
@@ -31,12 +32,14 @@ impl LevelContext {
     ) -> Result<Vec<u8>, Box<dyn Error>> {
         // State 19 draws the ending's own VRAM, not the level.
         if self.ending_entry.state() == sml2_core::ending_entry::EndingEntryState::Sequence {
-            return Ok(sml2_core::ending_render::render_ending_output(
-                &self.ending_scene,
-                &self.ending_sequence,
-                (vw, vh),
-                output,
-            ));
+            return Ok(view::fixed_screen((vw, vh), output.blank(3), |size| {
+                sml2_core::ending_render::render_ending_output(
+                    &self.ending_scene,
+                    &self.ending_sequence,
+                    size,
+                    output,
+                )
+            }));
         }
         let hud_live = hud_row_status(
             &self.hud,
@@ -89,6 +92,7 @@ impl Session {
 
     fn render_output(&self, view: (usize, usize), output: OutputMode) -> Vec<u8> {
         let (vw, vh) = view;
+        let fill = output.blank(3);
         if self
             .pending_level
             .as_ref()
@@ -97,62 +101,71 @@ impl Session {
             let font = self.assets.ending_scene.as_ref().and_then(|a| {
                 a.transfer_source(0x1A, 0x4656, sml2_core::easy_mode_card::EASY_CARD_FONT_LEN)
             });
-            return sml2_core::easy_mode_card::render_easy_card_output(
-                font.unwrap_or(&[]),
-                &self.assets.sprite_metas,
-                (vw, vh),
-                output,
-            );
+            return view::fixed_screen(view, fill, |size| {
+                sml2_core::easy_mode_card::render_easy_card_output(
+                    font.unwrap_or(&[]),
+                    &self.assets.sprite_metas,
+                    size,
+                    output,
+                )
+            });
         }
         match &self.state {
-            SessionState::Title(_) => sml2_core::front_end::render::render_title_output(
-                &self.assets.front_end,
-                (vw, vh),
-                output,
-            ),
+            SessionState::Title(_) => view::fixed_screen(view, fill, |size| {
+                sml2_core::front_end::render::render_title_output(
+                    &self.assets.front_end,
+                    size,
+                    output,
+                )
+            }),
             SessionState::FileSelectLoading(loading) => {
                 // Pending `$19` retains title VRAM; active transfers have LCD off.
                 if loading.lcd_disabled() {
                     vec![output.blank(0); vw * vh]
                 } else {
-                    sml2_core::front_end::render::render_title_output(
-                        &self.assets.front_end,
-                        (vw, vh),
-                        output,
-                    )
+                    view::fixed_screen(view, fill, |size| {
+                        sml2_core::front_end::render::render_title_output(
+                            &self.assets.front_end,
+                            size,
+                            output,
+                        )
+                    })
                 }
             }
-            SessionState::FileSelect(file_select) => {
+            SessionState::FileSelect(file_select) => view::fixed_screen(view, fill, |size| {
                 sml2_core::front_end::render::render_file_select_output(
                     file_select,
                     &self.slots,
                     &self.assets.front_end,
                     &self.assets.object_tables,
-                    (vw, vh),
+                    size,
                     output,
                 )
-            }
+            }),
             SessionState::Overworld(map_sim) => {
                 let map_sim = self.shown_map(map_sim);
-                let assets = MapAssets {
-                    tilemaps: &self.assets.overworld_tilemaps,
-                    manifest: &self.assets.overworld_manifest,
-                    tiles: &self.assets.overworld_tiles,
-                    zone_animation_tiles: &self.assets.zone_animation_tiles,
-                    wave: self.map_wave.clone(),
-                    sprites: None,
-                };
-                let frame = self.overworld_frame(map_sim, assets, (vw, vh));
-                sml2_core::map::rasterize_overworld(
-                    &frame.composition,
-                    &frame.vram,
-                    frame.bg_palette,
-                    frame.obj_palette,
-                    frame.obj_palette1,
-                    vw,
-                    vh,
-                    output,
-                )
+                self.overworld_view(map_sim, view, fill, |sim, (w, h)| {
+                    let assets = MapAssets {
+                        tilemaps: &self.assets.overworld_tilemaps,
+                        manifest: &self.assets.overworld_manifest,
+                        tiles: &self.assets.overworld_tiles,
+                        zone_animation_tiles: &self.assets.zone_animation_tiles,
+                        wave: self.map_wave.clone(),
+                        sprites: None,
+                    };
+                    let frame = self.overworld_frame(sim, assets, (w, h));
+                    Ok(sml2_core::map::rasterize_overworld(
+                        &frame.composition,
+                        &frame.vram,
+                        frame.bg_palette,
+                        frame.obj_palette,
+                        frame.obj_palette1,
+                        w,
+                        h,
+                        output,
+                    ))
+                })
+                .unwrap_or_else(|_| vec![fill; vw * vh])
             }
             SessionState::Demo(demo) => demo
                 .ctx
@@ -161,26 +174,30 @@ impl Session {
             SessionState::InLevel(ctx) => ctx
                 .render_output(vw, vh, output)
                 .unwrap_or_else(|_| vec![output.blank(3); vw * vh]),
-            SessionState::Castle(seq) => sml2_core::map::render_castle_sequence_output(
-                &self.assets.castle_reveal,
-                &self.assets.castle_scripts,
-                &self.assets.sprite_metas,
-                seq,
-                (vw, vh),
-                output,
-            ),
-            SessionState::GameOver(screen) => sml2_core::map::render_game_over_output(
-                &self.assets.castle_reveal,
-                &self.assets.sprite_metas,
-                sml2_core::map::GameOverView {
-                    fade_timer: screen.sim.fade_timer,
-                    frame_counter: screen.sim.frame_counter,
-                    golden_coin_flags: screen.sim.golden_coin_flags,
-                    obp: screen.obp,
-                },
-                (vw, vh),
-                output,
-            ),
+            SessionState::Castle(seq) => view::fixed_screen(view, fill, |size| {
+                sml2_core::map::render_castle_sequence_output(
+                    &self.assets.castle_reveal,
+                    &self.assets.castle_scripts,
+                    &self.assets.sprite_metas,
+                    seq,
+                    size,
+                    output,
+                )
+            }),
+            SessionState::GameOver(screen) => view::fixed_screen(view, fill, |size| {
+                sml2_core::map::render_game_over_output(
+                    &self.assets.castle_reveal,
+                    &self.assets.sprite_metas,
+                    sml2_core::map::GameOverView {
+                        fade_timer: screen.sim.fade_timer,
+                        frame_counter: screen.sim.frame_counter,
+                        golden_coin_flags: screen.sim.golden_coin_flags,
+                        obp: screen.obp,
+                    },
+                    size,
+                    output,
+                )
+            }),
         }
     }
 }
@@ -241,6 +258,93 @@ impl Session {
             .as_ref()
             .filter(|t| t.shows_source())
             .map_or(map_sim, |t| &t.source)
+    }
+
+    /// The overworld in any view. The hub is stitched from native frames
+    /// (its sprites are 8-bit OAM positions relative to each frame's camera);
+    /// a zone screen is drawn whole; rooms and the pan mode stay native.
+    pub(crate) fn overworld_view<P: Copy>(
+        &self,
+        map_sim: &sml2_core::map_sim::MapSim,
+        view: (usize, usize),
+        fill: P,
+        mut render: impl FnMut(&sml2_core::map_sim::MapSim, (usize, usize)) -> Result<Vec<P>, String>,
+    ) -> Result<Vec<P>, String> {
+        use super::view::{enlarged, letterbox, NATIVE};
+        if !enlarged(view) {
+            return render(map_sim, view);
+        }
+        match map_sim.screen_id {
+            0 if map_sim.scroll_only_latch == 0 => self.stitched_hub(map_sim, view, fill, render),
+            1..=8 => {
+                let size = (view.0.min(256), 144);
+                Ok(letterbox(&render(map_sim, size)?, size, view, fill))
+            }
+            _ => Ok(letterbox(&render(map_sim, NATIVE)?, NATIVE, view, fill)),
+        }
+    }
+
+    fn stitched_hub<P: Copy>(
+        &self,
+        map_sim: &sml2_core::map_sim::MapSim,
+        view: (usize, usize),
+        fill: P,
+        mut render: impl FnMut(&sml2_core::map_sim::MapSim, (usize, usize)) -> Result<Vec<P>, String>,
+    ) -> Result<Vec<P>, String> {
+        use super::view::{copy_rect, NATIVE};
+        const HUB: i32 = 512;
+        // Rows above `$3F203`'s status-bar strip; each native frame's own strip is dropped.
+        const ROWS: usize = 136;
+        // OAM Y $F0 (and the +8 rows and walk shift, which wrap to 0) all land
+        // above or below the frame, so the cursor draws nothing.
+        const HIDDEN_CURSOR_Y: u8 = 0xF0;
+        let (vw, vh) = view;
+        let ox = (i32::from(map_sim.cam_x) + 80 - vw as i32 / 2).clamp(0, HUB - vw as i32);
+        let oy = (i32::from(map_sim.cam_y) + 72 - vh as i32 / 2).clamp(0, HUB - vh as i32);
+        let mut out = vec![fill; vw * vh];
+        for ty in (0..vh).step_by(ROWS) {
+            for tx in (0..vw).step_by(NATIVE.0) {
+                let mut tile = map_sim.clone();
+                tile.cam_x = (ox + tx as i32) as u16;
+                tile.cam_y = (oy + ty as i32) as u16;
+                let cx =
+                    i32::from(map_sim.cursor_x) + i32::from(map_sim.cam_x) - i32::from(tile.cam_x);
+                let cy =
+                    i32::from(map_sim.cursor_y) + i32::from(map_sim.cam_y) - i32::from(tile.cam_y);
+                // From -16 the 8-bit wrap still lands each cell where it truly is.
+                if (-16..=176).contains(&cx) && (-16..=168).contains(&cy) {
+                    tile.cursor_x = cx as u8;
+                    tile.cursor_y = cy as u8;
+                } else {
+                    tile.cursor_y = HIDDEN_CURSOR_Y;
+                }
+                let pixels = render(&tile, NATIVE)?;
+                copy_rect(
+                    &mut out,
+                    view,
+                    &pixels,
+                    NATIVE.0,
+                    (0, 0, NATIVE.0, ROWS),
+                    (tx as i32, ty as i32),
+                );
+            }
+        }
+        let mut bar = map_sim.clone();
+        bar.cursor_y = HIDDEN_CURSOR_Y;
+        let pixels = render(&bar, NATIVE)?;
+        let (x0, y0, x1, y1) = sml2_core::map::status_bar_strip_rect(NATIVE.0, NATIVE.1);
+        copy_rect(
+            &mut out,
+            view,
+            &pixels,
+            NATIVE.0,
+            (x0, y0, x1 - x0, y1 - y0),
+            (
+                (vw as i32 - 160) / 2 + x0 as i32,
+                vh as i32 - (y1 - y0) as i32,
+            ),
+        );
+        Ok(out)
     }
 
     /// Lay out the overworld frame from `assets`.

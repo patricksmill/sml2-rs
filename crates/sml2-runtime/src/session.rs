@@ -853,6 +853,8 @@ pub struct Session {
     /// (see [`Session::main_loop_waits`]), every level frame included.
     ff97: u8,
     pub frame_n: u64,
+    /// Presentation size; its margin widens the live level's spawn windows.
+    view: (usize, usize),
     pub sound_driver: SoundDriver,
     /// The three `$2913` save slots, validated when the file select opens.
     pub slots: SaveSlots,
@@ -1105,6 +1107,7 @@ impl Session {
             prev_select: false,
             ff97: 0,
             frame_n: 0,
+            view: crate::render::view::NATIVE,
             sound_driver,
             slots: SaveSlots::new(),
             active_slot: None,
@@ -1294,8 +1297,17 @@ impl Session {
         self.rom_timing = Some(timing);
     }
 
+    pub fn set_view(&mut self, view: (usize, usize)) {
+        self.view = view;
+    }
+
     pub fn advance(&mut self, input: FrameInput) -> FrameEffects {
         self.remember_level_state();
+        // Demos replay recorded inputs against native spawns.
+        if let SessionState::InLevel(ctx) = &mut self.state {
+            let (mx, my) = crate::render::view::margin(self.view);
+            ctx.obj.view_margin = (mx.max(0) as u16, my.max(0) as u16);
+        }
         let FrameInput { keys, div } = input;
         let rom_timing = self.rom_timing.take();
         if self.main_loop_waits() {

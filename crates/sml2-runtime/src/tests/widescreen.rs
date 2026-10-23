@@ -57,3 +57,75 @@ fn a_384_px_level_view_does_not_repeat_columns() {
     // A 256-px wrap repeats every column but those Mario and the HUD cover.
     assert!(repeats < 64, "{repeats} of 128 columns repeat 256 px apart");
 }
+
+#[test]
+fn set_view_feeds_the_level_spawn_margin_but_not_demos() {
+    let mut session = level(1);
+    session.set_view((384, 216));
+    session.advance(FrameInput::default());
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!("in level")
+    };
+    assert_eq!(ctx.obj.view_margin, (112, 36));
+    assert!(session.start_demo(0));
+    session.advance(FrameInput::default());
+    let SessionState::Demo(demo) = &session.state else {
+        panic!("in demo")
+    };
+    assert_eq!(demo.ctx.obj.view_margin, (0, 0));
+}
+
+#[test]
+fn fixed_screens_are_centred_with_bars() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.enter_title();
+    let native = session.render_frame(NATIVE);
+    let view = (384, 216);
+    let wide = session.render_frame(view);
+    assert_eq!(crop(&wide, view, (112, 36, 160, 144)), native);
+    assert!(crop(&wide, view, (0, 0, 112, 216)).iter().all(|&p| p == 0));
+}
+
+#[test]
+fn the_hub_view_stays_inside_the_map_and_keeps_the_native_centre() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    let SessionState::Overworld(map) = &mut session.state else {
+        panic!("boots to map")
+    };
+    map.load_screen(0, 0, &session.assets.node_records);
+    map.cam_x = 0xC0;
+    map.cam_y = 0xC0;
+    let native = session.render_frame(NATIVE);
+    let view = (384, 216);
+    let wide = session.render_frame(view);
+    // The camera is far from the hub edges, so the view is centred on it.
+    assert_eq!(
+        crop(&wide, view, (112, 36, 160, 136)),
+        crop(&native, NATIVE, (0, 0, 160, 136))
+    );
+    // At the corner the view clamps instead of wrapping.
+    let SessionState::Overworld(map) = &mut session.state else {
+        unreachable!()
+    };
+    map.cam_x = 0;
+    map.cam_y = 0;
+    let native = session.render_frame(NATIVE);
+    let wide = session.render_frame(view);
+    assert_eq!(
+        crop(&wide, view, (0, 0, 160, 136)),
+        crop(&native, NATIVE, (0, 0, 160, 136))
+    );
+}
+
+#[test]
+fn a_zone_screen_is_drawn_whole_and_centred() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    let SessionState::Overworld(map) = &mut session.state else {
+        panic!("boots to map")
+    };
+    map.load_screen(1, 0, &session.assets.node_records);
+    let full = session.render_frame((256, 144));
+    let view = (384, 216);
+    let wide = session.render_frame(view);
+    assert_eq!(crop(&wide, view, (64, 36, 256, 144)), full);
+}
