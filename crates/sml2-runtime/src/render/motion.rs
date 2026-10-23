@@ -93,8 +93,10 @@ impl Offsets {
         }
     }
 
+    /// Background pixels to render past each view edge: only a shifted
+    /// background can expose them, at any scale.
     pub fn border(&self) -> usize {
-        if self.scale > 1 { BORDER } else { 0 }
+        if self.bg != (0, 0) { BORDER } else { 0 }
     }
 
     pub fn between(prev: Option<&MotionSnapshot>, cur: Option<&MotionSnapshot>, smooth: Smooth) -> Self {
@@ -215,6 +217,15 @@ mod tests {
         cur.objects = vec![(2, (200, 10))];
         let o = Offsets::between(Some(&prev), Some(&cur), Smooth { alpha: 0.5, scale: 1 });
         assert_eq!(o.object(2), o.bg);
+    }
+
+    #[test]
+    fn a_shifted_background_is_bordered_even_at_scale_one() {
+        let s = Smooth { alpha: 0.5, scale: 1 };
+        let o = Offsets::between(Some(&snap((100, 50))), Some(&snap((102, 50))), s);
+        assert_eq!(o.bg, (1, 0));
+        assert_eq!(o.border(), BORDER);
+        assert_eq!(Offsets::none().border(), 0);
     }
 
     #[test]

@@ -208,8 +208,13 @@ fn smoothing_at_a_full_tick_is_the_native_frame_upsampled() {
         session.advance(FrameInput::default());
     }
     let native = session.render_palette_frame((256, 144));
-    let (smooth, scale) =
-        session.render_palette_frame_smooth((256, 144), crate::render::motion::Smooth { alpha: 1.0, scale: 2 });
+    let (smooth, scale) = session.render_palette_frame_smooth(
+        (256, 144),
+        crate::render::motion::Smooth {
+            alpha: 1.0,
+            scale: 2,
+        },
+    );
     assert_eq!(scale, 2);
     let upsampled: Vec<_> = (0..288)
         .flat_map(|y| (0..512).map(move |x| (x, y)))
@@ -235,5 +240,8 @@ fn smoothing_shifts_the_level_but_not_the_status_bar() {
     let (shifted, _) = session.render_palette_frame_smooth((160, 144), half);
     let native = session.render_palette_frame((160, 144));
     assert_ne!(shifted[..160 * 136], native[..160 * 136]);
+    // Row 0 is pure background: half of a 4 px camera step moves it 2 px right.
+    assert_eq!(shifted[2..160], native[..158]);
+    assert!(native[..158].windows(2).any(|w| w[0] != w[1]), "row 0 has detail");
     assert_eq!(shifted[160 * 136..], native[160 * 136..]);
 }

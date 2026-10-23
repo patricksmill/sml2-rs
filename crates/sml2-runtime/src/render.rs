@@ -183,45 +183,6 @@ pub fn render_view_output_smooth(
     output: video::OutputMode,
     offsets: &motion::Offsets,
 ) -> Result<Vec<u8>, String> {
-    let layers = render_view_layers(
-        manifest,
-        layout,
-        overlay,
-        bg,
-        cam_x,
-        cam_y,
-        vw,
-        vh,
-        hud,
-        spr,
-        pal_override,
-        output,
-        offsets,
-    )?;
-    let (bg, obj) = layers.compose(offsets.scale, offsets.bg, |o, b| o.behind && b.index != 0);
-    Ok(bg
-        .iter()
-        .zip(&obj)
-        .map(|(b, o)| o.map_or(b.shade, |o| o.shade))
-        .collect())
-}
-
-#[allow(clippy::too_many_arguments)]
-fn render_view_layers(
-    manifest: &LevelManifest,
-    layout: &LevelLayout,
-    overlay: &[(u32, u8)],
-    bg: &[u8],
-    cam_x: u16,
-    cam_y: u16,
-    vw: usize,
-    vh: usize,
-    hud: Option<(&[u8], u8)>,
-    spr: Option<&SpriteCtx>,
-    pal_override: Option<u8>,
-    output: video::OutputMode,
-    offsets: &motion::Offsets,
-) -> Result<layers::Layers<NativeBg, NativeObj>, String> {
     // Decode every tile in the composed block once.
     let tiles: Vec<[u8; 64]> = (0..256u16)
         .map(|t| {
@@ -414,8 +375,7 @@ fn render_view_layers(
         // the overlap priority against Mario for the frame or two a fresh ball
         // sits inside him — may want to precede his cells; not verified against
         // a console frame yet, and it can only show while they overlap.
-        let fireballs = s.fireballs.clone();
-        for (i, (fx, fy, ff)) in fireballs.into_iter().enumerate() {
+        for (i, (fx, fy, ff)) in s.fireballs.iter().copied().enumerate() {
             let ((ax, ay), (ox, oy)) = place(fx, fy);
             let cells = sml2_core::player::draw_cells(&s.tables, ff, fx, fy, ax, ay, false)
                 .ok_or_else(|| format!("fireball mapping {ff} has no entry"))?;
@@ -434,8 +394,7 @@ fn render_view_layers(
         }
         // The brick-bump sprites ($2C82's $5297 enqueues), drawn after Mario's
         // cells and before the objects — the engine's OAM order.
-        let bumpers = s.bumpers.clone();
-        for (i, (bx, by, bf)) in bumpers.into_iter().enumerate() {
+        for (i, (bx, by, bf)) in s.bumpers.iter().copied().enumerate() {
             let ((ax, ay), (ox, oy)) = place(bx, by);
             let cells = sml2_core::player::draw_cells(&s.tables, bf, bx, by, ax, ay, false)
                 .ok_or_else(|| format!("bump frame {bf} has no mapping"))?;
@@ -505,7 +464,12 @@ fn render_view_layers(
             ));
         }
     }
-    Ok(layers)
+    let (bg, obj) = layers.compose(offsets.scale, offsets.bg, |o, b| o.behind && b.index != 0);
+    Ok(bg
+        .iter()
+        .zip(&obj)
+        .map(|(b, o)| o.map_or(b.shade, |o| o.shade))
+        .collect())
 }
 
 /// DMG OBJ overlap priority: the smaller OAM x wins, then the earlier entry.
