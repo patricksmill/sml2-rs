@@ -208,7 +208,7 @@ pub fn render_backdrop_output(
     bgp: u8,
     tile_data: TileData,
     view: (usize, usize),
-    scroll_x: i32,
+    scroll: (i32, i32),
     output: OutputMode,
     backdrop: Backdrop,
 ) -> Vec<u8> {
@@ -227,13 +227,14 @@ pub fn render_backdrop_output(
         .collect();
     let mut out = Vec::with_capacity(view.0 * view.1);
     for y in 0..view.1 as i32 {
+        let world_y = y + scroll.1;
         for x in 0..view.0 as i32 {
-            let world_x = x + scroll_x;
+            let world_x = x + scroll.0;
             let ((col, row), line) = backdrop(
                 tilemap,
                 world_x.div_euclid(8),
-                y.div_euclid(8),
-                y.rem_euclid(8) as usize,
+                world_y.div_euclid(8),
+                world_y.rem_euclid(8) as usize,
             );
             let tile = tiles[tilemap[row * 32 + col] as usize];
             out.push(shades[tile[line * 8 + world_x.rem_euclid(8) as usize] as usize]);

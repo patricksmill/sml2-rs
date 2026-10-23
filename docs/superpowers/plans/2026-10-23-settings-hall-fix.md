@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the settings hall an open brick room to the left of the pipes, colored by DX when DX mode is on, with Mario marching one station at a time and the current option spelled in the game's own letters.
+**Goal:** Make the settings hall an open brick room to the left of the pipes, colored by DX when DX mode is on, with Mario marching one station at a time between permanent option signs in the game's own letters.
 
-**Architecture:** The file-select map stays the authority for every tile. `hall_backdrop` reads that map for columns 2–19 and, to the left of column 2, continues the room: the brick checker on rows 0–1 and on rows 16–17, and the open `$FF` cell at map `(4, 4)` in between. There is no pipe floor. Stations stay on the same `0x20` lattice as the save pipes and Clear. The door is `0x28`, and each hall pedestal is `0x20` further left. A direction commits a 32-frame, 1 px/frame march. The sign for the station he is on, or marching toward, is stamped in the sky with the ROM's menu/ending alphabet (see the verified font correction below) and the file-select digit sprites (`$80`–`$89`). The egui caption is removed. DX mode paints the room from `dx.file_select`; the letters are then stamped in that screen's dark background color.
+**Architecture:** The file-select map stays the authority for every tile. `hall_backdrop` reads that map for columns 2–19 and, to the left of column 2, continues the room: the brick checker on rows 0–1 and on rows 16–17, and the open `$FF` cell at map `(4, 4)` in between. There is no pipe floor. Stations stay on the same `0x20` lattice as the save pipes and Clear. The door is `0x28`, and each hall pedestal is `0x20` further left. A direction commits a 32-frame, 1 px/frame march. Every station keeps its name and choice in the sky at its world position, with alternating name rows 32 and 72 (the choice is 16 pixels below), using the ROM's menu/ending alphabet (see the verified font correction below) and the file-select digit sprites (`$80`–`$89`). The room fills `settings.view()` so widescreen and camera zoom reveal more scenery. The egui caption is removed. DX mode paints the room from `dx.file_select`; the letters are then stamped in that screen's dark background color.
 
 **Tech Stack:** Rust, `sml2-core` front-end backdrop, `sml2-runtime` DX `screen` compositor, `sml2-desktop` hall stepper.
 
@@ -15,6 +15,7 @@
 - [x] Draw the file-select Mario metasprite in the native hall.
 - [x] Use DX file-select graphics/palettes with the display-filter fallback and live doorway.
 - [x] Draw every option name and choice in the picture and remove the egui caption.
+- [x] Expand the shared room for widescreen and camera zoom, keeping all signs fixed in world space.
 
 The detailed procedure below is retained as the original implementation proposal.
 These verified corrections supersede its font assumptions and prototype signatures:
@@ -25,32 +26,36 @@ These verified corrections supersede its font assumptions and prototype signatur
   font from bank `$1A:$4656` (already loaded for the Easy Mode card). Uppercase
   letters use `ASCII - '0'` (`A = $11`); its high bitplane supplies the letter
   stencil and its low bitplane supplies a background which must remain transparent.
-  Digits remain file-select OBJ tiles `$80`–`$89`.
-- `hall::alphabet` supplies that existing font to `pixels`, `stamp_sign` and
+  Digits remain file-select OBJ tiles `$80`–`$89`; their high bitplane supplies
+  the dark stroke so the light fill leaves counters open in digits such as 9.
+- `hall::alphabet` supplies that existing font to `pixels`, `stamp_signs` and
   `stamp_line`. `stamp_glyph<P: Copy>` shares clipped coverage for palette tokens
   and RGB pixels, avoiding duplicate byte and RGB implementations.
-- The file select and hall both use a native 160×144 picture, letterboxed into
-  enlarged views, so crossing the doorway preserves the framing. The DX
+- The file select and hall both fill the selected view, with the native 160×144
+  room centered as their shared anchor, so crossing the doorway preserves the
+  framing while widescreen and camera zoom reveal more of the room. The DX
   file-select camera clamps at zero until the cursor passes x=152; subtracting
   on the unsigned cursor before conversion prevents a negative scroll.
 - The hall camera follows each actual one-pixel Mario step, keeping his screen
   anchor at `DOOR` (x=40) and returning continuously to camera zero at the door.
-  Starting a march does not move the camera. Both sign lines stay together
-  within an eight-pixel screen margin while the destination station approaches.
+  Starting a march does not move the camera. Every sign stays at its station
+  and scrolls with the bricks, including before entering the hall. Alternating
+  sign heights leave room for six-character labels on the 32-pixel lattice.
 - File-select mouse picks include the DX camera offset at the character door.
+  Hall signs and their floor positions can be picked across the enlarged view;
+  clicking a visible hall sign at the first pipe walks Mario into the hall.
 - Hall tests live in `app/hall/tests.rs`; the stepper and presentation stay in
   `app/hall.rs`.
 
-Validation after the camera correction: all 1,683 core tests, 110 desktop tests,
+Validation after expanding the room: all 1,685 core tests, 114 desktop tests,
 and runtime suites pass with no failures (existing ignored tests remain ignored).
-The formerly failing
-`file_select_clear_draws_bomb_mario_in_dx_and_restores_the_regular_cursor` now
-passes without exclusion. Regression tests cover every hall step in both
-directions, complete sign visibility, file-select cursor placement, mouse picks
-after scrolling, and matching framing across widescreen/zoom settings in both
-rendering modes. The frozen replay sweep exits successfully. Rendered contact
-sheets were visually checked for station signs, room geometry, and camera
-placement during entry, movement, and return to the door.
+Regression tests cover every hall step in both directions, all twelve permanent
+signs without overlap, exact sign movement with the room, unchanged signs on a
+march decision, digit stencils, enlarged-view mouse picks, sprites beyond output
+x=255, and consistent scenery/sprite placement across widescreen and camera zoom
+in both rendering modes. The frozen replay sweep exits successfully. Rendered
+contact sheets were visually checked at 16:9 and 200% camera zoom, at the doorway
+and in the hall. Debug and release desktop builds succeed.
 
 ## Global Constraints
 
@@ -59,7 +64,7 @@ placement during entry, movement, and return to the door.
 - The hall floor is the brick checker, the same tiles as the ceiling. Do not draw save-pipe tiles in the hall.
 - A march is 32 move frames of 1 px, matching `FileSelect::state_left` / `state_right`. Releasing mid-march does not stop it. A new direction is ignored until the march ends.
 - Holding the direction chains the next march on the following frame, the way a held pad chains pipe-to-pipe.
-- The hall picture is 160×144 and letterboxed with `fixed_screen`. No motion smoothing on it.
+- The shared room fills `settings.view()`, centered on the native 160×144 anchor. No motion smoothing on it.
 - DX colors the hall only when `settings.dx_mode` is on, a bundle is installed, and `session.dx_supported()` is true. Otherwise the same geometry is palette indices through the display filter.
 - Standing on the door (`mario == 0x28`, no march, no hop, no click goal) keeps drawing the live file select, cursor and all.
 - No new files under `captures/` or `notes/`. Do not load `PORT_QUEUE.done.json`.

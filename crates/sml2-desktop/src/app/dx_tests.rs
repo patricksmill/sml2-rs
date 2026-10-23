@@ -450,6 +450,7 @@ fn enabling_dx_mode_without_graphics_starts_the_import() {
 fn dx_mode_colors_the_settings_hall() {
     use sml2_core::hardware_palettes::rgb555;
     let (mut app, _, path) = super::tests::app();
+    app.game.as_mut().unwrap().session.enter_file_select();
     let mut dx = red_bundle();
     dx.file_select.bg_palettes[6] = 0;
     dx.file_select.bg_palettes[7] = 0x7c; // dark sign ink is blue
@@ -510,7 +511,7 @@ fn resting_on_the_hall_door_keeps_the_live_file_select_picture() {
 }
 
 #[test]
-fn file_select_and_hall_keep_the_same_native_framing_in_enlarged_views() {
+fn file_select_and_hall_expand_with_widescreen_and_camera_zoom() {
     use crate::settings::{CameraZoom, Widescreen};
     let (mut app, _, path) = super::tests::app();
     app.dx_bundle = Some(red_bundle());
@@ -524,56 +525,47 @@ fn file_select_and_hall_keep_the_same_native_framing_in_enlarged_views() {
     }
     for dx_mode in [false, true] {
         app.settings.dx_mode = dx_mode;
-        app.settings.widescreen = Widescreen::Off;
-        app.settings.camera_zoom = CameraZoom::Native;
-        app.hall = None;
-        let native = app.frame_image(Smooth::OFF).unwrap();
-        app.hall = Some(hall::Hall::enter());
-        hall::step(
-            app.hall.as_mut().unwrap(),
-            true,
-            false,
-            false,
-            &mut app.settings,
-            &mut app.debug,
-        );
-        let hall_native = app.frame_image(Smooth::OFF).unwrap();
-        for (wide, zoom) in [
-            (Widescreen::Wide16x9, CameraZoom::Native),
-            (Widescreen::Off, CameraZoom::Zoom125),
-            (Widescreen::Wide16x9, CameraZoom::Zoom150),
-            (Widescreen::Wide16x9, CameraZoom::Zoom200),
-        ] {
-            app.settings.widescreen = wide;
-            app.settings.camera_zoom = zoom;
-            let view = app.settings.view();
-            let expected = sml2_runtime::render::view::letterbox(
-                &hall_native.pixels,
-                (160, 144),
-                view,
-                Color32::BLACK,
-            );
-            assert!(
-                app.frame_image(Smooth::OFF).unwrap().pixels == expected,
-                "hall {view:?}"
-            );
-            let hall = app.hall.take();
-            let expected = sml2_runtime::render::view::letterbox(
-                &native.pixels,
-                (160, 144),
-                view,
-                Color32::BLACK,
-            );
-            assert!(
-                app.frame_image(Smooth::OFF).unwrap().pixels == expected,
-                "file select {view:?}, DX {dx_mode}"
-            );
-            app.hall = Some(hall::Hall::enter());
-            assert!(
-                app.frame_image(Smooth::OFF).unwrap().pixels == expected,
-                "doorway {view:?}"
-            );
-            app.hall = hall;
+        for in_hall in [false, true] {
+            app.hall = in_hall.then(|| {
+                let mut h = hall::Hall::enter();
+                h.walk = -32;
+                h
+            });
+            app.settings.widescreen = Widescreen::Off;
+            app.settings.camera_zoom = CameraZoom::Native;
+            let native = app.frame_image(Smooth::OFF).unwrap();
+            for (wide, zoom) in [
+                (Widescreen::Wide16x9, CameraZoom::Native),
+                (Widescreen::Off, CameraZoom::Zoom125),
+                (Widescreen::Wide16x9, CameraZoom::Zoom150),
+                (Widescreen::Wide16x9, CameraZoom::Zoom200),
+            ] {
+                app.settings.widescreen = wide;
+                app.settings.camera_zoom = zoom;
+                let view = app.settings.view();
+                let frame = app.frame_image(Smooth::OFF).unwrap();
+                assert_eq!(frame.size, [view.0, view.1]);
+                let boxed = sml2_runtime::render::view::letterbox(
+                    &native.pixels,
+                    (160, 144),
+                    view,
+                    Color32::BLACK,
+                );
+                assert_ne!(
+                    frame.pixels, boxed,
+                    "the room fills {view:?}, DX {dx_mode}, hall {in_hall}"
+                );
+                let (mx, my) = sml2_runtime::render::view::margin(view);
+                for y in 0..144 {
+                    for x in 0..160 {
+                        assert_eq!(
+                            frame.pixels[(y + my as usize) * view.0 + x + mx as usize],
+                            native.pixels[y * 160 + x],
+                            "same room anchor"
+                        );
+                    }
+                }
+            }
         }
     }
     let _ = std::fs::remove_dir_all(path);

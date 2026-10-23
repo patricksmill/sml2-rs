@@ -13,7 +13,6 @@ use sml2_core::player_sim::PlayerKeys;
 use sml2_core::video::{OutputMode, PalettePixel};
 use sml2_runtime::content::{ExtractedContent, SessionAssets};
 use sml2_runtime::render::motion::{pick_scale, Smooth};
-use sml2_runtime::render::view::fixed_screen;
 #[cfg(test)]
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -483,99 +482,101 @@ impl DesktopApp {
     fn frame_image(&mut self, smooth: Smooth) -> Option<ColorImage> {
         let game = self.game.as_ref()?;
         let view = self.settings.view();
-        if let Some(hall) = &self.hall {
-            let on_door =
-                hall.mario == hall::DOOR && hall.walk == 0 && hall.hop == 0 && hall.goal.is_none();
-            if !on_door {
-                let dx = self
-                    .dx_bundle
-                    .as_ref()
-                    .filter(|_| self.settings.dx_mode && game.session.dx_supported());
-                if let Some(dx) = dx {
-                    let (x, y, sprite) = hall::presentation(hall);
-                    match game.session.render_dx_hall(
+        if let sml2_runtime::session::SessionState::FileSelect(file_select) = &game.session.state {
+            let mut doorway = hall::Hall::enter();
+            doorway.camera = i32::from(file_select.cursor().0.saturating_sub(152));
+            let hall = self.hall.as_ref().unwrap_or(&doorway);
+            let on_door = hall.mario == hall::DOOR && hall.walk == 0 && hall.hop == 0;
+            let dx = self
+                .dx_bundle
+                .as_ref()
+                .filter(|_| self.settings.dx_mode && game.session.dx_supported());
+            if let Some(dx) = dx {
+                let frame = if on_door {
+                    game.session
+                        .render_dx_file_select_room(dx, self.settings.character, view)
+                } else {
+                    game.session.render_dx_hall_view(
                         dx,
                         self.settings.character,
+                        view,
                         hall.camera,
-                        (x, y, sprite),
-                    ) {
-                        Ok(mut rgb) => {
-                            let palette = &dx.file_select.bg_palettes;
-                            let ink = sml2_core::hardware_palettes::rgb555(u16::from_le_bytes([
-                                palette[6], palette[7],
-                            ]));
-                            hall::stamp_sign(
-                                &mut rgb,
-                                hall,
-                                &game.session.assets.front_end,
-                                hall::alphabet(&game.session.assets),
-                                &self.settings,
-                                self.debug,
-                                ink,
-                            );
-                            let frame = fixed_screen(view, [0, 0, 0], |_| rgb);
-                            return Some(ColorImage::new(
-                                [view.0, view.1],
-                                frame
-                                    .into_iter()
-                                    .map(|[r, g, b]| Color32::from_rgb(r, g, b))
-                                    .collect(),
-                            ));
-                        }
-                        Err(error) => self.dx_message = error,
-                    }
-                }
-                let indices = fixed_screen(view, OutputMode::PaletteIndices.blank(3), |_| {
-                    hall::pixels(
-                        hall,
-                        &game.session.assets.front_end,
-                        &game.session.assets.object_tables,
-                        hall::alphabet(&game.session.assets),
-                        &self.settings,
-                        self.debug,
+                        hall::presentation(hall),
                     )
-                });
-                let pixels: Vec<PalettePixel> = indices
-                    .iter()
-                    .map(|&token| PalettePixel::from_token(token))
-                    .collect();
-                return Some(colorized(
-                    &pixels,
-                    self.settings.filter,
-                    &game.session.assets.cartridge_header,
-                    view,
-                ));
+                };
+                match frame {
+                    Ok(mut rgb) => {
+                        let palette = &dx.file_select.bg_palettes;
+                        let ink = sml2_core::hardware_palettes::rgb555(u16::from_le_bytes([
+                            palette[6], palette[7],
+                        ]));
+                        hall::stamp_signs(
+                            &mut rgb,
+                            hall,
+                            &game.session.assets.front_end,
+                            hall::alphabet(&game.session.assets),
+                            &self.settings,
+                            self.debug,
+                            ink,
+                        );
+                        return Some(ColorImage::new(
+                            [view.0, view.1],
+                            rgb.into_iter()
+                                .map(|[r, g, b]| Color32::from_rgb(r, g, b))
+                                .collect(),
+                        ));
+                    }
+                    Err(error) => self.dx_message = error,
+                }
             }
+            let mut indices = if on_door {
+                sml2_core::front_end::render::render_file_select_room_output(
+                    file_select,
+                    &game.session.slots,
+                    &game.session.assets.front_end,
+                    &game.session.assets.object_tables,
+                    view,
+                    OutputMode::PaletteIndices,
+                )
+            } else {
+                hall::pixels(
+                    hall,
+                    &game.session.assets.front_end,
+                    &game.session.assets.object_tables,
+                    hall::alphabet(&game.session.assets),
+                    &self.settings,
+                    self.debug,
+                )
+            };
+            if on_door {
+                hall::stamp_signs(
+                    &mut indices,
+                    hall,
+                    &game.session.assets.front_end,
+                    hall::alphabet(&game.session.assets),
+                    &self.settings,
+                    self.debug,
+                    3,
+                );
+            }
+            let pixels: Vec<_> = indices.into_iter().map(PalettePixel::from_token).collect();
+            return Some(colorized(
+                &pixels,
+                self.settings.filter,
+                &game.session.assets.cartridge_header,
+                view,
+            ));
         }
-
-        // File select and the hall are one native-sized room. Using the
-        // enlarged level view here expands the room immediately at the door.
-        let file_select = matches!(
-            &game.session.state,
-            sml2_runtime::session::SessionState::FileSelect(_)
-        );
-        let scene_view = if file_select {
-            sml2_runtime::render::view::NATIVE
-        } else {
-            view
-        };
         let dx = self
             .dx_bundle
             .as_ref()
             .filter(|_| self.settings.dx_mode && game.session.dx_supported());
         if let Some(dx) = dx {
-            match game.session.render_dx_frame_smooth(
-                dx,
-                self.settings.character,
-                scene_view,
-                smooth,
-            ) {
+            match game
+                .session
+                .render_dx_frame_smooth(dx, self.settings.character, view, smooth)
+            {
                 Ok((pixels, scale)) => {
-                    let pixels = if file_select {
-                        fixed_screen(view, [0, 0, 0], |_| pixels)
-                    } else {
-                        pixels
-                    };
                     return Some(ColorImage::new(
                         [view.0 * scale, view.1 * scale],
                         pixels
@@ -587,16 +588,7 @@ impl DesktopApp {
                 Err(error) => self.dx_message = error,
             }
         }
-        let (pixels, scale) = game.session.render_palette_frame_smooth(scene_view, smooth);
-        let pixels = if file_select {
-            fixed_screen(
-                view,
-                PalettePixel::from_token(OutputMode::PaletteIndices.blank(3)),
-                |_| pixels,
-            )
-        } else {
-            pixels
-        };
+        let (pixels, scale) = game.session.render_palette_frame_smooth(view, smooth);
         Some(colorized(
             &pixels,
             self.settings.filter,
@@ -729,10 +721,10 @@ impl DesktopApp {
                 if let Some(hall) = &mut self.hall {
                     let view = self.settings.view();
                     if let Some(pixel) = pointer::view_pixel(rect, view, pos) {
-                        if let Some((x, _)) = pointer::native_point(view, pixel) {
-                            if let Some(index) = hall::pedestal_at(x, hall) {
-                                hall.goal = Some(index);
-                            }
+                        if let Some(index) =
+                            hall::pedestal_at(pixel, hall, &self.settings, self.debug)
+                        {
+                            hall.goal = Some(index);
                         }
                     }
                 } else {

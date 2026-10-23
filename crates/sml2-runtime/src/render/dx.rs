@@ -96,6 +96,18 @@ impl Session {
         scroll_x: i32,
         mario: (u8, u8, u8),
     ) -> Result<Vec<[u8; 3]>, String> {
+        self.render_dx_hall_view(dx, character, (160, 144), scroll_x, mario)
+    }
+
+    /// The settings room fills widescreen and zoomed-out views.
+    pub fn render_dx_hall_view(
+        &self,
+        dx: &Presentation,
+        character: Character,
+        view: (usize, usize),
+        scroll_x: i32,
+        mario: (u8, u8, u8),
+    ) -> Result<Vec<[u8; 3]>, String> {
         use sml2_core::actor::ScreenPosition;
         use sml2_core::front_end::screen::hall_backdrop;
         use sml2_core::player::{append_cells, CellStyle};
@@ -117,7 +129,7 @@ impl Session {
             &dx.file_select,
             &cells,
             Some(player),
-            (160, 144),
+            view,
             hall_backdrop,
             scroll_x,
             false,
@@ -133,6 +145,30 @@ impl Session {
         dx: &Presentation,
         character: Character,
         view: (usize, usize),
+    ) -> Result<Vec<[u8; 3]>, String> {
+        self.render_dx_file_select_with_backdrop(fs, dx, character, view, false)
+    }
+
+    /// File-select sprites in the open room shared with the desktop hall.
+    pub fn render_dx_file_select_room(
+        &self,
+        dx: &Presentation,
+        character: Character,
+        view: (usize, usize),
+    ) -> Result<Vec<[u8; 3]>, String> {
+        let SessionState::FileSelect(fs) = &self.state else {
+            return Err("the settings room requires file select".into());
+        };
+        self.render_dx_file_select_with_backdrop(fs, dx, character, view, true)
+    }
+
+    fn render_dx_file_select_with_backdrop(
+        &self,
+        fs: &sml2_core::front_end::FileSelect,
+        dx: &Presentation,
+        character: Character,
+        view: (usize, usize),
+        room: bool,
     ) -> Result<Vec<[u8; 3]>, String> {
         let player = dx.player(character, 0);
         let mut tables = self.assets.object_tables.clone();
@@ -170,13 +206,19 @@ impl Session {
         // cursor so the walk stays on screen instead of leaving through the edge.
         // Clamp before widening: signed saturation would permit negative scroll.
         let scroll_x = i32::from(fs.cursor().0.saturating_sub(152));
-        screen(
+        screen_layers(
             &dx.file_select,
             &cells,
             Some(player),
             view,
-            file_select_backdrop,
+            if room {
+                sml2_core::front_end::screen::hall_backdrop
+            } else {
+                file_select_backdrop
+            },
             scroll_x,
+            true,
+            room,
         )
     }
 }

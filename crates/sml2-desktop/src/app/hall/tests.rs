@@ -14,15 +14,6 @@ fn the_sign_spells_the_station_in_game_letters() {
     let mut muted = settings.clone();
     catalog::cycle(Pedestal::Mute, &mut muted, &mut false);
     assert_eq!(catalog::sign(Pedestal::Mute, &muted, false).1, "ON");
-    let mut hall = Hall::enter();
-    hall.mario = pedestal_x(3);
-    assert_eq!(sign_station(&hall), Some(3));
-    hall.walk = -32;
-    assert_eq!(
-        sign_station(&hall),
-        Some(4),
-        "a left march shows the station he is walking toward"
-    );
 }
 
 #[test]
@@ -290,11 +281,14 @@ fn every_option_has_a_complete_sign_with_supported_game_glyphs() {
 }
 
 #[test]
-fn signs_stay_visible_through_every_march_and_the_door_returns_to_its_map_position() {
+fn all_twelve_signs_stay_in_the_room_and_scroll_as_one_picture() {
     let mut hall = Hall::enter();
+    hall.camera = -200;
     let mut settings = Settings::default();
-    let mut debug = false;
-    let alphabet = [255; 0x300];
+    settings.widescreen = crate::settings::Widescreen::Wide16x9;
+    settings.camera_zoom = crate::settings::CameraZoom::Zoom200;
+    let view = settings.view();
+    let font = [255; 0x300];
     let mut digits = vec![0; sml2_core::front_end::VRAM_LEN];
     digits[0x800..0x8a0].fill(255);
     let assets = sml2_core::front_end::FrontEndAssets::new(
@@ -305,34 +299,56 @@ fn signs_stay_visible_through_every_march_and_the_door_returns_to_its_map_positi
         vec![0; sml2_core::front_end::DEMO_TAPES_LEN],
     )
     .unwrap();
-    for (left, right) in [(true, false), (false, true)] {
-        for _ in 0..catalog::HALL_PEDESTALS.len() * 33 {
-            assert!(!step(
-                &mut hall,
-                left,
-                right,
-                false,
-                &mut settings,
-                &mut debug
-            ));
-            if let Some(index) = sign_station(&hall) {
-                let (name, value) = catalog::sign(catalog::HALL_PEDESTALS[index], &settings, debug);
-                let mut frame = vec![0u8; 160 * 144];
-                stamp_sign(&mut frame, &hall, &assets, &alphabet, &settings, debug, 3);
-                let letters = name
-                    .bytes()
-                    .chain(value.bytes())
-                    .filter(|&c| c != b' ')
-                    .count();
-                assert_eq!(
-                    frame.iter().filter(|&&pixel| pixel == 3).count(),
-                    letters * 64,
-                    "every glyph stays fully visible during the pan: {name} / {value}"
-                );
-            }
+    let mut before = vec![0; view.0 * view.1];
+    stamp_signs(&mut before, &hall, &assets, &font, &settings, false, 3);
+    let letters: usize = catalog::HALL_PEDESTALS
+        .iter()
+        .map(|p| {
+            let (name, value) = catalog::sign(*p, &settings, false);
+            name.bytes()
+                .chain(value.bytes())
+                .filter(|&c| c != b' ')
+                .count()
+        })
+        .sum();
+    assert_eq!(
+        before.iter().filter(|&&p| p == 3).count(),
+        letters * 64,
+        "all signs fit without overlap"
+    );
+    hall.camera -= 1;
+    let mut after = vec![0; view.0 * view.1];
+    stamp_signs(&mut after, &hall, &assets, &font, &settings, false, 3);
+    for y in 0..view.1 {
+        for x in 0..view.0 - 1 {
+            assert_eq!(
+                before[y * view.0 + x],
+                after[y * view.0 + x + 1],
+                "signs move exactly with the room"
+            );
         }
     }
-    assert_eq!((hall.mario, hall.camera, hall.walk), (DOOR, 0, 0));
+}
+
+#[test]
+fn enlarged_room_picks_signs_outside_the_native_rectangle() {
+    let hall = Hall::enter();
+    let mut settings = Settings::default();
+    settings.widescreen = crate::settings::Widescreen::Wide16x9;
+    settings.camera_zoom = crate::settings::CameraZoom::Zoom200;
+    let (mx, my) = sml2_runtime::render::view::margin(settings.view());
+    assert_eq!(
+        pedestal_at((mx - 24, my + 72), &hall, &settings, false),
+        Some(1)
+    );
+    assert_eq!(
+        pedestal_at((mx - 24, my + 120), &hall, &settings, false),
+        Some(1)
+    );
+    assert_eq!(
+        pedestal_at((mx - 24, my - 1), &hall, &settings, false),
+        None
+    );
 }
 
 #[test]
@@ -376,6 +392,14 @@ fn the_loaded_game_alphabet_has_the_rom_letter_a_stencil() {
 }
 
 #[test]
+fn file_select_digits_keep_their_counters_open_in_the_signs() {
+    let assets = sml2_runtime::session::SessionAssets::load().unwrap();
+    let nine = glyph(&assets.front_end, alphabet(&assets), b'9').unwrap();
+    let rows = [0, 0x7e, 0x46, 0x7e, 0x0e, 0x0e, 0x0e, 0];
+    assert_eq!(nine, std::array::from_fn(|i| rows[i / 2]));
+}
+
+#[test]
 fn camera_moves_only_with_mario_and_never_snaps_between_stations() {
     let mut hall = Hall::enter();
     let mut settings = Settings::default();
@@ -401,4 +425,26 @@ fn camera_moves_only_with_mario_and_never_snaps_between_stations() {
         }
     }
     assert_eq!((hall.mario, hall.camera), (DOOR, 0));
+}
+
+#[test]
+fn signs_are_present_before_a_march_and_do_not_switch_on_the_decision_frame() {
+    let mut hall = Hall::enter();
+    let mut settings = Settings::default();
+    let mut debug = false;
+    let assets = test_assets();
+    let font = [255; 0x300];
+    let mut before = vec![0u8; 160 * 144];
+    stamp_signs(&mut before, &hall, &assets, &font, &settings, debug, 3);
+    assert!(
+        before.iter().any(|&pixel| pixel == 3),
+        "signs exist even at the door"
+    );
+    step(&mut hall, true, false, false, &mut settings, &mut debug);
+    let mut after = vec![0u8; 160 * 144];
+    stamp_signs(&mut after, &hall, &assets, &font, &settings, debug, 3);
+    assert_eq!(
+        after, before,
+        "choosing a destination does not change the signs"
+    );
 }

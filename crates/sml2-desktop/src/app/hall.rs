@@ -118,9 +118,28 @@ pub(super) fn camera_left(hall: &Hall) -> i32 {
     hall.camera
 }
 
-pub(super) fn pedestal_at(native_x: u8, hall: &Hall) -> Option<usize> {
-    let world = hall.camera + i32::from(native_x);
-    (0..catalog::HALL_PEDESTALS.len()).find(|index| (world - pedestal_x(*index)).abs() <= 12)
+/// Pick a permanent sign or its floor position anywhere in the enlarged room.
+pub(super) fn pedestal_at(
+    pixel: (i32, i32),
+    hall: &Hall,
+    settings: &Settings,
+    debug: bool,
+) -> Option<usize> {
+    let (mx, my) = sml2_runtime::render::view::margin(settings.view());
+    let world = (hall.camera + pixel.0 - mx, pixel.1 - my);
+    (0..catalog::HALL_PEDESTALS.len()).find(|&index| {
+        let (name, value) = catalog::sign(catalog::HALL_PEDESTALS[index], settings, debug);
+        let half_width = name.len().max(value.len()) as i32 * 4;
+        let y = sign_y(index);
+        let dx = (world.0 - pedestal_x(index)).abs();
+        (dx <= half_width && (y..y + 24).contains(&world.1))
+            || (dx <= 12 && (104..144).contains(&world.1))
+    })
+}
+
+fn sign_y(index: usize) -> i32 {
+    // Same-height neighbors are 64 px apart, leaving room for six-letter words.
+    32 + (index % 2) as i32 * 40
 }
 
 pub(super) fn sprite_frame(hall: &Hall) -> u8 {
@@ -148,12 +167,6 @@ pub(super) fn presentation(hall: &Hall) -> (u8, u8, u8) {
     (x, y, sprite_frame(hall))
 }
 
-/// The station occupied now, or the destination of the current march.
-pub(super) fn sign_station(hall: &Hall) -> Option<usize> {
-    let x = hall.mario + i32::from(hall.walk);
-    (0..catalog::HALL_PEDESTALS.len()).find(|index| pedestal_x(*index) == x)
-}
-
 /// The game's menu/ending alphabet, already loaded for the Easy Mode card.
 /// Its letter A is font tile $11 (ASCII minus '0'); the low plane is the
 /// colored backdrop and the high plane is the letter stencil.
@@ -178,11 +191,9 @@ fn glyph(
         }
         b'0'..=b'9' => {
             let offset = (0x80 + usize::from(ch - b'0')) * 16;
-            assets
-                .file_select_vram()
-                .get(offset..offset + 16)?
-                .try_into()
-                .ok()
+            let source = assets.file_select_vram().get(offset..offset + 16)?;
+            // Keep the dark stroke, leaving the sprites' light fill transparent.
+            Some(std::array::from_fn(|i| source[(i / 2) * 2 + 1]))
         }
         _ => None,
     }
@@ -214,7 +225,7 @@ pub(super) fn stamp_line<P: Copy>(
     }
 }
 
-pub(super) fn stamp_sign<P: Copy>(
+pub(super) fn stamp_signs<P: Copy>(
     frame: &mut [P],
     hall: &Hall,
     assets: &sml2_core::front_end::FrontEndAssets,
@@ -223,23 +234,21 @@ pub(super) fn stamp_sign<P: Copy>(
     debug: bool,
     ink: P,
 ) {
-    if let Some(index) = sign_station(hall) {
-        let (name, value) = catalog::sign(catalog::HALL_PEDESTALS[index], settings, debug);
-        // An approaching station may still be at the view edge. Keep both
-        // lines together and readable while it scrolls toward Mario.
-        let half_width = name.len().max(value.len()) as i32 * 4;
-        let center = (pedestal_x(index) - hall.camera).clamp(half_width + 8, 160 - half_width - 8)
-            + hall.camera;
-        for (text, y) in [(&name, 48), (&value, 64)] {
+    let view = settings.view();
+    let (mx, my) = sml2_runtime::render::view::margin(view);
+    for (index, pedestal) in catalog::HALL_PEDESTALS.iter().enumerate() {
+        let (name, value) = catalog::sign(*pedestal, settings, debug);
+        let y = sign_y(index) + my;
+        for (text, y) in [(&name, y), (&value, y + 16)] {
             stamp_line(
                 frame,
-                160,
+                view.0,
                 assets,
                 alphabet,
                 text,
-                center,
+                pedestal_x(index),
                 y,
-                hall.camera,
+                hall.camera - mx,
                 ink,
             );
         }
@@ -255,15 +264,16 @@ pub(super) fn pixels(
     debug: bool,
 ) -> Vec<u8> {
     let (x, y, sprite) = presentation(hall);
-    let mut frame = sml2_core::front_end::render_hall_output(
+    let mut frame = sml2_core::front_end::render::render_hall_view_output(
         assets,
         tables,
+        settings.view(),
         hall.camera,
         (x, y),
         sprite,
         sml2_core::video::OutputMode::PaletteIndices,
     );
-    stamp_sign(&mut frame, hall, assets, alphabet, settings, debug, 3);
+    stamp_signs(&mut frame, hall, assets, alphabet, settings, debug, 3);
     frame
 }
 

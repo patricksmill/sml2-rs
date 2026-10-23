@@ -142,6 +142,20 @@ impl super::DesktopApp {
         let Some(pixel) = view_pixel(rect, view, pos) else {
             return;
         };
+        if let sml2_runtime::session::SessionState::FileSelect(file_select) = &game.session.state {
+            if file_select.menu_state() == 1 && file_select.cursor().0 == 40 {
+                let mut hall = super::hall::Hall::enter();
+                if let Some(index) =
+                    super::hall::pedestal_at(pixel, &hall, &self.settings, self.debug)
+                {
+                    hall.goal = Some(index);
+                    self.hall = Some(hall);
+                    self.aim = None;
+                    self.start_click = false;
+                    return;
+                }
+            }
+        }
         let Some((x, _)) = native_point(view, pixel) else {
             return;
         };
@@ -272,6 +286,28 @@ mod tests {
             app.on_picture_click(egui::pos2((mx + screen_x) as f32, (my + 70) as f32), rect);
             assert_eq!(app.aim, Some(aim));
         }
+        let _ = std::fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn clicking_a_visible_hall_sign_from_file_select_starts_the_walk() {
+        let (mut app, _, path) = super::super::tests::app();
+        app.settings.widescreen = crate::settings::Widescreen::Wide16x9;
+        app.settings.camera_zoom = crate::settings::CameraZoom::Zoom200;
+        app.game.as_mut().unwrap().session.enter_file_select();
+        for _ in 0..64 {
+            app.game
+                .as_mut()
+                .unwrap()
+                .session
+                .advance(Default::default());
+        }
+        let view = app.settings.view();
+        let (mx, my) = margin(view);
+        let rect = Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(view.0 as f32, view.1 as f32));
+        app.on_picture_click(egui::pos2((mx - 24) as f32, (my + 72) as f32), rect);
+        assert_eq!(app.hall.as_ref().unwrap().goal, Some(1));
+        assert_eq!(app.aim, None);
         let _ = std::fs::remove_dir_all(path);
     }
 

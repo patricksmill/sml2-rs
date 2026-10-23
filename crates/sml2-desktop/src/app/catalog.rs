@@ -132,7 +132,7 @@ fn on(value: bool) -> &'static str {
     }
 }
 
-/// Compact labels drawn with the title alphabet and file-select digits.
+/// Compact labels drawn with the menu alphabet and file-select digits.
 pub(super) fn sign(pedestal: Pedestal, settings: &Settings, debug: bool) -> (String, String) {
     use crate::settings::{CameraZoom, Filter, Widescreen};
     let on = |value| if value { "ON" } else { "OFF" }.to_string();

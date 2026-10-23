@@ -129,81 +129,93 @@ pub fn render_file_select_output(
         output,
     )
     .unwrap_or_else(|_| vec![output.blank(3); vw * vh]);
-    let vram = assets.file_select_vram();
+    for cell in file_select_cells(fs, slots, tables) {
+        draw_cell(&mut out, vw, vh, assets.file_select_vram(), output, cell);
+    }
+    out
+}
 
-    // `$300FE`: high nibble then low nibble, tile + $80, X +8 between digits.
+fn file_select_cells(fs: &FileSelect, slots: &SaveSlots, tables: &ObjectTables) -> Vec<Cell> {
+    let mut cells = Vec::new();
     for slot in 0..SLOT_COUNT {
-        let tally = slots.slot(slot).map(|r| r[0x42]).unwrap_or(0);
+        let tally = slots.slot(slot).map_or(0, |r| r[0x42]);
         let x = TALLY_X0 + 32 * slot as u8;
-        draw_cell(
-            &mut out,
-            vw,
-            vh,
-            vram,
-            output,
-            Cell {
+        for (dx, digit) in [(0, tally >> 4), (8, tally & 0x0F)] {
+            cells.push(Cell {
                 y: TALLY_Y,
-                x,
-                tile: 0x80 | (tally >> 4),
+                x: x + dx,
+                tile: 0x80 | digit,
                 attr: 0,
-            },
-        );
-        draw_cell(
-            &mut out,
-            vw,
-            vh,
-            vram,
-            output,
-            Cell {
-                y: TALLY_Y,
-                x: x + 8,
-                tile: 0x80 | (tally & 0x0F),
-                attr: 0,
-            },
-        );
+            });
+        }
     }
-
-    if fs.easy_mode() {
-        draw_metasprite(
-            &mut out,
-            vw,
-            vh,
-            vram,
-            output,
-            tables,
-            EASY_FRAME,
-            (EASY_X, EASY_Y),
-            false,
-        );
-    }
-
-    if let Some((y, frame)) = fs.erase_hop() {
-        draw_metasprite(
-            &mut out,
-            vw,
-            vh,
-            vram,
-            output,
+    let mut sprite = |frame, (x, y), behind_background| {
+        append_cells(
             tables,
             frame,
-            (fs.cursor().0, y),
-            true,
+            ScreenPosition { x, y },
+            CellStyle {
+                force_palette_one: false,
+                behind_background,
+            },
+            &mut cells,
+        );
+    };
+    if fs.easy_mode() {
+        sprite(EASY_FRAME, (EASY_X, EASY_Y), false);
+    }
+    if let Some((y, frame)) = fs.erase_hop() {
+        sprite(frame, (fs.cursor().0, y), true);
+    }
+    let cursor = fs.cursor_presentation();
+    sprite(cursor.sprite, cursor.position, cursor.behind_background);
+    cells
+}
+
+/// The desktop file select opens into the hall and fills the selected view.
+pub fn render_file_select_room_output(
+    fs: &FileSelect,
+    slots: &SaveSlots,
+    assets: &FrontEndAssets,
+    tables: &ObjectTables,
+    view: (usize, usize),
+    output: OutputMode,
+) -> Vec<u8> {
+    let scroll = i32::from(fs.cursor().0.saturating_sub(152));
+    let at = ((view.0 as i32 - 160) / 2, (view.1 as i32 - 144) / 2);
+    let mut frame = room_background(assets, view, scroll, output);
+    for cell in file_select_cells(fs, slots, tables) {
+        draw_cell_at(
+            &mut frame,
+            view.0,
+            view.1,
+            assets.file_select_vram(),
+            output,
+            cell,
+            (at.0 - scroll, at.1),
         );
     }
+    frame
+}
 
-    let cursor = fs.cursor_presentation();
-    draw_metasprite(
-        &mut out,
-        vw,
-        vh,
-        vram,
+fn room_background(
+    assets: &FrontEndAssets,
+    view: (usize, usize),
+    scroll_x: i32,
+    output: OutputMode,
+) -> Vec<u8> {
+    use super::screen::{hall_backdrop, render_backdrop_output};
+    let at = ((view.0 as i32 - 160) / 2, (view.1 as i32 - 144) / 2);
+    render_backdrop_output(
+        assets.file_select_vram(),
+        assets.file_select_tilemap(),
+        FILE_SELECT_BGP,
+        TileData::Signed,
+        view,
+        (scroll_x - at.0, -at.1),
         output,
-        tables,
-        cursor.sprite,
-        cursor.position,
-        cursor.behind_background,
-    );
-    out
+        hall_backdrop,
+    )
 }
 
 pub fn render_hall_output(
@@ -214,67 +226,62 @@ pub fn render_hall_output(
     sprite: u8,
     output: OutputMode,
 ) -> Vec<u8> {
-    use super::screen::{hall_backdrop, render_backdrop_output, TileData};
-    let mut frame = render_backdrop_output(
-        assets.file_select_vram(),
-        assets.file_select_tilemap(),
-        FILE_SELECT_BGP,
-        TileData::Signed,
-        (160, 144),
-        scroll_x,
-        output,
-        hall_backdrop,
-    );
-    draw_metasprite(
-        &mut frame,
-        160,
-        144,
-        assets.file_select_vram(),
-        output,
-        tables,
-        sprite,
-        mario,
-        false,
-    );
-    frame
+    render_hall_view_output(assets, tables, (160, 144), scroll_x, mario, sprite, output)
 }
 
-/// Expand one `$5297` metasprite and draw its cells.
-fn draw_metasprite(
-    frame: &mut [u8],
-    vw: usize,
-    vh: usize,
-    vram: &[u8],
-    output: OutputMode,
+/// Hall scenery and Mario share the enlarged view's centered native anchor.
+pub fn render_hall_view_output(
+    assets: &FrontEndAssets,
     tables: &ObjectTables,
+    view: (usize, usize),
+    scroll_x: i32,
+    mario: (u8, u8),
     sprite: u8,
-    base: (u8, u8),
-    behind_bg: bool,
-) {
+    output: OutputMode,
+) -> Vec<u8> {
+    let mut frame = room_background(assets, view, scroll_x, output);
     let mut cells = Vec::new();
-    let Some(()) = append_cells(
+    append_cells(
         tables,
         sprite,
         ScreenPosition {
-            x: base.0,
-            y: base.1,
+            x: mario.0,
+            y: mario.1,
         },
-        CellStyle {
-            force_palette_one: false,
-            behind_background: behind_bg,
-        },
+        CellStyle::default(),
         &mut cells,
-    ) else {
-        return;
-    };
+    );
+    let at = ((view.0 as i32 - 160) / 2, (view.1 as i32 - 144) / 2);
     for cell in cells {
-        draw_cell(frame, vw, vh, vram, output, cell);
+        draw_cell_at(
+            &mut frame,
+            view.0,
+            view.1,
+            assets.file_select_vram(),
+            output,
+            cell,
+            at,
+        );
     }
+    frame
 }
 
 /// Draw one 8x8 OAM cell. Colour 0 is transparent; attr bit 4 selects OBP1,
 /// bit 5/6 flip X/Y, and bit 7 puts the cell behind background colour 0.
 fn draw_cell(frame: &mut [u8], vw: usize, vh: usize, vram: &[u8], output: OutputMode, cell: Cell) {
+    draw_cell_at(frame, vw, vh, vram, output, cell, (0, 0));
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_cell_at(
+    frame: &mut [u8],
+    vw: usize,
+    vh: usize,
+    vram: &[u8],
+    output: OutputMode,
+    cell: Cell,
+    at: (i32, i32),
+) {
     if cell.tile as usize * 16 + 16 > vram.len() {
         return;
     }
@@ -299,8 +306,8 @@ fn draw_cell(frame: &mut [u8], vw: usize, vh: usize, vram: &[u8], output: Output
     let flip_x = cell.attr & 0x20 != 0;
     let flip_y = cell.attr & 0x40 != 0;
     let behind_bg = cell.attr & 0x80 != 0;
-    let sx = cell.x as i16 - 8;
-    let sy = cell.y as i16 - 16;
+    let sx = i32::from(cell.x) - 8 + at.0;
+    let sy = i32::from(cell.y) - 16 + at.1;
     for row in 0..8usize {
         for col in 0..8usize {
             let src_col = if flip_x { 7 - col } else { col };
@@ -309,8 +316,8 @@ fn draw_cell(frame: &mut [u8], vw: usize, vh: usize, vram: &[u8], output: Output
             if color == 0 {
                 continue;
             }
-            let px = sx + col as i16;
-            let py = sy + row as i16;
+            let px = sx + col as i32;
+            let py = sy + row as i32;
             if px < 0 || py < 0 || px as usize >= vw || py as usize >= vh {
                 continue;
             }

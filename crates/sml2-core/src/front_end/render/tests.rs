@@ -365,3 +365,73 @@ fn glyph_stamping_clips_nonzero_pixels_and_preserves_the_background() {
     stamp_glyph(&mut tokens, 4, &glyph[..15], (0, 0), 0);
     assert_eq!(tokens, before);
 }
+
+#[test]
+fn expanded_hall_translates_scenery_and_sprites_without_oam_wrapping() {
+    let assets = assets();
+    let view = (512, 288);
+    let native = render_hall_output(
+        &assets,
+        &tables(),
+        -200,
+        (152, 124),
+        4,
+        OutputMode::PaletteIndices,
+    );
+    let expanded = render_hall_view_output(
+        &assets,
+        &tables(),
+        view,
+        -200,
+        (152, 124),
+        4,
+        OutputMode::PaletteIndices,
+    );
+    assert_eq!(expanded.len(), 512 * 288);
+    for y in 0..144 {
+        for x in 0..160 {
+            assert_eq!(expanded[(y + 72) * 512 + x + 176], native[y * 160 + x]);
+        }
+    }
+    assert!(
+        expanded[180 * 512 + 312..180 * 512 + 336]
+            .iter()
+            .any(|&token| token >> 2 == 1),
+        "Mario renders beyond output x=255"
+    );
+    assert_eq!(expanded[0], 3, "ceiling scenery fills the outer view");
+}
+
+#[test]
+fn expanded_file_select_room_keeps_tallies_and_cursor_on_the_same_map() {
+    let (fs, slots) = dropped_file_select();
+    let assets = assets();
+    let tables = tables();
+    let native = render_file_select_room_output(
+        &fs,
+        &slots,
+        &assets,
+        &tables,
+        (160, 144),
+        OutputMode::PaletteIndices,
+    );
+    let expanded = render_file_select_room_output(
+        &fs,
+        &slots,
+        &assets,
+        &tables,
+        (512, 288),
+        OutputMode::PaletteIndices,
+    );
+    assert_eq!(expanded.len(), 512 * 288);
+    for y in 0..144 {
+        for x in 0..160 {
+            assert_eq!(expanded[(y + 72) * 512 + x + 176], native[y * 160 + x]);
+        }
+    }
+    assert!(
+        expanded.iter().any(|&token| token >> 2 == 1),
+        "the live cursor remains an OBJ sprite"
+    );
+    assert_eq!(expanded[0], 3, "the enlarged room uses the brick backdrop");
+}
