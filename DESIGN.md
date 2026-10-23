@@ -119,12 +119,15 @@ satisfied by keeping the seams below intact — do not bake these away:
 ### 3. Variable screen sizes & the display pipeline
 
 - **The viewport is a parameter, not a constant.** `--size WxH` renders any
-  world window centred on the camera, clamped so the viewport stays inside
-  the level (16x16 up to the full 4096x768 world). The native 160x144 is the
+  world window around the camera (16x16 up to the full 4096x768 world).
+  Level sampling retains the source tile-window edge behavior rather than
+  independently clamping terrain against the sprites. The native 160x144 is the
   default AND the parity anchor. At 160×144 the HUD strip is in the native
   rect; in any larger view it is bottom-centred (the desktop's Widescreen and
-  Camera zoom mods). With the status bar excluded, the centre 160×144 slice of
-  a larger level frame is pixel-identical to the native frame — re-assert
+  Camera zoom mods). With the status bar excluded, the native 160×144 rect inside
+  a larger level frame is pixel-identical to the native frame. It is horizontally
+  centred; zoomed-out levels put three quarters of the extra height above it
+  and one quarter below it (`render::view::level_margin`). Re-assert
   `crates/sml2-runtime/src/tests/widescreen.rs` after any renderer change.
 - **Window mode: integer scale + letterbox.** The window is resizable; each
   frame picks `s = min(win_w/W, win_h/H) >= 1` and letterboxes. Never blend or

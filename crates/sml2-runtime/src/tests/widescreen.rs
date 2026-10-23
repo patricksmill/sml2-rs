@@ -68,12 +68,21 @@ fn set_view_feeds_the_level_spawn_margin_but_not_demos() {
         panic!("in level")
     };
     assert_eq!(ctx.obj.view_margin, (112, 36));
+    assert_eq!(ctx.obj.view_bias_y, 18);
+    session.set_view(NATIVE);
+    session.advance(FrameInput::default());
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!("in level")
+    };
+    assert_eq!((ctx.obj.view_margin, ctx.obj.view_bias_y), ((0, 0), 0));
+    session.set_view((384, 216));
     assert!(session.start_demo(0));
     session.advance(FrameInput::default());
     let SessionState::Demo(demo) = &session.state else {
         panic!("in demo")
     };
     assert_eq!(demo.ctx.obj.view_margin, (0, 0));
+    assert_eq!(demo.ctx.obj.view_bias_y, 0);
 }
 
 #[test]

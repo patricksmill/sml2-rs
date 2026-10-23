@@ -524,6 +524,7 @@ mod handler_0x96fe;
 #[path = "bosses/door/side/adapter.rs"]
 mod handler_0x9824;
 mod helpers;
+mod visibility;
 #[path = "platforms/horizontal.rs"]
 mod horizontal_platform;
 mod interaction;
@@ -752,6 +753,8 @@ pub struct ObjectSim {
     /// Extra half-width/half-height of an enlarged view. Not ROM state: zero
     /// keeps every window at the engine's own size.
     pub view_margin: (u16, u16),
+    /// Upward shift of enlarged activation/culling windows; not the gameplay camera.
+    pub view_bias_y: u16,
     /// The widened scan window the margin fill covered last frame. Not ROM
     /// state: a culled record only refills once it re-enters the window.
     pub margin_filled: Option<(u16, u16)>,
@@ -856,6 +859,7 @@ impl ObjectSim {
             boss_oam: Vec::new(),
             unported: Vec::new(),
             view_margin: (0, 0),
+            view_bias_y: 0,
             margin_filled: None,
         }
     }
@@ -1239,10 +1243,10 @@ impl ObjectSim {
     fn engine(&mut self, cam_x: u16, cam_y: u16, layout: &LevelLayout, tables: &ObjectTables) {
         let (mx, my) = (i32::from(self.view_margin.0), i32::from(self.view_margin.1));
         let act_x = Self::window(cam_x, 0x60 + mx);
-        let act_y = Self::window(cam_y, 0x60 + my);
+        let act_y = self.vertical_view_window(cam_y, 0x60 + my);
         let scan_x = Self::window(cam_x, 0x70 + mx);
         let alive_x = Self::window(cam_x, 0xA0 + mx);
-        let alive_y = Self::window(cam_y, 0xA0 + my);
+        let alive_y = self.vertical_view_window(cam_y, 0xA0 + my);
 
         // $8064: scan direction/edge from the camera delta. Three-way:
         // - camera < prev: dir $FF, edge = scanX min & $F8

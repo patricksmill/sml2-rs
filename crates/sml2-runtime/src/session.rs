@@ -819,6 +819,7 @@ impl Session {
         if let SessionState::InLevel(ctx) = &mut self.state {
             let (mx, my) = crate::render::view::margin(self.view);
             ctx.obj.view_margin = (mx.max(0) as u16, my.max(0) as u16);
+            ctx.obj.view_bias_y = crate::render::view::level_bias(self.view) as u16;
         }
         let FrameInput { keys, div } = input;
         let rom_timing = self.rom_timing.take();

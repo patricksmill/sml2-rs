@@ -123,8 +123,13 @@ keeps the other device's bindings; Reset controls restores the defaults.
 Keyboard bindings use physical key positions, matching ordinary game controls.
 
 The game view is 160x144 unless **Settings → Mods → View** enlarges it:
-**Widescreen** (Off / 16:9) and **Camera zoom** (100% / 125% / 150%) give
-160x144, 200x180, 240x216, 256x144, 320x180 or 384x216. Enlarged level views
+**Widescreen** (Off / 16:9) and **Camera zoom** (100% / 125% / 150% / 200%) give
+160x144 through 320x288, or 256x144 through 512x288 at 16:9.
+Zoomed-out levels place three quarters of the additional height above the original
+view and one quarter below it, reducing the space shown beneath the level.
+The gameplay camera is unchanged; terrain, sprites, overlays and object visibility
+windows share the upward view bias. Native zoom and overworld/menu framing keep
+their existing positions. Enlarged level views
 spawn and update objects across the wider window, so gameplay differs from the
 original (attract demos keep native spawning); the status bar sits bottom
 centre, and fixed screens are letterboxed. Output scaling uses integer **physical** pixels,

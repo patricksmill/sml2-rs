@@ -4602,3 +4602,6 @@ fn an_excluded_slot_box_sits_at_its_world_position() {
     let b = obj.slot_contact_box(0, 0x0200, 0x0100).unwrap();
     assert_eq!((b.x0, b.y0), (0x110 + 88 - 6, 88 - 8));
 }
+
+#[path = "visibility.rs"]
+mod visibility;
