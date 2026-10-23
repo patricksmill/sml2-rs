@@ -3,6 +3,11 @@
 Rust port of Super Mario Land 2. Reads assets from the sibling byte-identical
 disassembly [`sml2decomp`](../sml2decomp); see [`DESIGN.md`](DESIGN.md).
 
+For a guided tour of the game logic and places to make changes, start with
+[Understanding and modifying the game](docs/game-code-guide.md).
+The [native modularity plan](docs/plans/2026-10-23-native-modularity.md) describes
+the next behavior-preserving architecture improvements.
+
 ## Setup
 
 ```sh
