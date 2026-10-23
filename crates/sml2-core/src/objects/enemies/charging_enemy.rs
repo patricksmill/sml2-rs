@@ -12,7 +12,7 @@
 //! Follows the idiomatic Rust porting guide: typed actor state, domain methods,
 //! zero raw hex offsets or register plumbing.
 
-use crate::actor::{Actor, ContactKind, Facing};
+use crate::actor::{Actor, ContactKind, Facing, SpriteFlipFlags};
 
 pub const DISTANCE_THRESHOLD_X: u8 = 40; // ROM $5AA0D: cp $28 (40)
 pub const INITIAL_CREEP_BUDGET: u8 = 24; // ROM $5A9FD: ld a, 24
@@ -75,7 +75,7 @@ pub fn update(actor: &mut Actor, context: ChargingEnemyContext) -> ChargingEnemy
         ChargingEnemyState::Init => {
             actor.position.move_y(2);
             actor.defeat_mode = 0x80;
-            actor.sprite_flip.set_horizontal(false);
+            actor.sprite_flip = SpriteFlipFlags::default();
             actor.contact_kind = ContactKind::from_raw(CONTACT_KIND);
             actor.travel_direction = Facing::from_raw(INITIAL_CREEP_BUDGET);
             actor.timer = INITIAL_PAUSE_FRAMES;
@@ -103,13 +103,11 @@ pub fn update(actor: &mut Actor, context: ChargingEnemyContext) -> ChargingEnemy
             }
 
             // ROM $5AA10: call 5B3C6 (face toward Mario)
-            let (next_state, flip, facing) = match context.mario_ref_x.cmp(&actor.position.x) {
-                std::cmp::Ordering::Greater => (ChargingEnemyState::CreepRight.to_raw(), true, 1),
-                std::cmp::Ordering::Less => (ChargingEnemyState::CreepLeft.to_raw(), false, 0xFF),
-                std::cmp::Ordering::Equal => (ChargingEnemyState::CreepLeft.to_raw(), false, 0),
+            let facing = match actor.face_toward(context.mario_ref_x) {
+                std::cmp::Ordering::Greater => 1,
+                std::cmp::Ordering::Less => 0xFF,
+                std::cmp::Ordering::Equal => 0,
             };
-            actor.state = next_state;
-            actor.sprite_flip.set_horizontal(flip);
             ChargingEnemyEffect::FacingSelected { facing }
         }
         ChargingEnemyState::CreepLeft => {

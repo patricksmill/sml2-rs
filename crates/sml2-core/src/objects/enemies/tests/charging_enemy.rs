@@ -174,3 +174,53 @@ fn bullet_bill_flies_through_the_full_view_before_returning_to_its_launcher() {
     assert!(sim.slot_done[0]);
     assert!(sim.unported.is_empty());
 }
+
+#[test]
+fn bullet_bill_respawn_initialization_clears_inherited_vertical_flip() {
+    let tables = tables();
+    for old_flip in 0..=255 {
+        let (mut sim, mut st) = fixture(544, 752, 4);
+        st.b[13] = old_flip;
+        // $5B2BF/$8240 preserve the old flip byte. $5A9F6-$5A9F7 must
+        // overwrite it before the respawned Bullet Bill can be drawn.
+        sim.respawn_object_5b2bf(&mut st, &tables);
+        assert_eq!(st.b[13], old_flip);
+        let mut expected = st.b;
+        expected[3..5].copy_from_slice(&466u16.to_be_bytes());
+        expected[12] = 0x80;
+        expected[13] = 0;
+        expected[15] = 5;
+        expected[18] = 74;
+        expected[25] = 24;
+        expected[28] = 24;
+        sim.handler_charging_enemy(&mut st, &tables);
+        assert_eq!(st.b, expected, "inherited flip {old_flip:#04x}");
+    }
+}
+
+#[test]
+fn bullet_bill_aiming_replaces_all_flip_flags_in_both_directions() {
+    let tables = tables();
+    for enlarged in [false, true] {
+        for (mario_x, state, flip, facing) in [(880, 1, 0, 255), (1168, 2, 0x20, 1)] {
+            for old_flip in 0..=255 {
+                let (mut sim, mut st) = fixture(1024, 1024, 5);
+                sim.mario_ref_x = mario_x;
+                if enlarged {
+                    sim.view_margin = (112, 36);
+                }
+                st.b[13] = old_flip;
+                let mut expected = st.b;
+                // $5B3CF-$5B3DD write either $00 or $20 to the whole byte.
+                expected[13] = flip;
+                expected[15] = state;
+                sim.handler_charging_enemy(&mut st, &tables);
+                assert_eq!(
+                    st.b, expected,
+                    "Mario X {mario_x}, old flip {old_flip:#04x}"
+                );
+                assert_eq!(sim.facing, facing);
+            }
+        }
+    }
+}
