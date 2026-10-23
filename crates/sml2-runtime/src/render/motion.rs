@@ -321,12 +321,13 @@ mod tests {
         use crate::session::{FrameInput, Session, SessionAssets};
         let mut session = Session::new(SessionAssets::load().unwrap());
         session.begin_level(0, 0).unwrap();
-        for _ in 0..3 {
+        for _ in 0..2 {
             session.advance(FrameInput::default());
         }
-        assert!(session.motion_prev.is_some());
-        let done = session.motion_offsets(Smooth::OFF);
-        assert_eq!((done.bg, done.player), ((0, 0), (0, 0)));
+        let before = session.level_ctx().and_then(MotionSnapshot::of);
+        assert!(before.is_some());
+        session.advance(FrameInput::default());
+        assert_eq!(session.motion_prev, before);
         session.enter_title();
         session.advance(FrameInput::default());
         assert!(session.motion_prev.is_none());
