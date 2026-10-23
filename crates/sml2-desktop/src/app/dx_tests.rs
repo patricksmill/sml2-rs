@@ -87,7 +87,7 @@ fn selecting_rom_does_not_activate_quit_from_browser_keyboard_input() {
         app.screen = Screen::Settings;
         app.page = super::panels::Page::Mods;
         super::tests::frame(&mut app, &ctx, vec![]);
-        app.menu.selected = 3; // Import, after the tab strip, DX Mode and Character.
+        app.menu.selected = 5; // Import, after the tab strip, view rows, DX Mode and Character.
         app.dx_picker = Some(super::file_picker::FilePicker::new(path.clone()));
         super::tests::frame(
             &mut app,
@@ -216,6 +216,21 @@ fn is_red(image: &ColorImage) -> bool {
 }
 
 #[test]
+fn dx_mode_frames_follow_the_view_settings() {
+    let (mut app, _, path) = super::tests::app();
+    app.dx_bundle = Some(red_bundle());
+    app.game.as_mut().unwrap().session.enter_title();
+    app.settings.dx_mode = true;
+    app.settings.widescreen = crate::settings::Widescreen::Wide16x9;
+    let image = app.frame_image().unwrap();
+    assert_eq!(image.size, [256, 144]);
+    // The title is native art: red in the centre, bars at the sides.
+    assert_eq!(image.pixels[72 * 256 + 128], Color32::from_rgb(255, 0, 0));
+    assert_eq!(image.pixels[72 * 256], Color32::from_rgb(0, 0, 0));
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
 fn dx_mode_colors_every_level_of_the_normal_game() {
     let (mut app, _, path) = super::tests::app();
     app.dx_bundle = Some(red_bundle());
@@ -262,7 +277,7 @@ fn enabling_dx_mode_without_graphics_starts_the_import() {
     app.screen = Screen::Settings;
     app.page = super::panels::Page::Mods;
     super::tests::frame(&mut app, &ctx, vec![]);
-    app.menu.selected = 1; // DX Mode, after the tab strip.
+    app.menu.selected = 3; // DX Mode, after the tab strip and the view rows.
     app.input.event(crate::input::Button::key("Enter"), true);
     super::tests::frame(&mut app, &ctx, vec![]);
     assert!(app.settings.dx_mode);

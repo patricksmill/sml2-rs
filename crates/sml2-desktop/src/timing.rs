@@ -23,8 +23,13 @@ impl TickBudget {
 }
 
 /// Pixel-aligned destination, computed in physical pixels, not UI points.
-pub fn game_rectangle(available: [u32; 2], zoom: crate::settings::Zoom) -> ([u32; 2], [u32; 2]) {
-    let fit = (available[0] / 160).min(available[1] / 144);
+pub fn game_rectangle(
+    available: [u32; 2],
+    zoom: crate::settings::Zoom,
+    view: (usize, usize),
+) -> ([u32; 2], [u32; 2]) {
+    let (w, h) = (view.0 as u32, view.1 as u32);
+    let fit = (available[0] / w).min(available[1] / h);
     if fit == 0 {
         return ([0, 0], [0, 0]);
     }
@@ -32,7 +37,7 @@ pub fn game_rectangle(available: [u32; 2], zoom: crate::settings::Zoom) -> ([u32
         crate::settings::Zoom::Auto => fit,
         crate::settings::Zoom::Integer(n) => u32::from(n).min(fit).max(1),
     };
-    let size = [160 * scale, 144 * scale];
+    let size = [w * scale, h * scale];
     (
         [(available[0] - size[0]) / 2, (available[1] - size[1]) / 2],
         size,
@@ -61,16 +66,28 @@ mod tests {
     #[test]
     fn zoom_is_integer_centered_and_constrained_by_physical_window_pixels() {
         assert_eq!(
-            game_rectangle([1000, 700], crate::settings::Zoom::Auto),
+            game_rectangle([1000, 700], crate::settings::Zoom::Auto, (160, 144)),
             ([180, 62], [640, 576])
         );
         assert_eq!(
-            game_rectangle([1000, 700], crate::settings::Zoom::Integer(2)),
+            game_rectangle([1000, 700], crate::settings::Zoom::Integer(2), (160, 144)),
             ([340, 206], [320, 288])
         );
         assert_eq!(
-            game_rectangle([0, 0], crate::settings::Zoom::Auto),
+            game_rectangle([0, 0], crate::settings::Zoom::Auto, (160, 144)),
             ([0, 0], [0, 0])
+        );
+    }
+    #[test]
+    fn game_rectangle_scales_the_view_by_whole_steps() {
+        let view = (384, 216);
+        assert_eq!(
+            game_rectangle([1920, 1080], crate::settings::Zoom::Auto, view),
+            ([0, 0], [1920, 1080])
+        );
+        assert_eq!(
+            game_rectangle([800, 720], crate::settings::Zoom::Auto, (160, 144)),
+            ([0, 0], [800, 720])
         );
     }
 }

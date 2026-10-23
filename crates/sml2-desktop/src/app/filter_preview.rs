@@ -42,7 +42,7 @@ impl FilterPreview {
 
     fn texture(&mut self, ctx: &egui::Context, filter: Filter) -> &TextureHandle {
         if self.texture.as_ref().is_none_or(|(f, _)| *f != filter) {
-            let image = super::colorized(&self.pixels, filter, &self.header);
+            let image = super::colorized(&self.pixels, filter, &self.header, (160, 144));
             self.texture = Some((
                 filter,
                 ctx.load_texture("sml2-filter-preview", image, TextureOptions::NEAREST),

@@ -220,9 +220,10 @@ impl DesktopApp {
         if let Some(scale) = scale {
             if !self.settings.fullscreen {
                 let pixels_per_point = ctx.pixels_per_point();
+                let (w, h) = self.settings.view();
                 ctx.send_viewport_cmd(ViewportCommand::InnerSize(egui::vec2(
-                    (160.0 * f32::from(scale) / pixels_per_point).max(480.0),
-                    (144.0 * f32::from(scale) / pixels_per_point + 48.0).max(400.0),
+                    (w as f32 * f32::from(scale) / pixels_per_point).max(480.0),
+                    (h as f32 * f32::from(scale) / pixels_per_point + 48.0).max(400.0),
                 )));
             }
         }
@@ -301,6 +302,7 @@ impl DesktopApp {
         }
         let mut submitted_frame = None;
         if let Some(game) = &mut self.game {
+            game.session.set_view(self.settings.view());
             game.audio_running(running && !self.settings.muted);
             for _ in 0..ticks {
                 let keys = if running {
@@ -357,6 +359,7 @@ impl DesktopApp {
     /// data covers, the display filter everywhere else and on any DX failure.
     fn frame_image(&mut self) -> Option<ColorImage> {
         let game = self.game.as_ref()?;
+        let view = self.settings.view();
         let dx = self
             .dx_bundle
             .as_ref()
@@ -364,11 +367,11 @@ impl DesktopApp {
         if let Some(dx) = dx {
             match game
                 .session
-                .render_dx_frame(dx, self.settings.character, (160, 144))
+                .render_dx_frame(dx, self.settings.character, view)
             {
                 Ok(pixels) => {
                     return Some(ColorImage::new(
-                        [160, 144],
+                        [view.0, view.1],
                         pixels
                             .into_iter()
                             .map(|[r, g, b]| Color32::from_rgb(r, g, b))
@@ -378,11 +381,12 @@ impl DesktopApp {
                 Err(error) => self.dx_message = error,
             }
         }
-        let pixels = game.session.render_palette_frame((160, 144));
+        let pixels = game.session.render_palette_frame(view);
         Some(colorized(
             &pixels,
             self.settings.filter,
             &game.session.assets.cartridge_header,
+            view,
         ))
     }
 
@@ -474,8 +478,9 @@ impl DesktopApp {
                 (available.height() * ppp).floor() as u32,
             ],
             self.settings.zoom,
+            self.settings.view(),
         );
-        self.effective_scale = size[0] / 160;
+        self.effective_scale = size[0] / self.settings.view().0 as u32;
         let origin = egui::pos2(
             (available.min.x * ppp).round() / ppp + offset[0] as f32 / ppp,
             (available.min.y * ppp).round() / ppp + offset[1] as f32 / ppp,
@@ -518,7 +523,12 @@ impl DesktopApp {
 }
 
 /// Keep the winning BG/OBJ source until its mapped shade reaches presentation.
-fn colorized(frame: &[PalettePixel], filter: Filter, header: &[u8; 0x18]) -> ColorImage {
+fn colorized(
+    frame: &[PalettePixel],
+    filter: Filter,
+    header: &[u8; 0x18],
+    view: (usize, usize),
+) -> ColorImage {
     let palette = filter.palette(header);
     let pixels = frame
         .iter()
@@ -527,7 +537,7 @@ fn colorized(frame: &[PalettePixel], filter: Filter, header: &[u8; 0x18]) -> Col
             Color32::from_rgb(r, g, b)
         })
         .collect();
-    ColorImage::new([160, 144], pixels)
+    ColorImage::new([view.0, view.1], pixels)
 }
 
 impl eframe::App for DesktopApp {

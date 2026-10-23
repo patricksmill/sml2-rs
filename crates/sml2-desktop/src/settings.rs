@@ -10,6 +10,8 @@ pub const SETTINGS_VERSION: u32 = 2;
 
 mod filter;
 pub use filter::Filter;
+mod view;
+pub use view::{CameraZoom, Widescreen};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Zoom {
@@ -37,6 +39,9 @@ pub struct Settings {
     pub dx_mode: bool,
     /// Who DX Mode draws; native physics are the same for both.
     pub character: sml2_core::character::Character,
+    /// Widen the game view (Mods). Changes object spawning while enlarged.
+    pub widescreen: Widescreen,
+    pub camera_zoom: CameraZoom,
 }
 
 impl Default for Settings {
@@ -55,11 +60,17 @@ impl Default for Settings {
             dx_installation: None,
             dx_mode: false,
             character: Default::default(),
+            widescreen: Widescreen::Off,
+            camera_zoom: CameraZoom::Native,
         }
     }
 }
 
 impl Settings {
+    pub fn view(&self) -> (usize, usize) {
+        view::view_size(self.widescreen, self.camera_zoom)
+    }
+
     pub fn validate(&mut self) -> Result<(), String> {
         if self.version != SETTINGS_VERSION {
             return Err(format!("Settings version {} is unsupported", self.version));
@@ -206,7 +217,13 @@ mod tests {
     fn version_two_settings_restore_optional_dx_selection() {
         let mut settings = Settings::default();
         let mut value = serde_json::to_value(&settings).unwrap();
-        for field in ["dx_installation", "dx_mode", "character"] {
+        for field in [
+            "dx_installation",
+            "dx_mode",
+            "character",
+            "widescreen",
+            "camera_zoom",
+        ] {
             value.as_object_mut().unwrap().remove(field);
         }
         assert_eq!(serde_json::from_value::<Settings>(value).unwrap(), settings);

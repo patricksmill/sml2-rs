@@ -170,7 +170,10 @@ impl DesktopApp {
                 Page::Display => self.display_page(ctx, ui),
                 Page::Audio => self.audio_page(ui),
                 Page::Controls => self.controls_page(ui),
-                Page::Mods => self.dx_controls(ui),
+                Page::Mods => {
+                    self.view_controls(ui);
+                    self.dx_controls(ui);
+                }
                 Page::Debug => self.debug_page(ui),
             }
             ui.add_space(6.0);
@@ -224,9 +227,34 @@ impl DesktopApp {
             };
             preview.show(ui, self.settings.filter, caption);
         }
+        theme::note(ui, "+ / − zoom · F11 fullscreen · F4 cycles filters.");
+    }
+
+    /// Settings → Mods: the enlarged view.
+    fn view_controls(&mut self, ui: &mut Ui) {
+        theme::section(ui, "VIEW");
+        let adjust = self.menu.row_adjustment();
+        let widescreen = self.settings.widescreen;
+        if self
+            .menu
+            .row(ui, "Widescreen", Value::Choice(widescreen.label().into()))
+            || adjust != 0
+        {
+            self.settings.widescreen = widescreen.next();
+        }
+        let adjust = self.menu.row_adjustment();
+        let zoom = self.settings.camera_zoom;
+        if self
+            .menu
+            .row(ui, "Camera zoom", Value::Choice(zoom.label().into()))
+            || adjust != 0
+        {
+            self.settings.camera_zoom = zoom.next();
+        }
         theme::note(
             ui,
-            "+ / − zoom · F11 fullscreen · F4 cycles filters. The game view stays 160 × 144.",
+            "A larger view also spawns enemies and items earlier, so play differs from the \
+             original while it is on. Menus and cutscenes keep their original size.",
         );
     }
 

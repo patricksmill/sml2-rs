@@ -315,7 +315,7 @@ fn every_filter_colorizes_the_native_source_and_shade_frame() {
         })
         .collect();
     for filter in Filter::ALL {
-        let image = colorized(&native, filter, header);
+        let image = colorized(&native, filter, header, (160, 144));
         assert_eq!(image.size, [160, 144]);
         let hardware = match filter {
             Filter::Gbc => Some(gbc_auto(header)),
@@ -355,6 +355,33 @@ fn every_filter_colorizes_the_native_source_and_shade_frame() {
 }
 
 #[test]
+fn the_frame_follows_the_view_settings() {
+    let (mut app, _, path) = app();
+    app.settings.widescreen = crate::settings::Widescreen::Wide16x9;
+    app.settings.camera_zoom = crate::settings::CameraZoom::Zoom150;
+    let image = app.frame_image().expect("a game frame");
+    assert_eq!(image.size, [384, 216]);
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn mods_rows_cycle_the_view_settings() {
+    let (mut app, ctx, path) = app();
+    app.screen = Screen::Settings;
+    app.page = super::panels::Page::Mods;
+    frame(&mut app, &ctx, vec![]);
+    for (row, expected) in [(1, (256, 144)), (2, (320, 180))] {
+        app.menu.selected = row; // Widescreen, then Camera zoom, after the tab strip.
+        app.input.event(Button::key("Enter"), true);
+        frame(&mut app, &ctx, vec![]);
+        app.input.event(Button::key("Enter"), false);
+        frame(&mut app, &ctx, vec![]);
+        assert_eq!(app.settings.view(), expected);
+    }
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
 fn actual_session_frames_use_the_extracted_cartridge_palette_for_every_filter() {
     let (mut app, _, path) = app();
     app.apply_debug(DebugAction::WarpLevel(4));
@@ -365,7 +392,12 @@ fn actual_session_frames_use_the_extracted_cartridge_palette_for_every_filter() 
         .iter()
         .any(|p| p.source != sml2_core::video::PaletteSource::Bg));
     for filter in Filter::ALL {
-        let image = colorized(&native, filter, &game.session.assets.cartridge_header);
+        let image = colorized(
+            &native,
+            filter,
+            &game.session.assets.cartridge_header,
+            (160, 144),
+        );
         assert!(screenshot::verify(&image, &image, [0, 0, 160, 144]).is_ok());
         // A changed channel at any native pixel must invalidate screenshot verification.
         let mut changed = image.clone();
@@ -390,6 +422,7 @@ fn screenshot_verification_keeps_the_submitted_filter_when_settings_change() {
         &game.session.render_palette_frame((160, 144)),
         Filter::Sgb(0),
         &game.session.assets.cartridge_header,
+        (160, 144),
     );
     assert_eq!(
         submitted, expected,
