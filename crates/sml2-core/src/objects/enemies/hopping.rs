@@ -12,6 +12,38 @@ impl From<MotionProfileError> for Error {
     }
 }
 
+/// Persistent states from the source dispatch table. Unknown bytes remain errors.
+#[derive(Clone, Copy)]
+#[repr(u8)]
+enum HoppingState {
+    Initialize = 0,
+    HopLeft = 1,
+    HopRight = 2,
+    TurnLeft = 3,
+    TurnRight = 4,
+}
+
+impl HoppingState {
+    fn from_raw(value: u8) -> Result<Self, Error> {
+        match value {
+            0 => Ok(Self::Initialize),
+            1 => Ok(Self::HopLeft),
+            2 => Ok(Self::HopRight),
+            3 => Ok(Self::TurnLeft),
+            4 => Ok(Self::TurnRight),
+            _ => Err(Error::InvalidState),
+        }
+    }
+}
+
+const MOTION_PHASE_CAP: u8 = 12;
+const LANDING_PAUSE: u8 = 8;
+const TURN_FRAME_PERIOD: u64 = 4;
+const TURN_STEPS: u8 = 6;
+const NEAR_PLAYER_DISTANCE: u8 = 48;
+const RISING_SPRITE: u8 = 56;
+const FALLING_SPRITE: u8 = 52;
+
 pub(super) trait World {
     fn player_x(&self) -> u16;
     fn face_player(&mut self, position: Position) -> bool;
@@ -32,16 +64,15 @@ pub(super) fn update(
     frame: FrameTick,
     world: &mut impl World,
 ) -> Result<(), Error> {
-    match actor.state {
-        0 => {
+    match HoppingState::from_raw(actor.state)? {
+        HoppingState::Initialize => {
             let _ = world.face_player(actor.position);
             actor.face_toward(world.player_x());
             actor.contact_kind = ContactKind::from_raw(77);
             actor.timer = 1;
         }
-        1 | 2 => hop(actor, world)?,
-        3 | 4 => turn(actor, frame),
-        _ => return Err(Error::InvalidState),
+        HoppingState::HopLeft | HoppingState::HopRight => hop(actor, world)?,
+        HoppingState::TurnLeft | HoppingState::TurnRight => turn(actor, frame),
     }
     Ok(())
 }
@@ -52,34 +83,34 @@ fn hop(actor: &mut Actor, world: &mut impl World) -> Result<(), Error> {
         if actor.timer != 0 {
             return Ok(());
         }
-        actor.sprite = 56;
+        actor.sprite = RISING_SPRITE;
     }
-    let right = actor.state == 2;
+    let right = actor.state == HoppingState::HopRight as u8;
     if world.wall_blocked(actor.position, right) {
         reverse(actor);
         return Ok(());
     }
     actor.position.move_x(if right { 1 } else { -1 });
     if actor.motion_leg == 0 {
-        let step = actor.motion_step(world.rise(), 12)?;
+        let step = actor.motion_step(world.rise(), MOTION_PHASE_CAP)?;
         actor.position.move_y(-i16::from(step));
-        if actor.motion_phase == 12 {
+        if actor.motion_phase == MOTION_PHASE_CAP {
             actor.motion_phase = 0;
             actor.motion_leg = 1;
-            actor.sprite = 52;
+            actor.sprite = FALLING_SPRITE;
         }
         return Ok(());
     }
     if !world.grounded(actor.position) {
-        let step = actor.motion_step(world.fall(), 12)?;
+        let step = actor.motion_step(world.fall(), MOTION_PHASE_CAP)?;
         actor.position.move_y(i16::from(step));
         return Ok(());
     }
     actor.motion_phase = 0;
     actor.motion_leg = 0;
-    actor.timer = 8;
+    actor.timer = LANDING_PAUSE;
     let distance = (world.player_x() as u8).wrapping_sub(actor.position.x as u8) as i8;
-    if distance.unsigned_abs() >= 48 {
+    if distance.unsigned_abs() >= NEAR_PLAYER_DISTANCE {
         actor.travel_direction = Facing::from_raw(actor.travel_direction.raw().wrapping_add(1));
         if actor.travel_direction.raw() == 3 {
             reverse(actor);
@@ -87,7 +118,11 @@ fn hop(actor: &mut Actor, world: &mut impl World) -> Result<(), Error> {
         return Ok(());
     }
     let face_left = world.face_player(actor.position);
-    let desired_state = if face_left { 1 } else { 2 };
+    let desired_state = if face_left {
+        HoppingState::HopLeft as u8
+    } else {
+        HoppingState::HopRight as u8
+    };
     if actor.state == desired_state {
         actor.travel_direction = Facing::from_raw(actor.travel_direction.raw().wrapping_add(1));
         actor.state = actor.state.wrapping_add(2);
@@ -104,26 +139,26 @@ fn turn(actor: &mut Actor, frame: FrameTick) {
         actor.timer -= 1;
         return;
     }
-    if !frame.every(4) {
+    if !frame.every(TURN_FRAME_PERIOD) {
         return;
     }
-    if actor.animation_frame == 6 {
+    if actor.animation_frame == TURN_STEPS {
         actor.animation_frame = 0;
-        actor.timer = 8;
+        actor.timer = LANDING_PAUSE;
         actor.state = actor.state.wrapping_sub(2);
         if actor.travel_direction.raw() == 3 {
             reverse(actor);
         }
         return;
     }
-    let first_half = actor.animation_frame < 3;
+    let first_half = actor.animation_frame < TURN_STEPS / 2;
     actor.animation_frame = actor.animation_frame.wrapping_add(1);
     actor.sprite = if first_half {
         actor.sprite.wrapping_add(1)
     } else {
         actor.sprite.wrapping_sub(1)
     };
-    let left = (actor.state == 3) == first_half;
+    let left = (actor.state == HoppingState::TurnLeft as u8) == first_half;
     actor.position.move_x(if left { -4 } else { 4 });
 }
 

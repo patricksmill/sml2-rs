@@ -304,3 +304,16 @@ fn handler_0x58848_misaligned_ground_preserves_previous_probe_high_byte() {
     // Last wall probe was Y=$00FF. Ground writes low $04, then exits.
     assert_eq!((st.px, st.py, sim.move_flags), (39, 4, 0x80));
 }
+
+#[test]
+fn handler_0x58848_unknown_states_preserve_all_bytes_and_report_diagnostic() {
+    for state in 5..=u8::MAX {
+        let mut sim = ObjectSim::new(vec![], 0);
+        let mut st = staging();
+        st.b[15] = state;
+        let expected = st.b;
+        sim.handler_0x58848(&mut st, &layout(0x60));
+        assert_eq!(st.b, expected, "state={state}");
+        assert_eq!(sim.unported, [0x58848], "state={state}");
+    }
+}
