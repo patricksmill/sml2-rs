@@ -110,7 +110,7 @@ distributed with the application.
 | Movement | Arrows | D-pad / left stick |
 | Jump / A | Z or Space | South |
 | Run / B | X or Shift | West or East |
-| Original game Start | Enter | Left stick click |
+| Start / confirm; pause popup in levels | Enter | Left stick click |
 | Original game Select | Backspace | Select / Back |
 | Desktop menu / resume | Esc | Start |
 | Menu navigation | Arrows, Enter / Space | D-pad / stick, South |

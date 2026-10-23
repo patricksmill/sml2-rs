@@ -122,8 +122,17 @@ impl DesktopApp {
             self.open_editor(ctx);
             return;
         }
+        let game_start = self.screen == Screen::Game
+            && self.game.as_ref().is_some_and(|game| matches!(
+                game.session.state,
+                sml2_runtime::session::SessionState::InLevel(_)
+            ))
+            && self.settings.bindings.0[crate::input::Action::Start as usize]
+                .iter()
+                .any(|button| self.input.take_press(button));
         if self.screen != Screen::Game && self.input.take_press(&Button::Pad(PadButton::East))
             || back
+            || game_start
         {
             let target = match self.screen {
                 Screen::Settings => self.return_screen,

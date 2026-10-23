@@ -801,3 +801,20 @@ fn quick_settings_pause_gameplay_and_escape_closes_only_the_popup() {
     assert!(!app.input.sample_player(&app.settings.bindings).a);
     let _ = std::fs::remove_dir_all(path);
 }
+
+#[test]
+fn enter_uses_the_popup_in_levels_and_confirms_resume() {
+    let (mut app, ctx, path) = app();
+    app.apply_debug(DebugAction::WarpLevel(4));
+    frame(&mut app, &ctx, vec![]);
+    frame(&mut app, &ctx, vec![key(egui::Key::Enter, true)]);
+    assert_eq!(app.screen, Screen::Home);
+    let SessionState::InLevel(level) = &app.game.as_ref().unwrap().session.state else { panic!("level") };
+    assert!(!level.sim.paused);
+    frame(&mut app, &ctx, vec![key(egui::Key::Enter, false)]);
+    frame(&mut app, &ctx, vec![key(egui::Key::Enter, true)]);
+    assert_eq!(app.screen, Screen::Game);
+    let SessionState::InLevel(level) = &app.game.as_ref().unwrap().session.state else { panic!("level") };
+    assert!(!level.sim.paused);
+    let _ = std::fs::remove_dir_all(path);
+}
