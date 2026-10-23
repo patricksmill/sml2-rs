@@ -4213,6 +4213,43 @@ fn a_view_margin_spawns_records_in_the_widened_band_only() {
 }
 
 #[test]
+fn a_culled_margin_record_waits_for_the_camera_to_uncover_it_again() {
+    let t = tables();
+    let layout = blank_layout();
+    let cam = 0x0200;
+    let mut obj = ObjectSim::new(vec![margin_record(cam + 0x70 + 0x40)], cam);
+    obj.configure(0);
+    obj.view_margin = (112, 36);
+    let step = |obj: &mut ObjectSim, cam| {
+        obj.step(cam, 0x0100, &layout, &t, &MarioContact::default(), false);
+    };
+    let holds_record = |obj: &ObjectSim| obj.slots.iter().any(|s| s.b[B_STATE] != 0);
+
+    step(&mut obj, cam);
+    assert_eq!(obj.spawned, vec![true]);
+    let slot = obj.slots.iter().position(|s| s.b[B_STATE] != 0).unwrap();
+
+    // Past the widened alive window: the odd-phase cull removes it.
+    set_x(&mut obj.slots[slot].b, cam + 0x300);
+    for _ in 0..2 {
+        step(&mut obj, cam);
+    }
+    assert_eq!(obj.slots[slot].b[B_STATE], 0, "culled");
+
+    for _ in 0..8 {
+        step(&mut obj, cam);
+        assert_eq!(obj.spawned, vec![false], "no respawn under a still camera");
+        assert!(!holds_record(&obj));
+    }
+
+    step(&mut obj, cam + 0x200);
+    assert_eq!(obj.spawned, vec![false]);
+    step(&mut obj, cam);
+    assert_eq!(obj.spawned, vec![true], "re-entering the window refills it");
+    assert!(holds_record(&obj));
+}
+
+#[test]
 fn a_zero_margin_leaves_a_still_camera_without_spawns() {
     let t = tables();
     let layout = blank_layout();

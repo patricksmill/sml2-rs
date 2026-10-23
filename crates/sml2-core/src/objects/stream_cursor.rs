@@ -22,6 +22,7 @@ impl ObjectSim {
     pub(super) fn seed_stream_cursor(&mut self) {
         self.stream_cursor_cleared = false;
         self.stream_index = 0;
+        self.margin_filled = None;
     }
 }
 

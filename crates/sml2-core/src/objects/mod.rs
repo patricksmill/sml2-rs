@@ -751,6 +751,9 @@ pub struct ObjectSim {
     /// Extra half-width/half-height of an enlarged view. Not ROM state: zero
     /// keeps every window at the engine's own size.
     pub view_margin: (u16, u16),
+    /// The widened scan window the margin fill covered last frame. Not ROM
+    /// state: a culled record only refills once it re-enters the window.
+    pub margin_filled: Option<(u16, u16)>,
 }
 
 impl ObjectSim {
@@ -852,6 +855,7 @@ impl ObjectSim {
             boss_oam: Vec::new(),
             unported: Vec::new(),
             view_margin: (0, 0),
+            margin_filled: None,
         }
     }
 
@@ -1312,18 +1316,26 @@ impl ObjectSim {
     }
 
     /// An enlarged view uncovers records beyond the native scan edges that
-    /// the edge scan never crosses (level start, warps, respawns).
+    /// the edge scan never crosses (level start, warps, respawns). Only
+    /// records newly inside the widened window are filled, so a culled
+    /// record waits for the camera to uncover it again, as the edge scan does.
     fn fill_view_margin(&mut self, cam_x: u16, tables: &ObjectTables) {
         let mx = i32::from(self.view_margin.0);
-        if mx == 0 || self.stream_cursor_cleared {
+        if mx == 0 {
+            self.margin_filled = None;
             return;
         }
         let native = Self::window(cam_x, 0x70);
         let wide = Self::window(cam_x, 0x70 + mx);
+        let prev = self.margin_filled.replace(wide);
+        if self.stream_cursor_cleared {
+            return;
+        }
         for ri in 0..self.records.len() {
             let x = self.records[ri].x;
             let in_band = (x >= wide.0 && x < native.0) || (x > native.1 && x <= wide.1);
-            if !in_band || self.record_skipped(ri) {
+            let uncovered = prev.is_none_or(|p| !Self::window_hit(x, p));
+            if !in_band || !uncovered || self.record_skipped(ri) {
                 continue;
             }
             let ptr = STREAM_BASE.wrapping_add((ri * RECORD_LEN) as u16);
