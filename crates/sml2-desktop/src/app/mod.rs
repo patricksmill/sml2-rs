@@ -668,7 +668,7 @@ impl DesktopApp {
                     let view = self.settings.view();
                     if let Some(pixel) = pointer::view_pixel(rect, view, pos) {
                         if let Some((x, _)) = pointer::native_point(view, pixel) {
-                            if let Some(index) = hall::pedestal_at(x, hall.mario) {
+                            if let Some(index) = hall::pedestal_at(x, hall) {
                                 hall.goal = Some(index);
                             }
                         }
