@@ -11,14 +11,15 @@ mod bundle_tests;
 
 /// Banks the presentation reads. `$06`, `$07` and `$1B`-`$1F` hold the base
 /// game's level, arena, transfer and animation graphics, `$08` its metatile
-/// tables and `$09`-`$0B`, `$12`-`$15` and `$17` its level layouts, all of
-/// which DX edits in place; the rest are DX additions: `$20` common HUD
-/// tiles, `$21` tile attributes, `$23`/`$28`/`$3A` object mappings, `$24`
-/// VRAM1 graphics and HUD tables, `$26` palettes, `$2A`/`$2B` Mario/Luigi
-/// graphics and `$2C`/`$2D` their mappings.
-pub const BANKS: [u8; 27] = [
-    0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x12, 0x13, 0x14, 0x15, 0x17, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
-    0x20, 0x21, 0x23, 0x24, 0x26, 0x28, 0x2A, 0x2B, 0x2C, 0x2D, 0x3A,
+/// tables, `$09`-`$0B`, `$12`-`$15` and `$17` its level layouts, and `$05`
+/// and `$0C` the title and file-select maps, all of which DX edits in place;
+/// the rest are DX additions: `$20` title and common HUD tiles, `$21` tile
+/// attributes, `$23`/`$28`/`$3A` object mappings, `$24` VRAM1 graphics and HUD
+/// tables, `$25` the file-select attribute map, `$26` palettes, `$2A`/`$2B`
+/// Mario/Luigi graphics and `$2C`/`$2D` their mappings.
+pub const BANKS: [u8; 30] = [
+    0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x12, 0x13, 0x14, 0x15, 0x17, 0x1B, 0x1C, 0x1D,
+    0x1E, 0x1F, 0x20, 0x21, 0x23, 0x24, 0x25, 0x26, 0x28, 0x2A, 0x2B, 0x2C, 0x2D, 0x3A,
 ];
 pub const BANK_LEN: usize = 0x4000;
 pub const LEVELS: usize = 32;

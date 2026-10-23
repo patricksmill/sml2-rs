@@ -47,6 +47,18 @@ pub struct PlayerGraphics {
     pub mappings: Vec<Vec<MappingEntry>>,
 }
 
+/// A front-end screen's CGB background, as its loader leaves VRAM: both banks
+/// of `$8000..$97FF`, the `$9800` tile map and its VRAM1 attribute map, and
+/// both palette sets.
+#[derive(Clone, Debug)]
+pub struct Screen {
+    pub vram: [Vec<u8>; 2],
+    pub tilemap: Vec<u8>,
+    pub attributes: Vec<u8>,
+    pub bg_palettes: Vec<u8>,
+    pub obj_palettes: Vec<u8>,
+}
+
 #[derive(Clone, Debug)]
 pub struct Presentation {
     pub levels: Vec<LevelGraphics>,
@@ -62,6 +74,10 @@ pub struct Presentation {
     /// The DX bytes behind every base-ROM address a level copies mid-level
     /// (arena reloads, scene transfers), keyed by bank.
     pub banks: BTreeMap<u8, Vec<u8>>,
+    /// `$20:$6A40`'s title screen.
+    pub title: Screen,
+    /// `$2B8B` plus `$25:$4234`'s file select.
+    pub file_select: Screen,
 }
 
 /// One sprite or player mapping table: cells per sprite ID.
@@ -140,6 +156,8 @@ impl Presentation {
             hud_tiles: bundle.banked(LEVEL_BANK, 0x7C24, 20)?.to_vec(),
             animation_rows: bundle.banked(ANIMATION_BANK, 0x6680, 0x1000)?.to_vec(),
             banks: bundle.banks.clone(),
+            title: title(bundle)?,
+            file_select: file_select(bundle)?,
         })
     }
 
@@ -246,6 +264,89 @@ fn level_graphics(bundle: &Bundle, level: u8) -> Result<LevelGraphics, ImportErr
         object_table: 0,
         metatiles,
         layout,
+    })
+}
+
+/// Copy `(bank, address, length)` sources into a `$8000`-based VRAM image at
+/// the given offsets.
+fn vram(bundle: &Bundle, copies: &[(u8, u16, usize, usize)]) -> Result<Vec<u8>, ImportError> {
+    let mut vram = vec![0; 0x1800];
+    for &(bank, address, length, at) in copies {
+        vram[at..at + length].copy_from_slice(bundle.banked(bank, address, length)?);
+    }
+    Ok(vram)
+}
+
+/// A `$9800` attribute map: the stored rows, then zeros.
+fn attribute_map(
+    bundle: &Bundle,
+    bank: u8,
+    address: u16,
+    length: usize,
+) -> Result<Vec<u8>, ImportError> {
+    let mut map = bundle.banked(bank, address, length)?.to_vec();
+    map.resize(0x400, 0);
+    Ok(map)
+}
+
+fn palettes(bundle: &Bundle, bg: u16, obj: u16) -> Result<(Vec<u8>, Vec<u8>), ImportError> {
+    let bg = bundle.banked(PALETTE_BANK, bg, 0x40)?.to_vec();
+    let obj = bundle.banked(PALETTE_BANK, obj, 0x40)?.to_vec();
+    CgbPalettes::from_bytes(&bg, &obj).map_err(|e| ImportError::InvalidBundle(e.to_string()))?;
+    Ok((bg, obj))
+}
+
+/// `$20:$6A40`: VRAM0 `$8800` from `$20:$4000`, VRAM1 `$8800`/`$8B00` from
+/// `$20:$5D00`/`$5000`, attributes `$20:$6800`, palettes `$26:$7870`/`$78B0`;
+/// the unchanged `$05:$59E5` map, which DX edits in place.
+fn title(bundle: &Bundle) -> Result<Screen, ImportError> {
+    let (bg_palettes, obj_palettes) = palettes(bundle, 0x7870, 0x78B0)?;
+    Ok(Screen {
+        vram: [
+            vram(bundle, &[(0x20, 0x4000, 0x1000, 0x800)])?,
+            vram(
+                bundle,
+                &[(0x20, 0x5D00, 0x300, 0x800), (0x20, 0x5000, 0xD00, 0xB00)],
+            )?,
+        ],
+        tilemap: bundle.banked(0x05, 0x59E5, 0x400)?.to_vec(),
+        attributes: attribute_map(bundle, 0x20, 0x6800, 0x240)?,
+        bg_palettes,
+        obj_palettes,
+    })
+}
+
+/// `$2B8B`'s unchanged VRAM0 copies and the `$0C:$4A52` map, DX-edited in
+/// place; `$25:$4234`'s attributes from `$25:$4000` and BG palettes
+/// `$26:$7D17`. VRAM1 and the OBJ palettes are what the title and the
+/// player's VRAM1 load (`$20:$6000`) leave.
+fn file_select(bundle: &Bundle) -> Result<Screen, ImportError> {
+    let (bg_palettes, obj_palettes) = palettes(bundle, 0x7D17, 0x78B0)?;
+    Ok(Screen {
+        vram: [
+            vram(
+                bundle,
+                &[
+                    (0x06, 0x4000, 0x800, 0),
+                    (0x1B, 0x7000, 0x300, 0x800),
+                    (0x0C, 0x6ACA, 0x380, 0xB00),
+                    (0x07, 0x6A00, 0x380, 0xE80),
+                    (0x07, 0x5E00, 0x600, 0x1200),
+                ],
+            )?,
+            vram(
+                bundle,
+                &[
+                    (0x20, 0x6000, 0x800, 0),
+                    (0x20, 0x5D00, 0x300, 0x800),
+                    (0x20, 0x5000, 0xD00, 0xB00),
+                ],
+            )?,
+        ],
+        tilemap: bundle.banked(0x0C, 0x4A52, 0x400)?.to_vec(),
+        attributes: attribute_map(bundle, 0x25, 0x4000, 0x234)?,
+        bg_palettes,
+        obj_palettes,
     })
 }
 

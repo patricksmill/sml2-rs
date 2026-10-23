@@ -41,6 +41,19 @@ fn synthetic_bundle() -> Presentation {
         hud_tiles: vec![0; 20],
         animation_rows: vec![0; 0x1000],
         banks: Default::default(),
+        title: screen(),
+        file_select: screen(),
+    }
+}
+
+/// A blank screen whose background is palette 0 color 0.
+fn screen() -> sml2_dx::Screen {
+    sml2_dx::Screen {
+        vram: [vec![0; 0x1800], vec![0; 0x1800]],
+        tilemap: vec![0; 0x400],
+        attributes: vec![0; 0x400],
+        bg_palettes: [0x1f, 0].repeat(32),
+        obj_palettes: [0xe0, 3].repeat(32),
     }
 }
 
@@ -50,8 +63,12 @@ fn dx_public_api_covers_every_level_with_its_own_tables() {
     // Level 1 is pure green.
     bundle.levels[1].bg_palettes = [0xe0, 3].repeat(32);
     let mut game = session();
-    assert!(!game.dx_supported(), "the title keeps its native picture");
-    assert!(game.render_dx_frame(&bundle, Mario).is_err());
+    game.enter_title();
+    assert!(game.dx_supported(), "the title has its own DX screen");
+    assert_eq!(
+        game.render_dx_frame(&bundle, Mario).unwrap(),
+        vec![RED; 160 * 144]
+    );
     game.begin_level(0, 0).unwrap();
     assert!(game.dx_supported());
     assert_eq!(
@@ -301,4 +318,28 @@ fn audited_rom_draws_every_level_and_leaves_arenas_native() {
     };
     assert!(ctx.arena_loaded);
     assert!(!game.dx_supported());
+}
+
+/// The title, and the file select 60 ticks after it opens, matched PyBoy's
+/// frames of the audited ROM on all 23,040 pixels; their RGB hashes pin them.
+#[test]
+#[ignore = "requires SML2_DX_ROM with the audited local ROM"]
+fn audited_rom_title_and_file_select_match_their_pyboy_frames() {
+    let bundle = audited();
+    let mut game = session();
+    game.enter_title();
+    let title = game.render_dx_frame(&bundle, Mario).unwrap().concat();
+    assert_eq!(
+        sml2_dx::sha256(&title),
+        "877cefb301d5aabf14414f03f20e5ef3f39e1e5e55ceb8dfc0ade1f41dd1e1c7"
+    );
+    game.enter_file_select();
+    for _ in 0..60 {
+        game.advance(FrameInput::default());
+    }
+    let file_select = game.render_dx_frame(&bundle, Mario).unwrap().concat();
+    assert_eq!(
+        sml2_dx::sha256(&file_select),
+        "b34891637e549b91cf3d56ed65bb2fd7c79f725814a3824453a57bbb35ae6232"
+    );
 }

@@ -170,6 +170,19 @@ fn red_bundle() -> sml2_dx::Presentation {
         hud_tiles: vec![0; 20],
         animation_rows: vec![0; 0x1000],
         banks: Default::default(),
+        title: screen(),
+        file_select: screen(),
+    }
+}
+
+/// A blank screen whose background is palette 0 color 0.
+fn screen() -> sml2_dx::Screen {
+    sml2_dx::Screen {
+        vram: [vec![0; 0x1800], vec![0; 0x1800]],
+        tilemap: vec![0; 0x400],
+        attributes: vec![0; 0x400],
+        bg_palettes: [0x1f, 0].repeat(32),
+        obj_palettes: [0xe0, 3].repeat(32),
     }
 }
 
@@ -184,9 +197,10 @@ fn is_red(image: &ColorImage) -> bool {
 fn dx_mode_colors_every_level_of_the_normal_game() {
     let (mut app, _, path) = super::tests::app();
     app.dx_bundle = Some(red_bundle());
-    // The title keeps the filter's picture.
+    // The title has its own DX screen.
+    app.game.as_mut().unwrap().session.enter_title();
     app.settings.dx_mode = true;
-    assert!(!is_red(&app.frame_image().unwrap()));
+    assert!(is_red(&app.frame_image().unwrap()));
     for level in [0, 1, 0x1F] {
         let game = app.game.as_mut().unwrap();
         game.session.debug_warp_level(level).unwrap();

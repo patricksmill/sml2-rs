@@ -263,6 +263,18 @@ matched every streamed BG map cell against DX's layout and metatiles, against
 gameplay is not ported, so the renderer draws DX's cell only where it keeps the
 native cell's collision class, and the native cell otherwise.
 
+## Title and file select
+
+`$2ABE` now calls `$20:$6A40`: VRAM0 `$8800..$97FF` from `$20:$4000`, VRAM1
+`$8800` from `$20:$5D00` and `$8B00` from `$20:$5000`, an 18-row VRAM1 attribute
+map from `$20:$6800`, and palettes `$26:$7870` (BG) and `$26:$78B0` (OBJ). The
+title map stays at `$05:$59E5`, edited in place. The file select keeps `$2B8B`'s
+VRAM0 copies and the `$0C:$4A52` map (both edited in place); `$28D9` calls
+`$25:$4234`, which loads the attribute map `$25:$4000` (`$234` bytes) and BG
+palettes `$26:$7D17`. VRAM1 and OBJ palettes carry over from the title, with the
+player's VRAM1 overlay at `$8000`. Rendered title and file-select frames match
+PyBoy's on all 23,040 pixels.
+
 Mid-level copies keep their base addresses: `$25AF`'s tables `$268B`/`$2699`,
 the bank-7 `$7800` block and `$216C`'s transfer code are byte-identical, so the
 renderer finds the native source of every rewritten tile and reads the same

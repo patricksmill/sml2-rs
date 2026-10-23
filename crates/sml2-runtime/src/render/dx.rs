@@ -1,6 +1,7 @@
 //! DX presentation of any level. Rendering never advances native gameplay.
 use super::{hud_row_status, window_coord, window_origin, HudDigits};
 use crate::session::{LevelContext, Session, SessionState};
+use sml2_core::actor::ScreenPosition;
 use sml2_core::{
     character::Character,
     level::{HudStrip, TileAnim, LAYOUT_HEIGHT, LAYOUT_WIDTH},
@@ -11,7 +12,7 @@ use sml2_core::{
         cgb::{self, BackgroundPixel, CgbAttributes, CgbPalettes, IndexedPixel, ObjectPixel},
     },
 };
-use sml2_dx::{LevelGraphics, Presentation};
+use sml2_dx::{LevelGraphics, Presentation, Screen};
 
 impl Session {
     /// The level a DX frame would draw: live play or an attract demo, outside
@@ -29,11 +30,17 @@ impl Session {
         (!ctx.arena_loaded && !boss).then_some(ctx.as_ref())
     }
 
-    /// Whether DX presentation covers the current screen: every level, live
-    /// or in a demo, except boss arenas. Title, map, arenas and other screens
-    /// keep their native picture.
+    /// Whether DX presentation covers the current screen: the title, the
+    /// file select and every level, live or in a demo, except boss arenas.
+    /// The map, arenas and other screens keep their native picture.
     pub fn dx_supported(&self) -> bool {
         self.dx_level().is_some()
+            || matches!(
+                self.state,
+                SessionState::Title(_)
+                    | SessionState::FileSelectLoading(_)
+                    | SessionState::FileSelect(_)
+            )
     }
 
     /// Render the current level in direct CGB RGB888 color, drawing the player
@@ -43,11 +50,113 @@ impl Session {
         dx: &Presentation,
         character: Character,
     ) -> Result<Vec<[u8; 3]>, String> {
+        match &self.state {
+            SessionState::Title(_) => return screen(&dx.title, &[], None),
+            SessionState::FileSelectLoading(loading) => {
+                // `$19` keeps the title until its transfers turn the LCD off.
+                return if loading.lcd_disabled() {
+                    Ok(vec![[255; 3]; 160 * 144])
+                } else {
+                    screen(&dx.title, &[], None)
+                };
+            }
+            SessionState::FileSelect(file_select) => {
+                return self.render_dx_file_select(file_select, dx, character)
+            }
+            _ => {}
+        }
         let ctx = self
             .dx_level()
-            .ok_or("DX presentation requires an active level")?;
+            .ok_or("DX presentation requires the title, file select or a level")?;
         render(ctx, dx, character)
     }
+
+    /// `$30000`'s screen with its OAM: the pipe tallies, the Easy banner, the
+    /// erase hop and the cursor, through DX's player mappings and graphics.
+    fn render_dx_file_select(
+        &self,
+        fs: &sml2_core::front_end::FileSelect,
+        dx: &Presentation,
+        character: Character,
+    ) -> Result<Vec<[u8; 3]>, String> {
+        let player = dx.player(character, 0);
+        let mut tables = self.assets.object_tables.clone();
+        tables.player_mappings = player.mappings.clone();
+        let mut cells = Vec::new();
+        // `$300FE`: high nibble then low nibble, tile + $80, X +8 between digits.
+        for slot in 0..3u8 {
+            let tally = self.slots.slot(usize::from(slot)).map_or(0, |r| r[0x42]);
+            let x = 32 + 32 * slot;
+            for (dx, digit) in [(0, tally >> 4), (8, tally & 0x0F)] {
+                cells.push(Cell {
+                    y: 88,
+                    x: x + dx,
+                    tile: 0x80 | digit,
+                    attr: 0,
+                });
+            }
+        }
+        let mut sprite = |frame: u8, (x, y): (u8, u8), behind: bool| {
+            let style = CellStyle {
+                force_palette_one: false,
+                behind_background: behind,
+            };
+            player::append_cells(&tables, frame, ScreenPosition { x, y }, style, &mut cells);
+        };
+        if fs.easy_mode() {
+            sprite(241, (68, 48), false);
+        }
+        if let Some((y, frame)) = fs.erase_hop() {
+            sprite(frame, (fs.cursor().0, y), true);
+        }
+        // `$30064`: Easy mode draws the small-Mario frames, 32 ids later.
+        let frame = if fs.easy_mode() {
+            fs.cursor_sprite().wrapping_add(32)
+        } else {
+            fs.cursor_sprite()
+        };
+        sprite(frame, fs.cursor(), fs.cursor_behind_bg());
+        screen(&dx.file_select, &cells, Some(player))
+    }
+}
+
+/// A front-end screen at scroll 0 with OAM cells in priority order. The
+/// signed `$8800` tile mode serves both the title and the file select;
+/// `player`, when given, replaces the `$8000` graphics in both banks.
+fn screen(
+    screen: &Screen,
+    cells: &[Cell],
+    player: Option<&sml2_dx::PlayerGraphics>,
+) -> Result<Vec<[u8; 3]>, String> {
+    let palettes = CgbPalettes::from_bytes(&screen.bg_palettes, &screen.obj_palettes)
+        .map_err(|e| e.to_string())?;
+    let mut vram = screen.vram.clone();
+    if let Some(player) = player {
+        vram[0][..0x800].copy_from_slice(&player.normal);
+        vram[1][..0x800].copy_from_slice(&player.bank1);
+    }
+    let banks = [&vram[0][..], &vram[1][..]];
+    let mut background = Vec::with_capacity(160 * 144);
+    for py in 0..144 {
+        for px in 0..160 {
+            let cell = (py / 8) * 32 + px / 8;
+            let attr = CgbAttributes::from_byte(screen.attributes[cell]);
+            background.push(BackgroundPixel {
+                index: cgb::sample_tile(
+                    banks,
+                    0x800 + video::bg_tile_offset(screen.tilemap[cell]),
+                    attr,
+                    (px & 7) as u8,
+                    (py & 7) as u8,
+                )
+                .map_err(|e| e.to_string())?,
+                priority: attr.priority(),
+            });
+        }
+    }
+    let mut objects = vec![None; 160 * 144];
+    draw_cells(&mut objects, banks, cells.to_vec(), 0)?;
+    cgb::compose_frame(&background, &objects, true, &palettes).map_err(|e| e.to_string())
 }
 
 /// One ROM source a level can copy into VRAM0 after loading: its destination

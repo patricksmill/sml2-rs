@@ -10,7 +10,7 @@ mod fingerprint;
 mod presentation;
 pub use bundle::{extract, Bundle, BANKS};
 pub use fingerprint::base_fingerprint;
-pub use presentation::{LevelGraphics, PlayerGraphics, Presentation};
+pub use presentation::{LevelGraphics, PlayerGraphics, Presentation, Screen};
 
 pub const REVISION: &str = "SML2DX v1.8.1 (UE v1.0)";
 pub const ROM_LEN: usize = 0x100000;
