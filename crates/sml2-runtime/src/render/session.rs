@@ -1,7 +1,8 @@
 //! Read-only session presentation: rendering never writes simulation state
 //! (the session's view feeds only the live level's spawn margin).
 
-use super::render_view_output;
+use super::motion::{Offsets, Smooth};
+use super::render_view_output_smooth;
 use super::view;
 use super::{hud_row_status, HudDigits};
 use crate::session::{LevelContext, Session, SessionState, MAP_FADE_STEP};
@@ -22,7 +23,9 @@ fn map_entry_palettes(frame: u16, initial: (u8, u8, u8)) -> (u8, u8, u8) {
 impl LevelContext {
     /// Render one level view without advancing the session.
     pub fn render_frame(&self, vw: usize, vh: usize) -> Result<Vec<u8>, Box<dyn Error>> {
-        self.render_output(vw, vh, OutputMode::Grayscale)
+        Ok(self
+            .render_output(vw, vh, OutputMode::Grayscale, &Offsets::none())?
+            .0)
     }
 
     fn render_output(
@@ -30,17 +33,19 @@ impl LevelContext {
         vw: usize,
         vh: usize,
         output: OutputMode,
-    ) -> Result<Vec<u8>, Box<dyn Error>> {
+        offsets: &Offsets,
+    ) -> Result<(Vec<u8>, usize), Box<dyn Error>> {
         // State 19 draws the ending's own VRAM, not the level.
         if self.ending_entry.state() == sml2_core::ending_entry::EndingEntryState::Sequence {
-            return Ok(view::fixed_screen((vw, vh), output.blank(3), |size| {
+            let frame = view::fixed_screen((vw, vh), output.blank(3), |size| {
                 sml2_core::ending_render::render_ending_output(
                     &self.ending_scene,
                     &self.ending_sequence,
                     size,
                     output,
                 )
-            }));
+            });
+            return Ok((frame, 1));
         }
         let hud_live = hud_row_status(
             &self.hud,
@@ -60,7 +65,7 @@ impl LevelContext {
         } else {
             None
         };
-        Ok(render_view_output(
+        let frame = render_view_output_smooth(
             &self.manifest,
             &self.layout_live,
             &self.sim.layout_writes,
@@ -73,25 +78,44 @@ impl LevelContext {
             self.spr.as_ref(),
             flash,
             output,
-        )?)
+            offsets,
+        )?;
+        Ok((frame, offsets.scale))
     }
 }
 
 impl Session {
     /// Render current view to an 8-bit grey buffer.
     pub fn render_frame(&self, view: (usize, usize)) -> Vec<u8> {
-        self.render_output(view, OutputMode::Grayscale)
+        self.render_output(view, OutputMode::Grayscale, Smooth::OFF).0
     }
 
     /// Render winning palette sources and register-mapped hardware shades.
     pub fn render_palette_frame(&self, view: (usize, usize)) -> Vec<PalettePixel> {
-        self.render_output(view, OutputMode::PaletteIndices)
+        self.render_output(view, OutputMode::PaletteIndices, Smooth::OFF)
+            .0
             .into_iter()
             .map(PalettePixel::from_token)
             .collect()
     }
 
-    fn render_output(&self, view: (usize, usize), output: OutputMode) -> Vec<u8> {
+    /// [`Session::render_palette_frame`] drawn `smooth.alpha` of the way from
+    /// the previous tick, with the scale actually used (1 outside levels).
+    pub fn render_palette_frame_smooth(
+        &self,
+        view: (usize, usize),
+        smooth: Smooth,
+    ) -> (Vec<PalettePixel>, usize) {
+        let (frame, scale) = self.render_output(view, OutputMode::PaletteIndices, smooth);
+        (frame.into_iter().map(PalettePixel::from_token).collect(), scale)
+    }
+
+    fn render_output(
+        &self,
+        view: (usize, usize),
+        output: OutputMode,
+        smooth: Smooth,
+    ) -> (Vec<u8>, usize) {
         let (vw, vh) = view;
         let fill = output.blank(3);
         if self
@@ -102,7 +126,7 @@ impl Session {
             let font = self.assets.ending_scene.as_ref().and_then(|a| {
                 a.transfer_source(0x1A, 0x4656, sml2_core::easy_mode_card::EASY_CARD_FONT_LEN)
             });
-            return view::fixed_screen(view, fill, |size| {
+            let frame = view::fixed_screen(view, fill, |size| {
                 sml2_core::easy_mode_card::render_easy_card_output(
                     font.unwrap_or(&[]),
                     &self.assets.sprite_metas,
@@ -110,8 +134,9 @@ impl Session {
                     output,
                 )
             });
+            return (frame, 1);
         }
-        match &self.state {
+        let frame = match &self.state {
             SessionState::Title(_) => view::fixed_screen(view, fill, |size| {
                 sml2_core::front_end::render::render_title_output(
                     &self.assets.front_end,
@@ -168,13 +193,17 @@ impl Session {
                 })
                 .unwrap_or_else(|_| vec![fill; vw * vh])
             }
-            SessionState::Demo(demo) => demo
-                .ctx
-                .render_output(vw, vh, output)
-                .unwrap_or_else(|_| vec![output.blank(3); vw * vh]),
-            SessionState::InLevel(ctx) => ctx
-                .render_output(vw, vh, output)
-                .unwrap_or_else(|_| vec![output.blank(3); vw * vh]),
+            SessionState::Demo(demo) => {
+                return demo
+                    .ctx
+                    .render_output(vw, vh, output, &self.motion_offsets(smooth))
+                    .unwrap_or_else(|_| (vec![output.blank(3); vw * vh], 1));
+            }
+            SessionState::InLevel(ctx) => {
+                return ctx
+                    .render_output(vw, vh, output, &self.motion_offsets(smooth))
+                    .unwrap_or_else(|_| (vec![output.blank(3); vw * vh], 1));
+            }
             SessionState::Castle(seq) => view::fixed_screen(view, fill, |size| {
                 sml2_core::map::render_castle_sequence_output(
                     &self.assets.castle_reveal,
@@ -199,7 +228,8 @@ impl Session {
                     output,
                 )
             }),
-        }
+        };
+        (frame, 1)
     }
 }
 

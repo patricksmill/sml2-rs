@@ -23,6 +23,7 @@ pub struct SpriteInst {
 
 mod pipe_background;
 mod dx;
+mod layers;
 pub mod motion;
 pub mod view;
 pub use pipe_background::PipeBackground;
@@ -147,6 +148,80 @@ pub fn render_view_output(
     pal_override: Option<u8>,
     output: video::OutputMode,
 ) -> Result<Vec<u8>, String> {
+    render_view_output_smooth(
+        manifest,
+        layout,
+        overlay,
+        bg,
+        cam_x,
+        cam_y,
+        vw,
+        vh,
+        hud,
+        spr,
+        pal_override,
+        output,
+        &motion::Offsets::none(),
+    )
+}
+
+/// [`render_view_output`] at `offsets.scale` output pixels per game pixel,
+/// each layer shifted by `offsets`.
+#[allow(clippy::too_many_arguments)]
+pub fn render_view_output_smooth(
+    manifest: &LevelManifest,
+    layout: &LevelLayout,
+    overlay: &[(u32, u8)],
+    bg: &[u8],
+    cam_x: u16,
+    cam_y: u16,
+    vw: usize,
+    vh: usize,
+    hud: Option<(&[u8], u8)>,
+    spr: Option<&SpriteCtx>,
+    pal_override: Option<u8>,
+    output: video::OutputMode,
+    offsets: &motion::Offsets,
+) -> Result<Vec<u8>, String> {
+    let layers = render_view_layers(
+        manifest,
+        layout,
+        overlay,
+        bg,
+        cam_x,
+        cam_y,
+        vw,
+        vh,
+        hud,
+        spr,
+        pal_override,
+        output,
+        offsets,
+    )?;
+    let (bg, obj) = layers.compose(offsets.scale, offsets.bg, |o, b| o.behind && b.index != 0);
+    Ok(bg
+        .iter()
+        .zip(&obj)
+        .map(|(b, o)| o.map_or(b.shade, |o| o.shade))
+        .collect())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_view_layers(
+    manifest: &LevelManifest,
+    layout: &LevelLayout,
+    overlay: &[(u32, u8)],
+    bg: &[u8],
+    cam_x: u16,
+    cam_y: u16,
+    vw: usize,
+    vh: usize,
+    hud: Option<(&[u8], u8)>,
+    spr: Option<&SpriteCtx>,
+    pal_override: Option<u8>,
+    output: video::OutputMode,
+    offsets: &motion::Offsets,
+) -> Result<layers::Layers<NativeBg, NativeObj>, String> {
     // Decode every tile in the composed block once.
     let tiles: Vec<[u8; 64]> = (0..256u16)
         .map(|t| {
@@ -176,19 +251,26 @@ pub fn render_view_output(
         window_origin(sx, world_w, span_x),
         window_origin(sy, world_h, span_y),
     );
-    let mut img = vec![shades[0]; vw * vh];
-    let mut bg_idx = vec![0u8; vw * vh];
-    for py in 0..vh {
-        let wy = window_coord(sy + py as i32, oy, span_y);
+    let border = offsets.border() as i32;
+    let mut layers = layers::Layers::new(
+        (vw, vh),
+        offsets.border(),
+        NativeBg {
+            shade: shades[0],
+            index: 0,
+        },
+    );
+    for py in -border..vh as i32 + border {
+        let wy = window_coord(sy + py, oy, span_y);
 
-        for px in 0..vw {
-            let wx = window_coord(sx + px as i32, ox, span_x);
+        for px in -border..vw as i32 + border {
+            let wx = window_coord(sx + px, ox, span_x);
             let (wx, wy) = spr
                 .and_then(|s| s.pipe_background)
                 .map_or((wx, wy), |pipe| {
-                    let (x, y) = pipe.sample(sx + px as i32, sy + py as i32);
+                    let (x, y) = pipe.sample(sx + px, sy + py);
                     let (dx, dy) = pipe.source_offset();
-                    let source = pipe.retains_source(sx + px as i32);
+                    let source = pipe.retains_source(sx + px);
                     let (vx, vy) = if source { (sx + dx, sy + dy) } else { (sx, sy) };
                     (
                         window_coord(x, window_origin(vx, world_w, span_x), span_x),
@@ -217,8 +299,10 @@ pub fn render_view_output(
                 mt.tiles[q] as usize
             };
             let col = tiles[tile][(ty & 7) * 8 + (tx & 7)];
-            bg_idx[py * vw + px] = col;
-            img[py * vw + px] = shades[col as usize];
+            *layers.bg_mut(px, py) = NativeBg {
+                shade: shades[col as usize],
+                index: col,
+            };
         }
     }
     // Window layer: the status-bar strip (no scroll; window at WX=7 -> px 0).
@@ -240,8 +324,10 @@ pub fn render_view_output(
                     }
                     let c = tiles[tile as usize][dy * 8 + dx];
                     let idx = py as usize * vw + px as usize;
-                    bg_idx[idx] = c;
-                    img[idx] = shades[c as usize];
+                    layers.window[idx] = Some(NativeBg {
+                        shade: shades[c as usize],
+                        index: c,
+                    });
                 }
             }
         }
@@ -257,7 +343,6 @@ pub fn render_view_output(
         let place = |x, y| view::sprite_anchor((vw, vh), (cam_x, cam_y), (x, y));
         let pal0 = output.palette(s.obp0, video::PaletteSource::Obj0);
         let pal1 = output.palette(s.obp1, video::PaletteSource::Obj1);
-        let mut taken = vec![false; vw * vh];
         if let Some((px, py, frame)) = s.player {
             let ((ax, ay), (ox, oy)) = place(px, py);
             let cells = sml2_core::player::draw_cells_styled(
@@ -277,10 +362,7 @@ pub fn render_view_output(
             // The player base already contains the camera (+96/+98 is world -
             // cam), so these cells are in final screen space: no `sx/sy`.
             for c in cells {
-                blit_obj_cell(
-                    &mut img,
-                    &bg_idx,
-                    &mut taken,
+                layers.cells.push(native_cell(
                     &s.objblock,
                     &pal0,
                     &pal1,
@@ -288,9 +370,8 @@ pub fn render_view_output(
                     c.y.wrapping_sub(s.player_pan) as i32 - 16 + oy,
                     c.tile,
                     c.attr,
-                    vw,
-                    vh,
-                );
+                    offsets.player,
+                ));
             }
         }
         if let Some((shx, shy, sframe)) = s.player_shield {
@@ -298,10 +379,7 @@ pub fn render_view_output(
             let cells = sml2_core::player::draw_cells(&s.tables, sframe, shx, shy, ax, ay, false)
                 .ok_or_else(|| format!("player shield frame {sframe} has no mapping"))?;
             for c in cells {
-                blit_obj_cell(
-                    &mut img,
-                    &bg_idx,
-                    &mut taken,
+                layers.cells.push(native_cell(
                     &s.objblock,
                     &pal0,
                     &pal1,
@@ -309,9 +387,8 @@ pub fn render_view_output(
                     c.y.wrapping_sub(s.player_pan) as i32 - 16 + oy,
                     c.tile,
                     c.attr,
-                    vw,
-                    vh,
-                );
+                    offsets.shield,
+                ));
             }
         }
         if let (Some((px, py, _)), Some((timer, chain))) = (s.player, s.streak_counter) {
@@ -319,10 +396,7 @@ pub fn render_view_output(
             let cells =
                 sml2_core::player::draw_streak_counter(&s.tables, timer, chain, px, py, ax, ay);
             for c in cells {
-                blit_obj_cell(
-                    &mut img,
-                    &bg_idx,
-                    &mut taken,
+                layers.cells.push(native_cell(
                     &s.objblock,
                     &pal0,
                     &pal1,
@@ -330,9 +404,8 @@ pub fn render_view_output(
                     c.y.wrapping_sub(s.player_pan) as i32 - 16 + oy,
                     c.tile,
                     c.attr,
-                    vw,
-                    vh,
-                );
+                    offsets.player,
+                ));
             }
         }
         // The live fireballs ($3261's $2CF4 staging, mapping $B0/$B4 + the rDiv
@@ -342,15 +415,12 @@ pub fn render_view_output(
         // sits inside him — may want to precede his cells; not verified against
         // a console frame yet, and it can only show while they overlap.
         let fireballs = s.fireballs.clone();
-        for (fx, fy, ff) in fireballs {
+        for (i, (fx, fy, ff)) in fireballs.into_iter().enumerate() {
             let ((ax, ay), (ox, oy)) = place(fx, fy);
             let cells = sml2_core::player::draw_cells(&s.tables, ff, fx, fy, ax, ay, false)
                 .ok_or_else(|| format!("fireball mapping {ff} has no entry"))?;
             for c in cells {
-                blit_obj_cell(
-                    &mut img,
-                    &bg_idx,
-                    &mut taken,
+                layers.cells.push(native_cell(
                     &s.objblock,
                     &pal0,
                     &pal1,
@@ -358,23 +428,19 @@ pub fn render_view_output(
                     c.y as i32 - 16 + oy,
                     c.tile,
                     c.attr,
-                    vw,
-                    vh,
-                );
+                    offsets.fireball(i),
+                ));
             }
         }
         // The brick-bump sprites ($2C82's $5297 enqueues), drawn after Mario's
         // cells and before the objects — the engine's OAM order.
         let bumpers = s.bumpers.clone();
-        for (bx, by, bf) in bumpers {
+        for (i, (bx, by, bf)) in bumpers.into_iter().enumerate() {
             let ((ax, ay), (ox, oy)) = place(bx, by);
             let cells = sml2_core::player::draw_cells(&s.tables, bf, bx, by, ax, ay, false)
                 .ok_or_else(|| format!("bump frame {bf} has no mapping"))?;
             for c in cells {
-                blit_obj_cell(
-                    &mut img,
-                    &bg_idx,
-                    &mut taken,
+                layers.cells.push(native_cell(
                     &s.objblock,
                     &pal0,
                     &pal1,
@@ -382,9 +448,8 @@ pub fn render_view_output(
                     c.y as i32 - 16 + oy,
                     c.tile,
                     c.attr,
-                    vw,
-                    vh,
-                );
+                    offsets.bumper(i),
+                ));
             }
         }
         let mut order: Vec<usize> = (0..s.insts.len()).collect();
@@ -408,10 +473,7 @@ pub fn render_view_output(
                 } else {
                     e.y as i32
                 };
-                blit_obj_cell(
-                    &mut img,
-                    &bg_idx,
-                    &mut taken,
+                layers.cells.push(native_cell(
                     &s.objblock,
                     &pal0,
                     &pal1,
@@ -419,9 +481,8 @@ pub fn render_view_output(
                     inst.y as i32 - sy + ey,
                     e.tile,
                     attr,
-                    vw,
-                    vh,
-                );
+                    offsets.object(inst.slot),
+                ));
             }
         }
         // The boss path's own draw (`$3A14` -> bank 25 `$66000`), which replaces
@@ -432,10 +493,7 @@ pub fn render_view_output(
         // who keeps OAM's first entries.
         let boss_shift = if resized { (mx, my) } else { (0, 0) };
         for c in &s.boss_oam {
-            blit_obj_cell(
-                &mut img,
-                &bg_idx,
-                &mut taken,
+            layers.cells.push(native_cell(
                 &s.objblock,
                 &pal0,
                 &pal1,
@@ -443,12 +501,11 @@ pub fn render_view_output(
                 c.y as i32 - 16 + boss_shift.1,
                 c.tile,
                 c.attr,
-                vw,
-                vh,
-            );
+                (0, 0),
+            ));
         }
     }
-    Ok(img)
+    Ok(layers)
 }
 
 /// DMG OBJ overlap priority: the smaller OAM x wins, then the earlier entry.
@@ -458,28 +515,35 @@ fn in_obj_priority_order(mut cells: Vec<sml2_core::player::Cell>) -> Vec<sml2_co
     cells
 }
 
-/// Blit one 8x8 OAM cell at screen `(px0, py0)` with the engine's rules:
-/// colour 0 is transparent, attr bit5 = X flip / bit6 = Y flip / bit4 = OBP1 /
-/// bit7 = BG priority, earlier cells win overlaps, and OBJ tiles use the
-/// `$8000` mode (`$8000 + t*16`).
+/// A native BG/window pixel: its mapped shade and colour index (priority).
+#[derive(Clone, Copy)]
+struct NativeBg {
+    shade: u8,
+    index: u8,
+}
+
+/// A native OBJ pixel: its mapped shade and attr bit 7.
+#[derive(Clone, Copy)]
+struct NativeObj {
+    shade: u8,
+    behind: bool,
+}
+
+/// One 8x8 OAM cell at screen `(x, y)`: colour 0 is transparent, attr bit5 =
+/// X flip / bit6 = Y flip / bit4 = OBP1 / bit7 = BG priority, earlier cells
+/// win overlaps (push order), and OBJ tiles use the `$8000` mode
+/// (`$8000 + t*16`).
 #[allow(clippy::too_many_arguments)]
-fn blit_obj_cell(
-    img: &mut [u8],
-    bg_idx: &[u8],
-    taken: &mut [bool],
+fn native_cell(
     objblock: &[u8],
     pal0: &[u8],
     pal1: &[u8],
-    px0: i32,
-    py0: i32,
+    x: i32,
+    y: i32,
     tile: u8,
     attr: u8,
-    vw: usize,
-    vh: usize,
-) {
-    if px0 <= -8 || px0 >= vw as i32 || py0 <= -8 || py0 >= vh as i32 {
-        return;
-    }
+    shift: (i32, i32),
+) -> layers::Cell<NativeObj> {
     let (xf, yf) = (attr & 0x20 != 0, attr & 0x40 != 0);
     let pal = if attr & 0x10 != 0 { pal1 } else { pal0 };
     let t = tile as usize;
@@ -492,25 +556,15 @@ fn blit_obj_cell(
         .try_into()
         .expect("objblock is $1000 bytes");
     let colors = video::tile_colors(&bytes);
-    for dy in 0..8 {
-        for dx in 0..8 {
-            let src = (if yf { 7 - dy } else { dy }) * 8 + (if xf { 7 - dx } else { dx });
-            let c = colors[src];
-            if c == 0 {
-                continue;
-            }
-            let (px, py) = (px0 + dx as i32, py0 + dy as i32);
-            if px < 0 || px >= vw as i32 || py < 0 || py >= vh as i32 {
-                continue;
-            }
-            let idx = py as usize * vw + px as usize;
-            if taken[idx] || (attr & 0x80 != 0 && bg_idx[idx] != 0) {
-                continue;
-            }
-            taken[idx] = true;
-            img[idx] = pal[c as usize];
-        }
-    }
+    let pixels = std::array::from_fn(|i| {
+        let (dx, dy) = (i % 8, i / 8);
+        let c = colors[(if yf { 7 - dy } else { dy }) * 8 + if xf { 7 - dx } else { dx }];
+        (c != 0).then(|| NativeObj {
+            shade: pal[c as usize],
+            behind: attr & 0x80 != 0,
+        })
+    });
+    layers::Cell { x, y, shift, pixels }
 }
 
 mod session;
@@ -591,7 +645,7 @@ pub(crate) fn apply_tile_anim(
 
 #[cfg(test)]
 mod tests {
-    use super::{blit_obj_cell, hud_row_status, in_obj_priority_order, HudDigits};
+    use super::{hud_row_status, in_obj_priority_order, native_cell, HudDigits, NativeObj};
     use sml2_core::level::HudStrip;
     use sml2_core::player::Cell;
 
@@ -616,15 +670,11 @@ mod tests {
                 attr: 0,
             },
         ];
-        let (vw, vh) = (16, 8);
         let pal = [0u8, 1, 2, 3];
-        let mut img = vec![0u8; vw * vh];
-        let mut taken = vec![false; vw * vh];
+        let mut layers: super::layers::Layers<u8, NativeObj> =
+            super::layers::Layers::new((16, 8), 0, 0);
         for c in in_obj_priority_order(cells) {
-            blit_obj_cell(
-                &mut img,
-                &[0; 128],
-                &mut taken,
+            layers.cells.push(native_cell(
                 &objblock,
                 &pal,
                 &pal,
@@ -632,10 +682,15 @@ mod tests {
                 c.y as i32 - 16,
                 c.tile,
                 c.attr,
-                vw,
-                vh,
-            );
+                (0, 0),
+            ));
         }
+        let (bg, obj) = layers.compose(1, (0, 0), |_, _| false);
+        let img: Vec<u8> = bg
+            .iter()
+            .zip(&obj)
+            .map(|(b, o)| o.map_or(*b, |o| o.shade))
+            .collect();
         assert_eq!(&img[..9], &[3, 3, 3, 3, 3, 3, 3, 3, 1]);
     }
 

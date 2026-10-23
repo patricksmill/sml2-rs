@@ -199,3 +199,41 @@ fn session_palette_level_composes_player_objects_boss_hud_priority_and_resets_so
         "source resets after boss removal"
     );
 }
+
+#[test]
+fn smoothing_at_a_full_tick_is_the_native_frame_upsampled() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(0, 0).unwrap();
+    for _ in 0..30 {
+        session.advance(FrameInput::default());
+    }
+    let native = session.render_palette_frame((256, 144));
+    let (smooth, scale) =
+        session.render_palette_frame_smooth((256, 144), crate::render::motion::Smooth { alpha: 1.0, scale: 2 });
+    assert_eq!(scale, 2);
+    let upsampled: Vec<_> = (0..288)
+        .flat_map(|y| (0..512).map(move |x| (x, y)))
+        .map(|(x, y)| native[(y / 2) * 256 + x / 2])
+        .collect();
+    assert_eq!(smooth, upsampled);
+}
+
+#[test]
+fn smoothing_shifts_the_level_but_not_the_status_bar() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(0, 0).unwrap();
+    for _ in 0..30 {
+        session.advance(FrameInput::default());
+    }
+    let mut prev = session
+        .level_ctx()
+        .and_then(crate::render::motion::MotionSnapshot::of)
+        .unwrap();
+    prev.cam.0 = prev.cam.0.wrapping_sub(4);
+    session.motion_prev = Some(prev);
+    let half = crate::render::motion::Smooth { alpha: 0.5, scale: 1 };
+    let (shifted, _) = session.render_palette_frame_smooth((160, 144), half);
+    let native = session.render_palette_frame((160, 144));
+    assert_ne!(shifted[..160 * 136], native[..160 * 136]);
+    assert_eq!(shifted[160 * 136..], native[160 * 136..]);
+}
