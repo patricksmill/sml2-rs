@@ -64,14 +64,14 @@ impl Session {
     ) -> Result<(Vec<[u8; 3]>, usize), String> {
         match &self.state {
             SessionState::Title(_) => {
-                return Ok((screen(&dx.title, &[], None, view, title_backdrop)?, 1));
+                return Ok((screen(&dx.title, &[], None, view, title_backdrop, 0)?, 1));
             }
             SessionState::FileSelectLoading(loading) => {
                 // `$19` keeps the title until its transfers turn the LCD off.
                 if loading.lcd_disabled() {
                     return Ok((vec![[255; 3]; view.0 * view.1], 1));
                 }
-                return Ok((screen(&dx.title, &[], None, view, title_backdrop)?, 1));
+                return Ok((screen(&dx.title, &[], None, view, title_backdrop, 0)?, 1));
             }
             SessionState::FileSelect(file_select) => {
                 let frame = self.render_dx_file_select(file_select, dx, character, view)?;
@@ -130,12 +130,16 @@ impl Session {
         }
         let cursor = fs.cursor_presentation();
         sprite(cursor.sprite, cursor.position, cursor.behind_background);
+        // The character door ends at x $C8, past the 160-wide map. Follow the
+        // cursor so the walk stays on screen instead of leaving through the edge.
+        let scroll_x = i32::from(fs.cursor().0).saturating_sub(152);
         screen(
             &dx.file_select,
             &cells,
             Some(player),
             view,
             file_select_backdrop,
+            scroll_x,
         )
     }
 }
@@ -265,7 +269,111 @@ fn dx_map_pixels(
             }
         }
     }
-    cgb::compose_frame(&background, &objects, true, palettes).map_err(|e| e.to_string())
+    let mut pixels = cgb::compose_frame(&background, &objects, true, palettes)
+        .map_err(|e| e.to_string())?;
+    fill_cursor_eye_holes(
+        &mut pixels,
+        &frame.composition.oam,
+        &frame.vram,
+        (w, h),
+        palettes,
+    );
+    Ok(pixels)
+}
+
+/// DX's cursor tiles put the eye whites on sprite color 0. That index is
+/// transparent, so the map shows through the eyes. Color 0 that is enclosed
+/// by the cursor (the shared tiles `0..32`) is the authored eye color, OBJ
+/// palette color 0. Color 0 on the silhouette stays transparent.
+fn fill_cursor_eye_holes(
+    pixels: &mut [[u8; 3]],
+    oam: &[(u8, u8, u8, u8)],
+    vram: &[[u8; 64]],
+    (w, h): (usize, usize),
+    palettes: &CgbPalettes,
+) {
+    let mut cover = vec![None; w * h];
+    let mut order: Vec<_> = oam.iter().enumerate().collect();
+    order.sort_by_key(|&(i, &(_, x, _, _))| (x, i));
+    for (_, &(oy, ox, tile, attr)) in order {
+        if tile >= 32 {
+            continue;
+        }
+        let Some(data) = vram.get(usize::from(tile)) else {
+            continue;
+        };
+        for dy in 0..8i32 {
+            for dx in 0..8i32 {
+                let (x, y) = (i32::from(ox) - 8 + dx, i32::from(oy) - 16 + dy);
+                if !(0..w as i32).contains(&x) || !(0..h as i32).contains(&y) {
+                    continue;
+                }
+                let sx = if attr & 0x20 != 0 { 7 - dx } else { dx };
+                let sy = if attr & 0x40 != 0 { 7 - dy } else { dy };
+                let i = y as usize * w + x as usize;
+                if cover[i].is_some() {
+                    continue;
+                }
+                cover[i] = Some((data[(sy * 8 + sx) as usize], attr & 7));
+            }
+        }
+    }
+    let mut exterior = vec![false; w * h];
+    let mut queue = Vec::new();
+    let leaks = |cover: &[Option<(u8, u8)>], x: usize, y: usize| {
+        [
+            (x as i32 - 1, y as i32),
+            (x as i32 + 1, y as i32),
+            (x as i32, y as i32 - 1),
+            (x as i32, y as i32 + 1),
+        ]
+        .into_iter()
+        .any(|(nx, ny)| {
+            nx < 0
+                || ny < 0
+                || nx >= w as i32
+                || ny >= h as i32
+                || cover[ny as usize * w + nx as usize].is_none()
+        })
+    };
+    for i in 0..w * h {
+        if !matches!(cover[i], Some((0, _))) {
+            continue;
+        }
+        if leaks(&cover, i % w, i / w) {
+            exterior[i] = true;
+            queue.push(i);
+        }
+    }
+    while let Some(i) = queue.pop() {
+        let (x, y) = (i % w, i / w);
+        for (nx, ny) in [
+            (x as i32 - 1, y as i32),
+            (x as i32 + 1, y as i32),
+            (x as i32, y as i32 - 1),
+            (x as i32, y as i32 + 1),
+        ] {
+            if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                continue;
+            }
+            let j = ny as usize * w + nx as usize;
+            if exterior[j] || !matches!(cover[j], Some((0, _))) {
+                continue;
+            }
+            exterior[j] = true;
+            queue.push(j);
+        }
+    }
+    for (i, sample) in cover.iter().enumerate() {
+        let Some((0, pal)) = *sample else {
+            continue;
+        };
+        if exterior[i] {
+            continue;
+        }
+        pixels[i] =
+            sml2_core::hardware_palettes::rgb555(palettes.objects()[usize::from(pal)][0]);
+    }
 }
 
 /// A 20×18 front-end screen at scroll 0, with OAM cells in priority order.
@@ -279,6 +387,7 @@ fn screen(
     player: Option<&sml2_dx::PlayerGraphics>,
     view: (usize, usize),
     backdrop: Backdrop,
+    scroll_x: i32,
 ) -> Result<Vec<[u8; 3]>, String> {
     use super::view::{enlarged, margin, NATIVE};
     let (view, at) = if enlarged(view) {
@@ -299,12 +408,13 @@ fn screen(
         let ny = y - at.1;
         for x in 0..view.0 as i32 {
             let nx = x - at.0;
-            let ((col, row), line) = if (0..160).contains(&nx) && (0..144).contains(&ny) {
-                (((nx / 8) as usize, (ny / 8) as usize), (ny & 7) as usize)
+            let world_x = nx + scroll_x;
+            let ((col, row), line) = if (0..160).contains(&world_x) && (0..144).contains(&ny) {
+                (((world_x / 8) as usize, (ny / 8) as usize), (ny & 7) as usize)
             } else {
                 backdrop(
                     &screen.tilemap,
-                    nx.div_euclid(8),
+                    world_x.div_euclid(8),
                     ny.div_euclid(8),
                     ny.rem_euclid(8) as usize,
                 )
@@ -316,7 +426,7 @@ fn screen(
                     banks,
                     0x800 + video::bg_tile_offset(screen.tilemap[cell]),
                     attr,
-                    nx.rem_euclid(8) as u8,
+                    world_x.rem_euclid(8) as u8,
                     line as u8,
                 )
                 .map_err(|e| e.to_string())?,
@@ -325,7 +435,14 @@ fn screen(
         }
     }
     let mut layers = super::layers::Layers::new(view, 0, background[0]);
-    push_cells(&mut layers.cells, banks, cells.to_vec(), 0, at, (0, 0))?;
+    push_cells(
+        &mut layers.cells,
+        banks,
+        cells.to_vec(),
+        0,
+        (at.0 - scroll_x, at.1),
+        (0, 0),
+    )?;
     let (_, objects) = layers.compose(1, (0, 0), |_, _| false);
     cgb::compose_frame(&background, &objects, true, &palettes).map_err(|e| e.to_string())
 }
@@ -880,6 +997,78 @@ fn push_cells(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dx_map_cursor_fills_an_enclosed_color_zero_and_keeps_the_outline_clear() {
+        use crate::render::session::OverworldFrame;
+        use sml2_core::hardware_palettes::rgb555;
+        use sml2_core::map::OverworldComposition;
+        let mut tile = [3u8; 64];
+        tile[0] = 0;
+        tile[3 * 8 + 3] = 0;
+        let mut bg = [0u8; 64];
+        bg[4..6].copy_from_slice(&0x001fu16.to_le_bytes());
+        let mut obj = [0u8; 64];
+        obj[0..2].copy_from_slice(&0x03e0u16.to_le_bytes());
+        let palettes = CgbPalettes::from_bytes(&bg, &obj).unwrap();
+        let frame = OverworldFrame {
+            composition: OverworldComposition {
+                bg: vec![None; 64],
+                oam: vec![(16, 8, 0, 0)],
+            },
+            vram: vec![tile],
+            bg_palette: 0xE4,
+            obj_palette: 0xD0,
+            obj_palette1: 0x39,
+        };
+        let out = dx_map_pixels(
+            &frame,
+            (8, 8),
+            None,
+            &[],
+            IndexedPixel::new(2, 0).unwrap(),
+            &palettes,
+        )
+        .unwrap();
+        assert_eq!(out[0], rgb555(0x001f), "a corner stays the background");
+        assert_eq!(out[3 * 8 + 3], rgb555(0x03e0), "an enclosed eye uses OBJ color 0");
+        assert_eq!(out[1], [0, 0, 0], "the outline stays opaque");
+    }
+
+    #[test]
+    fn file_select_scroll_keeps_the_character_door_on_screen() {
+        use sml2_core::player::Cell;
+        let mut vram0 = vec![0u8; 0x2000];
+        for y in 0..8 {
+            vram0[y * 2] = 0xFF;
+            vram0[y * 2 + 1] = 0xFF;
+        }
+        let mut obj = vec![0u8; 64];
+        obj[6..8].copy_from_slice(&0x7fffu16.to_le_bytes());
+        let picture = Screen {
+            vram: [vram0, vec![0u8; 0x2000]],
+            tilemap: vec![0; 0x400],
+            attributes: vec![0; 0x400],
+            bg_palettes: vec![0; 64],
+            obj_palettes: obj,
+        };
+        let cells = vec![Cell {
+            y: 16,
+            x: 200,
+            tile: 0,
+            attr: 0,
+        }];
+        let frame = screen(
+            &picture,
+            &cells,
+            None,
+            (160, 144),
+            file_select_backdrop,
+            48,
+        )
+        .unwrap();
+        assert_eq!(frame[144], [255, 255, 255], "door sprite stays on the right");
+        assert_eq!(frame[0], [0, 0, 0], "the left edge is the shifted background");
+    }
     #[test]
     fn pause_uses_literal_dx_channel_steps_and_preserves_source() {
         let bytes = [0xff, 0x7f, 0x64, 0x00];
