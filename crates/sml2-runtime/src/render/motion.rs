@@ -33,8 +33,9 @@ pub fn pick_scale(view: (usize, usize), effective_scale: u32) -> usize {
         .unwrap_or(1)
 }
 
-/// The world positions one tick drew with. The camera and Mario include their
-/// pans, so a pan change reads as motion.
+/// The positions one tick drew with, in background space (world positions
+/// against the background's `scroll_pan`-raised camera), so a pan change
+/// reads as motion.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MotionSnapshot {
     pub cam: (u16, u16),
@@ -54,16 +55,42 @@ impl MotionSnapshot {
         if ctx.sim.paused || ctx.scene_reload_blank || ctx.cam.boss_mode() || !s.boss_oam.is_empty() {
             return None;
         }
-        let pos = |&(x, y, _): &(u16, u16, u8)| (x, y);
-        let mario = |(x, y, _): (u16, u16, u8)| (x, y.wrapping_sub(u16::from(s.player_pan)));
+        let pans = Pans {
+            scroll: s.scroll_pan,
+            player: s.player_pan,
+        };
+        let anchored = |&(x, y, _): &(u16, u16, u8)| pans.anchored((x, y));
+        let mario = |(x, y, _): (u16, u16, u8)| pans.mario((x, y));
         Some(Self {
-            cam: (ctx.cam.x, ctx.cam.y.wrapping_sub(u16::from(s.scroll_pan))),
+            cam: pans.anchored((ctx.cam.x, ctx.cam.y)),
             player: s.player.map(mario),
             shield: s.player_shield.map(mario),
-            fireballs: s.fireballs.iter().map(pos).collect(),
-            bumpers: s.bumpers.iter().map(pos).collect(),
+            fireballs: s.fireballs.iter().map(anchored).collect(),
+            bumpers: s.bumpers.iter().map(anchored).collect(),
             objects: s.insts.iter().map(|i| (i.slot, (i.x, i.y))).collect(),
         })
+    }
+}
+
+/// A tick's pans. The background and objects are drawn `scroll_pan` up; the
+/// camera-anchored sprites (`view::sprite_anchor`) are not, and Mario's cells
+/// are a further `player_pan` up.
+#[derive(Debug, Clone, Copy)]
+struct Pans {
+    scroll: u8,
+    player: u8,
+}
+
+impl Pans {
+    /// The camera, a fireball or a bumper in background space.
+    fn anchored(self, (x, y): (u16, u16)) -> (u16, u16) {
+        (x, y.wrapping_sub(u16::from(self.scroll)))
+    }
+
+    /// Mario or his shield in background space.
+    fn mario(self, at: (u16, u16)) -> (u16, u16) {
+        let (x, y) = self.anchored(at);
+        (x, y.wrapping_sub(u16::from(self.player)))
     }
 }
 
@@ -192,6 +219,38 @@ mod tests {
         assert_eq!(o.object(3), (4, 0));
         assert_eq!(o.object(5), (4, 0), "a new slot is world-fixed");
         assert_eq!(o.fireball(0), (4, 0));
+    }
+
+    #[test]
+    fn a_scroll_pan_change_moves_the_background_but_not_the_anchored_sprites() {
+        let tick = |scroll| {
+            let pans = Pans { scroll, player: 2 };
+            MotionSnapshot {
+                cam: pans.anchored((100, 50)),
+                player: Some(pans.mario((110, 60))),
+                shield: Some(pans.mario((110, 60))),
+                fireballs: vec![pans.anchored((120, 60))],
+                bumpers: vec![pans.anchored((140, 40))],
+                objects: vec![(3, (130, 60))],
+                ..Default::default()
+            }
+        };
+        let o = Offsets::between(
+            Some(&tick(0)),
+            Some(&tick(4)),
+            Smooth {
+                alpha: 0.5,
+                scale: 2,
+            },
+        );
+        assert_eq!(o.bg, (0, -4));
+        assert_eq!((o.player, o.shield), ((0, 0), (0, 0)));
+        assert_eq!((o.fireball(0), o.bumper(0)), ((0, 0), (0, 0)));
+        assert_eq!(
+            o.object(3),
+            o.bg,
+            "objects are drawn through the scrolled camera"
+        );
     }
 
     #[test]

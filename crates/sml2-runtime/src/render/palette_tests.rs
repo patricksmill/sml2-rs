@@ -245,3 +245,32 @@ fn smoothing_shifts_the_level_but_not_the_status_bar() {
     assert!(native[..158].windows(2).any(|w| w[0] != w[1]), "row 0 has detail");
     assert_eq!(shifted[160 * 136..], native[160 * 136..]);
 }
+
+#[test]
+fn smoothing_moves_mario_by_his_share_of_the_tick() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(0, 0).unwrap();
+    for _ in 0..30 {
+        session.advance(FrameInput::default());
+    }
+    let mut prev = session
+        .level_ctx()
+        .and_then(crate::render::motion::MotionSnapshot::of)
+        .unwrap();
+    let mario = prev.player.as_mut().unwrap();
+    mario.0 = mario.0.wrapping_sub(2);
+    session.motion_prev = Some(prev);
+    let half = crate::render::motion::Smooth {
+        alpha: 0.5,
+        scale: 1,
+    };
+    let (smoothed, _) = session.render_palette_frame_smooth((160, 144), half);
+    assert_ne!(smoothed, session.render_palette_frame((160, 144)));
+    // Halfway through a 2 px step Mario is 1 px behind where the tick drew him.
+    let crate::session::SessionState::InLevel(ctx) = &mut session.state else {
+        panic!("in a level");
+    };
+    let player = ctx.spr.as_mut().unwrap().player.as_mut().unwrap();
+    player.0 = player.0.wrapping_sub(1);
+    assert_eq!(smoothed, session.render_palette_frame((160, 144)));
+}
