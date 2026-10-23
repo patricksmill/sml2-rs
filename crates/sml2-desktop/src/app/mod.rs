@@ -548,16 +548,34 @@ impl DesktopApp {
             }
         }
 
+        // File select and the hall are one native-sized room. Using the
+        // enlarged level view here expands the room immediately at the door.
+        let file_select = matches!(
+            &game.session.state,
+            sml2_runtime::session::SessionState::FileSelect(_)
+        );
+        let scene_view = if file_select {
+            sml2_runtime::render::view::NATIVE
+        } else {
+            view
+        };
         let dx = self
             .dx_bundle
             .as_ref()
             .filter(|_| self.settings.dx_mode && game.session.dx_supported());
         if let Some(dx) = dx {
-            match game
-                .session
-                .render_dx_frame_smooth(dx, self.settings.character, view, smooth)
-            {
+            match game.session.render_dx_frame_smooth(
+                dx,
+                self.settings.character,
+                scene_view,
+                smooth,
+            ) {
                 Ok((pixels, scale)) => {
+                    let pixels = if file_select {
+                        fixed_screen(view, [0, 0, 0], |_| pixels)
+                    } else {
+                        pixels
+                    };
                     return Some(ColorImage::new(
                         [view.0 * scale, view.1 * scale],
                         pixels
@@ -569,7 +587,16 @@ impl DesktopApp {
                 Err(error) => self.dx_message = error,
             }
         }
-        let (pixels, scale) = game.session.render_palette_frame_smooth(view, smooth);
+        let (pixels, scale) = game.session.render_palette_frame_smooth(scene_view, smooth);
+        let pixels = if file_select {
+            fixed_screen(
+                view,
+                PalettePixel::from_token(OutputMode::PaletteIndices.blank(3)),
+                |_| pixels,
+            )
+        } else {
+            pixels
+        };
         Some(colorized(
             &pixels,
             self.settings.filter,

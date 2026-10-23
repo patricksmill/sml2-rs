@@ -29,17 +29,28 @@ These verified corrections supersede its font assumptions and prototype signatur
 - `hall::alphabet` supplies that existing font to `pixels`, `stamp_sign` and
   `stamp_line`. `stamp_glyph<P: Copy>` shares clipped coverage for palette tokens
   and RGB pixels, avoiding duplicate byte and RGB implementations.
-- Camera destination margins are `32..128`, so six-character signs fit at every
-  station, including the first. A march to `DOOR` restores camera zero before
-  landing to avoid a jump back to the live file-select cursor.
+- The file select and hall both use a native 160×144 picture, letterboxed into
+  enlarged views, so crossing the doorway preserves the framing. The DX
+  file-select camera clamps at zero until the cursor passes x=152; subtracting
+  on the unsigned cursor before conversion prevents a negative scroll.
+- The hall camera follows each actual one-pixel Mario step, keeping his screen
+  anchor at `DOOR` (x=40) and returning continuously to camera zero at the door.
+  Starting a march does not move the camera. Both sign lines stay together
+  within an eight-pixel screen margin while the destination station approaches.
+- File-select mouse picks include the DX camera offset at the character door.
 - Hall tests live in `app/hall/tests.rs`; the stepper and presentation stay in
   `app/hall.rs`.
 
-Validation: all 1,683 core tests and 107 desktop tests pass (two desktop tests
-remain ignored). Runtime suites pass with the previously confirmed
-`file_select_clear_draws_bomb_mario_in_dx_and_restores_the_regular_cursor` failure
-excluded. The frozen replay sweep exits successfully. A contact sheet of all
-12 stations was rendered and visually checked for readable signs and room geometry.
+Validation after the camera correction: all 1,683 core tests, 110 desktop tests,
+and runtime suites pass with no failures (existing ignored tests remain ignored).
+The formerly failing
+`file_select_clear_draws_bomb_mario_in_dx_and_restores_the_regular_cursor` now
+passes without exclusion. Regression tests cover every hall step in both
+directions, complete sign visibility, file-select cursor placement, mouse picks
+after scrolling, and matching framing across widescreen/zoom settings in both
+rendering modes. The frozen replay sweep exits successfully. Rendered contact
+sheets were visually checked for station signs, room geometry, and camera
+placement during entry, movement, and return to the door.
 
 ## Global Constraints
 

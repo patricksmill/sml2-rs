@@ -39,26 +39,9 @@ fn furthest() -> i32 {
     pedestal_x(catalog::HALL_PEDESTALS.len() - 1)
 }
 
-fn aim_camera(mario: i32, camera: i32, dir: i8) -> i32 {
-    let dest = mario + i32::from(dir) * STEP;
-    let dest_screen = dest - camera;
-    if dest == DOOR {
-        return 0;
-    }
-    // Leave room for the six-character station name and choice.
-    if (32..128).contains(&dest_screen) {
-        camera
-    } else if dir < 0 {
-        dest - 48
-    } else {
-        (dest - 112).min(0)
-    }
-}
-
 fn begin_walk(hall: &mut Hall, dir: i8) {
     hall.facing = dir;
     hall.walk = dir * STEP as i8;
-    hall.camera = aim_camera(hall.mario, hall.camera, dir);
 }
 
 fn land(hall: &mut Hall, settings: &mut Settings, debug: &mut bool) {
@@ -88,6 +71,9 @@ pub(super) fn step(
     if hall.walk != 0 {
         let dir = hall.walk.signum();
         hall.mario += i32::from(dir);
+        // Keep the file-select door's screen anchor throughout the hall.
+        // Advance with actual movement, never the next station's destination.
+        hall.camera = (hall.mario - DOOR).min(0);
         hall.walk -= dir;
         hall.walk_timer = hall.walk_timer.wrapping_add(1);
         if hall.walk_timer >= 0x0C {
@@ -239,6 +225,11 @@ pub(super) fn stamp_sign<P: Copy>(
 ) {
     if let Some(index) = sign_station(hall) {
         let (name, value) = catalog::sign(catalog::HALL_PEDESTALS[index], settings, debug);
+        // An approaching station may still be at the view edge. Keep both
+        // lines together and readable while it scrolls toward Mario.
+        let half_width = name.len().max(value.len()) as i32 * 4;
+        let center = (pedestal_x(index) - hall.camera).clamp(half_width + 8, 160 - half_width - 8)
+            + hall.camera;
         for (text, y) in [(&name, 48), (&value, 64)] {
             stamp_line(
                 frame,
@@ -246,7 +237,7 @@ pub(super) fn stamp_sign<P: Copy>(
                 assets,
                 alphabet,
                 text,
-                pedestal_x(index),
+                center,
                 y,
                 hall.camera,
                 ink,

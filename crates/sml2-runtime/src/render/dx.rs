@@ -168,7 +168,8 @@ impl Session {
         sprite(cursor.sprite, cursor.position, cursor.behind_background);
         // The character door ends at x $C8, past the 160-wide map. Follow the
         // cursor so the walk stays on screen instead of leaving through the edge.
-        let scroll_x = i32::from(fs.cursor().0).saturating_sub(152);
+        // Clamp before widening: signed saturation would permit negative scroll.
+        let scroll_x = i32::from(fs.cursor().0.saturating_sub(152));
         screen(
             &dx.file_select,
             &cells,

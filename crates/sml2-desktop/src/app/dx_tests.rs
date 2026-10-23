@@ -508,3 +508,73 @@ fn resting_on_the_hall_door_keeps_the_live_file_select_picture() {
     }
     let _ = std::fs::remove_dir_all(path);
 }
+
+#[test]
+fn file_select_and_hall_keep_the_same_native_framing_in_enlarged_views() {
+    use crate::settings::{CameraZoom, Widescreen};
+    let (mut app, _, path) = super::tests::app();
+    app.dx_bundle = Some(red_bundle());
+    app.game.as_mut().unwrap().session.enter_file_select();
+    for _ in 0..64 {
+        app.game
+            .as_mut()
+            .unwrap()
+            .session
+            .advance(Default::default());
+    }
+    for dx_mode in [false, true] {
+        app.settings.dx_mode = dx_mode;
+        app.settings.widescreen = Widescreen::Off;
+        app.settings.camera_zoom = CameraZoom::Native;
+        app.hall = None;
+        let native = app.frame_image(Smooth::OFF).unwrap();
+        app.hall = Some(hall::Hall::enter());
+        hall::step(
+            app.hall.as_mut().unwrap(),
+            true,
+            false,
+            false,
+            &mut app.settings,
+            &mut app.debug,
+        );
+        let hall_native = app.frame_image(Smooth::OFF).unwrap();
+        for (wide, zoom) in [
+            (Widescreen::Wide16x9, CameraZoom::Native),
+            (Widescreen::Off, CameraZoom::Zoom125),
+            (Widescreen::Wide16x9, CameraZoom::Zoom150),
+            (Widescreen::Wide16x9, CameraZoom::Zoom200),
+        ] {
+            app.settings.widescreen = wide;
+            app.settings.camera_zoom = zoom;
+            let view = app.settings.view();
+            let expected = sml2_runtime::render::view::letterbox(
+                &hall_native.pixels,
+                (160, 144),
+                view,
+                Color32::BLACK,
+            );
+            assert!(
+                app.frame_image(Smooth::OFF).unwrap().pixels == expected,
+                "hall {view:?}"
+            );
+            let hall = app.hall.take();
+            let expected = sml2_runtime::render::view::letterbox(
+                &native.pixels,
+                (160, 144),
+                view,
+                Color32::BLACK,
+            );
+            assert!(
+                app.frame_image(Smooth::OFF).unwrap().pixels == expected,
+                "file select {view:?}, DX {dx_mode}"
+            );
+            app.hall = Some(hall::Hall::enter());
+            assert!(
+                app.frame_image(Smooth::OFF).unwrap().pixels == expected,
+                "doorway {view:?}"
+            );
+            app.hall = hall;
+        }
+    }
+    let _ = std::fs::remove_dir_all(path);
+}

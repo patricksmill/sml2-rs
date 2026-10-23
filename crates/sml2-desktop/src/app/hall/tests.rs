@@ -294,6 +294,17 @@ fn signs_stay_visible_through_every_march_and_the_door_returns_to_its_map_positi
     let mut hall = Hall::enter();
     let mut settings = Settings::default();
     let mut debug = false;
+    let alphabet = [255; 0x300];
+    let mut digits = vec![0; sml2_core::front_end::VRAM_LEN];
+    digits[0x800..0x8a0].fill(255);
+    let assets = sml2_core::front_end::FrontEndAssets::new(
+        vec![0; sml2_core::front_end::VRAM_LEN],
+        vec![0; sml2_core::front_end::TILEMAP_LEN],
+        digits,
+        vec![0; sml2_core::front_end::TILEMAP_LEN],
+        vec![0; sml2_core::front_end::DEMO_TAPES_LEN],
+    )
+    .unwrap();
     for (left, right) in [(true, false), (false, true)] {
         for _ in 0..catalog::HALL_PEDESTALS.len() * 33 {
             assert!(!step(
@@ -306,14 +317,18 @@ fn signs_stay_visible_through_every_march_and_the_door_returns_to_its_map_positi
             ));
             if let Some(index) = sign_station(&hall) {
                 let (name, value) = catalog::sign(catalog::HALL_PEDESTALS[index], &settings, debug);
-                let center = pedestal_x(index) - hall.camera;
-                for text in [name, value] {
-                    let half = text.len() as i32 * 4;
-                    assert!(
-                        center - half >= 0 && center + half <= 160,
-                        "clipped sign {text}"
-                    );
-                }
+                let mut frame = vec![0u8; 160 * 144];
+                stamp_sign(&mut frame, &hall, &assets, &alphabet, &settings, debug, 3);
+                let letters = name
+                    .bytes()
+                    .chain(value.bytes())
+                    .filter(|&c| c != b' ')
+                    .count();
+                assert_eq!(
+                    frame.iter().filter(|&&pixel| pixel == 3).count(),
+                    letters * 64,
+                    "every glyph stays fully visible during the pan: {name} / {value}"
+                );
             }
         }
     }
@@ -358,4 +373,32 @@ fn the_loaded_game_alphabet_has_the_rom_letter_a_stencil() {
     let rows = [0, 0x38, 0x7c, 0xc6, 0xc6, 0xfe, 0xc6, 0xc6];
     let expected: [u8; 16] = std::array::from_fn(|i| rows[i / 2]);
     assert_eq!(glyph, expected);
+}
+
+#[test]
+fn camera_moves_only_with_mario_and_never_snaps_between_stations() {
+    let mut hall = Hall::enter();
+    let mut settings = Settings::default();
+    let mut debug = false;
+    for (left, right) in [(true, false), (false, true)] {
+        for _ in 0..catalog::HALL_PEDESTALS.len() * 33 {
+            let before = (hall.mario, hall.camera);
+            assert!(!step(
+                &mut hall,
+                left,
+                right,
+                false,
+                &mut settings,
+                &mut debug
+            ));
+            assert_eq!(
+                hall.camera - before.1,
+                hall.mario - before.0,
+                "the camera must follow the actual movement, including decision frames"
+            );
+            assert!((hall.camera - before.1).abs() <= 1);
+            assert_eq!(hall.mario - hall.camera, DOOR);
+        }
+    }
+    assert_eq!((hall.mario, hall.camera), (DOOR, 0));
 }

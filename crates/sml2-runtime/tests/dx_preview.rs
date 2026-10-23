@@ -638,3 +638,48 @@ fn dx_smoothing_at_a_full_tick_is_the_dx_frame_upsampled() {
         (0..432).all(|y| (0..768).all(|x| smooth[y * 768 + x] == native[(y / 3) * 256 + x / 3]))
     );
 }
+
+#[test]
+fn file_select_camera_stays_at_zero_across_the_three_pipes_and_clear() {
+    use sml2_core::{object::MappingEntry, player_sim::PlayerKeys};
+    let mut bundle = synthetic_bundle();
+    bundle.players[0][0].normal[..16].copy_from_slice(&[255, 0].repeat(8));
+    bundle.players[0][0].mappings = vec![
+        vec![MappingEntry {
+            x: 0,
+            y: 0,
+            tile: 0,
+            attr: 0
+        }];
+        242
+    ];
+    let mut game = session();
+    game.enter_file_select();
+    for _ in 0..64 {
+        game.advance(FrameInput::default());
+    }
+    for cursor_x in [40, 72, 104, 136] {
+        let SessionState::FileSelect(file_select) = &game.state else {
+            panic!("file select")
+        };
+        assert_eq!(file_select.cursor(), (cursor_x, 124));
+        let frame = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
+        assert_eq!(
+            frame[108 * 160 + usize::from(cursor_x) - 8],
+            [0, 255, 0],
+            "cursor {cursor_x} must remain at its original screen position"
+        );
+        if cursor_x != 136 {
+            game.advance(FrameInput {
+                keys: PlayerKeys {
+                    right: true,
+                    ..Default::default()
+                },
+                div: 0,
+            });
+            for _ in 0..32 {
+                game.advance(FrameInput::default());
+            }
+        }
+    }
+}

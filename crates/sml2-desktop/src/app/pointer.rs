@@ -151,9 +151,14 @@ impl super::DesktopApp {
                 self.start_click = true;
                 self.aim = None;
             }
-            SessionState::FileSelect(_) => {
+            SessionState::FileSelect(file_select) => {
                 let door = self.settings.dx_mode && self.dx_bundle.is_some();
-                self.aim = Some(column(x, door));
+                let scroll = if door {
+                    file_select.cursor().0.saturating_sub(152)
+                } else {
+                    0
+                };
+                self.aim = Some(column(x.saturating_add(scroll), door));
                 self.start_click = false;
             }
             _ => {}
@@ -224,6 +229,50 @@ mod tests {
         assert_eq!(column(0x90, false), Aim::Clear);
         assert_eq!(column(0xB0, false), Aim::Clear);
         assert_eq!(column(0xB0, true), Aim::Door);
+    }
+
+    #[test]
+    fn file_select_clicks_follow_the_camera_at_the_character_door() {
+        use sml2_runtime::session::SessionState;
+
+        let (mut app, _, path) = super::super::tests::app();
+        app.dx_bundle = Some(super::super::dx_tests::red_bundle());
+        app.settings.dx_mode = true;
+        let session = &mut app.game.as_mut().unwrap().session;
+        let mut file_select = FileSelect::new(&mut session.slots);
+        for _ in 0..64 {
+            file_select.step(&mut session.slots, 0, 0);
+        }
+        for _ in 0..3 {
+            file_select.step(&mut session.slots, RIGHT, 0);
+            for _ in 0..32 {
+                file_select.step(&mut session.slots, 0, 0);
+            }
+        }
+        session.state = SessionState::FileSelect(file_select);
+        super::super::dx::prepare_tick(session, &app.settings, true);
+        let SessionState::FileSelect(file_select) = &mut session.state else {
+            unreachable!()
+        };
+        file_select.step(&mut session.slots, RIGHT, 0);
+        for _ in 0..65 {
+            file_select.step(&mut session.slots, 0, 0);
+        }
+        assert_eq!(file_select.cursor().0, 200);
+
+        let view = app.settings.view();
+        let (mx, my) = margin(view);
+        let rect = Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(view.0 as f32, view.1 as f32));
+        for (screen_x, aim) in [
+            (24, Aim::Pipe(72)),
+            (56, Aim::Pipe(104)),
+            (88, Aim::Clear),
+            (152, Aim::Door),
+        ] {
+            app.on_picture_click(egui::pos2((mx + screen_x) as f32, (my + 70) as f32), rect);
+            assert_eq!(app.aim, Some(aim));
+        }
+        let _ = std::fs::remove_dir_all(path);
     }
 
     #[test]
