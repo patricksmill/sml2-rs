@@ -1,4 +1,5 @@
 /target/
+/target-base/
 /extracted/
 handler_coverage.json
 /frame.png
