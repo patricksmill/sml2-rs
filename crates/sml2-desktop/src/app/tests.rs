@@ -481,3 +481,47 @@ fn settings_pages_cycle_with_shoulders_and_the_tab_row() {
     assert_eq!(app.game.as_ref().unwrap().session.frame_n, 0);
     let _ = std::fs::remove_dir_all(path);
 }
+
+#[test]
+fn home_pipes_show_the_saved_stage_tally_across_a_restart() {
+    let (mut app, ctx, path) = app();
+    app.screen = Screen::Game;
+    frame(&mut app, &ctx, vec![]);
+    let slots = |app: &DesktopApp| {
+        let slots = &app.game.as_ref().unwrap().session.slots;
+        [0, 1, 2].map(|slot| super::panels::pipe_stages(slots, slot))
+    };
+    let game = app.game.as_mut().unwrap();
+    game.session.active_slot = Some(0);
+    game.session.debug_warp_level(0).unwrap();
+    app.apply_debug(DebugAction::ClearAllLevels);
+    assert_eq!(
+        slots(&app)[0],
+        None,
+        "an unsaved edit does not reach the pipe"
+    );
+    app.apply_debug(DebugAction::Save);
+    assert_eq!(slots(&app)[0], Some(31));
+    // A new launch reads the same pipe image from disk.
+    let options = Options {
+        assets: app.options.assets.clone(),
+        paths: AppPaths {
+            settings: app.options.paths.settings.clone(),
+            save: app.options.paths.save.clone(),
+        },
+        audio: false,
+        filter: None,
+        play: false,
+        boot_title: false,
+        boot_select: false,
+        room: None,
+        reveal: false,
+        scale: None,
+        fullscreen: false,
+        smoke_frames: None,
+        screenshot: None,
+    };
+    let restarted = DesktopApp::new(&Context::default(), options, Settings::default(), None);
+    assert_eq!(slots(&restarted), [Some(31), None, None]);
+    let _ = std::fs::remove_dir_all(path);
+}

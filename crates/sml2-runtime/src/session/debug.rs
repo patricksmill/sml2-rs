@@ -56,7 +56,23 @@ impl Session {
     }
 
     /// Write a whole progress image into every live copy.
+    ///
+    /// `sLevelTally` moves with it, by the change in cleared stages: the game
+    /// counts a stage on its first clear (`$3547`, `$2426`), so an edit that
+    /// clears or un-clears stages must count them too or the file select and
+    /// the launcher report a full save as zero stages.
     pub fn debug_set_progress(&mut self, progress: [u8; 42]) {
+        let cleared = |image: &[u8; 42]| {
+            self.debug_level_slots()
+                .into_iter()
+                .filter(|&slot| image.get(usize::from(slot)).is_some_and(|b| b & 0x80 != 0))
+                .count() as i32
+        };
+        let delta = cleared(&progress) - cleared(&self.debug_progress());
+        if delta != 0 {
+            let tally = i32::from(bcd_to_u8(self.debug_tally()));
+            self.debug_set_tally(tally.saturating_add(delta).clamp(0, 99) as u8);
+        }
         self.castle_progress = progress;
         match &mut self.state {
             SessionState::Overworld(map) => {
@@ -183,6 +199,26 @@ impl Session {
             progress[offset] &= !0x80;
         }
         self.debug_set_progress(progress);
+    }
+
+    /// `sLevelTally` as the live state holds it (BCD).
+    pub fn debug_tally(&self) -> u8 {
+        match &self.state {
+            SessionState::InLevel(ctx) => ctx.sim.level_tally,
+            SessionState::Castle(seq) => seq.level_tally,
+            _ => self.level_tally,
+        }
+    }
+
+    /// Write the stage tally, as a decimal count, into every live copy.
+    fn debug_set_tally(&mut self, stages: u8) {
+        let packed = u8_to_bcd(stages.min(99));
+        self.level_tally = packed;
+        match &mut self.state {
+            SessionState::InLevel(ctx) => ctx.sim.level_tally = packed,
+            SessionState::Castle(seq) => seq.level_tally = packed,
+            _ => {}
+        }
     }
 
     /// The live purse as a decimal value (`sCoinLow`/`sCoinHigh` are BCD).

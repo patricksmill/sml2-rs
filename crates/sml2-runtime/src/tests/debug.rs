@@ -464,3 +464,27 @@ fn power_up_edits_play_as_pickups_and_carry_to_the_map() {
         _ => panic!("not on the map"),
     }
 }
+
+#[test]
+fn progress_edits_count_stages_in_the_saved_tally() {
+    let mut session = session();
+    session.begin_level(0, 0).unwrap();
+    session.debug_wipe_progress();
+    assert_eq!(session.debug_tally(), 0);
+    let stages = session.debug_clear_all_levels();
+    assert_eq!(stages, 31);
+    assert_eq!(session.debug_tally(), 0x31, "BCD, one per first clear");
+    session.debug_clear_all_levels();
+    assert_eq!(session.debug_tally(), 0x31, "a stage counts once");
+    session.debug_set_golden_coin(0, false);
+    assert_eq!(session.debug_tally(), 0x30);
+    session.debug_set_golden_coin(0, true);
+    assert_eq!(session.debug_tally(), 0x31);
+    session.debug_unlock_routes();
+    assert_eq!(session.debug_tally(), 0x31, "path bits are not stages");
+    // The record the save writer and the file select read.
+    assert_eq!(session.save_record()[0x42], 0x31);
+    session.debug_wipe_progress();
+    assert_eq!(session.debug_tally(), 0);
+    assert_eq!(session.save_record()[0x42], 0);
+}

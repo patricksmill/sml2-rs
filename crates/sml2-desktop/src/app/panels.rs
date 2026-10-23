@@ -6,6 +6,7 @@ use crate::{
     settings::Zoom,
 };
 use eframe::egui::{self, Context, Ui, ViewportCommand};
+use sml2_core::front_end::SaveSlots;
 use sml2_runtime::session::SessionState;
 
 /// Settings pages, in tab order.
@@ -35,6 +36,14 @@ impl Page {
             Page::Debug => "DEBUG",
         }
     }
+}
+
+/// A pipe's stage count as the file select shows it: the record's BCD
+/// `sLevelTally` (`$42`), or `None` for a pipe that fails its checksum (never
+/// saved, or erased).
+pub(super) fn pipe_stages(slots: &SaveSlots, slot: usize) -> Option<u16> {
+    let record = slots.load_slot(slot).filter(|_| slots.valid(slot))?;
+    Some(u16::from(record[0x42] >> 4) * 10 + u16::from(record[0x42] & 0x0F))
 }
 
 impl DesktopApp {
@@ -85,14 +94,7 @@ impl DesktopApp {
                     ui.spacing_mut().item_spacing.x = 8.0;
                     ui.add_space((theme::BUTTON_SIZE.x - 3.0 * 92.0) / 2.0);
                     for (slot, label) in ["A", "B", "C"].iter().enumerate() {
-                        let stages = game.session.slots.valid(slot).then(|| {
-                            game.session
-                                .slots
-                                .load_slot(slot)
-                                .map(|r| (r[0x42] >> 4) as u16 * 10 + (r[0x42] & 0x0F) as u16)
-                                .unwrap_or(0)
-                        });
-                        theme::save_pipe(ui, label, stages);
+                        theme::save_pipe(ui, label, pipe_stages(&game.session.slots, slot));
                     }
                 });
             }
@@ -104,18 +106,6 @@ impl DesktopApp {
                 self.reset_settings();
             }
         });
-        ui.add_space(10.0);
-        let below = ui
-            .allocate_exact_size(egui::vec2(10.0, 18.0), egui::Sense::hover())
-            .0;
-        theme::outlined(
-            ui,
-            below.center(),
-            egui::Align2::CENTER_CENTER,
-            "Native Rust edition",
-            13.0,
-            egui::Color32::WHITE,
-        );
     }
 
     /// Replace the settings file with defaults, even when it could not be read.
