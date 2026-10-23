@@ -16,6 +16,6 @@ pub mod title;
 pub use assets::{FrontEndAssets, DEMO_TAPE_LEN, DEMO_TAPES_LEN, TILEMAP_LEN, VRAM_LEN};
 pub use demo::{DemoTape, DEMO_LEVELS};
 pub use file_select::{FileSelect, FileSelectAction, FileSelectOutput};
-pub use render::{render_file_select, render_hall_output, render_title};
+pub use render::{render_file_select, render_hall_output, render_title, stamp_glyph};
 pub use save_slots::{SaveSlots, SAVE_IMAGE_LEN, SLOT_COUNT, SLOT_LEN};
 pub use title::{TitleAction, TitleScreen};

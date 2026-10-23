@@ -1130,6 +1130,56 @@ mod tests {
             rgb555(0x001f),
             "the open room is not the brick checker"
         );
+        let doorway = screen_layers(
+            &picture,
+            &[],
+            None,
+            (160, 144),
+            hall_backdrop,
+            0,
+            false,
+            true,
+        )
+        .unwrap();
+        assert_eq!(
+            doorway[32 * 160],
+            rgb555(0x001f),
+            "columns zero and one also open into the room"
+        );
+    }
+
+    #[test]
+    fn dx_hall_scroll_keeps_mario_in_screen_space() {
+        use sml2_core::front_end::screen::hall_backdrop;
+        let mut picture = Screen {
+            vram: [vec![0; 0x1800], vec![0; 0x1800]],
+            tilemap: vec![0; 0x400],
+            attributes: vec![0; 0x400],
+            bg_palettes: [0x1f, 0].repeat(32),
+            obj_palettes: [0xe0, 3].repeat(32),
+        };
+        for row in 0..8 {
+            picture.vram[0][row * 2] = 255;
+        }
+        let mario = Cell {
+            x: 56,
+            y: 64,
+            tile: 0,
+            attr: 0,
+        };
+        let frame = screen_layers(
+            &picture,
+            &[mario],
+            None,
+            (160, 144),
+            hall_backdrop,
+            -72,
+            false,
+            true,
+        )
+        .unwrap();
+        assert_eq!(frame[48 * 160 + 48], [0, 255, 0]);
+        assert_eq!(frame[48 * 160 + 120], [255, 0, 0]);
     }
 
     #[test]

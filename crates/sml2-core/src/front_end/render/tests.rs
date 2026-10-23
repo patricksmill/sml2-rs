@@ -344,3 +344,24 @@ fn the_hall_is_open_sky_over_a_brick_floor_and_mario_is_a_sprite() {
         "Mario is an object sprite"
     );
 }
+
+#[test]
+fn glyph_stamping_clips_nonzero_pixels_and_preserves_the_background() {
+    let mut glyph = [0u8; 16];
+    glyph[0] = 0x80; // color 1 at (0, 0), outside the destination
+    glyph[3] = 0x40; // color 2 at (1, 1)
+    glyph[4] = 0x20;
+    glyph[5] = 0x20; // color 3 at (2, 2)
+    let mut tokens = vec![9; 16];
+    stamp_glyph(&mut tokens, 4, &glyph, (-1, -1), 3);
+    assert_eq!(tokens, [3, 9, 9, 9, 9, 3, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9]);
+    let mut rgb = vec![[9, 8, 7]; 16];
+    stamp_glyph(&mut rgb, 4, &glyph, (-1, -1), [1, 2, 3]);
+    assert_eq!(rgb[0], [1, 2, 3]);
+    assert_eq!(rgb[5], [1, 2, 3]);
+    assert_eq!(rgb[1], [9, 8, 7]);
+    let before = tokens.clone();
+    stamp_glyph(&mut tokens, 0, &glyph, (0, 0), 0);
+    stamp_glyph(&mut tokens, 4, &glyph[..15], (0, 0), 0);
+    assert_eq!(tokens, before);
+}

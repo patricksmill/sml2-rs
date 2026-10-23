@@ -499,7 +499,20 @@ impl DesktopApp {
                         hall.camera,
                         (x, y, sprite),
                     ) {
-                        Ok(rgb) => {
+                        Ok(mut rgb) => {
+                            let palette = &dx.file_select.bg_palettes;
+                            let ink = sml2_core::hardware_palettes::rgb555(u16::from_le_bytes([
+                                palette[6], palette[7],
+                            ]));
+                            hall::stamp_sign(
+                                &mut rgb,
+                                hall,
+                                &game.session.assets.front_end,
+                                hall::alphabet(&game.session.assets),
+                                &self.settings,
+                                self.debug,
+                                ink,
+                            );
                             let frame = fixed_screen(view, [0, 0, 0], |_| rgb);
                             return Some(ColorImage::new(
                                 [view.0, view.1],
@@ -517,6 +530,9 @@ impl DesktopApp {
                         hall,
                         &game.session.assets.front_end,
                         &game.session.assets.object_tables,
+                        hall::alphabet(&game.session.assets),
+                        &self.settings,
+                        self.debug,
                     )
                 });
                 let pixels: Vec<PalettePixel> = indices
@@ -680,20 +696,6 @@ impl DesktopApp {
             Color32::WHITE,
         );
         self.paint_overlays(ui, rect);
-        if let Some(hall) = &self.hall {
-            if let Some(index) = (0..catalog::HALL_PEDESTALS.len())
-                .find(|index| (hall.mario - hall::pedestal_x(*index)).abs() <= 8)
-            {
-                let text = catalog::label(catalog::HALL_PEDESTALS[index], &self.settings, self.debug);
-                ui.painter().text(
-                    rect.min,
-                    egui::Align2::LEFT_TOP,
-                    text,
-                    egui::FontId::monospace(14.0),
-                    Color32::WHITE,
-                );
-            }
-        }
         let picture = ui.interact(rect, egui::Id::new("game-picture"), egui::Sense::click());
         if picture.clicked() {
             if let Some(pos) = picture.interact_pointer_pos() {

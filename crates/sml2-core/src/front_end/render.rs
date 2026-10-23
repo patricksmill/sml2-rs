@@ -323,5 +323,36 @@ fn draw_cell(frame: &mut [u8], vw: usize, vh: usize, vram: &[u8], output: Output
     }
 }
 
+/// Stamp the nonzero pixels of a game glyph, clipping to the destination.
+pub fn stamp_glyph<P: Copy>(
+    frame: &mut [P],
+    stride: usize,
+    bytes: &[u8],
+    origin: (i32, i32),
+    token: P,
+) {
+    if bytes.len() < 16 || stride == 0 {
+        return;
+    }
+    let height = frame.len() / stride;
+    for y in 0..8 {
+        let lo = bytes[y * 2];
+        let hi = bytes[y * 2 + 1];
+        for x in 0..8 {
+            let bit = 7 - x;
+            let color = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
+            if color == 0 {
+                continue;
+            }
+            let px = origin.0 + x as i32;
+            let py = origin.1 + y as i32;
+            if px < 0 || py < 0 || px >= stride as i32 || py >= height as i32 {
+                continue;
+            }
+            frame[py as usize * stride + px as usize] = token;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;

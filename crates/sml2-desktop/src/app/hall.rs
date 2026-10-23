@@ -1,6 +1,6 @@
 //! The brick room to the left of the file select, on its 32-pixel station lattice.
 
-use super::catalog::{self, Pedestal};
+use super::catalog;
 use crate::settings::Settings;
 
 pub(super) const STEP: i32 = 0x20;
@@ -42,7 +42,11 @@ fn furthest() -> i32 {
 fn aim_camera(mario: i32, camera: i32, dir: i8) -> i32 {
     let dest = mario + i32::from(dir) * STEP;
     let dest_screen = dest - camera;
-    if (8..152).contains(&dest_screen) {
+    if dest == DOOR {
+        return 0;
+    }
+    // Leave room for the six-character station name and choice.
+    if (32..128).contains(&dest_screen) {
         camera
     } else if dir < 0 {
         dest - 48
@@ -158,223 +162,120 @@ pub(super) fn presentation(hall: &Hall) -> (u8, u8, u8) {
     (x, y, sprite_frame(hall))
 }
 
+/// The station occupied now, or the destination of the current march.
+pub(super) fn sign_station(hall: &Hall) -> Option<usize> {
+    let x = hall.mario + i32::from(hall.walk);
+    (0..catalog::HALL_PEDESTALS.len()).find(|index| pedestal_x(*index) == x)
+}
+
+/// The game's menu/ending alphabet, already loaded for the Easy Mode card.
+/// Its letter A is font tile $11 (ASCII minus '0'); the low plane is the
+/// colored backdrop and the high plane is the letter stencil.
+pub(super) fn alphabet(assets: &sml2_runtime::session::SessionAssets) -> &[u8] {
+    assets
+        .ending_scene
+        .as_ref()
+        .and_then(|ending| ending.transfer_source(0x1A, 0x4656, 0x300))
+        .unwrap_or(&[])
+}
+
+fn glyph(
+    assets: &sml2_core::front_end::FrontEndAssets,
+    alphabet: &[u8],
+    ch: u8,
+) -> Option<[u8; 16]> {
+    match ch {
+        b'A'..=b'Z' => {
+            let offset = usize::from(ch - b'0') * 16;
+            let source = alphabet.get(offset..offset + 16)?;
+            Some(std::array::from_fn(|i| source[(i / 2) * 2 + 1]))
+        }
+        b'0'..=b'9' => {
+            let offset = (0x80 + usize::from(ch - b'0')) * 16;
+            assets
+                .file_select_vram()
+                .get(offset..offset + 16)?
+                .try_into()
+                .ok()
+        }
+        _ => None,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn stamp_line<P: Copy>(
+    frame: &mut [P],
+    stride: usize,
+    assets: &sml2_core::front_end::FrontEndAssets,
+    alphabet: &[u8],
+    text: &str,
+    center_world_x: i32,
+    world_y: i32,
+    camera: i32,
+    ink: P,
+) {
+    let start = center_world_x - text.len() as i32 * 4 - camera;
+    for (i, ch) in text.bytes().enumerate() {
+        if let Some(bytes) = glyph(assets, alphabet, ch) {
+            sml2_core::front_end::stamp_glyph(
+                frame,
+                stride,
+                &bytes,
+                (start + i as i32 * 8, world_y),
+                ink,
+            );
+        }
+    }
+}
+
+pub(super) fn stamp_sign<P: Copy>(
+    frame: &mut [P],
+    hall: &Hall,
+    assets: &sml2_core::front_end::FrontEndAssets,
+    alphabet: &[u8],
+    settings: &Settings,
+    debug: bool,
+    ink: P,
+) {
+    if let Some(index) = sign_station(hall) {
+        let (name, value) = catalog::sign(catalog::HALL_PEDESTALS[index], settings, debug);
+        for (text, y) in [(&name, 48), (&value, 64)] {
+            stamp_line(
+                frame,
+                160,
+                assets,
+                alphabet,
+                text,
+                pedestal_x(index),
+                y,
+                hall.camera,
+                ink,
+            );
+        }
+    }
+}
+
 pub(super) fn pixels(
     hall: &Hall,
     assets: &sml2_core::front_end::FrontEndAssets,
     tables: &sml2_core::object::ObjectTables,
+    alphabet: &[u8],
+    settings: &Settings,
+    debug: bool,
 ) -> Vec<u8> {
     let (x, y, sprite) = presentation(hall);
-    sml2_core::front_end::render_hall_output(
+    let mut frame = sml2_core::front_end::render_hall_output(
         assets,
         tables,
         hall.camera,
         (x, y),
         sprite,
         sml2_core::video::OutputMode::PaletteIndices,
-    )
+    );
+    stamp_sign(&mut frame, hall, assets, alphabet, settings, debug, 3);
+    frame
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn the_walk_uses_the_file_select_frames() {
-        let mut hall = Hall::enter();
-        assert_eq!(sprite_frame(&hall), 4, "standing, facing left");
-        let mut settings = Settings::default();
-        let mut debug = false;
-        step(&mut hall, true, false, false, &mut settings, &mut debug);
-        assert_eq!(sprite_frame(&hall), 5, "left march frame 0");
-        for _ in 0..4 {
-            step(&mut hall, false, false, false, &mut settings, &mut debug);
-        }
-        assert_eq!(sprite_frame(&hall), 6, "walk_timer 4 advances the frame");
-    }
-
-    #[test]
-    fn a_held_direction_marches_one_pipe_and_stops_on_the_lattice() {
-        let mut hall = Hall::enter();
-        let mut settings = Settings::default();
-        let mut debug = false;
-        assert!(!step(
-            &mut hall,
-            true,
-            false,
-            false,
-            &mut settings,
-            &mut debug
-        ));
-        assert_eq!(hall.mario, DOOR, "the decision frame does not slide");
-        assert_eq!(hall.walk, -STEP as i8);
-        for _ in 0..31 {
-            assert!(!step(
-                &mut hall,
-                false,
-                false,
-                false,
-                &mut settings,
-                &mut debug
-            ));
-        }
-        assert_ne!(hall.walk, 0, "releasing does not cancel the march");
-        assert!(!step(
-            &mut hall,
-            false,
-            false,
-            false,
-            &mut settings,
-            &mut debug
-        ));
-        assert_eq!(hall.mario, pedestal_x(0));
-        assert_eq!(hall.walk, 0);
-        let rested = hall.mario;
-        assert!(!step(
-            &mut hall,
-            false,
-            false,
-            false,
-            &mut settings,
-            &mut debug
-        ));
-        assert_eq!(hall.mario, rested, "he stands on the pipe");
-        assert!((0..160).contains(&(hall.mario - hall.camera)));
-    }
-
-    #[test]
-    fn every_march_stays_on_the_native_screen_and_a_click_hops_on_arrival() {
-        let mut hall = Hall::enter();
-        let mut settings = Settings::default();
-        let mut debug = false;
-        for _ in 0..catalog::HALL_PEDESTALS.len() {
-            for _ in 0..33 {
-                assert!(!step(
-                    &mut hall,
-                    true,
-                    false,
-                    false,
-                    &mut settings,
-                    &mut debug
-                ));
-                let screen = hall.mario - hall.camera;
-                assert!(
-                    (0..160).contains(&screen),
-                    "screen x {screen} at mario {} camera {}",
-                    hall.mario,
-                    hall.camera
-                );
-            }
-        }
-        assert_eq!(hall.mario, furthest());
-        assert_eq!(hall.walk, 0);
-        step(&mut hall, true, false, false, &mut settings, &mut debug);
-        assert_eq!(
-            hall.mario,
-            furthest(),
-            "the last pipe does not march further"
-        );
-        assert_eq!(hall.walk, 0);
-
-        let mut hall = Hall::enter();
-        hall.goal = Some(0);
-        step(&mut hall, false, false, false, &mut settings, &mut debug);
-        for _ in 0..31 {
-            step(&mut hall, false, false, false, &mut settings, &mut debug);
-        }
-        assert_eq!(hall.hop, 0);
-        step(&mut hall, false, false, false, &mut settings, &mut debug);
-        assert_eq!(hall.mario, pedestal_x(0));
-        assert!(hall.hop > 0);
-        assert_eq!(settings.zoom, crate::settings::Zoom::Integer(1));
-    }
-
-    #[test]
-    fn walking_left_reaches_volume_and_a_jump_raises_it() {
-        let mut hall = Hall::enter();
-        let mut settings = Settings::default();
-        let mut debug = false;
-        let volume_at = pedestal_x(
-            catalog::PEDESTALS
-                .iter()
-                .position(|p| *p == Pedestal::Volume)
-                .unwrap(),
-        );
-        for _ in 0..200 {
-            if hall.mario == volume_at {
-                break;
-            }
-            assert!(!step(
-                &mut hall,
-                true,
-                false,
-                false,
-                &mut settings,
-                &mut debug
-            ));
-        }
-        assert_eq!(hall.mario, volume_at);
-        assert!(!step(
-            &mut hall,
-            false,
-            false,
-            true,
-            &mut settings,
-            &mut debug
-        ));
-        assert!((settings.volume - 0.8).abs() < f32::EPSILON);
-        assert!(hall.hop > 0);
-        let during_hop = settings.volume;
-        step(&mut hall, false, false, true, &mut settings, &mut debug);
-        assert!(
-            (settings.volume - during_hop).abs() < f32::EPSILON,
-            "the hop ignores A"
-        );
-    }
-
-    #[test]
-    fn walking_right_through_the_door_leaves() {
-        let mut hall = Hall::enter();
-        let mut settings = Settings::default();
-        let mut debug = false;
-        assert!(step(
-            &mut hall,
-            false,
-            true,
-            false,
-            &mut settings,
-            &mut debug
-        ));
-    }
-
-    fn test_assets() -> sml2_core::front_end::FrontEndAssets {
-        use sml2_core::front_end::{DEMO_TAPES_LEN, TILEMAP_LEN, VRAM_LEN};
-        sml2_core::front_end::FrontEndAssets::new(
-            vec![0u8; VRAM_LEN],
-            vec![0u8; TILEMAP_LEN],
-            vec![0u8; VRAM_LEN],
-            vec![0u8; TILEMAP_LEN],
-            vec![0u8; DEMO_TAPES_LEN],
-        )
-        .unwrap()
-    }
-
-    fn tables() -> sml2_core::object::ObjectTables {
-        serde_json::from_str(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../extracted/objects.json"
-        )))
-        .expect("object tables")
-    }
-
-    #[test]
-    fn the_doorway_frame_is_palette_indices() {
-        let hall = Hall::enter();
-        assert_eq!(hall.mario, DOOR);
-        let frame = pixels(&hall, &test_assets(), &tables());
-        let decoded: Vec<_> = frame
-            .iter()
-            .copied()
-            .map(sml2_core::video::PalettePixel::from_token)
-            .collect();
-        assert_eq!(decoded.len(), frame.len());
-    }
-}
+#[path = "hall/tests.rs"]
+mod tests;

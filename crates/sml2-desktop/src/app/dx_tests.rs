@@ -451,6 +451,8 @@ fn dx_mode_colors_the_settings_hall() {
     use sml2_core::hardware_palettes::rgb555;
     let (mut app, _, path) = super::tests::app();
     let mut dx = red_bundle();
+    dx.file_select.bg_palettes[6] = 0;
+    dx.file_select.bg_palettes[7] = 0x7c; // dark sign ink is blue
     dx.file_select.bg_palettes[8] = 0xe0;
     dx.file_select.bg_palettes[9] = 0x03;
     dx.file_select.attributes[0] = 1;
@@ -474,5 +476,35 @@ fn dx_mode_colors_the_settings_hall() {
         image.pixels[32 * 160],
         Color32::from_rgb(rgb555(0x001f)[0], rgb555(0x001f)[1], rgb555(0x001f)[2])
     );
+    assert!(
+        image.pixels[48 * 160..72 * 160]
+            .iter()
+            .any(|&pixel| pixel == Color32::BLUE),
+        "the option sign uses DX background color 3"
+    );
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn resting_on_the_hall_door_keeps_the_live_file_select_picture() {
+    let (mut app, _, path) = super::tests::app();
+    app.dx_bundle = Some(red_bundle());
+    app.game.as_mut().unwrap().session.enter_file_select();
+    for _ in 0..64 {
+        app.game
+            .as_mut()
+            .unwrap()
+            .session
+            .advance(Default::default());
+    }
+    for dx_mode in [false, true] {
+        app.settings.dx_mode = dx_mode;
+        app.hall = None;
+        let file_select = app.frame_image(Smooth::OFF).unwrap();
+        app.hall = Some(hall::Hall::enter());
+        let doorway = app.frame_image(Smooth::OFF).unwrap();
+        assert_eq!(doorway.size, file_select.size);
+        assert!(doorway.pixels == file_select.pixels, "DX mode {dx_mode}");
+    }
     let _ = std::fs::remove_dir_all(path);
 }

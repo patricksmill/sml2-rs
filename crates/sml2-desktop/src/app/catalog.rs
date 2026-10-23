@@ -132,6 +132,69 @@ fn on(value: bool) -> &'static str {
     }
 }
 
+/// Compact labels drawn with the title alphabet and file-select digits.
+pub(super) fn sign(pedestal: Pedestal, settings: &Settings, debug: bool) -> (String, String) {
+    use crate::settings::{CameraZoom, Filter, Widescreen};
+    let on = |value| if value { "ON" } else { "OFF" }.to_string();
+    let (name, value) = match pedestal {
+        Pedestal::Zoom => (
+            "ZOOM",
+            match settings.zoom {
+                Zoom::Auto => "AUTO".into(),
+                Zoom::Integer(n) => n.to_string(),
+            },
+        ),
+        Pedestal::Fullscreen => ("FULL", on(settings.fullscreen)),
+        Pedestal::Filter => (
+            "FILTER",
+            match settings.filter {
+                Filter::Gray => "GRAY".into(),
+                Filter::Dmg => "DMG".into(),
+                Filter::Pocket => "POCKET".into(),
+                Filter::Gbc => "GBC".into(),
+                Filter::Amber => "AMBER".into(),
+                Filter::Sgb(index) => {
+                    format!("SGB {}{}", index / 8 + 1, char::from(b'A' + index % 8))
+                }
+            },
+        ),
+        Pedestal::Volume => ("VOL", format!("{:.0}", settings.volume * 100.0)),
+        Pedestal::Mute => ("MUTE", on(settings.muted)),
+        Pedestal::DeadZone => ("DEAD", format!("{:.0}", settings.dead_zone * 100.0)),
+        Pedestal::Widescreen => (
+            "WIDE",
+            match settings.widescreen {
+                Widescreen::Off => "OFF",
+                Widescreen::Wide16x9 => "169",
+            }
+            .into(),
+        ),
+        Pedestal::CameraZoom => (
+            "CAM",
+            match settings.camera_zoom {
+                CameraZoom::Native => "100",
+                CameraZoom::Zoom125 => "125",
+                CameraZoom::Zoom150 => "150",
+                CameraZoom::Zoom200 => "200",
+            }
+            .into(),
+        ),
+        Pedestal::Motion => ("SMOOTH", on(settings.motion_smoothing)),
+        Pedestal::DxMode => ("DX", on(settings.dx_mode)),
+        Pedestal::Character => (
+            "CHAR",
+            match settings.character {
+                sml2_core::character::Character::Mario => "MARIO",
+                sml2_core::character::Character::Luigi => "LUIGI",
+            }
+            .into(),
+        ),
+        Pedestal::Toolbar => ("BAR", on(settings.show_toolbar)),
+        Pedestal::Debug => ("DEBUG", on(debug)),
+    };
+    (name.into(), value)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
