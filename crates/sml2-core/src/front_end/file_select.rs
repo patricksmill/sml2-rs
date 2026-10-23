@@ -24,6 +24,16 @@ pub const FILE_SELECT_OBP1: u8 = 0x38;
 
 /// The state-6 erase animation's four sprite ids (`$41C2`).
 const ERASE_FRAMES: [u8; 4] = [0x10, 0x00, 0x11, 0x04];
+/// `$3012A`: Bomb Mario's four-step bob and sprite cycle.
+const BOMB_FRAMES: [u8; 4] = [0, 1, 2, 1];
+
+/// The cursor after the menu loop applies its presentation overrides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileSelectCursor {
+    pub sprite: u8,
+    pub position: (u8, u8),
+    pub behind_background: bool,
+}
 
 /// What a commit asked the host to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -117,6 +127,30 @@ impl FileSelect {
 
     pub fn cursor_sprite(&self) -> u8 {
         self.sprite
+    }
+
+    /// `$3007D..$300FE`: transformation, Bomb Mario, then ordinary/Easy
+    /// presentation. The bomb's one-pixel bob never changes movement state.
+    pub fn cursor_presentation(&self) -> FileSelectCursor {
+        let phase = ((self.frame & 0x0C) >> 2) as usize;
+        let mut position = self.cursor();
+        let sprite = if self.cursor_hop_active {
+            207 + phase as u8
+        } else if self.clear_mode {
+            let bob = BOMB_FRAMES[phase];
+            position.1 = position.1.wrapping_add(1).wrapping_sub(bob & 1);
+            let facing_frame = if self.mario_dir == 1 { 201 } else { 204 };
+            facing_frame + bob
+        } else if self.easy_mode {
+            self.sprite.wrapping_add(32)
+        } else {
+            self.sprite
+        };
+        FileSelectCursor {
+            sprite,
+            position,
+            behind_background: self.cursor_behind_bg,
+        }
     }
 
     pub fn cursor_behind_bg(&self) -> bool {

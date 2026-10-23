@@ -275,6 +275,120 @@ fn the_cursor_walk_cycle_drives_the_sprite_ids() {
     );
 }
 
+#[test]
+fn bomb_cursor_frames_and_bob_match_the_menu_loop_bytes() {
+    // `$300B4..$300E1`: table $3012A = [0,1,2,1], bases 201/204,
+    // and presentation Y = $FFC0 + 1 - (table value & 1).
+    let mut slots = SaveSlots::new();
+    let mut fs = FileSelect::new(&mut slots);
+    fs.clear_mode = true;
+    fs.easy_mode = true; // The clear-mode override follows the Easy addition.
+    fs.cursor_y = 124;
+    fs.cursor_behind_bg = true;
+    for (direction, sprites) in [
+        (1, [201, 202, 203, 202]),
+        (0xFF, [204, 205, 206, 205]),
+        (0, [204, 205, 206, 205]),
+    ] {
+        fs.mario_dir = direction;
+        for (phase, (sprite, y)) in sprites.into_iter().zip([125, 124, 125, 124]).enumerate() {
+            for subframe in 0..4 {
+                fs.frame = phase as u32 * 4 + subframe;
+                let cursor = fs.cursor_presentation();
+                assert_eq!(
+                    [cursor.sprite, cursor.position.0, cursor.position.1],
+                    [sprite, 40, y]
+                );
+                assert!(cursor.behind_background);
+                assert_eq!(
+                    fs.cursor(),
+                    (40, 124),
+                    "bob must not accumulate in movement state"
+                );
+            }
+        }
+    }
+    fs.frame = 0;
+    fs.cursor_y = 255;
+    assert_eq!(
+        fs.cursor_presentation().position.1,
+        0,
+        "staged Y wraps as a byte"
+    );
+}
+
+#[test]
+fn transformation_cursor_takes_priority_over_bomb_and_easy_frames() {
+    // `$300E6`: sCursorHopActive skips both Easy and clear-mode overrides.
+    let mut slots = SaveSlots::new();
+    let mut fs = FileSelect::new(&mut slots);
+    fs.cursor_hop_active = true;
+    fs.easy_mode = true;
+    for clear_mode in [false, true] {
+        fs.clear_mode = clear_mode;
+        for (frame, sprite) in [(0, 207), (4, 208), (8, 209), (12, 210)] {
+            fs.frame = frame;
+            let cursor = fs.cursor_presentation();
+            assert_eq!(
+                [cursor.sprite, cursor.position.0, cursor.position.1],
+                [sprite, 40, 16]
+            );
+        }
+    }
+    fs.cursor_hop_active = false;
+    fs.clear_mode = false;
+    assert_eq!(
+        fs.cursor_presentation().sprite,
+        48,
+        "ordinary Easy frame = 16 + 32"
+    );
+    fs.easy_mode = false;
+    assert_eq!(fs.cursor_presentation().sprite, 16);
+}
+
+#[test]
+fn clear_button_transforms_to_bomb_mario_and_back_at_the_source_timer_gates() {
+    let mut slots = SaveSlots::new();
+    let mut fs = FileSelect::new(&mut slots);
+    drop_in(&mut fs, &mut slots);
+    move_to_erase_position(&mut fs, &mut slots);
+
+    for arming in [true, false] {
+        fs.step(&mut slots, A, A);
+        for _ in 0..55 {
+            fs.step(&mut slots, 0, 0);
+            let cursor = fs.cursor_presentation();
+            match fs.timer() {
+                44..=54 => assert_eq!(
+                    cursor.sprite,
+                    if arming {
+                        9
+                    } else {
+                        204 + BOMB_FRAMES[((fs.frame & 12) >> 2) as usize]
+                    }
+                ),
+                43 => assert_eq!(fs.clear_mode(), arming, "$30291 toggles at $2B"),
+                11..=42 => assert_eq!(
+                    cursor.sprite,
+                    207 + ((fs.frame & 12) >> 2) as u8,
+                    "$302C2 latches the transformation"
+                ),
+                _ => assert_eq!((201..=206).contains(&cursor.sprite), arming),
+            }
+            assert_eq!(cursor.position.0, 0x88);
+        }
+        assert_eq!(fs.cursor(), (0x88, 124));
+        fs.step(&mut slots, 0, 0);
+        if !arming {
+            assert_eq!(
+                fs.cursor_presentation().sprite,
+                4,
+                "unarmed cursor faces left again"
+            );
+        }
+    }
+}
+
 fn move_to_erase_position(fs: &mut FileSelect, slots: &mut SaveSlots) {
     for _ in 0..3 {
         fs.step(slots, RIGHT, 0);

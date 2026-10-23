@@ -127,6 +127,63 @@ fn the_easy_banner_draws_at_its_rom_position() {
 }
 
 #[test]
+fn clear_button_renders_bomb_mario_pixels_at_the_bobbed_position() {
+    use crate::front_end::keys::{A, RIGHT};
+
+    let base_assets = assets();
+    let mut vram = base_assets.file_select_vram().to_vec();
+    // ROM mappings 204..206 use tile 199 for Bomb Mario's upper-left
+    // cell and 207/208 for the fuse at the right side.
+    paint(&mut vram, 199 * 16, 2);
+    for tile in 200..=208 {
+        paint(&mut vram, tile * 16, 1);
+    }
+    let assets = FrontEndAssets::new(
+        base_assets.title_vram().to_vec(),
+        base_assets.title_tilemap().to_vec(),
+        vram,
+        base_assets.file_select_tilemap().to_vec(),
+        base_assets.demo_tapes().to_vec(),
+    )
+    .unwrap();
+    let (mut fs, mut slots) = dropped_file_select();
+    for _ in 0..3 {
+        fs.step(&mut slots, RIGHT, 0);
+        for _ in 0..32 {
+            fs.step(&mut slots, 0, 0);
+        }
+    }
+    let ordinary = render_file_select(&fs, &slots, &assets, &tables(), (160, 144));
+    fs.step(&mut slots, A, A);
+    for _ in 0..55 {
+        fs.step(&mut slots, 0, 0);
+    }
+    // Select phase 0 explicitly: frame 204, base (136,125). Its tile 199
+    // lands at screen (120,113) and its fuse at (136,117).
+    for _ in 0..16 {
+        if fs.cursor_presentation().sprite == 204 {
+            break;
+        }
+        fs.step(&mut slots, 0, 0);
+    }
+    assert_eq!(fs.cursor_presentation().sprite, 204);
+    assert_eq!(fs.cursor(), (136, 124), "movement row stays unchanged");
+    let bomb = render_file_select(&fs, &slots, &assets, &tables(), (160, 144));
+    assert_eq!(
+        bomb[113 * 160 + 120],
+        170,
+        "Bomb Mario tile 199, OBP0 shade 1"
+    );
+    assert_eq!(bomb[117 * 160 + 136], 255, "Bomb Mario's fuse");
+    assert_eq!(
+        bomb[112 * 160 + 120],
+        0,
+        "one-pixel bob leaves the row above blank"
+    );
+    assert_ne!(ordinary[113 * 160 + 120], bomb[113 * 160 + 120]);
+}
+
+#[test]
 fn palette_frames_keep_front_end_sources_even_when_the_sprite_shade_is_white() {
     use crate::video::{OutputMode, PalettePixel, PaletteSource};
     let assets = assets();

@@ -190,6 +190,85 @@ fn dx_frames_take_the_view_size_and_keep_native_parity() {
 }
 
 #[test]
+fn file_select_clear_draws_bomb_mario_in_dx_and_restores_the_regular_cursor() {
+    use sml2_core::player_sim::PlayerKeys;
+
+    let mut game = session();
+    game.enter_file_select();
+    for _ in 0..45 {
+        game.advance(FrameInput::default());
+    }
+    for _ in 0..3 {
+        game.advance(FrameInput {
+            keys: PlayerKeys {
+                right: true,
+                ..Default::default()
+            },
+            div: 0,
+        });
+        for _ in 0..32 {
+            game.advance(FrameInput::default());
+        }
+    }
+
+    let mut bundle = synthetic_bundle();
+    // Only the ROM's six Bomb Mario mappings draw a green 8x8 cell. Regular
+    // Mario and the tally tiles stay transparent over the red background.
+    for character in &mut bundle.players {
+        let player = &mut character[0];
+        player.normal[16..32].copy_from_slice(&[0xff, 0].repeat(8));
+        for frame in 201..=206 {
+            player.mappings[frame] = vec![sml2_core::object::MappingEntry {
+                y: 0,
+                x: 0,
+                tile: 1,
+                attr: 0,
+            }];
+        }
+    }
+    assert_eq!(
+        game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(),
+        vec![RED; 160 * 144]
+    );
+
+    for armed in [true, false] {
+        game.advance(FrameInput {
+            keys: PlayerKeys {
+                a: true,
+                ..Default::default()
+            },
+            div: 0,
+        });
+        for _ in 0..55 {
+            game.advance(FrameInput::default());
+        }
+        let SessionState::FileSelect(fs) = &game.state else {
+            panic!("file select")
+        };
+        assert_eq!(fs.clear_mode(), armed);
+        assert_eq!(fs.cursor(), (0x88, 0x7c));
+        for character in [Mario, Luigi] {
+            let pixels = game
+                .render_dx_frame(&bundle, character, (160, 144))
+                .unwrap();
+            assert_eq!(
+                pixels.iter().filter(|&&p| p == [0, 255, 0]).count(),
+                if armed { 64 } else { 0 }
+            );
+            if armed {
+                assert_eq!(
+                    pixels[109 * 160 + 128],
+                    [0, 255, 0],
+                    "Bomb Mario at the Clear button"
+                );
+            } else {
+                assert_eq!(pixels, vec![RED; 160 * 144]);
+            }
+        }
+    }
+}
+
+#[test]
 fn luigi_and_the_alternate_theme_use_their_own_graphics() {
     let mut game = session();
     game.begin_level(0, 0).unwrap();

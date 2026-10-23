@@ -191,13 +191,7 @@ pub fn render_file_select_output(
         );
     }
 
-    let (x, y) = fs.cursor();
-    // `$30064`: Easy mode draws the small-Mario frames, 32 ids later.
-    let frame = if fs.easy_mode() {
-        fs.cursor_sprite().wrapping_add(32)
-    } else {
-        fs.cursor_sprite()
-    };
+    let cursor = fs.cursor_presentation();
     draw_metasprite(
         &mut out,
         vw,
@@ -205,9 +199,9 @@ pub fn render_file_select_output(
         vram,
         output,
         tables,
-        frame,
-        (x, y),
-        fs.cursor_behind_bg(),
+        cursor.sprite,
+        cursor.position,
+        cursor.behind_background,
     );
     out
 }

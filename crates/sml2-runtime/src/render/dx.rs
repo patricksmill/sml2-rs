@@ -128,13 +128,8 @@ impl Session {
         if let Some((y, frame)) = fs.erase_hop() {
             sprite(frame, (fs.cursor().0, y), true);
         }
-        // `$30064`: Easy mode draws the small-Mario frames, 32 ids later.
-        let frame = if fs.easy_mode() {
-            fs.cursor_sprite().wrapping_add(32)
-        } else {
-            fs.cursor_sprite()
-        };
-        sprite(frame, fs.cursor(), fs.cursor_behind_bg());
+        let cursor = fs.cursor_presentation();
+        sprite(cursor.sprite, cursor.position, cursor.behind_background);
         screen(
             &dx.file_select,
             &cells,
