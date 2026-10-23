@@ -88,18 +88,18 @@ fn dx_public_api_covers_every_level_with_its_own_tables() {
     game.enter_title();
     assert!(game.dx_supported(), "the title has its own DX screen");
     assert_eq!(
-        game.render_dx_frame(&bundle, Mario).unwrap(),
+        game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(),
         vec![RED; 160 * 144]
     );
     game.begin_level(0, 0).unwrap();
     assert!(game.dx_supported());
     assert_eq!(
-        game.render_dx_frame(&bundle, Mario).unwrap(),
+        game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(),
         vec![RED; 160 * 144]
     );
     game.begin_level(1, 0).unwrap();
     assert_eq!(
-        game.render_dx_frame(&bundle, Mario).unwrap(),
+        game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(),
         vec![[0, 255, 0]; 160 * 144]
     );
     // Boss arenas use DX tables that are not imported: native picture.
@@ -108,7 +108,46 @@ fn dx_public_api_covers_every_level_with_its_own_tables() {
     };
     ctx.arena_loaded = true;
     assert!(!game.dx_supported());
-    assert!(game.render_dx_frame(&bundle, Mario).is_err());
+    assert!(game.render_dx_frame(&bundle, Mario, (160, 144)).is_err());
+}
+
+#[test]
+fn dx_frames_take_the_view_size_and_keep_native_parity() {
+    let mut bundle = synthetic_bundle();
+    // Mario is one opaque green cell and the HUD row is blue, so the frame
+    // is not uniform red.
+    bundle.players[0][0].normal[..16].copy_from_slice(&[0xff, 0].repeat(8));
+    bundle.players[0][0].mappings = vec![
+        vec![sml2_core::object::MappingEntry {
+            y: 0,
+            x: 0,
+            tile: 0,
+            attr: 0,
+        }];
+        242
+    ];
+    bundle.levels[0].bg_palettes[8..10].copy_from_slice(&[0, 0x7c]);
+    bundle.levels[0].hud_attributes = vec![1; 20];
+    let mut game = session();
+    game.enter_title();
+    let native = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
+    let wide = game.render_dx_frame(&bundle, Mario, (384, 216)).unwrap();
+    assert_eq!(wide.len(), 384 * 216);
+    assert_eq!(wide[108 * 384 + 192], native[72 * 160 + 80]);
+    assert_eq!(wide[0], [0, 0, 0]);
+    game.begin_level(0, 0).unwrap();
+    game.advance(FrameInput::default());
+    let native = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
+    assert!(native[..160 * 136].iter().any(|&p| p != RED), "Mario shows");
+    let wide = game.render_dx_frame(&bundle, Mario, (384, 216)).unwrap();
+    assert_eq!(wide.len(), 384 * 216);
+    let centre: Vec<_> = (0..136)
+        .flat_map(|y| wide[(36 + y) * 384 + 112..(36 + y) * 384 + 272].to_vec())
+        .collect();
+    assert_eq!(centre, native[..160 * 136].to_vec());
+    // The HUD keeps to the view's bottom rows.
+    assert_eq!(wide[215 * 384 + 192], native[143 * 160 + 80]);
+    assert_ne!(wide[215 * 384 + 192], RED);
 }
 
 #[test]
@@ -132,12 +171,18 @@ fn luigi_and_the_alternate_theme_use_their_own_graphics() {
         player.normal[..16].copy_from_slice(&[0xff, 0].repeat(8));
         player.mappings = cell.clone();
     }
-    let mario = game.render_dx_frame(&bundle, Mario).unwrap();
-    let luigi = game.render_dx_frame(&bundle, Luigi).unwrap();
+    let mario = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
+    let luigi = game.render_dx_frame(&bundle, Luigi, (160, 144)).unwrap();
     assert_ne!(mario, luigi);
-    assert_eq!(game.render_dx_frame(&bundle, Mario).unwrap(), mario);
+    assert_eq!(
+        game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(),
+        mario
+    );
     bundle.levels[0].theme = 1;
-    assert_ne!(game.render_dx_frame(&bundle, Mario).unwrap(), mario);
+    assert_ne!(
+        game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(),
+        mario
+    );
 }
 
 #[test]
@@ -150,8 +195,15 @@ fn dx_render_frequency_preserves_native_frames_gameplay_and_save_bytes() {
     for tick in 0..40u8 {
         let old_frame = displayed.render_frame((160, 144));
         let save = displayed.save_record();
-        let color = displayed.render_dx_frame(&bundle, Mario).unwrap();
-        assert_eq!(displayed.render_dx_frame(&bundle, Mario).unwrap(), color);
+        let color = displayed
+            .render_dx_frame(&bundle, Mario, (160, 144))
+            .unwrap();
+        assert_eq!(
+            displayed
+                .render_dx_frame(&bundle, Mario, (160, 144))
+                .unwrap(),
+            color
+        );
         assert_eq!(displayed.render_frame((160, 144)), old_frame);
         assert_eq!(displayed.save_record(), save);
         let input = FrameInput {
@@ -190,7 +242,7 @@ fn audited_rom_forms_effects_and_initial_frame() {
     let bundle = audited();
     let mut game = session();
     game.begin_level(0, 0).unwrap();
-    let initial = game.render_dx_frame(&bundle, Mario).unwrap();
+    let initial = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
     assert!(initial.iter().any(|p| p[0] != p[1] || p[1] != p[2]));
     if let Some(path) = std::env::var_os("DX_OUTPUT_IMAGE") {
         let mut preview = session();
@@ -202,7 +254,7 @@ fn audited_rom_forms_effects_and_initial_frame() {
         for _ in 0..ticks {
             preview.advance(FrameInput::default());
         }
-        let pixels = preview.render_dx_frame(&bundle, Mario).unwrap();
+        let pixels = preview.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
         if let SessionState::InLevel(ctx) = &preview.state {
             eprintln!("DX comparison: ticks={ticks}, Mario=({},{}), camera=({},{}), animation={:?}, HUD={}",
                 ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y, ctx.tile_animation, ctx.hud_y);
@@ -227,8 +279,11 @@ fn audited_rom_forms_effects_and_initial_frame() {
         form.advance(FrameInput::default());
         let save = form.save_record();
         let grayscale = form.render_frame((160, 144));
-        let color = form.render_dx_frame(&bundle, Mario).unwrap();
-        assert_eq!(form.render_dx_frame(&bundle, Mario).unwrap(), color);
+        let color = form.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
+        assert_eq!(
+            form.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(),
+            color
+        );
         assert_eq!(form.render_frame((160, 144)), grayscale);
         assert_eq!(form.save_record(), save);
         frames.push(color);
@@ -241,12 +296,15 @@ fn audited_rom_forms_effects_and_initial_frame() {
     };
     ctx.sim.paused = true;
     ctx.sim.frame_counter = 0;
-    let pause0 = game.render_dx_frame(&bundle, Mario).unwrap();
+    let pause0 = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
     let SessionState::InLevel(ctx) = &mut game.state else {
         unreachable!()
     };
     ctx.sim.frame_counter = 16;
-    assert_ne!(pause0, game.render_dx_frame(&bundle, Mario).unwrap());
+    assert_ne!(
+        pause0,
+        game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap()
+    );
     let mut stars = Vec::new();
     for low in [4, 6] {
         let SessionState::InLevel(ctx) = &mut game.state else {
@@ -256,7 +314,7 @@ fn audited_rom_forms_effects_and_initial_frame() {
         ctx.sim.star_high = 1;
         ctx.sim.star_low = low + 1; // advance decrements before staging draw.
         game.advance(FrameInput::default());
-        stars.push(game.render_dx_frame(&bundle, Mario).unwrap());
+        stars.push(game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap());
     }
     assert_ne!(stars[0], stars[1]);
     // Luigi's forms differ from Mario's and from each other on the same native state.
@@ -269,7 +327,9 @@ fn audited_rom_forms_effects_and_initial_frame() {
         };
         ctx.sim.powerup = powerup;
         form.advance(FrameInput::default());
-        let color = form.render_dx_frame(&bundle, Character::Luigi).unwrap();
+        let color = form
+            .render_dx_frame(&bundle, Character::Luigi, (160, 144))
+            .unwrap();
         assert_ne!(color, frames[powerup as usize]);
         luigi_frames.push(color);
     }
@@ -304,7 +364,7 @@ fn audited_rom_draws_every_level_and_leaves_arenas_native() {
                 break;
             }
             for character in [Mario, Luigi] {
-                let frame = game.render_dx_frame(&bundle, character);
+                let frame = game.render_dx_frame(&bundle, character, (160, 144));
                 let frame = frame.unwrap_or_else(|e| panic!("level {level} tick {tick}: {e}"));
                 assert!(frame.iter().any(|p| p[0] != p[1] || p[1] != p[2]));
             }
@@ -350,7 +410,10 @@ fn audited_rom_title_and_file_select_match_their_pyboy_frames() {
     let bundle = audited();
     let mut game = session();
     game.enter_title();
-    let title = game.render_dx_frame(&bundle, Mario).unwrap().concat();
+    let title = game
+        .render_dx_frame(&bundle, Mario, (160, 144))
+        .unwrap()
+        .concat();
     assert_eq!(
         sml2_dx::sha256(&title),
         "877cefb301d5aabf14414f03f20e5ef3f39e1e5e55ceb8dfc0ade1f41dd1e1c7"
@@ -359,7 +422,10 @@ fn audited_rom_title_and_file_select_match_their_pyboy_frames() {
     for _ in 0..60 {
         game.advance(FrameInput::default());
     }
-    let file_select = game.render_dx_frame(&bundle, Mario).unwrap().concat();
+    let file_select = game
+        .render_dx_frame(&bundle, Mario, (160, 144))
+        .unwrap()
+        .concat();
     assert_eq!(
         sml2_dx::sha256(&file_select),
         "b34891637e549b91cf3d56ed65bb2fd7c79f725814a3824453a57bbb35ae6232"
@@ -388,7 +454,9 @@ fn audited_rom_draws_the_hub_and_zone_screens() {
         game.advance(FrameInput::default());
         assert!(game.dx_supported(), "screen {screen}");
         for character in [Mario, Luigi] {
-            let frame = game.render_dx_frame(&bundle, character).unwrap();
+            let frame = game
+                .render_dx_frame(&bundle, character, (160, 144))
+                .unwrap();
             let colors: std::collections::BTreeSet<_> = frame.iter().collect();
             assert!(colors.len() > 8, "screen {screen} has its palettes");
         }

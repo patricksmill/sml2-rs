@@ -165,8 +165,14 @@ fn real_rom_import_restart_and_dx_mode_preserve_saves_and_cancelled_installation
     game.session.advance(Default::default());
     assert!(game.session.dx_supported());
     let (_, dx) = dx_import::presentation(Ok((restored_key, bundle))).unwrap();
-    let mario = game.session.render_dx_frame(&dx, Character::Mario).unwrap();
-    let luigi = game.session.render_dx_frame(&dx, Character::Luigi).unwrap();
+    let mario = game
+        .session
+        .render_dx_frame(&dx, Character::Mario, (160, 144))
+        .unwrap();
+    let luigi = game
+        .session
+        .render_dx_frame(&dx, Character::Luigi, (160, 144))
+        .unwrap();
     assert_eq!(mario.len(), 160 * 144);
     assert_ne!(mario, luigi);
     // DX presentation never touches progress or the save file.

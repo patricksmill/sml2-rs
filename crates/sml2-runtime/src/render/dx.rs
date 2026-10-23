@@ -50,27 +50,36 @@ impl Session {
         &self,
         dx: &Presentation,
         character: Character,
+        view: (usize, usize),
     ) -> Result<Vec<[u8; 3]>, String> {
+        use super::view::fixed_screen;
+        const BAR: [u8; 3] = [0, 0, 0];
         match &self.state {
-            SessionState::Title(_) => return screen(&dx.title, &[], None),
+            SessionState::Title(_) => {
+                let title = screen(&dx.title, &[], None)?;
+                return Ok(fixed_screen(view, BAR, |_| title));
+            }
             SessionState::FileSelectLoading(loading) => {
                 // `$19` keeps the title until its transfers turn the LCD off.
-                return if loading.lcd_disabled() {
-                    Ok(vec![[255; 3]; 160 * 144])
-                } else {
-                    screen(&dx.title, &[], None)
-                };
+                if loading.lcd_disabled() {
+                    return Ok(vec![[255; 3]; view.0 * view.1]);
+                }
+                let title = screen(&dx.title, &[], None)?;
+                return Ok(fixed_screen(view, BAR, |_| title));
             }
             SessionState::FileSelect(file_select) => {
-                return self.render_dx_file_select(file_select, dx, character)
+                let frame = self.render_dx_file_select(file_select, dx, character)?;
+                return Ok(fixed_screen(view, BAR, |_| frame));
             }
-            SessionState::Overworld(map_sim) => return self.render_dx_map(map_sim, dx, character),
+            SessionState::Overworld(map_sim) => {
+                return self.render_dx_map(map_sim, dx, character, view)
+            }
             _ => {}
         }
         let ctx = self
             .dx_level()
             .ok_or("DX presentation requires the title, file select or a level")?;
-        render(ctx, dx, character)
+        render(ctx, dx, character, view)
     }
 
     /// `$30000`'s screen with its OAM: the pipe tallies, the Easy banner, the
@@ -132,6 +141,7 @@ impl Session {
         map_sim: &sml2_core::map_sim::MapSim,
         dx: &Presentation,
         character: Character,
+        view: (usize, usize),
     ) -> Result<Vec<[u8; 3]>, String> {
         let map_sim = self.shown_map(map_sim);
         let colors = dx
@@ -139,19 +149,6 @@ impl Session {
             .screens
             .get(usize::from(map_sim.screen_id))
             .ok_or("DX colors only the hub and the zones")?;
-        let wave = self
-            .map_wave
-            .as_ref()
-            .and_then(|live| sml2_core::map::MapWave::follow(dx.map.tiles.screen_raw(0), live));
-        let assets = crate::render::session::MapAssets {
-            tilemaps: &dx.map.tilemaps,
-            manifest: &dx.map.manifest,
-            tiles: &dx.map.tiles,
-            zone_animation_tiles: &dx.map.zone_animation_tiles,
-            wave,
-            sprites: Some(&dx.map.sprites),
-        };
-        let frame = self.overworld_frame(map_sim, assets, (160, 144));
         // `$26:$77F1`: the hub's eastern half has its own background set.
         let bg_palettes = match &colors.alternate_bg_palettes {
             Some(east) if map_sim.cam_x >= 0xE7 => east,
@@ -170,63 +167,96 @@ impl Session {
         // `$3F203` strip, which DX draws in color 3 (black in every hub set);
         // a zone's are past its 18 rows.
         let blank = IndexedPixel::new(if map_sim.screen_id == 0 { 3 } else { 0 }, 0).unwrap();
-        let mut background = Vec::with_capacity(160 * 144);
-        for sample in &frame.composition.bg {
-            let pixel = match sample {
-                Some(s) => {
-                    let attr = match attributes {
-                        Some(map) => {
-                            let (x, y) = (usize::from(s.cell.0), usize::from(s.cell.1));
-                            map.get(y * 32 + x).copied().unwrap_or(0)
-                        }
-                        None => dx.map.hub_attributes[usize::from(s.tile_byte)],
-                    };
-                    let color = frame
-                        .vram
-                        .get(s.tile)
-                        .map_or(0, |t| t[usize::from(s.pixel)]);
-                    BackgroundPixel {
-                        index: IndexedPixel::new(color, attr & 7).map_err(|e| e.to_string())?,
-                        priority: attr & 0x80 != 0,
-                    }
-                }
-                None => BackgroundPixel {
-                    index: blank,
-                    priority: false,
-                },
+        self.overworld_view(map_sim, view, [0, 0, 0], |sim, size| {
+            let wave = self
+                .map_wave
+                .as_ref()
+                .and_then(|live| sml2_core::map::MapWave::follow(dx.map.tiles.screen_raw(0), live));
+            let assets = crate::render::session::MapAssets {
+                tilemaps: &dx.map.tilemaps,
+                manifest: &dx.map.manifest,
+                tiles: &dx.map.tiles,
+                zone_animation_tiles: &dx.map.zone_animation_tiles,
+                wave,
+                sprites: Some(&dx.map.sprites),
             };
-            background.push(pixel);
-        }
-        // `draw_map_objects`: smaller X wins, then the earlier entry.
-        let mut objects = vec![None; 160 * 144];
-        let mut order: Vec<_> = frame.composition.oam.iter().enumerate().collect();
-        order.sort_by_key(|&(i, &(_, x, _, _))| (x, i));
-        for (_, &(oy, ox, tile, attr)) in order {
-            let Some(data) = frame.vram.get(usize::from(tile)) else {
-                continue;
-            };
-            for dy in 0..8i32 {
-                for dx in 0..8i32 {
-                    let (x, y) = (i32::from(ox) - 8 + dx, i32::from(oy) - 16 + dy);
-                    if !(0..160).contains(&x) || !(0..144).contains(&y) {
-                        continue;
+            let frame = self.overworld_frame(sim, assets, size);
+            dx_map_pixels(
+                &frame,
+                size,
+                attributes,
+                &dx.map.hub_attributes,
+                blank,
+                &palettes,
+            )
+        })
+    }
+}
+
+fn dx_map_pixels(
+    frame: &crate::render::session::OverworldFrame,
+    (w, h): (usize, usize),
+    attributes: Option<&Vec<u8>>,
+    hub_attributes: &[u8],
+    blank: IndexedPixel,
+    palettes: &CgbPalettes,
+) -> Result<Vec<[u8; 3]>, String> {
+    let mut background = Vec::with_capacity(w * h);
+    for sample in &frame.composition.bg {
+        let pixel = match sample {
+            Some(s) => {
+                let attr = match attributes {
+                    Some(map) => {
+                        let (x, y) = (usize::from(s.cell.0), usize::from(s.cell.1));
+                        map.get(y * 32 + x).copied().unwrap_or(0)
                     }
-                    let sx = if attr & 0x20 != 0 { 7 - dx } else { dx };
-                    let sy = if attr & 0x40 != 0 { 7 - dy } else { dy };
-                    let color = data[(sy * 8 + sx) as usize];
-                    let target = &mut objects[y as usize * 160 + x as usize];
-                    if color == 0 || target.is_some() {
-                        continue;
-                    }
-                    *target = Some(ObjectPixel {
-                        index: IndexedPixel::new(color, attr & 7).map_err(|e| e.to_string())?,
-                        behind_background: attr & 0x80 != 0,
-                    });
+                    None => hub_attributes[usize::from(s.tile_byte)],
+                };
+                let color = frame
+                    .vram
+                    .get(s.tile)
+                    .map_or(0, |t| t[usize::from(s.pixel)]);
+                BackgroundPixel {
+                    index: IndexedPixel::new(color, attr & 7).map_err(|e| e.to_string())?,
+                    priority: attr & 0x80 != 0,
                 }
             }
-        }
-        cgb::compose_frame(&background, &objects, true, &palettes).map_err(|e| e.to_string())
+            None => BackgroundPixel {
+                index: blank,
+                priority: false,
+            },
+        };
+        background.push(pixel);
     }
+    // `draw_map_objects`: smaller X wins, then the earlier entry.
+    let mut objects = vec![None; w * h];
+    let mut order: Vec<_> = frame.composition.oam.iter().enumerate().collect();
+    order.sort_by_key(|&(i, &(_, x, _, _))| (x, i));
+    for (_, &(oy, ox, tile, attr)) in order {
+        let Some(data) = frame.vram.get(usize::from(tile)) else {
+            continue;
+        };
+        for dy in 0..8i32 {
+            for dx in 0..8i32 {
+                let (x, y) = (i32::from(ox) - 8 + dx, i32::from(oy) - 16 + dy);
+                if !(0..w as i32).contains(&x) || !(0..h as i32).contains(&y) {
+                    continue;
+                }
+                let sx = if attr & 0x20 != 0 { 7 - dx } else { dx };
+                let sy = if attr & 0x40 != 0 { 7 - dy } else { dy };
+                let color = data[(sy * 8 + sx) as usize];
+                let target = &mut objects[y as usize * w + x as usize];
+                if color == 0 || target.is_some() {
+                    continue;
+                }
+                *target = Some(ObjectPixel {
+                    index: IndexedPixel::new(color, attr & 7).map_err(|e| e.to_string())?,
+                    behind_background: attr & 0x80 != 0,
+                });
+            }
+        }
+    }
+    cgb::compose_frame(&background, &objects, true, palettes).map_err(|e| e.to_string())
 }
 
 /// A front-end screen at scroll 0 with OAM cells in priority order. The
@@ -264,7 +294,7 @@ fn screen(
         }
     }
     let mut objects = vec![None; 160 * 144];
-    draw_cells(&mut objects, banks, cells.to_vec(), 0)?;
+    draw_cells(&mut objects, (160, 144), banks, cells.to_vec(), 0, (0, 0))?;
     cgb::compose_frame(&background, &objects, true, &palettes).map_err(|e| e.to_string())
 }
 
@@ -426,7 +456,11 @@ fn render(
     ctx: &LevelContext,
     dx: &Presentation,
     character: Character,
+    view: (usize, usize),
 ) -> Result<Vec<[u8; 3]>, String> {
+    let (vw, vh) = view;
+    let (mx, my) = super::view::margin(view);
+    let resized = view != super::view::NATIVE;
     let level_id = ctx.manifest.level_id;
     let level = dx
         .level(level_id)
@@ -458,21 +492,22 @@ fn render(
             index: IndexedPixel::new(0, 0).unwrap(),
             priority: false,
         };
-        160 * 144
+        vw * vh
     ];
-    let sx = ctx.cam.x as i32 - 80;
-    let sy = ctx.cam.y as i32 - 72 - ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
+    let sx = ctx.cam.x as i32 - vw as i32 / 2;
+    let sy = ctx.cam.y as i32 - vh as i32 / 2 - ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
     let world_w = (LAYOUT_WIDTH * 16) as i32;
     let world_h = (LAYOUT_HEIGHT * 16) as i32;
+    let (span_x, span_y) = (super::view::window_span(vw), super::view::window_span(vh));
     let (ox, oy) = (
-        window_origin(sx, world_w, 256),
-        window_origin(sy, world_h, 256),
+        window_origin(sx, world_w, span_x),
+        window_origin(sy, world_h, span_y),
     );
-    for py in 0..144 {
-        for px in 0..160 {
+    for py in 0..vh {
+        for px in 0..vw {
             let (mut wx, mut wy) = (
-                window_coord(sx + px as i32, ox, 256),
-                window_coord(sy + py as i32, oy, 256),
+                window_coord(sx + px as i32, ox, span_x),
+                window_coord(sy + py as i32, oy, span_y),
             );
             if let Some(pipe) = ctx.spr.as_ref().and_then(|s| s.pipe_background) {
                 let (x, y) = pipe.sample(sx + px as i32, sy + py as i32);
@@ -482,8 +517,8 @@ fn render(
                 } else {
                     (sx, sy)
                 };
-                wx = window_coord(x, window_origin(vx, world_w, 256), 256);
-                wy = window_coord(y, window_origin(vy, world_h, 256), 256);
+                wx = window_coord(x, window_origin(vx, world_w, span_x), span_x);
+                wy = window_coord(y, window_origin(vy, world_h, span_y), span_y);
             }
             let (cx, cy) = (wx as usize / 16, wy as usize / 16);
             let (tx, ty) = (wx as usize & 15, wy as usize & 15);
@@ -507,7 +542,7 @@ fn render(
                 metatile.tiles[(ty / 8) * 2 + tx / 8]
             };
             let attr = CgbAttributes::from_byte(level.tile_attributes[tile as usize]);
-            background[py * 160 + px] = BackgroundPixel {
+            background[py * vw + px] = BackgroundPixel {
                 index: cgb::sample_tile(
                     banks,
                     0x800 + video::bg_tile_offset(tile),
@@ -536,14 +571,18 @@ fn render(
         },
     );
     for dy in 0..8 {
-        let py = ctx.hud_y as usize + dy;
-        if py >= 144 {
+        let py = ctx.hud_y as i32 + vh as i32 - 144 + dy;
+        if !(0..vh as i32).contains(&py) {
             continue;
         }
         for (col, &tile) in row.iter().take(20).enumerate() {
             let attr = CgbAttributes::from_byte(level.hud_attributes[col]);
             for dx in 0..8 {
-                background[py * 160 + col * 8 + dx] = BackgroundPixel {
+                let x = mx + (col * 8 + dx) as i32;
+                if !(0..vw as i32).contains(&x) {
+                    continue;
+                }
+                background[py as usize * vw + x as usize] = BackgroundPixel {
                     index: cgb::sample_tile(
                         banks,
                         0x800 + video::bg_tile_offset(tile),
@@ -557,27 +596,43 @@ fn render(
             }
         }
     }
-    let mut objects = vec![None; 160 * 144];
+    let mut objects = vec![None; vw * vh];
     if let Some(s) = &ctx.spr {
         let mut tables = s.tables.clone();
         tables.player_mappings = player.mappings.clone();
         // `mapping_for` picks mode A or B by level; both hold this level's table.
         tables.sprite_mappings_a = dx.objects(level).to_vec();
         tables.sprite_mappings_b = tables.sprite_mappings_a.clone();
+        // `draw_cells` wraps screen positions in 8 bits like OAM. A native view
+        // keeps that wrap; a resized one draws each sprite with the camera on
+        // its own anchor and adds the true offset.
+        let (cam_x, cam_y) = (ctx.cam.x, ctx.cam.y);
+        let place = |x: u16, y: u16| -> ((u16, u16), (i32, i32)) {
+            if resized {
+                (
+                    (x, y),
+                    (x as i32 - cam_x as i32 + mx, y as i32 - cam_y as i32 + my),
+                )
+            } else {
+                ((cam_x, cam_y), (0, 0))
+            }
+        };
         // Fireballs are staged by $0F71 before Mario's $2D0A draw.
         for &(x, y, frame) in &s.fireballs {
-            let cells = player::draw_cells(&tables, frame, x, y, ctx.cam.x, ctx.cam.y, false)
+            let ((ax, ay), offset) = place(x, y);
+            let cells = player::draw_cells(&tables, frame, x, y, ax, ay, false)
                 .ok_or_else(|| format!("missing DX fireball frame {frame}"))?;
-            draw_cells(&mut objects, banks, cells, 0)?;
+            draw_cells(&mut objects, view, banks, cells, 0, offset)?;
         }
         if let Some((x, y, frame)) = s.player {
+            let ((ax, ay), offset) = place(x, y);
             let mut cells = player::draw_cells_styled(
                 &tables,
                 frame,
                 x,
                 y,
-                ctx.cam.x,
-                ctx.cam.y,
+                ax,
+                ay,
                 CellStyle {
                     force_palette_one: false,
                     behind_background: false,
@@ -592,27 +647,30 @@ fn render(
                     cell.attr |= 0x80;
                 }
             }
-            draw_cells(&mut objects, banks, cells, s.player_pan)?;
+            draw_cells(&mut objects, view, banks, cells, s.player_pan, offset)?;
         }
         if let Some((x, y, frame)) = s.player_shield {
-            if let Some(cells) =
-                player::draw_cells(&tables, frame, x, y, ctx.cam.x, ctx.cam.y, false)
-            {
-                draw_cells(&mut objects, banks, cells, s.player_pan)?;
+            let ((ax, ay), offset) = place(x, y);
+            if let Some(cells) = player::draw_cells(&tables, frame, x, y, ax, ay, false) {
+                draw_cells(&mut objects, view, banks, cells, s.player_pan, offset)?;
             }
         }
         if let (Some((x, y, _)), Some((timer, chain))) = (s.player, s.streak_counter) {
+            let ((ax, ay), offset) = place(x, y);
             draw_cells(
                 &mut objects,
+                view,
                 banks,
-                player::draw_streak_counter(&tables, timer, chain, x, y, ctx.cam.x, ctx.cam.y),
+                player::draw_streak_counter(&tables, timer, chain, x, y, ax, ay),
                 s.player_pan,
+                offset,
             )?;
         }
         for &(x, y, frame) in &s.bumpers {
-            let cells = player::draw_cells(&tables, frame, x, y, ctx.cam.x, ctx.cam.y, false)
+            let ((ax, ay), offset) = place(x, y);
+            let cells = player::draw_cells(&tables, frame, x, y, ax, ay, false)
                 .ok_or_else(|| format!("missing DX bump frame {frame}"))?;
-            draw_cells(&mut objects, banks, cells, 0)?;
+            draw_cells(&mut objects, view, banks, cells, 0, offset)?;
         }
         for inst in &s.insts {
             let mapping = tables
@@ -631,6 +689,7 @@ fn render(
                 };
                 blit(
                     &mut objects,
+                    view,
                     banks,
                     inst.x as i32 - sx + x as i32,
                     inst.y as i32 - sy + y as i32,
@@ -641,23 +700,26 @@ fn render(
         }
     }
     if ctx.scene_reload_blank {
-        return Ok(vec![[255; 3]; 160 * 144]);
+        return Ok(vec![[255; 3]; vw * vh]);
     }
     cgb::compose_frame(&background, &objects, true, &palettes).map_err(|e| e.to_string())
 }
 
 fn draw_cells(
     objects: &mut [Option<ObjectPixel>],
+    size: (usize, usize),
     banks: [&[u8]; 2],
     cells: Vec<Cell>,
     pan: u8,
+    offset: (i32, i32),
 ) -> Result<(), String> {
     for cell in cells {
         blit(
             objects,
+            size,
             banks,
-            cell.x as i32 - 8,
-            cell.y.wrapping_sub(pan) as i32 - 16,
+            cell.x as i32 - 8 + offset.0,
+            cell.y.wrapping_sub(pan) as i32 - 16 + offset.1,
             cell.tile,
             cell.attr,
         )?;
@@ -667,23 +729,24 @@ fn draw_cells(
 
 fn blit(
     objects: &mut [Option<ObjectPixel>],
+    (w, h): (usize, usize),
     banks: [&[u8]; 2],
     x: i32,
     y: i32,
     tile: u8,
     attr: u8,
 ) -> Result<(), String> {
-    if x <= -8 || x >= 160 || y <= -8 || y >= 144 {
+    if x <= -8 || x >= w as i32 || y <= -8 || y >= h as i32 {
         return Ok(());
     }
     let attr = CgbAttributes::from_byte(attr);
     for dy in 0..8 {
         for dx in 0..8 {
             let (px, py) = (x + dx, y + dy);
-            if !(0..160).contains(&px) || !(0..144).contains(&py) {
+            if !(0..w as i32).contains(&px) || !(0..h as i32).contains(&py) {
                 continue;
             }
-            let target = &mut objects[py as usize * 160 + px as usize];
+            let target = &mut objects[py as usize * w + px as usize];
             if target.is_some() {
                 continue;
             }
@@ -716,8 +779,8 @@ mod tests {
         let mut bank1 = [0; 32];
         bank1[..16].copy_from_slice(&[0x80, 0].repeat(8));
         let mut objects = vec![None; 160 * 144];
-        blit(&mut objects, [&bank0, &bank1], 0, 0, 0, 0x8c).unwrap();
-        blit(&mut objects, [&bank0, &bank1], 0, 0, 0, 0x0e).unwrap();
+        blit(&mut objects, (160, 144), [&bank0, &bank1], 0, 0, 0, 0x8c).unwrap();
+        blit(&mut objects, (160, 144), [&bank0, &bank1], 0, 0, 0, 0x0e).unwrap();
         assert_eq!(
             objects[0],
             Some(ObjectPixel {

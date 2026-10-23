@@ -362,7 +362,10 @@ impl DesktopApp {
             .as_ref()
             .filter(|_| self.settings.dx_mode && game.session.dx_supported());
         if let Some(dx) = dx {
-            match game.session.render_dx_frame(dx, self.settings.character) {
+            match game
+                .session
+                .render_dx_frame(dx, self.settings.character, (160, 144))
+            {
                 Ok(pixels) => {
                     return Some(ColorImage::new(
                         [160, 144],
