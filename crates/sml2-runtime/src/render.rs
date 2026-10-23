@@ -82,7 +82,8 @@ pub(crate) fn window_coord(v: i32, origin: i32, span: i32) -> i32 {
 
 /// Render a `vw`x`vh` view centred on the camera as an 8-bit grey frame. The
 /// native 160x144 rect stays pixel-exact inside it; `hud` draws the
-/// status-bar row at its native position (window Y within the rect).
+/// status-bar row in the native rect at 160x144 and bottom-centred in larger
+/// views.
 ///
 /// `overlay` is the sim's sparse level-map rewrite list (`layout_writes`: keys
 /// `row * 256 + col`, the engine's `$B000` addressing). The engine edits the
@@ -157,7 +158,8 @@ pub fn render_view_output(
     let world_w = (LAYOUT_WIDTH * 16) as i32;
     let world_h = (LAYOUT_HEIGHT * 16) as i32;
     // The engine never clamps the view to the level: it leaves the camera where it is and
-    // slides a 256-px tilemap window under it, so with the camera near an edge the view
+    // slides a 256-px tilemap window under it (an enlarged view widens the window to the
+    // view, `view::window_span`), so with the camera near an edge the view
     // runs past the level and shows the window's rows again. Clamping the view here (which
     // this used to do) instead shifted the whole background against Mario's OAM — on level
     // 5, whose start camera sits at the bottom of a 768-px world (cam_y 704, so the view

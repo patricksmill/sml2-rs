@@ -1,4 +1,5 @@
-//! Read-only session presentation; view dimensions never enter simulation state.
+//! Read-only session presentation: rendering never writes simulation state
+//! (the session's view feeds only the live level's spawn margin).
 
 use super::render_view_output;
 use super::view;

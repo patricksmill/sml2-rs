@@ -125,7 +125,7 @@ satisfied by keeping the seams below intact — do not bake these away:
   rect; in any larger view it is bottom-centred (the desktop's Widescreen and
   Camera zoom mods). With the status bar excluded, the centre 160×144 slice of
   a larger level frame is pixel-identical to the native frame — re-assert
-  `tests/widescreen.rs` after any renderer change.
+  `crates/sml2-runtime/src/tests/widescreen.rs` after any renderer change.
 - **Window mode: integer scale + letterbox.** The window is resizable; each
   frame picks `s = min(win_w/W, win_h/H) >= 1` and letterboxes. Never blend or
   non-integer-stretch by default (a filtered mode can be a user option later).
