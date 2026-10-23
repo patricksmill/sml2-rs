@@ -25,6 +25,8 @@ fn synthetic_bundle() -> Presentation {
         hud_attributes: vec![0; 20],
         theme: 0,
         object_table: 0,
+        metatiles: sml2_core::level::MetatileTable::from_bytes(&[0; 512]).unwrap(),
+        layout: vec![0; 0x3000],
     };
     let player = PlayerGraphics {
         normal: vec![0; 0x800],

@@ -3,11 +3,12 @@
 //! "All levels".
 
 use crate::{
-    bundle::{Bundle, LEVELS},
+    bundle::{Bundle, HEADER_LEN, LEVELS},
     ImportError,
 };
 use sml2_core::{
     character::Character,
+    level::{MetatileTable, LAYOUT_SIZE},
     object::{sprite_map_index, MappingEntry},
     video::cgb::CgbPalettes,
 };
@@ -30,6 +31,10 @@ pub struct LevelGraphics {
     pub theme: u8,
     /// Index into [`Presentation::object_tables`].
     pub object_table: usize,
+    /// DX's `Level_TileMap` for the level: which tiles build each metatile.
+    pub metatiles: MetatileTable,
+    /// DX's decompressed layout, `$B000`-addressed like the native one.
+    pub layout: Vec<u8>,
 }
 
 /// One character and theme: `$8000` graphics for the normal and Fire forms,
@@ -69,6 +74,7 @@ const ATTRIBUTE_BANK: u8 = 0x21;
 const LEVEL_BANK: u8 = 0x24;
 const PALETTE_BANK: u8 = 0x26;
 const ANIMATION_BANK: u8 = 0x1D;
+const METATILE_BANK: u8 = 0x08;
 
 impl Presentation {
     pub fn new(bundle: &Bundle) -> Result<Self, ImportError> {
@@ -217,6 +223,14 @@ fn level_graphics(bundle: &Bundle, level: u8) -> Result<LevelGraphics, ImportErr
         .to_vec();
     CgbPalettes::from_bytes(&bg_palettes, &obj_palettes)
         .map_err(|e| ImportError::InvalidBundle(format!("level {level} palettes: {e}")))?;
+    let header = &bundle.level_headers[index * HEADER_LEN..][..HEADER_LEN];
+    let metatiles = MetatileTable::from_bytes(bundle.banked(
+        METATILE_BANK,
+        u16::from_le_bytes([header[0x0B], header[0x0C]]),
+        0x200,
+    )?)
+    .map_err(ImportError::InvalidBundle)?;
+    let layout = layout(bundle, header[0x0D], header[0x12] & 0x0F)?;
     let hud = bundle.banked(LEVEL_BANK, 0x6000 + u16::from(level) * 2, 2)?;
     let hud = u16::from_le_bytes([hud[0], hud[1]]);
     Ok(LevelGraphics {
@@ -230,7 +244,36 @@ fn level_graphics(bundle: &Bundle, level: u8) -> Result<LevelGraphics, ImportErr
         // `$0669`: config nibbles 0 and 1 keep the normal theme; others set `$10`.
         theme: u8::from(!matches!(config & 0x0F, 0 | 1)),
         object_table: 0,
+        metatiles,
+        layout,
     })
+}
+
+/// `$0361`: the layout `$42F0[index]` names in `bank`, run-length decoded
+/// (`$0386`) to `$3000` bytes. A run byte has bit 7 set and is followed by a
+/// count (0 = 256) of extra copies.
+fn layout(bundle: &Bundle, bank: u8, index: u8) -> Result<Vec<u8>, ImportError> {
+    let at = bundle.banked(bank, 0x42F0 + u16::from(index) * 2, 2)?;
+    let mut address = u16::from_le_bytes([at[0], at[1]]);
+    let mut next = || -> Result<u8, ImportError> {
+        let byte = bundle.banked(bank, address, 1)?[0];
+        address = address.wrapping_add(1);
+        Ok(byte)
+    };
+    let mut out = Vec::with_capacity(LAYOUT_SIZE);
+    while out.len() < LAYOUT_SIZE {
+        let byte = next()?;
+        out.push(byte & 0x7F);
+        if byte & 0x80 != 0 {
+            let count = match next()? {
+                0 => 256,
+                n => usize::from(n),
+            };
+            let room = LAYOUT_SIZE - out.len();
+            out.extend(std::iter::repeat_n(byte & 0x7F, count.min(room)));
+        }
+    }
+    Ok(out)
 }
 
 /// A table of little-endian pointers inside `bank`, each to `[y, x, tile,

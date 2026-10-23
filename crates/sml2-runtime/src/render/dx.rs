@@ -175,6 +175,20 @@ fn live_background(ctx: &LevelContext, dx: &Presentation, level: &LevelGraphics)
     out
 }
 
+/// The metatile DX draws for an unrewritten cell. DX re-laid out many levels,
+/// mostly decoration; its cell is drawn where it keeps the native cell's
+/// collision class, and the native cell elsewhere, so the picture never shows
+/// ground the native physics lacks. Coin and block rewrites are native state.
+fn dx_cell(ctx: &LevelContext, level: &LevelGraphics, cx: usize, cy: usize) -> Option<u8> {
+    let native = ctx.layout_live.get(cx, cy)?;
+    let classes = &ctx.manifest.metatile_classes;
+    let class = |id: u8| classes.get(usize::from(id));
+    match level.layout.get(cy * LAYOUT_WIDTH + cx) {
+        Some(&dx) if class(dx).is_some() && class(dx) == class(native) => Some(dx),
+        _ => Some(native),
+    }
+}
+
 fn pause_palettes(bytes: &[u8], bright_phase: bool) -> Vec<u8> {
     let subtract = if bright_phase { [18, 8, 4] } else { [8, 4, 4] };
     bytes
@@ -259,11 +273,10 @@ fn render(
                 .iter()
                 .find(|(k, _)| *k == key)
                 .map(|(_, v)| *v);
-            let Some(id) = rewritten.or_else(|| ctx.layout_live.get(cx, cy)) else {
+            let Some(id) = rewritten.or_else(|| dx_cell(ctx, level, cx, cy)) else {
                 continue;
             };
-            let metatile = ctx
-                .manifest
+            let metatile = level
                 .metatiles
                 .get(id)
                 .ok_or_else(|| format!("invalid DX metatile {id}"))?;

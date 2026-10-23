@@ -10,14 +10,15 @@ use std::collections::BTreeMap;
 mod bundle_tests;
 
 /// Banks the presentation reads. `$06`, `$07` and `$1B`-`$1F` hold the base
-/// game's level, arena, transfer and animation graphics, which DX patches in
-/// place; the rest are DX additions: `$20` common HUD tiles, `$21` tile
-/// attributes, `$23`/`$28`/`$3A` object mappings, `$24` VRAM1 graphics and
-/// HUD tables, `$26` palettes, `$2A`/`$2B` Mario/Luigi graphics and
-/// `$2C`/`$2D` their mappings.
-pub const BANKS: [u8; 18] = [
-    0x06, 0x07, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x23, 0x24, 0x26, 0x28, 0x2A, 0x2B, 0x2C,
-    0x2D, 0x3A,
+/// game's level, arena, transfer and animation graphics, `$08` its metatile
+/// tables and `$09`-`$0B`, `$12`-`$15` and `$17` its level layouts, all of
+/// which DX edits in place; the rest are DX additions: `$20` common HUD
+/// tiles, `$21` tile attributes, `$23`/`$28`/`$3A` object mappings, `$24`
+/// VRAM1 graphics and HUD tables, `$26` palettes, `$2A`/`$2B` Mario/Luigi
+/// graphics and `$2C`/`$2D` their mappings.
+pub const BANKS: [u8; 27] = [
+    0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x12, 0x13, 0x14, 0x15, 0x17, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
+    0x20, 0x21, 0x23, 0x24, 0x26, 0x28, 0x2A, 0x2B, 0x2C, 0x2D, 0x3A,
 ];
 pub const BANK_LEN: usize = 0x4000;
 pub const LEVELS: usize = 32;
@@ -28,6 +29,11 @@ const LEVEL_CONFIG: usize = 0x360A;
 const ENEMY_SETS: usize = 0x362A;
 const TILE_SETS: usize = 0x36AA;
 const EXTRA_POINTERS: usize = 0x0763;
+/// Bank 1 `Level_Header_Pointers`: each level's 20-byte header, which
+/// `$5579` copies to `$A800` (metatile table pointer `+$0B`, layout bank
+/// `+$0D`, layout index `+$12`).
+const HEADER_POINTERS: usize = 0x55CB;
+pub const HEADER_LEN: usize = 20;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -41,6 +47,8 @@ pub struct Bundle {
     pub tile_sets: Vec<u8>,
     /// `$0763`: four bank-7 pointers for the `$8E80` block.
     pub extra_pointers: Vec<u8>,
+    /// Every level's header, in level order.
+    pub level_headers: Vec<u8>,
     #[serde(with = "hex_banks")]
     pub banks: BTreeMap<u8, Vec<u8>>,
 }
@@ -66,6 +74,7 @@ impl Bundle {
             ("enemy sets", &self.enemy_sets, LEVELS * 4),
             ("tile sets", &self.tile_sets, LEVELS * 4),
             ("extra pointers", &self.extra_pointers, 8),
+            ("level headers", &self.level_headers, LEVELS * HEADER_LEN),
         ] {
             if data.len() != length {
                 return bad(format!("{label} needs {length} bytes, got {}", data.len()));
@@ -120,6 +129,13 @@ pub fn extract(bytes: &[u8]) -> Result<Bundle, ImportError> {
         enemy_sets: rom.read(ENEMY_SETS, LEVELS * 4)?.to_vec(),
         tile_sets: rom.read(TILE_SETS, LEVELS * 4)?.to_vec(),
         extra_pointers: rom.read(EXTRA_POINTERS, 8)?.to_vec(),
+        level_headers: (0..LEVELS)
+            .map(|level| {
+                let pointer = rom.word(HEADER_POINTERS + level * 2)?;
+                rom.banked(1, pointer, HEADER_LEN)
+            })
+            .collect::<Result<Vec<_>, ImportError>>()?
+            .concat(),
         banks: BANKS
             .iter()
             .map(|&bank| Ok((bank, rom.banked(bank, 0x4000, BANK_LEN)?.to_vec())))

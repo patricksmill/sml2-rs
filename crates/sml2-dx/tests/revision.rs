@@ -215,6 +215,23 @@ fn every_level_derives_from_the_dx_loader_tables() {
         assert_eq!(level.obj_palettes, rom(0x26, 0x5000 + id * 0x40, 0x40));
         assert_eq!(level.tile_attributes, rom(0x21, 0x4000 + id * 0x100, 0x100));
         assert_eq!(level.theme, u8::from(config & 0x0f == 5), "level {id}");
+        // `Level_Header_Pointers` -> the header's metatile table in bank 8.
+        let header = usize::from(u16::from_le_bytes([
+            bytes[0x55cb + id * 2],
+            bytes[0x55cc + id * 2],
+        ]));
+        let table = usize::from(u16::from_le_bytes([
+            bytes[header + 0x0b],
+            bytes[header + 0x0c],
+        ]));
+        let metatiles: Vec<u8> = level
+            .metatiles
+            .metatiles
+            .iter()
+            .flat_map(|m| m.tiles)
+            .collect();
+        assert_eq!(metatiles, rom(8, table, 0x200), "level {id} metatiles");
+        assert_eq!(level.layout.len(), 0x3000);
         let objects = presentation.objects(level).len();
         assert_eq!(objects, if id >= 0x0a { 228 } else { 168 });
     }

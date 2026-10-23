@@ -254,6 +254,15 @@ The character table `$24:$7D00` is all `$FF`: no level forces a character.
 `$4A00` to VRAM1 `$8000`. `$2C:$5D62` and `$2D:$5E16` read mappings from `$4000`,
 or `$6000` under theme `$10`.
 
+DX also rewrote 21 levels' `Level_TileMap` metatile tables (bank 8, at the
+header's `+$0B` pointer) and 15 levels' compressed layouts (`$42F0[+$12]` in the
+header's `+$0D` bank). Schema 4 carries both. A PyBoy capture of level `$01`
+matched every streamed BG map cell against DX's layout and metatiles, against
+608 of 1,024 for the base layout. Most layout edits are decoration; levels `$01`,
+`$06`, `$0D`, `$0E`, `$11` and `$1B` also move solid cells (768 in `$06`). DX
+gameplay is not ported, so the renderer draws DX's cell only where it keeps the
+native cell's collision class, and the native cell otherwise.
+
 Mid-level copies keep their base addresses: `$25AF`'s tables `$268B`/`$2699`,
 the bank-7 `$7800` block and `$216C`'s transfer code are byte-identical, so the
 renderer finds the native source of every rewritten tile and reads the same

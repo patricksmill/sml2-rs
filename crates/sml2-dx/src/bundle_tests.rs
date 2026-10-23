@@ -26,8 +26,15 @@ fn fixture() -> Bundle {
         enemy_sets: [0x06, 0, 0x00, 0x58].repeat(LEVELS),
         tile_sets: [0x07, 0, 0x00, 0x40].repeat(LEVELS),
         extra_pointers: vec![0x00, 0x6A, 0x80, 0x6D, 0x00, 0x71, 0x80, 0x74],
+        // Metatiles at `$08:$4000`, layout 0 of bank `$09`.
+        level_headers: [&[0; 11][..], &[0x00, 0x40, 0x09], &[0; 4], &[0x00, 0]]
+            .concat()
+            .repeat(LEVELS),
         banks: BANKS.iter().map(|&b| (b, vec![0; BANK_LEN])).collect(),
     };
+    // `$42F0[0]` -> `$5000`: runs of metatile 0, 257 bytes each.
+    put(&mut bundle, 0x09, 0x42F0, &0x5000u16.to_le_bytes());
+    put(&mut bundle, 0x09, 0x5000, &[0x80, 0x00].repeat(48));
     for bank in [0x23, 0x28, 0x3A, 0x2C, 0x2D] {
         put(&mut bundle, bank, EMPTY, &[0x80]);
     }
@@ -81,6 +88,7 @@ fn old_schemas_other_sources_and_unknown_fields_are_rejected() {
         "enemy_sets",
         "tile_sets",
         "extra_pointers",
+        "level_headers",
         "banks",
     ] {
         let mut bad = value.clone();
@@ -92,6 +100,7 @@ fn old_schemas_other_sources_and_unknown_fields_are_rejected() {
 #[test]
 fn tables_and_banks_must_have_their_exact_shape() {
     for (field, length) in [
+        ("level_headers", LEVELS * 20),
         ("level_config", LEVELS),
         ("enemy_sets", LEVELS * 4),
         ("tile_sets", LEVELS * 4),
@@ -136,6 +145,9 @@ fn malformed_level_and_mapping_tables_are_rejected() {
     let mut bundle = fixture();
     put(&mut bundle, 0x2D, 0x6000, &0x7000u16.to_le_bytes());
     assert!(bundle.validate().is_err(), "65 cells without $80");
+    let mut bundle = fixture();
+    put(&mut bundle, 0x09, 0x42F0, &0x7FF0u16.to_le_bytes());
+    assert!(bundle.validate().is_err(), "a layout running off its bank");
 }
 
 #[test]
@@ -161,6 +173,13 @@ fn each_level_uses_its_own_tables_and_the_dx_loader_sources() {
     // Level $0D draws objects from bank $3A, mode B.
     put(&mut bundle, 0x3A, 0x7000, &[0xF8, 4, 12, 0x2B, 0x80]);
     put(&mut bundle, 0x3A, 0x4F11, &0x7000u16.to_le_bytes());
+    // Level 9's own metatile table and layout, literal and run bytes.
+    bundle.level_headers[9 * 20 + 0x0B..9 * 20 + 0x0E].copy_from_slice(&[0x00, 0x42, 0x0A]);
+    bundle.level_headers[9 * 20 + 0x12] = 0x31;
+    put(&mut bundle, 0x08, 0x4200, &[1, 2, 3, 4]);
+    put(&mut bundle, 0x0A, 0x42F2, &0x6000u16.to_le_bytes());
+    put(&mut bundle, 0x0A, 0x6000, &[0x05, 0x86, 0x02]);
+    put(&mut bundle, 0x0A, 0x6003, &[0x80, 0x00].repeat(48));
     // Luigi's alternate-theme fire graphics.
     put(&mut bundle, 0x2B, 0x6200, &[0xE8]);
 
@@ -177,6 +196,13 @@ fn each_level_uses_its_own_tables_and_the_dx_loader_sources() {
     assert_eq!(&level.obj_palettes[..2], &[0xE0, 3]);
     assert_eq!(level.hud_attributes[0], 0x8F);
     assert_eq!(level.theme, 0);
+    assert_eq!(level.metatiles.get(0).unwrap().tiles, [1, 2, 3, 4]);
+    assert_eq!(
+        &level.layout[..5],
+        &[5, 6, 6, 6, 0],
+        "a run is the byte plus its count"
+    );
+    assert_eq!(level.layout.len(), 0x3000);
     assert_eq!(
         p.level(0).unwrap().background[1][0x300],
         0,
