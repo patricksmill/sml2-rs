@@ -9,7 +9,7 @@ pub const SNAP: i32 = 8;
 /// Background pixels rendered past each view edge, so a background shifted by
 /// up to `SNAP` never exposes unrendered pixels.
 pub const BORDER: usize = SNAP as usize;
-const MAX_PIXELS: usize = 2048 * 2048;
+const MAX_PIXELS: usize = 1024 * 1024;
 
 /// How far through the current tick a frame is drawn (`alpha` in `[0, 1]`) and
 /// at how many output pixels per game pixel.
@@ -24,7 +24,7 @@ impl Smooth {
 }
 
 /// The largest divisor of `effective_scale` that keeps a `view` frame within
-/// 2048² output pixels, so the GPU still upsamples by a whole number.
+/// 1024² output pixels, so the GPU still upsamples by a whole number.
 pub fn pick_scale(view: (usize, usize), effective_scale: u32) -> usize {
     let n = effective_scale.max(1) as usize;
     (1..=n)
@@ -205,9 +205,11 @@ mod tests {
 
     #[test]
     fn scale_is_the_largest_divisor_within_the_pixel_budget() {
-        assert_eq!(pick_scale((160, 144), 3), 3);
-        assert_eq!(pick_scale((160, 144), 7), 7);
+        assert_eq!(pick_scale((160, 144), 6), 6, "960x864 fits");
+        assert_eq!(pick_scale((160, 144), 8), 4, "1280x1152 does not");
+        assert_eq!(pick_scale((160, 144), 7), 1, "a prime too large falls to 1");
         assert_eq!(pick_scale((256, 144), 15), 5);
+        assert_eq!(pick_scale((512, 288), 4), 2);
         assert_eq!(pick_scale((160, 144), 0), 1);
     }
 

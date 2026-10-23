@@ -57,7 +57,7 @@ stays byte-identical.
   the background by `s` with its offset, blits cells as `s×s` blocks at their
   offsets, and resolves BG-over-OBJ priority per output pixel.
 - `s` is the largest divisor of the window's effective integer scale such that
-  `(vw·s)·(vh·s) <= 2048·2048`. The GPU still upsamples by an integer factor.
+  `(vw·s)·(vh·s) <= 1024·1024`. The GPU still upsamples by an integer factor.
 - There is one render path: with smoothing off it runs at `s = 1` with zero
   offsets and no border, and must stay byte-identical to the pre-change
   output (existing renderer tests and the capture sweep check this).

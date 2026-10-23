@@ -15,7 +15,7 @@
 - Simulation is untouched; `bash captures/sweep.sh` must stay byte-identical.
 - Smoothing off ⇒ every renderer output byte-identical to before (all existing tests pass unchanged except the two blit unit tests rewritten in Tasks 3 and 4).
 - Snap threshold `SNAP = 8` game px per axis per tick; background border `BORDER = 8`.
-- Scale `s` = largest divisor of the window's effective integer scale with `(vw·s)·(vh·s) <= 2048·2048`.
+- Scale `s` = largest divisor of the window's effective integer scale with `(vw·s)·(vh·s) <= 1024·1024`.
 - Smoothing covers `SessionState::InLevel` and `SessionState::Demo` only; everything else renders at scale 1.
 - Setting default: Off. Commits: Conventional Commits.
 - Quick gate per task: `cargo test -p sml2-runtime` / `cargo test -p sml2-desktop` (and `cargo test -p sml2-core` once at the end).
