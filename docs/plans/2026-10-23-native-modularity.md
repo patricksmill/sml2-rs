@@ -2,8 +2,8 @@
 
 Initial source audit, 2026-10-23. Goal: make the Rust code easier to learn and
 modify while retaining the current implementation's observable behavior.
-This is a proposed refactoring sequence, not completed implementation or a
-replacement for the active original-game completion queue. Follow
+The first five slices are implemented; their results are recorded below.
+Further architecture proposals do not replace the active original-game completion queue. Follow
 [PORTING.md](../../PORTING.md) and the
 [completion workflow](2026-10-15-rust-completion-workflow.md) for bounded work.
 
@@ -58,8 +58,8 @@ that affects gameplay remains under the existing tick contract.
 
 ## First work packages
 
-Each numbered item is a separate proposed ticket. Prepare its exact file list
-and existing test inventory before implementation. No pending queue item is
+Each numbered item defines one bounded ticket. Its exact file list and existing
+test inventory are checked before implementation. No pending queue item is
 closed by this plan.
 
 1. **Name one native enemy module.** Scope: the `hopping` module registration,
@@ -120,7 +120,25 @@ At this audit, `cargo test -p sml2-core` passed all 1,655 tests, and
 `bash captures/sweep.sh` passed the frozen corpus with the established
 `traj4_ff0` exception. These runs include the working tree's existing rendering
 edits. They establish a starting point for future refactors, not full-game parity.
-This audit changes documentation only.
+The initial audit changed documentation only.
+
+### Implemented vertical slices
+
+The five initial tickets above are complete. The configuration/mod-format
+discussion remains future design work.
+
+| Slice | Result | Verification |
+|---|---|---|
+| 1 | Native module is `hopping`; address-based adapter discovery remains supported by the prompt generator | Core suite, 46 tooling tests, frozen sweep; commit `6c21b90` |
+| 2 | Six exact speed tables live in private `player/motion_tables.rs`, re-exported at their existing paths | Verbatim extraction comparison, core suite, frozen sweep; commit `ee5e433` |
+| 3 | `LevelContext` lives in `session/level.rs`, re-exported by `session` | Verbatim type/method comparison, core suite, runtime suite including public boundary tests, frozen sweep; commit `b9d0269` |
+| 4 | Named hopping states and timing constants; unknown state handling retained | 1,656 core tests, frozen sweep, all 251 unknown state bytes checked; deliberate unknown-to-init mutation fails the new test; commit `c009912` |
+| 5 | [Progression ownership map](../progression-ownership.md) with producer/consumer/reset contracts and a bounded follow-up candidate | Reviewed against transition, conversion, reset and save call sites; documentation only |
+
+Runtime verification passed 198 unit tests (4 ignored) and 11 integration tests
+(4 ignored). Ignored tests were not treated as passing evidence. Each frozen
+sweep retained the established `traj4_ff0` exception. No original-game completion
+queue item was closed by these refactors.
 
 For behavior changes or new coverage, construct in-memory cases with independently
 derived expected bytes and sensitivity checks as required by `PORTING.md`.

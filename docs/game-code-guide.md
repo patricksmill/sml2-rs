@@ -29,6 +29,8 @@ previous tick's value. Read `LevelContext::step_frame` and `PlayerSim::step`
 before moving an operation between systems. The
 [runtime boundaries guide](runtime-architecture.md) explains session loading,
 host integration, and the sound driver in more detail.
+The [progression ownership map](progression-ownership.md) follows state through
+level entry, clear, death, map return, and saving.
 
 ## Find the rule you want to understand
 
