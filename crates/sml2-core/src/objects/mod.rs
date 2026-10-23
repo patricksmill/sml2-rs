@@ -748,6 +748,9 @@ pub struct ObjectSim {
     pub boss_slots_raw: [u8; 512],
     pub boss_oam: Vec<BossOamCell>,
     pub unported: Vec<u32>,
+    /// Extra half-width/half-height of an enlarged view. Not ROM state: zero
+    /// keeps every window at the engine's own size.
+    pub view_margin: (u16, u16),
 }
 
 impl ObjectSim {
@@ -848,6 +851,7 @@ impl ObjectSim {
             boss_slots_raw: [0; 512],
             boss_oam: Vec::new(),
             unported: Vec::new(),
+            view_margin: (0, 0),
         }
     }
 
@@ -1213,11 +1217,12 @@ impl ObjectSim {
     /// 32x32 blobs' offsets are computed from the flipped origin).
     ///
     fn engine(&mut self, cam_x: u16, cam_y: u16, layout: &LevelLayout, tables: &ObjectTables) {
-        let act_x = Self::window(cam_x, 0x60);
-        let act_y = Self::window(cam_y, 0x60);
-        let scan_x = Self::window(cam_x, 0x70);
-        let alive_x = Self::window(cam_x, 0xA0);
-        let alive_y = Self::window(cam_y, 0xA0);
+        let (mx, my) = (i32::from(self.view_margin.0), i32::from(self.view_margin.1));
+        let act_x = Self::window(cam_x, 0x60 + mx);
+        let act_y = Self::window(cam_y, 0x60 + my);
+        let scan_x = Self::window(cam_x, 0x70 + mx);
+        let alive_x = Self::window(cam_x, 0xA0 + mx);
+        let alive_y = Self::window(cam_y, 0xA0 + my);
 
         // $8064: scan direction/edge from the camera delta. Three-way:
         // - camera < prev: dir $FF, edge = scanX min & $F8
@@ -1302,7 +1307,30 @@ impl ObjectSim {
         if self.scan_dir != 0 && (self.spawn_x >> 8) != 0xFF {
             self.scan(tables);
         }
+        self.fill_view_margin(cam_x, tables);
         self.prev_cam_x = cam_x;
+    }
+
+    /// An enlarged view uncovers records beyond the native scan edges that
+    /// the edge scan never crosses (level start, warps, respawns).
+    fn fill_view_margin(&mut self, cam_x: u16, tables: &ObjectTables) {
+        let mx = i32::from(self.view_margin.0);
+        if mx == 0 || self.stream_cursor_cleared {
+            return;
+        }
+        let native = Self::window(cam_x, 0x70);
+        let wide = Self::window(cam_x, 0x70 + mx);
+        for ri in 0..self.records.len() {
+            let x = self.records[ri].x;
+            let in_band = (x >= wide.0 && x < native.0) || (x > native.1 && x <= wide.1);
+            if !in_band || self.record_skipped(ri) {
+                continue;
+            }
+            let ptr = STREAM_BASE.wrapping_add((ri * RECORD_LEN) as u16);
+            if !self.spawn_record(ri, ptr, tables) {
+                return;
+            }
+        }
     }
 
     /// `$8285`: cull-removal — stage the slot, `$5B2D7`, hitbox, copy back.

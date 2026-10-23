@@ -4179,3 +4179,66 @@ fn star_defeat_streak_increments_plays_sfx_and_awards_lives_at_5() {
     assert_eq!(obj.stomp_bounce_timer, 0);
     assert!(obj.tick_stomp_bounce_timer().is_none());
 }
+
+fn margin_record(x: u16) -> SpawnRecord {
+    SpawnRecord {
+        x,
+        y: 0x0090,
+        anim_index: 16,
+        mode_flag: 0,
+        sprite_id: 0,
+        hitbox: [0; 4],
+        raw: [(x >> 8) as u8, x as u8, 0, 0, 0x90, 16],
+    }
+}
+
+#[test]
+fn a_view_margin_spawns_records_in_the_widened_band_only() {
+    let t = tables();
+    let layout = blank_layout();
+    let cam = 0x0200;
+    // Native scan edge is cam + $70; a 384-px view widens it by 112.
+    let records = vec![
+        margin_record(cam - 0x70 - 0x40), // left band
+        margin_record(cam + 0x40),        // inside the native window: never filled
+        margin_record(cam + 0x70 + 0x40), // right band
+        margin_record(cam + 0x70 + 0x78), // beyond the widened edge
+    ];
+    let mut obj = ObjectSim::new(records, cam);
+    obj.configure(0);
+    obj.view_margin = (112, 36);
+    obj.step(cam, 0x0100, &layout, &t, &MarioContact::default(), false);
+    assert_eq!(obj.spawned, vec![true, false, true, false]);
+    assert_eq!(obj.standby, 2);
+}
+
+#[test]
+fn a_zero_margin_leaves_a_still_camera_without_spawns() {
+    let t = tables();
+    let layout = blank_layout();
+    let cam = 0x0200;
+    let mut obj = ObjectSim::new(vec![margin_record(cam + 0x70 + 0x40)], cam);
+    obj.configure(0);
+    obj.step(cam, 0x0100, &layout, &t, &MarioContact::default(), false);
+    assert_eq!(obj.spawned, vec![false]);
+}
+
+#[test]
+fn a_view_margin_keeps_active_slots_alive_past_the_native_edge() {
+    let t = tables();
+    let layout = blank_layout();
+    let cam = 0x0200;
+    let mut obj = ObjectSim::new(Vec::new(), cam);
+    obj.configure(0);
+    obj.view_margin = (112, 36);
+    obj.active = 1;
+    let s = &mut obj.slots[0];
+    s.b[B_STATE] = 2;
+    s.b[B_RECHI] = 0xAD; // not stream-backed
+    set_x(&mut s.b, cam + 0xA0 + 0x40); // past native alive, inside widened
+    set_y(&mut s.b, 0x0100);
+    for _ in 0..4 {
+        obj.step(cam, 0x0100, &layout, &t, &MarioContact::default(), false);
+    }
+    assert_ne!(obj.slots[0].b[B_STATE], 0, "the widened alive window keeps it");
+}

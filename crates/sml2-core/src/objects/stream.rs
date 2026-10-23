@@ -92,49 +92,15 @@ impl ObjectSim {
                     return;
                 }
             }
-            // Record at the edge: the mode byte gates (and the engine's
-            // post-spawn marker 2 blocks re-spawns on a later pass).
-            let m = self.records[ri].mode_flag;
-            let skip = if self.easy_mode {
-                m & 0x0F != 0
-            } else {
-                m & 0x0E != 0
-            } || self.spawned[ri];
-            if skip {
+            if self.record_skipped(ri) {
                 if !self.step_stream(forward) {
                     return;
                 }
                 continue;
             }
-            let free = self.slots.iter().position(|s| s.b[B_STATE] == 0);
-            let Some(slot) = free else {
+            if !self.spawn_record(ri, self.stream_ptr(), tables) {
                 return; // no free slot: scan stops ($8C93 → $AF)
-            };
-            let r = self.records[ri];
-            // $8CA8: 6 record bytes, record pointer (+2), state = 1, clear
-            // +9..+31, marker 2, $8240 sprite derive, $81CF hitbox.
-            let mut s = Staging {
-                b: [0; 32],
-                ..Default::default()
-            };
-            s.b[B_XHI] = (r.x >> 8) as u8;
-            s.b[B_XLO] = r.x as u8;
-            s.b[B_MARKER] = r.mode_flag;
-            s.b[B_YHI] = (r.y >> 8) as u8;
-            s.b[B_YLO] = r.y as u8;
-            s.b[B_DEF] = r.anim_index;
-            // The engine stores (streamPtrHi, streamPtrLo + 2) with no carry
-            // into the hi byte.
-            let a = self.stream_ptr();
-            s.b[B_RECHI] = (a >> 8) as u8;
-            s.b[B_RECLO] = (a as u8).wrapping_add(2);
-            s.b[B_STATE] = 1;
-            self.derive_sprite(&mut s, tables);
-            self.refresh_hitbox(&mut s, tables, false);
-            self.slots[slot].b = s.b;
-            self.records[ri].mode_flag = 2;
-            self.spawned[ri] = true;
-            self.standby = self.standby.wrapping_add(1);
+            }
             // The last record leaves the pointer parked on itself (see
             // `advance_stream`): the engine's `$FF` terminator check refuses
             // the store, and the re-scan then walks into the same record with
@@ -143,5 +109,48 @@ impl ObjectSim {
             // in the same column spawns in the same pass.
             self.step_stream(forward);
         }
+    }
+
+    /// The mode byte gates (and the engine's post-spawn marker 2 blocks
+    /// re-spawns on a later pass).
+    pub(super) fn record_skipped(&self, ri: usize) -> bool {
+        let m = self.records[ri].mode_flag;
+        (if self.easy_mode {
+            m & 0x0F != 0
+        } else {
+            m & 0x0E != 0
+        }) || self.spawned[ri]
+    }
+
+    /// `$8CA8`: 6 record bytes, record pointer (+2), state = 1, clear
+    /// +9..+31, marker 2, `$8240` sprite derive, `$81CF` hitbox. `ptr` is the
+    /// record's stream address. False when every slot is taken.
+    pub(super) fn spawn_record(&mut self, ri: usize, ptr: u16, tables: &ObjectTables) -> bool {
+        let Some(slot) = self.slots.iter().position(|s| s.b[B_STATE] == 0) else {
+            return false;
+        };
+        let r = self.records[ri];
+        let mut s = Staging {
+            b: [0; 32],
+            ..Default::default()
+        };
+        s.b[B_XHI] = (r.x >> 8) as u8;
+        s.b[B_XLO] = r.x as u8;
+        s.b[B_MARKER] = r.mode_flag;
+        s.b[B_YHI] = (r.y >> 8) as u8;
+        s.b[B_YLO] = r.y as u8;
+        s.b[B_DEF] = r.anim_index;
+        // The engine stores (streamPtrHi, streamPtrLo + 2) with no carry
+        // into the hi byte.
+        s.b[B_RECHI] = (ptr >> 8) as u8;
+        s.b[B_RECLO] = (ptr as u8).wrapping_add(2);
+        s.b[B_STATE] = 1;
+        self.derive_sprite(&mut s, tables);
+        self.refresh_hitbox(&mut s, tables, false);
+        self.slots[slot].b = s.b;
+        self.records[ri].mode_flag = 2;
+        self.spawned[ri] = true;
+        self.standby = self.standby.wrapping_add(1);
+        true
     }
 }
