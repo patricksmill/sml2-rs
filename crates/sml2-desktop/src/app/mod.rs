@@ -408,7 +408,11 @@ impl DesktopApp {
                     }
                 }
                 if let Some(game) = self.game.as_mut() {
+                    // The hall may have changed Character after prepare_tick.
+                    // Apply that, then let the file-select door win and save it.
+                    game.session.character = self.settings.character;
                     game.tick(keys, volume);
+                    self.settings.character = game.session.character;
                 }
             }
             if clear_aim {
@@ -644,10 +648,10 @@ impl DesktopApp {
         );
         self.paint_overlays(ui, rect);
         if let Some(hall) = &self.hall {
-            if let Some(index) = (0..catalog::PEDESTALS.len())
+            if let Some(index) = (0..catalog::HALL_PEDESTALS.len())
                 .find(|index| (hall.mario - hall::pedestal_x(*index)).abs() <= 8)
             {
-                let text = catalog::label(catalog::PEDESTALS[index], &self.settings, self.debug);
+                let text = catalog::label(catalog::HALL_PEDESTALS[index], &self.settings, self.debug);
                 ui.painter().text(
                     rect.min,
                     egui::Align2::LEFT_TOP,

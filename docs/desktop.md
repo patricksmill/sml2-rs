@@ -84,6 +84,8 @@ pipe rooms and the attract demos, uses DX graphics and CGB colors, with sprite
 overlays, tile animation, star colors and pause colors; the display filter does
 not apply there. **Character** picks Mario or Luigi graphics; both play with the
 native rules. The space levels use DX's alternate (space) Mario and Luigi.
+On the DX file-select screen, walk right past Clear to use the character door.
+The returning character becomes the saved **Character** choice in Settings.
 
 The title, file select and overworld map (hub and zones) use DX's own screens
 and colors. The map's bonus rooms and other non-level screens keep the display

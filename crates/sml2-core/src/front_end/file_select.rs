@@ -44,6 +44,14 @@ pub enum FileSelectAction {
     Load { slot: usize, record: [u8; SLOT_LEN] },
     /// `$30227` erase path: the slot now holds the fresh template.
     Erased { slot: usize },
+    /// DX `$33158`: switch the active character as the door return starts.
+    SwitchCharacter,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CharacterDoorTrip {
+    Outbound,
+    Returning,
 }
 
 /// Sound requests produced by this frame (0 = none).
@@ -72,6 +80,8 @@ pub struct FileSelect {
     walk_timer: u8,
     mario_dir: u8,
     frame: u32,
+    character_door_enabled: bool,
+    character_door_trip: Option<CharacterDoorTrip>,
     /// `sSaveFileIndex` (`$A2A3`), set at the confirm commit.
     pub save_file_index: u8,
     sfx0: u8,
@@ -101,6 +111,8 @@ impl FileSelect {
             walk_timer: 0,
             mario_dir: 1,
             frame: 0,
+            character_door_enabled: false,
+            character_door_trip: None,
             save_file_index: 0,
             sfx0: 5,
             sfx2: 0,
@@ -119,6 +131,18 @@ impl FileSelect {
 
     pub fn timer(&self) -> u8 {
         self.timer
+    }
+
+    /// Enable DX's character door beyond Clear. The original game keeps its
+    /// `$88` right boundary unless the host opts in.
+    ///
+    /// Disabling during a trip returns to Clear, canceling any unsent switch;
+    /// an existing return finishes normally even if the door is re-enabled.
+    pub fn set_character_door_enabled(&mut self, enabled: bool) {
+        self.character_door_enabled = enabled;
+        if !enabled && self.character_door_trip == Some(CharacterDoorTrip::Outbound) {
+            self.return_from_character_door();
+        }
     }
 
     pub fn cursor(&self) -> (u8, u8) {
@@ -249,6 +273,16 @@ impl FileSelect {
 
     /// `$4326`: the slot row's input.
     fn state_input(&mut self, held: u8, pressed: u8) -> FileSelectAction {
+        // DX `$33158`: the input hook runs on the frame after the outbound
+        // walk ends. Keep the return automatic so held input cannot replace
+        // it with another walk or a save operation.
+        if self.character_door_trip == Some(CharacterDoorTrip::Outbound) {
+            self.return_from_character_door();
+            self.sprite = self.standing_sprite();
+            self.sfx0 = 0x0E;
+            return FileSelectAction::SwitchCharacter;
+        }
+
         // The ROM compares `hKeysPressed` with `cp`, so a multi-button press
         // (e.g. START+A) matches nothing.
         if pressed == SELECT {
@@ -264,6 +298,13 @@ impl FileSelect {
                 if self.cursor_x < 0x88 {
                     self.menu_state = 2;
                     self.timer = 32;
+                    self.sprite = ((self.walk_timer & 0x0C) >> 2).wrapping_add(1);
+                } else if self.character_door_enabled && self.cursor_x < 0xC8 {
+                    // DX `$33186`: a 64-frame walk to the door, with a
+                    // one-shot switch deferred until its arrival hook.
+                    self.character_door_trip = Some(CharacterDoorTrip::Outbound);
+                    self.menu_state = 2;
+                    self.timer = 64;
                     self.sprite = ((self.walk_timer & 0x0C) >> 2).wrapping_add(1);
                 }
             }
@@ -298,6 +339,17 @@ impl FileSelect {
         FileSelectAction::None
     }
 
+    fn return_from_character_door(&mut self) {
+        self.timer = self.cursor_x.saturating_sub(0x88);
+        if self.timer == 0 {
+            self.menu_state = 1;
+            self.character_door_trip = None;
+        } else {
+            self.menu_state = 3;
+            self.character_door_trip = Some(CharacterDoorTrip::Returning);
+        }
+    }
+
     /// `$42F1`: cursor right one slot, 32 frames.
     fn state_right(&mut self) {
         self.mario_dir = 1;
@@ -319,6 +371,9 @@ impl FileSelect {
         self.timer = self.timer.wrapping_sub(1);
         if self.timer == 0 {
             self.menu_state = 1;
+            if self.character_door_trip == Some(CharacterDoorTrip::Returning) {
+                self.character_door_trip = None;
+            }
         }
     }
 

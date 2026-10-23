@@ -3,6 +3,139 @@ use crate::dx_import::Worker;
 use sml2_dx::cache::CacheKey;
 use sml2_runtime::session::SessionState;
 
+fn game_tick(app: &mut DesktopApp, ctx: &Context) {
+    app.step = true;
+    super::tests::frame(app, ctx, vec![]);
+}
+
+#[test]
+fn character_door_requires_dx_mode_and_installed_graphics() {
+    use sml2_core::front_end::{keys::RIGHT, FileSelect};
+    use sml2_runtime::session::SessionState;
+
+    let (mut app, _, path) = super::tests::app();
+    for (enabled, installed, expected_timer) in
+        [(false, true, 0), (true, false, 0), (true, true, 64)]
+    {
+        app.settings.dx_mode = enabled;
+        let session = &mut app.game.as_mut().unwrap().session;
+        let mut file_select = FileSelect::new(&mut session.slots);
+        for _ in 0..64 {
+            file_select.step(&mut session.slots, 0, 0);
+        }
+        for _ in 0..3 {
+            file_select.step(&mut session.slots, RIGHT, 0);
+            for _ in 0..32 {
+                file_select.step(&mut session.slots, 0, 0);
+            }
+        }
+        session.state = SessionState::FileSelect(file_select);
+        super::dx::prepare_tick(session, &app.settings, installed);
+        let SessionState::FileSelect(file_select) = &mut session.state else {
+            unreachable!()
+        };
+        file_select.step(&mut session.slots, RIGHT, 0);
+        assert_eq!(file_select.timer(), expected_timer);
+        assert_eq!(file_select.cursor(), (0x88, 0x7C));
+    }
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn character_door_ticks_render_and_persist_the_new_character_without_a_save() {
+    use crate::input::Button;
+    use sml2_core::character::Character;
+    use sml2_runtime::session::SessionState;
+
+    let (mut app, ctx, path) = super::tests::app();
+    let mut bundle = red_bundle();
+    // Keep this synthetic cursor visible even while it reaches the offscreen door.
+    for character in &mut bundle.players {
+        for player in character {
+            player.mappings = vec![
+                vec![sml2_core::object::MappingEntry {
+                    y: 0,
+                    x: -80,
+                    tile: 0,
+                    attr: 0,
+                }];
+                242
+            ];
+        }
+    }
+    bundle.players[1][0].normal.fill(0xFF);
+    app.dx_bundle = Some(bundle);
+    app.settings.dx_mode = true;
+    app.screen = Screen::Game;
+    app.game.as_mut().unwrap().session.enter_file_select();
+    let slots = app.game.as_ref().unwrap().session.slots.image();
+    let menu = |app: &DesktopApp| {
+        let SessionState::FileSelect(file_select) = &app.game.as_ref().unwrap().session.state
+        else {
+            panic!("file select")
+        };
+        (
+            file_select.menu_state(),
+            file_select.cursor(),
+            file_select.timer(),
+        )
+    };
+    for _ in 0..64 {
+        if menu(&app).0 == 1 {
+            break;
+        }
+        game_tick(&mut app, &ctx);
+    }
+    app.input.event(Button::key("ArrowRight"), true);
+    for _ in 0..99 {
+        game_tick(&mut app, &ctx);
+    }
+    assert_eq!(menu(&app), (1, (0x88, 0x7C), 0));
+    app.input.event(Button::key("ArrowRight"), false);
+    game_tick(&mut app, &ctx);
+    app.input.event(Button::key("ArrowRight"), true);
+    game_tick(&mut app, &ctx);
+    app.input.event(Button::key("ArrowRight"), false);
+    for _ in 0..64 {
+        game_tick(&mut app, &ctx);
+    }
+    assert_eq!(app.settings.character, Character::Mario);
+    game_tick(&mut app, &ctx);
+    assert_eq!(menu(&app), (3, (0xC8, 0x7C), 64));
+    assert_eq!(app.settings.character, Character::Luigi);
+    assert_eq!(
+        app.game.as_ref().unwrap().session.character,
+        Character::Luigi
+    );
+    let luigi = app.frame_image(Smooth::OFF).unwrap();
+    app.settings.character = Character::Mario;
+    let mario = app.frame_image(Smooth::OFF).unwrap();
+    assert_ne!(
+        luigi.pixels, mario.pixels,
+        "the switched frame uses Luigi graphics"
+    );
+    app.settings.character = Character::Luigi;
+    app.persist();
+    assert_eq!(
+        Settings::load(&app.options.paths.settings)
+            .unwrap()
+            .character,
+        Character::Luigi
+    );
+    assert_eq!(app.game.as_ref().unwrap().session.slots.image(), slots);
+    assert!(!path.join("save.sav").exists());
+
+    // A later menu choice must seed the session instead of being overwritten.
+    app.settings.character = Character::Mario;
+    game_tick(&mut app, &ctx);
+    assert_eq!(
+        app.game.as_ref().unwrap().session.character,
+        Character::Mario
+    );
+    assert_eq!(app.settings.character, Character::Mario);
+    let _ = std::fs::remove_dir_all(path);
+}
+
 fn wait_for_dx(app: &mut DesktopApp) {
     let deadline = Instant::now() + Duration::from_secs(2);
     while app.dx_worker.is_some() {

@@ -276,6 +276,242 @@ fn the_cursor_walk_cycle_drives_the_sprite_ids() {
 }
 
 #[test]
+fn the_original_file_select_stops_at_clear_without_a_character_door() {
+    let mut slots = SaveSlots::new();
+    let mut fs = FileSelect::new(&mut slots);
+    drop_in(&mut fs, &mut slots);
+    move_to_erase_position(&mut fs, &mut slots);
+    let saves = slots.image();
+    for _ in 0..130 {
+        let out = fs.step(&mut slots, RIGHT, 0);
+        assert_eq!(
+            [fs.menu_state(), fs.cursor().0, fs.cursor().1, out.sfx0],
+            [1, 0x88, 0x7C, 0]
+        );
+        assert_eq!(out.action, FileSelectAction::None);
+    }
+    assert_eq!(slots.image(), saves);
+}
+
+#[test]
+fn dx_character_door_walks_64_frames_then_switches_once_and_returns() {
+    // Audited DX ROM `$33186`: state = 2, timer = $40, door X = $C8.
+    // `$33158`: next input frame requests SFX $0E and state 3/timer $40.
+    let mut slots = SaveSlots::new();
+    assert!(slots.write_slot(0, &valid_record(0x23)));
+    let mut fs = FileSelect::new(&mut slots);
+    fs.set_character_door_enabled(true);
+    drop_in(&mut fs, &mut slots);
+    for expected_x in [0x48, 0x68, 0x88] {
+        fs.step(&mut slots, RIGHT, 0);
+        assert_eq!(
+            [fs.menu_state(), fs.timer()],
+            [2, 32],
+            "ordinary pipe movement retains its original timing"
+        );
+        settle(&mut fs, &mut slots);
+        assert_eq!(fs.cursor().0, expected_x);
+    }
+    let saves = slots.image();
+    let out = fs.step(&mut slots, RIGHT, 0);
+    assert_eq!(
+        [fs.menu_state(), fs.timer(), fs.cursor().0, out.sfx0],
+        [2, 64, 0x88, 0]
+    );
+    assert_eq!(out.action, FileSelectAction::None);
+    for elapsed in 1..=64u8 {
+        let out = fs.step(&mut slots, RIGHT, START);
+        assert_eq!(
+            [
+                fs.menu_state(),
+                fs.timer(),
+                fs.cursor().0,
+                fs.cursor().1,
+                out.sfx0
+            ],
+            [
+                if elapsed == 64 { 1 } else { 2 },
+                64 - elapsed,
+                0x88 + elapsed,
+                0x7C,
+                0
+            ]
+        );
+        assert_eq!(
+            out.action,
+            FileSelectAction::None,
+            "arrival alone does not switch characters"
+        );
+        assert_eq!(slots.image(), saves);
+    }
+    // Arrival must complete even with a key held/pressed: never replace the
+    // automatic return with slot movement, confirmation, Easy, or erase.
+    for (held, pressed) in [
+        (0, 0),
+        (RIGHT, A),
+        (LEFT, START),
+        (SELECT, SELECT),
+        (0, A),
+        (0, DOWN),
+    ] {
+        let mut returning = fs.clone();
+        let out = returning.step(&mut slots, held, pressed);
+        assert_eq!(out.action, FileSelectAction::SwitchCharacter);
+        assert_eq!(
+            [
+                returning.menu_state(),
+                returning.timer(),
+                returning.cursor().0,
+                returning.cursor_sprite(),
+                out.sfx0
+            ],
+            [3, 64, 0xC8, 0, 0x0E]
+        );
+        assert!(!returning.easy_mode());
+        assert!(!returning.clear_mode());
+        for elapsed in 1..=64u8 {
+            let out = returning.step(&mut slots, held, pressed);
+            assert_eq!(
+                [
+                    returning.menu_state(),
+                    returning.timer(),
+                    returning.cursor().0,
+                    returning.cursor().1,
+                    out.sfx0
+                ],
+                [
+                    if elapsed == 64 { 1 } else { 3 },
+                    64 - elapsed,
+                    0xC8 - elapsed,
+                    0x7C,
+                    0
+                ]
+            );
+            assert_eq!(
+                out.action,
+                FileSelectAction::None,
+                "switch is a one-shot action"
+            );
+            assert_eq!(slots.image(), saves);
+        }
+        assert_eq!(
+            returning.step(&mut slots, 0, 0).action,
+            FileSelectAction::None
+        );
+        assert_eq!(returning.save_file_index, 0);
+    }
+}
+
+#[test]
+fn dx_character_door_rejects_right_at_or_beyond_its_boundary() {
+    let mut slots = SaveSlots::new();
+    let mut fs = FileSelect::new(&mut slots);
+    drop_in(&mut fs, &mut slots);
+    fs.set_character_door_enabled(true);
+    for x in [0xC8, 0xFF] {
+        fs.cursor_x = x;
+        let out = fs.step(&mut slots, RIGHT, 0);
+        assert_eq!([fs.menu_state(), fs.timer(), fs.cursor().0], [1, 0, x]);
+        assert_eq!(out.action, FileSelectAction::None);
+        assert_eq!(fs.character_door_trip, None);
+    }
+}
+
+#[test]
+fn dx_character_door_preserves_easy_and_clear_modes() {
+    for (easy, clear) in [(true, false), (false, true)] {
+        let mut slots = SaveSlots::new();
+        let mut fs = FileSelect::new(&mut slots);
+        drop_in(&mut fs, &mut slots);
+        move_to_erase_position(&mut fs, &mut slots);
+        if easy {
+            fs.step(&mut slots, SELECT, SELECT);
+        } else {
+            fs.step(&mut slots, A, A);
+            settle(&mut fs, &mut slots);
+        }
+        fs.set_character_door_enabled(true);
+        let saves = slots.image();
+        fs.step(&mut slots, RIGHT, 0);
+        for _ in 0..64 {
+            fs.step(&mut slots, 0, 0);
+        }
+        assert_eq!(
+            fs.step(&mut slots, 0, 0).action,
+            FileSelectAction::SwitchCharacter
+        );
+        for _ in 0..64 {
+            fs.step(&mut slots, 0, 0);
+        }
+        assert_eq!((fs.easy_mode(), fs.clear_mode()), (easy, clear));
+        assert_eq!(fs.cursor(), (0x88, 0x7C));
+        assert_eq!(slots.image(), saves);
+    }
+}
+
+#[test]
+fn disabling_the_character_door_cancels_an_unsent_switch_and_returns_to_clear() {
+    for progress in [0, 1, 32, 63, 64] {
+        let mut slots = SaveSlots::new();
+        let mut fs = FileSelect::new(&mut slots);
+        drop_in(&mut fs, &mut slots);
+        move_to_erase_position(&mut fs, &mut slots);
+        fs.set_character_door_enabled(true);
+        let saves = slots.image();
+        fs.step(&mut slots, RIGHT, 0);
+        for _ in 0..progress {
+            fs.step(&mut slots, 0, 0);
+        }
+        fs.set_character_door_enabled(false);
+        assert_eq!(
+            [fs.menu_state(), fs.timer(), fs.cursor().0],
+            [if progress == 0 { 1 } else { 3 }, progress, 0x88 + progress]
+        );
+        // Re-enabling mid-return must not create a second outbound trip.
+        if progress > 0 {
+            fs.set_character_door_enabled(true);
+        }
+        for _ in 0..progress {
+            assert_eq!(
+                fs.step(&mut slots, RIGHT, START).action,
+                FileSelectAction::None
+            );
+        }
+        assert_eq!(fs.cursor(), (0x88, 0x7C));
+        assert_eq!([fs.menu_state(), fs.timer()], [1, 0]);
+        assert_eq!(fs.step(&mut slots, 0, 0).action, FileSelectAction::None);
+        assert_eq!(slots.image(), saves);
+    }
+}
+
+#[test]
+fn disabling_the_character_door_after_a_switch_preserves_the_automatic_return() {
+    let mut slots = SaveSlots::new();
+    let mut fs = FileSelect::new(&mut slots);
+    drop_in(&mut fs, &mut slots);
+    move_to_erase_position(&mut fs, &mut slots);
+    fs.set_character_door_enabled(true);
+    let saves = slots.image();
+    fs.step(&mut slots, RIGHT, 0);
+    for _ in 0..64 {
+        fs.step(&mut slots, 0, 0);
+    }
+    assert_eq!(
+        fs.step(&mut slots, 0, 0).action,
+        FileSelectAction::SwitchCharacter
+    );
+    fs.set_character_door_enabled(false);
+    assert_eq!([fs.menu_state(), fs.timer(), fs.cursor().0], [3, 64, 0xC8]);
+    for _ in 0..64 {
+        assert_eq!(fs.step(&mut slots, RIGHT, A).action, FileSelectAction::None);
+    }
+    assert_eq!(fs.cursor(), (0x88, 0x7C));
+    assert_eq!(fs.step(&mut slots, RIGHT, 0).action, FileSelectAction::None);
+    assert_eq!([fs.menu_state(), fs.cursor().0], [1, 0x88]);
+    assert_eq!(slots.image(), saves);
+}
+
+#[test]
 fn bomb_cursor_frames_and_bob_match_the_menu_loop_bytes() {
     // `$300B4..$300E1`: table $3012A = [0,1,2,1], bases 201/204,
     // and presentation Y = $FFC0 + 1 - (table value & 1).

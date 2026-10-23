@@ -45,7 +45,7 @@ pub(super) fn step(
         } else if hall.mario > target {
             hall.mario -= 1;
         } else {
-            catalog::cycle(catalog::PEDESTALS[index], settings, debug);
+            catalog::cycle(catalog::HALL_PEDESTALS[index], settings, debug);
             hall.hop = 12;
             hall.goal = None;
         }
@@ -61,9 +61,10 @@ pub(super) fn step(
     }
     if jump {
         if let Some(index) =
-            (0..catalog::PEDESTALS.len()).find(|index| (hall.mario - pedestal_x(*index)).abs() <= 8)
+            (0..catalog::HALL_PEDESTALS.len())
+                .find(|index| (hall.mario - pedestal_x(*index)).abs() <= 8)
         {
-            catalog::cycle(catalog::PEDESTALS[index], settings, debug);
+            catalog::cycle(catalog::HALL_PEDESTALS[index], settings, debug);
             hall.hop = 12;
         }
     }
@@ -76,7 +77,7 @@ pub(super) fn camera_left(mario: i32) -> i32 {
 
 pub(super) fn pedestal_at(native_x: u8, mario: i32) -> Option<usize> {
     let world = camera_left(mario) + native_x as i32;
-    (0..catalog::PEDESTALS.len()).find(|index| (world - pedestal_x(*index)).abs() <= 12)
+    (0..catalog::HALL_PEDESTALS.len()).find(|index| (world - pedestal_x(*index)).abs() <= 12)
 }
 
 pub(super) fn pixels(hall: &Hall, assets: &sml2_core::front_end::FrontEndAssets) -> Vec<u8> {
@@ -107,7 +108,7 @@ pub(super) fn pixels(hall: &Hall, assets: &sml2_core::front_end::FrontEndAssets)
         file_select_backdrop,
     );
     let cam = camera_left(hall.mario);
-    for index in 0..catalog::PEDESTALS.len() {
+    for index in 0..catalog::HALL_PEDESTALS.len() {
         fill(&mut frame, pedestal_x(index) - cam - 8, 120, 16, 8, 2);
     }
     let hop = if hall.hop > 0 { 10 } else { 0 };

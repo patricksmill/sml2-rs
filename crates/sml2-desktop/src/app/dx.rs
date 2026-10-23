@@ -4,11 +4,16 @@ use super::DesktopApp;
 use crate::dx_import::{self, Event, Worker};
 use eframe::egui::{Context, Ui};
 
+/// Settings owns the persisted choice; a door action can update it during this tick.
 pub(super) fn prepare_tick(
-    _session: &mut sml2_runtime::Session,
-    _settings: &crate::settings::Settings,
-    _installed: bool,
+    session: &mut sml2_runtime::Session,
+    settings: &crate::settings::Settings,
+    installed: bool,
 ) {
+    session.character = settings.character;
+    if let sml2_runtime::session::SessionState::FileSelect(file_select) = &mut session.state {
+        file_select.set_character_door_enabled(settings.dx_mode && installed);
+    }
 }
 
 impl DesktopApp {

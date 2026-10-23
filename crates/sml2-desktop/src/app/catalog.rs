@@ -35,6 +35,22 @@ pub(super) const PEDESTALS: [Pedestal; 13] = [
     Pedestal::Debug,
 ];
 
+/// The hall's pedestals. Character is chosen by the file-select door.
+pub(super) const HALL_PEDESTALS: [Pedestal; 12] = [
+    Pedestal::Zoom,
+    Pedestal::Fullscreen,
+    Pedestal::Filter,
+    Pedestal::Volume,
+    Pedestal::Mute,
+    Pedestal::DeadZone,
+    Pedestal::Widescreen,
+    Pedestal::CameraZoom,
+    Pedestal::Motion,
+    Pedestal::DxMode,
+    Pedestal::Toolbar,
+    Pedestal::Debug,
+];
+
 pub(super) fn cycle(pedestal: Pedestal, settings: &mut Settings, debug: &mut bool) {
     match pedestal {
         Pedestal::Zoom => {

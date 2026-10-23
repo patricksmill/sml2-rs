@@ -18,6 +18,7 @@ pub use map_transition::MapScreenTransition;
 
 use sml2_core::audio::driver::SoundDriver;
 use sml2_core::camera::CameraSim;
+use sml2_core::character::Character;
 use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
 use sml2_core::ending_scene::EndingScene;
 use sml2_core::ending_sequence::EndingSequenceController;
@@ -107,6 +108,9 @@ pub enum SessionState {
     GameOver(Box<GameOverScreen>),
 }
 
+#[cfg(test)]
+#[path = "session/tests/file_select_character.rs"]
+mod file_select_character_tests;
 /// State `$07`'s inputs: the player record `$27AF` reset, which carries the
 /// fade, `$FF97` and the folded golden-coin flags, and the level's sprite
 /// palettes, which `$27AF` leaves untouched.
@@ -353,6 +357,8 @@ pub struct Session {
     pub active_slot: Option<u8>,
     /// Whether Easy mode is active for the current session.
     pub easy_mode: bool,
+    /// The presentation character selected through the DX file-select door.
+    pub character: Character,
     /// Deferred goal-bell handoff inputs: `(node, exit_tile_flag)`.
     bell_return: Option<(u8, u8)>,
     /// Hold frames already spent after the bell script reached state `$0A`.
@@ -621,6 +627,7 @@ impl Session {
             slots: SaveSlots::new(),
             active_slot: None,
             easy_mode: false,
+            character: Character::Mario,
             bell_return: None,
             bell_fade: None,
             bell_return_hold: 0,
@@ -1266,6 +1273,7 @@ impl Session {
                                 .push("front end: the loaded record was rejected".to_string());
                         }
                     }
+                    FileSelectAction::SwitchCharacter => self.character = self.character.next(),
                     FileSelectAction::Erased { .. } | FileSelectAction::None => {}
                 }
                 StepOutcome::Continue

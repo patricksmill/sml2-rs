@@ -275,6 +275,19 @@ palettes `$26:$7D17`. VRAM1 and OBJ palettes carry over from the title, with the
 player's VRAM1 overlay at `$8000`. Rendered title and file-select frames match
 PyBoy's on all 23,040 pixels.
 
+The character door uses two hooks in bank `$0C`: `$4326` calls `$7158`
+(ROM `$33158`) before reading menu input, and the right limit at `$4398`
+jumps to `$7186` (ROM `$33186`) when cursor X is at least `$88` (Clear).
+That extension starts a 64-frame right walk to X `$C8`; the next input
+frame toggles the character, requests graphics reload 7 and SFX 0 `$0E`,
+then starts a 64-frame left walk back to Clear. `$7186` rejects another
+right move at X `$C8`. The native file select enables this extension only
+for installed DX presentation, and reports a typed character switch to the
+session and desktop Character setting. Disabling DX during the trip returns
+the cursor to Clear without an unrequested character switch or slot write.
+The graphics reload handler at `$24:$7880` (ROM `$93880`) selects Mario/Luigi
+graphics from banks `$2A`/`$2B`; it does not change the door's tilemap.
+
 ## Overworld
 
 DX edits the overworld's tiles, maps, route patches and cursor poses in place,
