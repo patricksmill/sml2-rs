@@ -503,13 +503,14 @@ impl LevelContext {
                         o.state() == sml2_core::objects::SlotState::Active
                             && !self.obj.slot_done[*i]
                     })
-                    .map(|(_, o)| SpriteInst {
+                    .map(|(i, o)| SpriteInst {
                         sprite: o.sprite(),
                         x: o.x(),
                         y: o.y(),
                         flip: o.b[sml2_core::objects::B_DEFEAT]
                             ^ o.b[sml2_core::objects::B_FLIP]
                             ^ o.b[sml2_core::objects::B_FLASH],
+                        slot: i as u8,
                     })
                     .collect();
             }
@@ -855,6 +856,8 @@ pub struct Session {
     pub frame_n: u64,
     /// Presentation size; its margin widens the live level's spawn windows.
     view: (usize, usize),
+    /// The previous tick's in-level positions, for motion smoothing.
+    pub(crate) motion_prev: Option<crate::render::motion::MotionSnapshot>,
     pub sound_driver: SoundDriver,
     /// The three `$2913` save slots, validated when the file select opens.
     pub slots: SaveSlots,
@@ -1108,6 +1111,7 @@ impl Session {
             ff97: 0,
             frame_n: 0,
             view: crate::render::view::NATIVE,
+            motion_prev: None,
             sound_driver,
             slots: SaveSlots::new(),
             active_slot: None,
@@ -1301,7 +1305,27 @@ impl Session {
         self.view = view;
     }
 
+    /// The level context on screen: live play or an attract demo.
+    pub(crate) fn level_ctx(&self) -> Option<&LevelContext> {
+        match &self.state {
+            SessionState::InLevel(ctx) => Some(ctx),
+            SessionState::Demo(demo) => Some(&demo.ctx),
+            _ => None,
+        }
+    }
+
+    /// Screen shifts for a frame drawn `smooth.alpha` of the way from the
+    /// previous tick to the current one.
+    pub fn motion_offsets(&self, smooth: crate::render::motion::Smooth) -> crate::render::motion::Offsets {
+        use crate::render::motion::{MotionSnapshot, Offsets};
+        let cur = self.level_ctx().and_then(MotionSnapshot::of);
+        Offsets::between(self.motion_prev.as_ref(), cur.as_ref(), smooth)
+    }
+
     pub fn advance(&mut self, input: FrameInput) -> FrameEffects {
+        self.motion_prev = self
+            .level_ctx()
+            .and_then(crate::render::motion::MotionSnapshot::of);
         self.remember_level_state();
         // Demos replay recorded inputs against native spawns.
         if let SessionState::InLevel(ctx) = &mut self.state {

@@ -16,10 +16,14 @@ pub struct SpriteInst {
     pub y: u16,
     #[serde(default)]
     pub flip: u8,
+    /// The object slot, so a smoothed frame matches objects across ticks.
+    #[serde(default)]
+    pub slot: u8,
 }
 
 mod pipe_background;
 mod dx;
+pub mod motion;
 pub mod view;
 pub use pipe_background::PipeBackground;
 

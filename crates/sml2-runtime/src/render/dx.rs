@@ -20,14 +20,10 @@ impl Session {
     /// palettes, VRAM1 graphics and attribute map, and its boss sprites go
     /// through their own draw path; neither is imported yet.
     fn dx_level(&self) -> Option<&LevelContext> {
-        let ctx = match &self.state {
-            SessionState::InLevel(ctx) => ctx,
-            SessionState::Demo(demo) => &demo.ctx,
-            _ => return None,
-        };
+        let ctx = self.level_ctx()?;
         let boss = ctx.cam.boss_fight_phase != 0
             || ctx.spr.as_ref().is_some_and(|s| !s.boss_oam.is_empty());
-        (!ctx.arena_loaded && !boss).then_some(ctx.as_ref())
+        (!ctx.arena_loaded && !boss).then_some(ctx)
     }
 
     /// Whether DX presentation covers the current screen: the title, the

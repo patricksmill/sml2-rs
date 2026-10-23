@@ -128,6 +128,7 @@ fn session_palette_level_composes_player_objects_boss_hud_priority_and_resets_so
         x: 32,
         y: 0,
         flip: 0x10,
+        slot: 0,
     });
     spr.boss_oam = vec![
         BossOamCell {

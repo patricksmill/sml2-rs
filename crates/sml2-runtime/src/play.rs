@@ -525,13 +525,14 @@ pub(crate) fn run_play(
                         // or whose type is `$80` (an item inside its block).
                         o.state() == sml2_core::objects::SlotState::Active && !obj.slot_done[*i]
                     })
-                    .map(|(_, o)| SpriteInst {
+                    .map(|(i, o)| SpriteInst {
                         sprite: o.sprite(),
                         x: o.x(),
                         y: o.y(),
                         flip: o.b[sml2_core::objects::B_DEFEAT]
                             ^ o.b[sml2_core::objects::B_FLIP]
                             ^ o.b[sml2_core::objects::B_FLASH],
+                        slot: i as u8,
                     })
                     .collect();
             }
