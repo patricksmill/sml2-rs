@@ -112,6 +112,45 @@ fn dx_public_api_covers_every_level_with_its_own_tables() {
 }
 
 #[test]
+#[test]
+fn dx_margin_draws_a_painted_cell_and_keeps_the_centre_red() {
+    let mut bundle = synthetic_bundle();
+    let mut tiles = [0u8; 512];
+    tiles[4..8].fill(1);
+    bundle.levels[0].metatiles = sml2_core::level::MetatileTable::from_bytes(&tiles).unwrap();
+    let mut background = vec![0u8; 0x1000];
+    for row in 0..8 {
+        background[0x810 + row * 2] = 0xff;
+    }
+    bundle.levels[0].background[0] = background;
+    let mut palettes = [0x1f, 0].repeat(32);
+    palettes[2] = 0xe0;
+    palettes[3] = 0x03;
+    bundle.levels[0].bg_palettes = palettes;
+
+    let mut game = session();
+    game.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut game.state else {
+        panic!("in level")
+    };
+    ctx.cam.x = 200;
+    ctx.cam.y = 448;
+    ctx.scenery = sml2_core::scenery::SceneryOverlay::try_from_paints(
+        vec![sml2_core::scenery::SceneryPaint {
+            x: 7,
+            y: 24,
+            metatile: 1,
+        }],
+        128,
+    )
+    .unwrap();
+    let view = (384, 216);
+    let frame = game.render_dx_frame(&bundle, Mario, view).unwrap();
+    let (mx, my) = sml2_runtime::render::view::level_margin(view);
+    assert_eq!(frame[(my as usize + 40) * view.0 + mx as usize + 40], RED);
+    assert_eq!(frame[76 * view.0 + 111], [0, 255, 0]);
+}
+
 fn dx_frames_take_the_view_size_and_keep_native_parity() {
     let mut bundle = synthetic_bundle();
     // Mario is one opaque green cell and the HUD row is blue, so the frame

@@ -3,6 +3,7 @@
 use crate::render::view::NATIVE;
 use crate::session::{FrameInput, Session, SessionAssets, SessionState};
 use sml2_core::player_sim::PlayerKeys;
+use sml2_core::scenery::{SceneryOverlay, SceneryPaint};
 
 fn level(id: u8) -> Session {
     let mut session = Session::new(SessionAssets::load().expect("session assets must load"));
@@ -25,7 +26,15 @@ fn crop(frame: &[u8], view: (usize, usize), rect: (usize, usize, usize, usize)) 
 fn the_biased_native_rect_matches_native_above_the_status_bar() {
     let session = level(1);
     let native = session.render_frame(NATIVE);
-    for view in [(256, 144), (320, 180), (384, 216), (200, 180), (240, 216), (320, 288), (512, 288)] {
+    for view in [
+        (256, 144),
+        (320, 180),
+        (384, 216),
+        (200, 180),
+        (240, 216),
+        (320, 288),
+        (512, 288),
+    ] {
         let wide = session.render_frame(view);
         let (mx, my) = crate::render::view::level_margin(view);
         assert_eq!(
@@ -34,6 +43,111 @@ fn the_biased_native_rect_matches_native_above_the_status_bar() {
             "{view:?}"
         );
     }
+}
+
+#[test]
+fn an_unpainted_margin_continues_the_playfield_edge() {
+    let session = level(0);
+    let native = session.render_frame(NATIVE);
+    let view = (384, 216);
+    let wide = session.render_frame(view);
+    let (mx, my) = crate::render::view::level_margin(view);
+    assert_eq!(
+        crop(&wide, view, (mx as usize, my as usize, 160, 136)),
+        crop(&native, NATIVE, (0, 0, 160, 136))
+    );
+    for row in 0..136 {
+        assert_eq!(
+            wide[(my as usize + row) * view.0],
+            native[row * 160],
+            "left edge row {row}"
+        );
+    }
+    let below = (my + 144) as usize;
+    assert_eq!(
+        crop(&wide, view, (mx as usize, below, 160, 1)),
+        crop(&native, NATIVE, (0, 135, 160, 1))
+    );
+}
+
+#[test]
+fn a_paint_shows_in_the_margin_and_a_native_frame_ignores_it() {
+    let mut session = level(0);
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!("in level")
+    };
+    ctx.cam.x = 200;
+    ctx.cam.y = 448;
+    if let Some(spr) = ctx.spr.as_mut() {
+        spr.scroll_pan = 0;
+    }
+    let count = ctx.manifest.metatiles.metatiles.len();
+    let native = session.render_frame(NATIVE);
+    let view = (384, 216);
+    let plain = session.render_frame(view);
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!("in level")
+    };
+    ctx.scenery = SceneryOverlay::try_from_paints(
+        vec![SceneryPaint {
+            x: 7,
+            y: 24,
+            metatile: 1,
+        }],
+        count,
+    )
+    .unwrap();
+    assert_eq!(session.render_frame(NATIVE), native);
+    let wide = session.render_frame(view);
+    let (mx, my) = crate::render::view::level_margin(view);
+    assert_eq!(
+        crop(&wide, view, (mx as usize, my as usize, 160, 136)),
+        crop(&native, NATIVE, (0, 0, 160, 136))
+    );
+    // View (111, 76) is cell (7, 24), just left of the native picture.
+    assert_ne!(wide[76 * view.0 + 111], plain[76 * view.0 + 111]);
+    assert_eq!(wide[76 * view.0 + 112], plain[76 * view.0 + 112]);
+}
+
+#[test]
+fn insert_level_carries_scenery_and_an_arena_ignores_it() {
+    let mut assets = SessionAssets::load().unwrap();
+    let mut content = assets.level(0).unwrap().clone();
+    content.scenery = SceneryOverlay::try_from_paints(
+        vec![SceneryPaint {
+            x: 7,
+            y: 24,
+            metatile: 1,
+        }],
+        content.manifest.metatiles.metatiles.len(),
+    )
+    .unwrap();
+    assets.insert_level(0, content);
+    let mut session = Session::new(assets);
+    session.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!("in level")
+    };
+    ctx.cam.x = 200;
+    ctx.cam.y = 448;
+    if let Some(spr) = ctx.spr.as_mut() {
+        spr.scroll_pan = 0;
+    }
+    let painted = session.render_frame((384, 216));
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!("in level")
+    };
+    ctx.arena_loaded = true;
+    drop(ctx);
+    let arena = session.render_frame((384, 216));
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!("in level")
+    };
+    ctx.scenery = SceneryOverlay::empty();
+    drop(ctx);
+    let bare = session.render_frame((384, 216));
+    assert_ne!(painted[76 * 384 + 111], arena[76 * 384 + 111]);
+    assert_eq!(arena, bare);
 }
 
 #[test]

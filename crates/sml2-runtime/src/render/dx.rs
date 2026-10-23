@@ -531,7 +531,9 @@ fn render(
     };
     let mut layers = super::layers::Layers::new(view, offsets.border(), blank);
     let sx = ctx.cam.x as i32 - vw as i32 / 2;
-    let sy = ctx.cam.y as i32 - vh as i32 / 2 - super::view::level_bias(view)
+    let sy = ctx.cam.y as i32
+        - vh as i32 / 2
+        - super::view::level_bias(view)
         - ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
     let world_w = (LAYOUT_WIDTH * 16) as i32;
     let world_h = (LAYOUT_HEIGHT * 16) as i32;
@@ -590,6 +592,43 @@ fn render(
                 .map_err(|e| e.to_string())?,
                 priority: attr.priority(),
             };
+        }
+    }
+    let pan = ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
+    for py in -border..vh as i32 + border {
+        for px in -border..vw as i32 + border {
+            match super::margin::margin_sample(
+                view,
+                px,
+                py,
+                (ctx.cam.x, ctx.cam.y),
+                pan,
+                &ctx.scenery,
+            ) {
+                super::margin::MarginSample::Native => {}
+                super::margin::MarginSample::Edge { nx, ny } => {
+                    let src = *layers.bg_mut(nx, ny);
+                    *layers.bg_mut(px, py) = src;
+                }
+                super::margin::MarginSample::Paint { metatile, tx, ty } => {
+                    let metatile = level.metatiles.get(metatile).ok_or_else(|| {
+                        format!("scenery metatile {metatile} is not in the level")
+                    })?;
+                    let tile = metatile.tiles[(ty >> 3) * 2 + (tx >> 3)];
+                    let attr = CgbAttributes::from_byte(level.tile_attributes[tile as usize]);
+                    *layers.bg_mut(px, py) = BackgroundPixel {
+                        index: cgb::sample_tile(
+                            banks,
+                            0x800 + video::bg_tile_offset(tile),
+                            attr,
+                            (tx & 7) as u8,
+                            (ty & 7) as u8,
+                        )
+                        .map_err(|e| e.to_string())?,
+                        priority: attr.priority(),
+                    };
+                }
+            }
         }
     }
     let hud = HudStrip {

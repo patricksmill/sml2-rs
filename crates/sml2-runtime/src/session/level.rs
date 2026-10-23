@@ -1,19 +1,19 @@
 //! Live level state and its ordered simulation tick.
 
 use super::{
-    note_handoff_screen, player_behind_bg, BOSS_LOAD_VBLANKS, Tilesets,
-    apply_level_entry, boss_def_index, boss_def_portable, build_contact,
-    sample_level_player_inputs, scene_frame_head, seed_level_timer, update_tile_animation,
-    BellArm, CameraSim, EndingEntry, EndingFrame, EndingInput, EndingScene,
-    EndingSequenceController, FireHit, HudStrip, LevelLayout, LevelManifest,
-    MapHandoffOutcome, MapNodes, ObjectClock, ObjectSim, ObjectTables, PlayerKeys,
-    PlayerSim, SceneScripts, SceneStep, SceneVm, SpriteCtx, SpriteInst, TileAnimationClock,
+    apply_level_entry, boss_def_index, boss_def_portable, build_contact, note_handoff_screen,
+    player_behind_bg, sample_level_player_inputs, scene_frame_head, seed_level_timer,
+    update_tile_animation, BellArm, CameraSim, EndingEntry, EndingFrame, EndingInput, EndingScene,
+    EndingSequenceController, FireHit, HudStrip, LevelLayout, LevelManifest, MapHandoffOutcome,
+    MapNodes, ObjectClock, ObjectSim, ObjectTables, PlayerKeys, PlayerSim, SceneScripts, SceneStep,
+    SceneVm, SpriteCtx, SpriteInst, TileAnimationClock, Tilesets, BOSS_LOAD_VBLANKS,
 };
 
 /// In-level simulation state and working buffers for a live level play.
 pub struct LevelContext {
     pub manifest: LevelManifest,
     pub layout: LevelLayout,
+    pub scenery: sml2_core::scenery::SceneryOverlay,
     pub layout_live: LevelLayout,
     pub bg_base: Vec<u8>,
     pub bg_live: Vec<u8>,
@@ -129,6 +129,7 @@ impl LevelContext {
             bg_live: bg_base.clone(),
             manifest,
             layout,
+            scenery: content.scenery.clone(),
             bg_base,
             anim_rows,
             hud,
@@ -306,7 +307,8 @@ impl LevelContext {
 
         if let Some(tables) = &obj_tables {
             if !frozen {
-                let mario = build_contact(&self.sim, &keys, self.cam.scroll_pan, self.cam.scene_state);
+                let mario =
+                    build_contact(&self.sim, &keys, self.cam.scroll_pan, self.cam.scene_state);
                 sample_level_player_inputs(&mut self.obj, &self.sim);
                 self.obj.div = div;
                 if self.cam.scene_load_pending {
@@ -322,7 +324,8 @@ impl LevelContext {
                             // `$3C94` runs inside this update and outlasts its
                             // frame: a VBlank lands before it returns and
                             // decrements `sFadeTimer` with no update of its own.
-                            self.sim.fade_timer = self.sim.fade_timer.saturating_sub(BOSS_LOAD_VBLANKS);
+                            self.sim.fade_timer =
+                                self.sim.fade_timer.saturating_sub(BOSS_LOAD_VBLANKS);
                         }
                     } else if self.cam.take_blocked_scene_load() {
                         self.obj.note_blocked_scene_load();
@@ -524,4 +527,3 @@ impl LevelContext {
         self.sim.map_handoff_done || (self.sim.game_over && self.sim.fade_timer == 0)
     }
 }
-

@@ -34,6 +34,7 @@ pub mod player_sim;
 #[path = "route_matrix_tests.rs"]
 mod route_matrix_tests;
 pub mod scene;
+pub mod scenery;
 pub mod sprite_batch;
 pub mod tile_animation;
 pub mod tileset;

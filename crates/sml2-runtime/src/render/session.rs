@@ -82,6 +82,7 @@ impl LevelContext {
             flash,
             output,
             offsets,
+            (!self.arena_loaded).then_some(&self.scenery),
         )?;
         Ok((frame, offsets.scale))
     }

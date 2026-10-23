@@ -21,11 +21,12 @@ pub struct SpriteInst {
     pub slot: u8,
 }
 
-mod pipe_background;
 mod dx;
 mod layers;
+mod margin;
 pub mod motion;
 pub mod overlay;
+mod pipe_background;
 pub mod view;
 pub use pipe_background::PipeBackground;
 
@@ -163,6 +164,7 @@ pub fn render_view_output(
         pal_override,
         output,
         &motion::Offsets::none(),
+        None,
     )
 }
 
@@ -183,6 +185,7 @@ pub fn render_view_output_smooth(
     pal_override: Option<u8>,
     output: video::OutputMode,
     offsets: &motion::Offsets,
+    scenery: Option<&sml2_core::scenery::SceneryOverlay>,
 ) -> Result<Vec<u8>, String> {
     // Decode every tile in the composed block once.
     let tiles: Vec<[u8; 64]> = (0..256u16)
@@ -207,7 +210,9 @@ pub fn render_view_output_smooth(
     // top 632 is past 768 - 144), every tile drew 8 px low and Mario looked like he floated
     // above the block row the console puts him on.
     let sx = cam_x as i32 - vw as i32 / 2;
-    let sy = cam_y as i32 - vh as i32 / 2 - view::level_bias((vw, vh))
+    let sy = cam_y as i32
+        - vh as i32 / 2
+        - view::level_bias((vw, vh))
         - spr.map_or(0, |s| s.scroll_pan as i32);
     let (span_x, span_y) = (view::window_span(vw), view::window_span(vh));
     let (ox, oy) = (
@@ -266,6 +271,31 @@ pub fn render_view_output_smooth(
                 shade: shades[col as usize],
                 index: col,
             };
+        }
+    }
+    if let Some(scenery) = scenery {
+        let pan = spr.map_or(0, |s| s.scroll_pan as i32);
+        for py in -border..vh as i32 + border {
+            for px in -border..vw as i32 + border {
+                match margin::margin_sample((vw, vh), px, py, (cam_x, cam_y), pan, scenery) {
+                    margin::MarginSample::Native => {}
+                    margin::MarginSample::Edge { nx, ny } => {
+                        let src = *layers.bg_mut(nx, ny);
+                        *layers.bg_mut(px, py) = src;
+                    }
+                    margin::MarginSample::Paint { metatile, tx, ty } => {
+                        let mt = manifest.metatiles.get(metatile).ok_or_else(|| {
+                            format!("scenery metatile {metatile} is not in the level")
+                        })?;
+                        let tile = mt.tiles[(ty >> 3) * 2 + (tx >> 3)] as usize;
+                        let col = tiles[tile][(ty & 7) * 8 + (tx & 7)];
+                        *layers.bg_mut(px, py) = NativeBg {
+                            shade: shades[col as usize],
+                            index: col,
+                        };
+                    }
+                }
+            }
         }
     }
     // Window layer: the status-bar strip (no scroll; window at WX=7 -> px 0).
@@ -530,7 +560,12 @@ fn native_cell(
             behind: attr & 0x80 != 0,
         })
     });
-    layers::Cell { x, y, shift, pixels }
+    layers::Cell {
+        x,
+        y,
+        shift,
+        pixels,
+    }
 }
 
 mod session;

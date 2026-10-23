@@ -7,6 +7,7 @@ use sml2_core::map::{
 };
 use sml2_core::object::ObjectTables;
 use sml2_core::scene::SceneScripts;
+use sml2_core::scenery::SceneryOverlay;
 use sml2_core::tileset::Tilesets;
 use std::{
     error::Error,
@@ -55,6 +56,8 @@ pub struct LevelContent {
     pub objblock: Vec<u8>,
     pub edge_map: Option<[u8; 48]>,
     pub scene_map: Option<Vec<u8>>,
+    /// Paints drawn outside the original level picture. Empty for ROM levels.
+    pub scenery: SceneryOverlay,
 }
 
 impl LevelContent {
@@ -82,6 +85,7 @@ impl LevelContent {
             objblock,
             edge_map,
             scene_map,
+            scenery: SceneryOverlay::empty(),
         })
     }
 }
@@ -240,8 +244,8 @@ impl SessionAssets {
 // old licensee $01), used only when metadata is absent. Malformed metadata and
 // all other read errors remain errors; no ROM is opened by the runtime.
 const LEGACY_SML2_HEADER: [u8; 0x18] = [
-    0x4D, 0x41, 0x52, 0x49, 0x4F, 0x4C, 0x41, 0x4E, 0x44, 0x32, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 3, 4, 2, 1, 1,
+    0x4D, 0x41, 0x52, 0x49, 0x4F, 0x4C, 0x41, 0x4E, 0x44, 0x32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 4, 2,
+    1, 1,
 ];
 
 fn load_cartridge_header(source: &dyn ContentSource) -> io::Result<[u8; 0x18]> {
