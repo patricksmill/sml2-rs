@@ -884,9 +884,11 @@ impl ObjectSim {
 
     /// In an enlarged view slots live past the native alive window, where
     /// their 8-bit screen bytes wrap onto contacts 256 px away; those slots
-    /// take part in no contact. Native views never exclude a slot.
+    /// take part in no contact. Native views never exclude a slot, and
+    /// neither does boss mode (`sSceneState & $F0 != 0`), whose screen bytes
+    /// are not derived from world positions.
     pub fn contact_excluded(&self, i: usize) -> bool {
-        if self.view_margin == (0, 0) {
+        if self.view_margin == (0, 0) || self.mario.scene_state & 0xF0 != 0 {
             return false;
         }
         let c = self.camera_position;

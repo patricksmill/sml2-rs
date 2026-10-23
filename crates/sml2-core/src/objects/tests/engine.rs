@@ -4427,3 +4427,24 @@ fn an_enlarged_view_shell_never_knocks_out_through_the_wrap() {
     obj.ko_overlap(&st);
     assert_eq!(obj.slots[0].b[B_FLAGS], 0x02, "native: ROM bytes");
 }
+
+/// In boss mode (`sSceneState & $F0 != 0`) slot screen bytes are the boss
+/// path's own OAM positions and world X/Y are stale, so no slot is excluded.
+#[test]
+fn an_enlarged_view_never_excludes_boss_contacts() {
+    let mut obj = ObjectSim::new(Vec::new(), 0x0200);
+    obj.view_margin = (112, 36);
+    obj.camera_position = crate::actor::Position {
+        x: 0x0200,
+        y: 0x0100,
+    };
+    set_x(&mut obj.slots[0].b, 0x0400);
+    set_y(&mut obj.slots[0].b, 0x0100);
+    obj.mario.scene_state = 0xF0;
+    assert!(!obj.contact_excluded(0), "boss mode: screen bytes rule");
+    obj.mario.scene_state = 0;
+    assert!(
+        obj.contact_excluded(0),
+        "level mode: past the native window"
+    );
+}
