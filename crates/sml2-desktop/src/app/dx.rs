@@ -1,12 +1,9 @@
 use super::file_picker::{FilePicker, PickerResult};
 use super::theme::{self, Value};
-use super::{DesktopApp, Screen};
-use crate::{
-    dx_import::{self, Event, Worker},
-    game::Game,
-};
+use super::DesktopApp;
+use crate::dx_import::{self, Event, Worker};
 use eframe::egui::{Context, Ui};
-use sml2_runtime::content::{ExtractedContent, SessionAssets};
+use sml2_core::character::Character;
 
 impl DesktopApp {
     pub(super) fn restore_dx(&mut self) {
@@ -88,29 +85,43 @@ impl DesktopApp {
         }));
     }
 
-    pub(super) fn dx_controls(&mut self, ctx: &Context, ui: &mut Ui) {
-        theme::section(ui, "SML2DX · OPENING-LEVEL PREVIEW");
-        if self.dx_worker.is_none() {
-            let installed = self.dx_bundle.is_some();
-            let status = Value::Text(
-                if installed {
-                    "installed"
-                } else {
-                    "not installed"
-                }
-                .into(),
-            );
-            if self.dx_picker.is_none() && self.menu.row(ui, "Import SML2DX v1.8.1…", status) {
-                self.dx_message = "Choose the patched SML2DX v1.8.1 ROM…".into();
-                self.dx_worker = Some(Worker::choose_file(|| {
-                    rfd::FileDialog::new()
-                        .set_title("Import SML2DX v1.8.1")
-                        .add_filter("Game Boy Color ROM", &["gbc", "gb"])
-                        .pick_file()
-                }));
+    /// Settings → Mods: DX Mode, its character and the ROM import.
+    pub(super) fn dx_controls(&mut self, ui: &mut Ui) {
+        theme::section(ui, "SML2DX");
+        let installed = self.dx_bundle.is_some();
+        if self
+            .menu
+            .row(ui, "DX Mode", Value::Toggle(self.settings.dx_mode))
+        {
+            self.settings.dx_mode = !self.settings.dx_mode;
+            // Turning DX Mode on without graphics goes straight to the import.
+            if self.settings.dx_mode && !installed && self.dx_worker.is_none() {
+                self.choose_dx_rom();
             }
-            if installed && self.menu.row(ui, "Play DX preview", Value::None) {
-                self.start_dx(ctx);
+        }
+        let adjust = self.menu.row_adjustment();
+        let luigi = self
+            .dx_bundle
+            .as_ref()
+            .is_some_and(|b| b.supports_character(Character::Luigi));
+        let character = self.settings.character;
+        let shown = if character == Character::Luigi && installed && !luigi {
+            "Luigi (re-import)".to_string()
+        } else {
+            character.label().to_string()
+        };
+        if self.menu.row(ui, "Character", Value::Choice(shown)) || adjust != 0 {
+            self.settings.character = character.next();
+        }
+        theme::section(ui, "GRAPHICS");
+        if self.dx_worker.is_none() {
+            let (label, status) = if installed {
+                ("Re-import SML2DX ROM…", "v1.8.1 installed")
+            } else {
+                ("Import SML2DX ROM…", "not installed")
+            };
+            if self.dx_picker.is_none() && self.menu.row(ui, label, Value::Text(status.into())) {
+                self.choose_dx_rom();
             }
         } else {
             ui.horizontal(|ui| {
@@ -129,8 +140,24 @@ impl DesktopApp {
         }
         theme::note(
             ui,
-            "Supply your own patched ROM. Mario · opening level only · progress saves are isolated.",
+            "Supply your own SML2DX v1.8.1 ROM. DX Mode recolors and redraws the opening level, \
+             Mario or Luigi included, in the normal game with your normal saves. Other screens \
+             keep the display filter, and DX gameplay changes are not included.",
         );
+    }
+
+    fn choose_dx_rom(&mut self) {
+        self.dx_message = "Choose the patched SML2DX v1.8.1 ROM…".into();
+        self.dx_worker = Some(Worker::choose_file(|| {
+            // Unit tests drive this path; they must never open a native dialog.
+            if cfg!(test) {
+                return None;
+            }
+            rfd::FileDialog::new()
+                .set_title("Import SML2DX v1.8.1")
+                .add_filter("Game Boy Color ROM", &["gbc", "gb"])
+                .pick_file()
+        }));
     }
 
     /// The in-app ROM browser, drawn over whichever screen is showing.
@@ -145,40 +172,6 @@ impl DesktopApp {
                 self.dx_message = "DX import cancelled; previous installation retained".into();
             }
             None => {}
-        }
-    }
-
-    pub(super) fn start_dx(&mut self, ctx: &Context) {
-        if self.dx_normal.is_some() || self.dx_bundle.is_none() {
-            return;
-        }
-        if self.game.is_none() {
-            self.dx_message = "Extracted base assets are required. Supply their directory with --assets, then retry loading game.".into();
-            return;
-        }
-        let result = SessionAssets::load_from(&ExtractedContent::new(&self.options.assets))
-            .map_err(|error| format!("DX preview needs extracted base assets (--assets): {error}"))
-            .and_then(|assets| Game::preview(assets, self.options.audio));
-        match result {
-            Ok(preview) => {
-                if let Some(game) = &mut self.game {
-                    game.audio_running(false);
-                }
-                self.dx_normal = self.game.replace(preview);
-                self.debug = false;
-                self.paused = false;
-                self.navigate(ctx, Screen::Game);
-            }
-            Err(error) => self.dx_message = error,
-        }
-    }
-
-    pub(super) fn finish_dx(&mut self) {
-        if let Some(normal) = self.dx_normal.take() {
-            self.game = Some(normal);
-            self.paused = false;
-            self.step = false;
-            self.return_screen = Screen::Home;
         }
     }
 }

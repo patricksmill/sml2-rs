@@ -257,11 +257,6 @@ impl DesktopApp {
     }
 
     pub(super) fn apply_debug(&mut self, action: DebugAction) {
-        if self.dx_normal.is_some() {
-            self.debug_note = Some("End the DX preview before editing the normal game".into());
-            self.debug_note_error = true;
-            return;
-        }
         let warped = matches!(
             &action,
             DebugAction::WarpMap { .. } | DebugAction::EnterZone(_) | DebugAction::WarpLevel(_)

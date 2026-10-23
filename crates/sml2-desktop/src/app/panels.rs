@@ -71,12 +71,6 @@ impl DesktopApp {
                     self.navigate(ctx, Screen::Game);
                 }
             }
-            if self.dx_bundle.is_some()
-                && self.dx_worker.is_none()
-                && self.menu.button(ui, "Play DX Preview")
-            {
-                self.start_dx(ctx);
-            }
             if self.menu.button(ui, "Settings") {
                 self.return_screen = Screen::Home;
                 self.navigate(ctx, Screen::Settings);
@@ -186,7 +180,7 @@ impl DesktopApp {
                 Page::Display => self.display_page(ctx, ui),
                 Page::Audio => self.audio_page(ui),
                 Page::Controls => self.controls_page(ui),
-                Page::Mods => self.dx_controls(ctx, ui),
+                Page::Mods => self.dx_controls(ui),
                 Page::Debug => self.debug_page(ui),
             }
             ui.add_space(6.0);
@@ -231,9 +225,18 @@ impl DesktopApp {
         {
             self.cycle_filter(if adjust != 0 { adjust } else { 1 });
         }
+        if let Some(preview) = &mut self.filter_preview {
+            ui.add_space(4.0);
+            let caption = if self.settings.dx_mode && self.dx_bundle.is_some() {
+                "DX Mode colors the opening level; the filter covers everything else"
+            } else {
+                "Left / right on the filter row to compare"
+            };
+            preview.show(ui, self.settings.filter, caption);
+        }
         theme::note(
             ui,
-            "The backdrop previews the filter. + / − zoom · F11 fullscreen · F4 cycles filters. The game view stays 160 × 144.",
+            "+ / − zoom · F11 fullscreen · F4 cycles filters. The game view stays 160 × 144.",
         );
     }
 

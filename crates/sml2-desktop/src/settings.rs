@@ -33,6 +33,10 @@ pub struct Settings {
     pub preferred_controller: Option<String>,
     pub bindings: Bindings,
     pub dx_installation: Option<sml2_dx::cache::CacheKey>,
+    /// Present covered screens with the installed DX graphics and colors.
+    pub dx_mode: bool,
+    /// Who DX Mode draws; native physics are the same for both.
+    pub character: sml2_core::character::Character,
 }
 
 impl Default for Settings {
@@ -49,6 +53,8 @@ impl Default for Settings {
             preferred_controller: None,
             bindings: Bindings::default(),
             dx_installation: None,
+            dx_mode: false,
+            character: Default::default(),
         }
     }
 }
@@ -200,14 +206,13 @@ mod tests {
     fn version_two_settings_restore_optional_dx_selection() {
         let mut settings = Settings::default();
         let mut value = serde_json::to_value(&settings).unwrap();
-        value.as_object_mut().unwrap().remove("dx_installation");
-        assert_eq!(
-            serde_json::from_value::<Settings>(value)
-                .unwrap()
-                .dx_installation,
-            None
-        );
+        for field in ["dx_installation", "dx_mode", "character"] {
+            value.as_object_mut().unwrap().remove(field);
+        }
+        assert_eq!(serde_json::from_value::<Settings>(value).unwrap(), settings);
         settings.dx_installation = Some(sml2_dx::cache::CacheKey::new("1".repeat(64)));
+        settings.dx_mode = true;
+        settings.character = sml2_core::character::Character::Luigi;
         let restored: Settings =
             serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
         assert_eq!(restored, settings);

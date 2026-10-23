@@ -87,7 +87,7 @@ fn selecting_rom_does_not_activate_quit_from_browser_keyboard_input() {
         app.screen = Screen::Settings;
         app.page = super::panels::Page::Mods;
         super::tests::frame(&mut app, &ctx, vec![]);
-        app.menu.selected = 1; // Import SML2DX, after the tab strip.
+        app.menu.selected = 3; // Import, after the tab strip, DX Mode and Character.
         app.dx_picker = Some(super::file_picker::FilePicker::new(path.clone()));
         super::tests::frame(
             &mut app,
@@ -144,21 +144,83 @@ fn cancelled_and_failed_replacements_preserve_selected_installation() {
     let _ = std::fs::remove_dir_all(path);
 }
 
+/// A valid bundle whose every BG color is pure red.
+fn red_bundle() -> sml2_dx::Bundle {
+    sml2_dx::Bundle {
+        schema: sml2_dx::BUNDLE_SCHEMA,
+        source_sha256: sml2_dx::ROM_SHA256.into(),
+        background: [vec![0; 0x1000], vec![0; 0x1000]],
+        mario_normal: vec![0; 0x800],
+        mario_fire: vec![0; 0x800],
+        mario_bank1: vec![0; 0x800],
+        tile_attributes: vec![0; 256],
+        hud_tiles: vec![0; 20],
+        hud_attributes: vec![0; 20],
+        bg_palettes: [0x1f, 0].repeat(32),
+        obj_palettes: [0xe0, 3].repeat(32),
+        animation: vec![0; 256],
+        object_mappings: vec![vec![]; 168],
+        player_mappings: vec![vec![]; 242],
+        luigi: Some(sml2_dx::CharacterGraphics {
+            normal: vec![0; 0x800],
+            fire: vec![0; 0x800],
+            bank1: vec![0; 0x800],
+            mappings: vec![vec![]; 242],
+        }),
+    }
+}
+
+fn is_red(image: &ColorImage) -> bool {
+    image
+        .pixels
+        .iter()
+        .all(|p| *p == Color32::from_rgb(255, 0, 0))
+}
+
 #[test]
-fn leaving_preview_restores_normal_game_and_blocks_debug_warps() {
-    let (mut app, ctx, path) = super::tests::app();
-    let mut normal = app.game.take().unwrap();
-    normal.session.coins_low = 0x42;
-    app.dx_normal = Some(normal);
-    app.game = Some(Game::preview(SessionAssets::load().unwrap(), false).unwrap());
-    app.screen = Screen::Game;
-    app.apply_debug(super::debug::DebugAction::WarpLevel(1));
-    assert!(app.debug_note_error);
-    assert!(matches!(&app.game.as_ref().unwrap().session.state,
-        sml2_runtime::session::SessionState::InLevel(ctx) if ctx.manifest.level_id == 0));
-    app.navigate(&ctx, Screen::Home);
-    assert!(app.dx_normal.is_none());
-    assert_eq!(app.game.as_ref().unwrap().session.coins_low, 0x42);
+fn dx_mode_colors_the_normal_game_only_where_dx_data_covers_it() {
+    let (mut app, _, path) = super::tests::app();
+    app.dx_bundle = Some(red_bundle());
+    let game = app.game.as_mut().unwrap();
+    game.session.debug_warp_level(0).unwrap();
+    // Off: the filter's native frame, even in the covered level.
+    assert!(!is_red(&app.frame_image().unwrap()));
+    app.settings.dx_mode = true;
+    assert!(is_red(&app.frame_image().unwrap()));
+    // Luigi uses the same session; a Mario-only bundle quietly draws Mario.
+    app.settings.character = sml2_core::character::Character::Luigi;
+    assert!(is_red(&app.frame_image().unwrap()));
+    let bundle = app.dx_bundle.as_mut().unwrap();
+    bundle.schema = 1;
+    bundle.luigi = None;
+    assert!(is_red(&app.frame_image().unwrap()));
+    // Another level keeps the native picture, and so does a DX failure.
+    let game = app.game.as_mut().unwrap();
+    game.session.debug_warp_level(1).unwrap();
+    assert!(!is_red(&app.frame_image().unwrap()));
+    let game = app.game.as_mut().unwrap();
+    game.session.debug_warp_level(0).unwrap();
+    app.dx_bundle.as_mut().unwrap().bg_palettes.clear();
+    assert!(!is_red(&app.frame_image().unwrap()));
+    assert!(app.dx_message.contains("BG palettes"));
+    // The normal game keeps its save slot: DX Mode is presentation only.
     assert!(!path.join("save.sav").exists());
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn enabling_dx_mode_without_graphics_starts_the_import() {
+    let (mut app, ctx, path) = super::tests::app();
+    app.screen = Screen::Settings;
+    app.page = super::panels::Page::Mods;
+    super::tests::frame(&mut app, &ctx, vec![]);
+    app.menu.selected = 1; // DX Mode, after the tab strip.
+    app.input.event(crate::input::Button::key("Enter"), true);
+    super::tests::frame(&mut app, &ctx, vec![]);
+    assert!(app.settings.dx_mode);
+    assert!(app.dx_worker.is_some(), "the ROM chooser opens");
+    // The test chooser returns no file, so the in-app browser takes over.
+    wait_for_dx(&mut app);
+    assert!(app.dx_picker.is_some());
     let _ = std::fs::remove_dir_all(path);
 }

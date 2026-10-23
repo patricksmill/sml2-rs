@@ -49,12 +49,14 @@ The shell consumes existing extracted base content, which can be produced with
 `cargo run -p sml2-extract`.
 Use `--assets /path/to/extracted` to run from another directory.
 
-## SML2DX opening-level preview
+## SML2DX Mode
 
-On Home, choose **Import SML2DX…** and select your patched v1.8.1 ROM built
-against the original UE v1.0 release. The importer supports the exact ROM digest
-documented in the [DX audit](sml2dx-audit.md); other revisions and modified builds
-are rejected. Existing extracted base assets are required.
+In **Settings → Mods**, turn on **DX Mode** or choose **Import SML2DX ROM…**, and
+select your patched v1.8.1 ROM built against the original UE v1.0 release.
+Turning DX Mode on before anything is installed opens the import straight away.
+The importer supports the exact ROM digest documented in the
+[DX audit](sml2dx-audit.md); other revisions and modified builds are rejected.
+Existing extracted base assets are required.
 
 If the system dialog returns no file (including when a Linux desktop portal is
 unavailable), an in-app file browser opens. Navigate folders or paste the full
@@ -64,19 +66,21 @@ Import runs in the background and can be cancelled. Graphics, attributes,
 palettes and mappings are extracted locally into the application's `dx` cache
 directory. A complete bundle is validated before atomic publication. Its identity
 includes the ROM digest, base assets, importer version and schema. Failed imports
-preserve the selected installation. Settings remember the installation; startup
-checks its integrity and base assets before enabling **Play DX preview**.
+preserve the selected installation. Settings remember the installation, DX Mode
+and the character; startup checks the installation's integrity and base assets.
 
-The preview opens the first level directly as Mario with the original native
-gameplay rules. It uses DX graphics and CGB colors, including sprite overlays,
-tile animation, star colors and pause colors. Display palette presets do not
-recolor this output. Returning to the desktop menu, dying or completing the level
-ends the preview and restores the normal game session. Preview sessions never
-read or write progress saves, and debug game edits are disabled.
+DX Mode is a presentation layer over the normal game, not a separate session:
+saves, progress and the debug panel work as usual. While the opening level is on
+screen it uses DX graphics and CGB colors, including sprite overlays, tile
+animation, star colors and pause colors, and the display filter does not apply.
+**Character** picks Mario or Luigi graphics; both play with the native rules.
+Installations imported before Luigi support draw Mario until re-imported
+(**Re-import SML2DX ROM…**). Every other screen keeps the display filter, and a
+DX rendering failure falls back to it with the error shown on the Mods page.
 
-This is an opening-level presentation preview. Luigi, DX physics, other levels,
-title/map colorization and importing without extracted base assets remain future
-work. No ROM or imported graphics are distributed with the application.
+Other levels, title/map colorization, DX physics and importing without extracted
+base assets remain future work. No ROM or imported graphics are distributed with
+the application.
 
 ## Controls and settings
 
@@ -117,7 +121,9 @@ Debug inspection shows map/player/camera/scene state, object slots, sound-driver
 state and diagnostics. Debug stepping advances exactly one outer session tick.
 
 F4 cycles display palettes: Grayscale, DMG green, Pocket, GBC auto, the 32 SGB
-presets (1-A through 4-H), and Amber. The settings menu provides the same choices.
+presets (1-A through 4-H), and Amber. **Settings → Display** provides the same
+choices with a preview: an opening-level frame (background, Mario and the HUD)
+recolored live as you step through filters. The launcher backdrop follows it too.
 GBC auto uses separate background and sprite palettes selected from the ROM's
 title checksum. The old `SGB color` setting migrates to the real SGB 1-A preset.
 See [hardware palettes](hardware-palettes.md) for exact colours and source tables.

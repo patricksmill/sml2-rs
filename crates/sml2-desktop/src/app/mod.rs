@@ -9,7 +9,7 @@ use crate::{
 use eframe::egui::{
     self, Color32, ColorImage, Context, RawInput, TextureHandle, TextureOptions, ViewportCommand,
 };
-use sml2_core::video::PalettePixel;
+use sml2_core::{character::Character, video::PalettePixel};
 use sml2_runtime::content::{ExtractedContent, SessionAssets};
 #[cfg(test)]
 use std::path::PathBuf;
@@ -20,6 +20,7 @@ mod controls;
 mod debug;
 mod dx;
 mod file_picker;
+mod filter_preview;
 mod panels;
 mod startup;
 pub(crate) mod theme;
@@ -46,7 +47,6 @@ pub struct DesktopApp {
     allow_save: bool,
     status: Option<String>,
     game: Option<Game>,
-    dx_normal: Option<Game>,
     dx_bundle: Option<sml2_dx::Bundle>,
     dx_worker: Option<crate::dx_import::Worker>,
     dx_picker: Option<file_picker::FilePicker>,
@@ -60,6 +60,8 @@ pub struct DesktopApp {
     reset_armed: bool,
     /// Level 1 behind the launcher; `None` until the game data loads.
     backdrop: Option<backdrop::Backdrop>,
+    /// The Display page's sample frame; `None` until the game data loads.
+    filter_preview: Option<filter_preview::FilterPreview>,
     input: InputState,
     controllers: Controllers,
     menu: Menu,
@@ -113,7 +115,6 @@ impl DesktopApp {
             allow_save: error.is_none(),
             status: error,
             game: None,
-            dx_normal: None,
             dx_bundle: None,
             dx_worker: None,
             dx_picker: None,
@@ -124,6 +125,7 @@ impl DesktopApp {
             page: Page::Display,
             reset_armed: false,
             backdrop: None,
+            filter_preview: None,
             input: InputState::default(),
             controllers: Controllers::new(),
             menu: Menu::default(),
@@ -187,6 +189,11 @@ impl DesktopApp {
                     Ok(backdrop) => self.backdrop = Some(backdrop),
                     Err(e) => eprintln!("Launcher backdrop unavailable: {e}"),
                 }
+                let (assets, preview) = filter_preview::FilterPreview::new(assets);
+                match preview {
+                    Ok(preview) => self.filter_preview = Some(preview),
+                    Err(e) => eprintln!("Filter preview unavailable: {e}"),
+                }
                 self.game = Some(Game::new(
                     assets,
                     self.options.paths.save.clone(),
@@ -199,9 +206,6 @@ impl DesktopApp {
     }
 
     fn navigate(&mut self, ctx: &Context, screen: Screen) {
-        if screen != Screen::Game {
-            self.finish_dx();
-        }
         self.screen = screen;
         self.capture = None;
         self.reset_armed = false;
@@ -275,7 +279,7 @@ impl DesktopApp {
         if self.screen != Screen::Game {
             self.menu.finish();
         }
-        if self.debug && self.dx_normal.is_none() {
+        if self.debug {
             self.debug_panel(ctx);
         }
 
@@ -296,7 +300,6 @@ impl DesktopApp {
             self.input.suppress_until_release();
         }
         let mut submitted_frame = None;
-        let mut dx_render_failed = false;
         if let Some(game) = &mut self.game {
             game.audio_running(running && !self.settings.muted);
             for _ in 0..ticks {
@@ -313,43 +316,11 @@ impl DesktopApp {
                         self.settings.volume
                     },
                 );
-                if game.preview_finished() {
-                    break;
-                }
             }
-            let image = if self.dx_normal.is_some() {
-                match game.session.render_dx_frame(
-                    self.dx_bundle.as_ref().expect("active DX bundle"),
-                    sml2_core::character::Character::Mario,
-                ) {
-                    Ok(pixels) => ColorImage::new(
-                        [160, 144],
-                        pixels
-                            .into_iter()
-                            .map(|[r, g, b]| Color32::from_rgb(r, g, b))
-                            .collect(),
-                    ),
-                    Err(error) => {
-                        self.dx_message = error;
-                        dx_render_failed = true;
-                        ColorImage::from_gray([160, 144], &[0; 160 * 144])
-                    }
-                }
-            } else {
-                let pixels = game.session.render_palette_frame((160, 144));
-                colorized(
-                    &pixels,
-                    self.settings.filter,
-                    &game.session.assets.cartridge_header,
-                )
-            };
+        }
+        if let Some(image) = self.frame_image() {
             self.texture.set(image.clone(), TextureOptions::NEAREST);
             submitted_frame = Some(image);
-        }
-        if self.dx_normal.is_some()
-            && (dx_render_failed || self.game.as_ref().is_some_and(Game::preview_finished))
-        {
-            self.navigate(ctx, Screen::Home);
         }
         if !self.settings.fullscreen && ctx.input(|i| i.viewport().maximized != Some(true)) {
             let size = ctx.input(|i| {
@@ -380,6 +351,41 @@ impl DesktopApp {
             }
         }
         ctx.request_repaint_after(Duration::from_millis(8));
+    }
+
+    /// The current game frame: DX Mode's colors on screens the installed DX
+    /// data covers, the display filter everywhere else and on any DX failure.
+    fn frame_image(&mut self) -> Option<ColorImage> {
+        let game = self.game.as_ref()?;
+        let dx = self
+            .dx_bundle
+            .as_ref()
+            .filter(|_| self.settings.dx_mode && game.session.dx_supported());
+        if let Some(bundle) = dx {
+            let character = if bundle.supports_character(self.settings.character) {
+                self.settings.character
+            } else {
+                Character::Mario
+            };
+            match game.session.render_dx_frame(bundle, character) {
+                Ok(pixels) => {
+                    return Some(ColorImage::new(
+                        [160, 144],
+                        pixels
+                            .into_iter()
+                            .map(|[r, g, b]| Color32::from_rgb(r, g, b))
+                            .collect(),
+                    ))
+                }
+                Err(error) => self.dx_message = error,
+            }
+        }
+        let pixels = game.session.render_palette_frame((160, 144));
+        Some(colorized(
+            &pixels,
+            self.settings.filter,
+            &game.session.assets.cartridge_header,
+        ))
     }
 
     fn toolbar(&mut self, ctx: &Context) {
