@@ -6,8 +6,8 @@
 use super::*;
 
 /// A half-open contact box in `$2EF5`'s OAM space (screen px = x − 8,
-/// y − 16), in true `i32` positions: Mario's box overlaps a slot's exactly
-/// when `collide` touches the slot (screen-byte wrap aside).
+/// y − 16): Mario's box overlaps a slot's exactly when `collide` touches
+/// the slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ContactBox {
     pub x0: i32,
@@ -28,8 +28,7 @@ fn contact_type(ty: u8) -> bool {
 impl ObjectSim {
     /// Mario's side of `$2EF5` for the last stepped Mario state.
     pub fn mario_contact_box(&self, cam_x: u16, cam_y: u16) -> ContactBox {
-        let mx = i32::from(self.mario.x) - i32::from(cam_x) + 96;
-        let my = i32::from(self.mario.y) - i32::from(cam_y) + 98;
+        let (mx, my) = self.mario_contact_point(cam_x, cam_y);
         let big = self.mario.powerup != 0;
         let e = match (self.mario.ducking, big) {
             (false, true) => 8,
@@ -44,19 +43,48 @@ impl ObjectSim {
         }
     }
 
-    /// Slot `i`'s side of `$2EF5`; `None` unless the slot is active and
-    /// passes the `$2EDD` type gate.
+    /// `collide`'s `mario_sx`/`mario_sy` before the `u8` truncation.
+    fn mario_contact_point(&self, cam_x: u16, cam_y: u16) -> (i32, i32) {
+        (
+            i32::from(self.mario.x) - i32::from(cam_x) + 96,
+            i32::from(self.mario.y) - i32::from(cam_y) + 98,
+        )
+    }
+
+    /// Slot `i`'s side of `$2EF5`; `None` unless the slot passes the `$2EDD`
+    /// type gate and, outside boss mode (where the state byte is HP), is
+    /// active. A slot `collide` tests is placed from the `B_SCRX`/`B_SCRY`
+    /// bytes it reads — stale from the previous pass, or the boss driver's
+    /// own — unwrapped into the 256 px window its wrapping compare sees from
+    /// Mario. A `contact_excluded` slot is placed at its true world position.
     pub fn slot_contact_box(&self, i: usize, cam_x: u16, cam_y: u16) -> Option<ContactBox> {
         let s = &self.slots[i];
-        if !s.active() || !contact_type(s.b[B_TYPE]) {
+        let boss = self.mario.scene_state & 0xF0 != 0;
+        if (!boss && !s.active()) || !contact_type(s.b[B_TYPE]) {
             return None;
         }
-        let ox = i32::from(s.x()) - i32::from(cam_x) + 88;
-        let oy = i32::from(s.y()) - i32::from(cam_y) + 88 + i32::from(self.mario.pan & 3);
         let hb = |k: usize| i32::from(s.b[k] as i8);
+        let (left, top) = (hb(B_HB_LEFT), hb(B_HB_TOP));
+        let (ox, oy) = if self.contact_excluded(i) {
+            (
+                i32::from(s.x()) - i32::from(cam_x) + 88,
+                i32::from(s.y()) - i32::from(cam_y) + 88 + i32::from(self.mario.pan & 3),
+            )
+        } else {
+            // `collide` touches when `(mario − (o + edge)) mod 256 < span`:
+            // take the `o ≡ byte (mod 256)` that puts the difference in 0..256.
+            let unwrap = |m: i32, byte: u8, edge: i32| {
+                m - edge - (m - i32::from(byte) - edge).rem_euclid(256)
+            };
+            let (mx, my) = self.mario_contact_point(cam_x, cam_y);
+            (
+                unwrap(mx, s.b[B_SCRX], left - 5),
+                unwrap(my, s.b[B_SCRY], top - 20),
+            )
+        };
         Some(ContactBox {
-            x0: ox + hb(B_HB_LEFT),
-            y0: oy + hb(B_HB_TOP),
+            x0: ox + left,
+            y0: oy + top,
             x1: ox + hb(B_HB_RIGHT),
             y1: oy + hb(B_HB_BOTTOM),
         })
