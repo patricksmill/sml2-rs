@@ -261,8 +261,9 @@ impl Session {
     }
 
     /// The overworld in any view. The hub is stitched from native frames
-    /// (its sprites are 8-bit OAM positions relative to each frame's camera);
-    /// a zone screen is drawn whole; rooms and the pan mode stay native.
+    /// (its sprites are 8-bit OAM positions relative to each frame's camera)
+    /// while the view fits inside it; a zone screen is drawn whole; rooms,
+    /// the pan mode and views larger than the hub stay native.
     pub(crate) fn overworld_view<P: Copy>(
         &self,
         map_sim: &sml2_core::map_sim::MapSim,
@@ -275,7 +276,9 @@ impl Session {
             return render(map_sim, view);
         }
         match map_sim.screen_id {
-            0 if map_sim.scroll_only_latch == 0 => self.stitched_hub(map_sim, view, fill, render),
+            0 if map_sim.scroll_only_latch == 0 && view.0 <= 512 && view.1 <= 512 => {
+                self.stitched_hub(map_sim, view, fill, render)
+            }
             1..=8 => {
                 let size = (view.0.min(256), 144);
                 Ok(letterbox(&render(map_sim, size)?, size, view, fill))

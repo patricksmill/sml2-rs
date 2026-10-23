@@ -118,6 +118,20 @@ fn the_hub_view_stays_inside_the_map_and_keeps_the_native_centre() {
 }
 
 #[test]
+fn a_hub_view_wider_than_the_map_is_letterboxed() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    let SessionState::Overworld(map) = &mut session.state else {
+        panic!("boots to map")
+    };
+    map.load_screen(0, 0, &session.assets.node_records);
+    let native = session.render_frame(NATIVE);
+    let view = (600, 144);
+    let wide = session.render_frame(view);
+    assert_eq!(wide.len(), 600 * 144);
+    assert_eq!(crop(&wide, view, (220, 0, 160, 144)), native);
+}
+
+#[test]
 fn a_zone_screen_is_drawn_whole_and_centred() {
     let mut session = Session::new(SessionAssets::load().unwrap());
     let SessionState::Overworld(map) = &mut session.state else {
