@@ -58,12 +58,18 @@ stays byte-identical.
   offsets, and resolves BG-over-OBJ priority per output pixel.
 - `s` is the largest divisor of the window's effective integer scale such that
   `(vw·s)·(vh·s) <= 2048·2048`. The GPU still upsamples by an integer factor.
-- At `s == 1`, or with smoothing off, the existing renderer runs unchanged.
+- There is one render path: with smoothing off it runs at `s = 1` with zero
+  offsets and no border, and must stay byte-identical to the pre-change
+  output (existing renderer tests and the capture sweep check this).
+- The background border is 8 px, the largest shift the snap rule allows.
 
-### Snap rules (use `alpha = 1`, no offset)
+### Snap rules (no offset for that position)
 
-- Camera or a given sprite moved more than 16 px on either axis in one tick.
-- An object slot absent from the previous snapshot (or a different sprite id).
+- Camera or a given sprite moved more than 8 px on either axis in one tick.
+  A camera snap drops every offset; a sprite snap draws that sprite at its
+  current world position against the in-between camera.
+- An object slot absent from the previous snapshot is treated like a sprite
+  snap.
 - Paused (game pause or debug pause), single-stepping, scene-reload blank,
   boss-mode switch, or the state was not a level context on both ticks.
 
