@@ -25,6 +25,7 @@ mod editor;
 mod file_picker;
 mod filter_preview;
 mod catalog;
+mod hall;
 mod panels;
 mod pointer;
 mod startup;
@@ -100,6 +101,9 @@ pub struct DesktopApp {
     game_rect: [u32; 4],
     aim: Option<pointer::Aim>,
     start_click: bool,
+    hall: Option<hall::Hall>,
+    prev_hall_a: bool,
+    prev_hall_left: bool,
     validation_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
     settings_open: bool,
 }
@@ -161,6 +165,9 @@ impl DesktopApp {
             game_rect: [0; 4],
             aim: None,
             start_click: false,
+            hall: None,
+            prev_hall_a: false,
+            prev_hall_left: false,
             validation_error: Default::default(),
             settings_open: false,
         };
@@ -231,6 +238,7 @@ impl DesktopApp {
         release_focus(ctx);
         self.aim = None;
         self.start_click = false;
+        self.hall = None;
     }
 
     fn zoom(&mut self, ctx: &Context, scale: Option<u8>) {
@@ -344,7 +352,41 @@ impl DesktopApp {
                 keys = merged.keys;
                 clear_aim = merged.clear_aim;
                 clear_start = merged.clear_start;
+                let mut hall_persist = false;
+                if let Some(mut hall) = self.hall.take() {
+                    let jump = keys.a && !self.prev_hall_a;
+                    self.prev_hall_a = keys.a;
+                    let leave = hall::step(
+                        &mut hall,
+                        keys.left,
+                        keys.right,
+                        jump,
+                        &mut self.settings,
+                        &mut self.debug,
+                    );
+                    if leave {
+                        hall_persist = true;
+                    } else {
+                        self.hall = Some(hall);
+                    }
+                    keys = PlayerKeys::default();
+                } else if let sml2_runtime::session::SessionState::FileSelect(file_select) =
+                    &game.session.state
+                {
+                    if file_select.menu_state() == 1
+                        && file_select.cursor().0 == 0x28
+                        && keys.left
+                        && !self.prev_hall_left
+                    {
+                        self.hall = Some(hall::Hall::enter());
+                        keys.left = false;
+                    }
+                    self.prev_hall_left = keys.left;
+                }
                 game.tick(keys, volume);
+                if hall_persist {
+                    self.persist();
+                }
             }
             if clear_aim {
                 self.aim = None;
