@@ -53,19 +53,37 @@ impl<B: Copy, O: Copy> Layers<B, O> {
         let (w, h) = (vw * scale, vh * scale);
         let (s, b) = (scale as i32, self.border as i32);
         let (bw, bh) = ((vw + 2 * self.border) as i32, (vh + 2 * self.border) as i32);
+        // `(window column, background column)` per output column.
+        let columns: Vec<(usize, usize)> = (0..w as i32)
+            .map(|x| {
+                let gx = ((x - bg_shift.0).div_euclid(s) + b).clamp(0, bw - 1);
+                ((x / s) as usize, gx as usize)
+            })
+            .collect();
         let mut bg = Vec::with_capacity(w * h);
+        let mut previous = None;
         for y in 0..h as i32 {
-            let gy = ((y - bg_shift.1).div_euclid(s) + b).clamp(0, bh - 1);
-            for x in 0..w as i32 {
-                let window = self.window[(y / s) as usize * vw + (x / s) as usize];
-                bg.push(window.unwrap_or_else(|| {
-                    let gx = ((x - bg_shift.0).div_euclid(s) + b).clamp(0, bw - 1);
-                    self.bg[gy as usize * bw as usize + gx as usize]
-                }));
+            let gy = ((y - bg_shift.1).div_euclid(s) + b).clamp(0, bh - 1) as usize;
+            let wy = (y / s) as usize;
+            if previous == Some((gy, wy)) {
+                bg.extend_from_within(bg.len() - w..);
+                continue;
             }
+            previous = Some((gy, wy));
+            let bg_row = &self.bg[gy * bw as usize..][..bw as usize];
+            let window_row = &self.window[wy * vw..][..vw];
+            bg.extend(
+                columns
+                    .iter()
+                    .map(|&(wx, gx)| window_row[wx].unwrap_or(bg_row[gx])),
+            );
         }
         let mut obj = vec![None; w * h];
         for cell in &self.cells {
+            let (x0, y0) = (cell.x * s + cell.shift.0, cell.y * s + cell.shift.1);
+            if x0 >= w as i32 || y0 >= h as i32 || x0 + 8 * s <= 0 || y0 + 8 * s <= 0 {
+                continue;
+            }
             for (i, p) in cell.pixels.iter().enumerate() {
                 let Some(p) = p else { continue };
                 let x0 = (cell.x + (i % 8) as i32) * s + cell.shift.0;
@@ -124,6 +142,95 @@ mod tests {
         assert_eq!(obj[0], Some(5));
         let (_, obj) = layers.compose(1, (0, 0), |&o, _| o == 5);
         assert_eq!(obj[0], Some(6));
+    }
+
+    /// The straightforward per-pixel composition.
+    fn reference(
+        layers: &Layers<u8, u8>,
+        scale: usize,
+        bg_shift: (i32, i32),
+        hidden: impl Fn(&u8, &u8) -> bool,
+    ) -> (Vec<u8>, Vec<Option<u8>>) {
+        let (vw, vh) = layers.view;
+        let (w, h) = (vw * scale, vh * scale);
+        let (s, b) = (scale as i32, layers.border as i32);
+        let (bw, bh) = (
+            (vw + 2 * layers.border) as i32,
+            (vh + 2 * layers.border) as i32,
+        );
+        let mut bg = Vec::with_capacity(w * h);
+        for y in 0..h as i32 {
+            let gy = ((y - bg_shift.1).div_euclid(s) + b).clamp(0, bh - 1);
+            for x in 0..w as i32 {
+                let window = layers.window[(y / s) as usize * vw + (x / s) as usize];
+                bg.push(window.unwrap_or_else(|| {
+                    let gx = ((x - bg_shift.0).div_euclid(s) + b).clamp(0, bw - 1);
+                    layers.bg[gy as usize * bw as usize + gx as usize]
+                }));
+            }
+        }
+        let mut obj = vec![None; w * h];
+        for cell in &layers.cells {
+            for (i, p) in cell.pixels.iter().enumerate() {
+                let Some(p) = p else { continue };
+                let x0 = (cell.x + (i % 8) as i32) * s + cell.shift.0;
+                let y0 = (cell.y + (i / 8) as i32) * s + cell.shift.1;
+                for y in y0.max(0)..(y0 + s).min(h as i32) {
+                    for x in x0.max(0)..(x0 + s).min(w as i32) {
+                        let idx = y as usize * w + x as usize;
+                        if obj[idx].is_none() && !hidden(p, &bg[idx]) {
+                            obj[idx] = Some(*p);
+                        }
+                    }
+                }
+            }
+        }
+        (bg, obj)
+    }
+
+    #[test]
+    fn composition_matches_the_per_pixel_reference() {
+        let mut seed = 0x2545_f491_u32;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            seed
+        };
+        for (border, scale, shift) in [
+            (0, 1, (0, 0)),
+            (8, 1, (1, -2)),
+            (8, 2, (-3, 5)),
+            (8, 3, (24, -24)),
+            (8, 4, (-7, 0)),
+        ] {
+            let mut layers: Layers<u8, u8> = Layers::new((24, 16), border, 0);
+            for v in &mut layers.bg {
+                *v = (next() % 4) as u8;
+            }
+            for (i, v) in layers.window.iter_mut().enumerate() {
+                *v = (i / 24 >= 12 && next() % 3 != 0).then_some(9);
+            }
+            for _ in 0..12 {
+                let pixels = std::array::from_fn(|_| (next() % 3 != 0).then(|| (next() % 4) as u8));
+                let at = |n: u32| (n % 48) as i32 - 16;
+                let s = scale as i32;
+                layers.cells.push(Cell {
+                    x: at(next()),
+                    y: at(next()),
+                    shift: (
+                        ((next() % 33) as i32 - 16) * s / 2,
+                        (next() % 33) as i32 - 16,
+                    ),
+                    pixels,
+                });
+            }
+            let hidden = |o: &u8, b: &u8| *o == 1 && *b != 0;
+            assert!(
+                layers.compose(scale, shift, hidden) == reference(&layers, scale, shift, hidden),
+                "border {border}, scale {scale}, shift {shift:?}"
+            );
+        }
     }
 
     #[test]
