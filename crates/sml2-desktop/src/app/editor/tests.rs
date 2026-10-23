@@ -53,7 +53,7 @@ fn fast_strokes_interpolate_and_undo_as_one_gesture() {
 }
 
 #[test]
-fn rectangle_skips_the_map_and_cancellation_keeps_existing_scenery() {
+fn rectangle_paints_inside_the_map_without_changing_terrain() {
     let mut work = workspace();
     work.tool = Tool::Rectangle;
     work.begin((-2, 0), false);
@@ -67,8 +67,9 @@ fn rectangle_skips_the_map_and_cancellation_keeps_existing_scenery() {
     work.begin((-2, 0), false);
     work.extend(Some((2, 1)));
     work.finish();
-    assert_eq!(work.scenery.paints.len(), 4);
-    assert_eq!(work.sample((0, 0)), Some(0));
+    assert_eq!(work.scenery.paints.len(), 10);
+    assert_eq!(work.sample((0, 0)), Some(1));
+    assert_eq!(work.layout.cells, vec![0; LAYOUT_SIZE]);
     work.begin((-1, 0), true);
     assert_eq!(work.sample((-1, 0)), None);
     work.cancel();
@@ -106,8 +107,10 @@ fn no_ops_preserve_redo_and_new_edits_clear_it() {
     work.begin((-1, 0), false);
     work.finish();
     work.undo();
+    work.tool = Tool::Eraser;
     work.begin((0, 0), false);
     assert!(!work.finish());
+    work.tool = Tool::Brush;
     assert!(work.can_redo());
     work.begin((-2, 0), false);
     work.finish();

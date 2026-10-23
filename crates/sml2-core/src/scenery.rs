@@ -1,9 +1,9 @@
-//! Render-only scenery painted past the level layout, where the map has no cells.
+//! Render-only scenery, independent of the playable level layout and collision.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-/// One metatile painted past the level. Cell coordinates are in layout cells
+/// One visual metatile overlay. Cell coordinates are in layout cells
 /// and may be negative or past the 256×48 map.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SceneryPaint {

@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 pub(super) type Cell = (i16, i16);
 
-pub(super) fn paintable((x, y): Cell) -> bool {
+pub(super) fn outside_map((x, y): Cell) -> bool {
     !(0..LAYOUT_WIDTH as i16).contains(&x) || !(0..LAYOUT_HEIGHT as i16).contains(&y)
 }
 
@@ -154,12 +154,13 @@ impl Workspace {
         };
     }
 
+    pub fn paint(&self, cell: Cell) -> Option<u8> {
+        self.scenery.get(i32::from(cell.0), i32::from(cell.1))
+    }
+
     pub fn sample(&self, cell: Cell) -> Option<u8> {
-        if paintable(cell) {
-            self.scenery.get(i32::from(cell.0), i32::from(cell.1))
-        } else {
-            self.layout.get(cell.0 as usize, cell.1 as usize)
-        }
+        self.paint(cell)
+            .or_else(|| self.layout.get(cell.0 as usize, cell.1 as usize))
     }
 
     fn put(&mut self, cell: Cell, value: Option<u8>) {
@@ -219,10 +220,7 @@ impl Workspace {
             } => {
                 if let Some(cell) = cell {
                     for at in line(last.unwrap_or(cell), cell) {
-                        if !paintable(at) {
-                            continue;
-                        }
-                        let before = self.sample(at);
+                        let before = self.paint(at);
                         if before == *value {
                             continue;
                         }
@@ -257,10 +255,7 @@ impl Workspace {
                 for y in start.1.min(end.1)..=start.1.max(end.1) {
                     for x in start.0.min(end.0)..=start.0.max(end.0) {
                         let cell = (x, y);
-                        if !paintable(cell) {
-                            continue;
-                        }
-                        let before = self.sample(cell);
+                        let before = self.paint(cell);
                         if before == Some(value) {
                             continue;
                         }

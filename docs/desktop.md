@@ -176,9 +176,9 @@ disables it. Portable in-process audio remains separate follow-up work.
 ## Scenery Maker
 
 Choose **Scenery editor** from the desktop menu. The canvas shows the level
-with a magenta boundary; paint scenery beyond that boundary using the level's
-existing tiles. Terrain inside the 256×48 map is protected. The editor has its
-own pan and 1×–8× zoom, so it works with the default gameplay view too.
+with a magenta boundary; paint scenery anywhere using the level's existing
+tiles, including beneath the ground inside the 256×48 map. Scenery changes
+appearance only, never collision. The editor has its own pan and 1×–8× zoom, so it works with the default gameplay view too.
 
 | Action | Control |
 |---|---|
@@ -186,7 +186,8 @@ own pan and 1×–8× zoom, so it works with the default gameplay view too.
 | Paint | Left-drag; rectangles apply on release |
 | Temporary eraser | Right-drag |
 | Pan | Middle-drag or Space + left-drag |
-| Zoom | Mouse wheel around pointer; + / − around canvas center |
+| Scroll | Mouse wheel / trackpad; Shift-wheel scrolls horizontally |
+| Zoom | Ctrl/Cmd-wheel around pointer; + / − around canvas center |
 | Grid | G |
 | Undo / Redo | Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z |
 | Playtest / Return to editor | Enter / Escape |
@@ -200,9 +201,8 @@ terrain and scenery. Blank scenery leaves the selected tile unchanged.
 Each stroke or rectangle is one undo step, with the latest 100 steps retained
 per level. Level switching and returning from playtest preserve the viewport,
 selected tile, tool, and history for this app session. Playtest restarts the
-selected level using its normal entry and gameplay display settings. Enlarge
-the gameplay view in **Settings → Mods → View** to see scenery beyond the map
-during play.
+selected level using its normal entry and gameplay display settings. Scenery
+inside the map appears at native gameplay size too; enlarge the gameplay view in **Settings → Mods → View** to see farther beyond the map.
 
 Completed gestures and undo/redo autosave atomically to `scenery-NN.json`
 beside `settings.json` (`NN` is the zero-based level ID). The status strip
@@ -221,8 +221,8 @@ and physical-pixel viewport geometry. The existing core/runtime suite and
 frozen replay gate remain the parity checks.
 
 Editor tests also cover signed coordinate picking, pan/zoom, gesture-level
-autosave and undo, protected terrain, file errors, playtest return, and window
-layouts at 480×400, 800×720, and 1600×1000. Atlas pixels are compared with the
+autosave and undo, unchanged collision layout, file errors, playtest return,
+and window layouts at 480×400, 800×720, and 1600×1000. Atlas pixels are compared with the
 native and DX scenery renderers. Optional headless UI review PNGs can be
 exported into the system temporary directory with:
 

@@ -278,14 +278,16 @@ impl DesktopApp {
                     "· {}, {} · {}",
                     cell.0,
                     cell.1,
-                    if state::paintable(cell) {
+                    if state::outside_map(cell) {
                         "Scenery"
                     } else {
-                        "Protected terrain"
+                        "Map scenery"
                     }
                 ));
             } else {
-                ui.label("· Wheel: zoom · Space-drag: pan · Right-drag: erase");
+                ui.label(
+                    "· Wheel: scroll · Ctrl-wheel: zoom · Space-drag: pan · Right-drag: erase",
+                );
             }
         });
         if let Some(warning) = self.editor.atlas.as_ref().and_then(|a| a.warning.as_ref()) {

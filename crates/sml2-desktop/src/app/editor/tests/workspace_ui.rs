@@ -11,9 +11,9 @@ pub(super) fn frame(
     let modifiers = events
         .iter()
         .find_map(|event| match event {
-            Event::Key { modifiers, .. } | Event::PointerButton { modifiers, .. } => {
-                Some(*modifiers)
-            }
+            Event::Key { modifiers, .. }
+            | Event::PointerButton { modifiers, .. }
+            | Event::MouseWheel { modifiers, .. } => Some(*modifiers),
             _ => None,
         })
         .unwrap_or_default();
@@ -223,7 +223,7 @@ fn wheel_and_space_pan_do_not_paint_or_change_gameplay_zoom() {
     let pos = rect.center() - egui::vec2(80.0, 0.0);
     let view = app.settings.view();
     let window_zoom = app.settings.zoom;
-    let before = app.editor.work.as_ref().unwrap().viewport.world(rect, pos);
+    let center_before = app.editor.work.as_ref().unwrap().viewport.center;
     frame(
         &mut app,
         &ctx,
@@ -231,11 +231,39 @@ fn wheel_and_space_pan_do_not_paint_or_change_gameplay_zoom() {
         vec![
             Event::PointerMoved(pos),
             Event::MouseWheel {
-                unit: egui::MouseWheelUnit::Line,
-                delta: egui::vec2(0.0, 1.0),
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, -64.0),
                 modifiers: Modifiers::NONE,
             },
         ],
+    );
+    let work = app.editor.work.as_ref().unwrap();
+    assert_eq!(work.viewport.zoom, 2);
+    assert_eq!(work.viewport.center, center_before + egui::vec2(0.0, 32.0));
+    frame(
+        &mut app,
+        &ctx,
+        size,
+        vec![Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(-64.0, 0.0),
+            modifiers: Modifiers::SHIFT,
+        }],
+    );
+    assert_eq!(
+        app.editor.work.as_ref().unwrap().viewport.center.x,
+        center_before.x + 32.0
+    );
+    let before = app.editor.work.as_ref().unwrap().viewport.world(rect, pos);
+    frame(
+        &mut app,
+        &ctx,
+        size,
+        vec![Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            delta: egui::vec2(0.0, 1.0),
+            modifiers: Modifiers::CTRL | Modifiers::COMMAND,
+        }],
     );
     let work = app.editor.work.as_ref().unwrap();
     assert_eq!(work.viewport.zoom, 3);

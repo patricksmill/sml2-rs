@@ -1,6 +1,6 @@
 //! Signed world-space canvas; gameplay zoom and camera never participate.
 
-use super::state::{paintable, Cell, Gesture, Tool};
+use super::state::{outside_map, Cell, Gesture, Tool};
 use super::Editor;
 use crate::app::theme;
 use eframe::egui::{self, Color32, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind, Ui};
@@ -15,12 +15,13 @@ impl Editor {
         let Some(work) = &mut self.work else {
             return;
         };
-        let (pos, delta, space, scroll, focused) = ui.input(|i| {
+        let (pos, delta, space, scroll, modifiers, focused) = ui.input(|i| {
             (
                 i.pointer.hover_pos(),
                 i.pointer.delta(),
                 i.key_down(egui::Key::Space),
-                i.raw_scroll_delta.y,
+                i.raw_scroll_delta,
+                i.modifiers,
                 i.focused,
             )
         });
@@ -42,10 +43,19 @@ impl Editor {
                     }
                 });
             }
-            if scroll != 0.0 && self.pan_button.is_none() {
-                let next = (i16::from(work.viewport.zoom) + if scroll > 0.0 { 1 } else { -1 })
-                    .clamp(1, 8) as u8;
-                work.viewport.zoom_at(rect, pos.unwrap(), next);
+            if scroll != egui::Vec2::ZERO && self.pan_button.is_none() {
+                if modifiers.command || modifiers.ctrl {
+                    let next = (i16::from(work.viewport.zoom) + if scroll.y > 0.0 { 1 } else { -1 })
+                        .clamp(1, 8) as u8;
+                    work.viewport.zoom_at(rect, pos.unwrap(), next);
+                } else {
+                    let delta = if modifiers.shift {
+                        egui::vec2(scroll.x + scroll.y, 0.0)
+                    } else {
+                        scroll
+                    };
+                    work.viewport.pan(delta);
+                }
             }
         }
         if let Some(button) = self.pan_button {
@@ -75,7 +85,7 @@ impl Editor {
         // Pick what is actually shown, including DX's collision-compatible decoration.
         let picked = if work.tool == Tool::Eyedropper {
             self.hover.and_then(|cell| {
-                if paintable(cell) {
+                if work.paint(cell).is_some() || outside_map(cell) {
                     work.sample(cell)
                 } else {
                     self.atlas
@@ -109,10 +119,8 @@ impl Editor {
         }
         response.on_hover_cursor(if space || self.pan_button.is_some() {
             egui::CursorIcon::Grab
-        } else if self.hover.is_some_and(paintable) || work.tool == Tool::Eyedropper {
-            egui::CursorIcon::Crosshair
         } else {
-            egui::CursorIcon::NotAllowed
+            egui::CursorIcon::Crosshair
         });
         self.paint_canvas(ui, rect);
     }
@@ -158,14 +166,16 @@ impl Editor {
             for x in bounds.0..=bounds.2 {
                 let cell = (x as i16, y as i16);
                 let at = cell_rect(cell);
-                let id = if paintable(cell) {
-                    paints.get(&cell).copied()
-                } else {
-                    self.atlas
-                        .as_ref()
-                        .and_then(|a| a.layout.get(y as usize * LAYOUT_WIDTH + x as usize))
-                        .copied()
-                };
+                let id = paints.get(&cell).copied().or_else(|| {
+                    if outside_map(cell) {
+                        None
+                    } else {
+                        self.atlas
+                            .as_ref()
+                            .and_then(|a| a.layout.get(y as usize * LAYOUT_WIDTH + x as usize))
+                            .copied()
+                    }
+                });
                 if let Some(id) = id {
                     draw_tile(id, at, Color32::WHITE);
                 } else if (x + y).rem_euclid(2) == 0 {
@@ -220,9 +230,7 @@ impl Editor {
         if let Some(Gesture::Rectangle { start, end, value }) = &work.gesture {
             for y in start.1.min(end.1)..=start.1.max(end.1) {
                 for x in start.0.min(end.0)..=start.0.max(end.0) {
-                    if paintable((x, y)) {
-                        draw_tile(*value, cell_rect((x, y)), Color32::from_white_alpha(140));
-                    }
+                    draw_tile(*value, cell_rect((x, y)), Color32::from_white_alpha(140));
                 }
             }
             let outline = cell_rect((start.0.min(end.0), start.1.min(end.1)))
@@ -238,17 +246,15 @@ impl Editor {
                 let at = cell_rect(cell);
                 let erasing = work.tool == Tool::Eraser
                     || self.gesture_button == Some(PointerButton::Secondary);
-                let color = if !paintable(cell) && work.tool != Tool::Eyedropper {
-                    theme::ERROR
-                } else if erasing {
+                let color = if erasing {
                     Color32::LIGHT_RED
                 } else {
                     theme::GOLD
                 };
-                if paintable(cell) && !erasing && work.tool != Tool::Eyedropper {
+                if !erasing && work.tool != Tool::Eyedropper {
                     draw_tile(work.metatile, at, Color32::from_white_alpha(140));
                 }
-                if erasing || !paintable(cell) {
+                if erasing {
                     painter.rect_filled(at, 0.0, color.gamma_multiply(0.2));
                 }
                 painter.rect_stroke(at, 0.0, Stroke::new(2.0_f32, color), StrokeKind::Inside);

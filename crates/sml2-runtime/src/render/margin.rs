@@ -1,6 +1,5 @@
-//! What an enlarged level view draws. Inside the layout the real cell is
-//! sampled, with no window wrap. Past the layout a paint may cover the cell;
-//! otherwise it stays blank.
+//! Authored scenery overlays native and enlarged views without changing physics.
+//! Enlarged views sample unpainted terrain directly and stay blank past the map.
 
 use sml2_core::level::{LAYOUT_HEIGHT, LAYOUT_WIDTH};
 use sml2_core::scenery::SceneryOverlay;
@@ -16,7 +15,7 @@ pub(crate) enum MarginSample {
     Level { wx: i32, wy: i32 },
     /// Past the level, with nothing painted.
     Blank,
-    /// A painted metatile past the level. `(tx, ty)` is the pixel inside that cell.
+    /// A painted visual metatile. `(tx, ty)` is the pixel inside that cell.
     Paint { metatile: u8, tx: usize, ty: usize },
 }
 
@@ -28,18 +27,9 @@ pub(crate) fn margin_sample(
     scroll_pan: i32,
     overlay: &SceneryOverlay,
 ) -> MarginSample {
-    if !view::enlarged(view) {
-        return MarginSample::Native;
-    }
     let world_x = cam.0 as i32 - view.0 as i32 / 2 + px;
     let world_y = cam.1 as i32 - view.1 as i32 / 2 - view::level_bias(view) - scroll_pan + py;
     let (cx, cy) = (world_x.div_euclid(16), world_y.div_euclid(16));
-    if (0..LAYOUT_WIDTH as i32).contains(&cx) && (0..LAYOUT_HEIGHT as i32).contains(&cy) {
-        return MarginSample::Level {
-            wx: world_x,
-            wy: world_y,
-        };
-    }
     if let Some(metatile) = overlay.get(cx, cy) {
         return MarginSample::Paint {
             metatile,
@@ -47,12 +37,20 @@ pub(crate) fn margin_sample(
             ty: world_y.rem_euclid(16) as usize,
         };
     }
+    if !view::enlarged(view) {
+        return MarginSample::Native;
+    }
+    if (0..LAYOUT_WIDTH as i32).contains(&cx) && (0..LAYOUT_HEIGHT as i32).contains(&cy) {
+        return MarginSample::Level {
+            wx: world_x,
+            wy: world_y,
+        };
+    }
     MarginSample::Blank
 }
 
-/// The layout cell under a view pixel when that cell lies past the 256×48
-/// level. Those are the cells the scenery editor can paint. Cells Mario can
-/// walk on are inside the level and are not paintable.
+/// Signed layout cell under a view pixel. Scenery can cover cells both inside
+/// and outside the map without changing the collision layout.
 pub fn paintable_cell(
     view: (usize, usize),
     px: i32,
@@ -60,12 +58,6 @@ pub fn paintable_cell(
     cam: (u16, u16),
     scroll_pan: i32,
 ) -> Option<(i16, i16)> {
-    if !matches!(
-        margin_sample(view, px, py, cam, scroll_pan, &SceneryOverlay::empty()),
-        MarginSample::Blank
-    ) {
-        return None;
-    }
     let world_x = cam.0 as i32 - view.0 as i32 / 2 + px;
     let world_y = cam.1 as i32 - view.1 as i32 / 2 - view::level_bias(view) - scroll_pan + py;
     let (cx, cy) = (world_x.div_euclid(16), world_y.div_euclid(16));
@@ -131,7 +123,7 @@ mod tests {
                 ty: 14,
             }
         );
-        // A paint inside the level does not cover the real cell.
+        // Scenery can fill cells inside the map as a render-only overlay.
         let inside = SceneryOverlay::try_from_paints(
             vec![SceneryPaint {
                 x: 0,
@@ -143,10 +135,14 @@ mod tests {
         .unwrap();
         assert_eq!(
             margin_sample(view, 120, 76, cam, 0, &inside),
-            MarginSample::Level { wx: 8, wy: 398 }
+            MarginSample::Paint {
+                metatile: 4,
+                tx: 8,
+                ty: 14
+            }
         );
         assert_eq!(paintable_cell(view, 0, 76, cam, 0), Some((-7, 24)));
-        assert_eq!(paintable_cell(view, 120, 76, cam, 0), None);
-        assert_eq!(paintable_cell((160, 144), 0, 76, cam, 0), None);
+        assert_eq!(paintable_cell(view, 120, 76, cam, 0), Some((0, 24)));
+        assert_eq!(paintable_cell((160, 144), 0, 76, cam, 0), Some((0, 28)));
     }
 }
