@@ -755,6 +755,9 @@ pub struct ObjectSim {
     pub view_margin: (u16, u16),
     /// Upward shift of enlarged activation/culling windows; not the gameplay camera.
     pub view_bias_y: u16,
+    /// Shift of enlarged activation windows when the presentation camera
+    /// stops at a level edge. Simulation and contact cameras stay native.
+    pub view_offset: (i16, i16),
     /// The widened scan window the margin fill covered last frame. Not ROM
     /// state: a culled record only refills once it re-enters the window.
     pub margin_filled: Option<(u16, u16)>,
@@ -860,6 +863,7 @@ impl ObjectSim {
             unported: Vec::new(),
             view_margin: (0, 0),
             view_bias_y: 0,
+            view_offset: (0, 0),
             margin_filled: None,
         }
     }
@@ -1242,10 +1246,10 @@ impl ObjectSim {
     ///
     fn engine(&mut self, cam_x: u16, cam_y: u16, layout: &LevelLayout, tables: &ObjectTables) {
         let (mx, my) = (i32::from(self.view_margin.0), i32::from(self.view_margin.1));
-        let act_x = Self::window(cam_x, 0x60 + mx);
+        let act_x = self.horizontal_view_window(cam_x, 0x60 + mx);
         let act_y = self.vertical_view_window(cam_y, 0x60 + my);
-        let scan_x = Self::window(cam_x, 0x70 + mx);
-        let alive_x = Self::window(cam_x, 0xA0 + mx);
+        let scan_x = self.horizontal_view_window(cam_x, 0x70 + mx);
+        let alive_x = self.horizontal_view_window(cam_x, 0xA0 + mx);
         let alive_y = self.vertical_view_window(cam_y, 0xA0 + my);
 
         // $8064: scan direction/edge from the camera delta. Three-way:
@@ -1346,7 +1350,7 @@ impl ObjectSim {
             return;
         }
         let native = Self::window(cam_x, 0x70);
-        let wide = Self::window(cam_x, 0x70 + mx);
+        let wide = self.horizontal_view_window(cam_x, 0x70 + mx);
         let prev = self.margin_filled.replace(wide);
         if self.stream_cursor_cleared {
             return;

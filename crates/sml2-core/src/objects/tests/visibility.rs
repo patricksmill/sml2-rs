@@ -60,3 +60,48 @@ fn biased_view_culls_slots_beyond_both_shifted_alive_edges() {
         assert_eq!(obj.slots[0].b[B_STATE] != 0, alive, "y={y}");
     }
 }
+
+#[test]
+fn bounded_view_promotes_slots_at_shifted_left_and_right_edges() {
+    let t = tables();
+    let layout = blank_layout();
+    // 384px view at the level start: camera 80 is displayed at 192.
+    // At the end: camera 4016 is displayed at 3904.
+    for (camera_x, offset, x, promoted) in [
+        (80, 112, 399, true),
+        (80, 112, 400, true),
+        (80, 112, 401, false),
+        (4016, -112, 3695, false),
+        (4016, -112, 3696, true),
+    ] {
+        let mut obj = ObjectSim::new(vec![], camera_x);
+        obj.view_margin = (112, 36);
+        obj.view_offset = (offset, 0);
+        obj.phase = true;
+        obj.standby = 1;
+        let slot = &mut obj.slots[0];
+        slot.b[B_STATE] = 1;
+        slot.b[B_PARKED] = 0x4e;
+        set_x(&mut slot.b, x);
+        set_y(&mut slot.b, 448);
+        obj.step(camera_x, 448, &layout, &t, &MarioContact::default(), false);
+        assert_eq!(
+            obj.slots[0].b[B_STATE],
+            if promoted { 2 } else { 1 },
+            "camera {camera_x}, object {x}"
+        );
+        assert_eq!(obj.camera_position.x, camera_x);
+    }
+}
+
+#[test]
+fn bounded_view_fills_records_visible_beyond_the_old_right_edge() {
+    let t = tables();
+    let layout = blank_layout();
+    let mut obj = ObjectSim::new(vec![margin_record(360)], 80);
+    obj.view_margin = (112, 36);
+    obj.view_offset = (112, 0);
+    obj.step(80, 448, &layout, &t, &MarioContact::default(), false);
+    assert_eq!(obj.spawned, vec![true]);
+    assert_eq!(obj.slots[0].b[B_STATE], 1);
+}

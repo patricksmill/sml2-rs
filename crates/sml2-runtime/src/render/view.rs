@@ -20,6 +20,74 @@ pub fn level_margin(view: (usize, usize)) -> (i32, i32) {
     (x, y + level_bias(view))
 }
 
+pub(crate) fn raw_level_origin(view: (usize, usize), cam: (u16, u16), pan: i32) -> (i32, i32) {
+    (
+        cam.0 as i32 - view.0 as i32 / 2,
+        cam.1 as i32 - view.1 as i32 / 2 - level_bias(view) - pan,
+    )
+}
+
+fn max_level_origin(view: (usize, usize)) -> (i32, i32) {
+    use sml2_core::level::{LAYOUT_HEIGHT, LAYOUT_WIDTH};
+    (
+        (LAYOUT_WIDTH as i32 * 16 - view.0 as i32).max(0),
+        (LAYOUT_HEIGHT as i32 * 16 - view.1 as i32).max(0),
+    )
+}
+
+/// Enlarged gameplay views stop at the layout edges. Native views retain
+/// the hardware window coordinates, including their wrapping behavior.
+pub fn level_origin(view: (usize, usize), cam: (u16, u16), pan: i32) -> (i32, i32) {
+    let origin = raw_level_origin(view, cam, pan);
+    if !enlarged(view) {
+        return origin;
+    }
+    let max = max_level_origin(view);
+    (origin.0.clamp(0, max.0), origin.1.clamp(0, max.1))
+}
+
+/// One presentation camera shared by terrain, sprites and interpolation.
+/// Shifts are output pixels; the status bar stays fixed in screen space.
+pub(crate) struct LevelViewport {
+    pub origin: (i32, i32),
+    pub bg_shift: (i32, i32),
+    pub sprite_shift: (i32, i32),
+}
+
+impl LevelViewport {
+    pub fn new(
+        view: (usize, usize),
+        cam: (u16, u16),
+        pan: i32,
+        scale: usize,
+        bg_shift: (i32, i32),
+    ) -> Self {
+        let raw = raw_level_origin(view, cam, pan);
+        let origin = level_origin(view, cam, pan);
+        let max = max_level_origin(view);
+        let s = scale as i32;
+        let clamp_shift = |shift: i32, raw: i32, at: i32, limit: i32| {
+            if enlarged(view) {
+                at * s - (raw * s - shift).clamp(0, limit * s)
+            } else {
+                shift
+            }
+        };
+        let clamped = (
+            clamp_shift(bg_shift.0, raw.0, origin.0, max.0),
+            clamp_shift(bg_shift.1, raw.1, origin.1, max.1),
+        );
+        Self {
+            origin,
+            bg_shift: clamped,
+            sprite_shift: (
+                (raw.0 - origin.0) * s + clamped.0 - bg_shift.0,
+                (raw.1 - origin.1) * s + clamped.1 - bg_shift.1,
+            ),
+        }
+    }
+}
+
 /// The camera to draw an 8-bit-OAM sprite with, and the offset to add to its
 /// cells. A native view keeps the wrapped camera-relative path; a resized one
 /// draws the sprite with the camera on its own anchor and adds the true offset.
@@ -118,6 +186,49 @@ pub fn fixed_screen<P: Copy>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn level_camera_parks_at_edges_and_follows_between_them() {
+        let view = (384, 216);
+        for (cam, expected) in [
+            ((80, 72), (0, 0)),
+            ((192, 448), (0, 322)),
+            ((1024, 448), (832, 322)),
+            ((4016, 704), (3712, 552)),
+        ] {
+            assert_eq!(level_origin(view, cam, 0), expected);
+        }
+        assert_eq!(level_origin(NATIVE, (80, 704), 0), (0, 632));
+    }
+
+    #[test]
+    fn interpolation_stops_at_the_edges_and_translates_sprites_with_terrain() {
+        let view = (384, 216);
+        for (cam, motion) in [
+            ((80, 72), (3, 2)),
+            ((80, 72), (-3, -2)),
+            ((4016, 704), (3, 2)),
+            ((4016, 704), (-3, -2)),
+            ((192, 126), (3, 2)),
+            ((3904, 678), (-3, -2)),
+        ] {
+            let v = LevelViewport::new(view, cam, 0, 2, motion);
+            assert_eq!(v.bg_shift, (0, 0));
+            let raw = raw_level_origin(view, cam, 0);
+            // A static world point has the same final position through both
+            // terrain coordinates and the OAM camera plus its interpolation.
+            assert_eq!(
+                (
+                    -raw.0 * 2 + motion.0 + v.sprite_shift.0,
+                    -raw.1 * 2 + motion.1 + v.sprite_shift.1
+                ),
+                (-v.origin.0 * 2, -v.origin.1 * 2),
+            );
+        }
+        let interior = LevelViewport::new(view, (1024, 448), 3, 2, (3, -2));
+        assert_eq!(interior.bg_shift, (3, -2));
+        assert_eq!(interior.sprite_shift, (0, 0));
+    }
 
     #[test]
     fn spans_and_margins_match_the_view_table() {

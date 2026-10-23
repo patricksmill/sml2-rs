@@ -850,6 +850,10 @@ impl Session {
             let (mx, my) = crate::render::view::margin(self.view);
             ctx.obj.view_margin = (mx.max(0) as u16, my.max(0) as u16);
             ctx.obj.view_bias_y = crate::render::view::level_bias(self.view) as u16;
+            let camera = (ctx.cam.x, ctx.cam.y);
+            let raw = crate::render::view::raw_level_origin(self.view, camera, 0);
+            let bounded = crate::render::view::level_origin(self.view, camera, 0);
+            ctx.obj.view_offset = ((bounded.0 - raw.0) as i16, (bounded.1 - raw.1) as i16);
         }
         let FrameInput { keys, div } = input;
         let rom_timing = self.rom_timing.take();

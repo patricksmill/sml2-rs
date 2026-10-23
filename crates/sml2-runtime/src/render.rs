@@ -88,8 +88,8 @@ pub(crate) fn window_coord(v: i32, origin: i32, span: i32) -> i32 {
     origin + (v - origin).rem_euclid(span)
 }
 
-/// Render a `vw`x`vh` view centred on the camera as an 8-bit grey frame. The
-/// native 160x144 rect stays pixel-exact inside it; `hud` draws the
+/// Render a `vw`x`vh` view as an 8-bit grey frame. Enlarged views stop at the
+/// level edges, shifting terrain and sprites together; `hud` draws the
 /// status-bar row in the native rect at 160x144 and bottom-centred in larger
 /// views.
 ///
@@ -202,19 +202,19 @@ pub fn render_view_output_smooth(
     );
     let world_w = (LAYOUT_WIDTH * 16) as i32;
     let world_h = (LAYOUT_HEIGHT * 16) as i32;
-    // The engine never clamps the view to the level: it leaves the camera where it is and
-    // slides a 256-px tilemap window under it (an enlarged view widens the window to the
-    // view, `view::window_span`), so with the camera near an edge the view
-    // runs past the level and shows the window's rows again. Clamping the view here (which
-    // this used to do) instead shifted the whole background against Mario's OAM — on level
-    // 5, whose start camera sits at the bottom of a 768-px world (cam_y 704, so the view
-    // top 632 is past 768 - 144), every tile drew 8 px low and Mario looked like he floated
-    // above the block row the console puts him on.
-    let sx = cam_x as i32 - vw as i32 / 2;
-    let sy = cam_y as i32
-        - vh as i32 / 2
-        - view::level_bias((vw, vh))
-        - spr.map_or(0, |s| s.scroll_pan as i32);
+    let viewport = view::LevelViewport::new(
+        (vw, vh),
+        (cam_x, cam_y),
+        spr.map_or(0, |s| s.scroll_pan as i32),
+        offsets.scale,
+        offsets.bg,
+    );
+    let (sx, sy) = viewport.origin;
+    let raw_origin = view::raw_level_origin(
+        (vw, vh),
+        (cam_x, cam_y),
+        spr.map_or(0, |s| s.scroll_pan as i32),
+    );
     let (span_x, span_y) = (view::window_span(vw), view::window_span(vh));
     let (ox, oy) = (
         window_origin(sx, world_w, span_x),
@@ -496,8 +496,8 @@ pub fn render_view_output_smooth(
                     &s.objblock,
                     &pal0,
                     &pal1,
-                    inst.x as i32 - sx + ex,
-                    inst.y as i32 - sy + ey,
+                    inst.x as i32 - raw_origin.0 + ex,
+                    inst.y as i32 - raw_origin.1 + ey,
                     e.tile,
                     attr,
                     offsets.object(inst.slot),
@@ -524,7 +524,13 @@ pub fn render_view_output_smooth(
             ));
         }
     }
-    let (bg, obj) = layers.compose(offsets.scale, offsets.bg, |o, b| o.behind && b.index != 0);
+    for cell in &mut layers.cells {
+        cell.shift.0 += viewport.sprite_shift.0;
+        cell.shift.1 += viewport.sprite_shift.1;
+    }
+    let (bg, obj) = layers.compose(offsets.scale, viewport.bg_shift, |o, b| {
+        o.behind && b.index != 0
+    });
     Ok(bg
         .iter()
         .zip(&obj)

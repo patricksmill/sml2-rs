@@ -112,8 +112,7 @@ fn dx_public_api_covers_every_level_with_its_own_tables() {
 }
 
 #[test]
-#[test]
-fn dx_margin_draws_a_painted_cell_and_keeps_the_centre_red() {
+fn dx_bounded_view_draws_inside_scenery_and_hides_outside_scenery() {
     let mut bundle = synthetic_bundle();
     let mut tiles = [0u8; 512];
     tiles[4..8].fill(1);
@@ -136,11 +135,18 @@ fn dx_margin_draws_a_painted_cell_and_keeps_the_centre_red() {
     ctx.cam.x = 80;
     ctx.cam.y = 448;
     ctx.scenery = sml2_core::scenery::SceneryOverlay::try_from_paints(
-        vec![sml2_core::scenery::SceneryPaint {
-            x: -7,
-            y: 24,
-            metatile: 1,
-        }],
+        vec![
+            sml2_core::scenery::SceneryPaint {
+                x: -7,
+                y: 24,
+                metatile: 1,
+            },
+            sml2_core::scenery::SceneryPaint {
+                x: 0,
+                y: 24,
+                metatile: 1,
+            },
+        ],
         128,
     )
     .unwrap();
@@ -149,8 +155,16 @@ fn dx_margin_draws_a_painted_cell_and_keeps_the_centre_red() {
     let (mx, my) = sml2_runtime::render::view::level_margin(view);
     assert_eq!(frame[(my as usize + 40) * view.0 + mx as usize + 40], RED);
     assert_eq!(frame[76 * view.0], [0, 255, 0]);
+    assert_eq!(frame[76 * view.0 + 16], RED);
+    // Moving the simulation camera inside the parked range keeps the same view.
+    let SessionState::InLevel(ctx) = &mut game.state else {
+        unreachable!()
+    };
+    ctx.cam.x = 160;
+    assert!(game.render_dx_frame(&bundle, Mario, view).unwrap() == frame);
 }
 
+#[test]
 fn dx_frames_take_the_view_size_and_keep_native_parity() {
     let mut bundle = synthetic_bundle();
     // Mario is one opaque green cell and the HUD row is blue, so the frame
@@ -176,17 +190,34 @@ fn dx_frames_take_the_view_size_and_keep_native_parity() {
     assert_eq!(wide[0], native[0], "the title backdrop fills the corner");
     game.begin_level(0, 0).unwrap();
     game.advance(FrameInput::default());
-    let native = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
-    assert!(native[..160 * 136].iter().any(|&p| p != RED), "Mario shows");
-    let wide = game.render_dx_frame(&bundle, Mario, (384, 216)).unwrap();
-    assert_eq!(wide.len(), 384 * 216);
-    let centre: Vec<_> = (0..136)
-        .flat_map(|y| wide[(54 + y) * 384 + 112..(54 + y) * 384 + 272].to_vec())
-        .collect();
-    assert_eq!(centre, native[..160 * 136].to_vec());
-    // The HUD keeps to the view's bottom rows.
-    assert_eq!(wide[215 * 384 + 192], native[143 * 160 + 80]);
-    assert_ne!(wide[215 * 384 + 192], RED);
+    for (camera, crop_at) in [
+        ((80, 448), (0, 54)),
+        ((4016, 448), (224, 54)),
+        ((80, 704), (0, 80)),
+    ] {
+        let SessionState::InLevel(ctx) = &mut game.state else {
+            unreachable!()
+        };
+        ctx.cam.x = camera.0;
+        ctx.cam.y = camera.1;
+        ctx.sim.x = camera.0 - 46;
+        ctx.sim.y = camera.1 + 20;
+        game.advance(FrameInput::default());
+        game.preview_scenery(camera, sml2_core::scenery::SceneryOverlay::empty());
+        let native = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
+        assert!(native[..160 * 136].iter().any(|&p| p != RED), "Mario shows");
+        let wide = game.render_dx_frame(&bundle, Mario, (384, 216)).unwrap();
+        assert_eq!(wide.len(), 384 * 216);
+        let picture: Vec<_> = (0..120)
+            .flat_map(|y| {
+                wide[(crop_at.1 + y) * 384 + crop_at.0..(crop_at.1 + y) * 384 + crop_at.0 + 160]
+                    .to_vec()
+            })
+            .collect();
+        assert!(picture == native[..160 * 120], "camera {camera:?}");
+        assert_eq!(wide[215 * 384 + 192], native[143 * 160 + 80]);
+        assert_ne!(wide[215 * 384 + 192], RED);
+    }
 }
 
 #[test]

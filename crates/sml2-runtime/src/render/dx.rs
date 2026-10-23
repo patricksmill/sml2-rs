@@ -642,11 +642,11 @@ fn render(
         priority: false,
     };
     let mut layers = super::layers::Layers::new(view, offsets.border(), blank);
-    let sx = ctx.cam.x as i32 - vw as i32 / 2;
-    let sy = ctx.cam.y as i32
-        - vh as i32 / 2
-        - super::view::level_bias(view)
-        - ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
+    let pan = ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
+    let camera = (ctx.cam.x, ctx.cam.y);
+    let viewport = super::view::LevelViewport::new(view, camera, pan, offsets.scale, offsets.bg);
+    let (sx, sy) = viewport.origin;
+    let raw_origin = super::view::raw_level_origin(view, camera, pan);
     let world_w = (LAYOUT_WIDTH * 16) as i32;
     let world_h = (LAYOUT_HEIGHT * 16) as i32;
     let (span_x, span_y) = (super::view::window_span(vw), super::view::window_span(vh));
@@ -920,8 +920,8 @@ fn render(
                 };
                 layers.cells.push(obj_cell(
                     banks,
-                    inst.x as i32 - sx + x as i32,
-                    inst.y as i32 - sy + y as i32,
+                    inst.x as i32 - raw_origin.0 + x as i32,
+                    inst.y as i32 - raw_origin.1 + y as i32,
                     entry.tile,
                     entry.attr ^ inst.flip,
                     offsets.object(inst.slot),
@@ -932,7 +932,11 @@ fn render(
     if ctx.scene_reload_blank {
         return Ok(vec![[255; 3]; vw * vh * offsets.scale * offsets.scale]);
     }
-    let (background, objects) = layers.compose(offsets.scale, offsets.bg, |_, _| false);
+    for cell in &mut layers.cells {
+        cell.shift.0 += viewport.sprite_shift.0;
+        cell.shift.1 += viewport.sprite_shift.1;
+    }
+    let (background, objects) = layers.compose(offsets.scale, viewport.bg_shift, |_, _| false);
     cgb::compose_frame(&background, &objects, true, &palettes).map_err(|e| e.to_string())
 }
 

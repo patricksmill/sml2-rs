@@ -50,10 +50,7 @@ fn live_block_changes_override_paints_in_native_and_dx_at_both_view_sizes() {
     session.preview_scenery((80, 448), scenery.clone());
     let character = crate::settings::Settings::default().character;
     for size in [(160, 144), (384, 216)] {
-        let origin = (
-            80 - size.0 as i32 / 2,
-            448 - size.1 as i32 / 2 - view::level_bias(size),
-        );
+        let origin = view::level_origin(size, (80, 448), 0);
         let cell_pixels = |frame: &[[u8; 3]], cell_x: i32| {
             let mut pixels = Vec::new();
             for y in 0..16 {
@@ -181,7 +178,7 @@ fn native_atlas_pixels_match_rendered_scenery_with_every_display_filter() {
         (80, 448),
         SceneryOverlay::try_from_paints(
             vec![SceneryPaint {
-                x: -1,
+                x: 0,
                 y: 24,
                 metatile: 1,
             }],
@@ -192,10 +189,7 @@ fn native_atlas_pixels_match_rendered_scenery_with_every_display_filter() {
     let content = session.assets.level(0).unwrap();
     let size = (384, 216);
     let frame = session.render_palette_frame_smooth(size, Smooth::OFF).0;
-    let origin = (
-        80 - size.0 as i32 / 2,
-        448 - size.1 as i32 / 2 - view::level_bias(size),
-    );
+    let origin = view::level_origin(size, (80, 448), 0);
     for filter in Filter::ALL {
         let tile = native_tile(
             &content.bg_base,
@@ -208,7 +202,7 @@ fn native_atlas_pixels_match_rendered_scenery_with_every_display_filter() {
         let image = colorized(&frame, filter, &session.assets.cartridge_header, size);
         for y in 0..16 {
             for x in 0..16 {
-                let (px, py) = (-16 + x as i32 - origin.0, 384 + y as i32 - origin.1);
+                let (px, py) = (x as i32 - origin.0, 384 + y as i32 - origin.1);
                 assert_eq!(
                     tile[y * 16 + x],
                     image.pixels[py as usize * size.0 + px as usize],
@@ -240,7 +234,7 @@ fn dx_atlas_samples_banks_flips_and_palettes_like_the_scenery_renderer() {
         (80, 448),
         SceneryOverlay::try_from_paints(
             vec![SceneryPaint {
-                x: -1,
+                x: 0,
                 y: 24,
                 metatile: 1,
             }],
@@ -252,13 +246,10 @@ fn dx_atlas_samples_banks_flips_and_palettes_like_the_scenery_renderer() {
     let frame = session
         .render_dx_frame(&dx, crate::settings::Settings::default().character, size)
         .unwrap();
-    let origin = (
-        80 - size.0 as i32 / 2,
-        448 - size.1 as i32 / 2 - view::level_bias(size),
-    );
+    let origin = view::level_origin(size, (80, 448), 0);
     for y in 0..16 {
         for x in 0..16 {
-            let (px, py) = (-16 + x as i32 - origin.0, 384 + y as i32 - origin.1);
+            let (px, py) = (x as i32 - origin.0, 384 + y as i32 - origin.1);
             let [r, g, b] = frame[py as usize * size.0 + px as usize];
             assert_eq!(expected[y * 16 + x], Color32::from_rgb(r, g, b));
         }

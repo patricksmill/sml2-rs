@@ -1,5 +1,5 @@
 //! Authored scenery overlays native and enlarged views without changing physics.
-//! Enlarged views sample unpainted terrain directly and stay blank past the map.
+//! Enlarged views sample unpainted terrain through the bounded presentation camera.
 
 use sml2_core::level::{LAYOUT_HEIGHT, LAYOUT_WIDTH};
 use sml2_core::scenery::SceneryOverlay;
@@ -36,10 +36,7 @@ impl SceneryWindow {
         border: i32,
         overlay: &SceneryOverlay,
     ) -> Self {
-        let origin = (
-            cam.0 as i32 - view.0 as i32 / 2,
-            cam.1 as i32 - view.1 as i32 / 2 - view::level_bias(view) - pan,
-        );
+        let origin = view::level_origin(view, cam, pan);
         let first = (
             (origin.0 - border).div_euclid(16),
             (origin.1 - border).div_euclid(16),
@@ -138,8 +135,9 @@ pub fn paintable_cell(
     cam: (u16, u16),
     scroll_pan: i32,
 ) -> Option<(i16, i16)> {
-    let world_x = cam.0 as i32 - view.0 as i32 / 2 + px;
-    let world_y = cam.1 as i32 - view.1 as i32 / 2 - view::level_bias(view) - scroll_pan + py;
+    let origin = view::level_origin(view, cam, scroll_pan);
+    let world_x = origin.0 + px;
+    let world_y = origin.1 + py;
     let (cx, cy) = (world_x.div_euclid(16), world_y.div_euclid(16));
     i16::try_from(cx).ok().zip(i16::try_from(cy).ok())
 }
@@ -168,23 +166,22 @@ mod tests {
             margin_sample((384, 216), 112, 54, (80, 448), 0, &overlay),
             // Enlarged views draw the real layout even inside the native
             // picture. The existing paint must not cover this terrain cell.
-            MarginSample::Level { wx: 0, wy: 376 }
+            MarginSample::Level { wx: 112, wy: 376 }
         );
     }
 
     #[test]
-    fn inside_the_level_is_the_real_cell_and_past_it_is_blank_until_painted() {
-        // Camera at the left edge: view x 0 is world x -112, past the level.
-        // View x 120 is world x 8, inside the level.
+    fn bounded_views_sample_the_level_and_ignore_paints_beyond_its_edges() {
+        // Camera at the left edge: view x 0 stays at world x 0.
         let cam = (80u16, 448u16);
         let view = (384usize, 216usize);
         assert_eq!(
             margin_sample(view, 0, 76, cam, 0, &SceneryOverlay::empty()),
-            MarginSample::Blank
+            MarginSample::Level { wx: 0, wy: 398 }
         );
         assert_eq!(
             margin_sample(view, 120, 76, cam, 0, &SceneryOverlay::empty()),
-            MarginSample::Level { wx: 8, wy: 398 }
+            MarginSample::Level { wx: 120, wy: 398 }
         );
         let painted = SceneryOverlay::try_from_paints(
             vec![SceneryPaint {
@@ -197,11 +194,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             margin_sample(view, 0, 76, cam, 0, &painted),
-            MarginSample::Paint {
-                metatile: 4,
-                tx: 0,
-                ty: 14,
-            }
+            MarginSample::Level { wx: 0, wy: 398 }
         );
         // Scenery can fill cells inside the map as a render-only overlay.
         let inside = SceneryOverlay::try_from_paints(
@@ -214,15 +207,15 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            margin_sample(view, 120, 76, cam, 0, &inside),
+            margin_sample(view, 8, 76, cam, 0, &inside),
             MarginSample::Paint {
                 metatile: 4,
                 tx: 8,
                 ty: 14
             }
         );
-        assert_eq!(paintable_cell(view, 0, 76, cam, 0), Some((-7, 24)));
-        assert_eq!(paintable_cell(view, 120, 76, cam, 0), Some((0, 24)));
+        assert_eq!(paintable_cell(view, 0, 76, cam, 0), Some((0, 24)));
+        assert_eq!(paintable_cell(view, 120, 76, cam, 0), Some((7, 24)));
         assert_eq!(paintable_cell((160, 144), 0, 76, cam, 0), Some((0, 28)));
     }
 }

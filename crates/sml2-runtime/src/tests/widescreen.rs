@@ -23,72 +23,63 @@ fn crop(frame: &[u8], view: (usize, usize), rect: (usize, usize, usize, usize)) 
 }
 
 #[test]
-fn the_biased_native_rect_matches_native_above_the_status_bar() {
-    let session = level(1);
-    let native = session.render_frame(NATIVE);
-    for view in [
-        (256, 144),
-        (320, 180),
-        (384, 216),
-        (200, 180),
-        (240, 216),
-        (320, 288),
-        (512, 288),
+fn enlarged_views_keep_terrain_and_sprites_aligned_at_every_level_edge() {
+    let mut session = level(0);
+    for (cam_x, cam_y) in [
+        (80, 448),
+        (192, 448),
+        (1024, 448),
+        (3904, 448),
+        (4016, 448),
+        (80, 72),
+        (80, 704),
     ] {
-        let wide = session.render_frame(view);
-        let (mx, my) = crate::render::view::level_margin(view);
-        assert_eq!(
-            crop(&wide, view, (mx as usize, my as usize, 160, 136)),
-            crop(&native, NATIVE, (0, 0, 160, 136)),
-            "{view:?}"
-        );
+        let SessionState::InLevel(ctx) = &mut session.state else {
+            unreachable!()
+        };
+        ctx.cam.x = cam_x;
+        ctx.cam.y = cam_y;
+        if let Some(spr) = ctx.spr.as_mut() {
+            spr.scroll_pan = 0;
+            if let Some((x, y, _)) = spr.player.as_mut() {
+                *x = cam_x - 46;
+                *y = cam_y + 20;
+            }
+        }
+        let native = session.render_frame(NATIVE);
+        for view in [
+            (256, 144),
+            (320, 180),
+            (384, 216),
+            (200, 180),
+            (240, 216),
+            (320, 288),
+            (512, 288),
+        ] {
+            let wide = session.render_frame(view);
+            let left = (cam_x as i32 - view.0 as i32 / 2).clamp(0, 4096 - view.0 as i32);
+            let top = (cam_y as i32 - view.1 as i32 / 2 - crate::render::view::level_bias(view))
+                .clamp(0, 768 - view.1 as i32);
+            let (x, y) = (
+                (cam_x as i32 - 80 - left) as usize,
+                (cam_y as i32 - 72 - top) as usize,
+            );
+            assert!(
+                crop(&wide, view, (x, y, 160, 120)) == crop(&native, NATIVE, (0, 0, 160, 120)),
+                "camera ({cam_x}, {cam_y}), view {view:?}"
+            );
+        }
     }
 }
 
 #[test]
-fn past_the_level_is_blank_and_the_level_itself_is_not_smeared() {
+fn scenery_outside_the_level_is_hidden_by_the_bounded_camera() {
     let mut session = level(0);
-    let SessionState::InLevel(ctx) = &mut session.state else {
-        panic!("in level")
-    };
-    ctx.cam.x = 80;
-    ctx.cam.y = 448;
-    if let Some(spr) = ctx.spr.as_mut() {
-        spr.scroll_pan = 0;
-    }
-    let blank = sml2_core::video::bgp_shades(ctx.manifest.header.palettes[0])[0];
-    let native = session.render_frame(NATIVE);
-    let view = (384, 216);
-    let wide = session.render_frame(view);
-    let (mx, my) = crate::render::view::level_margin(view);
-    assert_eq!(
-        crop(&wide, view, (mx as usize, my as usize, 160, 136)),
-        crop(&native, NATIVE, (0, 0, 160, 136))
-    );
-    // View x 0 is world x -112, behind the level start.
-    assert!(
-        (0..136).all(|row| wide[(my as usize + row) * view.0] == blank),
-        "past the level stays blank"
-    );
-}
-
-#[test]
-fn a_paint_shows_in_the_margin_and_a_native_frame_ignores_it() {
-    let mut session = level(0);
-    let SessionState::InLevel(ctx) = &mut session.state else {
-        panic!("in level")
-    };
-    ctx.cam.x = 80;
-    ctx.cam.y = 448;
-    if let Some(spr) = ctx.spr.as_mut() {
-        spr.scroll_pan = 0;
-    }
-    let count = ctx.manifest.metatiles.metatiles.len();
     let native = session.render_frame(NATIVE);
     let view = (384, 216);
     let plain = session.render_frame(view);
     let SessionState::InLevel(ctx) = &mut session.state else {
-        panic!("in level")
+        unreachable!()
     };
     ctx.scenery = SceneryOverlay::try_from_paints(
         vec![SceneryPaint {
@@ -96,19 +87,11 @@ fn a_paint_shows_in_the_margin_and_a_native_frame_ignores_it() {
             y: 24,
             metatile: 1,
         }],
-        count,
+        ctx.manifest.metatiles.metatiles.len(),
     )
     .unwrap();
-    assert_eq!(session.render_frame(NATIVE), native);
-    let wide = session.render_frame(view);
-    let (mx, my) = crate::render::view::level_margin(view);
-    assert_eq!(
-        crop(&wide, view, (mx as usize, my as usize, 160, 136)),
-        crop(&native, NATIVE, (0, 0, 160, 136))
-    );
-    // View (0, 76) is cell (-7, 24), behind the level start.
-    assert_ne!(wide[76 * view.0], plain[76 * view.0]);
-    assert_eq!(wide[76 * view.0 + 120], plain[76 * view.0 + 120]);
+    assert!(session.render_frame(NATIVE) == native);
+    assert!(session.render_frame(view) == plain);
 }
 
 #[test]
@@ -117,7 +100,7 @@ fn insert_level_carries_scenery_and_an_arena_ignores_it() {
     let mut content = assets.level(0).unwrap().clone();
     content.scenery = SceneryOverlay::try_from_paints(
         vec![SceneryPaint {
-            x: -1,
+            x: 0,
             y: 24,
             metatile: 1,
         }],
@@ -140,15 +123,15 @@ fn insert_level_carries_scenery_and_an_arena_ignores_it() {
         panic!("in level")
     };
     ctx.arena_loaded = true;
-    drop(ctx);
+    let _ = ctx;
     let arena = session.render_frame((384, 216));
     let SessionState::InLevel(ctx) = &mut session.state else {
         panic!("in level")
     };
     ctx.scenery = SceneryOverlay::empty();
-    drop(ctx);
+    let _ = ctx;
     let bare = session.render_frame((384, 216));
-    assert_ne!(painted[76 * 384 + 104], arena[76 * 384 + 104]);
+    assert_ne!(painted[76 * 384], arena[76 * 384]);
     assert_eq!(arena, bare);
 }
 
@@ -185,12 +168,17 @@ fn set_view_feeds_the_level_spawn_margin_but_not_demos() {
     };
     assert_eq!(ctx.obj.view_margin, (112, 36));
     assert_eq!(ctx.obj.view_bias_y, 18);
+    assert_eq!(
+        ctx.obj.view_offset.0, 112,
+        "spawn window follows the parked camera"
+    );
     session.set_view(NATIVE);
     session.advance(FrameInput::default());
     let SessionState::InLevel(ctx) = &session.state else {
         panic!("in level")
     };
     assert_eq!((ctx.obj.view_margin, ctx.obj.view_bias_y), ((0, 0), 0));
+    assert_eq!(ctx.obj.view_offset, (0, 0));
     session.set_view((384, 216));
     assert!(session.start_demo(0));
     session.advance(FrameInput::default());
@@ -199,6 +187,7 @@ fn set_view_feeds_the_level_spawn_margin_but_not_demos() {
     };
     assert_eq!(demo.ctx.obj.view_margin, (0, 0));
     assert_eq!(demo.ctx.obj.view_bias_y, 0);
+    assert_eq!(demo.ctx.obj.view_offset, (0, 0));
 }
 
 #[test]
