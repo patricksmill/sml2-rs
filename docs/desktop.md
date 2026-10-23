@@ -122,7 +122,12 @@ conflicts and reserved desktop shortcuts are reported. Rebinding one device
 keeps the other device's bindings; Reset controls restores the defaults.
 Keyboard bindings use physical key positions, matching ordinary game controls.
 
-The game view remains 160x144. Output scaling uses integer **physical** pixels,
+The game view is 160x144 unless **Settings → Mods → View** enlarges it:
+**Widescreen** (Off / 16:9) and **Camera zoom** (100% / 125% / 150%) give
+160x144, 200x180, 240x216, 256x144, 320x180 or 384x216. Enlarged level views
+spawn and update objects across the wider window, so gameplay differs from the
+original (attract demos keep native spawning); the status bar sits bottom
+centre, and fixed screens are letterboxed. Output scaling uses integer **physical** pixels,
 with nearest sampling and centered letterboxing, independent of UI DPI.
 Manual scale presets resize the window when windowed and fit within the current
 window if the platform limits its size. Auto fit follows window dimensions.

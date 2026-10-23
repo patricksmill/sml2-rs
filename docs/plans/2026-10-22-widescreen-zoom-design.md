@@ -64,8 +64,8 @@ result must stay byte-identical to the current build.
   `(mx, my)` to its screen position. Positions are derived from world
   coordinates minus the camera in `i32`, never through `u8` screen bytes,
   so sprites more than 255 px from the native origin do not wrap.
-- **Boss OAM:** boss cells keep their OAM-space coordinates plus the margin;
-  the renderer no longer clips them at the native `$A0`/`$A8` bounds.
+- **Boss OAM:** Boss cells keep the core pass's native clipping (simulation
+  output) and are shifted by the view margin.
 - **Status bar:** drawn at `x = (w − 160) / 2`, `y = h − 8` (bottom of the
   view) when the view is larger than native; at 160×144 it stays at the
   current `hud_y` position.
@@ -117,3 +117,27 @@ page caption "The game view stays 160 × 144" is updated.
 Handlers whose fixed screen-edge checks still act at the native edge:
 
 - `objects/enemies/charging_enemy.rs`: resets at screen X ≥ `$B8`.
+- `objects/enemies/flashing_mine.rs`: acts at screen X ≥ the course's
+  `screen_limit`.
+- `objects/enemies/reactions.rs`: defeat ends at screen Y ≥ `$A0`.
+- `objects/bosses/shared/defeat_fall.rs`: falls while screen Y < `$D0`.
+- `objects/bosses/patrol/behavior.rs`: turns at screen X ≥ 160 / < 16.
+- `objects/bosses/patrol/child/behavior.rs`: despawns at screen X ≥ 184.
+- `objects/bosses/sweep/child/behavior.rs`: despawns at screen X ≥ 184.
+- `objects/bosses/mario_zone/pigs.rs`: walls at screen X ≥ `$A0` / < `$10`.
+- `objects/bosses/mario_zone/pig2_motion.rs`: turns at screen X < 16 / ≥ 160.
+- `objects/bosses/wario/form1.rs`: walls at screen X < `$98` / ≥ `$10`.
+- `objects/bosses/wario/form2.rs`: turns at screen X < 32 / ≥ 144.
+- `objects/bosses/wario/form3.rs`: turns at screen X < 24 / ≥ 152; exits at
+  ≥ 192.
+- `objects/bosses/wario/phase1_exit.rs`: exits while screen X < `$C0`.
+- `objects/bosses/wario/phase2_exit.rs`: picks its animation by screen X ≥ 192.
+- `objects/bosses/wario/moving_child.rs`,
+  `objects/bosses/wario/trajectory_child.rs`: despawn at screen X ≥ 176.
+
+Renderer limitations:
+
+- The wide DX hub picks the east-half palette set and attributes once from
+  the real camera, so a view straddling cam_x `$E7` colours its far half with
+  one set.
+- The hub stitcher assumes views ≤ 512 px.
