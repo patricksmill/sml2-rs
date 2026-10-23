@@ -71,15 +71,16 @@ impl ObjectSim {
                 i32::from(s.y()) - i32::from(cam_y) + 88 + i32::from(self.mario.pan & 3),
             )
         } else {
-            // `collide` touches when `(mario − (o + edge)) mod 256 < span`:
-            // take the `o ≡ byte (mod 256)` that puts the difference in 0..256.
-            let unwrap = |m: i32, byte: u8, edge: i32| {
-                m - edge - (m - i32::from(byte) - edge).rem_euclid(256)
+            // `collide` compares mod 256: take the `o ≡ byte (mod 256)` whose
+            // box centre lies within 128 px of Mario's point, which keeps the
+            // overlap exact while both boxes span well under 256 px.
+            let unwrap = |m: i32, byte: u8, centre: i32| {
+                m - centre - (m - i32::from(byte) - centre + 128).rem_euclid(256) + 128
             };
             let (mx, my) = self.mario_contact_point(cam_x, cam_y);
             (
-                unwrap(mx, s.b[B_SCRX], left - 5),
-                unwrap(my, s.b[B_SCRY], top - 20),
+                unwrap(mx, s.b[B_SCRX], (left + hb(B_HB_RIGHT)) / 2),
+                unwrap(my, s.b[B_SCRY], (top + hb(B_HB_BOTTOM)) / 2),
             )
         };
         Some(ContactBox {

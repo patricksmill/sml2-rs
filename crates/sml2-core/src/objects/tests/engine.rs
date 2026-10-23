@@ -4544,6 +4544,31 @@ fn contact_boxes_follow_boss_screen_bytes() {
 }
 
 #[test]
+fn a_slot_box_right_of_and_below_mario_sits_on_its_screen_bytes() {
+    let mut obj = ObjectSim::new(Vec::new(), 0x0200);
+    obj.camera_position = crate::actor::Position {
+        x: 0x0200,
+        y: 0x0100,
+    };
+    obj.mario = MarioContact {
+        x: 0x0200,
+        y: 0x0100,
+        ..Default::default()
+    };
+    let s = &mut obj.slots[0];
+    s.b[B_STATE] = 2;
+    s.b[B_TYPE] = 0x40;
+    s.b[B_HB_LEFT] = 0xFA;
+    s.b[B_HB_RIGHT] = 6;
+    s.b[B_HB_TOP] = 0xF8;
+    s.b[B_HB_BOTTOM] = 8;
+    s.b[B_SCRX] = 150;
+    s.b[B_SCRY] = 140;
+    let b = obj.slot_contact_box(0, 0x0200, 0x0100).unwrap();
+    assert_eq!((b.x0, b.y0), (150 - 6, 140 - 8));
+}
+
+#[test]
 fn contact_box_skips_inactive_and_gated_out_slots() {
     let mut obj = ObjectSim::new(Vec::new(), 0x0200);
     obj.slots[0].b[B_TYPE] = 0x40;
