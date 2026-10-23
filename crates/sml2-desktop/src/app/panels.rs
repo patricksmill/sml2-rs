@@ -374,6 +374,7 @@ impl DesktopApp {
             return;
         }
         let mut open = self.settings_open;
+        let mut close_for_full_settings = false;
         egui::Window::new("Settings")
             .open(&mut open)
             .default_width(360.0)
@@ -395,10 +396,11 @@ impl DesktopApp {
                 if ui.button("All settings").clicked() {
                     self.return_screen = self.screen;
                     self.navigate(ctx, Screen::Settings);
+                    close_for_full_settings = true;
                     release_focus(ctx);
                 }
             });
-        self.settings_open = open;
+        self.settings_open = open && !close_for_full_settings;
     }
 
     pub(super) fn debug_panel(&mut self, ctx: &Context) {

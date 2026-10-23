@@ -150,7 +150,7 @@ impl DesktopApp {
             show_native_border: false,
             levels: Vec::new(),
             editor: editor::Editor::default(),
-            focused: true,
+            focused: false,
             last_update: Instant::now(),
             last_save: Instant::now(),
             budget: TickBudget::default(),

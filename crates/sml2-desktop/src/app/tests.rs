@@ -705,6 +705,7 @@ fn f10_hides_the_toolbar_and_the_settings_button_opens_a_window() {
     let (mut app, ctx, path) = app();
     app.screen = Screen::Game;
     app.settings.show_toolbar = true;
+    frame(&mut app, &ctx, vec![]);
     frame(&mut app, &ctx, vec![key(egui::Key::F10, true)]);
     assert!(!app.settings.show_toolbar);
     app.settings.show_toolbar = true;
