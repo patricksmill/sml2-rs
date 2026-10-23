@@ -341,8 +341,10 @@ impl DesktopApp {
             let snap = self.front_snap();
             let mut clear_aim = false;
             let mut clear_start = false;
-            if let Some(game) = self.game.as_mut() {
-                dx::prepare_tick(&mut game.session, &self.settings, self.dx_bundle.is_some());
+            if self.game.is_some() {
+                if let Some(game) = self.game.as_mut() {
+                    dx::prepare_tick(&mut game.session, &self.settings, self.dx_bundle.is_some());
+                }
                 let mut keys = if running {
                     self.input.sample_player(&self.settings.bindings)
                 } else {
@@ -352,7 +354,6 @@ impl DesktopApp {
                 keys = merged.keys;
                 clear_aim = merged.clear_aim;
                 clear_start = merged.clear_start;
-                let mut hall_persist = false;
                 if let Some(mut hall) = self.hall.take() {
                     let jump = keys.a && !self.prev_hall_a;
                     self.prev_hall_a = keys.a;
@@ -365,27 +366,28 @@ impl DesktopApp {
                         &mut self.debug,
                     );
                     if leave {
-                        hall_persist = true;
+                        self.persist();
                     } else {
                         self.hall = Some(hall);
                     }
                     keys = PlayerKeys::default();
-                } else if let sml2_runtime::session::SessionState::FileSelect(file_select) =
-                    &game.session.state
-                {
-                    if file_select.menu_state() == 1
-                        && file_select.cursor().0 == 0x28
-                        && keys.left
-                        && !self.prev_hall_left
+                } else if let Some(game) = self.game.as_ref() {
+                    if let sml2_runtime::session::SessionState::FileSelect(file_select) =
+                        &game.session.state
                     {
-                        self.hall = Some(hall::Hall::enter());
-                        keys.left = false;
+                        if file_select.menu_state() == 1
+                            && file_select.cursor().0 == 0x28
+                            && keys.left
+                            && !self.prev_hall_left
+                        {
+                            self.hall = Some(hall::Hall::enter());
+                            keys.left = false;
+                        }
+                        self.prev_hall_left = keys.left;
                     }
-                    self.prev_hall_left = keys.left;
                 }
-                game.tick(keys, volume);
-                if hall_persist {
-                    self.persist();
+                if let Some(game) = self.game.as_mut() {
+                    game.tick(keys, volume);
                 }
             }
             if clear_aim {
