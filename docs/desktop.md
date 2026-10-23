@@ -19,6 +19,14 @@ Or launch the built executable:
 ./target/debug/sml2-desktop --play
 ```
 
+A normal launch opens the game's own title screen. START, or a click on the
+picture, opens the file select: Mario walks to a pipe and ducks into it, and
+he jumps on Clear. Esc, or the toolbar Menu button, opens the pause menu for
+Settings, the scenery editor, and Quit. Quit to title is on that menu only
+after you have left the title. `--play` skips the title and opens the
+overworld. `--title` is the same as a normal launch. `--file-select` opens
+the pipes directly.
+
 Linux builds require a C toolchain, pkg-config, and libudev development files
 for gilrs. X11 sessions also need libxkbcommon-x11 at runtime. For Fedora:
 

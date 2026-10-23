@@ -72,25 +72,66 @@ fn key(key: egui::Key, down: bool) -> egui::Event {
 }
 
 #[test]
-fn menu_confirm_opens_settings_and_escape_returns_to_the_game() {
+fn launch_opens_the_in_game_title() {
+    let (app, _, path) = app();
+    assert_eq!(app.screen, Screen::Game);
+    assert!(matches!(
+        app.game.as_ref().unwrap().session.state,
+        SessionState::Title(_)
+    ));
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn play_flag_skips_the_title_for_the_overworld() {
+    let (app, _, path) = app();
+    let options = Options {
+        assets: app.options.assets.clone(),
+        paths: AppPaths {
+            settings: app.options.paths.settings.clone(),
+            save: app.options.paths.save.clone(),
+        },
+        audio: false,
+        filter: None,
+        play: true,
+        boot_title: false,
+        boot_select: false,
+        room: None,
+        reveal: false,
+        scale: None,
+        fullscreen: false,
+        smoke_frames: None,
+        screenshot: None,
+    };
+    let restarted = DesktopApp::new(&Context::default(), options, Settings::default(), None);
+    assert_eq!(restarted.screen, Screen::Game);
+    assert!(matches!(
+        restarted.game.as_ref().unwrap().session.state,
+        SessionState::Overworld(_)
+    ));
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn menu_confirm_opens_settings_and_escape_returns_to_the_title() {
     let (mut app, ctx, path) = app();
     frame(&mut app, &ctx, vec![]);
+    assert_eq!(app.screen, Screen::Game);
+    assert!(matches!(
+        app.game.as_ref().unwrap().session.state,
+        SessionState::Title(_)
+    ));
+    app.input.event(Button::key("Escape"), true);
+    frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::key("Escape"), false);
     assert_eq!(app.screen, Screen::Home);
     app.input.event(Button::Pad(PadButton::South), true);
     frame(&mut app, &ctx, vec![]);
     assert_eq!(app.screen, Screen::Settings, "the first menu row is Settings");
-    assert_eq!(app.game.as_ref().unwrap().session.frame_n, 0);
-    app.input.event(Button::Pad(PadButton::South), false);
-    app.input.event(Button::key("Escape"), true);
-    frame(&mut app, &ctx, vec![]);
-    assert_eq!(app.screen, Screen::Home);
-    app.input.event(Button::key("Escape"), false);
-    app.input.event(Button::key("Escape"), true);
-    frame(&mut app, &ctx, vec![]);
-    assert_eq!(app.screen, Screen::Game);
-    let game = app.game.as_ref().unwrap();
-    assert!(game.session.pending_level.is_none());
-    assert!(matches!(game.session.state, SessionState::Overworld(_)));
+    assert!(matches!(
+        app.game.as_ref().unwrap().session.state,
+        SessionState::Title(_)
+    ));
     let _ = std::fs::remove_dir_all(path);
 }
 
@@ -122,8 +163,32 @@ fn quit_to_title_is_absent_while_the_session_is_on_the_title() {
 #[test]
 fn quit_to_title_from_the_map_opens_the_in_game_title() {
     let (mut app, ctx, path) = app();
-    // Session::new is the overworld, so the pause menu offers Quit to title.
+    app.options.play = true;
+    let options = Options {
+        assets: app.options.assets.clone(),
+        paths: AppPaths {
+            settings: app.options.paths.settings.clone(),
+            save: app.options.paths.save.clone(),
+        },
+        audio: false,
+        filter: None,
+        play: true,
+        boot_title: false,
+        boot_select: false,
+        room: None,
+        reveal: false,
+        scale: None,
+        fullscreen: false,
+        smoke_frames: None,
+        screenshot: None,
+    };
+    let mut app = DesktopApp::new(&Context::default(), options, Settings::default(), None);
+    app.controllers = Controllers::disconnected();
     frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::key("Escape"), true);
+    frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::key("Escape"), false);
+    assert_eq!(app.screen, Screen::Home);
     app.input.event(Button::Pad(PadButton::Down), true);
     frame(&mut app, &ctx, vec![]);
     app.input.event(Button::Pad(PadButton::Down), false);
@@ -157,6 +222,7 @@ fn debug_pause_and_step_advance_exactly_one_tick_after_a_stall() {
 #[test]
 fn fullscreen_shortcut_requests_a_native_transition_without_ticking_the_menu() {
     let (mut app, ctx, path) = app();
+    app.screen = Screen::Home;
     frame(&mut app, &ctx, vec![]);
     let output = frame(&mut app, &ctx, vec![key(egui::Key::F11, true)]);
     assert!(app.settings.fullscreen);
@@ -171,6 +237,7 @@ fn fullscreen_shortcut_requests_a_native_transition_without_ticking_the_menu() {
 #[test]
 fn binding_capture_updates_controls_without_forwarding_the_capture_press() {
     let (mut app, ctx, path) = app();
+    app.screen = Screen::Home;
     frame(&mut app, &ctx, vec![]);
     app.screen = Screen::Settings;
     app.capture = Some(Action::Jump);
@@ -222,6 +289,12 @@ fn debug_panel_renders_with_a_game_and_lists_every_level() {
 fn debug_actions_edit_the_session_and_persist_the_active_pipe() {
     let (mut app, ctx, path) = app();
     app.debug = true;
+    app.game
+        .as_mut()
+        .unwrap()
+        .session
+        .debug_warp_map(0, 0x09)
+        .unwrap();
     app.screen = Screen::Game;
     frame(&mut app, &ctx, vec![]);
     app.game.as_mut().unwrap().session.active_slot = Some(0);

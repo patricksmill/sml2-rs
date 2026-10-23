@@ -1,6 +1,7 @@
 use super::*;
 use crate::dx_import::Worker;
 use sml2_dx::cache::CacheKey;
+use sml2_runtime::session::SessionState;
 
 fn wait_for_dx(app: &mut DesktopApp) {
     let deadline = Instant::now() + Duration::from_secs(2);
@@ -33,16 +34,17 @@ fn system_picker_without_selection_opens_browser_and_preserves_installation() {
         }],
     );
     assert!(!output.shapes.is_empty());
-    assert!(
-        app.screen == Screen::Home,
-        "browser Enter must not activate Play behind it"
-    );
+    assert_eq!(app.screen, Screen::Game, "browser Enter must not leave the title");
+    assert!(matches!(
+        app.game.as_ref().unwrap().session.state,
+        SessionState::Title(_)
+    ));
     assert!(app.dx_picker.is_some());
     // Escape closes the browser instead of resuming the game behind it.
     app.input.event(crate::input::Button::key("Escape"), true);
     app.shortcuts(&ctx);
     assert!(app.dx_picker.is_none());
-    assert!(app.screen == Screen::Home);
+    assert_eq!(app.screen, Screen::Game);
     assert_eq!(app.settings.dx_installation, Some(key));
     let _ = std::fs::remove_dir_all(path);
 }

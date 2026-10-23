@@ -110,11 +110,6 @@ impl DesktopApp {
             ColorImage::from_gray([160, 144], &[0; 160 * 144]),
             TextureOptions::NEAREST,
         );
-        let screen = if options.play || options.boot_title || options.boot_select {
-            Screen::Game
-        } else {
-            Screen::Home
-        };
         let mut app = Self {
             options,
             saved_settings: settings.clone(),
@@ -127,7 +122,7 @@ impl DesktopApp {
             dx_picker: None,
             dx_message: String::new(),
             texture,
-            screen,
+            screen: Screen::Home,
             return_screen: Screen::Home,
             page: Page::Display,
             reset_armed: false,
@@ -162,28 +157,27 @@ impl DesktopApp {
         };
         app.load_game();
         app.restore_dx();
-        if app.options.boot_select {
-            if let Some(game) = &mut app.game {
-                game.session.enter_file_select();
+        if app.game.is_some() {
+            app.screen = Screen::Game;
+            if app.options.boot_select {
+                app.game.as_mut().unwrap().session.enter_file_select();
+            } else if app.options.boot_title || !app.options.play {
+                app.game.as_mut().unwrap().session.enter_title();
             }
-        } else if app.options.boot_title {
-            if let Some(game) = &mut app.game {
-                game.session.enter_title();
-            }
-        }
-        if let Some(room) = app.options.room {
-            if let Some(game) = &mut app.game {
-                if room >= 13 {
-                    game.session.begin_bell_room(room, 0, 0);
-                } else {
-                    game.session.begin_coin_room(room);
+            if let Some(room) = app.options.room {
+                if let Some(game) = &mut app.game {
+                    if room >= 13 {
+                        game.session.begin_bell_room(room, 0, 0);
+                    } else {
+                        game.session.begin_coin_room(room);
+                    }
                 }
-            }
-        } else if app.options.reveal {
-            if let Some(game) = &mut app.game {
-                let mut seq = sml2_core::castle_sequence::CastleSequence::default();
-                seq.coins = [0x80; 6];
-                game.session.begin_castle_sequence(seq, 8, 0, 0);
+            } else if app.options.reveal {
+                if let Some(game) = &mut app.game {
+                    let mut seq = sml2_core::castle_sequence::CastleSequence::default();
+                    seq.coins = [0x80; 6];
+                    game.session.begin_castle_sequence(seq, 8, 0, 0);
+                }
             }
         }
         if let Some(scale) = app.options.scale {
@@ -306,6 +300,7 @@ impl DesktopApp {
             && self.screen == Screen::Game
             && !self.paused
             && self.capture.is_none()
+            && self.dx_picker.is_none()
             && !self.screenshot_pending;
         let mut ticks = self.budget.advance(elapsed, running);
         let stepped = self.step && focused;
