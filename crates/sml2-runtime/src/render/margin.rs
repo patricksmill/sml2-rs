@@ -26,6 +26,7 @@ pub(crate) struct SceneryWindow {
     first: (i32, i32),
     width: usize,
     paints: Vec<Option<u8>>,
+    rewrites: Vec<Option<u8>>,
 }
 impl SceneryWindow {
     pub fn new(
@@ -59,8 +60,37 @@ impl SceneryWindow {
             origin,
             first,
             width,
+            rewrites: vec![None; paints.len()],
             paints,
         }
+    }
+    /// Live block writes supersede cosmetic paints, without mutating authoring data.
+    pub fn with_layout_writes(mut self, writes: &[(u32, u8)]) -> Self {
+        let height = self.paints.len() / self.width;
+        for &(key, value) in writes {
+            let (x, y) = (
+                (key % LAYOUT_WIDTH as u32) as i32,
+                (key / LAYOUT_WIDTH as u32) as i32,
+            );
+            if y >= LAYOUT_HEIGHT as i32 {
+                continue;
+            }
+            let (x, y) = (x - self.first.0, y - self.first.1);
+            if x >= 0 && y >= 0 && (x as usize) < self.width && (y as usize) < height {
+                let at = y as usize * self.width + x as usize;
+                // Match the existing first-write lookup contract.
+                if self.rewrites[at].is_none() {
+                    self.rewrites[at] = Some(value);
+                }
+                self.paints[at] = None;
+            }
+        }
+        self
+    }
+    pub fn rewrite(&self, px: i32, py: i32) -> Option<u8> {
+        let x = (self.origin.0 + px).div_euclid(16) - self.first.0;
+        let y = (self.origin.1 + py).div_euclid(16) - self.first.1;
+        self.rewrites[y as usize * self.width + x as usize]
     }
     pub fn sample(&self, px: i32, py: i32) -> MarginSample {
         let (world_x, world_y) = (self.origin.0 + px, self.origin.1 + py);

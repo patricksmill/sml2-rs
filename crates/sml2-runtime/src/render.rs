@@ -277,7 +277,8 @@ pub fn render_view_output_smooth(
     if let Some(scenery) = scenery.filter(|_| spr.and_then(|s| s.pipe_background).is_none()) {
         let pan = spr.map_or(0, |s| s.scroll_pan as i32);
         let scenery_window =
-            margin::SceneryWindow::new((vw, vh), (cam_x, cam_y), pan, border, scenery);
+            margin::SceneryWindow::new((vw, vh), (cam_x, cam_y), pan, border, scenery)
+                .with_layout_writes(overlay);
         for py in -border..vh as i32 + border {
             for px in -border..vw as i32 + border {
                 match scenery_window.sample(px, py) {
@@ -291,8 +292,7 @@ pub fn render_view_output_smooth(
                     margin::MarginSample::Level { wx, wy } => {
                         let (cx, tx) = ((wx as usize) >> 4, (wx as usize) & 15);
                         let (cy, ty) = ((wy as usize) >> 4, (wy as usize) & 15);
-                        let key = (cy * 256 + cx) as u32;
-                        let rewritten = overlay.iter().find(|(k, _)| *k == key).map(|(_, v)| *v);
+                        let rewritten = scenery_window.rewrite(px, py);
                         let Some(id) = rewritten.or_else(|| layout.get(cx, cy)) else {
                             continue;
                         };

@@ -596,7 +596,8 @@ fn render(
     }
     let pan = ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
     let scenery_window =
-        super::margin::SceneryWindow::new(view, (ctx.cam.x, ctx.cam.y), pan, border, &ctx.scenery);
+        super::margin::SceneryWindow::new(view, (ctx.cam.x, ctx.cam.y), pan, border, &ctx.scenery)
+            .with_layout_writes(&ctx.sim.layout_writes);
     let past_level = ctx.spr.as_ref().and_then(|s| s.pipe_background).is_none();
     for py in -border..vh as i32 + border {
         if !past_level {
@@ -611,7 +612,8 @@ fn render(
                 super::margin::MarginSample::Level { wx, wy } => {
                     let (cx, cy) = (wx as usize / 16, wy as usize / 16);
                     let (tx, ty) = (wx as usize & 15, wy as usize & 15);
-                    let Some(id) = dx_cell(ctx, level, cx, cy) else {
+                    let rewritten = scenery_window.rewrite(px, py);
+                    let Some(id) = rewritten.or_else(|| dx_cell(ctx, level, cx, cy)) else {
                         *layers.bg_mut(px, py) = blank;
                         continue;
                     };
@@ -619,7 +621,11 @@ fn render(
                         .metatiles
                         .get(id)
                         .ok_or_else(|| format!("invalid DX metatile {id}"))?;
-                    let tile = metatile.tiles[(ty / 8) * 2 + tx / 8];
+                    let tile = if rewritten == Some(24) {
+                        0xff
+                    } else {
+                        metatile.tiles[(ty / 8) * 2 + tx / 8]
+                    };
                     let attr = CgbAttributes::from_byte(level.tile_attributes[tile as usize]);
                     *layers.bg_mut(px, py) = BackgroundPixel {
                         index: cgb::sample_tile(

@@ -6,6 +6,122 @@ use sml2_core::scenery::{SceneryOverlay, SceneryPaint};
 use sml2_runtime::render::{motion::Smooth, view};
 
 #[test]
+fn live_block_changes_override_paints_in_native_and_dx_at_both_view_sizes() {
+    let (mut app, _, path) = app();
+    let session = &mut app.game.as_mut().unwrap().session;
+    session.begin_level(0, 0).unwrap();
+    let mut dx = red_bundle();
+    let sml2_runtime::session::SessionState::InLevel(level) = &mut session.state else {
+        unreachable!()
+    };
+    level.bg_live.fill(0);
+    level.manifest.header.palettes[0] = 0xe4;
+    for (id, tile) in [(0, 0), (1, 1), (0x60, 2), (7, 3)] {
+        level.manifest.metatiles.metatiles[id].tiles = [tile; 4];
+        dx.levels[0].metatiles.metatiles[id].tiles = [tile; 4];
+    }
+    for (tile, color) in [(1, 1), (2, 2), (3, 3)] {
+        let offset = sml2_core::video::bg_tile_offset(tile);
+        for y in 0..8 {
+            for plane in 0..2 {
+                let value = if color & (1 << plane) != 0 { 255 } else { 0 };
+                level.bg_live[offset + y * 2 + plane] = value;
+                dx.levels[0].background[0][offset + y * 2 + plane] = value;
+            }
+        }
+    }
+    dx.levels[0].bg_palettes = [0, 0, 0x1f, 0, 0xe0, 3, 0, 0x7c].repeat(8);
+    let scenery = SceneryOverlay::try_from_paints(
+        vec![
+            SceneryPaint {
+                x: 0,
+                y: 24,
+                metatile: 1,
+            },
+            SceneryPaint {
+                x: 1,
+                y: 24,
+                metatile: 1,
+            },
+        ],
+        128,
+    )
+    .unwrap();
+    session.preview_scenery((80, 448), scenery.clone());
+    let character = crate::settings::Settings::default().character;
+    for size in [(160, 144), (384, 216)] {
+        let origin = (
+            80 - size.0 as i32 / 2,
+            448 - size.1 as i32 / 2 - view::level_bias(size),
+        );
+        let cell_pixels = |frame: &[[u8; 3]], cell_x: i32| {
+            let mut pixels = Vec::new();
+            for y in 0..16 {
+                for x in 0..16 {
+                    pixels.push(
+                        frame[(384 + y - origin.1) as usize * size.0
+                            + (cell_x * 16 + x - origin.0) as usize],
+                    );
+                }
+            }
+            pixels
+        };
+        for changed in [24, 0x60, 7] {
+            // temporary bump blank, removed coin, replacement block
+            let sml2_runtime::session::SessionState::InLevel(level) = &mut session.state else {
+                unreachable!()
+            };
+            level.sim.layout_writes = vec![(24 * 256, changed)];
+            level.scenery = SceneryOverlay::empty();
+            let plain_native = session
+                .render_frame(size)
+                .into_iter()
+                .map(|v| [v; 3])
+                .collect::<Vec<_>>();
+            let plain_dx = session.render_dx_frame(&dx, character, size).unwrap();
+            let sml2_runtime::session::SessionState::InLevel(level) = &mut session.state else {
+                unreachable!()
+            };
+            level.scenery = scenery.clone();
+            let painted_native = session
+                .render_frame(size)
+                .into_iter()
+                .map(|v| [v; 3])
+                .collect::<Vec<_>>();
+            let painted_dx = session.render_dx_frame(&dx, character, size).unwrap();
+            assert_eq!(
+                cell_pixels(&painted_native, 0),
+                cell_pixels(&plain_native, 0),
+                "native {size:?} tile {changed}"
+            );
+            assert_eq!(
+                cell_pixels(&painted_dx, 0),
+                cell_pixels(&plain_dx, 0),
+                "DX {size:?} tile {changed}"
+            );
+            let (native_color, dx_color) = match changed {
+                24 => ([255; 3], [0; 3]),
+                0x60 => ([85; 3], [0, 255, 0]),
+                7 => ([0; 3], [0, 0, 255]),
+                _ => unreachable!(),
+            };
+            assert_eq!(cell_pixels(&painted_native, 0), vec![native_color; 256]);
+            assert_eq!(cell_pixels(&painted_dx, 0), vec![dx_color; 256]);
+            assert_ne!(
+                cell_pixels(&painted_native, 0),
+                cell_pixels(&painted_native, 1)
+            );
+            assert_ne!(cell_pixels(&painted_dx, 0), cell_pixels(&painted_dx, 1));
+            let sml2_runtime::session::SessionState::InLevel(level) = &session.state else {
+                unreachable!()
+            };
+            assert_eq!(level.scenery, scenery, "play must retain authoring data");
+        }
+    }
+    std::fs::remove_dir_all(path).ok();
+}
+
+#[test]
 fn scenery_inside_map_appears_at_native_size_in_native_and_dx_without_layout_edits() {
     let (mut app, _, path) = app();
     let session = &mut app.game.as_mut().unwrap().session;

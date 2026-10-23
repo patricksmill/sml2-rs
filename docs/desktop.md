@@ -198,6 +198,10 @@ includes every metatile in the tileset. The canvas and thumbnails follow the
 selected display filter or installed DX graphics. Eyedropper can sample both
 terrain and scenery. Blank scenery leaves the selected tile unchanged.
 
+During play, live changes from hitting blocks or collecting coins take
+precedence over painted scenery at that cell. The saved scenery stays intact
+for editing and restarting the level.
+
 Each stroke or rectangle is one undo step, with the latest 100 steps retained
 per level. Level switching and returning from playtest preserve the viewport,
 selected tile, tool, and history for this app session. Playtest restarts the
