@@ -18,8 +18,8 @@ pub const REVISION: &str = "SML2DX v1.8.1 (UE v1.0)";
 pub const ROM_LEN: usize = 0x100000;
 /// User-supplied ROM built from the official IPS patch against UE v1.0.
 pub const ROM_SHA256: &str = "1dd604a91b9ee99ef381cc795da3ae28c72d04ba9de78b355df829e56ce49c46";
-pub const IMPORTER_VERSION: u32 = 4;
-pub const BUNDLE_SCHEMA: u32 = 4;
+pub const IMPORTER_VERSION: u32 = 5;
+pub const BUNDLE_SCHEMA: u32 = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportError {

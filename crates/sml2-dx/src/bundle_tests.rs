@@ -78,7 +78,7 @@ fn valid_bundle_round_trips_through_hex_banks() {
 #[test]
 fn old_schemas_other_sources_and_unknown_fields_are_rejected() {
     let value = serde_json::to_value(fixture()).unwrap();
-    for schema in [1, 2, BUNDLE_SCHEMA + 1] {
+    for schema in [1, 2, 3, 4, BUNDLE_SCHEMA + 1] {
         let mut bad = value.clone();
         bad["schema"] = schema.into();
         let error = decode(&bad).unwrap_err().to_string();
