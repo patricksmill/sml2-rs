@@ -10,21 +10,22 @@ use eframe::egui::{
     self, Color32, ColorImage, Context, RawInput, TextureHandle, TextureOptions, ViewportCommand,
 };
 use sml2_core::player_sim::PlayerKeys;
-use sml2_core::video::PalettePixel;
+use sml2_core::video::{OutputMode, PalettePixel};
 use sml2_runtime::content::{ExtractedContent, SessionAssets};
 use sml2_runtime::render::motion::{pick_scale, Smooth};
+use sml2_runtime::render::view::fixed_screen;
 #[cfg(test)]
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 mod backdrop;
+mod catalog;
 mod controls;
 mod debug;
 mod dx;
 mod editor;
 mod file_picker;
 mod filter_preview;
-mod catalog;
 mod hall;
 mod panels;
 mod pointer;
@@ -290,7 +291,9 @@ impl DesktopApp {
             }
         }
 
-        if self.settings.show_toolbar && (self.screen == Screen::Game || self.screen == Screen::Editor) {
+        if self.settings.show_toolbar
+            && (self.screen == Screen::Game || self.screen == Screen::Editor)
+        {
             self.toolbar(ctx);
         }
         egui::CentralPanel::default()
@@ -336,7 +339,11 @@ impl DesktopApp {
             game.session.set_view(self.settings.view());
             game.audio_running(running && !self.settings.muted);
         }
-        let volume = if self.settings.muted { 0.0 } else { self.settings.volume };
+        let volume = if self.settings.muted {
+            0.0
+        } else {
+            self.settings.volume
+        };
         for _ in 0..ticks {
             let snap = self.front_snap();
             let mut clear_aim = false;
@@ -357,6 +364,8 @@ impl DesktopApp {
                 if let Some(mut hall) = self.hall.take() {
                     let jump = keys.a && !self.prev_hall_a;
                     self.prev_hall_a = keys.a;
+                    let fullscreen_was = self.settings.fullscreen;
+                    let zoom_was = self.settings.zoom;
                     let leave = hall::step(
                         &mut hall,
                         keys.left,
@@ -365,6 +374,18 @@ impl DesktopApp {
                         &mut self.settings,
                         &mut self.debug,
                     );
+                    if self.settings.fullscreen != fullscreen_was {
+                        ctx.send_viewport_cmd(ViewportCommand::Fullscreen(
+                            self.settings.fullscreen,
+                        ));
+                    }
+                    if self.settings.zoom != zoom_was {
+                        let scale = match self.settings.zoom {
+                            Zoom::Auto => None,
+                            Zoom::Integer(scale) => Some(scale),
+                        };
+                        self.zoom(ctx, scale);
+                    }
                     if leave {
                         self.persist();
                     } else {
@@ -459,7 +480,10 @@ impl DesktopApp {
         let game = self.game.as_ref()?;
         let view = self.settings.view();
         if let Some(hall) = &self.hall {
-            let indices = hall::pixels(hall, &game.session.assets.front_end);
+            // Fixed screens stay 160×144 and are letterboxed into the live view.
+            let indices = fixed_screen(view, OutputMode::PaletteIndices.blank(3), |_| {
+                hall::pixels(hall, &game.session.assets.front_end)
+            });
             let pixels: Vec<PalettePixel> = indices
                 .iter()
                 .map(|&token| PalettePixel::from_token(token))
@@ -468,7 +492,7 @@ impl DesktopApp {
                 &pixels,
                 self.settings.filter,
                 &game.session.assets.cartridge_header,
-                (160, 144),
+                view,
             ));
         }
         let dx = self
@@ -620,9 +644,9 @@ impl DesktopApp {
         );
         self.paint_overlays(ui, rect);
         if let Some(hall) = &self.hall {
-            if let Some(index) = (0..catalog::PEDESTALS.len()).find(|index| {
-                (hall.mario - hall::pedestal_x(*index)).abs() <= 8
-            }) {
+            if let Some(index) = (0..catalog::PEDESTALS.len())
+                .find(|index| (hall.mario - hall::pedestal_x(*index)).abs() <= 8)
+            {
                 let text = catalog::label(catalog::PEDESTALS[index], &self.settings, self.debug);
                 ui.painter().text(
                     rect.min,

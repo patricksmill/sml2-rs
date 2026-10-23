@@ -102,6 +102,10 @@ impl DesktopApp {
             if self.input.take_press(&Button::key("F1")) {
                 self.debug = !self.debug;
             }
+            if self.input.take_press(&Button::key("F10")) {
+                self.settings.show_toolbar = !self.settings.show_toolbar;
+                self.persist();
+            }
             if self.input.take_press(&Button::key("F4")) {
                 self.cycle_filter(1);
             }

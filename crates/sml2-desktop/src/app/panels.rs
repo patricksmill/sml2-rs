@@ -41,9 +41,7 @@ impl Page {
 fn on_front_end(state: &SessionState) -> bool {
     matches!(
         state,
-        SessionState::Title(_)
-            | SessionState::FileSelect(_)
-            | SessionState::FileSelectLoading(_)
+        SessionState::Title(_) | SessionState::FileSelect(_) | SessionState::FileSelectLoading(_)
     )
 }
 
@@ -382,10 +380,20 @@ impl DesktopApp {
                 for pedestal in catalog::PEDESTALS {
                     let text = catalog::label(pedestal, &self.settings, self.debug);
                     if ui.button(text).clicked() {
-                        if pedestal == catalog::Pedestal::Fullscreen {
-                            self.fullscreen(ctx);
-                        } else {
-                            catalog::cycle(pedestal, &mut self.settings, &mut self.debug);
+                        match pedestal {
+                            catalog::Pedestal::Fullscreen => self.fullscreen(ctx),
+                            catalog::Pedestal::Zoom => {
+                                let current = match self.settings.zoom {
+                                    Zoom::Auto => 0,
+                                    Zoom::Integer(n) => n as i32,
+                                };
+                                let next = (current + 1).rem_euclid(9);
+                                self.zoom(
+                                    ctx,
+                                    if next == 0 { None } else { Some(next as u8) },
+                                );
+                            }
+                            _ => catalog::cycle(pedestal, &mut self.settings, &mut self.debug),
                         }
                         self.persist();
                         release_focus(ctx);

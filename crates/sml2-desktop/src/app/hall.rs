@@ -60,9 +60,9 @@ pub(super) fn step(
         return true;
     }
     if jump {
-        if let Some(index) = (0..catalog::PEDESTALS.len()).find(|index| {
-            (hall.mario - pedestal_x(*index)).abs() <= 8
-        }) {
+        if let Some(index) =
+            (0..catalog::PEDESTALS.len()).find(|index| (hall.mario - pedestal_x(*index)).abs() <= 8)
+        {
             catalog::cycle(catalog::PEDESTALS[index], settings, debug);
             hall.hop = 12;
         }
@@ -92,7 +92,7 @@ pub(super) fn pixels(hall: &Hall, assets: &sml2_core::front_end::FrontEndAssets)
         (0, 0),
         (160, 144),
         TileData::Signed,
-        OutputMode::Grayscale,
+        OutputMode::PaletteIndices,
     )
     .expect("file select background");
     let mut frame = render_bg_wide_output(
@@ -146,15 +146,32 @@ mod tests {
             if hall.mario == volume_at {
                 break;
             }
-            assert!(!step(&mut hall, true, false, false, &mut settings, &mut debug));
+            assert!(!step(
+                &mut hall,
+                true,
+                false,
+                false,
+                &mut settings,
+                &mut debug
+            ));
         }
         assert_eq!(hall.mario, volume_at);
-        assert!(!step(&mut hall, false, false, true, &mut settings, &mut debug));
+        assert!(!step(
+            &mut hall,
+            false,
+            false,
+            true,
+            &mut settings,
+            &mut debug
+        ));
         assert!((settings.volume - 0.8).abs() < f32::EPSILON);
         assert!(hall.hop > 0);
         let during_hop = settings.volume;
         step(&mut hall, false, false, true, &mut settings, &mut debug);
-        assert!((settings.volume - during_hop).abs() < f32::EPSILON, "the hop ignores A");
+        assert!(
+            (settings.volume - during_hop).abs() < f32::EPSILON,
+            "the hop ignores A"
+        );
     }
 
     #[test]
@@ -162,7 +179,14 @@ mod tests {
         let mut hall = Hall::enter();
         let mut settings = Settings::default();
         let mut debug = false;
-        assert!(step(&mut hall, false, true, false, &mut settings, &mut debug));
+        assert!(step(
+            &mut hall,
+            false,
+            true,
+            false,
+            &mut settings,
+            &mut debug
+        ));
     }
 
     fn test_assets() -> sml2_core::front_end::FrontEndAssets {
@@ -188,5 +212,18 @@ mod tests {
         let mario = frame[100 * 160 + screen_x];
         assert_eq!(mario, 3, "Mario is palette index 3");
         assert_ne!(frame[8 * 160 + 8], 3, "the checker behind him is not Mario");
+    }
+
+    #[test]
+    fn the_doorway_frame_is_palette_indices() {
+        let hall = Hall::enter();
+        assert_eq!(hall.mario, 0);
+        let frame = pixels(&hall, &test_assets());
+        let decoded: Vec<_> = frame
+            .iter()
+            .copied()
+            .map(sml2_core::video::PalettePixel::from_token)
+            .collect();
+        assert_eq!(decoded.len(), frame.len());
     }
 }

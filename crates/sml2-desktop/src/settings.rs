@@ -250,6 +250,19 @@ mod tests {
     }
 
     #[test]
+    fn version_two_without_show_toolbar_loads_as_version_three_with_the_bar() {
+        let path = std::env::temp_dir().join(format!(
+            "sml2_settings_v2_toolbar_{}.json",
+            std::process::id()
+        ));
+        fs::write(&path, br#"{"version":2}"#).unwrap();
+        let settings = Settings::load(&path).unwrap();
+        assert_eq!(settings.version, 3);
+        assert!(settings.show_toolbar);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn rejects_invalid_sgb_presets() {
         let mut settings = Settings {
             filter: Filter::Sgb(32),
