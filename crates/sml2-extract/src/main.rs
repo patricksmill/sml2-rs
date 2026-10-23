@@ -18,7 +18,7 @@ mod cartridge;
 mod castle;
 mod ending;
 mod front_end;
-mod map;
+use sml2_extract::map;
 mod objects;
 mod parse;
 mod render;

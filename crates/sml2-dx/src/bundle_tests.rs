@@ -47,6 +47,15 @@ fn fixture() -> Bundle {
         table(&mut bundle, bank, 0x6000, 242, EMPTY);
     }
     table(&mut bundle, 0x24, 0x6000, LEVELS as u16, 0x6040);
+    // The overworld's pointer tables, all at one empty record: a `$FF` first
+    // byte ends a route patch, a `$FF` tile ends a decor metasprite. The
+    // route-patch table `$63EA` is the zone decor table's last 58 entries.
+    for bank in [0x0F, 0x18] {
+        put(&mut bundle, bank, 0x7000, &[0xFF, 0, 0xFF, 0]);
+    }
+    table(&mut bundle, 0x18, 0x62E6, 188, 0x7000);
+    table(&mut bundle, 0x0F, 0x4AD7, 16, 0x7000);
+    table(&mut bundle, 0x0F, 0x4C4D, 17, 0x7000);
     bundle
 }
 

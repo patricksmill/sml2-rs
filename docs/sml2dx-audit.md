@@ -275,6 +275,33 @@ palettes `$26:$7D17`. VRAM1 and OBJ palettes carry over from the title, with the
 player's VRAM1 overlay at `$8000`. Rendered title and file-select frames match
 PyBoy's on all 23,040 pixels.
 
+## Overworld
+
+DX edits the overworld's tiles, maps, route patches and cursor poses in place,
+so the importer runs the native extractor's map builders (`sml2_extract::map`)
+over the DX banks `$06`, `$0D`-`$11`, `$18` and `$19`. Colors are DX's own:
+
+- Hub: `$26:$77F1` loads BG palettes `$26:$6380`, or `$63C0` once the camera X
+  (`$FFB9`) reaches `$E7`, and OBJ `$6400` (Mario) / `$6440` (Luigi, `$FFF6`).
+  `$29:$67E9` copies the per-tile attribute table `$29:$6542` to `$D000`; every
+  hub cell's attribute is `$D000[tile]` (verified on all 1,024 cells of a
+  capture). The status bar's backdrop draws in color 3.
+- Zones: branches `$26:$7969`.. set BG and OBJ palettes and call `$29:$6642`
+  with an index for the 32x18 attribute map. Pumpkin `$6780`/`$67C0`/`$4B40`,
+  Tree `$6480`/`$64C0`/`$4000`, Macro `$6600`/`$6640`/`$4240`, Space
+  `$66C0`/`$6700`/`$46C0` (`$4900` once `sMapSpacePath0` bit 0 is set), Turtle
+  `$6540`/`$6580`/`$4480`, Mario `$6840`/`$6880`/`$4D80`, Wario `$69C0`/`$6A40`/
+  `$5200`, castle hill `$6900`/`$6940`/`$4FC0`; Luigi's OBJ set is `+$40`.
+- Sprites: the decor tables `$0F:$4C4D` (hub) and `$18:$62E6` (zones), and the
+  status bar `$0F:$7251`, keep their layout; DX adds CGB palette bits to their
+  attribute bytes. The route-patch table `$18:$63EA` is the zone decor table's
+  last 58 entries.
+
+The hub's wave shimmer is replayed over DX's tiles from the native wave's start
+phase and tick count (its state repeats every 128 ticks). Captures of the hub and
+Tree Zone matched PyBoy except where water and decor animation timing differ.
+The bonus rooms and map palette fades stay native.
+
 Mid-level copies keep their base addresses: `$25AF`'s tables `$268B`/`$2699`,
 the bank-7 `$7800` block and `$216C`'s transfer code are byte-identical, so the
 renderer finds the native source of every rewritten tile and reads the same

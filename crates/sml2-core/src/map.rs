@@ -943,8 +943,18 @@ fn decor_offscreen(slot_a: u8, slot_x: u8, slot_y: u8, cam_x: u16, cam_y: u16) -
 /// (`$11 $88 $70 $05`) staged `y=62 x=213 tile=$3A attr=$00`, which is this
 /// arithmetic exactly.
 pub fn decor_oam(slot: (u8, u8, u8, u8), cam_x: u16, cam_y: u16) -> Option<Vec<(u8, u8, u8, u8)>> {
+    decor_oam_in(slot, cam_x, cam_y, &DECOR_METASPRITES)
+}
+
+/// [`decor_oam`] over another revision's `$4C4D` table.
+pub fn decor_oam_in<T: AsRef<[(i8, i8, u8, u8)]>>(
+    slot: (u8, u8, u8, u8),
+    cam_x: u16,
+    cam_y: u16,
+    table: &[T],
+) -> Option<Vec<(u8, u8, u8, u8)>> {
     let (a, x, y, id) = slot;
-    if id == 0xFF || id as usize >= DECOR_METASPRITES.len() {
+    if id == 0xFF || id as usize >= table.len() {
         return None;
     }
     if decor_offscreen(a, x, y, cam_x, cam_y) {
@@ -953,7 +963,8 @@ pub fn decor_oam(slot: (u8, u8, u8, u8), cam_x: u16, cam_y: u16) -> Option<Vec<(
     let oam_x = x.wrapping_sub(cam_x as u8).wrapping_add(8);
     let oam_y = y.wrapping_sub(cam_y as u8).wrapping_add(16);
     Some(
-        DECOR_METASPRITES[id as usize]
+        table[id as usize]
+            .as_ref()
             .iter()
             .map(|&(dy, dx, tile, attr)| {
                 (
@@ -990,6 +1001,11 @@ pub struct MapWave {
     /// The eight affected tiles' raw 2bpp bytes, keyed by [`WAVE_TILES`], so the
     /// renderer can re-decode after a write.
     pub raw: [[u8; 16]; 8],
+    /// The phase before the first tick and the ticks since, so another tile
+    /// set (DX's) can be brought to the same rotation: every row turns one
+    /// bit per 8 ticks, so the state repeats every 128.
+    pub start_phase: Option<u8>,
+    pub ticks: u32,
 }
 
 impl MapWave {
@@ -1009,11 +1025,27 @@ impl MapWave {
             phase: 0,
             strips,
             raw,
+            start_phase: None,
+            ticks: 0,
         })
+    }
+
+    /// Seed from `raw_block` and turn it as far as `other` has turned.
+    pub fn follow(raw_block: &[u8], other: &MapWave) -> Option<Self> {
+        let mut wave = Self::seed(raw_block)?;
+        if let Some(start) = other.start_phase {
+            wave.phase = start;
+            for _ in 0..other.ticks % 128 {
+                wave.tick();
+            }
+        }
+        Some(wave)
     }
 
     /// One `$3E853` call.
     pub fn tick(&mut self) {
+        self.start_phase.get_or_insert(self.phase);
+        self.ticks = self.ticks.wrapping_add(1);
         self.phase = self.phase.wrapping_add(1);
         let e = ((self.phase & 7) as usize) * 2;
         let left = self.phase & 1 == 0;
@@ -1112,9 +1144,19 @@ pub fn hub_decor_cells(
     cam_x: u16,
     cam_y: u16,
 ) -> Vec<(u8, u8, u8, u8)> {
+    hub_decor_cells_in(slots, cam_x, cam_y, &DECOR_METASPRITES)
+}
+
+/// [`hub_decor_cells`] over another revision's `$4C4D` table.
+pub fn hub_decor_cells_in<T: AsRef<[(i8, i8, u8, u8)]>>(
+    slots: &[(u8, u8, u8, u8)],
+    cam_x: u16,
+    cam_y: u16,
+    table: &[T],
+) -> Vec<(u8, u8, u8, u8)> {
     let mut out = Vec::new();
     for slot in slots {
-        if let Some(cells) = decor_oam(*slot, cam_x, cam_y) {
+        if let Some(cells) = decor_oam_in(*slot, cam_x, cam_y, table) {
             out.extend(cells);
         }
     }
@@ -1149,7 +1191,12 @@ impl StatusBar {
     /// `$3F203`'s digit patches: `sLives` nibbles into entries 6 and 7,
     /// `sCoinHigh`'s low nibble into entry 10, `sCoinLow`'s nibbles into 11 and 12.
     pub fn cells(&self) -> [(u8, u8, u8, u8); 9] {
-        let mut cells = STATUS_BAR_TEMPLATE;
+        self.cells_in(STATUS_BAR_TEMPLATE)
+    }
+
+    /// [`Self::cells`] over another revision's `$7251` template.
+    pub fn cells_in(&self, template: [(u8, u8, u8, u8); 9]) -> [(u8, u8, u8, u8); 9] {
+        let mut cells = template;
         cells[0].2 = 0x7C;
         cells[2].2 = (self.lives >> 4) | 0x70;
         cells[3].2 = (self.lives & 0x0F) | 0x70;
@@ -1324,6 +1371,26 @@ pub fn render_overworld_view_with_video(
     )
 }
 
+/// One background pixel of an overworld frame: which decoded tile it samples
+/// (an index into the screen's 384 tiles), the map byte that named it, the
+/// map cell in 8-px tiles, and the pixel within the tile (`y * 8 + x`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BgSample {
+    pub tile: usize,
+    pub tile_byte: u8,
+    pub cell: (u16, u16),
+    pub pixel: u8,
+}
+
+/// An overworld frame before rasterizing: each pixel's background sample
+/// (`None` draws color 0) and the OAM cells `(y, x, tile, attr)` in staging
+/// order. The native DMG renderer and DX's colors both draw from it.
+#[derive(Clone, Debug)]
+pub struct OverworldComposition {
+    pub bg: Vec<Option<BgSample>>,
+    pub oam: Vec<(u8, u8, u8, u8)>,
+}
+
 /// Render map pixels with optional hardware palette provenance.
 #[allow(clippy::too_many_arguments)]
 pub fn render_overworld_view_output(
@@ -1360,10 +1427,101 @@ pub fn render_overworld_view_output(
     video: Option<&MapVideo>,
     output: crate::video::OutputMode,
 ) -> Vec<u8> {
+    let composition = compose_overworld_view(
+        screen_id,
+        cam_x,
+        cam_y,
+        cursor_x,
+        cursor_y,
+        cursor_move,
+        cursor_walking,
+        walk_frame,
+        cursor_pose,
+        decor_cells,
+        status_bar.map(StatusBar::cells).as_ref().map(|c| &c[..]),
+        camera_pan,
+        frame_counter,
+        tilemaps,
+        manifest,
+        level_progress,
+        vw,
+        vh,
+        video,
+    );
+    rasterize_overworld(
+        &composition,
+        tiles_vram,
+        bg_palette,
+        obj_palette,
+        video.map_or(0x39, |v| v.obj_palette1),
+        vw,
+        vh,
+        output,
+    )
+}
+
+/// Draw a composition with the DMG palettes, as the console shows it.
+#[allow(clippy::too_many_arguments)]
+pub fn rasterize_overworld(
+    composition: &OverworldComposition,
+    tiles_vram: &[[u8; 64]],
+    bg_palette: u8,
+    obj_palette: u8,
+    obj_palette1: u8,
+    vw: usize,
+    vh: usize,
+    output: crate::video::OutputMode,
+) -> Vec<u8> {
     let bg_shades = output.palette(bg_palette, crate::video::PaletteSource::Bg);
     let mut img = vec![bg_shades[0]; vw * vh];
     let mut bg_colors = vec![0; vw * vh];
-    let _ = &img;
+    for (at, sample) in composition.bg.iter().enumerate() {
+        if let Some(tile_data) = sample.and_then(|s| tiles_vram.get(s.tile).map(|t| (t, s))) {
+            let col = tile_data.0[usize::from(tile_data.1.pixel)];
+            bg_colors[at] = col;
+            img[at] = bg_shades[col as usize];
+        }
+    }
+    draw_map_objects_output(
+        &mut img,
+        &bg_colors,
+        tiles_vram,
+        &composition.oam,
+        obj_palette,
+        obj_palette1,
+        vw,
+        vh,
+        output,
+    );
+    img
+}
+
+/// Lay out one overworld frame: the hub's 64x64 stitched map or a zone's
+/// 32x32 screen with its route patches and per-row scroll, then the OAM.
+#[allow(clippy::too_many_arguments)]
+pub fn compose_overworld_view(
+    screen_id: u8,
+    cam_x: u16,
+    cam_y: u16,
+    cursor_x: u8,
+    cursor_y: u8,
+    cursor_move: u8,
+    cursor_walking: u8,
+    walk_frame: u8,
+    cursor_pose: u8,
+    decor_cells: &[(u8, u8, u8, u8)],
+    // The hub's `$3F203` counters, already built from their template.
+    status_bar: Option<&[(u8, u8, u8, u8)]>,
+    camera_pan: bool,
+    frame_counter: u8,
+    tilemaps: &OverworldTilemaps,
+    manifest: &OverworldManifest,
+    level_progress: &[u8],
+    vw: usize,
+    vh: usize,
+    video: Option<&MapVideo>,
+) -> OverworldComposition {
+    let mut bg = vec![None; vw * vh];
 
     if screen_id == 0 {
         // Hub 64x64 stitched map
@@ -1376,12 +1534,12 @@ pub fn render_overworld_view_output(
                 let tx = wx / 8;
                 let sub_x = wx % 8;
                 let tile_byte = tilemaps.hub_tile(tx, ty);
-                let vram_idx = signed_bg_tile_index(tile_byte);
-                if let Some(tile_data) = tiles_vram.get(vram_idx) {
-                    let col = tile_data[sub_y * 8 + sub_x];
-                    bg_colors[py * vw + px] = col;
-                    img[py * vw + px] = bg_shades[col as usize];
-                }
+                bg[py * vw + px] = Some(BgSample {
+                    tile: signed_bg_tile_index(tile_byte),
+                    tile_byte,
+                    cell: (tx as u16, ty as u16),
+                    pixel: (sub_y * 8 + sub_x) as u8,
+                });
             }
         }
     } else {
@@ -1426,29 +1584,21 @@ pub fn render_overworld_view_output(
                 let tx = wx / 8;
                 let sub_x = wx % 8;
                 let tile_byte = active_map[ty * 32 + tx];
-                let vram_idx = signed_bg_tile_index(tile_byte);
-                if let Some(tile_data) = tiles_vram.get(vram_idx) {
-                    let col = tile_data[sub_y * 8 + sub_x];
-                    bg_colors[py * vw + px] = col;
-                    img[py * vw + px] = bg_shades[col as usize];
-                }
+                bg[py * vw + px] = Some(BgSample {
+                    tile: signed_bg_tile_index(tile_byte),
+                    tile_byte,
+                    cell: (tx as u16, ty as u16),
+                    pixel: (sub_y * 8 + sub_x) as u8,
+                });
             }
         }
     }
 
     if screen_id >= 9 {
-        draw_map_objects_output(
-            &mut img,
-            &bg_colors,
-            tiles_vram,
-            decor_cells,
-            obj_palette,
-            video.map_or(0x39, |v| v.obj_palette1),
-            vw,
-            vh,
-            output,
-        );
-        return img;
+        return OverworldComposition {
+            bg,
+            oam: decor_cells.to_vec(),
+        };
     }
 
     let mut oam = Vec::new();
@@ -1458,18 +1608,7 @@ pub fn render_overworld_view_output(
             oam.extend(PAN_ARROWS);
         }
         oam.extend_from_slice(decor_cells);
-        draw_map_objects_output(
-            &mut img,
-            &bg_colors,
-            tiles_vram,
-            &oam,
-            obj_palette,
-            video.map_or(0x39, |v| v.obj_palette1),
-            vw,
-            vh,
-            output,
-        );
-        return img;
+        return OverworldComposition { bg, oam };
     }
 
     // `$3F203` supplies this strip on the hub only. Zone loaders clear it.
@@ -1477,8 +1616,7 @@ pub fn render_overworld_view_output(
         let (x0, y0, x1, y1) = status_bar_strip_rect(vw, vh);
         for py in y0..y1 {
             for px in x0..x1 {
-                img[py * vw + px] = bg_shades[0];
-                bg_colors[py * vw + px] = 0;
+                bg[py * vw + px] = None;
             }
         }
     }
@@ -1523,22 +1661,10 @@ pub fn render_overworld_view_output(
     }
     // The cursor owns OAM 0-3; hub counters precede scenery at entry 13.
     if let Some(bar) = status_bar {
-        oam.extend(bar.cells());
+        oam.extend_from_slice(bar);
     }
     oam.extend_from_slice(decor_cells);
-    draw_map_objects_output(
-        &mut img,
-        &bg_colors,
-        tiles_vram,
-        &oam,
-        obj_palette,
-        video.map_or(0x39, |v| v.obj_palette1),
-        vw,
-        vh,
-        output,
-    );
-
-    img
+    OverworldComposition { bg, oam }
 }
 
 #[cfg(test)]
@@ -2212,11 +2338,31 @@ mod wave_tests {
     /// `$DF` is odd and rotates right at `e = 14` and again at `e = 15` for
     /// strips 2 and 3.
     #[test]
+    fn a_followed_wave_turns_another_tile_set_as_far_and_repeats_every_128() {
+        let block = |seed: u8| -> Vec<u8> {
+            (0..384 * 16).map(|i| (i as u8).wrapping_mul(seed).rotate_left(3)).collect()
+        };
+        let (native, dx) = (block(7), block(13));
+        let mut live = MapWave::seed(&native).unwrap();
+        live.phase = 0x45;
+        let mut direct = MapWave::seed(&dx).unwrap();
+        direct.phase = 0x45;
+        for ticks in 1..=300 {
+            live.tick();
+            direct.tick();
+            let followed = MapWave::follow(&dx, &live).unwrap();
+            assert_eq!(followed.raw, direct.raw, "tick {ticks}");
+        }
+    }
+
+    #[test]
     fn wave_rotation_matches_the_console() {
         let mut wave = MapWave {
             phase: 0xDD,
             strips: [[0u8; 32]; 4],
             raw: [[0u8; 16]; 8],
+            start_phase: None,
+            ticks: 0,
         };
         for (n, hex) in [STRIP0, STRIP1, STRIP2, STRIP3].iter().enumerate() {
             wave.strips[n].copy_from_slice(&bytes(hex));

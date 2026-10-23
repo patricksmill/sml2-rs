@@ -9,6 +9,7 @@ use crate::{
 use sml2_core::{
     character::Character,
     level::{MetatileTable, LAYOUT_SIZE},
+    map::{OverworldManifest, OverworldTilemaps, OverworldTiles},
     object::{sprite_map_index, MappingEntry},
     video::cgb::CgbPalettes,
 };
@@ -59,6 +60,49 @@ pub struct Screen {
     pub obj_palettes: Vec<u8>,
 }
 
+/// One overworld screen's DX colors (`$26:$77F1` for the hub, the
+/// `$26:$7969`.. branches for the zones).
+#[derive(Clone, Debug)]
+pub struct MapScreen {
+    pub bg_palettes: Vec<u8>,
+    /// The hub's second set, used once its camera reaches X `$E7`.
+    pub alternate_bg_palettes: Option<Vec<u8>>,
+    /// `[Mario, Luigi]`, by `$FFF6`.
+    pub obj_palettes: [Vec<u8>; 2],
+    /// A zone's 32x18 VRAM1 attribute map (`$29:$6642`); the hub colors
+    /// tiles by ID instead.
+    pub attributes: Option<Vec<u8>>,
+    /// Space Zone's map once `sMapSpacePath0` bit 0 is set.
+    pub alternate_attributes: Option<Vec<u8>>,
+}
+
+/// The overworld's sprite tables in the native tables' shapes: DX keeps their
+/// layout and edits their attribute bytes, adding CGB palettes.
+#[derive(Clone, Debug)]
+pub struct MapSprites {
+    /// `$0F:$4C4D`: the hub's 17 decor metasprites.
+    pub hub_decor: Vec<Vec<(i8, i8, u8, u8)>>,
+    /// `$18:$62E6`: the zones' 188 decor metasprites.
+    pub zone_decor: Vec<Vec<(i8, i8, u8, u8)>>,
+    /// `$0F:$7251`: the hub status bar's nine OAM entries.
+    pub status_bar: [(u8, u8, u8, u8); 9],
+}
+
+/// The overworld, built by the native extractor's builders from the DX banks
+/// (DX edits the tiles, maps, patches and poses in place) plus DX's colors.
+#[derive(Clone, Debug)]
+pub struct MapGraphics {
+    pub tilemaps: OverworldTilemaps,
+    pub manifest: OverworldManifest,
+    pub tiles: OverworldTiles,
+    pub zone_animation_tiles: Vec<u8>,
+    /// `$29:$6542`: the hub's attribute for each tile ID, loaded to `$D000`.
+    pub hub_attributes: Vec<u8>,
+    /// Native screens 0 (hub) to 8.
+    pub screens: Vec<MapScreen>,
+    pub sprites: MapSprites,
+}
+
 #[derive(Clone, Debug)]
 pub struct Presentation {
     pub levels: Vec<LevelGraphics>,
@@ -78,6 +122,7 @@ pub struct Presentation {
     pub title: Screen,
     /// `$2B8B` plus `$25:$4234`'s file select.
     pub file_select: Screen,
+    pub map: MapGraphics,
 }
 
 /// One sprite or player mapping table: cells per sprite ID.
@@ -91,6 +136,7 @@ const LEVEL_BANK: u8 = 0x24;
 const PALETTE_BANK: u8 = 0x26;
 const ANIMATION_BANK: u8 = 0x1D;
 const METATILE_BANK: u8 = 0x08;
+const MAP_BANK: u8 = 0x29;
 
 impl Presentation {
     pub fn new(bundle: &Bundle) -> Result<Self, ImportError> {
@@ -158,6 +204,7 @@ impl Presentation {
             banks: bundle.banks.clone(),
             title: title(bundle)?,
             file_select: file_select(bundle)?,
+            map: map(bundle)?,
         })
     }
 
@@ -348,6 +395,118 @@ fn file_select(bundle: &Bundle) -> Result<Screen, ImportError> {
         bg_palettes,
         obj_palettes,
     })
+}
+
+/// The DX banks laid out at their ROM offsets, for builders that read fixed
+/// addresses.
+fn rom_image(bundle: &Bundle) -> Vec<u8> {
+    let last = bundle.banks.keys().max().copied().unwrap_or(0);
+    let mut rom = vec![0; (usize::from(last) + 1) * crate::bundle::BANK_LEN];
+    for (&bank, bytes) in &bundle.banks {
+        let at = usize::from(bank) * crate::bundle::BANK_LEN;
+        rom[at..at + bytes.len()].copy_from_slice(bytes);
+    }
+    rom
+}
+
+fn map(bundle: &Bundle) -> Result<MapGraphics, ImportError> {
+    use sml2_extract::map as extract;
+    let bad = |what: &str, e: String| ImportError::InvalidBundle(format!("overworld {what}: {e}"));
+    let rom = rom_image(bundle);
+    let tilemaps = extract::build_tilemaps_binary(&rom).map_err(|e| bad("maps", e))?;
+    let tiles = extract::build_tiles_binary(&rom).map_err(|e| bad("tiles", e))?;
+    let manifest = extract::build_manifest(&rom).map_err(|e| bad("patches", e))?;
+    let palette = |address: u16| -> Result<Vec<u8>, ImportError> {
+        Ok(bundle.banked(PALETTE_BANK, address, 0x40)?.to_vec())
+    };
+    let zone = |bg: u16, obj: u16, attributes: u16| -> Result<MapScreen, ImportError> {
+        Ok(MapScreen {
+            bg_palettes: palette(bg)?,
+            alternate_bg_palettes: None,
+            obj_palettes: [palette(obj)?, palette(obj + 0x40)?],
+            attributes: Some(bundle.banked(MAP_BANK, attributes, 0x240)?.to_vec()),
+            alternate_attributes: None,
+        })
+    };
+    // Native screen order: hub, Pumpkin, Tree, Macro, Space, Turtle, Mario,
+    // Wario's castle, the castle hill. Each zone branch names its palettes
+    // and the `$29:$6642` map for its index.
+    let mut screens = vec![
+        MapScreen {
+            bg_palettes: palette(0x6380)?,
+            alternate_bg_palettes: Some(palette(0x63C0)?),
+            obj_palettes: [palette(0x6400)?, palette(0x6440)?],
+            attributes: None,
+            alternate_attributes: None,
+        },
+        zone(0x6780, 0x67C0, 0x4B40)?,
+        zone(0x6480, 0x64C0, 0x4000)?,
+        zone(0x6600, 0x6640, 0x4240)?,
+        zone(0x66C0, 0x6700, 0x46C0)?,
+        zone(0x6540, 0x6580, 0x4480)?,
+        zone(0x6840, 0x6880, 0x4D80)?,
+        zone(0x69C0, 0x6A40, 0x5200)?,
+        zone(0x6900, 0x6940, 0x4FC0)?,
+    ];
+    screens[4].alternate_attributes = Some(bundle.banked(MAP_BANK, 0x4900, 0x240)?.to_vec());
+    for screen in &screens {
+        for obj in &screen.obj_palettes {
+            CgbPalettes::from_bytes(&screen.bg_palettes, obj)
+                .map_err(|e| bad("palettes", e.to_string()))?;
+        }
+    }
+    Ok(MapGraphics {
+        tilemaps: OverworldTilemaps::from_bytes(&tilemaps)
+            .ok_or_else(|| bad("maps", "wrong length".into()))?,
+        manifest: serde_json::from_value(manifest).map_err(|e| bad("patches", e.to_string()))?,
+        tiles: OverworldTiles::from_bytes(&tiles)
+            .ok_or_else(|| bad("tiles", "wrong length".into()))?,
+        zone_animation_tiles: extract::build_zone_animation_tiles(&rom)
+            .map_err(|e| bad("animation", e))?,
+        hub_attributes: bundle.banked(MAP_BANK, 0x6542, 0x100)?.to_vec(),
+        screens,
+        sprites: MapSprites {
+            hub_decor: metasprites(bundle, 0x0F, 0x4C4D, 17)?,
+            zone_decor: metasprites(bundle, 0x18, 0x62E6, 188)?,
+            status_bar: {
+                let bytes = bundle.banked(0x0F, 0x7251, 36)?;
+                std::array::from_fn(|i| {
+                    let c = &bytes[i * 4..i * 4 + 4];
+                    (c[0], c[1], c[2], c[3])
+                })
+            },
+        },
+    })
+}
+
+/// A pointer table of `(dy, dx, tile, attr)` metasprites, each ended by a
+/// `$FF` tile byte (`$3D01D` and `$509B` test the tile, not `dy`).
+fn metasprites(
+    bundle: &Bundle,
+    bank: u8,
+    table: u16,
+    count: u16,
+) -> Result<Vec<Vec<(i8, i8, u8, u8)>>, ImportError> {
+    (0..count)
+        .map(|i| {
+            let at = bundle.banked(bank, table + i * 2, 2)?;
+            let mut address = u16::from_le_bytes([at[0], at[1]]);
+            let mut cells = Vec::new();
+            loop {
+                let c = bundle.banked(bank, address, 4)?;
+                if c[2] == 0xFF {
+                    return Ok(cells);
+                }
+                if cells.len() == 64 {
+                    return Err(ImportError::InvalidBundle(format!(
+                        "unterminated metasprite {i} at ${bank:02X}:${table:04X}"
+                    )));
+                }
+                cells.push((c[0] as i8, c[1] as i8, c[2], c[3]));
+                address = address.wrapping_add(4);
+            }
+        })
+        .collect()
 }
 
 /// `$0361`: the layout `$42F0[index]` names in `bank`, run-length decoded

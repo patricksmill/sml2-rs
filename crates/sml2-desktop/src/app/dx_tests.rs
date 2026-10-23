@@ -172,6 +172,28 @@ fn red_bundle() -> sml2_dx::Presentation {
         banks: Default::default(),
         title: screen(),
         file_select: screen(),
+        map: sml2_dx::MapGraphics {
+            tilemaps: Default::default(),
+            manifest: Default::default(),
+            tiles: Default::default(),
+            zone_animation_tiles: Vec::new(),
+            hub_attributes: vec![0; 0x100],
+            screens: vec![
+                sml2_dx::MapScreen {
+                    bg_palettes: [0x1f, 0].repeat(32),
+                    alternate_bg_palettes: None,
+                    obj_palettes: [[0xe0, 3].repeat(32), [0xe0, 3].repeat(32)],
+                    attributes: Some(vec![0; 0x240]),
+                    alternate_attributes: None,
+                };
+                9
+            ],
+            sprites: sml2_dx::MapSprites {
+                hub_decor: vec![vec![]; 17],
+                zone_decor: vec![vec![]; 188],
+                status_bar: [(0, 0, 0, 0); 9],
+            },
+        },
     }
 }
 

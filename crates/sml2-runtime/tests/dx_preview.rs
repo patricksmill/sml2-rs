@@ -43,6 +43,28 @@ fn synthetic_bundle() -> Presentation {
         banks: Default::default(),
         title: screen(),
         file_select: screen(),
+        map: sml2_dx::MapGraphics {
+            tilemaps: Default::default(),
+            manifest: Default::default(),
+            tiles: Default::default(),
+            zone_animation_tiles: Vec::new(),
+            hub_attributes: vec![0; 0x100],
+            screens: vec![
+                sml2_dx::MapScreen {
+                    bg_palettes: [0x1f, 0].repeat(32),
+                    alternate_bg_palettes: None,
+                    obj_palettes: [[0xe0, 3].repeat(32), [0xe0, 3].repeat(32)],
+                    attributes: Some(vec![0; 0x240]),
+                    alternate_attributes: None,
+                };
+                9
+            ],
+            sprites: sml2_dx::MapSprites {
+                hub_decor: vec![vec![]; 17],
+                zone_decor: vec![vec![]; 188],
+                status_bar: [(0, 0, 0, 0); 9],
+            },
+        },
     }
 }
 
@@ -342,4 +364,33 @@ fn audited_rom_title_and_file_select_match_their_pyboy_frames() {
         sml2_dx::sha256(&file_select),
         "b34891637e549b91cf3d56ed65bb2fd7c79f725814a3824453a57bbb35ae6232"
     );
+}
+
+/// The hub and every zone screen draw in DX color; the hub and Tree Zone
+/// matched PyBoy's frames of this ROM except where animation timing differs.
+#[test]
+#[ignore = "requires SML2_DX_ROM with the audited local ROM"]
+fn audited_rom_draws_the_hub_and_zone_screens() {
+    let bundle = audited();
+    for (screen, node) in [
+        (0u8, 0x14u8),
+        (1, 0x28),
+        (2, 0x23),
+        (3, 0x32),
+        (4, 0x3C),
+        (5, 0x4B),
+        (6, 0x50),
+        (8, 0x72),
+    ] {
+        let mut game = session();
+        game.debug_clear_all_levels();
+        game.debug_warp_map(screen, node).unwrap();
+        game.advance(FrameInput::default());
+        assert!(game.dx_supported(), "screen {screen}");
+        for character in [Mario, Luigi] {
+            let frame = game.render_dx_frame(&bundle, character).unwrap();
+            let colors: std::collections::BTreeSet<_> = frame.iter().collect();
+            assert!(colors.len() > 8, "screen {screen} has its palettes");
+        }
+    }
 }

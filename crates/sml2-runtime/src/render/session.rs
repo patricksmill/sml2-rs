@@ -133,149 +133,24 @@ impl Session {
                 )
             }
             SessionState::Overworld(map_sim) => {
-                let map_sim = self
-                    .map_screen_transition
-                    .as_ref()
-                    .filter(|t| t.shows_source())
-                    .map_or(map_sim, |t| &t.source);
-                let mut vram = if map_sim.screen_id >= 13 && !self.assets.bell_room_tiles.is_empty()
-                {
-                    // Screens 13/14 copy bank 25 `$5000` to `$8800`; the zone
-                    // tilesets at `map/tiles.bin` do not apply.
-                    self.assets.bell_room_tiles.vram_tiles()
-                } else {
-                    self.assets
-                        .overworld_tiles
-                        .screen_vram_tiles(map_sim.screen_id)
+                let map_sim = self.shown_map(map_sim);
+                let assets = MapAssets {
+                    tilemaps: &self.assets.overworld_tilemaps,
+                    manifest: &self.assets.overworld_manifest,
+                    tiles: &self.assets.overworld_tiles,
+                    zone_animation_tiles: &self.assets.zone_animation_tiles,
+                    wave: self.map_wave.clone(),
+                    sprites: None,
                 };
-                // `$3F58` copies bank 6 `$4000` over `$8000` in both bonus
-                // rooms, so the sprite pass sees those 128 tiles.
-                if map_sim.screen_id >= 9 && !self.assets.room_common_tiles.is_empty() {
-                    for (index, tile) in self
-                        .assets
-                        .room_common_tiles
-                        .vram_tiles()
-                        .iter()
-                        .enumerate()
-                    {
-                        if index < vram.len() {
-                            vram[index] = *tile;
-                        }
-                    }
-                }
-                if map_sim.screen_id == 0 {
-                    if let Some(wave) = &self.map_wave {
-                        wave.apply(&mut vram);
-                    }
-                }
-                map_sim.apply_zone_tile_animation(&mut vram, &self.assets.zone_animation_tiles);
-                if let Some(room) = map_sim
-                    .room
-                    .as_ref()
-                    .filter(|_| (9..=12).contains(&map_sim.screen_id))
-                {
-                    room.apply_bulb_tiles(&mut vram);
-                }
-                if map_sim.screen_id == 1
-                    && map_sim.level_progress[7] & 1 != 0
-                    && map_sim.level_progress[38] & 0x80 != 0
-                {
-                    // `$3D2FC`: bank 14 $4500->$8800, $220 bytes.
-                    let gate = vram[0x50..0x72].to_vec();
-                    vram[0x80..0xA2].copy_from_slice(&gate);
-                }
-                let bg_pal = self
-                    .assets
-                    .overworld_manifest
-                    .screens
-                    .iter()
-                    .find(|s| s.id == map_sim.screen_id)
-                    .map(|s| s.bg_palette)
-                    .unwrap_or(0xE4);
-                let zone_palettes = map_sim.zone_palettes();
-                let initial = (
-                    zone_palettes.map_or(bg_pal, |p| p.0),
-                    0xD0,
-                    zone_palettes.map_or(0x39, |p| p.1),
-                );
-                let (bg_pal, obp, obj_palette1) = match &self.map_pan_return {
-                    Some(pan) => {
-                        let p = pan.palettes();
-                        (p.0, p.1, initial.2)
-                    }
-                    None => self
-                        .pending_level
-                        .as_ref()
-                        .map_or(initial, |t| map_entry_palettes(t.frame, initial)),
-                };
-                // `$3F203` fills `sStatusBarOAM` from `$7251` on the hub; a zone
-                // screen's `$3E277` clears those nine entries first, so its bar
-                // has no counters.
-                let status_bar = (map_sim.screen_id == 0).then_some(sml2_core::map::StatusBar {
-                    lives: self.lives,
-                    coins_low: map_sim.coins_low,
-                    coins_high: map_sim.coins_high,
-                });
-                // `$3CFC8` (hub, OAM 13+), `$3E277` (zones, OAM 4+) or the
-                // room's own `$6109B` expansion: all run before the cursor,
-                // which owns 0-3.
-                let decor_cells = if map_sim.screen_id == 0 {
-                    sml2_core::map::hub_decor_cells(
-                        &map_sim.decor_slots,
-                        map_sim.cam_x,
-                        map_sim.cam_y,
-                    )
-                } else if let Some(room) = &map_sim.room {
-                    room.oam_cells()
-                } else {
-                    sml2_core::map_zone_decor::zone_decor_oam(map_sim.zone_render_slots())
-                };
-                let zone_live = (1..=8).contains(&map_sim.screen_id);
-                let tilemaps = self
-                    .assets
-                    .overworld_tilemaps
-                    .with_screen_writes(map_sim.screen_id, &map_sim.zone_tile_writes());
-                let mut manifest = self.assets.overworld_manifest.clone();
-                if zone_live {
-                    manifest
-                        .dynamic_unlocks
-                        .retain(|r| r.screen_id != map_sim.screen_id);
-                }
-                let transition_palettes = self
-                    .map_screen_transition
-                    .as_ref()
-                    .map(|t| t.palettes(map_sim.screen_id));
-                let (bg_pal, obp) = transition_palettes.map_or((bg_pal, obp), |p| (p.0, p.1));
-                let video = sml2_core::map::MapVideo {
-                    scroll_rows: std::array::from_fn(|y| map_sim.zone_background_scroll(y).0),
-                    scroll_y: map_sim.zone_background_scroll(0).1,
-                    obj_palette1: transition_palettes.map_or_else(|| obj_palette1, |p| p.2),
-                };
-                sml2_core::map::render_overworld_view_output(
-                    map_sim.screen_id,
-                    map_sim.cam_x,
-                    map_sim.cam_y,
-                    map_sim.cursor_x,
-                    map_sim.cursor_y,
-                    map_sim.cursor_move,
-                    map_sim.cursor_walking,
-                    map_sim.walk_frame,
-                    map_sim.cursor_pose,
-                    &decor_cells,
-                    status_bar.as_ref(),
-                    map_sim.scroll_only_latch != 0,
-                    // `$3C9F4` reads `$FF97`, a frame counter that free-runs from
-                    // boot; the session's own frame count is the same shape.
-                    (self.frame_n & 0xFF) as u8,
-                    &tilemaps,
-                    &manifest,
-                    &map_sim.level_progress,
-                    &vram,
-                    bg_pal,
-                    obp,
+                let frame = self.overworld_frame(map_sim, assets, (vw, vh));
+                sml2_core::map::rasterize_overworld(
+                    &frame.composition,
+                    &frame.vram,
+                    frame.bg_palette,
+                    frame.obj_palette,
+                    frame.obj_palette1,
                     vw,
                     vh,
-                    Some(&video),
                     output,
                 )
             }
@@ -334,6 +209,201 @@ mod tests {
                 expected,
                 "frame {frame}"
             );
+        }
+    }
+}
+
+/// The overworld data a frame draws from: the native set or DX's.
+pub(crate) struct MapAssets<'a> {
+    pub tilemaps: &'a sml2_core::map::OverworldTilemaps,
+    pub manifest: &'a sml2_core::map::OverworldManifest,
+    pub tiles: &'a sml2_core::map::OverworldTiles,
+    pub zone_animation_tiles: &'a [u8],
+    pub wave: Option<sml2_core::map::MapWave>,
+    /// Another revision's sprite tables (`$4C4D`, `$62E6`, `$7251`); `None`
+    /// keeps the native ones.
+    pub sprites: Option<&'a sml2_dx::MapSprites>,
+}
+
+/// One overworld frame laid out, with the tiles and DMG palettes it draws with.
+pub(crate) struct OverworldFrame {
+    pub composition: sml2_core::map::OverworldComposition,
+    pub vram: Vec<[u8; 64]>,
+    pub bg_palette: u8,
+    pub obj_palette: u8,
+    pub obj_palette1: u8,
+}
+
+impl Session {
+    /// The map screen on view: the transition's source until it hands over.
+    pub(crate) fn shown_map<'a>(&'a self, map_sim: &'a sml2_core::map_sim::MapSim) -> &'a sml2_core::map_sim::MapSim {
+        self.map_screen_transition
+            .as_ref()
+            .filter(|t| t.shows_source())
+            .map_or(map_sim, |t| &t.source)
+    }
+
+    /// Lay out the overworld frame from `assets`.
+    pub(crate) fn overworld_frame(
+        &self,
+        map_sim: &sml2_core::map_sim::MapSim,
+        assets: MapAssets<'_>,
+        (vw, vh): (usize, usize),
+    ) -> OverworldFrame {
+        let mut vram = if map_sim.screen_id >= 13 && !self.assets.bell_room_tiles.is_empty()
+        {
+            // Screens 13/14 copy bank 25 `$5000` to `$8800`; the zone
+            // tilesets at `map/tiles.bin` do not apply.
+            self.assets.bell_room_tiles.vram_tiles()
+        } else {
+            assets.tiles.screen_vram_tiles(map_sim.screen_id)
+        };
+        // `$3F58` copies bank 6 `$4000` over `$8000` in both bonus
+        // rooms, so the sprite pass sees those 128 tiles.
+        if map_sim.screen_id >= 9 && !self.assets.room_common_tiles.is_empty() {
+            for (index, tile) in self
+                .assets
+                .room_common_tiles
+                .vram_tiles()
+                .iter()
+                .enumerate()
+            {
+                if index < vram.len() {
+                    vram[index] = *tile;
+                }
+            }
+        }
+        if map_sim.screen_id == 0 {
+            if let Some(wave) = &assets.wave {
+                wave.apply(&mut vram);
+            }
+        }
+        map_sim.apply_zone_tile_animation(&mut vram, assets.zone_animation_tiles);
+        if let Some(room) = map_sim
+            .room
+            .as_ref()
+            .filter(|_| (9..=12).contains(&map_sim.screen_id))
+        {
+            room.apply_bulb_tiles(&mut vram);
+        }
+        if map_sim.screen_id == 1
+            && map_sim.level_progress[7] & 1 != 0
+            && map_sim.level_progress[38] & 0x80 != 0
+        {
+            // `$3D2FC`: bank 14 $4500->$8800, $220 bytes.
+            let gate = vram[0x50..0x72].to_vec();
+            vram[0x80..0xA2].copy_from_slice(&gate);
+        }
+        let bg_pal = assets
+            .manifest
+            .screens
+            .iter()
+            .find(|s| s.id == map_sim.screen_id)
+            .map(|s| s.bg_palette)
+            .unwrap_or(0xE4);
+        let zone_palettes = map_sim.zone_palettes();
+        let initial = (
+            zone_palettes.map_or(bg_pal, |p| p.0),
+            0xD0,
+            zone_palettes.map_or(0x39, |p| p.1),
+        );
+        let (bg_pal, obp, obj_palette1) = match &self.map_pan_return {
+            Some(pan) => {
+                let p = pan.palettes();
+                (p.0, p.1, initial.2)
+            }
+            None => self
+                .pending_level
+                .as_ref()
+                .map_or(initial, |t| map_entry_palettes(t.frame, initial)),
+        };
+        // `$3F203` fills `sStatusBarOAM` from `$7251` on the hub; a zone
+        // screen's `$3E277` clears those nine entries first, so its bar
+        // has no counters.
+        let status_bar = (map_sim.screen_id == 0).then_some(sml2_core::map::StatusBar {
+            lives: self.lives,
+            coins_low: map_sim.coins_low,
+            coins_high: map_sim.coins_high,
+        });
+        // `$3CFC8` (hub, OAM 13+), `$3E277` (zones, OAM 4+) or the
+        // room's own `$6109B` expansion: all run before the cursor,
+        // which owns 0-3.
+        let decor_cells = if map_sim.screen_id == 0 {
+            match assets.sprites {
+                Some(t) => sml2_core::map::hub_decor_cells_in(
+                    &map_sim.decor_slots,
+                    map_sim.cam_x,
+                    map_sim.cam_y,
+                    &t.hub_decor,
+                ),
+                None => sml2_core::map::hub_decor_cells(
+                    &map_sim.decor_slots,
+                    map_sim.cam_x,
+                    map_sim.cam_y,
+                ),
+            }
+        } else if let Some(room) = &map_sim.room {
+            room.oam_cells()
+        } else {
+            let slots = map_sim.zone_render_slots();
+            match assets.sprites {
+                Some(t) => sml2_core::map_zone_decor::zone_decor_oam_in(slots, &t.zone_decor),
+                None => sml2_core::map_zone_decor::zone_decor_oam(slots),
+            }
+        };
+        let status_cells = status_bar.map(|bar| match assets.sprites {
+            Some(t) => bar.cells_in(t.status_bar),
+            None => bar.cells(),
+        });
+        let zone_live = (1..=8).contains(&map_sim.screen_id);
+        let tilemaps = assets
+            .tilemaps
+            .with_screen_writes(map_sim.screen_id, &map_sim.zone_tile_writes());
+        let mut manifest = assets.manifest.clone();
+        if zone_live {
+            manifest
+                .dynamic_unlocks
+                .retain(|r| r.screen_id != map_sim.screen_id);
+        }
+        let transition_palettes = self
+            .map_screen_transition
+            .as_ref()
+            .map(|t| t.palettes(map_sim.screen_id));
+        let (bg_pal, obp) = transition_palettes.map_or((bg_pal, obp), |p| (p.0, p.1));
+        let video = sml2_core::map::MapVideo {
+            scroll_rows: std::array::from_fn(|y| map_sim.zone_background_scroll(y).0),
+            scroll_y: map_sim.zone_background_scroll(0).1,
+            obj_palette1: transition_palettes.map_or_else(|| obj_palette1, |p| p.2),
+        };
+        let composition = sml2_core::map::compose_overworld_view(
+            map_sim.screen_id,
+            map_sim.cam_x,
+            map_sim.cam_y,
+            map_sim.cursor_x,
+            map_sim.cursor_y,
+            map_sim.cursor_move,
+            map_sim.cursor_walking,
+            map_sim.walk_frame,
+            map_sim.cursor_pose,
+            &decor_cells,
+            status_cells.as_ref().map(|c| &c[..]),
+            map_sim.scroll_only_latch != 0,
+            // `$3C9F4` reads `$FF97`, a frame counter that free-runs from
+            // boot; the session's own frame count is the same shape.
+            (self.frame_n & 0xFF) as u8,
+            &tilemaps,
+            &manifest,
+            &map_sim.level_progress,
+            vw,
+            vh,
+            Some(&video),
+        );
+        OverworldFrame {
+            composition,
+            vram,
+            bg_palette: bg_pal,
+            obj_palette: obp,
+            obj_palette1: video.obj_palette1,
         }
     }
 }

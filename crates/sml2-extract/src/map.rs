@@ -17,14 +17,7 @@ pub const SCREEN_TILEMAP_SPECS: &[(u8, &str, usize, usize, &str, u8)] = &[
         "gfx/overworld/pumpkinzone.png",
         0xE4,
     ),
-    (
-        2,
-        "tree",
-        0x3B240,
-        576,
-        "gfx/overworld/treezone.png",
-        0xE4,
-    ),
+    (2, "tree", 0x3B240, 576, "gfx/overworld/treezone.png", 0xE4),
     (
         3,
         "macro",
@@ -329,24 +322,10 @@ pub fn build_tiles_binary(baserom: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 /// Emit `extracted/map/tilemaps.bin`, `extracted/map/route_patches.json`, and `extracted/map/tiles.bin`.
-pub fn emit(baserom: &[u8], extracted: &Path) -> Result<(), Box<dyn Error>> {
-    let map_dir = extracted.join("map");
-    fs::create_dir_all(&map_dir)?;
-
-    fs::write(
-        map_dir.join("zone_animations.bin"),
-        build_zone_animation_tiles(baserom)?,
-    )?;
-
-    // 1. Tilemaps binary
-    let tilemaps_bin = build_tilemaps_binary(baserom).map_err(|e| format!("map tilemaps: {e}"))?;
-    fs::write(map_dir.join("tilemaps.bin"), &tilemaps_bin)?;
-    println!(
-        "wrote map/tilemaps.bin: 64x64 hub + 14 zone screens ({} bytes)",
-        tilemaps_bin.len()
-    );
-
-    // 2. Route patches and cursor metadata
+/// `map/route_patches.json`: screen metadata, route patch streams, cursor
+/// poses and the dynamic unlocks, as read from `baserom` (or any revision that
+/// keeps the same tables in place).
+pub fn build_manifest(baserom: &[u8]) -> Result<serde_json::Value, String> {
     let patches = extract_patches(baserom).map_err(|e| format!("route patches: {e}"))?;
     let cursor_poses = extract_cursor_poses(baserom).map_err(|e| format!("cursor poses: {e}"))?;
 
@@ -413,7 +392,28 @@ pub fn emit(baserom: &[u8], extracted: &Path) -> Result<(), Box<dyn Error>> {
         "cursor_poses": cursor_poses,
         "dynamic_unlocks": dynamic_unlocks,
     });
+    Ok(manifest)
+}
 
+pub fn emit(baserom: &[u8], extracted: &Path) -> Result<(), Box<dyn Error>> {
+    let map_dir = extracted.join("map");
+    fs::create_dir_all(&map_dir)?;
+
+    fs::write(
+        map_dir.join("zone_animations.bin"),
+        build_zone_animation_tiles(baserom)?,
+    )?;
+
+    // 1. Tilemaps binary
+    let tilemaps_bin = build_tilemaps_binary(baserom).map_err(|e| format!("map tilemaps: {e}"))?;
+    fs::write(map_dir.join("tilemaps.bin"), &tilemaps_bin)?;
+    println!(
+        "wrote map/tilemaps.bin: 64x64 hub + 14 zone screens ({} bytes)",
+        tilemaps_bin.len()
+    );
+
+    // 2. Route patches and cursor metadata
+    let manifest = build_manifest(baserom)?;
     fs::write(
         map_dir.join("route_patches.json"),
         serde_json::to_string_pretty(&manifest)? + "\n",

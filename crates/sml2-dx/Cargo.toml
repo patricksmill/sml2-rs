@@ -8,6 +8,7 @@ sha2 = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sml2-core = { path = "../sml2-core" }
+sml2-extract = { path = "../sml2-extract" }
 
 [dev-dependencies]
 tempfile = "3"

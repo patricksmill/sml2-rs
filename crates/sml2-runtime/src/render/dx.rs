@@ -34,13 +34,14 @@ impl Session {
     /// file select and every level, live or in a demo, except boss arenas.
     /// The map, arenas and other screens keep their native picture.
     pub fn dx_supported(&self) -> bool {
-        self.dx_level().is_some()
-            || matches!(
-                self.state,
-                SessionState::Title(_)
-                    | SessionState::FileSelectLoading(_)
-                    | SessionState::FileSelect(_)
-            )
+        match &self.state {
+            SessionState::Title(_)
+            | SessionState::FileSelectLoading(_)
+            | SessionState::FileSelect(_) => true,
+            // The hub and the eight zones; the bonus rooms stay native.
+            SessionState::Overworld(map_sim) => self.shown_map(map_sim).screen_id <= 8,
+            _ => self.dx_level().is_some(),
+        }
     }
 
     /// Render the current level in direct CGB RGB888 color, drawing the player
@@ -63,6 +64,7 @@ impl Session {
             SessionState::FileSelect(file_select) => {
                 return self.render_dx_file_select(file_select, dx, character)
             }
+            SessionState::Overworld(map_sim) => return self.render_dx_map(map_sim, dx, character),
             _ => {}
         }
         let ctx = self
@@ -117,6 +119,113 @@ impl Session {
         };
         sprite(frame, fs.cursor(), fs.cursor_behind_bg());
         screen(&dx.file_select, &cells, Some(player))
+    }
+}
+
+impl Session {
+    /// The overworld through DX's tiles, maps and patches, colored by the
+    /// screen's palettes and either its attribute map (zones) or the hub's
+    /// per-tile table (`$29:$6542`, which `$29:$6440` also uses for tiles the
+    /// map rewrites).
+    fn render_dx_map(
+        &self,
+        map_sim: &sml2_core::map_sim::MapSim,
+        dx: &Presentation,
+        character: Character,
+    ) -> Result<Vec<[u8; 3]>, String> {
+        let map_sim = self.shown_map(map_sim);
+        let colors = dx
+            .map
+            .screens
+            .get(usize::from(map_sim.screen_id))
+            .ok_or("DX colors only the hub and the zones")?;
+        let wave = self
+            .map_wave
+            .as_ref()
+            .and_then(|live| sml2_core::map::MapWave::follow(dx.map.tiles.screen_raw(0), live));
+        let assets = crate::render::session::MapAssets {
+            tilemaps: &dx.map.tilemaps,
+            manifest: &dx.map.manifest,
+            tiles: &dx.map.tiles,
+            zone_animation_tiles: &dx.map.zone_animation_tiles,
+            wave,
+            sprites: Some(&dx.map.sprites),
+        };
+        let frame = self.overworld_frame(map_sim, assets, (160, 144));
+        // `$26:$77F1`: the hub's eastern half has its own background set.
+        let bg_palettes = match &colors.alternate_bg_palettes {
+            Some(east) if map_sim.cam_x >= 0xE7 => east,
+            _ => &colors.bg_palettes,
+        };
+        let player = usize::from(character == Character::Luigi);
+        let palettes = CgbPalettes::from_bytes(bg_palettes, &colors.obj_palettes[player])
+            .map_err(|e| e.to_string())?;
+        let space_path =
+            map_sim.level_progress[sml2_core::map::progress_offset::SPACE_PATH_0] & 1 != 0;
+        let attributes = match (&colors.alternate_attributes, space_path) {
+            (Some(alternate), true) => Some(alternate),
+            _ => colors.attributes.as_ref(),
+        };
+        // The only pixels a hub frame leaves empty are the status bar's
+        // `$3F203` strip, which DX draws in color 3 (black in every hub set);
+        // a zone's are past its 18 rows.
+        let blank = IndexedPixel::new(if map_sim.screen_id == 0 { 3 } else { 0 }, 0).unwrap();
+        let mut background = Vec::with_capacity(160 * 144);
+        for sample in &frame.composition.bg {
+            let pixel = match sample {
+                Some(s) => {
+                    let attr = match attributes {
+                        Some(map) => {
+                            let (x, y) = (usize::from(s.cell.0), usize::from(s.cell.1));
+                            map.get(y * 32 + x).copied().unwrap_or(0)
+                        }
+                        None => dx.map.hub_attributes[usize::from(s.tile_byte)],
+                    };
+                    let color = frame
+                        .vram
+                        .get(s.tile)
+                        .map_or(0, |t| t[usize::from(s.pixel)]);
+                    BackgroundPixel {
+                        index: IndexedPixel::new(color, attr & 7).map_err(|e| e.to_string())?,
+                        priority: attr & 0x80 != 0,
+                    }
+                }
+                None => BackgroundPixel {
+                    index: blank,
+                    priority: false,
+                },
+            };
+            background.push(pixel);
+        }
+        // `draw_map_objects`: smaller X wins, then the earlier entry.
+        let mut objects = vec![None; 160 * 144];
+        let mut order: Vec<_> = frame.composition.oam.iter().enumerate().collect();
+        order.sort_by_key(|&(i, &(_, x, _, _))| (x, i));
+        for (_, &(oy, ox, tile, attr)) in order {
+            let Some(data) = frame.vram.get(usize::from(tile)) else {
+                continue;
+            };
+            for dy in 0..8i32 {
+                for dx in 0..8i32 {
+                    let (x, y) = (i32::from(ox) - 8 + dx, i32::from(oy) - 16 + dy);
+                    if !(0..160).contains(&x) || !(0..144).contains(&y) {
+                        continue;
+                    }
+                    let sx = if attr & 0x20 != 0 { 7 - dx } else { dx };
+                    let sy = if attr & 0x40 != 0 { 7 - dy } else { dy };
+                    let color = data[(sy * 8 + sx) as usize];
+                    let target = &mut objects[y as usize * 160 + x as usize];
+                    if color == 0 || target.is_some() {
+                        continue;
+                    }
+                    *target = Some(ObjectPixel {
+                        index: IndexedPixel::new(color, attr & 7).map_err(|e| e.to_string())?,
+                        behind_background: attr & 0x80 != 0,
+                    });
+                }
+            }
+        }
+        cgb::compose_frame(&background, &objects, true, &palettes).map_err(|e| e.to_string())
     }
 }
 

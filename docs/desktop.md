@@ -76,8 +76,9 @@ overlays, tile animation, star colors and pause colors; the display filter does
 not apply there. **Character** picks Mario or Luigi graphics; both play with the
 native rules. The space levels use DX's alternate (space) Mario and Luigi.
 
-The title and file select use DX's own screens. The map and other non-level
-screens keep the display filter for now. So do boss
+The title, file select and overworld map (hub and zones) use DX's own screens
+and colors. The map's bonus rooms and other non-level screens keep the display
+filter for now. So do boss
 arenas and boss fights: DX gives each arena its own palettes, VRAM1 graphics and
 attribute map and draws bosses through a separate path, which are not imported
 yet. Eight levels (`$03`, `$07`, `$0C`, `$0D`, `$15`, `$16`, `$18`, `$19`) also

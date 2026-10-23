@@ -897,12 +897,20 @@ pub type ZoneSlot = (u8, u8, u8);
 /// rather than read past it (the console would follow whatever the neighbouring
 /// bytes happen to look like).
 pub fn zone_decor_oam(slots: &[ZoneSlot]) -> Vec<(u8, u8, u8, u8)> {
+    zone_decor_oam_in(slots, &ZONE_DECOR_METASPRITES)
+}
+
+/// [`zone_decor_oam`] over another revision's `$62E6` table.
+pub fn zone_decor_oam_in<T: AsRef<[(i8, i8, u8, u8)]>>(
+    slots: &[ZoneSlot],
+    table: &[T],
+) -> Vec<(u8, u8, u8, u8)> {
     let mut out = Vec::new();
     for &(x, y, id) in slots {
-        if id == 0xFF || id as usize >= ZONE_DECOR_METASPRITES.len() {
+        if id == 0xFF || id as usize >= table.len() {
             continue;
         }
-        for &(dy, dx, tile, attr) in ZONE_DECOR_METASPRITES[id as usize] {
+        for &(dy, dx, tile, attr) in table[id as usize].as_ref() {
             // `$3E277` reserves entries 0-3 for the cursor; `$6109B`
             // stops at hardware OAM entry 40, even in the middle of a sprite.
             if out.len() == 36 {
