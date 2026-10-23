@@ -38,6 +38,8 @@ pub fn pick_scale(view: (usize, usize), effective_scale: u32) -> usize {
 /// reads as motion.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MotionSnapshot {
+    /// Frames from different levels are never blended.
+    pub level: u8,
     pub cam: (u16, u16),
     pub player: Option<(u16, u16)>,
     pub shield: Option<(u16, u16)>,
@@ -62,6 +64,7 @@ impl MotionSnapshot {
         let anchored = |&(x, y, _): &(u16, u16, u8)| pans.anchored((x, y));
         let mario = |(x, y, _): (u16, u16, u8)| pans.mario((x, y));
         Some(Self {
+            level: ctx.manifest.level_id,
             cam: pans.anchored((ctx.cam.x, ctx.cam.y)),
             player: s.player.map(mario),
             shield: s.player_shield.map(mario),
@@ -132,6 +135,9 @@ impl Offsets {
         let (Some(prev), Some(cur)) = (prev, cur) else {
             return out;
         };
+        if prev.level != cur.level {
+            return out;
+        }
         let Some(cam) = shift(prev.cam, cur.cam, smooth.alpha, s) else {
             return out;
         };
@@ -266,6 +272,29 @@ mod tests {
             Smooth { alpha: 1.0, scale: 3 },
         );
         assert_eq!(done.bg, (0, 0));
+    }
+
+    #[test]
+    fn a_new_level_draws_the_current_tick() {
+        let mut prev = snap((100, 50));
+        prev.objects = vec![(2, (10, 10))];
+        let mut cur = MotionSnapshot {
+            level: 1,
+            ..snap((102, 50))
+        };
+        cur.objects = vec![(2, (12, 10))];
+        let s = Smooth {
+            alpha: 0.5,
+            scale: 2,
+        };
+        let o = Offsets::between(Some(&prev), Some(&cur), s);
+        assert_eq!(
+            o,
+            Offsets {
+                scale: 2,
+                ..Offsets::none()
+            }
+        );
     }
 
     #[test]
