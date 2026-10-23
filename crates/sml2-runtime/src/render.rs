@@ -24,6 +24,7 @@ pub struct SpriteInst {
 mod dx;
 mod layers;
 mod margin;
+pub use margin::paintable_cell;
 pub mod motion;
 pub mod overlay;
 mod pipe_background;

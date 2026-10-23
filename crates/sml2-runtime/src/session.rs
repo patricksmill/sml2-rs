@@ -13,8 +13,8 @@ mod file_select_loading;
 pub use file_select_loading::FileSelectLoading;
 mod map_pan;
 mod map_transition;
-pub use map_transition::MapScreenTransition;
 pub use map_pan::{MapPanReturn, MAP_PAN_RELOAD_FRAMES, MAP_PAN_RETURN_FRAMES};
+pub use map_transition::MapScreenTransition;
 
 use sml2_core::audio::driver::SoundDriver;
 use sml2_core::camera::CameraSim;
@@ -35,8 +35,8 @@ use sml2_core::tile_animation::TileAnimationClock;
 use sml2_core::tileset::Tilesets;
 
 use crate::game::{
-    apply_level_entry, build_contact, note_handoff_screen, sample_level_player_inputs, scene_frame_head,
-    seed_level_timer, update_tile_animation, BellArm,
+    apply_level_entry, build_contact, note_handoff_screen, sample_level_player_inputs,
+    scene_frame_head, seed_level_timer, update_tile_animation, BellArm,
 };
 use crate::render::{SpriteCtx, SpriteInst};
 
@@ -465,6 +465,23 @@ impl Session {
         self.state = SessionState::Castle(seq);
     }
 
+    /// Place the scenery editor's camera and paints on the live level.
+    /// Scroll pan is cleared so a click maps to the cell the picture shows.
+    pub fn preview_scenery(
+        &mut self,
+        cam: (u16, u16),
+        scenery: sml2_core::scenery::SceneryOverlay,
+    ) {
+        if let SessionState::InLevel(ctx) = &mut self.state {
+            ctx.cam.x = cam.0;
+            ctx.cam.y = cam.1;
+            if let Some(spr) = ctx.spr.as_mut() {
+                spr.scroll_pan = 0;
+            }
+            ctx.scenery = scenery;
+        }
+    }
+
     /// Put a level live immediately (the map's own 37-frame transition is
     /// skipped), for acceptance tapes.
     pub fn begin_level(&mut self, level_id: u8, progress_flags: u8) -> Result<(), String> {
@@ -735,7 +752,10 @@ impl Session {
     /// Produce progress bytes without writing them.
     /// The record a level's hand-off saved: the map as it returned, with the
     /// node the last `$2934` call saw ([`MapHandoffOutcome::saved_node`]).
-    fn handoff_save_record(&self, handoff: &sml2_core::player_sim::MapHandoffOutcome) -> [u8; 0x50] {
+    fn handoff_save_record(
+        &self,
+        handoff: &sml2_core::player_sim::MapHandoffOutcome,
+    ) -> [u8; 0x50] {
         match &self.state {
             SessionState::Overworld(map) => {
                 let mut map = map.clone();
@@ -804,7 +824,10 @@ impl Session {
 
     /// Screen shifts for a frame drawn `smooth.alpha` of the way from the
     /// previous tick to the current one.
-    pub fn motion_offsets(&self, smooth: crate::render::motion::Smooth) -> crate::render::motion::Offsets {
+    pub fn motion_offsets(
+        &self,
+        smooth: crate::render::motion::Smooth,
+    ) -> crate::render::motion::Offsets {
         use crate::render::motion::{MotionSnapshot, Offsets};
         let cur = self.level_ctx().and_then(MotionSnapshot::of);
         Offsets::between(self.motion_prev.as_ref(), cur.as_ref(), smooth)
@@ -1042,7 +1065,10 @@ impl Session {
                 {
                     self.bell_fade = Some(0);
                     let screen = self.bell_return.map_or(0, |(node, flag)| {
-                        bell_handoff(map_sim, node, flag, &self.assets.nodes).1.screen.unwrap_or(0)
+                        bell_handoff(map_sim, node, flag, &self.assets.nodes)
+                            .1
+                            .screen
+                            .unwrap_or(0)
                     });
                     self.bell_return_hold = bell_return_hold(screen);
                 }
@@ -1131,7 +1157,8 @@ impl Session {
                     }) {
                         Ok(mut ctx) => {
                             self.object_clock.initialize_level(&mut ctx.obj);
-                            self.map_ram = sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
+                            self.map_ram =
+                                sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
                             ctx.obj.easy_mode = self.easy_mode;
                             // The level loader shares the map's persistent block;
                             // entering one level must retain every other clear.
@@ -1438,8 +1465,7 @@ impl Session {
                                 map_sim.node = target_node;
                                 map_sim.room = Some(room);
                                 self.bell_entry = Some(0);
-                                self.bell_return =
-                                    Some((target_node, ctx.sim.exit_tile_flag));
+                                self.bell_return = Some((target_node, ctx.sim.exit_tile_flag));
                             } else {
                                 map_sim.load_screen(
                                     target_screen,

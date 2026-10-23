@@ -53,6 +53,24 @@ impl SceneryOverlay {
         Ok(Self { paints })
     }
 
+    /// Replace the paint on this cell. A bad cell or metatile leaves the
+    /// overlay unchanged.
+    pub fn set(&mut self, paint: SceneryPaint, metatile_count: usize) -> Result<(), String> {
+        let mut paints: Vec<_> = self
+            .paints
+            .iter()
+            .copied()
+            .filter(|p| (p.x, p.y) != (paint.x, paint.y))
+            .collect();
+        paints.push(paint);
+        *self = Self::try_from_paints(paints, metatile_count)?;
+        Ok(())
+    }
+
+    pub fn erase(&mut self, x: u8, y: u8) {
+        self.paints.retain(|p| (p.x, p.y) != (x, y));
+    }
+
     /// The metatile painted at layout cell `(x, y)`.
     pub fn get(&self, x: usize, y: usize) -> Option<u8> {
         self.paints
@@ -108,6 +126,45 @@ mod tests {
             128,
         );
         assert_eq!(dup.unwrap_err(), "scenery paint (1, 2) is duplicated");
+    }
+
+    #[test]
+    fn set_replaces_a_cell_and_erase_removes_it() {
+        let mut overlay = SceneryOverlay::empty();
+        overlay
+            .set(
+                SceneryPaint {
+                    x: 7,
+                    y: 24,
+                    metatile: 1,
+                },
+                128,
+            )
+            .unwrap();
+        overlay
+            .set(
+                SceneryPaint {
+                    x: 7,
+                    y: 24,
+                    metatile: 4,
+                },
+                128,
+            )
+            .unwrap();
+        assert_eq!(overlay.get(7, 24), Some(4));
+        assert!(overlay
+            .set(
+                SceneryPaint {
+                    x: 1,
+                    y: 48,
+                    metatile: 1,
+                },
+                128,
+            )
+            .is_err());
+        assert_eq!(overlay.get(7, 24), Some(4));
+        overlay.erase(7, 24);
+        assert_eq!(overlay.get(7, 24), None);
     }
 
     #[test]

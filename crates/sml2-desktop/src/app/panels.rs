@@ -84,6 +84,9 @@ impl DesktopApp {
                 self.return_screen = Screen::Home;
                 self.navigate(ctx, Screen::Settings);
             }
+            if self.game.is_some() && self.menu.button(ui, "Scenery editor") {
+                self.open_editor(ctx);
+            }
             if self.menu.button(ui, "Quit") {
                 ctx.send_viewport_cmd(ViewportCommand::Close);
             }

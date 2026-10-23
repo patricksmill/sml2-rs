@@ -579,6 +579,24 @@ fn home_pipes_show_the_saved_stage_tally_across_a_restart() {
 }
 
 #[test]
+fn the_scenery_editor_paints_a_margin_cell_and_saves_it() {
+    let (mut app, ctx, path) = app();
+    frame(&mut app, &ctx, vec![]);
+    app.open_editor(&ctx);
+    assert!(app.screen == Screen::Editor);
+    app.editor.cam = (200, 448);
+    app.editor.metatile = 1;
+    app.paint_cell(7, 24).unwrap();
+    frame(&mut app, &ctx, vec![]);
+    let SessionState::InLevel(level) = &app.game.as_ref().unwrap().session.state else {
+        panic!("editor shows a level")
+    };
+    assert_eq!(level.scenery.get(7, 24), Some(1));
+    let saved = std::fs::read_to_string(path.join("scenery-00.json")).unwrap();
+    assert!(saved.contains("\"metatile\": 1"));
+    let _ = std::fs::remove_dir_all(path);
+}
+
 fn overlay_rects_scale_view_pixels_from_the_image_origin() {
     let rect = egui::Rect::from_min_size(egui::pos2(10.0, 20.0), egui::vec2(480.0, 432.0));
     let r = overlay_rect(rect, (160, 144), (5, 7, 10, 21));

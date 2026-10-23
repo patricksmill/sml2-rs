@@ -20,6 +20,7 @@ mod backdrop;
 mod controls;
 mod debug;
 mod dx;
+mod editor;
 mod file_picker;
 mod filter_preview;
 mod panels;
@@ -37,6 +38,7 @@ enum Screen {
     Home,
     Game,
     Settings,
+    Editor,
 }
 
 use panels::Page;
@@ -83,6 +85,7 @@ pub struct DesktopApp {
     show_native_border: bool,
     /// Level picker entries, cached when the assets load.
     levels: Vec<(u8, String)>,
+    editor: editor::Editor,
     focused: bool,
     last_update: Instant,
     last_save: Instant,
@@ -145,6 +148,7 @@ impl DesktopApp {
             show_hitboxes: false,
             show_native_border: false,
             levels: Vec::new(),
+            editor: editor::Editor::default(),
             focused: false,
             last_update: Instant::now(),
             last_save: Instant::now(),
@@ -270,7 +274,7 @@ impl DesktopApp {
             }
         }
 
-        if self.screen == Screen::Game {
+        if self.screen == Screen::Game || self.screen == Screen::Editor {
             self.toolbar(ctx);
         }
         egui::CentralPanel::default()
@@ -278,6 +282,8 @@ impl DesktopApp {
             .show(ctx, |ui| {
                 if self.screen == Screen::Game {
                     self.game_view(ui);
+                } else if self.screen == Screen::Editor {
+                    self.editor_view(ctx, ui);
                 } else {
                     self.launcher(ctx, ui);
                 }

@@ -49,6 +49,32 @@ pub(crate) fn margin_sample(
     }
 }
 
+/// The layout cell under a view pixel, when that pixel is outside the original
+/// picture and the cell is inside the 256×48 layout. Those are the cells the
+/// scenery editor can paint.
+pub fn paintable_cell(
+    view: (usize, usize),
+    px: i32,
+    py: i32,
+    cam: (u16, u16),
+    scroll_pan: i32,
+) -> Option<(u8, u8)> {
+    if matches!(
+        margin_sample(view, px, py, cam, scroll_pan, &SceneryOverlay::empty()),
+        MarginSample::Native
+    ) {
+        return None;
+    }
+    let world_x = cam.0 as i32 - view.0 as i32 / 2 + px;
+    let world_y = cam.1 as i32 - view.1 as i32 / 2 - view::level_bias(view) - scroll_pan + py;
+    let (cx, cy) = (world_x.div_euclid(16), world_y.div_euclid(16));
+    if (0..LAYOUT_WIDTH as i32).contains(&cx) && (0..LAYOUT_HEIGHT as i32).contains(&cy) {
+        Some((cx as u8, cy as u8))
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,5 +131,8 @@ mod tests {
                 ty: 14,
             }
         );
+        assert_eq!(paintable_cell(view, 111, 76, cam, 0), Some((7, 24)));
+        assert_eq!(paintable_cell(view, 112, 76, cam, 0), None);
+        assert_eq!(paintable_cell((160, 144), 111, 76, cam, 0), None);
     }
 }
