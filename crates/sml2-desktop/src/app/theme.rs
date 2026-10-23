@@ -1,5 +1,5 @@
-//! Launcher look: DMG shell plastic, the A/B buttons' magenta, the START/SELECT
-//! pills and outlined title lettering. Painting only; selection and activation
+//! Translucent pause popup and DMG-inspired settings controls.
+//! Painting only; selection and activation
 //! stay with [`crate::menu::Menu`].
 
 use eframe::egui::{
@@ -21,7 +21,6 @@ pub const GOLD: Color32 = Color32::from_rgb(0xF8, 0xD0, 0x30);
 pub const LED: Color32 = Color32::from_rgb(0xE8, 0x20, 0x30);
 pub const ERROR: Color32 = Color32::from_rgb(0xB0, 0x10, 0x20);
 
-pub const BUTTON_SIZE: Vec2 = Vec2::new(300.0, 38.0);
 pub const ROW_SIZE: Vec2 = Vec2::new(440.0, 34.0);
 
 /// A shell-plastic card with the DMG's big lower-right corner.
@@ -44,45 +43,33 @@ pub fn card() -> egui::Frame {
         })
 }
 
-/// Text drawn with a one-pixel-per-point outline, readable over the level.
-pub fn outlined(ui: &Ui, pos: Pos2, align: Align2, text: &str, size: f32, fill: Color32) -> Rect {
-    let painter = ui.painter();
-    let font = FontId::proportional(size);
-    let outline = (size / 14.0).clamp(1.0, 3.0);
-    for (dx, dy) in [
-        (-1.0, 0.0),
-        (1.0, 0.0),
-        (0.0, -1.0),
-        (0.0, 1.0),
-        (-1.0, -1.0),
-        (1.0, 1.0),
-        (1.0, -1.0),
-        (-1.0, 1.0),
-    ] {
-        painter.text(
-            pos + Vec2::new(dx, dy) * outline,
-            align,
-            text,
-            font.clone(),
-            INK,
-        );
-    }
-    painter.text(pos, align, text, font, fill)
+/// A compact translucent surface: the paused game remains visible beneath it.
+pub fn popup_frame() -> egui::Frame {
+    card()
+        .fill(Color32::from_rgba_unmultiplied(0xD4, 0xD0, 0xC8, 200))
+        .corner_radius(12)
+        .inner_margin(16)
 }
 
-/// The SML2 title: outlined white lettering over a gold subtitle.
-pub fn logo(ui: &mut Ui, title: &str, subtitle: &str) {
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 84.0), Sense::hover());
-    let top = rect.center_top() + Vec2::new(0.0, 4.0);
-    outlined(ui, top, Align2::CENTER_TOP, title, 40.0, Color32::WHITE);
-    outlined(
-        ui,
-        top + Vec2::new(0.0, 52.0),
-        Align2::CENTER_TOP,
-        subtitle,
-        18.0,
-        GOLD,
+pub fn menu_button(ui: &mut Ui, text: &str, selected: bool) -> Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(260.0, 30.0), Sense::click());
+    let ink = if selected { Color32::WHITE } else { INK };
+    if selected {
+        ui.painter()
+            .rect_filled(rect, 5, MAGENTA.gamma_multiply(0.85));
+        cursor(ui, rect.left_center() + Vec2::new(13.0, 0.0), ink);
+    } else if response.hovered() {
+        ui.painter()
+            .rect_filled(rect, 5, Color32::from_black_alpha(20));
+    }
+    ui.painter().text(
+        rect.left_center() + Vec2::new(28.0, 0.0),
+        Align2::LEFT_CENTER,
+        text,
+        FontId::proportional(15.0),
+        ink,
     );
+    response
 }
 
 /// The menu's ▶ cursor, drawn so it never depends on the font's glyphs.
@@ -152,39 +139,6 @@ fn raised(
 fn interact(ui: &mut Ui, size: Vec2) -> (Rect, Response) {
     let (rect, response) = ui.allocate_exact_size(size + Vec2::new(0.0, 3.0), Sense::click());
     (Rect::from_min_size(rect.min, size), response)
-}
-
-/// A big pill menu button; the selected one turns A-button magenta.
-pub fn menu_button(ui: &mut Ui, text: &str, selected: bool) -> Response {
-    let (rect, response) = interact(ui, BUTTON_SIZE);
-    if ui.is_rect_visible(rect) {
-        let (fill, edge, ink) = if selected {
-            (MAGENTA, MAGENTA_DARK, Color32::WHITE)
-        } else {
-            (SHELL_LIGHT, SHELL_SHADOW, NAVY)
-        };
-        let fill = if ui.is_enabled() {
-            fill
-        } else {
-            fill.gamma_multiply(0.6)
-        };
-        let face = raised(ui, rect, &response, fill, edge, 19);
-        ui.painter().text(
-            face.center(),
-            Align2::CENTER_CENTER,
-            text,
-            FontId::proportional(17.0),
-            ink,
-        );
-        if selected {
-            cursor(
-                ui,
-                face.left_center() + Vec2::new(20.0, 0.0),
-                Color32::WHITE,
-            );
-        }
-    }
-    response
 }
 
 /// What a settings row shows on its right-hand side.
@@ -328,115 +282,4 @@ pub fn note(ui: &mut Ui, text: &str) {
 
 pub fn error(ui: &mut Ui, text: &str) {
     ui.label(egui::RichText::new(text).size(13.0).strong().color(ERROR));
-}
-
-/// A controller glyph for the hint bar.
-pub enum Glyph {
-    A,
-    B,
-    Start,
-    Pad,
-    Shoulders,
-}
-
-fn pill_label(glyph: &Glyph) -> &'static str {
-    if matches!(glyph, Glyph::Start) {
-        "START"
-    } else {
-        "L / R"
-    }
-}
-
-fn glyph_width(ui: &Ui, glyph: &Glyph) -> f32 {
-    match glyph {
-        Glyph::A | Glyph::B | Glyph::Pad => 18.0,
-        Glyph::Start | Glyph::Shoulders => {
-            let small = FontId::proportional(10.0);
-            ui.painter()
-                .layout_no_wrap(pill_label(glyph).into(), small, INK)
-                .size()
-                .x
-                + 14.0
-        }
-    }
-}
-
-/// Paint a glyph followed by its caption; returns the width used.
-fn hint(ui: &Ui, at: Pos2, glyph: &Glyph, caption: &str) -> f32 {
-    let painter = ui.painter();
-    let small = FontId::proportional(10.0);
-    let glyph_width = match glyph {
-        Glyph::A | Glyph::B => {
-            let center = at + Vec2::new(9.0, 0.0);
-            painter.circle_filled(center + Vec2::new(0.0, 1.5), 9.0, MAGENTA_DARK);
-            painter.circle_filled(center, 9.0, MAGENTA);
-            let letter = if matches!(glyph, Glyph::A) { "A" } else { "B" };
-            painter.text(
-                center,
-                Align2::CENTER_CENTER,
-                letter,
-                FontId::proportional(11.0),
-                Color32::WHITE,
-            );
-            18.0
-        }
-        Glyph::Start | Glyph::Shoulders => {
-            let text = pill_label(glyph);
-            let width = glyph_width(ui, glyph);
-            let pill = Rect::from_min_size(at - Vec2::new(0.0, 8.0), Vec2::new(width, 16.0));
-            painter.rect_filled(pill, 8, PILL);
-            painter.text(
-                pill.center(),
-                Align2::CENTER_CENTER,
-                text,
-                small,
-                Color32::WHITE,
-            );
-            width
-        }
-        Glyph::Pad => {
-            let center = at + Vec2::new(9.0, 0.0);
-            let arm = Vec2::new(18.0, 6.0);
-            painter.rect_filled(Rect::from_center_size(center, arm), 1, INK);
-            painter.rect_filled(
-                Rect::from_center_size(center, Vec2::new(arm.y, arm.x)),
-                1,
-                INK,
-            );
-            18.0
-        }
-    };
-    let text = painter.text(
-        at + Vec2::new(glyph_width + 6.0, 0.0),
-        Align2::LEFT_CENTER,
-        caption,
-        FontId::proportional(13.0),
-        Color32::WHITE,
-    );
-    glyph_width + 6.0 + text.width()
-}
-
-/// A translucent bar along the bottom edge listing controller hints.
-pub fn hint_bar(ui: &Ui, area: Rect, hints: &[(Glyph, &str)]) {
-    let bar = Rect::from_min_max(egui::pos2(area.min.x, area.max.y - 34.0), area.max);
-    ui.painter()
-        .rect_filled(bar, 0, Color32::from_black_alpha(150));
-    let gap = 22.0;
-    // Measure first so the row centres.
-    let widths: Vec<f32> = hints
-        .iter()
-        .map(|(glyph, caption)| {
-            glyph_width(ui, glyph)
-                + 6.0
-                + ui.painter()
-                    .layout_no_wrap((*caption).into(), FontId::proportional(13.0), INK)
-                    .size()
-                    .x
-        })
-        .collect();
-    let total = widths.iter().sum::<f32>() + gap * hints.len().saturating_sub(1) as f32;
-    let mut x = bar.center().x - total / 2.0;
-    for (glyph, caption) in hints {
-        x += hint(ui, egui::pos2(x, bar.center().y), glyph, caption) + gap;
-    }
 }

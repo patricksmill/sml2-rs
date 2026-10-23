@@ -27,6 +27,9 @@ debug inspection/stepping around the native session:
 cargo run -p sml2-desktop
 ```
 
+Escape or controller Start opens a compact translucent menu over the paused
+game. Resume returns to the same spot, including inside the settings hall.
+
 Settings → Mods offers **DX Mode**, which draws every level with graphics and
 colors imported from your own SML2DX ROM, as Mario or Luigi.
 See [DX Mode setup and limits](docs/desktop.md#sml2dx-mode).

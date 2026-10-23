@@ -47,46 +47,46 @@ fn on_front_end(state: &SessionState) -> bool {
 
 impl DesktopApp {
     pub(super) fn home_panel(&mut self, ctx: &Context, ui: &mut Ui) {
-        theme::logo(ui, "SUPER MARIO LAND 2", "6 GOLDEN COINS");
-        ui.add_space(14.0);
-        theme::card().show(ui, |ui| {
-            ui.set_width(theme::BUTTON_SIZE.x);
-            ui.spacing_mut().item_spacing.y = 6.0;
-            if self.game.is_none() {
-                if self.menu.button(ui, "Retry loading game") {
-                    self.load_game();
-                    if self.game.is_some() {
-                        self.navigate(ctx, Screen::Game);
-                    }
+        ui.set_width(260.0);
+        ui.spacing_mut().item_spacing.y = 4.0;
+        if self.game.is_some() && self.menu.button(ui, "Resume") {
+            self.navigate(ctx, Screen::Game);
+        }
+        if self.game.is_none() {
+            if self.menu.button(ui, "Retry loading game") {
+                self.load_game();
+                if self.game.is_some() {
+                    self.navigate(ctx, Screen::Game);
                 }
             }
-            if self.menu.button(ui, "Settings") {
-                self.settings_open = true;
+        }
+        if self.menu.button(ui, "Settings") {
+            self.return_screen = Screen::Home;
+            self.navigate(ctx, Screen::Settings);
+        }
+        if self.game.is_some() && self.menu.button(ui, "Scenery editor") {
+            self.open_editor(ctx);
+        }
+        let quit_to_title = self
+            .game
+            .as_ref()
+            .is_some_and(|game| !on_front_end(&game.session.state));
+        if quit_to_title && self.menu.button(ui, "Quit to title") {
+            if let Some(game) = &mut self.game {
+                game.session.enter_title();
             }
-            if self.game.is_some() && self.menu.button(ui, "Scenery editor") {
-                self.open_editor(ctx);
-            }
-            let quit_to_title = self
-                .game
-                .as_ref()
-                .is_some_and(|game| !on_front_end(&game.session.state));
-            if quit_to_title && self.menu.button(ui, "Quit to title") {
-                if let Some(game) = &mut self.game {
-                    game.session.enter_title();
-                }
-                self.navigate(ctx, Screen::Game);
-            }
-            if self.menu.button(ui, "Quit") {
-                ctx.send_viewport_cmd(ViewportCommand::Close);
-            }
-            if let Some(message) = &self.status {
-                ui.add_space(6.0);
-                theme::error(ui, message);
-            }
-            if !self.allow_save && self.menu.button(ui, "Reset unreadable settings") {
-                self.reset_settings();
-            }
-        });
+            self.navigate(ctx, Screen::Game);
+        }
+        if self.menu.button(ui, "Quit") {
+            ctx.send_viewport_cmd(ViewportCommand::Close);
+        }
+        if let Some(message) = &self.status {
+            ui.add_space(6.0);
+            theme::error(ui, message);
+        }
+        if !self.allow_save && self.menu.button(ui, "Reset unreadable settings") {
+            self.reset_settings();
+        }
     }
 
     /// Replace the settings file with defaults, even when it could not be read.
@@ -125,47 +125,35 @@ impl DesktopApp {
                 self.reset_armed = false;
             }
         }
-        let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 46.0), egui::Sense::hover());
-        theme::outlined(
-            ui,
-            rect.center(),
-            egui::Align2::CENTER_CENTER,
-            "SETTINGS",
-            32.0,
-            egui::Color32::WHITE,
-        );
-        ui.add_space(10.0);
-        theme::card().show(ui, |ui| {
-            ui.set_width(theme::ROW_SIZE.x);
-            ui.spacing_mut().item_spacing.y = 6.0;
-            let labels = Page::ALL.map(Page::label);
-            let mut index = Page::ALL.iter().position(|p| *p == self.page).unwrap_or(0);
-            ui.vertical_centered(|ui| {
-                if self.menu.tabs(ui, &labels, &mut index) {
-                    self.page = Page::ALL[index];
-                    self.reset_armed = false;
-                }
-            });
-            ui.add_space(4.0);
-            match self.page {
-                Page::Display => self.display_page(ctx, ui),
-                Page::Audio => self.audio_page(ui),
-                Page::Controls => self.controls_page(ui),
-                Page::Mods => {
-                    self.view_controls(ui);
-                    self.dx_controls(ui);
-                }
-                Page::Debug => self.debug_page(ui),
-            }
-            ui.add_space(6.0);
-            if self.menu.row(ui, "Back", Value::None) && self.capture.is_none() {
-                self.persist();
-                self.navigate(ctx, self.return_screen);
-            }
-            if let Some(message) = &self.status {
-                theme::error(ui, message);
+        ui.set_width(theme::ROW_SIZE.x);
+        ui.spacing_mut().item_spacing.y = 6.0;
+        let labels = Page::ALL.map(Page::label);
+        let mut index = Page::ALL.iter().position(|p| *p == self.page).unwrap_or(0);
+        ui.vertical_centered(|ui| {
+            if self.menu.tabs(ui, &labels, &mut index) {
+                self.page = Page::ALL[index];
+                self.reset_armed = false;
             }
         });
+        ui.add_space(4.0);
+        match self.page {
+            Page::Display => self.display_page(ctx, ui),
+            Page::Audio => self.audio_page(ui),
+            Page::Controls => self.controls_page(ui),
+            Page::Mods => {
+                self.view_controls(ui);
+                self.dx_controls(ui);
+            }
+            Page::Debug => self.debug_page(ui),
+        }
+        ui.add_space(6.0);
+        if self.menu.row(ui, "Back", Value::None) && self.capture.is_none() {
+            self.persist();
+            self.navigate(ctx, self.return_screen);
+        }
+        if let Some(message) = &self.status {
+            theme::error(ui, message);
+        }
     }
 
     fn display_page(&mut self, ctx: &Context, ui: &mut Ui) {
@@ -373,10 +361,14 @@ impl DesktopApp {
         }
         let mut open = self.settings_open;
         let mut close_for_full_settings = false;
-        egui::Window::new("Settings")
+        egui::Window::new(egui::RichText::new("Settings").color(theme::INK))
             .open(&mut open)
-            .default_width(360.0)
+            .default_width(280.0)
+            .collapsible(false)
+            .resizable(false)
+            .frame(theme::popup_frame())
             .show(ctx, |ui| {
+                ui.visuals_mut().override_text_color = Some(theme::INK);
                 for pedestal in catalog::PEDESTALS {
                     let text = catalog::label(pedestal, &self.settings, self.debug);
                     if ui.button(text).clicked() {
@@ -409,6 +401,11 @@ impl DesktopApp {
                 }
             });
         self.settings_open = open && !close_for_full_settings;
+        if !self.settings_open {
+            self.input.suppress_until_release();
+            self.budget.reset();
+            release_focus(ctx);
+        }
     }
 
     pub(super) fn debug_panel(&mut self, ctx: &Context) {

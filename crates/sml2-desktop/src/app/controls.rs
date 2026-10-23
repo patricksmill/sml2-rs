@@ -1,7 +1,7 @@
 use super::{screenshot, DesktopApp, Screen};
 use crate::{
     input::{Button, PadButton},
-    menu::pressed,
+    menu::{pressed, release_focus},
 };
 use eframe::egui::{self, Context, RawInput};
 
@@ -86,6 +86,13 @@ impl DesktopApp {
                 }
                 self.input.suppress_until_release();
             }
+            return;
+        }
+        if self.settings_open && (back || self.input.take_press(&Button::Pad(PadButton::East))) {
+            self.settings_open = false;
+            self.persist();
+            self.input.suppress_until_release();
+            release_focus(ctx);
             return;
         }
         if self.screen == Screen::Editor {

@@ -23,7 +23,8 @@ A normal launch opens the game's own title screen. START, or a click on the
 picture, opens the file select: Mario walks to a pipe and ducks into it, and
 he jumps on Clear. Walk left from the first pipe to open the settings hall.
 F10 shows or hides the toolbar. Esc, or the toolbar Menu button, opens the
-pause menu for Settings, the scenery editor, and Quit. Quit to title is on
+compact translucent pause menu over the current game frame, with Resume,
+Settings, the scenery editor, and Quit. Quit to title is on
 that menu only after you have left the title. `--play` skips the title and
 opens the overworld. `--title` is the same as a normal launch.
 `--file-select` opens the pipes directly.
@@ -156,7 +157,8 @@ state and diagnostics. Debug stepping advances exactly one outer session tick.
 F4 cycles display palettes: Grayscale, DMG green, Pocket, GBC auto, the 32 SGB
 presets (1-A through 4-H), and Amber. **Settings → Display** provides the same
 choices with a preview: an opening-level frame (background, Mario and the HUD)
-recolored live as you step through filters. The launcher backdrop follows it too.
+recolored live as you step through filters. The paused game behind the settings
+popup updates to the selected filter too.
 GBC auto uses separate background and sprite palettes selected from the ROM's
 title checksum. The old `SGB color` setting migrates to the real SGB 1-A preset.
 See [hardware palettes](hardware-palettes.md) for exact colours and source tables.

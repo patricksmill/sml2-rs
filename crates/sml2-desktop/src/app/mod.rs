@@ -17,7 +17,6 @@ use sml2_runtime::render::motion::{pick_scale, Smooth};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-mod backdrop;
 mod catalog;
 mod controls;
 mod debug;
@@ -65,8 +64,6 @@ pub struct DesktopApp {
     page: Page,
     /// "Reset all settings" was pressed once and waits for confirmation.
     reset_armed: bool,
-    /// Level 1 behind the launcher; `None` until the game data loads.
-    backdrop: Option<backdrop::Backdrop>,
     /// The Display page's sample frame; `None` until the game data loads.
     filter_preview: Option<filter_preview::FilterPreview>,
     input: InputState,
@@ -136,7 +133,6 @@ impl DesktopApp {
             return_screen: Screen::Home,
             page: Page::Display,
             reset_armed: false,
-            backdrop: None,
             filter_preview: None,
             input: InputState::default(),
             controllers: Controllers::new(),
@@ -205,10 +201,6 @@ impl DesktopApp {
     fn load_game(&mut self) {
         match SessionAssets::load_from(&ExtractedContent::new(&self.options.assets)) {
             Ok(assets) => {
-                match backdrop::Backdrop::new(&assets) {
-                    Ok(backdrop) => self.backdrop = Some(backdrop),
-                    Err(e) => eprintln!("Launcher backdrop unavailable: {e}"),
-                }
                 let (assets, preview) = filter_preview::FilterPreview::new(assets);
                 match preview {
                     Ok(preview) => self.filter_preview = Some(preview),
@@ -238,7 +230,16 @@ impl DesktopApp {
         release_focus(ctx);
         self.aim = None;
         self.start_click = false;
-        self.hall = None;
+        if screen == Screen::Editor
+            || !self.game.as_ref().is_some_and(|game| {
+                matches!(
+                    game.session.state,
+                    sml2_runtime::session::SessionState::FileSelect(_)
+                )
+            })
+        {
+            self.hall = None;
+        }
     }
 
     fn zoom(&mut self, ctx: &Context, scale: Option<u8>) {
@@ -290,22 +291,21 @@ impl DesktopApp {
             }
         }
 
-        if self.settings.show_toolbar
-            && (self.screen == Screen::Game || self.screen == Screen::Editor)
-        {
+        if self.settings.show_toolbar && self.game.is_some() {
             self.toolbar(ctx);
         }
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(Color32::BLACK))
             .show(ctx, |ui| {
-                if self.screen == Screen::Game {
-                    self.game_view(ui);
-                } else if self.screen == Screen::Editor {
+                if self.screen == Screen::Editor {
                     self.editor_view(ctx, ui);
-                } else {
-                    self.launcher(ctx, ui);
+                } else if self.game.is_some() {
+                    self.game_view(ui);
                 }
             });
+        if matches!(self.screen, Screen::Home | Screen::Settings) {
+            self.pause_menu(ctx);
+        }
         self.dx_picker_window(ctx);
         if self.screen != Screen::Game {
             self.menu.finish();
@@ -321,11 +321,12 @@ impl DesktopApp {
         let running = focused
             && self.screen == Screen::Game
             && !self.paused
+            && !self.settings_open
             && self.capture.is_none()
             && self.dx_picker.is_none()
             && !self.screenshot_pending;
         let mut ticks = self.budget.advance(elapsed, running);
-        let stepped = self.step && focused;
+        let stepped = self.step && focused && self.screen == Screen::Game && !self.settings_open;
         if stepped {
             ticks = 1;
         }
@@ -434,7 +435,7 @@ impl DesktopApp {
         } else {
             Smooth::OFF
         };
-        if self.screen == Screen::Game {
+        if self.screen != Screen::Editor {
             if let Some(image) = self.frame_image(smooth) {
                 self.texture.set(image.clone(), TextureOptions::NEAREST);
                 submitted_frame = Some(image);
@@ -458,7 +459,11 @@ impl DesktopApp {
             if self.redraws >= frames && !self.screenshot_pending {
                 if self.options.screenshot.is_some() && self.redraws == frames {
                     self.screenshot_pending = true;
-                    if self.screen == Screen::Game && !self.debug && !self.paused {
+                    if self.screen == Screen::Game
+                        && !self.debug
+                        && !self.paused
+                        && !self.settings_open
+                    {
                         self.screenshot_check =
                             submitted_frame.map(|frame| (frame, self.game_rect));
                     }
@@ -635,51 +640,47 @@ impl DesktopApp {
         });
     }
 
-    /// Home and Settings: the scrolling level behind a shell-plastic card.
-    fn launcher(&mut self, ctx: &Context, ui: &mut egui::Ui) {
-        let area = ui.max_rect();
-        let dim = if self.screen == Screen::Settings {
-            90
-        } else {
-            30
-        };
-        match &mut self.backdrop {
-            Some(backdrop) => backdrop.paint(ui, area, self.settings.filter, dim),
-            None => {
-                ui.painter().rect_filled(area, 0, theme::BEZEL);
-            }
-        }
-        let content = egui::Rect::from_min_max(area.min, area.max - egui::vec2(0.0, 34.0));
-        ui.scope_builder(egui::UiBuilder::new().max_rect(content), |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.add_space(24.0);
-                ui.vertical_centered(|ui| {
-                    if self.screen == Screen::Settings {
-                        self.settings_panel(ctx, ui);
+    /// Pause and settings popups share the actual game's paused frame.
+    fn pause_menu(&mut self, ctx: &Context) {
+        let settings = self.screen == Screen::Settings;
+        let title = if settings { "Settings" } else { "Menu" };
+        egui::Window::new(egui::RichText::new(title).color(theme::INK))
+            .id(egui::Id::new(if settings {
+                "settings-popup"
+            } else {
+                "pause-menu"
+            }))
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .default_width(if settings {
+                theme::ROW_SIZE.x
+            } else {
+                260.0
+            })
+            .collapsible(false)
+            .resizable(false)
+            .movable(false)
+            .frame(theme::popup_frame())
+            .show(ctx, |ui| {
+                ui.visuals_mut().override_text_color = Some(theme::INK);
+                egui::ScrollArea::vertical()
+                    .max_height((ctx.content_rect().height() - 100.0).max(160.0))
+                    .show(ui, |ui| {
+                        if settings {
+                            self.settings_panel(ctx, ui);
+                        } else {
+                            self.home_panel(ctx, ui);
+                        }
+                    });
+                ui.add_space(6.0);
+                theme::note(
+                    ui,
+                    if settings {
+                        "Esc: back · L / R: page"
                     } else {
-                        self.home_panel(ctx, ui);
-                    }
-                });
-                ui.add_space(16.0);
+                        "Esc / Start: resume"
+                    },
+                );
             });
-        });
-        use theme::Glyph;
-        let back = if self.screen == Screen::Home && self.game.is_some() {
-            "Resume · Esc"
-        } else {
-            "Back · Esc"
-        };
-        let mut hints = vec![
-            (Glyph::Pad, "Choose"),
-            (Glyph::A, "Confirm · Enter"),
-            (Glyph::B, back),
-        ];
-        if self.screen == Screen::Settings {
-            hints.push((Glyph::Shoulders, "Page · PgUp/PgDn"));
-        } else {
-            hints.push((Glyph::Start, "Menu"));
-        }
-        theme::hint_bar(ui, area, &hints);
     }
 
     fn game_view(&mut self, ui: &mut egui::Ui) {
@@ -716,7 +717,11 @@ impl DesktopApp {
         );
         self.paint_overlays(ui, rect);
         let picture = ui.interact(rect, egui::Id::new("game-picture"), egui::Sense::click());
-        if picture.clicked() {
+        if self.screen == Screen::Game
+            && !self.settings_open
+            && self.dx_picker.is_none()
+            && picture.clicked()
+        {
             if let Some(pos) = picture.interact_pointer_pos() {
                 if let Some(hall) = &mut self.hall {
                     let view = self.settings.view();

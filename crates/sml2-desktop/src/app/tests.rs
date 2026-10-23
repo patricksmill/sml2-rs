@@ -125,10 +125,17 @@ fn menu_confirm_opens_settings_and_escape_returns_to_the_title() {
     frame(&mut app, &ctx, vec![]);
     app.input.event(Button::key("Escape"), false);
     assert_eq!(app.screen, Screen::Home);
+    app.input.event(Button::Pad(PadButton::Down), true);
+    frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::Pad(PadButton::Down), false);
     app.input.event(Button::Pad(PadButton::South), true);
     frame(&mut app, &ctx, vec![]);
-    assert!(app.settings_open, "the first menu row is Settings");
+    assert_eq!(app.screen, Screen::Settings);
+    frame(&mut app, &ctx, vec![key(egui::Key::Escape, true)]);
     assert_eq!(app.screen, Screen::Home);
+    frame(&mut app, &ctx, vec![key(egui::Key::Escape, false)]);
+    frame(&mut app, &ctx, vec![key(egui::Key::Escape, true)]);
+    assert_eq!(app.screen, Screen::Game);
     assert!(matches!(
         app.game.as_ref().unwrap().session.state,
         SessionState::Title(_)
@@ -142,12 +149,11 @@ fn quit_to_title_is_absent_while_the_session_is_on_the_title() {
     app.game.as_mut().unwrap().session.enter_title();
     app.screen = Screen::Home;
     frame(&mut app, &ctx, vec![]);
-    app.input.event(Button::Pad(PadButton::Down), true);
-    frame(&mut app, &ctx, vec![]);
-    app.input.event(Button::Pad(PadButton::Down), false);
-    app.input.event(Button::Pad(PadButton::Down), true);
-    frame(&mut app, &ctx, vec![]);
-    app.input.event(Button::Pad(PadButton::Down), false);
+    for _ in 0..3 {
+        app.input.event(Button::Pad(PadButton::Down), true);
+        frame(&mut app, &ctx, vec![]);
+        app.input.event(Button::Pad(PadButton::Down), false);
+    }
     app.input.event(Button::Pad(PadButton::South), true);
     let output = frame(&mut app, &ctx, vec![]);
     assert!(
@@ -155,7 +161,7 @@ fn quit_to_title_is_absent_while_the_session_is_on_the_title() {
             .commands
             .iter()
             .any(|c| matches!(c, ViewportCommand::Close)),
-        "Settings, Scenery editor, Quit — the third row closes the window"
+        "Resume, Settings, Scenery editor, Quit — the fourth row closes the window"
     );
     assert_eq!(app.screen, Screen::Home);
     let _ = std::fs::remove_dir_all(path);
@@ -190,12 +196,11 @@ fn quit_to_title_from_the_map_opens_the_in_game_title() {
     frame(&mut app, &ctx, vec![]);
     app.input.event(Button::key("Escape"), false);
     assert_eq!(app.screen, Screen::Home);
-    app.input.event(Button::Pad(PadButton::Down), true);
-    frame(&mut app, &ctx, vec![]);
-    app.input.event(Button::Pad(PadButton::Down), false);
-    app.input.event(Button::Pad(PadButton::Down), true);
-    frame(&mut app, &ctx, vec![]);
-    app.input.event(Button::Pad(PadButton::Down), false);
+    for _ in 0..3 {
+        app.input.event(Button::Pad(PadButton::Down), true);
+        frame(&mut app, &ctx, vec![]);
+        app.input.event(Button::Pad(PadButton::Down), false);
+    }
     app.input.event(Button::Pad(PadButton::South), true);
     frame(&mut app, &ctx, vec![]);
     assert_eq!(app.screen, Screen::Game);
@@ -723,4 +728,76 @@ fn overlay_rects_scale_view_pixels_from_the_image_origin() {
     let r = overlay_rect(rect, (160, 144), (5, 7, 10, 21));
     assert_eq!(r.min, egui::pos2(25.0, 41.0));
     assert_eq!(r.size(), egui::vec2(30.0, 63.0));
+}
+
+#[test]
+fn pause_menu_keeps_the_actual_game_frame_visible_and_blocks_input() {
+    let (mut app, ctx, path) = app();
+    app.apply_debug(DebugAction::WarpLevel(4));
+    frame(&mut app, &ctx, vec![]);
+    frame(&mut app, &ctx, vec![key(egui::Key::Escape, true)]);
+    frame(&mut app, &ctx, vec![key(egui::Key::Escape, false)]);
+    assert_eq!(app.screen, Screen::Home);
+    let tick = app.game.as_ref().unwrap().session.frame_n;
+    let still = app.frame_image(Smooth::OFF).unwrap();
+    let output = frame(
+        &mut app,
+        &ctx,
+        vec![key(egui::Key::ArrowRight, true), key(egui::Key::Z, true)],
+    );
+    assert_eq!(app.game.as_ref().unwrap().session.frame_n, tick);
+    assert_eq!(app.frame_image(Smooth::OFF).unwrap().pixels, still.pixels);
+    assert!(output.shapes.iter().any(|shape| matches!(&shape.shape, egui::Shape::Mesh(mesh) if mesh.texture_id == app.texture.id())), "the paused game is painted behind the popup");
+    frame(
+        &mut app,
+        &ctx,
+        vec![key(egui::Key::ArrowRight, false), key(egui::Key::Z, false)],
+    );
+    frame(&mut app, &ctx, vec![key(egui::Key::Escape, true)]);
+    assert_eq!(app.screen, Screen::Game);
+    let popup = ctx
+        .memory(|memory| memory.area_rect(egui::Id::new("pause-menu")))
+        .unwrap();
+    assert!(
+        popup.width() <= 320.0 && popup.height() <= 350.0,
+        "compact popup: {popup:?}"
+    );
+    assert!(
+        theme::popup_frame().fill.a() < 255,
+        "the game remains visible through the popup"
+    );
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn opening_the_pause_menu_preserves_the_walk_through_settings_hall() {
+    let (mut app, ctx, path) = app();
+    app.game.as_mut().unwrap().session.enter_file_select();
+    let mut hall = hall::Hall::enter();
+    hall.mario = hall::pedestal_x(2);
+    hall.camera = hall.mario - hall::DOOR;
+    app.hall = Some(hall.clone());
+    app.navigate(&ctx, Screen::Home);
+    assert_eq!(app.hall, Some(hall.clone()));
+    frame(&mut app, &ctx, vec![]);
+    assert_eq!(app.hall, Some(hall.clone()));
+    app.navigate(&ctx, Screen::Game);
+    assert_eq!(app.hall, Some(hall));
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn quick_settings_pause_gameplay_and_escape_closes_only_the_popup() {
+    let (mut app, ctx, path) = app();
+    app.apply_debug(DebugAction::WarpLevel(4));
+    frame(&mut app, &ctx, vec![]);
+    app.settings_open = true;
+    let tick = app.game.as_ref().unwrap().session.frame_n;
+    frame(&mut app, &ctx, vec![key(egui::Key::Z, true)]);
+    assert_eq!(app.game.as_ref().unwrap().session.frame_n, tick);
+    frame(&mut app, &ctx, vec![key(egui::Key::Escape, true)]);
+    assert!(!app.settings_open);
+    assert_eq!(app.screen, Screen::Game);
+    assert!(!app.input.sample_player(&app.settings.bindings).a);
+    let _ = std::fs::remove_dir_all(path);
 }
