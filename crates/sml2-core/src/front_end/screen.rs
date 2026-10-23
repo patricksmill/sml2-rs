@@ -201,5 +201,46 @@ pub fn hall_backdrop(map: &[u8], tx: i32, ty: i32, line: usize) -> ((usize, usiz
     ((4, 4), line)
 }
 
+#[allow(clippy::too_many_arguments)]
+pub fn render_backdrop_output(
+    vram: &[u8],
+    tilemap: &[u8],
+    bgp: u8,
+    tile_data: TileData,
+    view: (usize, usize),
+    scroll_x: i32,
+    output: OutputMode,
+    backdrop: Backdrop,
+) -> Vec<u8> {
+    let shades = output.palette(bgp, PaletteSource::Bg);
+    let tiles: Vec<[u8; 64]> = (0..=255u8)
+        .map(|tile| {
+            let offset = match tile_data {
+                TileData::Unsigned => tile as usize * 16,
+                TileData::Signed if tile < 0x80 => 0x1000 + tile as usize * 16,
+                TileData::Signed => tile as usize * 16,
+            };
+            vram.get(offset..offset + 16)
+                .and_then(|b| b.try_into().ok())
+                .map_or([0; 64], tile_colors)
+        })
+        .collect();
+    let mut out = Vec::with_capacity(view.0 * view.1);
+    for y in 0..view.1 as i32 {
+        for x in 0..view.0 as i32 {
+            let world_x = x + scroll_x;
+            let ((col, row), line) = backdrop(
+                tilemap,
+                world_x.div_euclid(8),
+                y.div_euclid(8),
+                y.rem_euclid(8) as usize,
+            );
+            let tile = tiles[tilemap[row * 32 + col] as usize];
+            out.push(shades[tile[line * 8 + world_x.rem_euclid(8) as usize] as usize]);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests;

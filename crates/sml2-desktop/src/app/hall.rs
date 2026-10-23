@@ -133,57 +133,64 @@ pub(super) fn pedestal_at(native_x: u8, hall: &Hall) -> Option<usize> {
     (0..catalog::HALL_PEDESTALS.len()).find(|index| (world - pedestal_x(*index)).abs() <= 12)
 }
 
-pub(super) fn pixels(hall: &Hall, assets: &sml2_core::front_end::FrontEndAssets) -> Vec<u8> {
-    use sml2_core::front_end::file_select::FILE_SELECT_BGP;
-    use sml2_core::front_end::screen::{
-        file_select_backdrop, render_bg_output, render_bg_wide_output, TileData,
-    };
-    use sml2_core::video::OutputMode;
-    let native = render_bg_output(
-        assets.file_select_vram(),
-        assets.file_select_tilemap(),
-        FILE_SELECT_BGP,
-        (0, 0),
-        (160, 144),
-        TileData::Signed,
-        OutputMode::PaletteIndices,
-    )
-    .expect("file select background");
-    let mut frame = render_bg_wide_output(
-        &native,
-        assets.file_select_vram(),
-        assets.file_select_tilemap(),
-        FILE_SELECT_BGP,
-        TileData::Signed,
-        (160, 144),
-        (-camera_left(hall), 0),
-        OutputMode::PaletteIndices,
-        file_select_backdrop,
-    );
-    let cam = camera_left(hall);
-    for index in 0..catalog::HALL_PEDESTALS.len() {
-        fill(&mut frame, pedestal_x(index) - cam - 8, 120, 16, 8, 2);
+pub(super) fn sprite_frame(hall: &Hall) -> u8 {
+    if hall.hop > 0 {
+        return 9;
     }
-    let hop = if hall.hop > 0 { 10 } else { 0 };
-    fill(&mut frame, hall.mario - cam - 4, 100 - hop, 8, 16, 3);
-    frame
+    if hall.walk != 0 {
+        let frame = (hall.walk_timer & 0x0C) >> 2;
+        return if hall.facing < 0 {
+            frame + 5
+        } else {
+            frame + 1
+        };
+    }
+    if hall.facing < 0 {
+        4
+    } else {
+        0
+    }
 }
 
-fn fill(frame: &mut [u8], x: i32, y: i32, w: i32, h: i32, shade: u8) {
-    for dy in 0..h {
-        for dx in 0..w {
-            let px = x + dx;
-            let py = y + dy;
-            if (0..160).contains(&px) && (0..144).contains(&py) {
-                frame[(py * 160 + px) as usize] = shade;
-            }
-        }
-    }
+pub(super) fn presentation(hall: &Hall) -> (u8, u8, u8) {
+    let x = (hall.mario - camera_left(hall)) as u8;
+    let y = 0x7C_u8.wrapping_sub(if hall.hop > 0 { 10 } else { 0 });
+    (x, y, sprite_frame(hall))
+}
+
+pub(super) fn pixels(
+    hall: &Hall,
+    assets: &sml2_core::front_end::FrontEndAssets,
+    tables: &sml2_core::object::ObjectTables,
+) -> Vec<u8> {
+    let (x, y, sprite) = presentation(hall);
+    sml2_core::front_end::render_hall_output(
+        assets,
+        tables,
+        hall.camera,
+        (x, y),
+        sprite,
+        sml2_core::video::OutputMode::PaletteIndices,
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn the_walk_uses_the_file_select_frames() {
+        let mut hall = Hall::enter();
+        assert_eq!(sprite_frame(&hall), 4, "standing, facing left");
+        let mut settings = Settings::default();
+        let mut debug = false;
+        step(&mut hall, true, false, false, &mut settings, &mut debug);
+        assert_eq!(sprite_frame(&hall), 5, "left march frame 0");
+        for _ in 0..4 {
+            step(&mut hall, false, false, false, &mut settings, &mut debug);
+        }
+        assert_eq!(sprite_frame(&hall), 6, "walk_timer 4 advances the frame");
+    }
+
     #[test]
     fn a_held_direction_marches_one_pipe_and_stops_on_the_lattice() {
         let mut hall = Hall::enter();
@@ -350,25 +357,19 @@ mod tests {
         .unwrap()
     }
 
-    #[test]
-    fn the_picture_puts_mario_on_the_volume_pedestal() {
-        let mut hall = Hall::enter();
-        hall.mario = pedestal_x(3);
-        hall.camera = hall.mario - 48;
-        let assets = test_assets();
-        let frame = pixels(&hall, &assets);
-        assert_eq!(frame.len(), 160 * 144);
-        let screen_x = (hall.mario - camera_left(&hall)) as usize;
-        let mario = frame[100 * 160 + screen_x];
-        assert_eq!(mario, 3, "Mario is palette index 3");
-        assert_ne!(frame[8 * 160 + 8], 3, "the checker behind him is not Mario");
+    fn tables() -> sml2_core::object::ObjectTables {
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../extracted/objects.json"
+        )))
+        .expect("object tables")
     }
 
     #[test]
     fn the_doorway_frame_is_palette_indices() {
         let hall = Hall::enter();
         assert_eq!(hall.mario, DOOR);
-        let frame = pixels(&hall, &test_assets());
+        let frame = pixels(&hall, &test_assets(), &tables());
         let decoded: Vec<_> = frame
             .iter()
             .copied()

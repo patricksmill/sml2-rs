@@ -486,7 +486,7 @@ impl DesktopApp {
         if let Some(hall) = &self.hall {
             // Fixed screens stay 160×144 and are letterboxed into the live view.
             let indices = fixed_screen(view, OutputMode::PaletteIndices.blank(3), |_| {
-                hall::pixels(hall, &game.session.assets.front_end)
+                hall::pixels(hall, &game.session.assets.front_end, &game.session.assets.object_tables)
             });
             let pixels: Vec<PalettePixel> = indices
                 .iter()

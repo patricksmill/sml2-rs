@@ -206,6 +206,39 @@ pub fn render_file_select_output(
     out
 }
 
+pub fn render_hall_output(
+    assets: &FrontEndAssets,
+    tables: &ObjectTables,
+    scroll_x: i32,
+    mario: (u8, u8),
+    sprite: u8,
+    output: OutputMode,
+) -> Vec<u8> {
+    use super::screen::{hall_backdrop, render_backdrop_output, TileData};
+    let mut frame = render_backdrop_output(
+        assets.file_select_vram(),
+        assets.file_select_tilemap(),
+        FILE_SELECT_BGP,
+        TileData::Signed,
+        (160, 144),
+        scroll_x,
+        output,
+        hall_backdrop,
+    );
+    draw_metasprite(
+        &mut frame,
+        160,
+        144,
+        assets.file_select_vram(),
+        output,
+        tables,
+        sprite,
+        mario,
+        false,
+    );
+    frame
+}
+
 /// Expand one `$5297` metasprite and draw its cells.
 fn draw_metasprite(
     frame: &mut [u8],

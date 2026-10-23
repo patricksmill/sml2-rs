@@ -304,3 +304,43 @@ fn wide_title_continues_the_wall_and_ground_past_the_map() {
     assert_eq!(px(170, 143), shades[1]);
     assert_eq!(px(-16, 160), shades[1]);
 }
+
+#[test]
+fn the_hall_is_open_sky_over_a_brick_floor_and_mario_is_a_sprite() {
+    use crate::front_end::screen::hall_backdrop;
+    use crate::video::OutputMode;
+    let _ = hall_backdrop;
+    let mut vram = vec![0u8; VRAM_LEN];
+    // Signed `$FF` is color 0. Signed `$F8` (the brick checker) is color 3.
+    paint(&mut vram, 0xF8 * 16, 3);
+    for tile in 0..128 {
+        paint(&mut vram, tile * 16, 1);
+    }
+    let mut map = vec![0u8; TILEMAP_LEN];
+    map[1] = 0xF8;
+    map[4 * 32 + 4] = 0xFF;
+    let assets = FrontEndAssets::new(
+        vec![0u8; VRAM_LEN],
+        vec![0u8; TILEMAP_LEN],
+        vram,
+        map,
+        vec![0u8; crate::front_end::DEMO_TAPES_LEN],
+    )
+    .unwrap();
+    let frame = render_hall_output(
+        &assets,
+        &tables(),
+        -72,
+        (48, 0x7C),
+        4,
+        OutputMode::PaletteIndices,
+    );
+    assert_eq!(frame.len(), 160 * 144);
+    assert_eq!(frame[0], 3, "the ceiling is the brick checker");
+    assert_eq!(frame[32 * 160], 0, "the space under the ceiling is open");
+    assert_eq!(frame[128 * 160], 3, "the floor is the same bricks");
+    assert!(
+        frame.iter().any(|token| token >> 2 == 1),
+        "Mario is an object sprite"
+    );
+}
