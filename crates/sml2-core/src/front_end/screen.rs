@@ -184,5 +184,22 @@ pub fn render_bg_wide_output(
     out
 }
 
+/// The settings hall to the left of the file select. Columns 2–19 are the
+/// map. Further left, rows 0–1 and 16–17 are the brick checker and rows
+/// 2–15 are the open `$FF` cell at map `(4, 4)`.
+pub fn hall_backdrop(map: &[u8], tx: i32, ty: i32, line: usize) -> ((usize, usize), usize) {
+    if (2..20).contains(&tx) && (0..18).contains(&ty) {
+        return ((tx as usize, ty as usize), line);
+    }
+    if !(0..18).contains(&ty) {
+        return file_select_backdrop(map, tx, ty, line);
+    }
+    let row = ty as usize;
+    if row < 2 || row >= 16 {
+        return ((tx.rem_euclid(2) as usize, row.rem_euclid(2)), line);
+    }
+    ((4, 4), line)
+}
+
 #[cfg(test)]
 mod tests;
