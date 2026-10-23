@@ -133,11 +133,11 @@ fn dx_margin_draws_a_painted_cell_and_keeps_the_centre_red() {
     let SessionState::InLevel(ctx) = &mut game.state else {
         panic!("in level")
     };
-    ctx.cam.x = 200;
+    ctx.cam.x = 80;
     ctx.cam.y = 448;
     ctx.scenery = sml2_core::scenery::SceneryOverlay::try_from_paints(
         vec![sml2_core::scenery::SceneryPaint {
-            x: 7,
+            x: -7,
             y: 24,
             metatile: 1,
         }],
@@ -148,7 +148,7 @@ fn dx_margin_draws_a_painted_cell_and_keeps_the_centre_red() {
     let frame = game.render_dx_frame(&bundle, Mario, view).unwrap();
     let (mx, my) = sml2_runtime::render::view::level_margin(view);
     assert_eq!(frame[(my as usize + 40) * view.0 + mx as usize + 40], RED);
-    assert_eq!(frame[76 * view.0 + 111], [0, 255, 0]);
+    assert_eq!(frame[76 * view.0], [0, 255, 0]);
 }
 
 fn dx_frames_take_the_view_size_and_keep_native_parity() {

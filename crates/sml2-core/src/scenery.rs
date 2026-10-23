@@ -1,12 +1,14 @@
-//! Render-only scenery painted outside the original 160×144 level picture.
+//! Render-only scenery painted past the level layout, where the map has no cells.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
-/// One metatile painted into the margin of an enlarged level view.
+/// One metatile painted past the level. Cell coordinates are in layout cells
+/// and may be negative or past the 256×48 map.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SceneryPaint {
-    pub x: u8,
-    pub y: u8,
+    pub x: i16,
+    pub y: i16,
     pub metatile: u8,
 }
 
@@ -21,34 +23,27 @@ impl SceneryOverlay {
         Self { paints: Vec::new() }
     }
 
-    /// Rejects a row outside the 48-row layout, a metatile the level does not
-    /// have, and a second paint on the same cell. The message names the cell.
+    /// Rejects a metatile the level does not have, and a second paint on the
+    /// same cell. The message names the cell. Cells past the 256×48 layout
+    /// are the ones an enlarged view can show beyond the level.
     pub fn try_from_paints(
         paints: Vec<SceneryPaint>,
         metatile_count: usize,
     ) -> Result<Self, String> {
-        let mut seen = vec![false; 256 * 48];
+        let mut seen = HashSet::new();
         for paint in &paints {
-            if paint.y >= 48 {
-                return Err(format!(
-                    "scenery paint ({}, {}) is outside the layout",
-                    paint.x, paint.y
-                ));
-            }
             if usize::from(paint.metatile) >= metatile_count {
                 return Err(format!(
                     "scenery paint ({}, {}) metatile {} is not in the level",
                     paint.x, paint.y, paint.metatile
                 ));
             }
-            let cell = usize::from(paint.y) * 256 + usize::from(paint.x);
-            if seen[cell] {
+            if !seen.insert((paint.x, paint.y)) {
                 return Err(format!(
                     "scenery paint ({}, {}) is duplicated",
                     paint.x, paint.y
                 ));
             }
-            seen[cell] = true;
         }
         Ok(Self { paints })
     }
@@ -67,15 +62,15 @@ impl SceneryOverlay {
         Ok(())
     }
 
-    pub fn erase(&mut self, x: u8, y: u8) {
+    pub fn erase(&mut self, x: i16, y: i16) {
         self.paints.retain(|p| (p.x, p.y) != (x, y));
     }
 
-    /// The metatile painted at layout cell `(x, y)`.
-    pub fn get(&self, x: usize, y: usize) -> Option<u8> {
+    /// The metatile painted at layout cell `(x, y)`, which may lie past the map.
+    pub fn get(&self, x: i32, y: i32) -> Option<u8> {
         self.paints
             .iter()
-            .find(|p| usize::from(p.x) == x && usize::from(p.y) == y)
+            .find(|p| i32::from(p.x) == x && i32::from(p.y) == y)
             .map(|p| p.metatile)
     }
 }
@@ -85,19 +80,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejects_a_row_past_the_layout_an_unknown_metatile_and_a_duplicate() {
-        let row = SceneryOverlay::try_from_paints(
+    fn accepts_a_cell_past_the_layout_and_rejects_a_bad_metatile_or_duplicate() {
+        let past = SceneryOverlay::try_from_paints(
             vec![SceneryPaint {
-                x: 1,
+                x: -1,
                 y: 48,
                 metatile: 0,
             }],
             128,
-        );
-        assert_eq!(
-            row.unwrap_err(),
-            "scenery paint (1, 48) is outside the layout"
-        );
+        )
+        .unwrap();
+        assert_eq!(past.get(-1, 48), Some(0));
         let tile = SceneryOverlay::try_from_paints(
             vec![SceneryPaint {
                 x: 1,
@@ -155,9 +148,9 @@ mod tests {
         assert!(overlay
             .set(
                 SceneryPaint {
-                    x: 1,
+                    x: -1,
                     y: 48,
-                    metatile: 1,
+                    metatile: 200,
                 },
                 128,
             )

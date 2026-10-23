@@ -595,7 +595,11 @@ fn render(
         }
     }
     let pan = ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
+    let past_level = ctx.spr.as_ref().and_then(|s| s.pipe_background).is_none();
     for py in -border..vh as i32 + border {
+        if !past_level {
+            break;
+        }
         for px in -border..vw as i32 + border {
             match super::margin::margin_sample(
                 view,
@@ -606,9 +610,33 @@ fn render(
                 &ctx.scenery,
             ) {
                 super::margin::MarginSample::Native => {}
-                super::margin::MarginSample::Edge { nx, ny } => {
-                    let src = *layers.bg_mut(nx, ny);
-                    *layers.bg_mut(px, py) = src;
+                super::margin::MarginSample::Blank => {
+                    *layers.bg_mut(px, py) = blank;
+                }
+                super::margin::MarginSample::Level { wx, wy } => {
+                    let (cx, cy) = (wx as usize / 16, wy as usize / 16);
+                    let (tx, ty) = (wx as usize & 15, wy as usize & 15);
+                    let Some(id) = dx_cell(ctx, level, cx, cy) else {
+                        *layers.bg_mut(px, py) = blank;
+                        continue;
+                    };
+                    let metatile = level
+                        .metatiles
+                        .get(id)
+                        .ok_or_else(|| format!("invalid DX metatile {id}"))?;
+                    let tile = metatile.tiles[(ty / 8) * 2 + tx / 8];
+                    let attr = CgbAttributes::from_byte(level.tile_attributes[tile as usize]);
+                    *layers.bg_mut(px, py) = BackgroundPixel {
+                        index: cgb::sample_tile(
+                            banks,
+                            0x800 + video::bg_tile_offset(tile),
+                            attr,
+                            (tx & 7) as u8,
+                            (ty & 7) as u8,
+                        )
+                        .map_err(|e| e.to_string())?,
+                        priority: attr.priority(),
+                    };
                 }
                 super::margin::MarginSample::Paint { metatile, tx, ty } => {
                     let metatile = level.metatiles.get(metatile).ok_or_else(|| {

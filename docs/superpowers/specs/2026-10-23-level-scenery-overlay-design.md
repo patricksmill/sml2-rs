@@ -15,14 +15,13 @@ only. It does not change collision, enemies, the camera, or a 160×144 game.
 
 ## Decisions
 
-- The margin is every pixel of an enlarged view outside the centred 160×144
-  rect, including the smoothing border.
-- An unpainted margin copies the nearest pixel of the original playfield
-  (the 160×136 area above the status bar). It does not reveal further ROM
-  cells. Mid-level widescreen shows that continued edge until a project
-  paints it. Sprites still draw in the margin, on top of that background.
-- A paint replaces the margin cell it names. Paints inside the 160×144 rect
-  are not drawn.
+- An enlarged view samples the real layout cell wherever that cell exists,
+  with no window wrap and no copied edge. Anywhere Mario can walk stays the
+  level.
+- Past the 256×48 layout, a paint supplies the cell. An unpainted cell past
+  the level is blank. A 160×144 view keeps the original window path.
+- Paint coordinates are layout cells and may be negative or past the map.
+  A paint inside the layout is stored but not drawn.
 - The same rule is used by the native renderer and DX. DX colors a painted
   metatile through the level's existing tile-attribute table.
 - No editor screen in this work. The data sits on `LevelContent`, which

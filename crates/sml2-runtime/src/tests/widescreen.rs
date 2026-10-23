@@ -46,8 +46,17 @@ fn the_biased_native_rect_matches_native_above_the_status_bar() {
 }
 
 #[test]
-fn an_unpainted_margin_continues_the_playfield_edge() {
-    let session = level(0);
+fn past_the_level_is_blank_and_the_level_itself_is_not_smeared() {
+    let mut session = level(0);
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!("in level")
+    };
+    ctx.cam.x = 80;
+    ctx.cam.y = 448;
+    if let Some(spr) = ctx.spr.as_mut() {
+        spr.scroll_pan = 0;
+    }
+    let blank = sml2_core::video::bgp_shades(ctx.manifest.header.palettes[0])[0];
     let native = session.render_frame(NATIVE);
     let view = (384, 216);
     let wide = session.render_frame(view);
@@ -56,17 +65,10 @@ fn an_unpainted_margin_continues_the_playfield_edge() {
         crop(&wide, view, (mx as usize, my as usize, 160, 136)),
         crop(&native, NATIVE, (0, 0, 160, 136))
     );
-    for row in 0..136 {
-        assert_eq!(
-            wide[(my as usize + row) * view.0],
-            native[row * 160],
-            "left edge row {row}"
-        );
-    }
-    let below = (my + 144) as usize;
-    assert_eq!(
-        crop(&wide, view, (mx as usize, below, 160, 1)),
-        crop(&native, NATIVE, (0, 135, 160, 1))
+    // View x 0 is world x -112, behind the level start.
+    assert!(
+        (0..136).all(|row| wide[(my as usize + row) * view.0] == blank),
+        "past the level stays blank"
     );
 }
 
@@ -76,7 +78,7 @@ fn a_paint_shows_in_the_margin_and_a_native_frame_ignores_it() {
     let SessionState::InLevel(ctx) = &mut session.state else {
         panic!("in level")
     };
-    ctx.cam.x = 200;
+    ctx.cam.x = 80;
     ctx.cam.y = 448;
     if let Some(spr) = ctx.spr.as_mut() {
         spr.scroll_pan = 0;
@@ -90,7 +92,7 @@ fn a_paint_shows_in_the_margin_and_a_native_frame_ignores_it() {
     };
     ctx.scenery = SceneryOverlay::try_from_paints(
         vec![SceneryPaint {
-            x: 7,
+            x: -7,
             y: 24,
             metatile: 1,
         }],
@@ -104,9 +106,9 @@ fn a_paint_shows_in_the_margin_and_a_native_frame_ignores_it() {
         crop(&wide, view, (mx as usize, my as usize, 160, 136)),
         crop(&native, NATIVE, (0, 0, 160, 136))
     );
-    // View (111, 76) is cell (7, 24), just left of the native picture.
-    assert_ne!(wide[76 * view.0 + 111], plain[76 * view.0 + 111]);
-    assert_eq!(wide[76 * view.0 + 112], plain[76 * view.0 + 112]);
+    // View (0, 76) is cell (-7, 24), behind the level start.
+    assert_ne!(wide[76 * view.0], plain[76 * view.0]);
+    assert_eq!(wide[76 * view.0 + 120], plain[76 * view.0 + 120]);
 }
 
 #[test]
@@ -115,7 +117,7 @@ fn insert_level_carries_scenery_and_an_arena_ignores_it() {
     let mut content = assets.level(0).unwrap().clone();
     content.scenery = SceneryOverlay::try_from_paints(
         vec![SceneryPaint {
-            x: 7,
+            x: -1,
             y: 24,
             metatile: 1,
         }],
@@ -128,7 +130,7 @@ fn insert_level_carries_scenery_and_an_arena_ignores_it() {
     let SessionState::InLevel(ctx) = &mut session.state else {
         panic!("in level")
     };
-    ctx.cam.x = 200;
+    ctx.cam.x = 80;
     ctx.cam.y = 448;
     if let Some(spr) = ctx.spr.as_mut() {
         spr.scroll_pan = 0;
@@ -146,7 +148,7 @@ fn insert_level_carries_scenery_and_an_arena_ignores_it() {
     ctx.scenery = SceneryOverlay::empty();
     drop(ctx);
     let bare = session.render_frame((384, 216));
-    assert_ne!(painted[76 * 384 + 111], arena[76 * 384 + 111]);
+    assert_ne!(painted[76 * 384 + 104], arena[76 * 384 + 104]);
     assert_eq!(arena, bare);
 }
 

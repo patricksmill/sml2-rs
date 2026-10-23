@@ -1,20 +1,22 @@
-//! What an enlarged level view draws outside the original 160×144 picture.
+//! What an enlarged level view draws. Inside the layout the real cell is
+//! sampled, with no window wrap. Past the layout a paint may cover the cell;
+//! otherwise it stays blank.
 
 use sml2_core::level::{LAYOUT_HEIGHT, LAYOUT_WIDTH};
 use sml2_core::scenery::SceneryOverlay;
 
-use super::view::{self, NATIVE};
-
-const PLAYFIELD_H: i32 = 136;
+use super::view;
 
 /// How to draw one pixel of an enlarged level view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MarginSample {
-    /// The original window path, including the centred 160×144 picture.
+    /// The original window path. Used for a 160×144 view.
     Native,
-    /// Copy the native playfield pixel at `(nx, ny)` in view coordinates.
-    Edge { nx: i32, ny: i32 },
-    /// A painted metatile. `(tx, ty)` is the pixel inside that 16×16 cell.
+    /// The real layout pixel at this world position.
+    Level { wx: i32, wy: i32 },
+    /// Past the level, with nothing painted.
+    Blank,
+    /// A painted metatile past the level. `(tx, ty)` is the pixel inside that cell.
     Paint { metatile: u8, tx: usize, ty: usize },
 }
 
@@ -26,53 +28,48 @@ pub(crate) fn margin_sample(
     scroll_pan: i32,
     overlay: &SceneryOverlay,
 ) -> MarginSample {
-    let (mx, my) = view::level_margin(view);
-    let in_native = px >= mx && px < mx + NATIVE.0 as i32 && py >= my && py < my + NATIVE.1 as i32;
-    if !view::enlarged(view) || in_native {
+    if !view::enlarged(view) {
         return MarginSample::Native;
     }
     let world_x = cam.0 as i32 - view.0 as i32 / 2 + px;
     let world_y = cam.1 as i32 - view.1 as i32 / 2 - view::level_bias(view) - scroll_pan + py;
     let (cx, cy) = (world_x.div_euclid(16), world_y.div_euclid(16));
     if (0..LAYOUT_WIDTH as i32).contains(&cx) && (0..LAYOUT_HEIGHT as i32).contains(&cy) {
-        if let Some(metatile) = overlay.get(cx as usize, cy as usize) {
-            return MarginSample::Paint {
-                metatile,
-                tx: world_x.rem_euclid(16) as usize,
-                ty: world_y.rem_euclid(16) as usize,
-            };
-        }
+        return MarginSample::Level {
+            wx: world_x,
+            wy: world_y,
+        };
     }
-    MarginSample::Edge {
-        nx: px.clamp(mx, mx + NATIVE.0 as i32 - 1),
-        ny: py.clamp(my, my + PLAYFIELD_H - 1),
+    if let Some(metatile) = overlay.get(cx, cy) {
+        return MarginSample::Paint {
+            metatile,
+            tx: world_x.rem_euclid(16) as usize,
+            ty: world_y.rem_euclid(16) as usize,
+        };
     }
+    MarginSample::Blank
 }
 
-/// The layout cell under a view pixel, when that pixel is outside the original
-/// picture and the cell is inside the 256×48 layout. Those are the cells the
-/// scenery editor can paint.
+/// The layout cell under a view pixel when that cell lies past the 256×48
+/// level. Those are the cells the scenery editor can paint. Cells Mario can
+/// walk on are inside the level and are not paintable.
 pub fn paintable_cell(
     view: (usize, usize),
     px: i32,
     py: i32,
     cam: (u16, u16),
     scroll_pan: i32,
-) -> Option<(u8, u8)> {
-    if matches!(
+) -> Option<(i16, i16)> {
+    if !matches!(
         margin_sample(view, px, py, cam, scroll_pan, &SceneryOverlay::empty()),
-        MarginSample::Native
+        MarginSample::Blank
     ) {
         return None;
     }
     let world_x = cam.0 as i32 - view.0 as i32 / 2 + px;
     let world_y = cam.1 as i32 - view.1 as i32 / 2 - view::level_bias(view) - scroll_pan + py;
     let (cx, cy) = (world_x.div_euclid(16), world_y.div_euclid(16));
-    if (0..LAYOUT_WIDTH as i32).contains(&cx) && (0..LAYOUT_HEIGHT as i32).contains(&cy) {
-        Some((cx as u8, cy as u8))
-    } else {
-        None
-    }
+    i16::try_from(cx).ok().zip(i16::try_from(cy).ok())
 }
 
 #[cfg(test)]
@@ -102,21 +99,22 @@ mod tests {
     }
 
     #[test]
-    fn past_the_picture_copies_the_playfield_edge_unless_that_cell_is_painted() {
-        let cam = (200u16, 448u16);
+    fn inside_the_level_is_the_real_cell_and_past_it_is_blank_until_painted() {
+        // Camera at the left edge: view x 0 is world x -112, past the level.
+        // View x 120 is world x 8, inside the level.
+        let cam = (80u16, 448u16);
         let view = (384usize, 216usize);
         assert_eq!(
             margin_sample(view, 0, 76, cam, 0, &SceneryOverlay::empty()),
-            MarginSample::Edge { nx: 112, ny: 76 }
+            MarginSample::Blank
         );
         assert_eq!(
-            margin_sample(view, 200, 200, cam, 0, &SceneryOverlay::empty()),
-            MarginSample::Edge { nx: 200, ny: 189 }
+            margin_sample(view, 120, 76, cam, 0, &SceneryOverlay::empty()),
+            MarginSample::Level { wx: 8, wy: 398 }
         );
-        // Native left is world x 120. View x 111 is world x 119, cell (7, 24).
         let painted = SceneryOverlay::try_from_paints(
             vec![SceneryPaint {
-                x: 7,
+                x: -7,
                 y: 24,
                 metatile: 4,
             }],
@@ -124,15 +122,29 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            margin_sample(view, 111, 76, cam, 0, &painted),
+            margin_sample(view, 0, 76, cam, 0, &painted),
             MarginSample::Paint {
                 metatile: 4,
-                tx: 7,
+                tx: 0,
                 ty: 14,
             }
         );
-        assert_eq!(paintable_cell(view, 111, 76, cam, 0), Some((7, 24)));
-        assert_eq!(paintable_cell(view, 112, 76, cam, 0), None);
-        assert_eq!(paintable_cell((160, 144), 111, 76, cam, 0), None);
+        // A paint inside the level does not cover the real cell.
+        let inside = SceneryOverlay::try_from_paints(
+            vec![SceneryPaint {
+                x: 0,
+                y: 24,
+                metatile: 4,
+            }],
+            8,
+        )
+        .unwrap();
+        assert_eq!(
+            margin_sample(view, 120, 76, cam, 0, &inside),
+            MarginSample::Level { wx: 8, wy: 398 }
+        );
+        assert_eq!(paintable_cell(view, 0, 76, cam, 0), Some((-7, 24)));
+        assert_eq!(paintable_cell(view, 120, 76, cam, 0), None);
+        assert_eq!(paintable_cell((160, 144), 0, 76, cam, 0), None);
     }
 }

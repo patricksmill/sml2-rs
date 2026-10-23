@@ -48,7 +48,7 @@ impl DesktopApp {
         self.navigate(ctx, Screen::Editor);
     }
 
-    pub(super) fn paint_cell(&mut self, x: u8, y: u8) -> Result<(), String> {
+    pub(super) fn paint_cell(&mut self, x: i16, y: i16) -> Result<(), String> {
         self.editor.scenery.set(
             SceneryPaint {
                 x,
@@ -61,7 +61,7 @@ impl DesktopApp {
         Ok(())
     }
 
-    pub(super) fn erase_cell(&mut self, x: u8, y: u8) {
+    pub(super) fn erase_cell(&mut self, x: i16, y: i16) {
         self.editor.scenery.erase(x, y);
         self.save_scenery();
     }
@@ -99,11 +99,13 @@ impl DesktopApp {
     fn editor_tools(&mut self, ctx: &Context, ui: &mut Ui) {
         ui.vertical(|ui| {
             ui.set_width(220.0);
-            ui.label("Paint outside the magenta box. Right click erases.");
+            ui.label(
+                "Paint past the level, where the map ends. Anywhere Mario can walk stays the real level. Right click erases.",
+            );
             if !view::enlarged(self.settings.view()) {
                 theme::error(
                     ui,
-                    "Turn on widescreen or camera zoom. A 160×144 view has no margin to paint.",
+                    "Turn on widescreen or camera zoom so the view reaches past the level.",
                 );
             }
             let mut level = self.editor.level;
@@ -208,8 +210,7 @@ impl DesktopApp {
                     }
                 }
                 None if response.clicked() || response.secondary_clicked() => {
-                    self.status =
-                        Some("That spot is inside the original picture, or past the level.".into());
+                    self.status = Some("That spot is part of the level.".into());
                 }
                 None => {}
             }

@@ -274,15 +274,40 @@ pub fn render_view_output_smooth(
             };
         }
     }
-    if let Some(scenery) = scenery {
+    if let Some(scenery) = scenery.filter(|_| spr.and_then(|s| s.pipe_background).is_none()) {
         let pan = spr.map_or(0, |s| s.scroll_pan as i32);
         for py in -border..vh as i32 + border {
             for px in -border..vw as i32 + border {
                 match margin::margin_sample((vw, vh), px, py, (cam_x, cam_y), pan, scenery) {
                     margin::MarginSample::Native => {}
-                    margin::MarginSample::Edge { nx, ny } => {
-                        let src = *layers.bg_mut(nx, ny);
-                        *layers.bg_mut(px, py) = src;
+                    margin::MarginSample::Blank => {
+                        *layers.bg_mut(px, py) = NativeBg {
+                            shade: shades[0],
+                            index: 0,
+                        };
+                    }
+                    margin::MarginSample::Level { wx, wy } => {
+                        let (cx, tx) = ((wx as usize) >> 4, (wx as usize) & 15);
+                        let (cy, ty) = ((wy as usize) >> 4, (wy as usize) & 15);
+                        let key = (cy * 256 + cx) as u32;
+                        let rewritten = overlay.iter().find(|(k, _)| *k == key).map(|(_, v)| *v);
+                        let Some(id) = rewritten.or_else(|| layout.get(cx, cy)) else {
+                            continue;
+                        };
+                        let mt = manifest
+                            .metatiles
+                            .get(id)
+                            .ok_or_else(|| format!("metatile id {id} out of table"))?;
+                        let tile = if rewritten == Some(24) {
+                            0xFF
+                        } else {
+                            mt.tiles[(ty >> 3) * 2 + (tx >> 3)] as usize
+                        };
+                        let col = tiles[tile][(ty & 7) * 8 + (tx & 7)];
+                        *layers.bg_mut(px, py) = NativeBg {
+                            shade: shades[col as usize],
+                            index: col,
+                        };
                     }
                     margin::MarginSample::Paint { metatile, tx, ty } => {
                         let mt = manifest.metatiles.get(metatile).ok_or_else(|| {
