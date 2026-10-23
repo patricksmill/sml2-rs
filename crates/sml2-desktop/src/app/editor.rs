@@ -1,39 +1,29 @@
-//! Scenery editor: paint metatiles outside the original level picture.
+//! Scenery authoring workspace. The live game is used only for playtesting.
 
-use super::{overlay_rect, DesktopApp, Screen};
-use crate::app::theme;
-use eframe::egui::{self, Color32, ColorImage, Context, Sense, TextureOptions, Ui};
-use sml2_core::level::Metatile;
-use sml2_core::scenery::{SceneryOverlay, SceneryPaint};
-use sml2_core::video::{bg_tile_offset, bgp_shades, tile_colors};
-use sml2_runtime::render::motion::Smooth;
-use sml2_runtime::render::{paintable_cell, view};
-use sml2_runtime::session::SessionState;
-use std::fs;
-use std::path::PathBuf;
+use super::{theme, DesktopApp, Screen};
+use eframe::egui::{self, Context, PointerButton, Rect, Ui};
+use state::{Cell, Tool, Workspace};
+use std::collections::BTreeMap;
 
+mod canvas;
+mod palette;
+mod persistence;
+mod state;
+#[cfg(test)]
+mod tests;
+
+#[derive(Default)]
 pub(super) struct Editor {
     pub level: u8,
-    pub metatile: u8,
-    pub cam: (u16, u16),
-    pub scenery: SceneryOverlay,
-    metatile_count: usize,
-    palette: Vec<u8>,
-    swatches: Vec<(u8, ColorImage)>,
-}
-
-impl Default for Editor {
-    fn default() -> Self {
-        Self {
-            level: 0,
-            metatile: 0,
-            cam: (0, 0),
-            scenery: SceneryOverlay::empty(),
-            metatile_count: 0,
-            palette: Vec::new(),
-            swatches: Vec::new(),
-        }
-    }
+    work: Option<Workspace>,
+    levels: BTreeMap<u8, Workspace>,
+    atlas: Option<palette::Atlas>,
+    all_tiles: bool,
+    pub playtesting: bool,
+    canvas_rect: Option<Rect>,
+    hover: Option<Cell>,
+    gesture_button: Option<PointerButton>,
+    pan_button: Option<PointerButton>,
 }
 
 impl DesktopApp {
@@ -44,289 +34,290 @@ impl DesktopApp {
         if self.game.is_none() {
             return;
         }
-        self.load_editor_level();
+        if self.editor.work.is_none() {
+            self.load_editor_level();
+        }
+        self.editor.playtesting = false;
         self.navigate(ctx, Screen::Editor);
     }
 
-    pub(super) fn paint_cell(&mut self, x: i16, y: i16) -> Result<(), String> {
-        self.editor.scenery.set(
-            SceneryPaint {
-                x,
-                y,
-                metatile: self.editor.metatile,
-            },
-            self.editor.metatile_count,
-        )?;
-        self.save_scenery();
-        Ok(())
+    fn load_editor_level(&mut self) {
+        let Some(game) = &self.game else {
+            return;
+        };
+        let Ok(content) = game.session.assets.level(self.editor.level) else {
+            return;
+        };
+        let mut work = Workspace::new(
+            content.layout.clone(),
+            content.manifest.metatiles.metatiles.len(),
+            egui::pos2(
+                f32::from(content.manifest.header.camera_start_x),
+                f32::from(content.manifest.header.camera_start_y),
+            ),
+        );
+        match self.read_scenery(self.editor.level, work.count) {
+            Ok(scenery) => work.scenery = scenery,
+            Err(error) => work.load_error = Some(error),
+        }
+        self.editor.work = Some(work);
     }
 
-    pub(super) fn erase_cell(&mut self, x: i16, y: i16) {
-        self.editor.scenery.erase(x, y);
+    fn select_editor_level(&mut self, id: u8) {
+        if id == self.editor.level {
+            return;
+        }
+        self.finish_editor_gesture();
+        if let Some(work) = self.editor.work.take() {
+            self.editor.levels.insert(self.editor.level, work);
+        }
+        self.editor.level = id;
+        self.editor.work = self.editor.levels.remove(&id);
+        if self.editor.work.is_none() {
+            self.load_editor_level();
+        }
+        self.editor.atlas = None;
+        self.editor.hover = None;
+    }
+
+    pub(super) fn finish_editor_gesture(&mut self) {
+        if let Some(work) = &mut self.editor.work {
+            work.finish();
+        }
+        self.editor.gesture_button = None;
+        self.editor.pan_button = None;
         self.save_scenery();
+    }
+
+    pub(super) fn cancel_editor_gesture(&mut self) -> bool {
+        let cancelled = self.editor.work.as_mut().is_some_and(Workspace::cancel);
+        self.editor.gesture_button = None;
+        self.editor.pan_button = None;
+        cancelled
     }
 
     pub(super) fn play_editor(&mut self, ctx: &Context) {
-        self.save_scenery();
-        let id = self.editor.level;
-        let scenery = self.editor.scenery.clone();
+        self.finish_editor_gesture();
+        let Some(work) = &self.editor.work else {
+            return;
+        };
+        if work.load_error.is_some() {
+            return;
+        }
         let Some(game) = &mut self.game else {
             return;
         };
+        let id = self.editor.level;
         let Ok(mut content) = game.session.assets.level(id).cloned() else {
             return;
         };
-        content.scenery = scenery;
+        content.scenery = work.scenery.clone();
         game.session.assets.insert_level(id, content);
         if let Err(error) = game.session.begin_level(id, 0) {
             self.status = Some(error);
             return;
         }
+        self.paused = false;
+        self.editor.playtesting = true;
         self.navigate(ctx, Screen::Game);
     }
 
     pub(super) fn editor_view(&mut self, ctx: &Context, ui: &mut Ui) {
-        self.sync_editor();
-        if let Some(image) = self.frame_image(Smooth::OFF) {
-            self.texture.set(image, TextureOptions::NEAREST);
-        }
-        ui.horizontal(|ui| {
-            self.editor_tools(ctx, ui);
-            self.editor_canvas(ui);
+        self.editor_atlas(ctx);
+        ui.scope(|ui| {
+            let visuals = &mut ui.style_mut().visuals;
+            visuals.override_text_color = Some(theme::INK);
+            visuals.widgets.inactive.bg_fill = theme::SHELL_LIGHT;
+            visuals.widgets.hovered.bg_fill = theme::SHELL;
+            visuals.widgets.active.bg_fill = theme::SHELL_SHADOW;
+            visuals.selection.bg_fill = theme::MAGENTA;
+            visuals.selection.stroke.color = egui::Color32::WHITE;
+            egui::Frame::NONE
+                .fill(theme::SHELL)
+                .inner_margin(8)
+                .show(ui, |ui| {
+                    self.editor_tools(ctx, ui);
+                    self.editor.tile_tray(ui);
+                });
+            egui::TopBottomPanel::bottom("scenery-status")
+                .frame(egui::Frame::NONE.fill(theme::SHELL).inner_margin(5))
+                .show_inside(ui, |ui| {
+                    self.editor_status(ui);
+                });
+            self.editor.canvas(ui);
         });
+        self.save_scenery();
     }
 
     fn editor_tools(&mut self, ctx: &Context, ui: &mut Ui) {
-        ui.vertical(|ui| {
-            ui.set_width(220.0);
-            ui.label(
-                "Paint past the level, where the map ends. Anywhere Mario can walk stays the real level. Right click erases.",
-            );
-            if !view::enlarged(self.settings.view()) {
-                theme::error(
-                    ui,
-                    "Turn on widescreen or camera zoom so the view reaches past the level.",
-                );
-            }
-            let mut level = self.editor.level;
+        let mut level = self.editor.level;
+        ui.horizontal_wrapped(|ui| {
+            ui.strong("SCENERY MAKER");
             egui::ComboBox::from_id_salt("scenery-level")
+                .width(170.0)
                 .selected_text(
                     self.levels
                         .iter()
                         .find(|(id, _)| *id == level)
                         .map(|(_, label)| label.as_str())
-                        .unwrap_or("level"),
+                        .unwrap_or("Level"),
                 )
                 .show_ui(ui, |ui| {
                     for (id, label) in &self.levels {
                         ui.selectable_value(&mut level, *id, label);
                     }
                 });
-            if level != self.editor.level {
-                self.editor.level = level;
-                self.load_editor_level();
-            }
-            ui.horizontal(|ui| {
-                if ui.button("Camera left").clicked() {
-                    self.editor.cam.0 = self.editor.cam.0.saturating_sub(16);
-                }
-                if ui.button("Camera right").clicked() {
-                    self.editor.cam.0 = self.editor.cam.0.saturating_add(16);
-                }
-            });
-            ui.horizontal(|ui| {
-                if ui.button("Camera up").clicked() {
-                    self.editor.cam.1 = self.editor.cam.1.saturating_sub(16);
-                }
-                if ui.button("Camera down").clicked() {
-                    self.editor.cam.1 = self.editor.cam.1.saturating_add(16);
-                }
-            });
-            ui.label(format!("{} paints", self.editor.scenery.paints.len()));
-            egui::ScrollArea::vertical()
-                .max_height(280.0)
-                .show(ui, |ui| {
-                    ui.horizontal_wrapped(|ui| {
-                        for (id, image) in &self.editor.swatches {
-                            let texture = ctx.load_texture(
-                                format!("scenery-swatch-{id}"),
-                                image.clone(),
-                                TextureOptions::NEAREST,
-                            );
-                            let selected = *id == self.editor.metatile;
-                            if ui
-                                .add(egui::Button::image(&texture).selected(selected))
-                                .on_hover_text(format!("metatile {id}"))
-                                .clicked()
-                            {
-                                self.editor.metatile = *id;
-                            }
-                        }
-                    });
-                });
-            if ui.button("Play this level").clicked() {
+            if ui.button("Play · Enter").clicked() {
                 self.play_editor(ctx);
             }
             if ui.button("Back").clicked() {
                 self.navigate(ctx, Screen::Home);
             }
         });
+        self.select_editor_level(level);
+        let Some(work) = &mut self.editor.work else {
+            return;
+        };
+        ui.horizontal_wrapped(|ui| {
+            for (tool, label, hint) in Tool::ALL {
+                if ui
+                    .selectable_label(work.tool == tool, label)
+                    .on_hover_text(hint)
+                    .clicked()
+                {
+                    work.finish();
+                    work.tool = tool;
+                }
+            }
+            ui.separator();
+            if ui
+                .add_enabled(work.can_undo(), egui::Button::new("Undo"))
+                .on_hover_text("Ctrl/Cmd+Z")
+                .clicked()
+            {
+                work.undo();
+            }
+            if ui
+                .add_enabled(work.can_redo(), egui::Button::new("Redo"))
+                .on_hover_text("Ctrl/Cmd+Shift+Z")
+                .clicked()
+            {
+                work.redo();
+            }
+            ui.toggle_value(&mut work.grid, "Grid · G");
+            let mut zoom = work.viewport.zoom;
+            if ui.button("−").clicked() {
+                zoom = zoom.saturating_sub(1).max(1);
+            }
+            ui.label(format!("{}×", zoom));
+            if ui.button("+").clicked() {
+                zoom = (zoom + 1).min(8);
+            }
+            if let Some(rect) = self.editor.canvas_rect {
+                work.viewport.zoom_at(rect, rect.center(), zoom);
+            } else {
+                work.viewport.zoom = zoom;
+            }
+            if ui.button("Reset view").clicked() {
+                work.reset_view();
+            }
+        });
     }
 
-    fn editor_canvas(&mut self, ui: &mut Ui) {
-        let view = self.settings.view();
-        let available = ui.available_size();
-        let scale = (available.x / view.0 as f32)
-            .min(available.y / view.1 as f32)
-            .floor()
-            .max(1.0_f32);
-        let size = egui::vec2(view.0 as f32 * scale, view.1 as f32 * scale);
-        let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
-        ui.painter().image(
-            self.texture.id(),
-            rect,
-            egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0_f32, 1.0_f32)),
-            Color32::WHITE,
-        );
-        let (mx, my) = view::level_margin(view);
-        ui.painter().rect_stroke(
-            overlay_rect(rect, view, (mx, my, 160, 144)),
-            0.0_f32,
-            egui::Stroke::new(2.0_f32, theme::MAGENTA),
-            egui::StrokeKind::Inside,
-        );
-        if response.clicked() || response.secondary_clicked() || response.dragged() {
-            let Some(pos) = response.interact_pointer_pos() else {
-                return;
-            };
-            let px = ((pos.x - rect.min.x) / scale) as i32;
-            let py = ((pos.y - rect.min.y) / scale) as i32;
-            let erase = response.secondary_clicked() || ui.input(|i| i.pointer.secondary_down());
-            match paintable_cell(view, px, py, self.editor.cam, 0) {
-                Some((x, y)) if erase => self.erase_cell(x, y),
-                Some((x, y)) => {
-                    if let Err(error) = self.paint_cell(x, y) {
-                        self.status = Some(error);
+    fn editor_status(&mut self, ui: &mut Ui) {
+        let Some(work) = &self.editor.work else {
+            ui.label("No level loaded");
+            return;
+        };
+        if let Some(error) = &work.load_error {
+            ui.colored_label(
+                theme::ERROR,
+                format!("File not loaded; editing locked: {error}"),
+            );
+            return;
+        }
+        if let Some(error) = &work.save_error {
+            let retry = ui
+                .horizontal_wrapped(|ui| {
+                    ui.colored_label(theme::ERROR, format!("Save failed: {error}"));
+                    ui.button("Retry").clicked()
+                })
+                .inner;
+            if retry {
+                self.editor.work.as_mut().unwrap().save_error = None;
+            }
+            return;
+        }
+        ui.horizontal_wrapped(|ui| {
+            ui.strong(if work.dirty { "Saving…" } else { "Saved" });
+            ui.label(format!("· {} scenery tiles", work.scenery.paints.len()));
+            if let Some(cell) = self.editor.hover {
+                ui.label(format!(
+                    "· {}, {} · {}",
+                    cell.0,
+                    cell.1,
+                    if state::paintable(cell) {
+                        "Scenery"
+                    } else {
+                        "Protected terrain"
                     }
-                }
-                None if response.clicked() || response.secondary_clicked() => {
-                    self.status = Some("That spot is part of the level.".into());
-                }
-                None => {}
+                ));
+            } else {
+                ui.label("· Wheel: zoom · Space-drag: pan · Right-drag: erase");
             }
+        });
+        if let Some(warning) = self.editor.atlas.as_ref().and_then(|a| a.warning.as_ref()) {
+            ui.colored_label(theme::ERROR, warning);
         }
     }
 
-    fn load_editor_level(&mut self) {
-        let id = self.editor.level;
-        let Some(game) = &self.game else {
-            return;
-        };
-        let Ok(content) = game.session.assets.level(id) else {
-            return;
-        };
-        let cam = (
-            content.manifest.header.camera_start_x,
-            content.manifest.header.camera_start_y,
-        );
-        let count = content.manifest.metatiles.metatiles.len();
-        let palette = content.layout.distinct_metatile_ids();
-        let bgp = content.manifest.header.palettes[0];
-        let swatches = palette
-            .iter()
-            .filter_map(|id| {
-                content
-                    .manifest
-                    .metatiles
-                    .get(*id)
-                    .map(|metatile| (*id, swatch(&content.bg_base, bgp, metatile)))
-            })
-            .collect();
-        self.editor.cam = cam;
-        self.editor.metatile_count = count;
-        self.editor.palette = palette;
-        self.editor.swatches = swatches;
-        if !self.editor.palette.contains(&self.editor.metatile) {
-            self.editor.metatile = self.editor.palette.first().copied().unwrap_or(0);
-        }
-        self.editor.scenery = self.read_scenery(count);
-    }
-
-    fn sync_editor(&mut self) {
-        let id = self.editor.level;
-        let cam = self.editor.cam;
-        let scenery = self.editor.scenery.clone();
-        let Some(game) = &mut self.game else {
-            return;
-        };
-        let current = matches!(
-            &game.session.state,
-            SessionState::InLevel(ctx) if ctx.manifest.level_id == id
-        );
-        if !current && game.session.begin_level(id, 0).is_err() {
+    pub(super) fn editor_shortcuts(&mut self, ctx: &Context) {
+        if ctx.wants_keyboard_input() {
             return;
         }
-        game.session.preview_scenery(cam, scenery);
-    }
-
-    fn scenery_path(&self) -> PathBuf {
-        self.options
-            .paths
-            .settings
-            .parent()
-            .unwrap_or(std::path::Path::new("."))
-            .join(format!("scenery-{:02}.json", self.editor.level))
-    }
-
-    fn read_scenery(&self, metatile_count: usize) -> SceneryOverlay {
-        let Ok(text) = fs::read_to_string(self.scenery_path()) else {
-            return SceneryOverlay::empty();
+        let Some(work) = &mut self.editor.work else {
+            return;
         };
-        let Ok(overlay) = serde_json::from_str::<SceneryOverlay>(&text) else {
-            return SceneryOverlay::empty();
-        };
-        SceneryOverlay::try_from_paints(overlay.paints, metatile_count)
-            .unwrap_or_else(|_| SceneryOverlay::empty())
-    }
-
-    fn save_scenery(&mut self) {
-        let path = self.scenery_path();
-        if let Some(parent) = path.parent() {
-            if let Err(error) = fs::create_dir_all(parent) {
-                self.status = Some(format!("Could not save scenery: {error}"));
-                return;
-            }
+        let (undo, redo, tool, grid, play) = ctx.input(|i| {
+            let command = i.modifiers.command;
+            let tool = if command || i.modifiers.alt {
+                None
+            } else if i.key_pressed(egui::Key::B) {
+                Some(Tool::Brush)
+            } else if i.key_pressed(egui::Key::E) {
+                Some(Tool::Eraser)
+            } else if i.key_pressed(egui::Key::I) {
+                Some(Tool::Eyedropper)
+            } else if i.key_pressed(egui::Key::R) {
+                Some(Tool::Rectangle)
+            } else {
+                None
+            };
+            (
+                command && !i.modifiers.shift && i.key_pressed(egui::Key::Z),
+                command && i.modifiers.shift && i.key_pressed(egui::Key::Z),
+                tool,
+                !command && i.key_pressed(egui::Key::G),
+                i.key_pressed(egui::Key::Enter),
+            )
+        });
+        if undo || redo || tool.is_some() {
+            work.finish();
         }
-        match serde_json::to_string_pretty(&self.editor.scenery) {
-            Ok(text) => {
-                if let Err(error) = fs::write(&path, text) {
-                    self.status = Some(format!("Could not save scenery: {error}"));
-                }
-            }
-            Err(error) => self.status = Some(format!("Could not save scenery: {error}")),
+        if undo {
+            work.undo();
         }
-    }
-}
-
-fn swatch(bg: &[u8], bgp: u8, metatile: &Metatile) -> ColorImage {
-    let shades = bgp_shades(bgp);
-    let mut pixels = vec![Color32::from_gray(shades[0]); 16 * 16];
-    for (quad, &tile) in metatile.tiles.iter().enumerate() {
-        let (ox, oy) = ((quad % 2) * 8, (quad / 2) * 8);
-        let offset = bg_tile_offset(tile);
-        let Some(bytes) = bg.get(offset..offset + 16) else {
-            continue;
-        };
-        let Ok(bytes) = <[u8; 16]>::try_from(bytes) else {
-            continue;
-        };
-        let colors = tile_colors(&bytes);
-        for y in 0..8 {
-            for x in 0..8 {
-                pixels[(oy + y) * 16 + ox + x] =
-                    Color32::from_gray(shades[colors[y * 8 + x] as usize]);
-            }
+        if redo {
+            work.redo();
+        }
+        if let Some(tool) = tool {
+            work.tool = tool;
+        }
+        if grid {
+            work.grid = !work.grid;
+        }
+        if play {
+            self.play_editor(ctx);
         }
     }
-    ColorImage::new([16, 16], pixels)
 }

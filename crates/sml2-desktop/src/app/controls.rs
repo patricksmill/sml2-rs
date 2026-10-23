@@ -88,6 +88,29 @@ impl DesktopApp {
             }
             return;
         }
+        if self.screen == Screen::Editor {
+            if back {
+                if !self.cancel_editor_gesture() {
+                    self.navigate(ctx, Screen::Home);
+                }
+                return;
+            }
+            self.editor_shortcuts(ctx);
+            if self.input.take_press(&Button::key("F11")) {
+                self.fullscreen(ctx);
+            }
+            if self.input.take_press(&Button::key("F1")) {
+                self.debug = !self.debug;
+            }
+            if self.input.take_press(&Button::key("F4")) {
+                self.cycle_filter(1);
+            }
+            return;
+        }
+        if back && self.screen == Screen::Game && self.editor.playtesting {
+            self.open_editor(ctx);
+            return;
+        }
         if self.screen != Screen::Game && self.input.take_press(&Button::Pad(PadButton::East))
             || back
         {

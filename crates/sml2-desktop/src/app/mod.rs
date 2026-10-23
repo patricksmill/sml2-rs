@@ -216,6 +216,9 @@ impl DesktopApp {
     }
 
     fn navigate(&mut self, ctx: &Context, screen: Screen) {
+        if self.screen == Screen::Editor && screen != Screen::Editor {
+            self.finish_editor_gesture();
+        }
         self.screen = screen;
         self.capture = None;
         self.reset_armed = false;
@@ -427,6 +430,10 @@ impl DesktopApp {
                 if ui.button("Menu · Esc").clicked() {
                     self.navigate(ctx, Screen::Home);
                 }
+                if self.screen == Screen::Game && self.editor.playtesting
+                    && ui.button("Return to editor · Esc").clicked() {
+                    self.open_editor(ctx);
+                }
                 if ui.button("Settings").clicked() {
                     self.return_screen = self.screen;
                     self.navigate(ctx, Screen::Settings);
@@ -624,6 +631,7 @@ impl eframe::App for DesktopApp {
         self.receive_input(input);
     }
     fn on_exit(&mut self) {
+        self.finish_editor_gesture();
         self.persist();
     }
 }

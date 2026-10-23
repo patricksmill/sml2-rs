@@ -579,21 +579,14 @@ fn home_pipes_show_the_saved_stage_tally_across_a_restart() {
 }
 
 #[test]
-fn the_scenery_editor_paints_a_margin_cell_and_saves_it() {
+fn the_scenery_editor_opens_without_changing_the_game_view() {
     let (mut app, ctx, path) = app();
     frame(&mut app, &ctx, vec![]);
     app.open_editor(&ctx);
     assert!(app.screen == Screen::Editor);
-    app.editor.cam = (80, 448);
-    app.editor.metatile = 1;
-    app.paint_cell(-1, 24).unwrap();
+    let view = app.settings.view();
     frame(&mut app, &ctx, vec![]);
-    let SessionState::InLevel(level) = &app.game.as_ref().unwrap().session.state else {
-        panic!("editor shows a level")
-    };
-    assert_eq!(level.scenery.get(-1, 24), Some(1));
-    let saved = std::fs::read_to_string(path.join("scenery-00.json")).unwrap();
-    assert!(saved.contains("\"metatile\": 1"));
+    assert_eq!(app.settings.view(), view);
     let _ = std::fs::remove_dir_all(path);
 }
 
