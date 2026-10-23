@@ -371,6 +371,11 @@ pub struct PlayerSim {
     /// frame ahead: on an autoscroll level it pushes Mario +1 early on every
     /// frame the camera steps (traj19, `autoscroll_clamp_x_divergence`).
     pub camx: u16,
+    /// Extra pixels added to each side of the `$0FBF` screen window. An
+    /// autoscroller keeps the camera on its own path, so this is what lets
+    /// Mario walk out to the edges of a view wider than 160. Zero is the
+    /// ROM window (`$10`..=`$A0`).
+    pub screen_margin: u16,
     /// `sCameraY` low byte, same frame-start timing as [`Self::camx`] —
     /// `$1BFF`'s hazard arm reads `sMarioScreenY`, which the draw step
     /// computed from the previous frame's camera.
@@ -570,6 +575,7 @@ impl PlayerSim {
             phase: 0,
             frame_counter: 0,
             camx: 0,
+            screen_margin: 0,
             camy: 0,
             collision_tile: 0,
             probe_point: (0, 0),
@@ -1645,6 +1651,31 @@ impl PlayerSim {
         self.fade_timer = self.fade_timer.saturating_sub(1);
     }
 
+    /// `$0FBF`: keep Mario inside the screen. The ROM window is screen X
+    /// `$10`..=`$A0` against the frame-start camera. `screen_margin` grows
+    /// both edges, in real camera-relative pixels, so a wide autoscroller
+    /// does not wrap the check through a byte.
+    fn clamp_screen_x(&mut self) {
+        let margin = i32::from(self.screen_margin);
+        if margin == 0 {
+            let sx = self.x.wrapping_sub(self.camx).wrapping_add(96) & 0xFF;
+            if sx < 0x10 {
+                self.x = self.x.wrapping_add(u16::from(0x10 - sx));
+            } else if sx >= 0xA0 {
+                self.x = self.x.wrapping_sub(u16::from(sx - 0xA0));
+            }
+            return;
+        }
+        let sx = self.x as i32 - self.camx as i32 + 96;
+        let left = 0x10 - margin;
+        let right = 0xA0 + margin;
+        if sx < left {
+            self.x = self.x.wrapping_add((left - sx) as u16);
+        } else if sx > right {
+            self.x = self.x.wrapping_sub((sx - right) as u16);
+        }
+    }
+
     /// One frame of the player update. `a_pressed`/`b_pressed` are the A/B
     /// new-press edges (`hKeysPressed` bits 0/1).
     pub fn step(
@@ -1968,13 +1999,7 @@ impl PlayerSim {
                 self.pipe_dir = 3;
             }
         }
-        // $0FBF screen-edge wrap
-        let sx = self.x.wrapping_sub(self.camx).wrapping_add(96) & 0xFF;
-        if sx < 0x10 {
-            self.x = self.x.wrapping_add(16 - sx);
-        } else if sx >= 0xA0 {
-            self.x = self.x.wrapping_sub(sx - 160);
-        }
+        self.clamp_screen_x();
         // $14BF/$14D5 walk-anim timer (+1, +2 with B; wraps at $0C; moon physics and goal bell fix cadence to +1)
         let b = if self.moon != 0 || self.goal_bell {
             1

@@ -2595,6 +2595,31 @@ fn normal_landing_never_bonks_the_tile_below() {
     assert_eq!(sim.vvel, 10, "vvel is not a bounce's");
 }
 
+/// `$0FBF` with a widened window: Mario can stand `screen_margin` pixels
+/// past either native edge, and one step past that is pulled back onto it.
+#[test]
+fn a_wide_autoscroller_clamps_mario_to_the_view_edges() {
+    let layout = blank_layout();
+    let mut sim = PlayerSim::new();
+    sim.screen_margin = 48;
+    sim.camx = 400;
+    sim.hvel = 0x80;
+    sim.y = 80;
+    // sx = x - cam + 96. The wide edges are 16-48 and 160+48.
+    sim.x = (400i32 + (16 - 48) - 96 - 5) as u16;
+    sim.step(&PlayerKeys::default(), false, false, &layout);
+    assert_eq!(sim.x as i32 - sim.camx as i32 + 96, 16 - 48);
+
+    sim.x = (400i32 + (160 + 48) - 96 + 7) as u16;
+    sim.step(&PlayerKeys::default(), false, false, &layout);
+    assert_eq!(sim.x as i32 - sim.camx as i32 + 96, 160 + 48);
+
+    sim.screen_margin = 0;
+    sim.x = 400 + 160 - 96 + 4;
+    sim.step(&PlayerKeys::default(), false, false, &layout);
+    assert_eq!(sim.x.wrapping_sub(sim.camx).wrapping_add(96) & 0xFF, 0xA0);
+}
+
 /// The whole `$129F`→`$1327` path through `step`: a spinning big Mario
 /// falling onto a `$00` floor brick bumps it, bounces with the A-held 75
 /// — this frame's own gravity already decremented it once, and the hold

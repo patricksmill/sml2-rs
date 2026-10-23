@@ -159,6 +159,35 @@ fn a_384_px_level_view_does_not_repeat_columns() {
 }
 
 #[test]
+fn an_autoscroller_opens_its_screen_edges_with_the_view() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(19, 0).expect("star course");
+    session.set_view((256, 144));
+    session.advance(FrameInput::default());
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!("in level")
+    };
+    assert_ne!(ctx.cam.auto_scroll, 0);
+    assert_eq!(ctx.sim.screen_margin, 48);
+
+    session.set_view(NATIVE);
+    session.advance(FrameInput::default());
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!("in level")
+    };
+    assert_eq!(ctx.sim.screen_margin, 0);
+
+    session.begin_level(0, 0).unwrap();
+    session.set_view((384, 216));
+    session.advance(FrameInput::default());
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!("in level")
+    };
+    assert_eq!(ctx.cam.auto_scroll, 0);
+    assert_eq!(ctx.sim.screen_margin, 0);
+}
+
+#[test]
 fn set_view_feeds_the_level_spawn_margin_but_not_demos() {
     let mut session = level(1);
     session.set_view((384, 216));
