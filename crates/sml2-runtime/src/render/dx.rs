@@ -89,6 +89,42 @@ impl Session {
         Ok((render(ctx, dx, character, view, &offsets)?, offsets.scale))
     }
 
+    pub fn render_dx_hall(
+        &self,
+        dx: &Presentation,
+        character: Character,
+        scroll_x: i32,
+        mario: (u8, u8, u8),
+    ) -> Result<Vec<[u8; 3]>, String> {
+        use sml2_core::actor::ScreenPosition;
+        use sml2_core::front_end::screen::hall_backdrop;
+        use sml2_core::player::{append_cells, CellStyle};
+        let player = dx.player(character, 0);
+        let mut tables = self.assets.object_tables.clone();
+        tables.player_mappings = player.mappings.clone();
+        let mut cells = Vec::new();
+        let _ = append_cells(
+            &tables,
+            mario.2,
+            ScreenPosition {
+                x: mario.0,
+                y: mario.1,
+            },
+            CellStyle::default(),
+            &mut cells,
+        );
+        screen_layers(
+            &dx.file_select,
+            &cells,
+            Some(player),
+            (160, 144),
+            hall_backdrop,
+            scroll_x,
+            false,
+            true,
+        )
+    }
+
     /// `$30000`'s screen with its OAM: the pipe tallies, the Easy banner, the
     /// erase hop and the cursor, through DX's player mappings and graphics.
     fn render_dx_file_select(
@@ -389,6 +425,20 @@ fn screen(
     backdrop: Backdrop,
     scroll_x: i32,
 ) -> Result<Vec<[u8; 3]>, String> {
+    screen_layers(screen, cells, player, view, backdrop, scroll_x, true, false)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn screen_layers(
+    screen: &Screen,
+    cells: &[Cell],
+    player: Option<&sml2_dx::PlayerGraphics>,
+    view: (usize, usize),
+    backdrop: Backdrop,
+    scroll_x: i32,
+    cells_follow_scroll: bool,
+    backdrop_everywhere: bool,
+) -> Result<Vec<[u8; 3]>, String> {
     use super::view::{enlarged, margin, NATIVE};
     let (view, at) = if enlarged(view) {
         (view, margin(view))
@@ -409,8 +459,13 @@ fn screen(
         for x in 0..view.0 as i32 {
             let nx = x - at.0;
             let world_x = nx + scroll_x;
-            let ((col, row), line) = if (0..160).contains(&world_x) && (0..144).contains(&ny) {
-                (((world_x / 8) as usize, (ny / 8) as usize), (ny & 7) as usize)
+            let on_map =
+                !backdrop_everywhere && (0..160).contains(&world_x) && (0..144).contains(&ny);
+            let ((col, row), line) = if on_map {
+                (
+                    ((world_x / 8) as usize, (ny / 8) as usize),
+                    (ny & 7) as usize,
+                )
             } else {
                 backdrop(
                     &screen.tilemap,
@@ -435,12 +490,13 @@ fn screen(
         }
     }
     let mut layers = super::layers::Layers::new(view, 0, background[0]);
+    let cell_scroll = if cells_follow_scroll { scroll_x } else { 0 };
     push_cells(
         &mut layers.cells,
         banks,
         cells.to_vec(),
         0,
-        (at.0 - scroll_x, at.1),
+        (at.0 - cell_scroll, at.1),
         (0, 0),
     )?;
     let (_, objects) = layers.compose(1, (0, 0), |_, _| false);
@@ -1036,6 +1092,44 @@ mod tests {
         assert_eq!(out[0], rgb555(0x001f), "a corner stays the background");
         assert_eq!(out[3 * 8 + 3], rgb555(0x03e0), "an enclosed eye uses OBJ color 0");
         assert_eq!(out[1], [0, 0, 0], "the outline stays opaque");
+    }
+
+    #[test]
+    fn dx_hall_colors_the_open_room_and_not_the_bricks() {
+        use sml2_core::front_end::screen::hall_backdrop;
+        use sml2_core::hardware_palettes::rgb555;
+        let mut bg = [0x1f, 0].repeat(32);
+        bg[8] = 0xe0;
+        bg[9] = 0x03;
+        let mut attributes = vec![0u8; 0x400];
+        attributes[0] = 1;
+        attributes[1] = 1;
+        attributes[32] = 1;
+        attributes[33] = 1;
+        let picture = Screen {
+            vram: [vec![0; 0x1800], vec![0; 0x1800]],
+            tilemap: vec![0; 0x400],
+            attributes,
+            bg_palettes: bg,
+            obj_palettes: [0xe0, 3].repeat(32),
+        };
+        let frame = screen_layers(
+            &picture,
+            &[],
+            None,
+            (160, 144),
+            hall_backdrop,
+            -72,
+            false,
+            true,
+        )
+        .unwrap();
+        assert_eq!(frame[0], rgb555(0x03e0), "ceiling bricks use palette 1");
+        assert_eq!(
+            frame[32 * 160],
+            rgb555(0x001f),
+            "the open room is not the brick checker"
+        );
     }
 
     #[test]

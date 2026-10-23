@@ -445,3 +445,34 @@ fn enabling_dx_mode_without_graphics_starts_the_import() {
     assert!(app.dx_picker.is_some());
     let _ = std::fs::remove_dir_all(path);
 }
+
+#[test]
+fn dx_mode_colors_the_settings_hall() {
+    use sml2_core::hardware_palettes::rgb555;
+    let (mut app, _, path) = super::tests::app();
+    let mut dx = red_bundle();
+    dx.file_select.bg_palettes[8] = 0xe0;
+    dx.file_select.bg_palettes[9] = 0x03;
+    dx.file_select.attributes[0] = 1;
+    dx.file_select.attributes[1] = 1;
+    dx.file_select.attributes[32] = 1;
+    dx.file_select.attributes[33] = 1;
+    app.dx_bundle = Some(dx);
+    app.settings.dx_mode = true;
+    app.settings.widescreen = crate::settings::Widescreen::Off;
+    app.settings.camera_zoom = crate::settings::CameraZoom::Native;
+    let mut hall = hall::Hall::enter();
+    hall.mario = hall::pedestal_x(1);
+    hall.camera = -72;
+    app.hall = Some(hall);
+    let image = app.frame_image(Smooth::OFF).unwrap();
+    assert_eq!(
+        image.pixels[0],
+        Color32::from_rgb(rgb555(0x03e0)[0], rgb555(0x03e0)[1], rgb555(0x03e0)[2])
+    );
+    assert_eq!(
+        image.pixels[32 * 160],
+        Color32::from_rgb(rgb555(0x001f)[0], rgb555(0x001f)[1], rgb555(0x001f)[2])
+    );
+    let _ = std::fs::remove_dir_all(path);
+}

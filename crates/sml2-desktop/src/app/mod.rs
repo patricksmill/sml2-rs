@@ -484,21 +484,54 @@ impl DesktopApp {
         let game = self.game.as_ref()?;
         let view = self.settings.view();
         if let Some(hall) = &self.hall {
-            // Fixed screens stay 160×144 and are letterboxed into the live view.
-            let indices = fixed_screen(view, OutputMode::PaletteIndices.blank(3), |_| {
-                hall::pixels(hall, &game.session.assets.front_end, &game.session.assets.object_tables)
-            });
-            let pixels: Vec<PalettePixel> = indices
-                .iter()
-                .map(|&token| PalettePixel::from_token(token))
-                .collect();
-            return Some(colorized(
-                &pixels,
-                self.settings.filter,
-                &game.session.assets.cartridge_header,
-                view,
-            ));
+            let on_door =
+                hall.mario == hall::DOOR && hall.walk == 0 && hall.hop == 0 && hall.goal.is_none();
+            if !on_door {
+                let dx = self
+                    .dx_bundle
+                    .as_ref()
+                    .filter(|_| self.settings.dx_mode && game.session.dx_supported());
+                if let Some(dx) = dx {
+                    let (x, y, sprite) = hall::presentation(hall);
+                    match game.session.render_dx_hall(
+                        dx,
+                        self.settings.character,
+                        hall.camera,
+                        (x, y, sprite),
+                    ) {
+                        Ok(rgb) => {
+                            let frame = fixed_screen(view, [0, 0, 0], |_| rgb);
+                            return Some(ColorImage::new(
+                                [view.0, view.1],
+                                frame
+                                    .into_iter()
+                                    .map(|[r, g, b]| Color32::from_rgb(r, g, b))
+                                    .collect(),
+                            ));
+                        }
+                        Err(error) => self.dx_message = error,
+                    }
+                }
+                let indices = fixed_screen(view, OutputMode::PaletteIndices.blank(3), |_| {
+                    hall::pixels(
+                        hall,
+                        &game.session.assets.front_end,
+                        &game.session.assets.object_tables,
+                    )
+                });
+                let pixels: Vec<PalettePixel> = indices
+                    .iter()
+                    .map(|&token| PalettePixel::from_token(token))
+                    .collect();
+                return Some(colorized(
+                    &pixels,
+                    self.settings.filter,
+                    &game.session.assets.cartridge_header,
+                    view,
+                ));
+            }
         }
+
         let dx = self
             .dx_bundle
             .as_ref()
