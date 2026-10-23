@@ -87,7 +87,8 @@ impl LevelContext {
 impl Session {
     /// Render current view to an 8-bit grey buffer.
     pub fn render_frame(&self, view: (usize, usize)) -> Vec<u8> {
-        self.render_output(view, OutputMode::Grayscale, Smooth::OFF).0
+        self.render_output(view, OutputMode::Grayscale, Smooth::OFF)
+            .0
     }
 
     /// Render winning palette sources and register-mapped hardware shades.
@@ -107,7 +108,10 @@ impl Session {
         smooth: Smooth,
     ) -> (Vec<PalettePixel>, usize) {
         let (frame, scale) = self.render_output(view, OutputMode::PaletteIndices, smooth);
-        (frame.into_iter().map(PalettePixel::from_token).collect(), scale)
+        (
+            frame.into_iter().map(PalettePixel::from_token).collect(),
+            scale,
+        )
     }
 
     fn render_output(
@@ -146,16 +150,9 @@ impl Session {
                     self.title_output(view, output)
                 }
             }
-            SessionState::FileSelect(file_select) => view::fixed_screen(view, fill, |size| {
-                sml2_core::front_end::render::render_file_select_output(
-                    file_select,
-                    &self.slots,
-                    &self.assets.front_end,
-                    &self.assets.object_tables,
-                    size,
-                    output,
-                )
-            }),
+            SessionState::FileSelect(file_select) => {
+                self.file_select_output(file_select, view, output)
+            }
             SessionState::Overworld(map_sim) => {
                 let map_sim = self.shown_map(map_sim);
                 self.overworld_view(map_sim, view, fill, |sim, (w, h)| {
@@ -272,7 +269,10 @@ pub(crate) struct OverworldFrame {
 
 impl Session {
     /// The map screen on view: the transition's source until it hands over.
-    pub(crate) fn shown_map<'a>(&'a self, map_sim: &'a sml2_core::map_sim::MapSim) -> &'a sml2_core::map_sim::MapSim {
+    pub(crate) fn shown_map<'a>(
+        &'a self,
+        map_sim: &'a sml2_core::map_sim::MapSim,
+    ) -> &'a sml2_core::map_sim::MapSim {
         self.map_screen_transition
             .as_ref()
             .filter(|t| t.shows_source())
@@ -283,9 +283,40 @@ impl Session {
     fn title_output(&self, view: (usize, usize), output: OutputMode) -> Vec<u8> {
         use sml2_core::front_end::render::{render_title_output, render_title_wide_output};
         if super::view::enlarged(view) {
-            render_title_wide_output(&self.assets.front_end, view, super::view::margin(view), output)
+            render_title_wide_output(
+                &self.assets.front_end,
+                view,
+                super::view::margin(view),
+                output,
+            )
         } else {
             render_title_output(&self.assets.front_end, view, output)
+        }
+    }
+
+    /// The file select; an enlarged view continues its block frame.
+    fn file_select_output(
+        &self,
+        file_select: &sml2_core::front_end::FileSelect,
+        view: (usize, usize),
+        output: OutputMode,
+    ) -> Vec<u8> {
+        use sml2_core::front_end::render::{
+            render_file_select_output, render_file_select_wide_output,
+        };
+        let (fe, tables) = (&self.assets.front_end, &self.assets.object_tables);
+        if super::view::enlarged(view) {
+            render_file_select_wide_output(
+                file_select,
+                &self.slots,
+                fe,
+                tables,
+                view,
+                super::view::margin(view),
+                output,
+            )
+        } else {
+            render_file_select_output(file_select, &self.slots, fe, tables, view, output)
         }
     }
 
@@ -386,8 +417,7 @@ impl Session {
         assets: MapAssets<'_>,
         (vw, vh): (usize, usize),
     ) -> OverworldFrame {
-        let mut vram = if map_sim.screen_id >= 13 && !self.assets.bell_room_tiles.is_empty()
-        {
+        let mut vram = if map_sim.screen_id >= 13 && !self.assets.bell_room_tiles.is_empty() {
             // Screens 13/14 copy bank 25 `$5000` to `$8800`; the zone
             // tilesets at `map/tiles.bin` do not apply.
             self.assets.bell_room_tiles.vram_tiles()

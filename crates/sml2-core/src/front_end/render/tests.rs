@@ -217,9 +217,12 @@ fn wide_title_continues_the_wall_and_ground_past_the_map() {
     paint(&mut vram, 0x95 * 16, 3);
     vram[0x95 * 16 + 14] = 0xFF;
     vram[0x95 * 16 + 15] = 0x00;
+    let mut map = assets.title_tilemap().to_vec();
+    map[..2].copy_from_slice(&[0x85, 0x86]);
+    map[17 * 32] = 0x95;
     assets = FrontEndAssets::new(
         vram,
-        assets.title_tilemap().to_vec(),
+        map,
         assets.file_select_vram().to_vec(),
         assets.file_select_tilemap().to_vec(),
         assets.demo_tapes().to_vec(),

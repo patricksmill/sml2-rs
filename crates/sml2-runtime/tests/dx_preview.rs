@@ -134,7 +134,7 @@ fn dx_frames_take_the_view_size_and_keep_native_parity() {
     let wide = game.render_dx_frame(&bundle, Mario, (384, 216)).unwrap();
     assert_eq!(wide.len(), 384 * 216);
     assert_eq!(wide[108 * 384 + 192], native[72 * 160 + 80]);
-    assert_eq!(wide[0], [0, 0, 0]);
+    assert_eq!(wide[0], native[0], "the title backdrop fills the corner");
     game.begin_level(0, 0).unwrap();
     game.advance(FrameInput::default());
     let native = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();

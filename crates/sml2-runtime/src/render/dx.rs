@@ -2,6 +2,7 @@
 use super::{hud_row_status, window_coord, window_origin, HudDigits};
 use crate::session::{LevelContext, Session, SessionState};
 use sml2_core::actor::ScreenPosition;
+use sml2_core::front_end::screen::{file_select_backdrop, title_backdrop, Backdrop};
 use sml2_core::{
     character::Character,
     level::{HudStrip, TileAnim, LAYOUT_HEIGHT, LAYOUT_WIDTH},
@@ -61,24 +62,20 @@ impl Session {
         view: (usize, usize),
         smooth: super::motion::Smooth,
     ) -> Result<(Vec<[u8; 3]>, usize), String> {
-        use super::view::fixed_screen;
-        const BAR: [u8; 3] = [0, 0, 0];
         match &self.state {
             SessionState::Title(_) => {
-                let title = screen(&dx.title, &[], None)?;
-                return Ok((fixed_screen(view, BAR, |_| title), 1));
+                return Ok((screen(&dx.title, &[], None, view, title_backdrop)?, 1));
             }
             SessionState::FileSelectLoading(loading) => {
                 // `$19` keeps the title until its transfers turn the LCD off.
                 if loading.lcd_disabled() {
                     return Ok((vec![[255; 3]; view.0 * view.1], 1));
                 }
-                let title = screen(&dx.title, &[], None)?;
-                return Ok((fixed_screen(view, BAR, |_| title), 1));
+                return Ok((screen(&dx.title, &[], None, view, title_backdrop)?, 1));
             }
             SessionState::FileSelect(file_select) => {
-                let frame = self.render_dx_file_select(file_select, dx, character)?;
-                return Ok((fixed_screen(view, BAR, |_| frame), 1));
+                let frame = self.render_dx_file_select(file_select, dx, character, view)?;
+                return Ok((frame, 1));
             }
             SessionState::Overworld(map_sim) => {
                 return Ok((self.render_dx_map(map_sim, dx, character, view)?, 1))
@@ -99,6 +96,7 @@ impl Session {
         fs: &sml2_core::front_end::FileSelect,
         dx: &Presentation,
         character: Character,
+        view: (usize, usize),
     ) -> Result<Vec<[u8; 3]>, String> {
         let player = dx.player(character, 0);
         let mut tables = self.assets.object_tables.clone();
@@ -137,7 +135,13 @@ impl Session {
             fs.cursor_sprite()
         };
         sprite(frame, fs.cursor(), fs.cursor_behind_bg());
-        screen(&dx.file_select, &cells, Some(player))
+        screen(
+            &dx.file_select,
+            &cells,
+            Some(player),
+            view,
+            file_select_backdrop,
+        )
     }
 }
 
@@ -269,14 +273,24 @@ fn dx_map_pixels(
     cgb::compose_frame(&background, &objects, true, palettes).map_err(|e| e.to_string())
 }
 
-/// A front-end screen at scroll 0 with OAM cells in priority order. The
-/// signed `$8800` tile mode serves both the title and the file select;
-/// `player`, when given, replaces the `$8000` graphics in both banks.
+/// A 20×18 front-end screen at scroll 0, with OAM cells in priority order.
+/// Native when `view` is not enlarged; otherwise centred, with `backdrop`
+/// past the map. The signed `$8800` tile mode serves both the title and the
+/// file select, and `player`, when given, replaces the `$8000` graphics in
+/// both banks.
 fn screen(
     screen: &Screen,
     cells: &[Cell],
     player: Option<&sml2_dx::PlayerGraphics>,
+    view: (usize, usize),
+    backdrop: Backdrop,
 ) -> Result<Vec<[u8; 3]>, String> {
+    use super::view::{enlarged, margin, NATIVE};
+    let (view, at) = if enlarged(view) {
+        (view, margin(view))
+    } else {
+        (NATIVE, (0, 0))
+    };
     let palettes = CgbPalettes::from_bytes(&screen.bg_palettes, &screen.obj_palettes)
         .map_err(|e| e.to_string())?;
     let mut vram = screen.vram.clone();
@@ -285,26 +299,38 @@ fn screen(
         vram[1][..0x800].copy_from_slice(&player.bank1);
     }
     let banks = [&vram[0][..], &vram[1][..]];
-    let mut background = Vec::with_capacity(160 * 144);
-    for py in 0..144 {
-        for px in 0..160 {
-            let cell = (py / 8) * 32 + px / 8;
+    let mut background = Vec::with_capacity(view.0 * view.1);
+    for y in 0..view.1 as i32 {
+        let ny = y - at.1;
+        for x in 0..view.0 as i32 {
+            let nx = x - at.0;
+            let ((col, row), line) = if (0..160).contains(&nx) && (0..144).contains(&ny) {
+                (((nx / 8) as usize, (ny / 8) as usize), (ny & 7) as usize)
+            } else {
+                backdrop(
+                    &screen.tilemap,
+                    nx.div_euclid(8),
+                    ny.div_euclid(8),
+                    ny.rem_euclid(8) as usize,
+                )
+            };
+            let cell = row * 32 + col;
             let attr = CgbAttributes::from_byte(screen.attributes[cell]);
             background.push(BackgroundPixel {
                 index: cgb::sample_tile(
                     banks,
                     0x800 + video::bg_tile_offset(screen.tilemap[cell]),
                     attr,
-                    (px & 7) as u8,
-                    (py & 7) as u8,
+                    nx.rem_euclid(8) as u8,
+                    line as u8,
                 )
                 .map_err(|e| e.to_string())?,
                 priority: attr.priority(),
             });
         }
     }
-    let mut layers = super::layers::Layers::new((160, 144), 0, background[0]);
-    push_cells(&mut layers.cells, banks, cells.to_vec(), 0, (0, 0), (0, 0))?;
+    let mut layers = super::layers::Layers::new(view, 0, background[0]);
+    push_cells(&mut layers.cells, banks, cells.to_vec(), 0, at, (0, 0))?;
     let (_, objects) = layers.compose(1, (0, 0), |_, _| false);
     cgb::compose_frame(&background, &objects, true, &palettes).map_err(|e| e.to_string())
 }

@@ -77,7 +77,7 @@ fn set_view_feeds_the_level_spawn_margin_but_not_demos() {
 }
 
 #[test]
-fn fixed_screens_are_centred_and_the_title_backdrop_fills_the_bars() {
+fn front_end_screens_keep_their_centre_and_continue_their_backdrops() {
     let mut session = Session::new(SessionAssets::load().unwrap());
     session.enter_title();
     let native = session.render_frame(NATIVE);
@@ -96,7 +96,13 @@ fn fixed_screens_are_centred_and_the_title_backdrop_fills_the_bars() {
     for _ in 0..64 {
         step(&mut session, PlayerKeys::default());
     }
-    step(&mut session, PlayerKeys { start: true, ..Default::default() });
+    step(
+        &mut session,
+        PlayerKeys {
+            start: true,
+            ..Default::default()
+        },
+    );
     for _ in 0..46 {
         step(&mut session, PlayerKeys::default());
     }
@@ -104,7 +110,16 @@ fn fixed_screens_are_centred_and_the_title_backdrop_fills_the_bars() {
     let native = session.render_frame(NATIVE);
     let wide = session.render_frame(view);
     assert_eq!(crop(&wide, view, (112, 36, 160, 144)), native);
-    assert!(crop(&wide, view, (0, 0, 112, 216)).iter().all(|&p| p == 0));
+    // The 2×2 block checker repeats every 16 px across the seam.
+    assert_eq!(
+        crop(&wide, view, (96, 36, 16, 8)),
+        crop(&native, NATIVE, (0, 0, 16, 8))
+    );
+    // The pipe in column 2 runs on above the screen.
+    assert_eq!(
+        crop(&wide, view, (112 + 16, 28, 8, 8)),
+        crop(&native, NATIVE, (16, 0, 8, 8))
+    );
 }
 
 #[test]

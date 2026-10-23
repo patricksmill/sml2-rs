@@ -40,7 +40,10 @@ fn an_empty_map_renders_shade_zero() {
     let map = vec![0u8; TILEMAP_LEN];
     let frame = render_bg(&vram, &map, 0xE4, (0, 0), (16, 16)).unwrap();
     assert_eq!(frame.len(), 256);
-    assert!(frame.iter().all(|&p| p == 255), "BGP $E4 maps color 0 to 255");
+    assert!(
+        frame.iter().all(|&p| p == 255),
+        "BGP $E4 maps color 0 to 255"
+    );
 }
 
 #[test]
@@ -97,4 +100,24 @@ fn short_background_inputs_are_rejected() {
     assert!(render_bg(&vram, &map[..TILEMAP_LEN - 1], 0, (0, 0), (8, 8))
         .unwrap_err()
         .contains("background map"));
+}
+
+#[test]
+fn file_select_backdrop_repeats_the_blocks_and_runs_pipes_on() {
+    let mut map = vec![0u8; TILEMAP_LEN];
+    for (row, tiles) in [(0, [0xF8, 0xF9]), (1, [0xFA, 0xFB]), (17, [0xFA, 0xFB])] {
+        for col in 0..20 {
+            map[row * 32 + col] = tiles[col % 2];
+        }
+    }
+    map[2] = 0x13;
+    map[17 * 32 + 3] = 0x14;
+    // Beside the map: the 2×2 checker in step with columns 0-1.
+    assert_eq!(file_select_backdrop(&map, -1, 5, 3), ((1, 1), 3));
+    assert_eq!(file_select_backdrop(&map, 20, 0, 0), ((0, 0), 0));
+    // Above and below: blocks continue, pipe columns repeat their edge tile.
+    assert_eq!(file_select_backdrop(&map, 4, -1, 2), ((0, 1), 2));
+    assert_eq!(file_select_backdrop(&map, 2, -3, 6), ((2, 0), 6));
+    assert_eq!(file_select_backdrop(&map, 3, 20, 1), ((3, 17), 1));
+    assert_eq!(file_select_backdrop(&map, 2, 20, 1), ((0, 0), 1));
 }

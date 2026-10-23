@@ -226,9 +226,9 @@ fn dx_mode_frames_follow_the_view_settings() {
         .frame_image(sml2_runtime::render::motion::Smooth::OFF)
         .unwrap();
     assert_eq!(image.size, [256, 144]);
-    // The title is native art: red in the centre, bars at the sides.
+    // The title backdrop fills the view with the screen's own color.
     assert_eq!(image.pixels[72 * 256 + 128], Color32::from_rgb(255, 0, 0));
-    assert_eq!(image.pixels[72 * 256], Color32::from_rgb(0, 0, 0));
+    assert_eq!(image.pixels[72 * 256], Color32::from_rgb(255, 0, 0));
     let _ = std::fs::remove_dir_all(path);
 }
 

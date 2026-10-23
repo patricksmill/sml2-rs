@@ -105,5 +105,84 @@ pub fn render_bg_output(
     Ok(out)
 }
 
+/// What an off-map tile `(tx, ty)` of a 20×18 front-end screen shows: the map
+/// cell `(col, row)` to copy and which of its lines to read for pixel line
+/// `line`, given the screen's map.
+pub type Backdrop = fn(&[u8], i32, i32, usize) -> ((usize, usize), usize);
+
+/// The title sign stands on a `$85`/`$86` wall checker (map `(0, 0)` is
+/// `$85`) above row 17's `$95` ground, whose last line runs on below.
+pub fn title_backdrop(_map: &[u8], tx: i32, ty: i32, line: usize) -> ((usize, usize), usize) {
+    match ty {
+        ..17 => (((tx + ty).rem_euclid(2) as usize, 0), line),
+        17 => ((0, 17), line),
+        _ => ((0, 17), 7),
+    }
+}
+
+/// The file select is framed by a 2×2 block checker (map rows 0-1, columns
+/// 0-1); a column whose top or bottom tile breaks it — a pipe — runs on.
+pub fn file_select_backdrop(map: &[u8], tx: i32, ty: i32, line: usize) -> ((usize, usize), usize) {
+    let block = (tx.rem_euclid(2) as usize, ty.rem_euclid(2) as usize);
+    if !(0..20).contains(&tx) {
+        return (block, line);
+    }
+    let (col, edge) = (tx as usize, if ty < 0 { 0 } else { 17 });
+    if map[edge * 32 + col] != map[edge * 32 + col % 2] {
+        ((col, edge), line)
+    } else {
+        (block, line)
+    }
+}
+
+/// `native`, a 160×144 frame of the screen in `tilemap`, at `at` in a
+/// `view`-sized frame whose other pixels come from `backdrop`.
+#[allow(clippy::too_many_arguments)]
+pub fn render_bg_wide_output(
+    native: &[u8],
+    vram: &[u8],
+    tilemap: &[u8],
+    bgp: u8,
+    tile_data: TileData,
+    view: (usize, usize),
+    at: (i32, i32),
+    output: OutputMode,
+    backdrop: Backdrop,
+) -> Vec<u8> {
+    let shades = output.palette(bgp, PaletteSource::Bg);
+    let tiles: Vec<[u8; 64]> = (0..=255u8)
+        .map(|tile| {
+            let offset = match tile_data {
+                TileData::Unsigned => tile as usize * 16,
+                TileData::Signed if tile < 0x80 => 0x1000 + tile as usize * 16,
+                TileData::Signed => tile as usize * 16,
+            };
+            vram.get(offset..offset + 16)
+                .and_then(|b| b.try_into().ok())
+                .map_or([0; 64], tile_colors)
+        })
+        .collect();
+    let mut out = Vec::with_capacity(view.0 * view.1);
+    for y in 0..view.1 as i32 {
+        let ny = y - at.1;
+        for x in 0..view.0 as i32 {
+            let nx = x - at.0;
+            if (0..160).contains(&nx) && (0..144).contains(&ny) {
+                out.push(native[(ny * 160 + nx) as usize]);
+                continue;
+            }
+            let ((col, row), line) = backdrop(
+                tilemap,
+                nx.div_euclid(8),
+                ny.div_euclid(8),
+                ny.rem_euclid(8) as usize,
+            );
+            let tile = tiles[tilemap[row * 32 + col] as usize];
+            out.push(shades[tile[line * 8 + nx.rem_euclid(8) as usize] as usize]);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests;
