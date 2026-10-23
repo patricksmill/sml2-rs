@@ -246,21 +246,9 @@ pub fn render_view_output(
     // earlier instance; BG wins where attr bit 7 is set and the BG pixel is
     // non-transparent.
     if let Some(s) = spr {
-        // `draw_cells` wraps screen positions in 8 bits like OAM. A native view
-        // keeps that wrap; a resized one draws each sprite with the camera on
-        // its own anchor and adds the true offset.
         let resized = (vw, vh) != view::NATIVE;
         let (mx, my) = view::margin((vw, vh));
-        let place = |x: u16, y: u16| -> ((u16, u16), (i32, i32)) {
-            if resized {
-                (
-                    (x, y),
-                    (x as i32 - cam_x as i32 + mx, y as i32 - cam_y as i32 + my),
-                )
-            } else {
-                ((cam_x, cam_y), (0, 0))
-            }
-        };
+        let place = |x, y| view::sprite_anchor((vw, vh), (cam_x, cam_y), (x, y));
         let pal0 = output.palette(s.obp0, video::PaletteSource::Obj0);
         let pal1 = output.palette(s.obp1, video::PaletteSource::Obj1);
         let mut taken = vec![false; vw * vh];

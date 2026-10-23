@@ -7,6 +7,27 @@ pub fn margin(view: (usize, usize)) -> (i32, i32) {
     ((view.0 as i32 - 160) / 2, (view.1 as i32 - 144) / 2)
 }
 
+/// The camera to draw an 8-bit-OAM sprite with, and the offset to add to its
+/// cells. A native view keeps the wrapped camera-relative path; a resized one
+/// draws the sprite with the camera on its own anchor and adds the true offset.
+pub fn sprite_anchor(
+    view: (usize, usize),
+    cam: (u16, u16),
+    at: (u16, u16),
+) -> ((u16, u16), (i32, i32)) {
+    if view == NATIVE {
+        return (cam, (0, 0));
+    }
+    let (mx, my) = margin(view);
+    (
+        at,
+        (
+            at.0 as i32 - cam.0 as i32 + mx,
+            at.1 as i32 - cam.1 as i32 + my,
+        ),
+    )
+}
+
 /// A view at least as large as native in both axes, and larger in one.
 pub fn enlarged(view: (usize, usize)) -> bool {
     view.0 >= NATIVE.0 && view.1 >= NATIVE.1 && view != NATIVE
@@ -94,6 +115,18 @@ mod tests {
         assert_eq!(window_span(320), 320);
         assert_eq!(window_span(384), 384);
         assert!(enlarged((256, 144)) && !enlarged(NATIVE) && !enlarged((16, 16)));
+    }
+
+    #[test]
+    fn sprite_anchor_keeps_native_and_offsets_resized_views() {
+        assert_eq!(
+            sprite_anchor(NATIVE, (100, 50), (130, 60)),
+            ((100, 50), (0, 0))
+        );
+        assert_eq!(
+            sprite_anchor((384, 216), (100, 50), (130, 60)),
+            ((130, 60), (142, 46))
+        );
     }
 
     #[test]

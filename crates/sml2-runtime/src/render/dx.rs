@@ -459,8 +459,7 @@ fn render(
     view: (usize, usize),
 ) -> Result<Vec<[u8; 3]>, String> {
     let (vw, vh) = view;
-    let (mx, my) = super::view::margin(view);
-    let resized = view != super::view::NATIVE;
+    let (mx, _) = super::view::margin(view);
     let level_id = ctx.manifest.level_id;
     let level = dx
         .level(level_id)
@@ -603,20 +602,7 @@ fn render(
         // `mapping_for` picks mode A or B by level; both hold this level's table.
         tables.sprite_mappings_a = dx.objects(level).to_vec();
         tables.sprite_mappings_b = tables.sprite_mappings_a.clone();
-        // `draw_cells` wraps screen positions in 8 bits like OAM. A native view
-        // keeps that wrap; a resized one draws each sprite with the camera on
-        // its own anchor and adds the true offset.
-        let (cam_x, cam_y) = (ctx.cam.x, ctx.cam.y);
-        let place = |x: u16, y: u16| -> ((u16, u16), (i32, i32)) {
-            if resized {
-                (
-                    (x, y),
-                    (x as i32 - cam_x as i32 + mx, y as i32 - cam_y as i32 + my),
-                )
-            } else {
-                ((cam_x, cam_y), (0, 0))
-            }
-        };
+        let place = |x, y| super::view::sprite_anchor(view, (ctx.cam.x, ctx.cam.y), (x, y));
         // Fireballs are staged by $0F71 before Mario's $2D0A draw.
         for &(x, y, frame) in &s.fireballs {
             let ((ax, ay), offset) = place(x, y);
