@@ -330,50 +330,6 @@ pub fn error(ui: &mut Ui, text: &str) {
     ui.label(egui::RichText::new(text).size(13.0).strong().color(ERROR));
 }
 
-/// A green warp pipe standing for a save slot, its stage tally underneath.
-pub fn save_pipe(ui: &mut Ui, label: &str, stages: Option<u16>) {
-    const GREEN: Color32 = Color32::from_rgb(0x3C, 0x9A, 0x3C);
-    const DARK: Color32 = Color32::from_rgb(0x1E, 0x55, 0x24);
-    const SHINE: Color32 = Color32::from_rgb(0x9C, 0xE0, 0x7A);
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(92.0, 74.0), Sense::hover());
-    let painter = ui.painter();
-    let top = rect.center_top();
-    let (lip, body) = if stages.is_some() {
-        (GREEN, GREEN)
-    } else {
-        (PILL, PILL)
-    };
-    let body_rect = Rect::from_min_size(top + Vec2::new(-14.0, 12.0), Vec2::new(28.0, 28.0));
-    let lip_rect = Rect::from_min_size(top + Vec2::new(-18.0, 0.0), Vec2::new(36.0, 13.0));
-    for (r, fill) in [(body_rect, body), (lip_rect, lip)] {
-        painter.rect(r, 2, fill, Stroke::new(1.5_f32, DARK), StrokeKind::Inside);
-        let shine = Rect::from_min_size(
-            r.min + Vec2::new(5.0, 2.5),
-            Vec2::new(4.0, r.height() - 5.0),
-        );
-        painter.rect_filled(shine, 1, if stages.is_some() { SHINE } else { SHELL_LIGHT });
-    }
-    painter.text(
-        body_rect.center() + Vec2::new(3.0, 0.0),
-        Align2::CENTER_CENTER,
-        label,
-        FontId::proportional(14.0),
-        Color32::WHITE,
-    );
-    let caption = match stages {
-        Some(1) => "1 stage".to_string(),
-        Some(n) => format!("{n} stages"),
-        None => "empty".to_string(),
-    };
-    painter.text(
-        rect.center_bottom() - Vec2::new(0.0, 14.0),
-        Align2::CENTER_CENTER,
-        caption,
-        FontId::proportional(12.5),
-        if stages.is_some() { INK } else { SHELL_SHADOW },
-    );
-}
-
 /// A controller glyph for the hint bar.
 pub enum Glyph {
     A,

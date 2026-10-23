@@ -6,7 +6,6 @@ use crate::{
     settings::Zoom,
 };
 use eframe::egui::{self, Context, Ui, ViewportCommand};
-use sml2_core::front_end::SaveSlots;
 use sml2_runtime::session::SessionState;
 
 /// Settings pages, in tab order.
@@ -38,12 +37,13 @@ impl Page {
     }
 }
 
-/// A pipe's stage count as the file select shows it: the record's BCD
-/// `sLevelTally` (`$42`), or `None` for a pipe that fails its checksum (never
-/// saved, or erased).
-pub(super) fn pipe_stages(slots: &SaveSlots, slot: usize) -> Option<u16> {
-    let record = slots.load_slot(slot).filter(|_| slots.valid(slot))?;
-    Some(u16::from(record[0x42] >> 4) * 10 + u16::from(record[0x42] & 0x0F))
+fn on_front_end(state: &SessionState) -> bool {
+    matches!(
+        state,
+        SessionState::Title(_)
+            | SessionState::FileSelect(_)
+            | SessionState::FileSelectLoading(_)
+    )
 }
 
 impl DesktopApp {
@@ -53,31 +53,12 @@ impl DesktopApp {
         theme::card().show(ui, |ui| {
             ui.set_width(theme::BUTTON_SIZE.x);
             ui.spacing_mut().item_spacing.y = 6.0;
-            if self.menu.button(
-                ui,
-                if self.game.is_some() {
-                    "Play / Resume"
-                } else {
-                    "Retry loading game"
-                },
-            ) {
-                if self.game.is_none() {
+            if self.game.is_none() {
+                if self.menu.button(ui, "Retry loading game") {
                     self.load_game();
-                }
-                if self.game.is_some() {
-                    self.navigate(ctx, Screen::Game);
-                }
-            }
-            if self.menu.button(ui, "Title / File Select") {
-                if self.game.is_none() {
-                    self.load_game();
-                }
-                if let Some(game) = &mut self.game {
-                    // `$00`: the original boot flow; START opens the three pipes.
-                    game.session.enter_title();
-                }
-                if self.game.is_some() {
-                    self.navigate(ctx, Screen::Game);
+                    if self.game.is_some() {
+                        self.navigate(ctx, Screen::Game);
+                    }
                 }
             }
             if self.menu.button(ui, "Settings") {
@@ -87,19 +68,18 @@ impl DesktopApp {
             if self.game.is_some() && self.menu.button(ui, "Scenery editor") {
                 self.open_editor(ctx);
             }
+            let quit_to_title = self
+                .game
+                .as_ref()
+                .is_some_and(|game| !on_front_end(&game.session.state));
+            if quit_to_title && self.menu.button(ui, "Quit to title") {
+                if let Some(game) = &mut self.game {
+                    game.session.enter_title();
+                }
+                self.navigate(ctx, Screen::Game);
+            }
             if self.menu.button(ui, "Quit") {
                 ctx.send_viewport_cmd(ViewportCommand::Close);
-            }
-            if let Some(game) = &self.game {
-                ui.add_space(8.0);
-                theme::section(ui, "SAVE PIPES");
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 8.0;
-                    ui.add_space((theme::BUTTON_SIZE.x - 3.0 * 92.0) / 2.0);
-                    for (slot, label) in ["A", "B", "C"].iter().enumerate() {
-                        theme::save_pipe(ui, label, pipe_stages(&game.session.slots, slot));
-                    }
-                });
             }
             if let Some(message) = &self.status {
                 ui.add_space(6.0);

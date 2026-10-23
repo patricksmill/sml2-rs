@@ -72,34 +72,71 @@ fn key(key: egui::Key, down: bool) -> egui::Event {
 }
 
 #[test]
-fn controller_can_open_settings_and_confirm_play_without_leaking_a_jump() {
+fn menu_confirm_opens_settings_and_escape_returns_to_the_game() {
     let (mut app, ctx, path) = app();
     frame(&mut app, &ctx, vec![]);
-    app.input.event(Button::Pad(PadButton::Down), true);
-    frame(&mut app, &ctx, vec![]);
-    app.input.event(Button::Pad(PadButton::Down), false);
-    // Row 1 is Title / File Select; Settings is row 2.
-    app.input.event(Button::Pad(PadButton::Down), true);
-    frame(&mut app, &ctx, vec![]);
-    app.input.event(Button::Pad(PadButton::Down), false);
+    assert_eq!(app.screen, Screen::Home);
     app.input.event(Button::Pad(PadButton::South), true);
     frame(&mut app, &ctx, vec![]);
-    assert!(app.screen == Screen::Settings);
+    assert_eq!(app.screen, Screen::Settings, "the first menu row is Settings");
     assert_eq!(app.game.as_ref().unwrap().session.frame_n, 0);
     app.input.event(Button::Pad(PadButton::South), false);
-    app.input.event(Button::Pad(PadButton::Start), true);
+    app.input.event(Button::key("Escape"), true);
     frame(&mut app, &ctx, vec![]);
-    assert!(app.screen == Screen::Home);
-    app.input.event(Button::Pad(PadButton::Start), false);
+    assert_eq!(app.screen, Screen::Home);
+    app.input.event(Button::key("Escape"), false);
+    app.input.event(Button::key("Escape"), true);
+    frame(&mut app, &ctx, vec![]);
+    assert_eq!(app.screen, Screen::Game);
+    let game = app.game.as_ref().unwrap();
+    assert!(game.session.pending_level.is_none());
+    assert!(matches!(game.session.state, SessionState::Overworld(_)));
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn quit_to_title_is_absent_while_the_session_is_on_the_title() {
+    let (mut app, ctx, path) = app();
+    app.game.as_mut().unwrap().session.enter_title();
+    app.screen = Screen::Home;
+    frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::Pad(PadButton::Down), true);
+    frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::Pad(PadButton::Down), false);
+    app.input.event(Button::Pad(PadButton::Down), true);
+    frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::Pad(PadButton::Down), false);
+    app.input.event(Button::Pad(PadButton::South), true);
+    let output = frame(&mut app, &ctx, vec![]);
+    assert!(
+        output.viewport_output[&egui::ViewportId::ROOT]
+            .commands
+            .iter()
+            .any(|c| matches!(c, ViewportCommand::Close)),
+        "Settings, Scenery editor, Quit — the third row closes the window"
+    );
+    assert_eq!(app.screen, Screen::Home);
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn quit_to_title_from_the_map_opens_the_in_game_title() {
+    let (mut app, ctx, path) = app();
+    // Session::new is the overworld, so the pause menu offers Quit to title.
+    frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::Pad(PadButton::Down), true);
+    frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::Pad(PadButton::Down), false);
+    app.input.event(Button::Pad(PadButton::Down), true);
+    frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::Pad(PadButton::Down), false);
     app.input.event(Button::Pad(PadButton::South), true);
     frame(&mut app, &ctx, vec![]);
-    assert!(app.screen == Screen::Game);
-    let game = app.game.as_ref().unwrap();
-    assert!(
-        game.session.pending_level.is_none(),
-        "menu confirmation must not enter a level"
-    );
-    assert!(game.session.frame_n > 0);
+    assert_eq!(app.screen, Screen::Game);
+    assert!(matches!(
+        app.game.as_ref().unwrap().session.state,
+        SessionState::Title(_)
+    ));
     let _ = std::fs::remove_dir_all(path);
 }
 
@@ -539,21 +576,20 @@ fn home_pipes_show_the_saved_stage_tally_across_a_restart() {
     let (mut app, ctx, path) = app();
     app.screen = Screen::Game;
     frame(&mut app, &ctx, vec![]);
-    let slots = |app: &DesktopApp| {
+    let tally = |app: &DesktopApp| {
         let slots = &app.game.as_ref().unwrap().session.slots;
-        [0, 1, 2].map(|slot| super::panels::pipe_stages(slots, slot))
+        slots
+            .load_slot(0)
+            .filter(|_| slots.valid(0))
+            .map(|record| record[0x42])
     };
     let game = app.game.as_mut().unwrap();
     game.session.active_slot = Some(0);
     game.session.debug_warp_level(0).unwrap();
     app.apply_debug(DebugAction::ClearAllLevels);
-    assert_eq!(
-        slots(&app)[0],
-        None,
-        "an unsaved edit does not reach the pipe"
-    );
+    assert_eq!(tally(&app), None, "an unsaved edit does not reach the pipe");
     app.apply_debug(DebugAction::Save);
-    assert_eq!(slots(&app)[0], Some(31));
+    assert_eq!(tally(&app), Some(0x31));
     // A new launch reads the same pipe image from disk.
     let options = Options {
         assets: app.options.assets.clone(),
@@ -574,7 +610,7 @@ fn home_pipes_show_the_saved_stage_tally_across_a_restart() {
         screenshot: None,
     };
     let restarted = DesktopApp::new(&Context::default(), options, Settings::default(), None);
-    assert_eq!(slots(&restarted), [Some(31), None, None]);
+    assert_eq!(tally(&restarted), Some(0x31));
     let _ = std::fs::remove_dir_all(path);
 }
 

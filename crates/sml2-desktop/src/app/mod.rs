@@ -33,7 +33,7 @@ mod screenshot;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Screen {
     Home,
     Game,
