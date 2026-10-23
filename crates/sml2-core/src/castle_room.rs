@@ -341,6 +341,8 @@ impl CastleRoom {
     ///
     /// The room stages Mario or the `$4C4D`/`$4C51` item preview in
     /// `$FFC4..$C7`; `$5297` expands its sprite id before the room decorations.
+    /// `$60464`, `$607BF` and `$60D02` call it whatever the id: id 0 is big
+    /// Mario standing.
     /// The first record at `$A6B5` is the expander's blank `$7F` placeholder.
     pub fn oam_cells(&self) -> Vec<(u8, u8, u8, u8)> {
         self.oam_cells_from(&self.metasprites, None)
@@ -355,25 +357,23 @@ impl CastleRoom {
         mappings: Option<&[Vec<crate::object::MappingEntry>]>,
     ) -> Vec<(u8, u8, u8, u8)> {
         let mut cells = Vec::new();
-        if self.oam[2] != 0 {
-            if let Some(mappings) = mappings {
-                if let Some(sprite) = mappings.get(usize::from(self.oam[2])) {
-                    for entry in sprite {
-                        cells.push((
-                            self.oam[0].wrapping_add(entry.y as u8),
-                            self.oam[1].wrapping_add(entry.x as u8),
-                            entry.tile,
-                            entry.attr,
-                        ));
-                    }
+        if let Some(mappings) = mappings {
+            if let Some(sprite) = mappings.get(usize::from(self.oam[2])) {
+                for entry in sprite {
+                    cells.push((
+                        self.oam[0].wrapping_add(entry.y as u8),
+                        self.oam[1].wrapping_add(entry.x as u8),
+                        entry.tile,
+                        entry.attr,
+                    ));
                 }
-            } else {
-                for (x, y, tile, attr) in
-                    self.sprite_metas
-                        .expand(self.oam[2], self.oam[1], self.oam[0])
-                {
-                    cells.push((y, x, tile, attr));
-                }
+            }
+        } else {
+            for (x, y, tile, attr) in
+                self.sprite_metas
+                    .expand(self.oam[2], self.oam[1], self.oam[0])
+            {
+                cells.push((y, x, tile, attr));
             }
         }
         for index in 1..16 {
@@ -2368,9 +2368,12 @@ mod oam_tests {
         room.oam[2] = 0;
         room.sprites = [0xFF; SPRITE_BYTES];
         room.sprites[3..6].copy_from_slice(&[40, 100, 0x0C]);
+        // Id 0 is big Mario, drawn like any other id.
+        let mario = room.sprite_metas.expand(0, room.oam[1], room.oam[0]).len();
+        assert_eq!(mario, 8);
         assert_eq!(
-            room.oam_cells(),
-            vec![
+            room.oam_cells()[mario..],
+            [
                 (100, 40, 0x90, 0),
                 (100, 48, 0x91, 0),
                 (108, 40, 0x92, 0),
@@ -2404,9 +2407,10 @@ mod oam_tests {
             room.sprites = [0xFF; SPRITE_BYTES];
             // `$51B1[$18]` -> `$5459`: mushroom, with BG priority set.
             room.sprites[3..6].copy_from_slice(&[40, 100, 0x18]);
+            let mario = room.sprite_metas.expand(0, room.oam[1], room.oam[0]).len();
             assert_eq!(
-                room.oam_cells(),
-                vec![
+                room.oam_cells()[mario..],
+                [
                     (100, 40, 0x90, 0x80),
                     (100, 48, 0x91, 0x80),
                     (108, 40, 0x92, 0x80),
@@ -2416,8 +2420,8 @@ mod oam_tests {
             // `$51B1[$2D]` -> `$5599`: the other room's mushroom frame.
             room.sprites[5] = 0x2D;
             assert_eq!(
-                room.oam_cells(),
-                vec![
+                room.oam_cells()[mario..],
+                [
                     (100, 40, 0x90, 0),
                     (100, 48, 0x91, 0),
                     (108, 40, 0x92, 0),

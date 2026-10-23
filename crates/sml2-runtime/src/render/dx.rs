@@ -260,7 +260,22 @@ impl Session {
         // `$3F203` strip, which DX draws in color 3 (black in every hub set);
         // a zone's are past its 18 rows.
         let blank = IndexedPixel::new(if map_sim.screen_id == 0 { 3 } else { 0 }, 0).unwrap();
-        let mario = &dx.player(character, 0).mappings;
+        let player = dx.player(character, 0);
+        let mario = &player.mappings;
+        // VRAM1 on every map screen: the player's `$8000` overlay over what
+        // the title and file select left at `$8800`. Room Mario and the coin
+        // rooms' status box (attribute bit 3) draw from it.
+        let mut bank1 = dx.file_select.vram[1].clone();
+        bank1[..0x800].copy_from_slice(&player.bank1);
+        let vram1: Vec<[u8; 64]> = bank1
+            .as_chunks::<16>()
+            .0
+            .iter()
+            .map(video::tile_colors)
+            .collect();
+        // DX's eye whites on color 0 belong to the map cursor; the rooms'
+        // Mario has none.
+        let cursor = map_sim.screen_id < 9;
         self.overworld_view(map_sim, view, [0, 0, 0], |sim, size| {
             let wave = self
                 .map_wave
@@ -280,24 +295,37 @@ impl Session {
             let frame = self.overworld_frame(sim, assets, size);
             dx_map_pixels(
                 &frame,
+                &vram1,
                 size,
                 attributes,
                 &dx.map.hub_attributes,
                 blank,
                 &palettes,
+                cursor,
             )
         })
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn dx_map_pixels(
     frame: &crate::render::session::OverworldFrame,
+    vram1: &[[u8; 64]],
     (w, h): (usize, usize),
     attributes: Option<&Vec<u8>>,
     hub_attributes: &[u8],
     blank: IndexedPixel,
     palettes: &CgbPalettes,
+    cursor: bool,
 ) -> Result<Vec<[u8; 3]>, String> {
+    // Attribute bit 3 picks VRAM bank 1.
+    let bank = |attr: u8| {
+        if attr & 0x08 != 0 {
+            vram1
+        } else {
+            &frame.vram[..]
+        }
+    };
     let mut background = Vec::with_capacity(w * h);
     for sample in &frame.composition.bg {
         let pixel = match sample {
@@ -309,10 +337,16 @@ fn dx_map_pixels(
                     }
                     None => hub_attributes[usize::from(s.tile_byte)],
                 };
-                let color = frame
-                    .vram
+                let (mut px, mut py) = (s.pixel % 8, s.pixel / 8);
+                if attr & 0x20 != 0 {
+                    px = 7 - px;
+                }
+                if attr & 0x40 != 0 {
+                    py = 7 - py;
+                }
+                let color = bank(attr)
                     .get(s.tile)
-                    .map_or(0, |t| t[usize::from(s.pixel)]);
+                    .map_or(0, |t| t[usize::from(py * 8 + px)]);
                 BackgroundPixel {
                     index: IndexedPixel::new(color, attr & 7).map_err(|e| e.to_string())?,
                     priority: attr & 0x80 != 0,
@@ -330,7 +364,7 @@ fn dx_map_pixels(
     let mut order: Vec<_> = frame.composition.oam.iter().enumerate().collect();
     order.sort_by_key(|&(i, &(_, x, _, _))| (x, i));
     for (_, &(oy, ox, tile, attr)) in order {
-        let Some(data) = frame.vram.get(usize::from(tile)) else {
+        let Some(data) = bank(attr).get(usize::from(tile)) else {
             continue;
         };
         for dy in 0..8i32 {
@@ -355,13 +389,15 @@ fn dx_map_pixels(
     }
     let mut pixels =
         cgb::compose_frame(&background, &objects, true, palettes).map_err(|e| e.to_string())?;
-    fill_cursor_eye_holes(
-        &mut pixels,
-        &frame.composition.oam,
-        &frame.vram,
-        (w, h),
-        palettes,
-    );
+    if cursor {
+        fill_cursor_eye_holes(
+            &mut pixels,
+            &frame.composition.oam,
+            &frame.vram,
+            (w, h),
+            palettes,
+        );
+    }
     Ok(pixels)
 }
 
@@ -1129,11 +1165,13 @@ mod tests {
         };
         let out = dx_map_pixels(
             &frame,
+            &[],
             (8, 8),
             None,
             &[],
             IndexedPixel::new(2, 0).unwrap(),
             &palettes,
+            true,
         )
         .unwrap();
         assert_eq!(out[0], rgb555(0x001f), "a corner stays the background");
@@ -1143,6 +1181,53 @@ mod tests {
             "an enclosed eye uses OBJ color 0"
         );
         assert_eq!(out[1], [0, 0, 0], "the outline stays opaque");
+    }
+
+    #[test]
+    fn dx_map_attribute_bit_3_draws_from_vram_bank_1() {
+        use crate::render::session::OverworldFrame;
+        use sml2_core::hardware_palettes::rgb555;
+        use sml2_core::map::{BgSample, OverworldComposition};
+        let mut bg = [0u8; 64];
+        bg[2..8].copy_from_slice(&[0x1f, 0, 0xe0, 0x03, 0x00, 0x7c]);
+        let mut obj = [0u8; 64];
+        obj[4..6].copy_from_slice(&0x7fffu16.to_le_bytes());
+        let palettes = CgbPalettes::from_bytes(&bg, &obj).unwrap();
+        // Bank 0's tile is color 1, bank 1's color 2 on its top row only.
+        let mut bank1 = [0u8; 64];
+        bank1[..8].fill(2);
+        let sample = |pixel| {
+            Some(BgSample {
+                tile: 0,
+                tile_byte: 0,
+                cell: (0, 0),
+                pixel,
+            })
+        };
+        let frame = OverworldFrame {
+            composition: OverworldComposition {
+                bg: vec![sample(0), sample(1)],
+                oam: vec![(16, 9, 0, 0x08)],
+            },
+            vram: vec![[1; 64]],
+            bg_palette: 0xE4,
+            obj_palette: 0xD0,
+            obj_palette1: 0x39,
+        };
+        // `$48`: bank 1, flipped vertically, so the top row reads row 7.
+        let out = dx_map_pixels(
+            &frame,
+            &[bank1],
+            (2, 1),
+            Some(&vec![0x48]),
+            &[],
+            IndexedPixel::new(0, 0).unwrap(),
+            &palettes,
+            false,
+        )
+        .unwrap();
+        assert_eq!(out[0], [0, 0, 0], "flipped: bank 1's row 7 is color 0");
+        assert_eq!(out[1], rgb555(0x7fff), "the sprite reads bank 1's color 2");
     }
 
     #[test]

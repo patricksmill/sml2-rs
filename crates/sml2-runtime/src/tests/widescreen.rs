@@ -347,3 +347,18 @@ fn both_minigames_stay_centred_and_fill_the_wide_map() {
         assert_ne!(wide[36 * view.0 + 104], 0, "screen {screen}");
     }
 }
+
+#[test]
+fn the_minigame_doors_stay_native_and_centred() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    let SessionState::Overworld(map) = &mut session.state else {
+        panic!("boots to map")
+    };
+    map.load_screen(8, 0, &session.assets.node_records);
+    let native = session.render_frame(NATIVE);
+    let view = (384, 216);
+    let wide = session.render_frame(view);
+    assert_eq!(crop(&wide, view, (112, 36, 160, 144)), native);
+    // Its columns past the picture are filler, so the sides are letterbox.
+    assert_eq!(wide[36 * view.0 + 104], 0);
+}

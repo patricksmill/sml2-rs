@@ -722,7 +722,8 @@ fn the_coin_room_draws_the_item_preview() {
         SessionState::Overworld(map) => match &mut map.room {
             Some(room) => {
                 let tile = room.oam[2];
-                room.oam[2] = 0;
+                // Any id draws, so move Mario off-screen instead.
+                room.oam[1] = 0xC0;
                 tile
             }
             None => panic!("the coin room is live"),

@@ -338,7 +338,8 @@ impl Session {
     /// (its sprites are 8-bit OAM positions relative to each frame's camera)
     /// during navigation and panning. Oversized views show the whole hub.
     /// Zone screens and both minigames show their 32-tile-wide map, with a
-    /// minigame's 160-wide picture kept centred.
+    /// minigame's 160-wide picture kept centred. Screen 8, the minigame
+    /// doors, stays native: its columns past the picture are filler.
     pub(crate) fn overworld_view<P: Copy>(
         &self,
         map_sim: &sml2_core::map_sim::MapSim,
@@ -356,7 +357,7 @@ impl Session {
                 let pixels = self.stitched_hub(map_sim, size, fill, render)?;
                 Ok(letterbox(&pixels, size, view, fill))
             }
-            1..=14 => {
+            1..=7 | 9..=14 => {
                 let size = (view.0.min(256), 144);
                 Ok(letterbox(&render(map_sim, size)?, size, view, fill))
             }
