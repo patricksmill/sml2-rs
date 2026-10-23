@@ -458,6 +458,19 @@ impl DesktopApp {
     fn frame_image(&mut self, smooth: Smooth) -> Option<ColorImage> {
         let game = self.game.as_ref()?;
         let view = self.settings.view();
+        if let Some(hall) = &self.hall {
+            let indices = hall::pixels(hall, &game.session.assets.front_end);
+            let pixels: Vec<PalettePixel> = indices
+                .iter()
+                .map(|&token| PalettePixel::from_token(token))
+                .collect();
+            return Some(colorized(
+                &pixels,
+                self.settings.filter,
+                &game.session.assets.cartridge_header,
+                (160, 144),
+            ));
+        }
         let dx = self
             .dx_bundle
             .as_ref()
@@ -606,10 +619,35 @@ impl DesktopApp {
             Color32::WHITE,
         );
         self.paint_overlays(ui, rect);
+        if let Some(hall) = &self.hall {
+            if let Some(index) = (0..catalog::PEDESTALS.len()).find(|index| {
+                (hall.mario - hall::pedestal_x(*index)).abs() <= 8
+            }) {
+                let text = catalog::label(catalog::PEDESTALS[index], &self.settings, self.debug);
+                ui.painter().text(
+                    rect.min,
+                    egui::Align2::LEFT_TOP,
+                    text,
+                    egui::FontId::monospace(14.0),
+                    Color32::WHITE,
+                );
+            }
+        }
         let picture = ui.interact(rect, egui::Id::new("game-picture"), egui::Sense::click());
         if picture.clicked() {
             if let Some(pos) = picture.interact_pointer_pos() {
-                self.on_picture_click(pos, rect);
+                if let Some(hall) = &mut self.hall {
+                    let view = self.settings.view();
+                    if let Some(pixel) = pointer::view_pixel(rect, view, pos) {
+                        if let Some((x, _)) = pointer::native_point(view, pixel) {
+                            if let Some(index) = hall::pedestal_at(x, hall.mario) {
+                                hall.goal = Some(index);
+                            }
+                        }
+                    }
+                } else {
+                    self.on_picture_click(pos, rect);
+                }
             }
         }
         if self.paused {
