@@ -4,6 +4,13 @@ use super::DesktopApp;
 use crate::dx_import::{self, Event, Worker};
 use eframe::egui::{Context, Ui};
 
+pub(super) fn prepare_tick(
+    _session: &mut sml2_runtime::Session,
+    _settings: &crate::settings::Settings,
+    _installed: bool,
+) {
+}
+
 impl DesktopApp {
     pub(super) fn restore_dx(&mut self) {
         let Some(key) = self.settings.dx_installation.clone() else {

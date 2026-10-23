@@ -9,6 +9,7 @@ use crate::{
 use eframe::egui::{
     self, Color32, ColorImage, Context, RawInput, TextureHandle, TextureOptions, ViewportCommand,
 };
+use sml2_core::player_sim::PlayerKeys;
 use sml2_core::video::PalettePixel;
 use sml2_runtime::content::{ExtractedContent, SessionAssets};
 use sml2_runtime::render::motion::{pick_scale, Smooth};
@@ -24,6 +25,7 @@ mod editor;
 mod file_picker;
 mod filter_preview;
 mod panels;
+mod pointer;
 mod startup;
 pub(crate) mod theme;
 pub use startup::{run, Options};
@@ -95,6 +97,8 @@ pub struct DesktopApp {
     screenshot_pending: bool,
     screenshot_check: Option<(ColorImage, [u32; 4])>,
     game_rect: [u32; 4],
+    aim: Option<pointer::Aim>,
+    start_click: bool,
     validation_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
 }
 
@@ -153,6 +157,8 @@ impl DesktopApp {
             screenshot_pending: false,
             screenshot_check: None,
             game_rect: [0; 4],
+            aim: None,
+            start_click: false,
             validation_error: Default::default(),
         };
         app.load_game();
@@ -220,6 +226,8 @@ impl DesktopApp {
         self.input.suppress_until_release();
         self.budget.reset();
         release_focus(ctx);
+        self.aim = None;
+        self.start_click = false;
     }
 
     fn zoom(&mut self, ctx: &Context, scale: Option<u8>) {
@@ -315,20 +323,30 @@ impl DesktopApp {
         if let Some(game) = &mut self.game {
             game.session.set_view(self.settings.view());
             game.audio_running(running && !self.settings.muted);
-            for _ in 0..ticks {
-                let keys = if running {
+        }
+        let volume = if self.settings.muted { 0.0 } else { self.settings.volume };
+        for _ in 0..ticks {
+            let snap = self.front_snap();
+            let mut clear_aim = false;
+            let mut clear_start = false;
+            if let Some(game) = self.game.as_mut() {
+                dx::prepare_tick(&mut game.session, &self.settings, self.dx_bundle.is_some());
+                let mut keys = if running {
                     self.input.sample_player(&self.settings.bindings)
                 } else {
-                    Default::default()
+                    PlayerKeys::default()
                 };
-                game.tick(
-                    keys,
-                    if self.settings.muted {
-                        0.0
-                    } else {
-                        self.settings.volume
-                    },
-                );
+                let merged = pointer::merge_pointer(&snap, &keys, self.aim, self.start_click);
+                keys = merged.keys;
+                clear_aim = merged.clear_aim;
+                clear_start = merged.clear_start;
+                game.tick(keys, volume);
+            }
+            if clear_aim {
+                self.aim = None;
+            }
+            if clear_start {
+                self.start_click = false;
             }
         }
         // A screenshot is checked against this CPU frame, which must be a tick.
@@ -540,6 +558,12 @@ impl DesktopApp {
             Color32::WHITE,
         );
         self.paint_overlays(ui, rect);
+        let picture = ui.interact(rect, egui::Id::new("game-picture"), egui::Sense::click());
+        if picture.clicked() {
+            if let Some(pos) = picture.interact_pointer_pos() {
+                self.on_picture_click(pos, rect);
+            }
+        }
         if self.paused {
             ui.painter().text(
                 available.min + egui::vec2(12.0, 12.0),
