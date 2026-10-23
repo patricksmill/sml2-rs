@@ -208,6 +208,15 @@ impl Editor {
             Stroke::new(2.0_f32, theme::MAGENTA),
             StrokeKind::Inside,
         );
+        if level_rect.left() > rect.left() + 140.0 {
+            painter.text(
+                rect.left_top() + egui::vec2(12.0, 12.0),
+                egui::Align2::LEFT_TOP,
+                "SCENERY · paint here",
+                egui::FontId::proportional(12.0),
+                theme::SHELL_LIGHT,
+            );
+        }
         if let Some(Gesture::Rectangle { start, end, value }) = &work.gesture {
             for y in start.1.min(end.1)..=start.1.max(end.1) {
                 for x in start.0.min(end.0)..=start.0.max(end.0) {

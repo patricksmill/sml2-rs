@@ -126,12 +126,23 @@ impl DesktopApp {
         self.editor_atlas(ctx);
         ui.scope(|ui| {
             let visuals = &mut ui.style_mut().visuals;
-            visuals.override_text_color = Some(theme::INK);
-            visuals.widgets.inactive.bg_fill = theme::SHELL_LIGHT;
-            visuals.widgets.hovered.bg_fill = theme::SHELL;
-            visuals.widgets.active.bg_fill = theme::SHELL_SHADOW;
+            visuals.override_text_color = None;
+            for (widget, fill) in [
+                (&mut visuals.widgets.noninteractive, theme::SHELL),
+                (&mut visuals.widgets.inactive, theme::SHELL_LIGHT),
+                (&mut visuals.widgets.hovered, theme::SHELL),
+                (&mut visuals.widgets.active, theme::SHELL_SHADOW),
+                (&mut visuals.widgets.open, theme::SHELL_LIGHT),
+            ] {
+                widget.bg_fill = fill;
+                widget.weak_bg_fill = fill;
+                widget.fg_stroke.color = theme::INK;
+                widget.bg_stroke = egui::Stroke::new(1.0_f32, theme::SHELL_SHADOW);
+            }
             visuals.selection.bg_fill = theme::MAGENTA;
             visuals.selection.stroke.color = egui::Color32::WHITE;
+            ui.spacing_mut().interact_size.y = 26.0;
+            ui.spacing_mut().button_padding = egui::vec2(7.0, 4.0);
             egui::Frame::NONE
                 .fill(theme::SHELL)
                 .inner_margin(8)
@@ -167,7 +178,10 @@ impl DesktopApp {
                         ui.selectable_value(&mut level, *id, label);
                     }
                 });
-            if ui.button("Play · Enter").clicked() {
+            if ui
+                .add(egui::Button::new("Play · Enter").fill(theme::GOLD))
+                .clicked()
+            {
                 self.play_editor(ctx);
             }
             if ui.button("Back").clicked() {
@@ -181,7 +195,7 @@ impl DesktopApp {
         ui.horizontal_wrapped(|ui| {
             for (tool, label, hint) in Tool::ALL {
                 if ui
-                    .selectable_label(work.tool == tool, label)
+                    .add(egui::Button::new(label).selected(work.tool == tool))
                     .on_hover_text(hint)
                     .clicked()
                 {
@@ -230,10 +244,18 @@ impl DesktopApp {
             return;
         };
         if let Some(error) = &work.load_error {
-            ui.colored_label(
-                theme::ERROR,
-                format!("File not loaded; editing locked: {error}"),
-            );
+            let reload = ui
+                .horizontal_wrapped(|ui| {
+                    ui.colored_label(
+                        theme::ERROR,
+                        format!("File not loaded; editing locked: {error}"),
+                    );
+                    ui.button("Reload file").clicked()
+                })
+                .inner;
+            if reload {
+                self.reload_scenery();
+            }
             return;
         }
         if let Some(error) = &work.save_error {
@@ -272,35 +294,50 @@ impl DesktopApp {
     }
 
     pub(super) fn editor_shortcuts(&mut self, ctx: &Context) {
-        if ctx.wants_keyboard_input() {
+        // Ordinary tool buttons retain egui focus too. Only popups and debug
+        // text entry should take these shortcuts away from the workspace.
+        if egui::Popup::is_any_open(ctx) || self.debug && ctx.wants_keyboard_input() {
             return;
         }
         let Some(work) = &mut self.editor.work else {
             return;
         };
-        let (undo, redo, tool, grid, play) = ctx.input(|i| {
-            let command = i.modifiers.command;
-            let tool = if command || i.modifiers.alt {
-                None
-            } else if i.key_pressed(egui::Key::B) {
-                Some(Tool::Brush)
-            } else if i.key_pressed(egui::Key::E) {
-                Some(Tool::Eraser)
-            } else if i.key_pressed(egui::Key::I) {
-                Some(Tool::Eyedropper)
-            } else if i.key_pressed(egui::Key::R) {
-                Some(Tool::Rectangle)
-            } else {
-                None
-            };
+        let (undo, redo, tool, grid, play, zoom_delta) = ctx.input_mut(|i| {
+            let modifiers = i.modifiers;
+            let mut pressed = |key| i.consume_key(modifiers, key);
+            let z = modifiers.command && pressed(egui::Key::Z);
+            let mut tool = None;
+            let (mut grid, mut play) = (false, false);
+            let mut zoom_delta = 0;
+            if !modifiers.command && !modifiers.alt {
+                for (key, candidate) in [
+                    (egui::Key::B, Tool::Brush),
+                    (egui::Key::E, Tool::Eraser),
+                    (egui::Key::I, Tool::Eyedropper),
+                    (egui::Key::R, Tool::Rectangle),
+                ] {
+                    if pressed(key) {
+                        tool = Some(candidate);
+                    }
+                }
+                grid = pressed(egui::Key::G);
+                play = pressed(egui::Key::Enter);
+                let plus = pressed(egui::Key::Plus) | pressed(egui::Key::Equals);
+                let minus = pressed(egui::Key::Minus);
+                zoom_delta = i16::from(plus) - i16::from(minus);
+            }
             (
-                command && !i.modifiers.shift && i.key_pressed(egui::Key::Z),
-                command && i.modifiers.shift && i.key_pressed(egui::Key::Z),
+                z && !modifiers.shift,
+                z && modifiers.shift,
                 tool,
-                !command && i.key_pressed(egui::Key::G),
-                i.key_pressed(egui::Key::Enter),
+                grid,
+                play,
+                zoom_delta,
             )
         });
+        if undo || redo || tool.is_some() || grid || play || zoom_delta != 0 {
+            crate::menu::release_focus(ctx);
+        }
         if undo || redo || tool.is_some() {
             work.finish();
         }
@@ -315,6 +352,12 @@ impl DesktopApp {
         }
         if grid {
             work.grid = !work.grid;
+        }
+        if zoom_delta != 0 && work.gesture.is_none() {
+            if let Some(rect) = self.editor.canvas_rect {
+                let zoom = (i16::from(work.viewport.zoom) + zoom_delta).clamp(1, 8) as u8;
+                work.viewport.zoom_at(rect, rect.center(), zoom);
+            }
         }
         if play {
             self.play_editor(ctx);

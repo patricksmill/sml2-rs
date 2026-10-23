@@ -2,6 +2,11 @@ use super::state::*;
 use eframe::egui::{self, Pos2, Rect};
 use sml2_core::level::{LevelLayout, LAYOUT_SIZE};
 
+mod persistence;
+mod preview;
+mod rendering;
+mod workspace_ui;
+
 fn workspace() -> Workspace {
     let mut work = Workspace::new(
         LevelLayout {

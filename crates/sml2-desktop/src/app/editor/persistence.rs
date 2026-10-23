@@ -6,6 +6,25 @@ use sml2_core::scenery::SceneryOverlay;
 use std::{fs, path::PathBuf};
 
 impl DesktopApp {
+    /// Reload only a blocked workspace, after the user repairs its file.
+    pub(super) fn reload_scenery(&mut self) {
+        let Some(work) = &self.editor.work else {
+            return;
+        };
+        if work.load_error.is_none() {
+            return;
+        }
+        let result = self.read_scenery(self.editor.level, work.count);
+        let work = self.editor.work.as_mut().unwrap();
+        match result {
+            Ok(scenery) => {
+                work.scenery = scenery;
+                work.load_error = None;
+            }
+            Err(error) => work.load_error = Some(error),
+        }
+    }
+
     fn scenery_path(&self, level: u8) -> PathBuf {
         self.options
             .paths

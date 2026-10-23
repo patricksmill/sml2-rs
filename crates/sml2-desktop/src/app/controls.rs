@@ -89,7 +89,7 @@ impl DesktopApp {
             return;
         }
         if self.screen == Screen::Editor {
-            if back {
+            if back || self.input.take_press(&Button::Pad(PadButton::East)) {
                 if !self.cancel_editor_gesture() {
                     self.navigate(ctx, Screen::Home);
                 }

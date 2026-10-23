@@ -430,8 +430,10 @@ impl DesktopApp {
                 if ui.button("Menu · Esc").clicked() {
                     self.navigate(ctx, Screen::Home);
                 }
-                if self.screen == Screen::Game && self.editor.playtesting
-                    && ui.button("Return to editor · Esc").clicked() {
+                if self.screen == Screen::Game
+                    && self.editor.playtesting
+                    && ui.button("Return to editor · Esc").clicked()
+                {
                     self.open_editor(ctx);
                 }
                 if ui.button("Settings").clicked() {

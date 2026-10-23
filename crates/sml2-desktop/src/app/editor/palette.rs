@@ -103,11 +103,12 @@ pub(super) fn dx_tile(level: &LevelGraphics, id: u8) -> Result<Vec<Color32>, Str
 impl DesktopApp {
     pub(super) fn editor_atlas(&mut self, ctx: &Context) {
         let key = format!(
-            "{}:{:?}:{}:{:?}",
+            "{}:{:?}:{}:{:?}:{}",
             self.editor.level,
             self.settings.filter,
             self.settings.dx_mode,
-            self.settings.dx_installation
+            self.settings.dx_installation,
+            self.dx_bundle.is_some()
         );
         if self
             .editor

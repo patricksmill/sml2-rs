@@ -145,7 +145,7 @@ fn cancelled_and_failed_replacements_preserve_selected_installation() {
 }
 
 /// Every level's BG colors are pure red; every tile is blank.
-fn red_bundle() -> sml2_dx::Presentation {
+pub(super) fn red_bundle() -> sml2_dx::Presentation {
     let level = sml2_dx::LevelGraphics {
         background: [vec![0; 0x1000], vec![0; 0x1000]],
         tile_attributes: vec![0; 256],
