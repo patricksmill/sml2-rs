@@ -251,10 +251,19 @@ impl DesktopApp {
         {
             self.settings.camera_zoom = zoom.next();
         }
+        if self.menu.row(
+            ui,
+            "Motion smoothing",
+            Value::Toggle(self.settings.motion_smoothing),
+        ) {
+            self.settings.motion_smoothing = !self.settings.motion_smoothing;
+        }
         theme::note(
             ui,
             "A larger view also spawns enemies and items earlier, so play differs from the \
-             original while it is on. Menus and cutscenes keep their original size.",
+             original while it is on. Menus and cutscenes keep their original size. Motion \
+             smoothing draws levels between frames on displays faster than 60 Hz, one frame \
+             behind.",
         );
     }
 

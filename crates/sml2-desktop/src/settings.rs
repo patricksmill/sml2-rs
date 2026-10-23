@@ -42,6 +42,8 @@ pub struct Settings {
     /// Widen the game view (Mods). Changes object spawning while enlarged.
     pub widescreen: Widescreen,
     pub camera_zoom: CameraZoom,
+    /// Draw levels between the last two ticks on fast displays (Mods).
+    pub motion_smoothing: bool,
 }
 
 impl Default for Settings {
@@ -62,6 +64,7 @@ impl Default for Settings {
             character: Default::default(),
             widescreen: Widescreen::Off,
             camera_zoom: CameraZoom::Native,
+            motion_smoothing: false,
         }
     }
 }
@@ -223,6 +226,7 @@ mod tests {
             "character",
             "widescreen",
             "camera_zoom",
+            "motion_smoothing",
         ] {
             value.as_object_mut().unwrap().remove(field);
         }

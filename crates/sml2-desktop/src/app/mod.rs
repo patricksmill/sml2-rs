@@ -11,6 +11,7 @@ use eframe::egui::{
 };
 use sml2_core::video::PalettePixel;
 use sml2_runtime::content::{ExtractedContent, SessionAssets};
+use sml2_runtime::render::motion::{pick_scale, Smooth};
 #[cfg(test)]
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -293,7 +294,8 @@ impl DesktopApp {
             && self.capture.is_none()
             && !self.screenshot_pending;
         let mut ticks = self.budget.advance(elapsed, running);
-        if self.step && focused {
+        let stepped = self.step && focused;
+        if stepped {
             ticks = 1;
         }
         self.step = false;
@@ -320,7 +322,15 @@ impl DesktopApp {
                 );
             }
         }
-        if let Some(image) = self.frame_image() {
+        let smooth = if self.settings.motion_smoothing && running && !stepped {
+            Smooth {
+                alpha: self.budget.fraction(),
+                scale: pick_scale(self.settings.view(), self.effective_scale),
+            }
+        } else {
+            Smooth::OFF
+        };
+        if let Some(image) = self.frame_image(smooth) {
             self.texture.set(image.clone(), TextureOptions::NEAREST);
             submitted_frame = Some(image);
         }
@@ -352,12 +362,16 @@ impl DesktopApp {
                 }
             }
         }
-        ctx.request_repaint_after(Duration::from_millis(8));
+        if self.settings.motion_smoothing && running {
+            ctx.request_repaint();
+        } else {
+            ctx.request_repaint_after(Duration::from_millis(8));
+        }
     }
 
     /// The current game frame: DX Mode's colors on screens the installed DX
     /// data covers, the display filter everywhere else and on any DX failure.
-    fn frame_image(&mut self) -> Option<ColorImage> {
+    fn frame_image(&mut self, smooth: Smooth) -> Option<ColorImage> {
         let game = self.game.as_ref()?;
         let view = self.settings.view();
         let dx = self
@@ -367,11 +381,11 @@ impl DesktopApp {
         if let Some(dx) = dx {
             match game
                 .session
-                .render_dx_frame(dx, self.settings.character, view)
+                .render_dx_frame_smooth(dx, self.settings.character, view, smooth)
             {
-                Ok(pixels) => {
+                Ok((pixels, scale)) => {
                     return Some(ColorImage::new(
-                        [view.0, view.1],
+                        [view.0 * scale, view.1 * scale],
                         pixels
                             .into_iter()
                             .map(|[r, g, b]| Color32::from_rgb(r, g, b))
@@ -381,12 +395,12 @@ impl DesktopApp {
                 Err(error) => self.dx_message = error,
             }
         }
-        let pixels = game.session.render_palette_frame(view);
+        let (pixels, scale) = game.session.render_palette_frame_smooth(view, smooth);
         Some(colorized(
             &pixels,
             self.settings.filter,
             &game.session.assets.cartridge_header,
-            view,
+            (view.0 * scale, view.1 * scale),
         ))
     }
 

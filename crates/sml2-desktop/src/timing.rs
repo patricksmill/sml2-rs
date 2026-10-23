@@ -20,6 +20,10 @@ impl TickBudget {
         // Drop excess after a stall, rather than performing an unbounded burst.
         due.min(8) as usize
     }
+    /// How far into the next tick the accumulated time is, in `[0, 1)`.
+    pub fn fraction(&self) -> f32 {
+        self.phase as f32 / 1_000_000_000.0
+    }
 }
 
 /// Pixel-aligned destination, computed in physical pixels, not UI points.
@@ -62,6 +66,15 @@ mod tests {
             assert_eq!(budget.advance(Duration::ZERO, true), 0);
             assert_eq!(budget.advance(Duration::from_secs(10), true), 8);
         }
+    }
+    #[test]
+    fn fraction_is_the_progress_into_the_next_tick() {
+        let mut budget = TickBudget::default();
+        assert_eq!(budget.fraction(), 0.0);
+        assert_eq!(budget.advance(Duration::from_micros(25_000), true), 1);
+        assert!((budget.fraction() - 0.5).abs() < 0.001);
+        budget.advance(Duration::ZERO, false);
+        assert_eq!(budget.fraction(), 0.0);
     }
     #[test]
     fn zoom_is_integer_centered_and_constrained_by_physical_window_pixels() {

@@ -17,6 +17,8 @@ Together they select the view size in game pixels:
 | 125% | 200×180        | 320×180 |
 | 150% | 240×216        | 384×216 |
 
+200% and motion smoothing: see 2026-10-22-zoom200-motion-smoothing-design.md.
+
 At 160×144 (both settings at their defaults) every output, test and sweep
 result must stay byte-identical to the current build.
 

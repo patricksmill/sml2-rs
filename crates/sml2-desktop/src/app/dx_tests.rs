@@ -222,7 +222,9 @@ fn dx_mode_frames_follow_the_view_settings() {
     app.game.as_mut().unwrap().session.enter_title();
     app.settings.dx_mode = true;
     app.settings.widescreen = crate::settings::Widescreen::Wide16x9;
-    let image = app.frame_image().unwrap();
+    let image = app
+        .frame_image(sml2_runtime::render::motion::Smooth::OFF)
+        .unwrap();
     assert_eq!(image.size, [256, 144]);
     // The title is native art: red in the centre, bars at the sides.
     assert_eq!(image.pixels[72 * 256 + 128], Color32::from_rgb(255, 0, 0));
@@ -237,34 +239,55 @@ fn dx_mode_colors_every_level_of_the_normal_game() {
     // The title has its own DX screen.
     app.game.as_mut().unwrap().session.enter_title();
     app.settings.dx_mode = true;
-    assert!(is_red(&app.frame_image().unwrap()));
+    assert!(is_red(
+        &app.frame_image(sml2_runtime::render::motion::Smooth::OFF)
+            .unwrap()
+    ));
     for level in [0, 1, 0x1F] {
         let game = app.game.as_mut().unwrap();
         game.session.debug_warp_level(level).unwrap();
         app.settings.dx_mode = false;
         assert!(
-            !is_red(&app.frame_image().unwrap()),
+            !is_red(
+                &app.frame_image(sml2_runtime::render::motion::Smooth::OFF)
+                    .unwrap()
+            ),
             "off: the filter, level {level}"
         );
         app.settings.dx_mode = true;
-        assert!(is_red(&app.frame_image().unwrap()), "level {level}");
+        assert!(
+            is_red(
+                &app.frame_image(sml2_runtime::render::motion::Smooth::OFF)
+                    .unwrap()
+            ),
+            "level {level}"
+        );
     }
     // Luigi draws through the same session.
     app.settings.character = sml2_core::character::Character::Luigi;
-    assert!(is_red(&app.frame_image().unwrap()));
+    assert!(is_red(
+        &app.frame_image(sml2_runtime::render::motion::Smooth::OFF)
+            .unwrap()
+    ));
     // A boss arena, and any DX failure, keep the native picture.
     let game = app.game.as_mut().unwrap();
     if let sml2_runtime::session::SessionState::InLevel(ctx) = &mut game.session.state {
         ctx.arena_loaded = true;
     }
-    assert!(!is_red(&app.frame_image().unwrap()));
+    assert!(!is_red(
+        &app.frame_image(sml2_runtime::render::motion::Smooth::OFF)
+            .unwrap()
+    ));
     assert!(app.dx_message.is_empty(), "an arena is not a failure");
     let game = app.game.as_mut().unwrap();
     game.session.debug_warp_level(0).unwrap();
     app.dx_bundle.as_mut().unwrap().levels[0]
         .bg_palettes
         .clear();
-    assert!(!is_red(&app.frame_image().unwrap()));
+    assert!(!is_red(
+        &app.frame_image(sml2_runtime::render::motion::Smooth::OFF)
+            .unwrap()
+    ));
     assert!(!app.dx_message.is_empty());
     // The normal game keeps its save slot: DX Mode is presentation only.
     assert!(!path.join("save.sav").exists());
@@ -277,7 +300,7 @@ fn enabling_dx_mode_without_graphics_starts_the_import() {
     app.screen = Screen::Settings;
     app.page = super::panels::Page::Mods;
     super::tests::frame(&mut app, &ctx, vec![]);
-    app.menu.selected = 3; // DX Mode, after the tab strip and the view rows.
+    app.menu.selected = 4; // DX Mode, after the tab strip and the view rows.
     app.input.event(crate::input::Button::key("Enter"), true);
     super::tests::frame(&mut app, &ctx, vec![]);
     assert!(app.settings.dx_mode);

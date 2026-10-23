@@ -359,7 +359,9 @@ fn the_frame_follows_the_view_settings() {
     let (mut app, _, path) = app();
     app.settings.widescreen = crate::settings::Widescreen::Wide16x9;
     app.settings.camera_zoom = crate::settings::CameraZoom::Zoom150;
-    let image = app.frame_image().expect("a game frame");
+    let image = app
+        .frame_image(sml2_runtime::render::motion::Smooth::OFF)
+        .expect("a game frame");
     assert_eq!(image.size, [384, 216]);
     let _ = std::fs::remove_dir_all(path);
 }
@@ -405,6 +407,23 @@ fn actual_session_frames_use_the_extracted_cartridge_palette_for_every_filter() 
         changed.pixels[123] = Color32::from_rgb(if r < 128 { r + 2 } else { r - 2 }, g, b);
         assert!(screenshot::verify(&changed, &image, [0, 0, 160, 144]).is_err());
     }
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn motion_smoothing_submits_a_frame_at_the_chosen_scale() {
+    let (mut app, _, path) = app();
+    app.apply_debug(DebugAction::WarpLevel(4));
+    let smooth = sml2_runtime::render::motion::Smooth {
+        alpha: 1.0,
+        scale: 2,
+    };
+    let image = app.frame_image(smooth).unwrap();
+    assert_eq!(image.size, [320, 288]);
+    let off = app
+        .frame_image(sml2_runtime::render::motion::Smooth::OFF)
+        .unwrap();
+    assert_eq!(off.size, [160, 144]);
     let _ = std::fs::remove_dir_all(path);
 }
 
