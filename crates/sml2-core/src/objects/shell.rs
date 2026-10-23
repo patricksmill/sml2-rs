@@ -104,6 +104,13 @@ impl ObjectSim {
             if ty == 0 || ty == 0x5F || ty & 0xA0 != 0 {
                 continue;
             }
+            if self.view_margin != (0, 0) {
+                let near = |a: u16, b: u16| (a.wrapping_sub(b) as i16).unsigned_abs() < 0x80;
+                let o = &self.slots[j];
+                if !near(o.x(), st.x()) || !near(o.y(), st.y()) {
+                    continue;
+                }
+            }
             let b = &self.slots[j].b;
             let oy = b[B_SCRY];
             let ox = b[B_SCRX];

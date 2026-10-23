@@ -181,14 +181,18 @@ impl ObjectSim {
         let bx = bonk_x.wrapping_add(8) & 0xF0;
         let bx = bx.wrapping_sub(scroll_x).wrapping_sub(8);
         let mut special = false;
-        for s in self.slots.iter_mut() {
-            if s.b[B_FLAGS] != 0 {
+        for i in 0..SLOT_COUNT {
+            if self.slots[i].b[B_FLAGS] != 0 {
                 continue;
             }
-            let ty = s.b[B_TYPE];
+            let ty = self.slots[i].b[B_TYPE];
             if ty == 0 {
                 continue;
             }
+            if self.contact_excluded(i) {
+                continue;
+            }
+            let s = &mut self.slots[i];
             if s.b[B_SCRY].wrapping_sub(by) >= 0x10 {
                 continue;
             }
@@ -205,14 +209,18 @@ impl ObjectSim {
 
     pub fn fire_hit(&mut self, sy: u8, sx: u8) -> FireHit {
         let mut result = FireHit::None;
-        for s in self.slots.iter_mut() {
-            if s.b[B_FLAGS] != 0 {
+        for i in 0..SLOT_COUNT {
+            if self.slots[i].b[B_FLAGS] != 0 {
                 continue;
             }
-            let ty = s.b[B_TYPE];
+            let ty = self.slots[i].b[B_TYPE];
             if ty == 0 || ty & 0x80 != 0 {
                 continue;
             }
+            if self.contact_excluded(i) {
+                continue;
+            }
+            let s = &mut self.slots[i];
             let oy = s.b[B_SCRY];
             let y0 = s.b[B_HB_TOP].wrapping_sub(6).wrapping_add(oy);
             let h = s.b[B_HB_BOTTOM]
@@ -266,6 +274,9 @@ impl ObjectSim {
                     continue;
                 }
             } else if ty & 0x63 == 0 {
+                continue;
+            }
+            if self.contact_excluded(i) {
                 continue;
             }
             // $2EF5: box test against the slot's screen position.

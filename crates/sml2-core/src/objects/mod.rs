@@ -882,6 +882,19 @@ impl ObjectSim {
         v >= w.0 && v <= w.1
     }
 
+    /// In an enlarged view slots live past the native alive window, where
+    /// their 8-bit screen bytes wrap onto contacts 256 px away; those slots
+    /// take part in no contact. Native views never exclude a slot.
+    pub fn contact_excluded(&self, i: usize) -> bool {
+        if self.view_margin == (0, 0) {
+            return false;
+        }
+        let c = self.camera_position;
+        let s = &self.slots[i];
+        !(Self::window_hit(s.x(), Self::window(c.x, 0xA0))
+            && Self::window_hit(s.y(), Self::window(c.y, 0xA0)))
+    }
+
     /// Bank 2 `$8DFD`/`$8E6C`: stage boss slots and metadata from `lookup_boss_spawn_def`.
     ///
     /// Implements byte-for-byte Bank 2 staging:

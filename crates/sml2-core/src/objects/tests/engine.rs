@@ -4279,3 +4279,151 @@ fn a_view_margin_keeps_active_slots_alive_past_the_native_edge() {
     }
     assert_ne!(obj.slots[0].b[B_STATE], 0, "the widened alive window keeps it");
 }
+
+/// Every horizontal offset a 384-px view keeps alive, with an active harmful
+/// slot on Mario's row: which offsets hurt him.
+fn hurt_offsets(margin: (u16, u16)) -> Vec<i32> {
+    let t = tables();
+    let layout = blank_layout();
+    let cam = 0x0200;
+    let mut base = ObjectSim::new(Vec::new(), cam);
+    base.configure(0);
+    base.view_margin = margin;
+    base.active = 1;
+    let mario = MarioContact {
+        x: cam,
+        y: 0x0100,
+        ..Default::default()
+    };
+    let reach = 0xA0 + i32::from(margin.0);
+    (-reach..=reach)
+        .filter(|&dx| {
+            let mut o = base.clone();
+            let s = &mut o.slots[0];
+            s.b[B_STATE] = 2;
+            s.b[B_RECHI] = 0xAD;
+            s.b[B_TYPE] = 0x40;
+            s.b[B_HB_TOP] = 0;
+            s.b[B_HB_BOTTOM] = 16;
+            s.b[B_HB_LEFT] = 0;
+            s.b[B_HB_RIGHT] = 16;
+            set_x(&mut s.b, (i32::from(cam) + dx) as u16);
+            set_y(&mut s.b, 0x0100 + 20);
+            for _ in 0..2 {
+                o.step(cam, 0x0100, &layout, &t, &mario, false);
+            }
+            o.mario_dead != 0
+        })
+        .collect()
+}
+
+#[test]
+fn an_enlarged_view_never_hurts_mario_through_the_screen_byte_wrap() {
+    assert_eq!(hurt_offsets((112, 36)), (5..=13).collect::<Vec<_>>());
+}
+
+#[test]
+fn a_native_view_keeps_the_rom_contact() {
+    assert_eq!(hurt_offsets((0, 0)), (5..=13).collect::<Vec<_>>());
+}
+
+/// A fire-hit slot boxed on the ball's screen point, with world X `dx` from
+/// a camera at (`$0200`, `$0100`).
+fn wide_fire_sim(margin: (u16, u16), dx: i32) -> ObjectSim {
+    let mut obj = ObjectSim::new(Vec::new(), 0x0200);
+    obj.view_margin = margin;
+    obj.camera_position = crate::actor::Position {
+        x: 0x0200,
+        y: 0x0100,
+    };
+    fire_slot(&mut obj, 0, 0x24, 0);
+    set_x(&mut obj.slots[0].b, (0x0200 + dx) as u16);
+    set_y(&mut obj.slots[0].b, 0x0100);
+    obj
+}
+
+#[test]
+fn an_enlarged_view_fire_hit_skips_slots_past_the_native_window() {
+    let mut obj = wide_fire_sim((112, 36), 0x100);
+    assert_eq!(obj.fire_hit(0x4A, 0x4A), FireHit::None);
+    assert_eq!(obj.slots[0].b[B_FLAGS], 0, "no defeat through the wrap");
+    let mut obj = wide_fire_sim((112, 36), 0x10);
+    assert_eq!(obj.fire_hit(0x4A, 0x4A), FireHit::Defeat);
+    assert_eq!(obj.slots[0].b[B_FLAGS], 0x02);
+    let mut obj = wide_fire_sim((0, 0), 0x100);
+    assert_eq!(
+        obj.fire_hit(0x4A, 0x4A),
+        FireHit::Defeat,
+        "native: ROM bytes"
+    );
+}
+
+/// A `$80` pose on the bonk tile of `below_bonk_marks_idle_objects_in_the_tile_window`
+/// with world X `dx` from a camera at (`$0200`, `$0100`).
+fn wide_bonk_sim(margin: (u16, u16), dx: i32) -> ObjectSim {
+    let mut obj = ObjectSim::new(Vec::new(), 0x0200);
+    obj.view_margin = margin;
+    obj.camera_position = crate::actor::Position {
+        x: 0x0200,
+        y: 0x0100,
+    };
+    let s = &mut obj.slots[0];
+    s.b[B_TYPE] = 0x80;
+    s.b[B_SCRY] = 0x97;
+    s.b[B_SCRX] = 0xF8;
+    set_x(&mut s.b, (0x0200 + dx) as u16);
+    set_y(&mut s.b, 0x0100);
+    obj
+}
+
+#[test]
+fn an_enlarged_view_below_bonk_skips_slots_past_the_native_window() {
+    let mut obj = wide_bonk_sim((112, 36), -0x100);
+    assert!(!obj.below_bonk(0xDF, 0x68, 0x31, 0x70));
+    assert_eq!(obj.slots[0].b[B_FLAGS], 0, "no bonk through the wrap");
+    let mut obj = wide_bonk_sim((112, 36), 0x10);
+    assert!(obj.below_bonk(0xDF, 0x68, 0x31, 0x70));
+    assert_eq!(obj.slots[0].b[B_FLAGS], 0x20);
+    let mut obj = wide_bonk_sim((0, 0), -0x100);
+    assert!(obj.below_bonk(0xDF, 0x68, 0x31, 0x70), "native: ROM bytes");
+    assert_eq!(obj.slots[0].b[B_FLAGS], 0x20);
+}
+
+/// A shell at world (100, 100) and a walker with matching screen bytes at
+/// world X `100 + dx`.
+fn wide_ko_sim(margin: (u16, u16), dx: i32) -> (ObjectSim, Staging) {
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(0);
+    obj.view_margin = margin;
+    let mut st = streamed(3, 0x5F, 0);
+    set_x(&mut st.b, 100);
+    set_y(&mut st.b, 100);
+    st.b[B_SCRY] = 96;
+    st.b[B_SCRX] = 96;
+    let s = &mut obj.slots[0];
+    s.b[B_STATE] = 2;
+    s.b[B_TYPE] = 0x4E;
+    s.b[B_SCRY] = 90;
+    s.b[B_SCRX] = 96;
+    s.b[B_HB_TOP] = 0;
+    s.b[B_HB_BOTTOM] = 0x10;
+    s.b[B_HB_LEFT] = 0;
+    s.b[B_HB_RIGHT] = 0x10;
+    set_x(&mut s.b, (100 + dx) as u16);
+    set_y(&mut s.b, 94);
+    (obj, st)
+}
+
+#[test]
+fn an_enlarged_view_shell_never_knocks_out_through_the_wrap() {
+    let (mut obj, st) = wide_ko_sim((112, 36), 0x100);
+    obj.ko_overlap(&st);
+    assert_eq!(obj.slots[0].b[B_FLAGS], 0, "256 px away: no KO");
+    assert_eq!(obj.object_hit_flag, 0);
+    let (mut obj, st) = wide_ko_sim((112, 36), 0);
+    obj.ko_overlap(&st);
+    assert_eq!(obj.slots[0].b[B_FLAGS], 0x02, "the overlap still hits");
+    let (mut obj, st) = wide_ko_sim((0, 0), 0x100);
+    obj.ko_overlap(&st);
+    assert_eq!(obj.slots[0].b[B_FLAGS], 0x02, "native: ROM bytes");
+}
