@@ -20,6 +20,7 @@ impl DesktopApp {
             Ok(scenery) => {
                 work.scenery = scenery;
                 work.load_error = None;
+                self.editor.canvas_cache.clear();
             }
             Err(error) => work.load_error = Some(error),
         }
@@ -45,7 +46,7 @@ impl DesktopApp {
         };
         let overlay: SceneryOverlay =
             serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
-        SceneryOverlay::try_from_paints(overlay.paints, count)
+        SceneryOverlay::try_from_paints(overlay.paints(), count)
             .map_err(|e| format!("{}: {e}", path.display()))
     }
 

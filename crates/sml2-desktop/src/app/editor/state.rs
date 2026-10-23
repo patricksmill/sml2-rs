@@ -107,6 +107,7 @@ pub(super) struct Workspace {
     pub tool: Tool,
     pub grid: bool,
     pub scenery: SceneryOverlay,
+    pub chunk_versions: BTreeMap<Cell, u64>,
     pub layout: LevelLayout,
     pub used: Vec<u8>,
     pub count: usize,
@@ -135,6 +136,7 @@ impl Workspace {
             tool: Tool::Brush,
             grid: true,
             scenery: SceneryOverlay::empty(),
+            chunk_versions: BTreeMap::new(),
             layout,
             used,
             count,
@@ -164,14 +166,24 @@ impl Workspace {
     }
 
     fn put(&mut self, cell: Cell, value: Option<u8>) {
-        self.scenery.erase(cell.0, cell.1);
         if let Some(metatile) = value {
-            self.scenery.paints.push(SceneryPaint {
-                x: cell.0,
-                y: cell.1,
-                metatile,
-            });
+            self.scenery
+                .set(
+                    SceneryPaint {
+                        x: cell.0,
+                        y: cell.1,
+                        metatile,
+                    },
+                    self.count,
+                )
+                .expect("validated authoring tile");
+        } else {
+            self.scenery.erase(cell.0, cell.1);
         }
+        *self
+            .chunk_versions
+            .entry((cell.0.div_euclid(16), cell.1.div_euclid(16)))
+            .or_default() += 1;
     }
 
     pub fn begin(&mut self, cell: Cell, erase: bool) {

@@ -47,9 +47,9 @@ fn fast_strokes_interpolate_and_undo_as_one_gesture() {
         assert_eq!(work.sample((x, 24)), Some(1));
     }
     work.undo();
-    assert!(work.scenery.paints.is_empty());
+    assert!(work.scenery.is_empty());
     work.redo();
-    assert_eq!(work.scenery.paints.len(), 10);
+    assert_eq!(work.scenery.len(), 10);
 }
 
 #[test]
@@ -59,7 +59,7 @@ fn rectangle_paints_inside_the_map_without_changing_terrain() {
     work.begin((-2, 0), false);
     work.extend(Some((2, 1)));
     assert!(
-        work.scenery.paints.is_empty(),
+        work.scenery.is_empty(),
         "rectangle is a preview until release"
     );
     work.cancel();
@@ -67,7 +67,7 @@ fn rectangle_paints_inside_the_map_without_changing_terrain() {
     work.begin((-2, 0), false);
     work.extend(Some((2, 1)));
     work.finish();
-    assert_eq!(work.scenery.paints.len(), 10);
+    assert_eq!(work.scenery.len(), 10);
     assert_eq!(work.sample((0, 0)), Some(1));
     assert_eq!(work.layout.cells, vec![0; LAYOUT_SIZE]);
     work.begin((-1, 0), true);
@@ -75,7 +75,7 @@ fn rectangle_paints_inside_the_map_without_changing_terrain() {
     work.cancel();
     assert_eq!(work.sample((-1, 0)), Some(1));
     work.undo();
-    assert!(work.scenery.paints.is_empty());
+    assert!(work.scenery.is_empty());
 }
 
 #[test]
@@ -95,7 +95,7 @@ fn eyedropper_and_eraser_handle_blank_and_protected_cells() {
     work.begin((-1, 0), false);
     work.extend(Some((5, 0)));
     work.finish();
-    assert!(work.scenery.paints.is_empty());
+    assert!(work.scenery.is_empty());
     assert_eq!(work.layout.cells, vec![0; LAYOUT_SIZE]);
     work.undo();
     assert_eq!(work.sample((-1, 0)), Some(1));
@@ -131,7 +131,7 @@ fn history_retains_the_latest_hundred_gestures() {
     for _ in 0..110 {
         work.undo();
     }
-    assert_eq!(work.scenery.paints.len(), 10);
+    assert_eq!(work.scenery.len(), 10);
     for y in 0..10 {
         assert_eq!(work.sample((-1, y)), Some(1));
     }

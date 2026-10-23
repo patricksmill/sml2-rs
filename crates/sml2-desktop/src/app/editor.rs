@@ -18,6 +18,7 @@ pub(super) struct Editor {
     work: Option<Workspace>,
     levels: BTreeMap<u8, Workspace>,
     atlas: Option<palette::Atlas>,
+    canvas_cache: canvas::CanvasCache,
     all_tiles: bool,
     pub playtesting: bool,
     canvas_rect: Option<Rect>,
@@ -77,6 +78,7 @@ impl DesktopApp {
             self.load_editor_level();
         }
         self.editor.atlas = None;
+        self.editor.canvas_cache.clear();
         self.editor.hover = None;
     }
 
@@ -157,7 +159,13 @@ impl DesktopApp {
                 });
             self.editor.canvas(ui);
         });
+        let saving = self.editor.work.as_ref().is_some_and(|w| {
+            w.dirty && w.gesture.is_none() && w.load_error.is_none() && w.save_error.is_none()
+        });
         self.save_scenery();
+        if saving {
+            ctx.request_repaint();
+        }
     }
 
     fn editor_tools(&mut self, ctx: &Context, ui: &mut Ui) {
@@ -272,7 +280,7 @@ impl DesktopApp {
         }
         ui.horizontal_wrapped(|ui| {
             ui.strong(if work.dirty { "Saving…" } else { "Saved" });
-            ui.label(format!("· {} scenery tiles", work.scenery.paints.len()));
+            ui.label(format!("· {} scenery tiles", work.scenery.len()));
             if let Some(cell) = self.editor.hover {
                 ui.label(format!(
                     "· {}, {} · {}",

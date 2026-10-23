@@ -103,7 +103,7 @@ fn pointer_drag_saves_on_release_and_command_keys_undo_after_button_focus() {
         ],
     );
     frame(&mut app, &ctx, size, vec![Event::PointerMoved(end)]);
-    assert_eq!(app.editor.work.as_ref().unwrap().scenery.paints.len(), 6);
+    assert_eq!(app.editor.work.as_ref().unwrap().scenery.len(), 6);
     assert!(!path.join("scenery-00.json").exists());
     frame(
         &mut app,
@@ -113,7 +113,7 @@ fn pointer_drag_saves_on_release_and_command_keys_undo_after_button_focus() {
     );
     let saved = std::fs::read(path.join("scenery-00.json")).unwrap();
     let overlay: sml2_core::scenery::SceneryOverlay = serde_json::from_slice(&saved).unwrap();
-    assert_eq!(overlay.paints.len(), 6);
+    assert_eq!(overlay.len(), 6);
     // A focused button must not disable editor shortcuts.
     ctx.memory_mut(|memory| memory.request_focus(egui::Id::new("tool-button")));
     frame(
@@ -122,7 +122,7 @@ fn pointer_drag_saves_on_release_and_command_keys_undo_after_button_focus() {
         size,
         vec![key(Key::Z, Modifiers::CTRL | Modifiers::COMMAND)],
     );
-    assert!(app.editor.work.as_ref().unwrap().scenery.paints.is_empty());
+    assert!(app.editor.work.as_ref().unwrap().scenery.is_empty());
     frame(
         &mut app,
         &ctx,
@@ -144,7 +144,7 @@ fn pointer_drag_saves_on_release_and_command_keys_undo_after_button_focus() {
             Modifiers::CTRL | Modifiers::COMMAND | Modifiers::SHIFT,
         )],
     );
-    assert_eq!(app.editor.work.as_ref().unwrap().scenery.paints.len(), 6);
+    assert_eq!(app.editor.work.as_ref().unwrap().scenery.len(), 6);
     std::fs::remove_dir_all(path).ok();
 }
 
@@ -208,7 +208,7 @@ fn rectangle_escape_cancels_without_leaving_and_right_drag_temporarily_erases() 
         size,
         vec![pointer(end, PointerButton::Secondary, false)],
     );
-    assert!(app.editor.work.as_ref().unwrap().scenery.paints.is_empty());
+    assert!(app.editor.work.as_ref().unwrap().scenery.is_empty());
     assert_eq!(app.editor.work.as_ref().unwrap().tool, Tool::Rectangle);
     std::fs::remove_dir_all(path).ok();
 }
@@ -297,7 +297,7 @@ fn wheel_and_space_pan_do_not_paint_or_change_gameplay_zoom() {
             key(Key::Plus, Modifiers::NONE),
         ],
     );
-    assert!(app.editor.work.as_ref().unwrap().scenery.paints.is_empty());
+    assert!(app.editor.work.as_ref().unwrap().scenery.is_empty());
     assert_eq!(app.settings.view(), view);
     assert_eq!(app.settings.zoom, window_zoom);
     assert_eq!(app.editor.work.as_ref().unwrap().viewport.zoom, 4);
@@ -369,6 +369,45 @@ fn shortcut_events_are_consumed_once_even_when_the_frame_needs_another_pass() {
         app.ui(ctx);
         ctx.request_discard("test an egui sizing pass");
     });
-    assert_eq!(app.editor.work.as_ref().unwrap().scenery.paints.len(), 1);
+    assert_eq!(app.editor.work.as_ref().unwrap().scenery.len(), 1);
+    std::fs::remove_dir_all(path).ok();
+}
+
+#[test]
+fn idle_editor_reuses_chunks_and_skips_hidden_game_uploads() {
+    let (mut app, ctx, path) = app();
+    app.open_editor(&ctx);
+    let size = (800.0, 720.0);
+    frame(&mut app, &ctx, size, vec![]);
+    frame(&mut app, &ctx, size, vec![]);
+    for _ in 0..30 {
+        frame(&mut app, &ctx, size, vec![]);
+    }
+    let builds = app.editor.canvas_cache.builds;
+    let game_texture = app.texture.id();
+    let idle = frame(&mut app, &ctx, size, vec![]);
+    assert_eq!(app.editor.canvas_cache.builds, builds);
+    assert!(idle
+        .textures_delta
+        .set
+        .iter()
+        .all(|(id, _)| *id != game_texture));
+    assert!(
+        idle.viewport_output[&egui::ViewportId::ROOT].repaint_delay
+            > std::time::Duration::from_millis(8)
+    );
+    let work = app.editor.work.as_mut().unwrap();
+    let cell = (
+        (work.viewport.center.x / 16.0) as i16,
+        (work.viewport.center.y / 16.0) as i16,
+    );
+    work.metatile = 1;
+    work.begin(cell, false);
+    frame(&mut app, &ctx, size, vec![]);
+    assert_eq!(app.editor.canvas_cache.builds, builds + 1);
+    app.editor.work.as_mut().unwrap().finish();
+    app.editor.work.as_mut().unwrap().undo();
+    frame(&mut app, &ctx, size, vec![]);
+    assert_eq!(app.editor.canvas_cache.builds, builds + 2);
     std::fs::remove_dir_all(path).ok();
 }

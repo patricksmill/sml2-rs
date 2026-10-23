@@ -1,10 +1,10 @@
-//! Render-only scenery, independent of the playable level layout and collision.
-
+//! Indexed render-only scenery; JSON remains a sparse list of paints.
+use crate::level::{LAYOUT_HEIGHT, LAYOUT_WIDTH};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::BTreeMap;
+const EMPTY: u16 = 256;
+const SIDE: usize = 16;
 
-/// One visual metatile overlay. Cell coordinates are in layout cells
-/// and may be negative or past the 256×48 map.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SceneryPaint {
     pub x: i16,
@@ -12,72 +12,210 @@ pub struct SceneryPaint {
     pub metatile: u8,
 }
 
-/// Sparse paints for one level. Empty for every level loaded from the ROM.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SceneryOverlay {
-    pub paints: Vec<SceneryPaint>,
+#[derive(Debug, Clone)]
+struct Chunk {
+    cells: Box<[u16; 256]>,
+    used: usize,
 }
 
+/// Lazily allocated 24 KiB map grid plus sparse 16×16 chunks outside it.
+/// All mutations pass through set/erase so the index cannot become stale.
+#[derive(Debug, Clone, Default)]
+pub struct SceneryOverlay {
+    dense: Option<Box<[u16]>>,
+    chunks: BTreeMap<(i16, i16), Chunk>,
+    len: usize,
+}
+#[derive(Serialize, Deserialize)]
+struct SceneryData {
+    paints: Vec<SceneryPaint>,
+}
+impl Serialize for SceneryOverlay {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        SceneryData {
+            paints: self.paints(),
+        }
+        .serialize(serializer)
+    }
+}
+impl<'de> Deserialize<'de> for SceneryOverlay {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let data = SceneryData::deserialize(deserializer)?;
+        Self::try_from_paints(data.paints, 256).map_err(serde::de::Error::custom)
+    }
+}
+impl PartialEq for SceneryOverlay {
+    fn eq(&self, other: &Self) -> bool {
+        self.len == other.len
+            && self
+                .paints()
+                .iter()
+                .all(|p| other.get(p.x.into(), p.y.into()) == Some(p.metatile))
+    }
+}
+impl Eq for SceneryOverlay {}
 impl SceneryOverlay {
     pub fn empty() -> Self {
-        Self { paints: Vec::new() }
+        Self::default()
     }
-
-    /// Rejects a metatile the level does not have, and a second paint on the
-    /// same cell. The message names the cell. Cells past the 256×48 layout
-    /// are the ones an enlarged view can show beyond the level.
-    pub fn try_from_paints(
-        paints: Vec<SceneryPaint>,
-        metatile_count: usize,
-    ) -> Result<Self, String> {
-        let mut seen = HashSet::new();
-        for paint in &paints {
-            if usize::from(paint.metatile) >= metatile_count {
-                return Err(format!(
-                    "scenery paint ({}, {}) metatile {} is not in the level",
-                    paint.x, paint.y, paint.metatile
-                ));
+    pub fn len(&self) -> usize {
+        self.len
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+    pub fn try_from_paints(paints: Vec<SceneryPaint>, count: usize) -> Result<Self, String> {
+        let mut result = Self::empty();
+        for p in paints {
+            if result.get(p.x.into(), p.y.into()).is_some() {
+                return Err(format!("scenery paint ({}, {}) is duplicated", p.x, p.y));
             }
-            if !seen.insert((paint.x, paint.y)) {
-                return Err(format!(
-                    "scenery paint ({}, {}) is duplicated",
-                    paint.x, paint.y
-                ));
-            }
+            result.set(p, count)?;
         }
-        Ok(Self { paints })
+        Ok(result)
     }
-
-    /// Replace the paint on this cell. A bad cell or metatile leaves the
-    /// overlay unchanged.
-    pub fn set(&mut self, paint: SceneryPaint, metatile_count: usize) -> Result<(), String> {
-        let mut paints: Vec<_> = self
-            .paints
-            .iter()
-            .copied()
-            .filter(|p| (p.x, p.y) != (paint.x, paint.y))
-            .collect();
-        paints.push(paint);
-        *self = Self::try_from_paints(paints, metatile_count)?;
+    fn inside(x: i32, y: i32) -> bool {
+        (0..LAYOUT_WIDTH as i32).contains(&x) && (0..LAYOUT_HEIGHT as i32).contains(&y)
+    }
+    pub fn get(&self, x: i32, y: i32) -> Option<u8> {
+        let value = if Self::inside(x, y) {
+            *self
+                .dense
+                .as_ref()?
+                .get(y as usize * LAYOUT_WIDTH + x as usize)?
+        } else {
+            let (x, y) = (i16::try_from(x).ok()?, i16::try_from(y).ok()?);
+            let chunk = self.chunks.get(&(x.div_euclid(16), y.div_euclid(16)))?;
+            chunk.cells[y.rem_euclid(16) as usize * SIDE + x.rem_euclid(16) as usize]
+        };
+        (value != EMPTY).then_some(value as u8)
+    }
+    pub fn set(&mut self, p: SceneryPaint, count: usize) -> Result<(), String> {
+        if p.metatile as usize >= count {
+            return Err(format!(
+                "scenery paint ({}, {}) metatile {} is not in the level",
+                p.x, p.y, p.metatile
+            ));
+        }
+        let value = if Self::inside(p.x.into(), p.y.into()) {
+            let cells = self.dense.get_or_insert_with(|| {
+                vec![EMPTY; LAYOUT_WIDTH * LAYOUT_HEIGHT].into_boxed_slice()
+            });
+            &mut cells[p.y as usize * LAYOUT_WIDTH + p.x as usize]
+        } else {
+            let chunk = self
+                .chunks
+                .entry((p.x.div_euclid(16), p.y.div_euclid(16)))
+                .or_insert_with(|| Chunk {
+                    cells: Box::new([EMPTY; 256]),
+                    used: 0,
+                });
+            let cell =
+                &mut chunk.cells[p.y.rem_euclid(16) as usize * SIDE + p.x.rem_euclid(16) as usize];
+            if *cell == EMPTY {
+                chunk.used += 1;
+            }
+            cell
+        };
+        if *value == EMPTY {
+            self.len += 1;
+        }
+        *value = p.metatile.into();
         Ok(())
     }
-
     pub fn erase(&mut self, x: i16, y: i16) {
-        self.paints.retain(|p| (p.x, p.y) != (x, y));
+        let removed = if Self::inside(x.into(), y.into()) {
+            if let Some(cells) = &mut self.dense {
+                std::mem::replace(&mut cells[y as usize * LAYOUT_WIDTH + x as usize], EMPTY)
+                    != EMPTY
+            } else {
+                false
+            }
+        } else {
+            let key = (x.div_euclid(16), y.div_euclid(16));
+            if let Some(chunk) = self.chunks.get_mut(&key) {
+                let removed = std::mem::replace(
+                    &mut chunk.cells[y.rem_euclid(16) as usize * SIDE + x.rem_euclid(16) as usize],
+                    EMPTY,
+                ) != EMPTY;
+                if removed {
+                    chunk.used -= 1;
+                }
+                if chunk.used == 0 {
+                    self.chunks.remove(&key);
+                }
+                removed
+            } else {
+                false
+            }
+        };
+        if removed {
+            self.len -= 1;
+        }
+        if self.len == 0 {
+            self.dense = None;
+        }
     }
-
-    /// The metatile painted at layout cell `(x, y)`, which may lie past the map.
-    pub fn get(&self, x: i32, y: i32) -> Option<u8> {
-        self.paints
-            .iter()
-            .find(|p| i32::from(p.x) == x && i32::from(p.y) == y)
-            .map(|p| p.metatile)
+    /// Materialize a deterministic sparse snapshot for IO, never for rendering.
+    pub fn paints(&self) -> Vec<SceneryPaint> {
+        let mut paints = Vec::with_capacity(self.len);
+        if let Some(cells) = &self.dense {
+            for (i, &value) in cells.iter().enumerate() {
+                if value != EMPTY {
+                    paints.push(SceneryPaint {
+                        x: (i % LAYOUT_WIDTH) as i16,
+                        y: (i / LAYOUT_WIDTH) as i16,
+                        metatile: value as u8,
+                    });
+                }
+            }
+        }
+        for (&(cx, cy), chunk) in &self.chunks {
+            for (i, &value) in chunk.cells.iter().enumerate() {
+                if value != EMPTY {
+                    paints.push(SceneryPaint {
+                        x: cx * 16 + (i % 16) as i16,
+                        y: cy * 16 + (i / 16) as i16,
+                        metatile: value as u8,
+                    });
+                }
+            }
+        }
+        paints
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn indexed_edits_match_sparse_reference_across_chunk_edges_and_signed_extremes() {
+        let mut overlay = SceneryOverlay::empty();
+        let mut reference = BTreeMap::new();
+        for y in [i16::MIN, -17, -16, -1, 0, 47, 48, i16::MAX] {
+            for x in [i16::MIN, -17, -16, -1, 0, 255, 256, i16::MAX] {
+                for metatile in [0, 255, 7] {
+                    overlay.set(SceneryPaint { x, y, metatile }, 256).unwrap();
+                    reference.insert((x, y), metatile);
+                    assert_eq!(overlay.get(x.into(), y.into()), Some(metatile));
+                    assert_eq!(overlay.len(), reference.len());
+                }
+            }
+        }
+        let json = serde_json::to_string(&overlay).unwrap();
+        let restored: SceneryOverlay = serde_json::from_str(&json).unwrap();
+        assert_eq!(overlay, restored);
+        for (&(x, y), &id) in &reference {
+            assert_eq!(restored.get(x.into(), y.into()), Some(id));
+            overlay.erase(x, y);
+            overlay.erase(x, y);
+        }
+        assert!(overlay.is_empty());
+        assert!(overlay.dense.is_none());
+        assert!(overlay.chunks.is_empty());
+        assert_eq!(overlay.get(i32::MAX, 0), None);
+    }
 
     #[test]
     fn accepts_a_cell_past_the_layout_and_rejects_a_bad_metatile_or_duplicate() {

@@ -349,9 +349,11 @@ impl DesktopApp {
         } else {
             Smooth::OFF
         };
-        if let Some(image) = self.frame_image(smooth) {
-            self.texture.set(image.clone(), TextureOptions::NEAREST);
-            submitted_frame = Some(image);
+        if self.screen == Screen::Game {
+            if let Some(image) = self.frame_image(smooth) {
+                self.texture.set(image.clone(), TextureOptions::NEAREST);
+                submitted_frame = Some(image);
+            }
         }
         if !self.settings.fullscreen && ctx.input(|i| i.viewport().maximized != Some(true)) {
             let size = ctx.input(|i| {
@@ -383,7 +385,9 @@ impl DesktopApp {
         }
         if self.settings.motion_smoothing && running {
             ctx.request_repaint();
-        } else {
+        } else if self.screen == Screen::Editor && self.dx_worker.is_some() {
+            ctx.request_repaint_after(Duration::from_millis(50));
+        } else if self.screen != Screen::Editor {
             ctx.request_repaint_after(Duration::from_millis(8));
         }
     }

@@ -114,10 +114,10 @@ fn level_switches_preserve_view_tool_selection_and_both_history_stacks() {
     assert_eq!(work.tool, Tool::Rectangle);
     assert!(work.can_undo() && work.can_redo());
     work.redo();
-    assert_eq!(work.scenery.paints.len(), 2);
+    assert_eq!(work.scenery.len(), 2);
     app.navigate(&ctx, Screen::Home);
     assert!(!app.editor.work.as_ref().unwrap().dirty);
     app.open_editor(&ctx);
-    assert_eq!(app.editor.work.as_ref().unwrap().scenery.paints.len(), 2);
+    assert_eq!(app.editor.work.as_ref().unwrap().scenery.len(), 2);
     std::fs::remove_dir_all(path).ok();
 }

@@ -276,9 +276,11 @@ pub fn render_view_output_smooth(
     }
     if let Some(scenery) = scenery.filter(|_| spr.and_then(|s| s.pipe_background).is_none()) {
         let pan = spr.map_or(0, |s| s.scroll_pan as i32);
+        let scenery_window =
+            margin::SceneryWindow::new((vw, vh), (cam_x, cam_y), pan, border, scenery);
         for py in -border..vh as i32 + border {
             for px in -border..vw as i32 + border {
-                match margin::margin_sample((vw, vh), px, py, (cam_x, cam_y), pan, scenery) {
+                match scenery_window.sample(px, py) {
                     margin::MarginSample::Native => {}
                     margin::MarginSample::Blank => {
                         *layers.bg_mut(px, py) = NativeBg {

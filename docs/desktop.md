@@ -212,6 +212,24 @@ lock editing instead of being replaced; repair the file and choose **Reload
 file**. The existing scenery JSON format remains compatible. History and
 viewport settings are kept only until the app exits.
 
+Scenery uses a lazily allocated 24 KiB grid for map cells and sparse 16×16
+chunks outside the map. JSON files retain the same `paints` list. The Rust
+overlay keeps its index private; use `set`, `erase`, `get`, `len`, and
+`is_empty`, or `paints()` to materialize a snapshot for IO. Rendering resolves
+scenery once per visible metatile. The editor caches visible chunk meshes,
+invalidates edited chunks, and skips hidden gameplay rendering. Idle editor
+repaints are driven by input, save status changes, and active import jobs.
+
+To measure CPU rendering with 0, 256, 2,048, and 8,192 painted cells using
+the existing extracted assets:
+
+```sh
+cargo run --release -p sml2-runtime --example scenery_bench
+```
+
+This reports the median of seven renders at native and enlarged sizes. It
+excludes simulation, audio, and GPU presentation; it is not a hardware FPS test.
+
 ## Validation
 
 Automated tests cover settings persistence/recovery, key/controller input,

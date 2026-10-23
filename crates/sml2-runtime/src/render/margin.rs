@@ -19,34 +19,84 @@ pub(crate) enum MarginSample {
     Paint { metatile: u8, tx: usize, ty: usize },
 }
 
-pub(crate) fn margin_sample(
+/// Resolve sparse lookups once per visible metatile, shared by both renderers.
+pub(crate) struct SceneryWindow {
+    view: (usize, usize),
+    origin: (i32, i32),
+    first: (i32, i32),
+    width: usize,
+    paints: Vec<Option<u8>>,
+}
+impl SceneryWindow {
+    pub fn new(
+        view: (usize, usize),
+        cam: (u16, u16),
+        pan: i32,
+        border: i32,
+        overlay: &SceneryOverlay,
+    ) -> Self {
+        let origin = (
+            cam.0 as i32 - view.0 as i32 / 2,
+            cam.1 as i32 - view.1 as i32 / 2 - view::level_bias(view) - pan,
+        );
+        let first = (
+            (origin.0 - border).div_euclid(16),
+            (origin.1 - border).div_euclid(16),
+        );
+        let last = (
+            (origin.0 + view.0 as i32 + border - 1).div_euclid(16),
+            (origin.1 + view.1 as i32 + border - 1).div_euclid(16),
+        );
+        let width = (last.0 - first.0 + 1) as usize;
+        let mut paints = Vec::with_capacity(width * (last.1 - first.1 + 1) as usize);
+        for y in first.1..=last.1 {
+            for x in first.0..=last.0 {
+                paints.push(overlay.get(x, y));
+            }
+        }
+        Self {
+            view,
+            origin,
+            first,
+            width,
+            paints,
+        }
+    }
+    pub fn sample(&self, px: i32, py: i32) -> MarginSample {
+        let (world_x, world_y) = (self.origin.0 + px, self.origin.1 + py);
+        let (cx, cy) = (world_x.div_euclid(16), world_y.div_euclid(16));
+        let paint =
+            self.paints[(cy - self.first.1) as usize * self.width + (cx - self.first.0) as usize];
+        let view = self.view;
+        if let Some(metatile) = paint {
+            return MarginSample::Paint {
+                metatile,
+                tx: world_x.rem_euclid(16) as usize,
+                ty: world_y.rem_euclid(16) as usize,
+            };
+        }
+        if !view::enlarged(view) {
+            return MarginSample::Native;
+        }
+        if (0..LAYOUT_WIDTH as i32).contains(&cx) && (0..LAYOUT_HEIGHT as i32).contains(&cy) {
+            return MarginSample::Level {
+                wx: world_x,
+                wy: world_y,
+            };
+        }
+        MarginSample::Blank
+    }
+}
+#[cfg(test)]
+fn margin_sample(
     view: (usize, usize),
     px: i32,
     py: i32,
     cam: (u16, u16),
-    scroll_pan: i32,
+    pan: i32,
     overlay: &SceneryOverlay,
 ) -> MarginSample {
-    let world_x = cam.0 as i32 - view.0 as i32 / 2 + px;
-    let world_y = cam.1 as i32 - view.1 as i32 / 2 - view::level_bias(view) - scroll_pan + py;
-    let (cx, cy) = (world_x.div_euclid(16), world_y.div_euclid(16));
-    if let Some(metatile) = overlay.get(cx, cy) {
-        return MarginSample::Paint {
-            metatile,
-            tx: world_x.rem_euclid(16) as usize,
-            ty: world_y.rem_euclid(16) as usize,
-        };
-    }
-    if !view::enlarged(view) {
-        return MarginSample::Native;
-    }
-    if (0..LAYOUT_WIDTH as i32).contains(&cx) && (0..LAYOUT_HEIGHT as i32).contains(&cy) {
-        return MarginSample::Level {
-            wx: world_x,
-            wy: world_y,
-        };
-    }
-    MarginSample::Blank
+    SceneryWindow::new(view, cam, pan, 0, overlay).sample(px, py)
 }
 
 /// Signed layout cell under a view pixel. Scenery can cover cells both inside

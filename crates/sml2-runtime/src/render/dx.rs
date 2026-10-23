@@ -595,20 +595,15 @@ fn render(
         }
     }
     let pan = ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
+    let scenery_window =
+        super::margin::SceneryWindow::new(view, (ctx.cam.x, ctx.cam.y), pan, border, &ctx.scenery);
     let past_level = ctx.spr.as_ref().and_then(|s| s.pipe_background).is_none();
     for py in -border..vh as i32 + border {
         if !past_level {
             break;
         }
         for px in -border..vw as i32 + border {
-            match super::margin::margin_sample(
-                view,
-                px,
-                py,
-                (ctx.cam.x, ctx.cam.y),
-                pan,
-                &ctx.scenery,
-            ) {
+            match scenery_window.sample(px, py) {
                 super::margin::MarginSample::Native => {}
                 super::margin::MarginSample::Blank => {
                     *layers.bg_mut(px, py) = blank;

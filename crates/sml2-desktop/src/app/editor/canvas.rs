@@ -5,7 +5,20 @@ use super::Editor;
 use crate::app::theme;
 use eframe::egui::{self, Color32, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind, Ui};
 use sml2_core::level::{LAYOUT_HEIGHT, LAYOUT_WIDTH};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
+
+#[derive(Default)]
+pub(super) struct CanvasCache {
+    chunks: HashMap<Cell, (u64, Arc<egui::Mesh>)>,
+    texture: Option<egui::TextureId>,
+    #[cfg(test)]
+    pub builds: usize,
+}
+impl CanvasCache {
+    pub fn clear(&mut self) {
+        self.chunks.clear();
+    }
+}
 
 impl Editor {
     pub(super) fn canvas(&mut self, ui: &mut Ui) {
@@ -125,7 +138,7 @@ impl Editor {
         self.paint_canvas(ui, rect);
     }
 
-    fn paint_canvas(&self, ui: &Ui, rect: Rect) {
+    fn paint_canvas(&mut self, ui: &Ui, rect: Rect) {
         let Some(work) = &self.work else {
             return;
         };
@@ -149,12 +162,6 @@ impl Editor {
             ((hi.x / 16.0).floor() as i32).min(i16::MAX as i32),
             ((hi.y / 16.0).floor() as i32).min(i16::MAX as i32),
         );
-        let paints: HashMap<_, _> = work
-            .scenery
-            .paints
-            .iter()
-            .map(|p| ((p.x, p.y), p.metatile))
-            .collect();
         let draw_tile = |id, at, tint| {
             if let Some(atlas) = &self.atlas {
                 if usize::from(id) < work.count {
@@ -162,24 +169,67 @@ impl Editor {
                 }
             }
         };
-        for y in bounds.1..=bounds.3 {
-            for x in bounds.0..=bounds.2 {
-                let cell = (x as i16, y as i16);
-                let at = cell_rect(cell);
-                let id = paints.get(&cell).copied().or_else(|| {
-                    if outside_map(cell) {
-                        None
-                    } else {
-                        self.atlas
-                            .as_ref()
-                            .and_then(|a| a.layout.get(y as usize * LAYOUT_WIDTH + x as usize))
-                            .copied()
+        if let Some(atlas) = &self.atlas {
+            let cache = &mut self.canvas_cache;
+            if cache.texture != Some(atlas.texture.id()) {
+                cache.clear();
+                cache.texture = Some(atlas.texture.id());
+            }
+            let (left, top, right, bottom) = (
+                bounds.0.div_euclid(16),
+                bounds.1.div_euclid(16),
+                bounds.2.div_euclid(16),
+                bounds.3.div_euclid(16),
+            );
+            cache.chunks.retain(|&(x, y), _| {
+                (left - 1..=right + 1).contains(&(x as i32))
+                    && (top - 1..=bottom + 1).contains(&(y as i32))
+            });
+            for cy in top..=bottom {
+                for cx in left..=right {
+                    let key = (cx as i16, cy as i16);
+                    let version = work.chunk_versions.get(&key).copied().unwrap_or(0);
+                    if !cache.chunks.get(&key).is_some_and(|(v, _)| *v == version) {
+                        let mut mesh = egui::Mesh::with_texture(atlas.texture.id());
+                        for dy in 0..16 {
+                            for dx in 0..16 {
+                                let (x, y) = (cx * 16 + dx, cy * 16 + dy);
+                                let cell = (x as i16, y as i16);
+                                let id = work.paint(cell).or_else(|| {
+                                    if outside_map(cell) {
+                                        None
+                                    } else {
+                                        atlas
+                                            .layout
+                                            .get(y as usize * LAYOUT_WIDTH + x as usize)
+                                            .copied()
+                                    }
+                                });
+                                if let Some(id) = id.filter(|&id| (id as usize) < work.count) {
+                                    mesh.add_rect_with_uv(
+                                        Rect::from_min_size(
+                                            egui::pos2(x as f32 * 16.0, y as f32 * 16.0),
+                                            egui::vec2(16.0, 16.0),
+                                        ),
+                                        atlas.uv(id),
+                                        Color32::WHITE,
+                                    );
+                                }
+                            }
+                        }
+                        cache.chunks.insert(key, (version, Arc::new(mesh)));
+                        #[cfg(test)]
+                        {
+                            cache.builds += 1;
+                        }
                     }
-                });
-                if let Some(id) = id {
-                    draw_tile(id, at, Color32::WHITE);
-                } else if (x + y).rem_euclid(2) == 0 {
-                    painter.rect_filled(at, 0.0, Color32::from_white_alpha(8));
+                    let mut mesh = (*cache.chunks[&key].1).clone();
+                    mesh.transform(egui::emath::TSTransform {
+                        scaling: f32::from(view.zoom),
+                        translation: rect.center().to_vec2()
+                            - view.center.to_vec2() * f32::from(view.zoom),
+                    });
+                    painter.add(egui::Shape::mesh(mesh));
                 }
             }
         }
