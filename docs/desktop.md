@@ -129,7 +129,10 @@ Zoomed-out levels place three quarters of the additional height above the origin
 view and one quarter below it, reducing the space shown beneath the level.
 The gameplay camera is unchanged; terrain, sprites, overlays and object visibility
 windows share the upward view bias. Native zoom and overworld/menu framing keep
-their existing positions. Enlarged level views
+their existing positions. On the overworld hub, navigation and camera-pan mode
+both show the expanded map, clamped to its 512x512 bounds; pan arrows stay at
+the view edges. Views larger than the hub show the whole map with bars. Zone
+screens retain their authored 256x144 extent. Enlarged level views
 spawn and update objects across the wider window, so gameplay differs from the
 original (attract demos keep native spawning); the status bar sits bottom
 centre, and fixed screens are letterboxed. Output scaling uses integer **physical** pixels,

@@ -169,11 +169,11 @@ fn a_hub_view_wider_than_the_map_is_letterboxed() {
         panic!("boots to map")
     };
     map.load_screen(0, 0, &session.assets.node_records);
-    let native = session.render_frame(NATIVE);
+    let full = session.render_frame((512, 144));
     let view = (600, 144);
     let wide = session.render_frame(view);
     assert_eq!(wide.len(), 600 * 144);
-    assert_eq!(crop(&wide, view, (220, 0, 160, 144)), native);
+    assert_eq!(crop(&wide, view, (44, 0, 512, 144)), full);
 }
 
 #[test]

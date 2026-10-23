@@ -1,6 +1,9 @@
 //! Read-only session presentation: rendering never writes simulation state
 //! (the session's view feeds only the live level's spawn margin).
 
+#[path = "hub.rs"]
+mod hub;
+
 use super::motion::{Offsets, Smooth};
 use super::render_view_output_smooth;
 use super::view;
@@ -322,8 +325,8 @@ impl Session {
 
     /// The overworld in any view. The hub is stitched from native frames
     /// (its sprites are 8-bit OAM positions relative to each frame's camera)
-    /// while the view fits inside it; a zone screen is drawn whole; rooms,
-    /// the pan mode and views larger than the hub stay native.
+    /// during navigation and panning. Oversized views show the whole hub;
+    /// zone screens show their authored area, and rooms stay native.
     pub(crate) fn overworld_view<P: Copy>(
         &self,
         map_sim: &sml2_core::map_sim::MapSim,
@@ -336,8 +339,10 @@ impl Session {
             return render(map_sim, view);
         }
         match map_sim.screen_id {
-            0 if map_sim.scroll_only_latch == 0 && view.0 <= 512 && view.1 <= 512 => {
-                self.stitched_hub(map_sim, view, fill, render)
+            0 => {
+                let size = (view.0.min(512), view.1.min(512));
+                let pixels = self.stitched_hub(map_sim, size, fill, render)?;
+                Ok(letterbox(&pixels, size, view, fill))
             }
             1..=8 => {
                 let size = (view.0.min(256), 144);
@@ -345,69 +350,6 @@ impl Session {
             }
             _ => Ok(letterbox(&render(map_sim, NATIVE)?, NATIVE, view, fill)),
         }
-    }
-
-    fn stitched_hub<P: Copy>(
-        &self,
-        map_sim: &sml2_core::map_sim::MapSim,
-        view: (usize, usize),
-        fill: P,
-        mut render: impl FnMut(&sml2_core::map_sim::MapSim, (usize, usize)) -> Result<Vec<P>, String>,
-    ) -> Result<Vec<P>, String> {
-        use super::view::{copy_rect, NATIVE};
-        const HUB: i32 = 512;
-        // Rows above `$3F203`'s status-bar strip; each native frame's own strip is dropped.
-        const ROWS: usize = 136;
-        // OAM Y $F0 (and the +8 rows and walk shift, which wrap to 0) all land
-        // above or below the frame, so the cursor draws nothing.
-        const HIDDEN_CURSOR_Y: u8 = 0xF0;
-        let (vw, vh) = view;
-        let ox = (i32::from(map_sim.cam_x) + 80 - vw as i32 / 2).clamp(0, HUB - vw as i32);
-        let oy = (i32::from(map_sim.cam_y) + 72 - vh as i32 / 2).clamp(0, HUB - vh as i32);
-        let mut out = vec![fill; vw * vh];
-        for ty in (0..vh).step_by(ROWS) {
-            for tx in (0..vw).step_by(NATIVE.0) {
-                let mut tile = map_sim.clone();
-                tile.cam_x = (ox + tx as i32) as u16;
-                tile.cam_y = (oy + ty as i32) as u16;
-                let cx =
-                    i32::from(map_sim.cursor_x) + i32::from(map_sim.cam_x) - i32::from(tile.cam_x);
-                let cy =
-                    i32::from(map_sim.cursor_y) + i32::from(map_sim.cam_y) - i32::from(tile.cam_y);
-                // From -16 the 8-bit wrap still lands each cell where it truly is.
-                if (-16..=176).contains(&cx) && (-16..=168).contains(&cy) {
-                    tile.cursor_x = cx as u8;
-                    tile.cursor_y = cy as u8;
-                } else {
-                    tile.cursor_y = HIDDEN_CURSOR_Y;
-                }
-                let pixels = render(&tile, NATIVE)?;
-                copy_rect(
-                    &mut out,
-                    view,
-                    &pixels,
-                    NATIVE.0,
-                    (0, 0, NATIVE.0, ROWS),
-                    (tx as i32, ty as i32),
-                );
-            }
-        }
-        let mut bar = map_sim.clone();
-        bar.cursor_y = HIDDEN_CURSOR_Y;
-        let pixels = render(&bar, NATIVE)?;
-        let (x0, y0, x1, y1) = sml2_core::map::status_bar_strip_rect(NATIVE.0, NATIVE.1);
-        copy_rect(
-            &mut out,
-            view,
-            &pixels,
-            NATIVE.0,
-            (x0, y0, x1 - x0, y1 - y0),
-            (
-                (vw as i32 - 160) / 2 + x0 as i32,
-                vh as i32 - (y1 - y0) as i32,
-            ),
-        );
-        Ok(out)
     }
 
     /// Lay out the overworld frame from `assets`.
