@@ -28,6 +28,7 @@ pub enum CameraZoom {
     Native,
     Zoom125,
     Zoom150,
+    Zoom200,
 }
 
 impl CameraZoom {
@@ -36,13 +37,15 @@ impl CameraZoom {
             Self::Native => "100%",
             Self::Zoom125 => "125%",
             Self::Zoom150 => "150%",
+            Self::Zoom200 => "200%",
         }
     }
     pub fn next(self) -> Self {
         match self {
             Self::Native => Self::Zoom125,
             Self::Zoom125 => Self::Zoom150,
-            Self::Zoom150 => Self::Native,
+            Self::Zoom150 => Self::Zoom200,
+            Self::Zoom200 => Self::Native,
         }
     }
 }
@@ -53,6 +56,7 @@ pub fn view_size(widescreen: Widescreen, zoom: CameraZoom) -> (usize, usize) {
         CameraZoom::Native => 144,
         CameraZoom::Zoom125 => 180,
         CameraZoom::Zoom150 => 216,
+        CameraZoom::Zoom200 => 288,
     };
     let width = match widescreen {
         Widescreen::Off => height * 10 / 9,
@@ -74,5 +78,15 @@ mod tests {
         assert_eq!(view_size(Wide16x9, Native), (256, 144));
         assert_eq!(view_size(Wide16x9, Zoom125), (320, 180));
         assert_eq!(view_size(Wide16x9, Zoom150), (384, 216));
+        assert_eq!(view_size(Off, Zoom200), (320, 288));
+        assert_eq!(view_size(Wide16x9, Zoom200), (512, 288));
+    }
+
+    #[test]
+    fn zoom_cycles_through_200_percent_back_to_native() {
+        use CameraZoom::*;
+        assert_eq!(Zoom150.next(), Zoom200);
+        assert_eq!(Zoom200.next(), Native);
+        assert_eq!(Zoom200.label(), "200%");
     }
 }
