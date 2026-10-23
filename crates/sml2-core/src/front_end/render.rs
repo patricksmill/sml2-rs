@@ -51,6 +51,48 @@ pub fn render_title_output(
     .unwrap_or_else(|_| vec![output.blank(3); view.0 * view.1])
 }
 
+/// The title in a view larger than native, its 160×144 rect at `at`. The map
+/// only covers 20×18 tiles, so the backdrop around the sign continues past
+/// it: the `$85`/`$86` wall checker above row 17, row 17's `$95` ground, and
+/// that tile's last line below.
+pub fn render_title_wide_output(
+    assets: &FrontEndAssets,
+    view: (usize, usize),
+    at: (i32, i32),
+    output: OutputMode,
+) -> Vec<u8> {
+    let native = render_title_output(assets, (160, 144), output);
+    let vram = assets.title_vram();
+    let shades = output.palette(TITLE_BGP, PaletteSource::Bg);
+    let colors = |tile: usize| {
+        let bytes: &[u8; 16] = vram[tile * 16..tile * 16 + 16]
+            .try_into()
+            .expect("16-byte tile slice");
+        tile_colors(bytes)
+    };
+    let (wall, ground) = ([colors(0x85), colors(0x86)], colors(0x95));
+    let mut out = Vec::with_capacity(view.0 * view.1);
+    for y in 0..view.1 as i32 {
+        let ny = y - at.1;
+        for x in 0..view.0 as i32 {
+            let nx = x - at.0;
+            if (0..160).contains(&nx) && (0..144).contains(&ny) {
+                out.push(native[(ny * 160 + nx) as usize]);
+                continue;
+            }
+            let (tx, ty) = (nx.div_euclid(8), ny.div_euclid(8));
+            let (col, line) = (nx.rem_euclid(8) as usize, ny.rem_euclid(8) as usize);
+            let color = match ty {
+                ..17 => wall[(tx + ty).rem_euclid(2) as usize][line * 8 + col],
+                17 => ground[line * 8 + col],
+                _ => ground[7 * 8 + col],
+            };
+            out.push(shades[color as usize]);
+        }
+    }
+    out
+}
+
 /// `$30000`'s static screen plus the cursor, tally digits and Easy banner.
 pub fn render_file_select(
     fs: &FileSelect,

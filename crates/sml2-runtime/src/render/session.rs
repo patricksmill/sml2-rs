@@ -137,25 +137,13 @@ impl Session {
             return (frame, 1);
         }
         let frame = match &self.state {
-            SessionState::Title(_) => view::fixed_screen(view, fill, |size| {
-                sml2_core::front_end::render::render_title_output(
-                    &self.assets.front_end,
-                    size,
-                    output,
-                )
-            }),
+            SessionState::Title(_) => self.title_output(view, output),
             SessionState::FileSelectLoading(loading) => {
                 // Pending `$19` retains title VRAM; active transfers have LCD off.
                 if loading.lcd_disabled() {
                     vec![output.blank(0); vw * vh]
                 } else {
-                    view::fixed_screen(view, fill, |size| {
-                        sml2_core::front_end::render::render_title_output(
-                            &self.assets.front_end,
-                            size,
-                            output,
-                        )
-                    })
+                    self.title_output(view, output)
                 }
             }
             SessionState::FileSelect(file_select) => view::fixed_screen(view, fill, |size| {
@@ -289,6 +277,16 @@ impl Session {
             .as_ref()
             .filter(|t| t.shows_source())
             .map_or(map_sim, |t| &t.source)
+    }
+
+    /// The title; an enlarged view continues the sign's backdrop.
+    fn title_output(&self, view: (usize, usize), output: OutputMode) -> Vec<u8> {
+        use sml2_core::front_end::render::{render_title_output, render_title_wide_output};
+        if super::view::enlarged(view) {
+            render_title_wide_output(&self.assets.front_end, view, super::view::margin(view), output)
+        } else {
+            render_title_output(&self.assets.front_end, view, output)
+        }
     }
 
     /// The overworld in any view. The hub is stitched from native frames

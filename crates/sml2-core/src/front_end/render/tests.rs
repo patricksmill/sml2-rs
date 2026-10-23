@@ -207,3 +207,40 @@ fn palette_frames_keep_front_end_sources_even_when_the_sprite_shade_is_white() {
     );
     assert_eq!(frame[16], 1, "transparent OBJ colour preserves BG source");
 }
+
+#[test]
+fn wide_title_continues_the_wall_and_ground_past_the_map() {
+    let mut assets = assets();
+    let mut vram = assets.title_vram().to_vec();
+    paint(&mut vram, 0x85 * 16, 1);
+    paint(&mut vram, 0x86 * 16, 2);
+    paint(&mut vram, 0x95 * 16, 3);
+    vram[0x95 * 16 + 14] = 0xFF;
+    vram[0x95 * 16 + 15] = 0x00;
+    assets = FrontEndAssets::new(
+        vram,
+        assets.title_tilemap().to_vec(),
+        assets.file_select_vram().to_vec(),
+        assets.file_select_tilemap().to_vec(),
+        assets.demo_tapes().to_vec(),
+    )
+    .unwrap();
+    let shades = OutputMode::Grayscale.palette(TITLE_BGP, PaletteSource::Bg);
+    let (view, at) = ((192usize, 180usize), (16i32, 12i32));
+    let out = render_title_wide_output(&assets, view, at, OutputMode::Grayscale);
+    let px = |nx: i32, ny: i32| out[(ny + at.1) as usize * view.0 + (nx + at.0) as usize];
+
+    let native = render_title(&assets, (160, 144));
+    assert_eq!(px(0, 0), native[0]);
+    assert_eq!(px(159, 143), native[143 * 160 + 159]);
+    // `$85`/`$86` checker: map (0, 0) is `$85`.
+    assert_eq!(px(-1, 0), shades[2]);
+    assert_eq!(px(-9, 0), shades[1]);
+    assert_eq!(px(160, 0), shades[1]);
+    assert_eq!(px(0, -1), shades[2]);
+    assert_eq!(px(-1, 100), px(-1, 116));
+    // Row 17 is `$95`; below it its last line repeats.
+    assert_eq!(px(-1, 136), shades[3]);
+    assert_eq!(px(170, 143), shades[1]);
+    assert_eq!(px(-16, 160), shades[1]);
+}
