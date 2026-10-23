@@ -160,7 +160,10 @@ fn wario_castle_blink_gate_accumulator_wrap_and_random_rejection() {
     tick(&mut map, 3);
     assert_eq!(map.zone_animation.wario_castle.accum, 0);
     assert_eq!(
-        (map.zone_animation.wario_castle.blink_timer, map.zone_slots[3].2),
+        (
+            map.zone_animation.wario_castle.blink_timer,
+            map.zone_slots[3].2
+        ),
         (0, 63)
     );
     tick(&mut map, 3);
@@ -249,9 +252,15 @@ fn the_sky_bands_run_in_vblank_on_the_shared_raster_phase() {
     map.raster_phase = 3;
     let bands = map.zone_animation.wario_castle.band_scroll;
     tick(&mut map, 0);
-    assert_eq!(map.raster_phase, 3, "the map handler leaves the bands alone");
+    assert_eq!(
+        map.raster_phase, 3,
+        "the map handler leaves the bands alone"
+    );
     assert_eq!(map.zone_animation.wario_castle.band_scroll, bands);
     map.vblank_bands();
     assert_eq!(map.raster_phase, 4);
-    assert_eq!(map.zone_animation.wario_castle.band_scroll[0], bands[0].wrapping_sub(1));
+    assert_eq!(
+        map.zone_animation.wario_castle.band_scroll[0],
+        bands[0].wrapping_sub(1)
+    );
 }

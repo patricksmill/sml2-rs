@@ -28,15 +28,16 @@ impl Session {
     }
 
     /// Whether DX presentation covers the current screen: the title, the
-    /// file select and every level, live or in a demo, except boss arenas.
-    /// The map, arenas and other screens keep their native picture.
+    /// file select, the overworld (hub, zones and both minigames) and every
+    /// level, live or in a demo, except boss arenas. Arenas and the other
+    /// screens keep their native picture.
     pub fn dx_supported(&self) -> bool {
         match &self.state {
             SessionState::Title(_)
             | SessionState::FileSelectLoading(_)
             | SessionState::FileSelect(_) => true,
-            // The hub and the eight zones; the bonus rooms stay native.
-            SessionState::Overworld(map_sim) => self.shown_map(map_sim).screen_id <= 8,
+            // The hub, the eight zones, and both minigames (screens 9–14).
+            SessionState::Overworld(map_sim) => self.shown_map(map_sim).screen_id <= 14,
             _ => self.dx_level().is_some(),
         }
     }
@@ -240,7 +241,7 @@ impl Session {
             .map
             .screens
             .get(usize::from(map_sim.screen_id))
-            .ok_or("DX colors only the hub and the zones")?;
+            .ok_or("DX colors the hub, the zones and both minigames")?;
         // `$26:$77F1`: the hub's eastern half has its own background set.
         let bg_palettes = match &colors.alternate_bg_palettes {
             Some(east) if map_sim.cam_x >= 0xE7 => east,
@@ -259,6 +260,7 @@ impl Session {
         // `$3F203` strip, which DX draws in color 3 (black in every hub set);
         // a zone's are past its 18 rows.
         let blank = IndexedPixel::new(if map_sim.screen_id == 0 { 3 } else { 0 }, 0).unwrap();
+        let mario = &dx.player(character, 0).mappings;
         self.overworld_view(map_sim, view, [0, 0, 0], |sim, size| {
             let wave = self
                 .map_wave
@@ -271,6 +273,9 @@ impl Session {
                 zone_animation_tiles: &dx.map.zone_animation_tiles,
                 wave,
                 sprites: Some(&dx.map.sprites),
+                bell_tiles: Some(&dx.map.bell_tiles),
+                room_tiles: Some(&dx.map.room_tiles),
+                player_mappings: Some(mario),
             };
             let frame = self.overworld_frame(sim, assets, size);
             dx_map_pixels(
@@ -348,8 +353,8 @@ fn dx_map_pixels(
             }
         }
     }
-    let mut pixels = cgb::compose_frame(&background, &objects, true, palettes)
-        .map_err(|e| e.to_string())?;
+    let mut pixels =
+        cgb::compose_frame(&background, &objects, true, palettes).map_err(|e| e.to_string())?;
     fill_cursor_eye_holes(
         &mut pixels,
         &frame.composition.oam,
@@ -450,8 +455,7 @@ fn fill_cursor_eye_holes(
         if exterior[i] {
             continue;
         }
-        pixels[i] =
-            sml2_core::hardware_palettes::rgb555(palettes.objects()[usize::from(pal)][0]);
+        pixels[i] = sml2_core::hardware_palettes::rgb555(palettes.objects()[usize::from(pal)][0]);
     }
 }
 
@@ -1133,7 +1137,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!(out[0], rgb555(0x001f), "a corner stays the background");
-        assert_eq!(out[3 * 8 + 3], rgb555(0x03e0), "an enclosed eye uses OBJ color 0");
+        assert_eq!(
+            out[3 * 8 + 3],
+            rgb555(0x03e0),
+            "an enclosed eye uses OBJ color 0"
+        );
         assert_eq!(out[1], [0, 0, 0], "the outline stays opaque");
     }
 
@@ -1248,17 +1256,17 @@ mod tests {
             tile: 0,
             attr: 0,
         }];
-        let frame = screen(
-            &picture,
-            &cells,
-            None,
-            (160, 144),
-            file_select_backdrop,
-            48,
-        )
-        .unwrap();
-        assert_eq!(frame[144], [255, 255, 255], "door sprite stays on the right");
-        assert_eq!(frame[0], [0, 0, 0], "the left edge is the shifted background");
+        let frame = screen(&picture, &cells, None, (160, 144), file_select_backdrop, 48).unwrap();
+        assert_eq!(
+            frame[144],
+            [255, 255, 255],
+            "door sprite stays on the right"
+        );
+        assert_eq!(
+            frame[0],
+            [0, 0, 0],
+            "the left edge is the shifted background"
+        );
     }
     #[test]
     fn pause_uses_literal_dx_channel_steps_and_preserves_source() {

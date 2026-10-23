@@ -339,9 +339,12 @@ impl Session {
     fn debug_sync_carry(&mut self) {
         let (lives, coins_low, coins_high, powerup) = match &self.state {
             SessionState::Overworld(map) => (map.lives, map.coins_low, map.coins_high, map.powerup),
-            SessionState::InLevel(ctx) => {
-                (ctx.sim.lives, ctx.sim.coins_low, ctx.sim.coins_high, ctx.sim.powerup)
-            }
+            SessionState::InLevel(ctx) => (
+                ctx.sim.lives,
+                ctx.sim.coins_low,
+                ctx.sim.coins_high,
+                ctx.sim.powerup,
+            ),
             _ => return,
         };
         self.lives = lives;

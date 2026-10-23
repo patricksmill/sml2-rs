@@ -32,7 +32,11 @@ fn intro_blink_flips_only_on_every_sixteenth_frame() {
     for frame in 0..64u64 {
         let mut actor = Actor::default();
         update_part(&mut actor, Part::Straw, context(frame, false, 3), &PROFILE).unwrap();
-        assert_eq!(actor.sprite_flip.horizontal(), frame % 16 == 0, "frame {frame}");
+        assert_eq!(
+            actor.sprite_flip.horizontal(),
+            frame % 16 == 0,
+            "frame {frame}"
+        );
     }
 }
 
@@ -40,13 +44,15 @@ fn intro_blink_flips_only_on_every_sixteenth_frame() {
 fn pig2_intro_counts_to_0x30_without_waiting_for_the_fade() {
     let mut actor = Actor::default();
     for tick in 1..0x30u8 {
-        let effects =
-            update_part(&mut actor, Part::Wood, context(1, false, 1), &PROFILE).unwrap();
+        let effects = update_part(&mut actor, Part::Wood, context(1, false, 1), &PROFILE).unwrap();
         assert!(effects.release_remove_mode);
         assert_eq!((actor.state, actor.timer), (0, tick));
     }
     let effects = update_part(&mut actor, Part::Wood, context(1, false, 1), &PROFILE).unwrap();
-    assert_eq!((actor.state, actor.sprite, effects.sound1), (3, 0x20, Some(4)));
+    assert_eq!(
+        (actor.state, actor.sprite, effects.sound1),
+        (3, 0x20, Some(4))
+    );
     assert_eq!(actor.contact_kind, ContactKind::from_raw(0x45));
 }
 
@@ -63,7 +69,8 @@ fn pig1_intro_waits_for_the_fade() {
 fn controller_intro_spawns_its_house_after_0x30_frames() {
     let mut actor = Actor::default();
     for _ in 1..0x30 {
-        let effects = update_controller(&mut actor, context(1, false, 0), &PROFILE, &PROFILE).unwrap();
+        let effects =
+            update_controller(&mut actor, context(1, false, 0), &PROFILE, &PROFILE).unwrap();
         assert_eq!(effects.spawn_child, None);
     }
     let effects = update_controller(&mut actor, context(1, false, 0), &PROFILE, &PROFILE).unwrap();

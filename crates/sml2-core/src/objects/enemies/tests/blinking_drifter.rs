@@ -27,6 +27,10 @@ fn handler_0x59aad_bobs_on_the_eased_curves() {
     }
     assert_eq!(&ys[..4], &[197, 195, 194, 192], "up 3, 2, 1, 2");
     assert_eq!(ys[11], 184, "leg 0 rises 16");
-    assert_eq!((st.b[16], st.b[24]), (1, 1), "leg 1 has taken its first step");
+    assert_eq!(
+        (st.b[16], st.b[24]),
+        (1, 1),
+        "leg 1 has taken its first step"
+    );
     assert_eq!(ys[12], 184, "and that step is $7488[0] = 0");
 }

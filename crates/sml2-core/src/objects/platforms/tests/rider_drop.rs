@@ -143,10 +143,16 @@ fn handler_0x5a258_ridden_platform_sinks_instead_of_knockback() {
     for _ in 0..6 {
         sim.slots[1].b[23] = 0x08;
         sim.step(100, 100, &layout, &tables, &mario, false);
-        assert_eq!(u16::from_be_bytes([sim.slots[1].b[0], sim.slots[1].b[1]]), 100);
+        assert_eq!(
+            u16::from_be_bytes([sim.slots[1].b[0], sim.slots[1].b[1]]),
+            100
+        );
         assert_eq!(sim.slots[1].b[27], 0);
         let next = u16::from_be_bytes([sim.slots[1].b[3], sim.slots[1].b[4]]);
-        assert!(next == y || next == y + 1, "platform y jumped from {y} to {next}");
+        assert!(
+            next == y || next == y + 1,
+            "platform y jumped from {y} to {next}"
+        );
         y = next;
     }
     assert!(y > 100, "ridden platform never sank");

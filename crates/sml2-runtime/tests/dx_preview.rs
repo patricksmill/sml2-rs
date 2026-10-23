@@ -57,12 +57,15 @@ fn synthetic_bundle() -> Presentation {
                     attributes: Some(vec![0; 0x240]),
                     alternate_attributes: None,
                 };
-                9
+                15
             ],
+            bell_tiles: Default::default(),
+            room_tiles: Default::default(),
             sprites: sml2_dx::MapSprites {
                 hub_decor: vec![vec![]; 17],
                 zone_decor: vec![vec![]; 188],
                 status_bar: [(0, 0, 0, 0); 9],
+                room_metasprites: Default::default(),
             },
         },
     }
@@ -109,6 +112,30 @@ fn dx_public_api_covers_every_level_with_its_own_tables() {
     ctx.arena_loaded = true;
     assert!(!game.dx_supported());
     assert!(game.render_dx_frame(&bundle, Mario, (160, 144)).is_err());
+}
+
+#[test]
+fn both_minigames_draw_in_dx_color() {
+    let mut bundle = synthetic_bundle();
+    // Screen 9 is pure green; screen 13 is pure blue.
+    bundle.map.screens[9].bg_palettes = [0xe0, 3].repeat(32);
+    bundle.map.screens[13].bg_palettes = [0x00, 0x7c].repeat(32);
+    let mut game = session();
+    game.begin_coin_room(9);
+    assert!(game.dx_supported());
+    assert_eq!(
+        game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(),
+        vec![[0, 255, 0]; 160 * 144]
+    );
+    let wide = game.render_dx_frame(&bundle, Mario, (256, 144)).unwrap();
+    assert_eq!(wide.len(), 256 * 144);
+    assert_eq!(&wide[48..208], &[[0, 255, 0]; 160]);
+    game.begin_bell_room(13, 0, 0);
+    assert!(game.dx_supported());
+    assert_eq!(
+        game.render_dx_frame(&bundle, Luigi, (160, 144)).unwrap(),
+        vec![[0, 0, 255]; 160 * 144]
+    );
 }
 
 #[test]

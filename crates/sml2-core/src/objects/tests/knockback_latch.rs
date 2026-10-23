@@ -45,6 +45,10 @@ fn ffe8_counter_handlers_never_set_the_knockback_latch() {
                 st.b[B_FSTATE]
             );
         }
-        assert!(sim.unported.is_empty(), "${handler:05X}: {:X?}", sim.unported);
+        assert!(
+            sim.unported.is_empty(),
+            "${handler:05X}: {:X?}",
+            sim.unported
+        );
     }
 }

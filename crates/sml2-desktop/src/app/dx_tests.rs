@@ -167,7 +167,11 @@ fn system_picker_without_selection_opens_browser_and_preserves_installation() {
         }],
     );
     assert!(!output.shapes.is_empty());
-    assert_eq!(app.screen, Screen::Game, "browser Enter must not leave the title");
+    assert_eq!(
+        app.screen,
+        Screen::Game,
+        "browser Enter must not leave the title"
+    );
     assert!(matches!(
         app.game.as_ref().unwrap().session.state,
         SessionState::Title(_)
@@ -321,12 +325,15 @@ pub(super) fn red_bundle() -> sml2_dx::Presentation {
                     attributes: Some(vec![0; 0x240]),
                     alternate_attributes: None,
                 };
-                9
+                15
             ],
+            bell_tiles: Default::default(),
+            room_tiles: Default::default(),
             sprites: sml2_dx::MapSprites {
                 hub_decor: vec![vec![]; 17],
                 zone_decor: vec![vec![]; 188],
                 status_bar: [(0, 0, 0, 0); 9],
+                room_metasprites: Default::default(),
             },
         },
     }

@@ -376,7 +376,9 @@ fn pause_mode_stops_the_engine_and_starts_the_beep() {
     // `$13FE7`'s eight register writes.
     assert!(driver.pulse_writes.contains(&PulseWrite::Envelope(8)));
     assert!(driver.pulse_writes.contains(&PulseWrite::Ch2Envelope(8)));
-    assert!(driver.pulse_writes.contains(&PulseWrite::FrequencyControl(0x80)));
+    assert!(driver
+        .pulse_writes
+        .contains(&PulseWrite::FrequencyControl(0x80)));
     assert!(driver
         .pulse_writes
         .contains(&PulseWrite::Ch2FrequencyControl(0x80)));
@@ -389,7 +391,9 @@ fn pause_mode_stops_the_engine_and_starts_the_beep() {
         .pulse_writes
         .contains(&PulseWrite::Ch2DutyLength(0x80)));
     assert!(driver.pulse_writes.contains(&PulseWrite::Ch2Envelope(0xA1)));
-    assert!(driver.pulse_writes.contains(&PulseWrite::Ch2FrequencyLow(0xC1)));
+    assert!(driver
+        .pulse_writes
+        .contains(&PulseWrite::Ch2FrequencyLow(0xC1)));
     assert!(driver
         .pulse_writes
         .contains(&PulseWrite::Ch2FrequencyControl(0xC7)));
@@ -434,7 +438,9 @@ fn the_pause_beep_walks_its_five_entries_then_holds() {
         assert_eq!(driver.pause_beep_index, index);
         assert_eq!(driver.pause_beep_timer, timer);
         assert!(
-            driver.pulse_writes.contains(&PulseWrite::Ch2FrequencyLow(low)),
+            driver
+                .pulse_writes
+                .contains(&PulseWrite::Ch2FrequencyLow(low)),
             "entry {index} writes NR23 = ${low:02X}"
         );
     }

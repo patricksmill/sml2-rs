@@ -78,7 +78,7 @@ fn valid_bundle_round_trips_through_hex_banks() {
 #[test]
 fn old_schemas_other_sources_and_unknown_fields_are_rejected() {
     let value = serde_json::to_value(fixture()).unwrap();
-    for schema in [1, 2, 3, 4, BUNDLE_SCHEMA + 1] {
+    for schema in [1, 2, 3, 4, 5, BUNDLE_SCHEMA + 1] {
         let mut bad = value.clone();
         bad["schema"] = schema.into();
         let error = decode(&bad).unwrap_err().to_string();
@@ -125,7 +125,7 @@ fn tables_and_banks_must_have_their_exact_shape() {
     missing.banks.remove(&0x26);
     assert!(missing.validate().is_err());
     let mut extra = fixture();
-    extra.banks.insert(0x01, vec![0; BANK_LEN]);
+    extra.banks.insert(0x02, vec![0; BANK_LEN]);
     assert!(extra.validate().is_err());
     let mut short = fixture();
     short.banks.get_mut(&0x2A).unwrap().pop();
@@ -236,4 +236,9 @@ fn each_level_uses_its_own_tables_and_the_dx_loader_sources() {
     assert!(p.level(32).is_none());
     assert_eq!(p.rom(0x1D, 0x4600, 1), Some(&[0xE4][..]));
     assert_eq!(p.rom(0x01, 0x4000, 1), None, "unstored bank");
+    assert_eq!(p.map.screens.len(), 15, "hub, zones and both minigames");
+    assert_eq!(
+        p.map.screens[9].attributes.as_ref().map(Vec::len),
+        Some(0x240)
+    );
 }

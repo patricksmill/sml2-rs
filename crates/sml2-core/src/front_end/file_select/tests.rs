@@ -12,9 +12,7 @@ fn valid_record(node: u8) -> [u8; SLOT_LEN] {
     record[0x42] = 0x12;
     record[0x43] = 5;
     record[0x44] = 2;
-    record[0x45] = record[..0x45]
-        .iter()
-        .fold(0u8, |c, b| c.wrapping_add(*b));
+    record[0x45] = record[..0x45].iter().fold(0u8, |c, b| c.wrapping_add(*b));
     record[0x46..0x4A].copy_from_slice(&SAVE_SIGNATURE);
     record
 }
@@ -71,7 +69,9 @@ fn drop_thresholds_choose_sprite_and_priority_before_moving() {
     // `$43D6`: test current Y against $30/$7C, then add 2 and test $40.
     let mut slots = SaveSlots::new();
     let mut fs = FileSelect::new(&mut slots);
-    for _ in 0..16 { fs.step(&mut slots, 0, 0); }
+    for _ in 0..16 {
+        fs.step(&mut slots, 0, 0);
+    }
     assert_eq!(fs.cursor(), (40, 0x30));
     assert_eq!(fs.cursor_sprite(), 16);
     assert!(fs.cursor_behind_bg());
@@ -79,11 +79,15 @@ fn drop_thresholds_choose_sprite_and_priority_before_moving() {
     assert_eq!(fs.cursor(), (40, 0x32));
     assert_eq!(fs.cursor_sprite(), 10);
     assert!(!fs.cursor_behind_bg());
-    for _ in 17..23 { fs.step(&mut slots, 0, 0); }
+    for _ in 17..23 {
+        fs.step(&mut slots, 0, 0);
+    }
     assert_eq!(fs.cursor().1, 0x3E);
     fs.step(&mut slots, 0, 0);
     assert_eq!(fs.cursor().1, 0x41);
-    for _ in 24..44 { fs.step(&mut slots, 0, 0); }
+    for _ in 24..44 {
+        fs.step(&mut slots, 0, 0);
+    }
     assert_eq!((fs.cursor().1, fs.menu_state()), (0x7D, 0));
     fs.step(&mut slots, 0, 0);
     assert_eq!((fs.cursor().1, fs.menu_state()), (0x7C, 1));

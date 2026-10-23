@@ -167,6 +167,9 @@ impl Session {
                         zone_animation_tiles: &self.assets.zone_animation_tiles,
                         wave: self.map_wave.clone(),
                         sprites: None,
+                        bell_tiles: None,
+                        room_tiles: None,
+                        player_mappings: None,
                     };
                     let frame = self.overworld_frame(sim, assets, (w, h));
                     Ok(sml2_core::map::rasterize_overworld(
@@ -257,9 +260,16 @@ pub(crate) struct MapAssets<'a> {
     pub tiles: &'a sml2_core::map::OverworldTiles,
     pub zone_animation_tiles: &'a [u8],
     pub wave: Option<sml2_core::map::MapWave>,
-    /// Another revision's sprite tables (`$4C4D`, `$62E6`, `$7251`); `None`
-    /// keeps the native ones.
+    /// Another revision's sprite tables (`$4C4D`, `$62E6`, `$7251`, and the
+    /// minigame metasprites); `None` keeps the native ones.
     pub sprites: Option<&'a sml2_dx::MapSprites>,
+    /// DX bell-room tiles. `None` uses the session's native set.
+    pub bell_tiles: Option<&'a sml2_core::map::BellRoomTiles>,
+    /// DX copies of the 128 tiles both minigames put at `$8000`. `None`
+    /// uses the session's native set.
+    pub room_tiles: Option<&'a sml2_core::map::RoomCommonTiles>,
+    /// DX player mappings for the minigame Mario sprite (`$5297`'s replacement).
+    pub player_mappings: Option<&'a [Vec<sml2_core::object::MappingEntry>]>,
 }
 
 /// One overworld frame laid out, with the tiles and DMG palettes it draws with.
@@ -326,8 +336,9 @@ impl Session {
 
     /// The overworld in any view. The hub is stitched from native frames
     /// (its sprites are 8-bit OAM positions relative to each frame's camera)
-    /// during navigation and panning. Oversized views show the whole hub;
-    /// zone screens show their authored area, and rooms stay native.
+    /// during navigation and panning. Oversized views show the whole hub.
+    /// Zone screens and both minigames show their 32-tile-wide map, with a
+    /// minigame's 160-wide picture kept centred.
     pub(crate) fn overworld_view<P: Copy>(
         &self,
         map_sim: &sml2_core::map_sim::MapSim,
@@ -345,7 +356,7 @@ impl Session {
                 let pixels = self.stitched_hub(map_sim, size, fill, render)?;
                 Ok(letterbox(&pixels, size, view, fill))
             }
-            1..=8 => {
+            1..=14 => {
                 let size = (view.0.min(256), 144);
                 Ok(letterbox(&render(map_sim, size)?, size, view, fill))
             }
@@ -360,25 +371,31 @@ impl Session {
         assets: MapAssets<'_>,
         (vw, vh): (usize, usize),
     ) -> OverworldFrame {
-        let mut vram = if map_sim.screen_id >= 13 && !self.assets.bell_room_tiles.is_empty() {
+        let mut vram = if map_sim.screen_id >= 13 {
             // Screens 13/14 copy bank 25 `$5000` to `$8800`; the zone
             // tilesets at `map/tiles.bin` do not apply.
-            self.assets.bell_room_tiles.vram_tiles()
+            match assets.bell_tiles {
+                Some(tiles) => tiles.vram_tiles(),
+                None if !self.assets.bell_room_tiles.is_empty() => {
+                    self.assets.bell_room_tiles.vram_tiles()
+                }
+                None => assets.tiles.screen_vram_tiles(map_sim.screen_id),
+            }
         } else {
             assets.tiles.screen_vram_tiles(map_sim.screen_id)
         };
         // `$3F58` copies bank 6 `$4000` over `$8000` in both bonus
         // rooms, so the sprite pass sees those 128 tiles.
-        if map_sim.screen_id >= 9 && !self.assets.room_common_tiles.is_empty() {
-            for (index, tile) in self
-                .assets
-                .room_common_tiles
-                .vram_tiles()
-                .iter()
-                .enumerate()
-            {
-                if index < vram.len() {
-                    vram[index] = *tile;
+        if map_sim.screen_id >= 9 {
+            let common = match assets.room_tiles {
+                Some(tiles) => tiles,
+                None => &self.assets.room_common_tiles,
+            };
+            if !common.is_empty() {
+                for (index, tile) in common.vram_tiles().iter().enumerate() {
+                    if index < vram.len() {
+                        vram[index] = *tile;
+                    }
                 }
             }
         }
@@ -452,7 +469,12 @@ impl Session {
                 ),
             }
         } else if let Some(room) = &map_sim.room {
-            room.oam_cells()
+            match assets.sprites {
+                Some(tables) => {
+                    room.oam_cells_from(&tables.room_metasprites, assets.player_mappings)
+                }
+                None => room.oam_cells(),
+            }
         } else {
             let slots = map_sim.zone_render_slots();
             match assets.sprites {

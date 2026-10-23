@@ -23,13 +23,13 @@ use std::{
 };
 
 mod acceptance;
+mod boss_bounce;
+mod boss_entry;
+mod boss_return;
 mod castle_flow;
 mod conveyor;
-mod boss_entry;
-mod boss_bounce;
-mod boss_return;
-mod debug;
 mod death_audio;
+mod debug;
 mod front_end;
 mod game;
 mod pause_audio;

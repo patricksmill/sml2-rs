@@ -2541,7 +2541,10 @@ mod tests {
 
         for _ in 0x2C..=0x57 {
             map.bookkeeping(0x3D);
-            assert_eq!(map.decor_slots[14].3, 5, "the swim back keeps its mouth shut");
+            assert_eq!(
+                map.decor_slots[14].3, 5,
+                "the swim back keeps its mouth shut"
+            );
         }
         assert_eq!(map.decor_slots[14].1, 0x88 - 42 + 44);
         assert_eq!(wake(&map), [0xFF; 5], "back past `$88`: no wake");
@@ -2552,7 +2555,10 @@ mod tests {
         assert_eq!(map.decor_slots[14].1, 0x8A, "held from `$58`");
         map.bookkeeping(0x3D);
         assert_eq!(map.rock_anim_timer, 0, "the counter wrapped");
-        assert_eq!(map.decor_slots[14].1, 0x89, "the wrap frame steps left once more");
+        assert_eq!(
+            map.decor_slots[14].1, 0x89,
+            "the wrap frame steps left once more"
+        );
         map.bookkeeping(0x3D);
         assert_eq!(map.decor_slots[14].1, 0x89, "then the routine idles");
     }
@@ -2862,7 +2868,11 @@ mod tests {
         );
         assert_eq!(map.cursor_move, 0x2F, "the door leaves the move byte alone");
         assert_eq!(out.transition, Some(4), "$3E3BA walks out Up");
-        assert_eq!(out.music, Some(255), "the door's own request, before the loader's");
+        assert_eq!(
+            out.music,
+            Some(255),
+            "the door's own request, before the loader's"
+        );
         assert_eq!((map.cam_x, map.cam_y), (0, 0));
         assert_eq!(map.cursor_anim, 0x92);
         assert!(map.zone_slots.iter().any(|slot| slot.2 != 0xFF));
@@ -2962,14 +2972,22 @@ mod tests {
         map.node = 0x31;
         map.screen_id = 1;
         map.level_progress[6] = 0x80;
-        assert_eq!(map.synthetic_press(0x00, &n), 0x10, "slot 6 is not the byte tested");
+        assert_eq!(
+            map.synthetic_press(0x00, &n),
+            0x10,
+            "slot 6 is not the byte tested"
+        );
         assert_eq!(map.mario_dead, 0xFF, "the one-shot is spent either way");
 
         let mut map = MapSim::new();
         map.node = 0x31;
         map.screen_id = 1;
         map.level_progress[7] = 0x80;
-        assert_eq!(map.synthetic_press(0x00, &n), 0x80, "$3C364[6] cleared suppresses it");
+        assert_eq!(
+            map.synthetic_press(0x00, &n),
+            0x80,
+            "$3C364[6] cleared suppresses it"
+        );
         assert_eq!(map.mario_dead, 0xFF);
     }
 
@@ -3150,7 +3168,10 @@ mod tests {
         map.load_screen(2, 0, &records);
         assert_eq!(map.frame_counter, 0, "Tree Zone");
 
-        let ram = MapRam { frame_counter: 60, ..Default::default() };
+        let ram = MapRam {
+            frame_counter: 60,
+            ..Default::default()
+        };
         map.set_map_ram(ram);
         assert_eq!(map.frame_counter, 0, "a zone keeps its loader's zero");
         map.load_screen(0, 0, &records);
@@ -3177,7 +3198,13 @@ mod tests {
         for screen in [1, 0, 6, 0, 2] {
             map.load_screen(screen, 0, &records);
             assert_eq!(
-                (map.anim_phase, map.raster_phase, map.anim_index, map.coin_icon_phase, map.sparkle_timer),
+                (
+                    map.anim_phase,
+                    map.raster_phase,
+                    map.anim_index,
+                    map.coin_icon_phase,
+                    map.sparkle_timer
+                ),
                 (103, 37, 91, 2, 3),
                 "screen {screen}"
             );
@@ -3291,7 +3318,10 @@ mod tests {
         map.coins_high = 0x09;
         map.lives = 0x05;
         map.frame_counter = 0x37; // the hub's counter runs freely before the door
-        let press = |pressed: u8| MapInput { keys_pressed: pressed, ..Default::default() };
+        let press = |pressed: u8| MapInput {
+            keys_pressed: pressed,
+            ..Default::default()
+        };
         map.tick(press(0x01), &n, &walk, &recs());
         assert_eq!(map.screen_id, 9);
 
@@ -3332,19 +3362,33 @@ mod tests {
         .expect("castle scripts asset");
         let mut map = MapSim::new();
         map.set_castle_scripts(scripts);
-        map.set_map_ram(MapRam { reveal_progress: 0x23, reveal_tick: 0x43, ..Default::default() });
+        map.set_map_ram(MapRam {
+            reveal_progress: 0x23,
+            reveal_tick: 0x43,
+            ..Default::default()
+        });
         map.lives = 0x12;
         map.coins_low = 0x99;
         map.coins_high = 0x09;
-        let press = |pressed: u8| MapInput { keys_pressed: pressed, ..Default::default() };
+        let press = |pressed: u8| MapInput {
+            keys_pressed: pressed,
+            ..Default::default()
+        };
         for (node, idle, reveal) in [(0x70, 0x31, 0x24), (0x6F, 0x11, 0x65)] {
             map.screen_id = 0;
             map.node = node;
             map.tick(press(0x01), &n, &walk, &recs());
-            assert!((9..=12).contains(&map.screen_id), "node {node:02X} opens a coin room");
+            assert!(
+                (9..=12).contains(&map.screen_id),
+                "node {node:02X} opens a coin room"
+            );
             let (mut idle_at, mut decoded) = (None, None);
             for tick in 0..700 {
-                let a = if idle_at.is_some_and(|at| tick == at + idle) { 0x01 } else { 0 };
+                let a = if idle_at.is_some_and(|at| tick == at + idle) {
+                    0x01
+                } else {
+                    0
+                };
                 map.tick(press(a), &n, &walk, &recs());
                 let Some(room) = map.room.as_ref() else { break };
                 if room.state == 0 && idle_at.is_none() {

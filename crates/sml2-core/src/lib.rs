@@ -3,16 +3,15 @@
 pub mod actor;
 pub mod audio;
 pub mod camera;
-pub mod character;
 pub mod castle;
 pub mod castle_room;
-pub mod room_sprites;
 pub mod castle_sequence;
+pub mod character;
 pub mod collision;
 pub mod credits_text;
 pub mod divider;
-pub mod ending_entry;
 pub mod easy_mode_card;
+pub mod ending_entry;
 pub mod ending_raster;
 pub mod ending_render;
 pub mod ending_scene;
@@ -30,6 +29,7 @@ mod object_events;
 pub mod objects;
 pub mod player;
 pub mod player_sim;
+pub mod room_sprites;
 #[cfg(test)]
 #[path = "route_matrix_tests.rs"]
 mod route_matrix_tests;

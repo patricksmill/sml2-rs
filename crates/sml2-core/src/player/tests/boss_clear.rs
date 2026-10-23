@@ -196,7 +196,10 @@ fn live_boss_returns_use_the_hub_branch_before_the_zone_bands() {
         dead.map_node = node;
         dead.dead = 0xFF;
         let out = dead.map_handoff(&nodes);
-        assert_eq!((out.node, out.screen, out.cursor_move), (node, Some(zone), None));
+        assert_eq!(
+            (out.node, out.screen, out.cursor_move),
+            (node, Some(zone), None)
+        );
         assert_eq!(out.saved_node, out.node, "the tail saves the final node");
         assert_eq!(dead.level_progress[progress], 0);
     }

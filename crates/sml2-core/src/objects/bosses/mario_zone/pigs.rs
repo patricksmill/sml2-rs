@@ -294,9 +294,11 @@ pub(super) fn update_controller(
                 .motion_step(profile, 15)
                 .map_err(|_| UpdateError::InvalidMotionProfile)?
                 .wrapping_add(2);
-            actor
-                .screen
-                .move_y(if actor.motion_leg == 0 { -i16::from(step) } else { i16::from(step) });
+            actor.screen.move_y(if actor.motion_leg == 0 {
+                -i16::from(step)
+            } else {
+                i16::from(step)
+            });
             if actor.motion_phase == 15 {
                 actor.motion_phase = 0;
                 if actor.motion_leg == 0 {

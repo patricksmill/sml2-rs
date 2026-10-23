@@ -134,7 +134,10 @@ pub(super) fn map_entry_runner(
     // leave one other coin missing too, so its clear is not the sixth coin
     // (whose castle reveal would make its own save).
     if GOLDEN_COIN_OFFSETS.contains(&slot) {
-        let other = GOLDEN_COIN_OFFSETS.into_iter().find(|&off| off != slot).unwrap();
+        let other = GOLDEN_COIN_OFFSETS
+            .into_iter()
+            .find(|&off| off != slot)
+            .unwrap();
         map.level_progress[other] = 0;
     }
     map.level_progress[slot] = progress;

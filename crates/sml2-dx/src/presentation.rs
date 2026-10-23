@@ -9,8 +9,9 @@ use crate::{
 use sml2_core::{
     character::Character,
     level::{MetatileTable, LAYOUT_SIZE},
-    map::{OverworldManifest, OverworldTilemaps, OverworldTiles},
+    map::{BellRoomTiles, OverworldManifest, OverworldTilemaps, OverworldTiles, RoomCommonTiles},
     object::{sprite_map_index, MappingEntry},
+    room_sprites::RoomSpriteTable,
     video::cgb::CgbPalettes,
 };
 use std::collections::BTreeMap;
@@ -86,6 +87,9 @@ pub struct MapSprites {
     pub zone_decor: Vec<Vec<(i8, i8, u8, u8)>>,
     /// `$0F:$7251`: the hub status bar's nine OAM entries.
     pub status_bar: [(u8, u8, u8, u8); 9],
+    /// `$18:$51B1`: both minigames' decoration metasprites. DX moves one
+    /// of them to `$5919`, past the native table's end.
+    pub room_metasprites: RoomSpriteTable,
 }
 
 /// The overworld, built by the native extractor's builders from the DX banks
@@ -98,8 +102,12 @@ pub struct MapGraphics {
     pub zone_animation_tiles: Vec<u8>,
     /// `$29:$6542`: the hub's attribute for each tile ID, loaded to `$D000`.
     pub hub_attributes: Vec<u8>,
-    /// Native screens 0 (hub) to 8.
+    /// Native screens 0 (hub) through 14 (both minigames).
     pub screens: Vec<MapScreen>,
+    /// Bank 25 `$5000`, the tiles both bell rooms copy to `$8800`.
+    pub bell_tiles: BellRoomTiles,
+    /// Bank 6 `$4000`, the 128 tiles both minigames copy to `$8000`.
+    pub room_tiles: RoomCommonTiles,
     pub sprites: MapSprites,
 }
 
@@ -449,6 +457,28 @@ fn map(bundle: &Bundle) -> Result<MapGraphics, ImportError> {
         zone(0x6900, 0x6940, 0x4FC0)?,
     ];
     screens[4].alternate_attributes = Some(bundle.banked(MAP_BANK, 0x4900, 0x240)?.to_vec());
+    // Screens 9–14, in order. `$26:$765A` selects the coin room from the
+    // door cursor's X (`$A101`): `$70` is screen 9, `$58` screen 10, `$40`
+    // screen 11 and `$28` screen 12. Bell rooms are `$7C91` (13) and
+    // `$78F0` (14). Attribute maps are bank `$37`; `$7D57` copies `$240`
+    // bytes to VRAM1 `$9800`. Coin rooms share the OBJ set at `$761A`.
+    let mini = |bg: u16, obj: u16, attributes: u16| -> Result<MapScreen, ImportError> {
+        Ok(MapScreen {
+            bg_palettes: palette(bg)?,
+            alternate_bg_palettes: None,
+            obj_palettes: [palette(obj)?, palette(obj)?],
+            attributes: Some(bundle.banked(0x37, attributes, 0x240)?.to_vec()),
+            alternate_attributes: None,
+        })
+    };
+    screens.extend([
+        mini(0x75DA, 0x761A, 0x7340)?,
+        mini(0x759A, 0x761A, 0x7100)?,
+        mini(0x755A, 0x761A, 0x6EC0)?,
+        mini(0x751A, 0x761A, 0x6C80)?,
+        mini(0x745A, 0x74DA, 0x6800)?,
+        mini(0x749A, 0x74DA, 0x6A40)?,
+    ]);
     for screen in &screens {
         for obj in &screen.obj_palettes {
             CgbPalettes::from_bytes(&screen.bg_palettes, obj)
@@ -465,9 +495,17 @@ fn map(bundle: &Bundle) -> Result<MapGraphics, ImportError> {
             .map_err(|e| bad("animation", e))?,
         hub_attributes: bundle.banked(MAP_BANK, 0x6542, 0x100)?.to_vec(),
         screens,
+        bell_tiles: BellRoomTiles::from_bytes(bundle.banked(0x19, 0x5000, 0x1000)?)
+            .ok_or_else(|| bad("bell tiles", "wrong length".into()))?,
+        room_tiles: RoomCommonTiles::from_bytes(bundle.banked(0x06, 0x4000, 0x0800)?)
+            .ok_or_else(|| bad("room tiles", "wrong length".into()))?,
         sprites: MapSprites {
             hub_decor: metasprites(bundle, 0x0F, 0x4C4D, 17)?,
             zone_decor: metasprites(bundle, 0x18, 0x62E6, 188)?,
+            room_metasprites: RoomSpriteTable::new(
+                0x51B1,
+                bundle.banked(0x18, 0x51B1, 0x593D - 0x51B1)?,
+            ),
             status_bar: {
                 let bytes = bundle.banked(0x0F, 0x7251, 36)?;
                 std::array::from_fn(|i| {

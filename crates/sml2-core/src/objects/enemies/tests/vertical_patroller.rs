@@ -82,10 +82,16 @@ fn handler_0x5a992_real_mode_b_anim80_step() {
     let mut y = 100u16;
     for _ in 0..8 {
         sim.step(100, 100, &layout, &tables, &MarioContact::default(), false);
-        assert_eq!(u16::from_be_bytes([sim.slots[1].b[0], sim.slots[1].b[1]]), 100);
+        assert_eq!(
+            u16::from_be_bytes([sim.slots[1].b[0], sim.slots[1].b[1]]),
+            100
+        );
         assert_eq!(sim.slots[1].b[27], 0);
         let next = u16::from_be_bytes([sim.slots[1].b[3], sim.slots[1].b[4]]);
-        assert!(next == y || next == y + 1, "saw y jumped from {y} to {next}");
+        assert!(
+            next == y || next == y + 1,
+            "saw y jumped from {y} to {next}"
+        );
         y = next;
     }
     assert_eq!(y, 102);

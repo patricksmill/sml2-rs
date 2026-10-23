@@ -38,10 +38,7 @@ impl FrontEndAssets {
             ("demo_tapes", &demo_tapes, DEMO_TAPES_LEN),
         ] {
             if blob.len() != len {
-                return Err(format!(
-                    "{name} is {} bytes, expected {len}",
-                    blob.len()
-                ));
+                return Err(format!("{name} is {} bytes, expected {len}", blob.len()));
             }
         }
         Ok(Self {

@@ -245,7 +245,10 @@ fn castle_door_level_keeps_the_flutter_bytes() {
             _ if frame == 0 => a,
             _ => PlayerKeys::default(),
         };
-        if matches!(step(&mut session, keys).outcome, StepOutcome::LevelEntered(24)) {
+        if matches!(
+            step(&mut session, keys).outcome,
+            StepOutcome::LevelEntered(24)
+        ) {
             entered = true;
             break;
         }
@@ -255,7 +258,11 @@ fn castle_door_level_keeps_the_flutter_bytes() {
         panic!("Wario level")
     };
     assert_eq!(
-        (ctx.sim.flutter, ctx.sim.flutter_armed, ctx.sim.flutter_charge),
+        (
+            ctx.sim.flutter,
+            ctx.sim.flutter_armed,
+            ctx.sim.flutter_charge
+        ),
         (3, true, 11)
     );
 }

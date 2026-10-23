@@ -116,7 +116,10 @@ fn the_pause_frame_reaches_the_apu_with_silence_and_the_first_beep() {
     let mut pcm = Vec::new();
     apu.generate_samples(44_100, 2_205, &mut pcm);
     let peak = pcm.iter().fold(0.0f32, |peak, s| peak.max(s.abs()));
-    assert!(peak > 0.01, "the pause beep reaches the output (peak {peak})");
+    assert!(
+        peak > 0.01,
+        "the pause beep reaches the output (peak {peak})"
+    );
 }
 
 #[test]

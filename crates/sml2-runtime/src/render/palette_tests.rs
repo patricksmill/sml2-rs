@@ -236,13 +236,19 @@ fn smoothing_shifts_the_level_but_not_the_status_bar() {
         .unwrap();
     prev.cam.0 = prev.cam.0.wrapping_sub(4);
     session.motion_prev = Some(prev);
-    let half = crate::render::motion::Smooth { alpha: 0.5, scale: 1 };
+    let half = crate::render::motion::Smooth {
+        alpha: 0.5,
+        scale: 1,
+    };
     let (shifted, _) = session.render_palette_frame_smooth((160, 144), half);
     let native = session.render_palette_frame((160, 144));
     assert_ne!(shifted[..160 * 136], native[..160 * 136]);
     // Row 0 is pure background: half of a 4 px camera step moves it 2 px right.
     assert_eq!(shifted[2..160], native[..158]);
-    assert!(native[..158].windows(2).any(|w| w[0] != w[1]), "row 0 has detail");
+    assert!(
+        native[..158].windows(2).any(|w| w[0] != w[1]),
+        "row 0 has detail"
+    );
     assert_eq!(shifted[160 * 136..], native[160 * 136..]);
 }
 

@@ -34,7 +34,8 @@ fn demo_pages_run_from_page_three_down_to_page_zero() {
     for (page, byte) in tapes.chunks_mut(DEMO_TAPE_LEN).enumerate() {
         byte.fill(page as u8);
     }
-    let assets = FrontEndAssets::new(title_vram, title_map, select_vram, select_map, tapes).unwrap();
+    let assets =
+        FrontEndAssets::new(title_vram, title_map, select_vram, select_map, tapes).unwrap();
     // $7C00 (page 3) is demo 3; $7F00 (page 0) is demo 0.
     assert_eq!(assets.demo_tape(3)[0], 0);
     assert_eq!(assets.demo_tape(2)[0], 1);

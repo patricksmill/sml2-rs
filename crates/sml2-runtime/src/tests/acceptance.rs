@@ -40,7 +40,9 @@ fn to_file_select(session: &mut Session) {
     assert!(matches!(session.state, SessionState::FileSelectLoading(_)));
     // Separate `$19` loader dispatch, before the 45 `$1A` cursor updates.
     for _ in 0..20 {
-        if !matches!(session.state, SessionState::FileSelectLoading(_)) { break; }
+        if !matches!(session.state, SessionState::FileSelectLoading(_)) {
+            break;
+        }
         idle(session, 1);
     }
     assert!(matches!(session.state, SessionState::FileSelect(_)));
@@ -100,7 +102,14 @@ fn overworld(session: &Session) -> &MapSim {
     }
 }
 
-fn record(node: u8, coins_low: u8, coins_high: u8, tally: u8, lives: u8, money: u8) -> [u8; SLOT_LEN] {
+fn record(
+    node: u8,
+    coins_low: u8,
+    coins_high: u8,
+    tally: u8,
+    lives: u8,
+    money: u8,
+) -> [u8; SLOT_LEN] {
     let mut record = [0u8; SLOT_LEN];
     record[0] = node;
     record[0x08] = 0x80;
@@ -146,7 +155,11 @@ fn acceptance_1_empty_sram_new_game_reaches_the_hub() {
 
     let record = session.save_record();
     assert_eq!(record[0], 0, "new game starts at node 0");
-    assert_eq!(&record[0x01..0x08], &[0u8; 7], "the progress block is empty");
+    assert_eq!(
+        &record[0x01..0x08],
+        &[0u8; 7],
+        "the progress block is empty"
+    );
     assert_eq!(record[0x42], 0);
     assert_eq!(record[0x43], 5);
     assert!(save_record_valid(&record));
@@ -339,7 +352,10 @@ fn acceptance_7_easy_mode_is_ui_state_and_erase_clears_it() {
 
     confirm_and_load(&mut session);
     assert!(matches!(session.state, SessionState::Overworld(_)));
-    assert!(session.easy_mode, "Easy mode transfers to the session on load");
+    assert!(
+        session.easy_mode,
+        "Easy mode transfers to the session on load"
+    );
     session.enter_file_select();
     assert!(!file_select(&session).easy_mode(), "Easy is not saved");
 
@@ -397,7 +413,10 @@ fn acceptance_easy_mode_propagates_into_level() {
     );
     assert!(file_select(&easy_session).easy_mode());
     confirm_and_load(&mut easy_session);
-    assert!(easy_session.easy_mode, "Easy mode transfers to session on load");
+    assert!(
+        easy_session.easy_mode,
+        "Easy mode transfers to session on load"
+    );
 
     // Starting a level propagates Easy mode into ObjectSim.
     easy_session.begin_level(0, 0).expect("level 0 loads");

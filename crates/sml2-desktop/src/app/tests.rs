@@ -809,12 +809,16 @@ fn enter_uses_the_popup_in_levels_and_confirms_resume() {
     frame(&mut app, &ctx, vec![]);
     frame(&mut app, &ctx, vec![key(egui::Key::Enter, true)]);
     assert_eq!(app.screen, Screen::Home);
-    let SessionState::InLevel(level) = &app.game.as_ref().unwrap().session.state else { panic!("level") };
+    let SessionState::InLevel(level) = &app.game.as_ref().unwrap().session.state else {
+        panic!("level")
+    };
     assert!(!level.sim.paused);
     frame(&mut app, &ctx, vec![key(egui::Key::Enter, false)]);
     frame(&mut app, &ctx, vec![key(egui::Key::Enter, true)]);
     assert_eq!(app.screen, Screen::Game);
-    let SessionState::InLevel(level) = &app.game.as_ref().unwrap().session.state else { panic!("level") };
+    let SessionState::InLevel(level) = &app.game.as_ref().unwrap().session.state else {
+        panic!("level")
+    };
     assert!(!level.sim.paused);
     let _ = std::fs::remove_dir_all(path);
 }

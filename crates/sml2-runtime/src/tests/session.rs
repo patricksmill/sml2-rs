@@ -808,11 +808,19 @@ fn dying_in_a_zone_level_returns_to_that_zone() {
         crate::session::Session::new(SessionAssets::load().expect("session assets must load"));
     session.debug_warp_map(2, 0x23).expect("tree zone");
     let tick = |session: &mut crate::session::Session, keys: PlayerKeys| {
-        session.advance(crate::session::FrameInput { keys, div: 0 }).outcome
+        session
+            .advance(crate::session::FrameInput { keys, div: 0 })
+            .outcome
     };
     for frame in 0..400 {
         let a = frame % 20 < 2;
-        tick(&mut session, PlayerKeys { a, ..PlayerKeys::default() });
+        tick(
+            &mut session,
+            PlayerKeys {
+                a,
+                ..PlayerKeys::default()
+            },
+        );
         if matches!(session.state, SessionState::InLevel(_)) {
             break;
         }
@@ -825,8 +833,11 @@ fn dying_in_a_zone_level_returns_to_that_zone() {
     ctx.sim.fade_timer = 3;
     let mut exit = None;
     for _ in 0..300 {
-        if let StepOutcome::LevelExited { node, screen, cleared } =
-            tick(&mut session, PlayerKeys::default())
+        if let StepOutcome::LevelExited {
+            node,
+            screen,
+            cleared,
+        } = tick(&mut session, PlayerKeys::default())
         {
             exit = Some((node, screen, cleared));
             break;
@@ -851,9 +862,7 @@ fn flutter_charge_survives_a_level_change() {
     let mut session = Session::new(SessionAssets::load().expect("session assets"));
     session.debug_warp_map(6, 0x50).expect("mario zone");
     let tick = |session: &mut Session, keys: PlayerKeys| {
-        session
-            .advance(FrameInput { keys, div: 0 })
-            .outcome
+        session.advance(FrameInput { keys, div: 0 }).outcome
     };
     let mut entered = None;
     tick(
@@ -926,7 +935,10 @@ fn flutter_charge_survives_a_level_change() {
     };
     assert!(ctx.sim.flutter_armed, "sFlutterArmed survives the map");
     assert_eq!(ctx.sim.flutter_charge, 1, "sFlutterCharge survives the map");
-    assert_eq!(ctx.sim.walk_timer, 7, "sMarioWalkAnimTimer survives the map");
+    assert_eq!(
+        ctx.sim.walk_timer, 7,
+        "sMarioWalkAnimTimer survives the map"
+    );
 }
 
 /// The reveal's coin walk (`$4485`) steps `$A222` by 8, and nothing on the
@@ -1134,7 +1146,11 @@ fn a_level_return_fades_the_hub_in() {
                 break;
             }
         }
-        assert_eq!(exited, Some(0), "level 0 returns to the hub (cleared {cleared})");
+        assert_eq!(
+            exited,
+            Some(0),
+            "level 0 returns to the hub (cleared {cleared})"
+        );
         let mut steps = Vec::new();
         while let Some(pan) = &session.map_pan_return {
             steps.push(pan.palettes().0);
@@ -1434,7 +1450,9 @@ fn boss_entry_hides_the_tileset_reload_until_the_scroll_finishes() {
     use crate::session::{FrameInput, Session};
     let mut session = Session::new(SessionAssets::load().unwrap());
     session.begin_level(13, 0).unwrap();
-    let SessionState::InLevel(ctx) = &mut session.state else { panic!() };
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        panic!()
+    };
     ctx.cam.scene_id = 14; // `$65 $20 $30 $60 $68 $40 $03 $FF`
     ctx.cam.transition = 1;
     ctx.cam.x = 0x6B0;
@@ -1443,15 +1461,31 @@ fn boss_entry_hides_the_tileset_reload_until_the_scroll_finishes() {
     let mut restored = false;
     for _ in 0..80 {
         session.advance(FrameInput::default());
-        let SessionState::InLevel(ctx) = &session.state else { panic!() };
+        let SessionState::InLevel(ctx) = &session.state else {
+            panic!()
+        };
         if ctx.scene_reload_blank {
             white_frames += 1;
-            assert_eq!((ctx.spr.as_ref().unwrap().obp0, ctx.spr.as_ref().unwrap().obp1), (0, 0));
+            assert_eq!(
+                (
+                    ctx.spr.as_ref().unwrap().obp0,
+                    ctx.spr.as_ref().unwrap().obp1
+                ),
+                (0, 0)
+            );
             assert!(session.render_frame((160, 144)).iter().all(|&p| p == 255));
         } else if white_frames != 0 {
             assert_eq!(ctx.cam.transition, 0);
-            assert_eq!((ctx.spr.as_ref().unwrap().obp0, ctx.spr.as_ref().unwrap().obp1),
-                       (ctx.manifest.header.palettes[1], ctx.manifest.header.palettes[2]));
+            assert_eq!(
+                (
+                    ctx.spr.as_ref().unwrap().obp0,
+                    ctx.spr.as_ref().unwrap().obp1
+                ),
+                (
+                    ctx.manifest.header.palettes[1],
+                    ctx.manifest.header.palettes[2]
+                )
+            );
             assert!(session.render_frame((160, 144)).iter().any(|&p| p != 255));
             restored = true;
             break;
@@ -1553,7 +1587,11 @@ fn the_scripted_exit_walks_through_the_fade_input_lock() {
         panic!("Wario level")
     };
     assert!(ctx.sim.fade_timer > 0, "the fade lock was still active");
-    assert!(ctx.sim.dir_right && ctx.sim.hvel > 0x80, "hvel {:02x}", ctx.sim.hvel);
+    assert!(
+        ctx.sim.dir_right && ctx.sim.hvel > 0x80,
+        "hvel {:02x}",
+        ctx.sim.hvel
+    );
 }
 
 /// State 19 draws the ending's own scene in all 20 substates:

@@ -102,10 +102,16 @@ fn handler_0x5a30e_real_mode_b_anim65_step() {
     let mut x = 100u16;
     for _ in 0..8 {
         sim.step(100, 100, &layout, &tables, &mario, false);
-        assert_eq!(u16::from_be_bytes([sim.slots[1].b[3], sim.slots[1].b[4]]), 100);
+        assert_eq!(
+            u16::from_be_bytes([sim.slots[1].b[3], sim.slots[1].b[4]]),
+            100
+        );
         assert_eq!(sim.slots[1].b[27], 0);
         let next = u16::from_be_bytes([sim.slots[1].b[0], sim.slots[1].b[1]]);
-        assert!(next == x || next == x + 1, "pacer x jumped from {x} to {next}");
+        assert!(
+            next == x || next == x + 1,
+            "pacer x jumped from {x} to {next}"
+        );
         x = next;
     }
     assert_eq!(x, 102);

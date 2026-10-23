@@ -313,7 +313,12 @@ over the DX banks `$06`, `$0D`-`$11`, `$18` and `$19`. Colors are DX's own:
 The hub's wave shimmer is replayed over DX's tiles from the native wave's start
 phase and tick count (its state repeats every 128 ticks). Captures of the hub and
 Tree Zone matched PyBoy except where water and decor animation timing differ.
-The bonus rooms and map palette fades stay native.
+Both minigames (coin rooms 9–12 and bell rooms 13–14) use these DX screens:
+coin rooms take BG `$75DA`/`$759A`/`$755A`/`$751A` and shared OBJ `$761A`, with
+attribute maps bank `$37` `$7340`/`$7100`/`$6EC0`/`$6C80`, selected by the door
+cursor's X. Bell rooms take BG `$745A`/`$749A`, OBJ `$74DA`, and attribute maps
+`$6800`/`$6A40`. Tiles stay the in-place bank 25 and bank 6 copies. Map palette
+fades stay native.
 
 Mid-level copies keep their base addresses: `$25AF`'s tables `$268B`/`$2699`,
 the bank-7 `$7800` block and `$216C`'s transfer code are byte-identical, so the

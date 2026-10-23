@@ -10,9 +10,7 @@ fn valid_record(node: u8) -> [u8; SLOT_LEN] {
     record[0x42] = 0x12; // BCD tally
     record[0x43] = 5; // lives
     record[0x44] = 2; // money bags
-    record[0x45] = record[..0x45]
-        .iter()
-        .fold(0u8, |c, b| c.wrapping_add(*b));
+    record[0x45] = record[..0x45].iter().fold(0u8, |c, b| c.wrapping_add(*b));
     record[0x46..0x4A].copy_from_slice(&SAVE_SIGNATURE);
     record
 }
@@ -37,9 +35,7 @@ fn the_fresh_template_is_invalid_by_design() {
         "the four signature bytes"
     );
     assert_eq!(template[0x4A], 0, "+$4A is never written");
-    let sum = template[..0x45]
-        .iter()
-        .fold(0u8, |c, b| c.wrapping_add(*b));
+    let sum = template[..0x45].iter().fold(0u8, |c, b| c.wrapping_add(*b));
     assert_eq!(sum, 5, "the real sum differs from the stored checksum");
     assert!(
         !save_record_valid(&template),

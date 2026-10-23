@@ -583,8 +583,14 @@ fn the_object_write_back_covers_every_field() {
     obj3.stomp_bounce = true;
     sim3.apply_object_result(&mut obj3, false);
     assert_eq!(sim3.vvel, 49, "the brick/bounce arm's fixed 49");
-    assert!(sim3.no_jump_cut, "$2E5C: the scene bounce ignores the A release");
-    assert!(!sim2.no_jump_cut, "the ordinary stomp jump can still be cut");
+    assert!(
+        sim3.no_jump_cut,
+        "$2E5C: the scene bounce ignores the A release"
+    );
+    assert!(
+        !sim2.no_jump_cut,
+        "the ordinary stomp jump can still be cut"
+    );
     // In a boss scene `$2E5C` and `$2D7D`'s stomp tail both run: the stomp's
     // 48 lands last, and the bounce's no-cut flag stays.
     let mut sim5 = small_sim();
@@ -1827,7 +1833,11 @@ fn entering_water_lifts_the_fall_index_and_swimming_lands() {
     high.vvel = 0x30;
     high.in_air = true;
     high.environment_probe(&layout, &PlayerKeys::default());
-    assert_eq!((high.vvel, high.in_air), (0x30, true), "a rising index is kept");
+    assert_eq!(
+        (high.vvel, high.in_air),
+        (0x30, true),
+        "a rising index is kept"
+    );
 }
 
 /// `$14FA`: flutter timer is bypassed when in a bit-1 moon zone.
@@ -2409,7 +2419,10 @@ fn respawn_keeps_the_flutter_state() {
     sim.flutter_armed = true;
     sim.flutter_charge = 4;
     sim.respawn(34, 468);
-    assert_eq!((sim.flutter, sim.flutter_armed, sim.flutter_charge), (3, true, 4));
+    assert_eq!(
+        (sim.flutter, sim.flutter_armed, sim.flutter_charge),
+        (3, true, 4)
+    );
 }
 
 #[test]
@@ -3759,7 +3772,10 @@ fn flutter_charge_of_11_retriggers_on_the_frame_after_the_press() {
         &layout,
     );
     assert_eq!(sim.flutter, 7);
-    assert_eq!(sim.flutter_charge, 11, "the press does not increment charge");
+    assert_eq!(
+        sim.flutter_charge, 11,
+        "the press does not increment charge"
+    );
     assert_eq!(sim.vvel, 24);
     assert_eq!(sim.y, 200);
 
@@ -3773,7 +3789,10 @@ fn flutter_charge_of_11_retriggers_on_the_frame_after_the_press() {
         &layout,
     );
     assert_eq!(sim.flutter_charge, 0, "11 + 1 reaches the restart");
-    assert_eq!(sim.flutter, 7, "timer reloads to 8 and gravity decrements it");
+    assert_eq!(
+        sim.flutter, 7,
+        "timer reloads to 8 and gravity decrements it"
+    );
     assert_eq!(sim.vvel, 24);
     assert_eq!(sim.y, 200, "the restarted hover does not fall");
 }
@@ -4124,7 +4143,10 @@ fn spike_hazard_power_down_emits_sfx_and_animates() {
     sim.step(&keys, false, false, &layout);
     assert_eq!(sim.sfx0, 20, "emitted SFX 20 on damage from spikes");
     assert_eq!(sim.powerup, 0, "powerup lost");
-    assert_eq!(sim.invincibility, 128, "granted 128 frames of invincibility");
+    assert_eq!(
+        sim.invincibility, 128,
+        "granted 128 frames of invincibility"
+    );
 
     // First frame of invincibility: decrements to 127 (bit 2 is 1) -> Small Mario (base 10 + 32 = 42)
     assert_eq!(sim.frame_index(0), 42);
@@ -4159,4 +4181,3 @@ fn death_arc_requests_jingle_on_fade_entry() {
     assert_eq!(sim.fade_timer.to_le_bytes(), [0xC0, 0]);
     assert_eq!([sim.powerup, sim.invincibility], [0, 0]);
 }
-

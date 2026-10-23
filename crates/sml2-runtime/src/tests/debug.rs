@@ -332,7 +332,10 @@ fn warps_carry_what_the_player_picked_up_since_the_last_hand_off() {
     session.debug_warp_map(0, 0x14).expect("hub");
     match &session.state {
         SessionState::Overworld(map) => {
-            assert_eq!((map.coins_low, map.coins_high, map.lives, map.powerup), (0x37, 0x01, 0x08, 1));
+            assert_eq!(
+                (map.coins_low, map.coins_high, map.lives, map.powerup),
+                (0x37, 0x01, 0x08, 1)
+            );
         }
         _ => panic!("the map warp did not land"),
     }
@@ -343,7 +346,11 @@ fn warps_carry_what_the_player_picked_up_since_the_last_hand_off() {
         map.coins_high = 0;
     }
     session.debug_warp_level(3).expect("level 3 loads");
-    assert_eq!(session.debug_coins(), 5, "the map's spend reaches the level");
+    assert_eq!(
+        session.debug_coins(),
+        5,
+        "the map's spend reaches the level"
+    );
     assert_eq!(session.debug_lives(), 8);
 }
 
@@ -358,10 +365,19 @@ fn warping_from_the_pause_screen_resumes_the_sound_engine() {
         let mut session = session();
         session.debug_warp_level(0).expect("level 1 loads");
         for _ in 0..8 {
-            session.advance(FrameInput { keys: PlayerKeys::default(), div: 0x3D });
+            session.advance(FrameInput {
+                keys: PlayerKeys::default(),
+                div: 0x3D,
+            });
         }
-        let start = PlayerKeys { start: true, ..PlayerKeys::default() };
-        session.advance(FrameInput { keys: start, div: 0x3D });
+        let start = PlayerKeys {
+            start: true,
+            ..PlayerKeys::default()
+        };
+        session.advance(FrameInput {
+            keys: start,
+            div: 0x3D,
+        });
         assert!(session.sound_driver.sound_paused, "START paused the engine");
 
         if warp_to_map {
@@ -371,10 +387,16 @@ fn warping_from_the_pause_screen_resumes_the_sound_engine() {
         }
         assert!(!session.sound_driver.sound_paused);
         for _ in 0..4 {
-            session.advance(FrameInput { keys: PlayerKeys::default(), div: 0x3D });
+            session.advance(FrameInput {
+                keys: PlayerKeys::default(),
+                div: 0x3D,
+            });
         }
         assert!(!session.sound_driver.sound_paused, "the engine stays live");
-        assert_ne!(session.sound_driver.active_song, 0, "music plays after the warp");
+        assert_ne!(
+            session.sound_driver.active_song, 0,
+            "music plays after the warp"
+        );
     }
 }
 
@@ -397,14 +419,25 @@ fn entering_a_zone_from_the_panel_lands_where_the_rom_door_does() {
         (8, (8, 0x6E, 40, 131)),
     ] {
         let mut session = session();
-        session.debug_warp_map(3, 0x32).expect("start somewhere else");
+        session
+            .debug_warp_map(3, 0x32)
+            .expect("start somewhere else");
         for _ in 0..20 {
-            session.advance(FrameInput { keys: PlayerKeys::default(), div: 0 });
+            session.advance(FrameInput {
+                keys: PlayerKeys::default(),
+                div: 0,
+            });
         }
         session.debug_enter_zone(screen).expect("the door opens");
-        assert!(session.map_screen_transition.is_some(), "screen {screen}: the walk-in runs");
+        assert!(
+            session.map_screen_transition.is_some(),
+            "screen {screen}: the walk-in runs"
+        );
         for _ in 0..500 {
-            session.advance(FrameInput { keys: PlayerKeys::default(), div: 0 });
+            session.advance(FrameInput {
+                keys: PlayerKeys::default(),
+                div: 0,
+            });
         }
         let SessionState::Overworld(map) = &session.state else {
             panic!("screen {screen}: left the overworld");
@@ -426,7 +459,10 @@ fn power_up_edits_play_as_pickups_and_carry_to_the_map() {
 
     let mut session = session();
     session.debug_warp_level(0).expect("level 1 loads");
-    let idle = FrameInput { keys: PlayerKeys::default(), div: 0x3D };
+    let idle = FrameInput {
+        keys: PlayerKeys::default(),
+        div: 0x3D,
+    };
     for _ in 0..8 {
         session.advance(idle);
     }

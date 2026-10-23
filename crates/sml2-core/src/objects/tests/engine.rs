@@ -4277,7 +4277,10 @@ fn a_view_margin_keeps_active_slots_alive_past_the_native_edge() {
     for _ in 0..4 {
         obj.step(cam, 0x0100, &layout, &t, &MarioContact::default(), false);
     }
-    assert_ne!(obj.slots[0].b[B_STATE], 0, "the widened alive window keeps it");
+    assert_ne!(
+        obj.slots[0].b[B_STATE], 0,
+        "the widened alive window keeps it"
+    );
 }
 
 /// Every horizontal offset a 384-px view keeps alive, with an active harmful

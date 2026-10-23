@@ -270,10 +270,16 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
             "--play" => play_mode = true,
             // `--boot title` starts the ROM's title -> file-select flow.
             "--boot" => {
-                boot = match args.next().ok_or("--boot needs title or overworld")?.as_str() {
+                boot = match args
+                    .next()
+                    .ok_or("--boot needs title or overworld")?
+                    .as_str()
+                {
                     "title" => crate::session::Boot::Title,
                     "overworld" => crate::session::Boot::Overworld,
-                    other => return Err(format!("--boot must be title or overworld, got {other}").into()),
+                    other => {
+                        return Err(format!("--boot must be title or overworld, got {other}").into())
+                    }
                 };
             }
             "--window" => window_mode = true,

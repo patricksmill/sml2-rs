@@ -152,10 +152,11 @@ impl DesktopApp {
         }
         theme::note(
             ui,
-            "Supply your own SML2DX v1.8.1 ROM. DX Mode redraws the title, file select, map \
-             and every level in DX graphics and color, as Mario or Luigi, in the normal game \
-             with your normal saves. Boss arenas and bonus rooms keep the display filter for \
-             now, and DX gameplay changes are not included.",
+            "Supply your own SML2DX v1.8.1 ROM. DX Mode redraws the title, file select, map, \
+             both minigames and every level in DX graphics and color, as Mario or Luigi, in \
+             the normal game with your normal saves. Boss arenas keep the display filter for \
+             now, and DX gameplay changes are not included. Re-import if this installation \
+             predates the minigames.",
         );
     }
 

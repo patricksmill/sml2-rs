@@ -105,12 +105,12 @@ pub use staging::*;
 use staging::{BOUNCE_SPEED, FALL_SPEED, HOVER_SPEED, SPIN_WOBBLE, STEP_74A1};
 #[path = "enemies/boo.rs"]
 mod boo;
-#[path = "bosses/shared/defeat_fall.rs"]
-mod boss_defeat_fall;
 #[path = "bosses/shared/handlers.rs"]
 mod boss;
 #[path = "bosses/shared/damage.rs"]
 mod boss_damage;
+#[path = "bosses/shared/defeat_fall.rs"]
+mod boss_defeat_fall;
 #[path = "bosses/shared/flash.rs"]
 mod boss_flash;
 #[cfg(test)]
@@ -195,10 +195,6 @@ mod handler_0x587a1_adapter;
 mod handler_0x58804;
 #[path = "compat/items/floating_pickup.rs"]
 mod handler_0x58804_adapter;
-#[path = "enemies/hopper.rs"]
-mod hopper;
-#[path = "enemies/hopping.rs"]
-mod hopping;
 #[path = "compat/enemies/hopping.rs"]
 mod handler_0x58848_adapter;
 #[path = "enemies/buried.rs"]
@@ -526,11 +522,18 @@ mod handler_0x96fe;
 #[path = "bosses/door/side/adapter.rs"]
 mod handler_0x9824;
 mod helpers;
-mod visibility;
+#[path = "enemies/hopper.rs"]
+mod hopper;
+#[path = "enemies/hopping.rs"]
+mod hopping;
 #[path = "platforms/horizontal.rs"]
 mod horizontal_platform;
 mod interaction;
+mod visibility;
 pub use interaction::ContactBox;
+#[cfg(test)]
+#[path = "tests/carried_release.rs"]
+mod carried_release_tests;
 #[path = "items/floater.rs"]
 mod floater;
 #[path = "items/grower.rs"]
@@ -539,6 +542,9 @@ mod grower;
 mod item_poses;
 #[path = "compat/items/dispatch.rs"]
 mod items;
+#[cfg(test)]
+#[path = "tests/knockback_latch.rs"]
+mod knockback_latch_tests;
 #[path = "enemies/left_marcher.rs"]
 mod left_marcher;
 #[path = "bosses/mario_zone/mod.rs"]
@@ -564,6 +570,8 @@ mod perched_flyer;
 mod pipe_bobber;
 #[path = "projectiles/piranha_fireball.rs"]
 mod piranha_fireball;
+#[path = "enemies/reactions.rs"]
+mod reactions;
 #[cfg(test)]
 #[path = "tests/record_marker.rs"]
 mod record_marker_tests;
@@ -573,8 +581,6 @@ mod record_reset;
 #[path = "tests/record_reset.rs"]
 mod record_reset_tests;
 mod reward_spawn;
-#[path = "enemies/reactions.rs"]
-mod reactions;
 #[path = "platforms/rising.rs"]
 mod rising_platform;
 #[path = "compat/platforms/rising.rs"]
@@ -583,16 +589,10 @@ mod scratch;
 mod shell;
 #[path = "enemies/shell.rs"]
 mod shell_behavior;
-#[cfg(test)]
-#[path = "tests/carried_release.rs"]
-mod carried_release_tests;
 #[path = "bosses/door/side/behavior.rs"]
 mod side_door;
 #[path = "effects/squashed.rs"]
 mod squashed;
-#[cfg(test)]
-#[path = "tests/knockback_latch.rs"]
-mod knockback_latch_tests;
 #[cfg(test)]
 #[path = "tests/stomp_morph.rs"]
 mod stomp_morph_tests;

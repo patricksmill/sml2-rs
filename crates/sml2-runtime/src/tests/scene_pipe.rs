@@ -36,11 +36,16 @@ fn live_session_pipe_page_write_preserves_low_bytes_and_suspends_gameplay() {
         ctx.cam.prev_mario_y_lo = 0xA4;
         ctx.cam.update_enables(ctx.sim.x);
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../extracted/levels");
-        ctx.cam.edge_map.copy_from_slice(&fs::read(root.join("level11.edge.bin")).unwrap());
+        ctx.cam
+            .edge_map
+            .copy_from_slice(&fs::read(root.join("level11.edge.bin")).unwrap());
         ctx.cam.scene_map = fs::read(root.join("level11.scene.bin")).unwrap();
     }
     let input = FrameInput {
-        keys: PlayerKeys { right: true, ..Default::default() },
+        keys: PlayerKeys {
+            right: true,
+            ..Default::default()
+        },
         div: 0,
     };
     // The first pass reads the prior draw at screen X $A0, even though

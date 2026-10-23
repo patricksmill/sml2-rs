@@ -156,7 +156,12 @@ fn update_bands(state: &mut WarioCastleAnimation, raster_phase: &mut u8) {
     }
 }
 
-fn animate_wanderer(state: &mut WarioCastleAnimation, wanderer: &mut (u8, u8, u8), div: u8, timer: u8) {
+fn animate_wanderer(
+    state: &mut WarioCastleAnimation,
+    wanderer: &mut (u8, u8, u8),
+    div: u8,
+    timer: u8,
+) {
     let (x, y, sprite) = wanderer;
     match state.movement {
         1 | 2 => {

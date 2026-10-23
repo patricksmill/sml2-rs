@@ -1496,6 +1496,16 @@ pub fn rasterize_overworld(
     img
 }
 
+/// Scroll added to a bonus room's background, and the same shift for its
+/// sprites, so the 160-wide picture stays centred in a wider view.
+fn room_margins(screen_id: u8, vw: usize) -> (usize, u8) {
+    if !(9..=14).contains(&screen_id) || vw <= 160 {
+        return (0, 0);
+    }
+    let margin = (vw.min(256) - 160) / 2;
+    ((256 - margin) & 255, margin as u8)
+}
+
 /// Lay out one overworld frame: the hub's 64x64 stitched map or a zone's
 /// 32x32 screen with its route patches and per-row scroll, then the OAM.
 #[allow(clippy::too_many_arguments)]
@@ -1570,6 +1580,10 @@ pub fn compose_overworld_view(
                 }
             }
         }
+        // A bonus room is 160 px of picture inside a 32-tile map. A wider
+        // view keeps that picture centred; the map wraps, so the columns
+        // the hardware never shows fill both sides.
+        let (room_scroll, _) = room_margins(screen_id, vw);
         for py in 0..vh.min(144) {
             let wy = (py + video.map_or(0, |v| v.scroll_y as usize)) & 255;
             let ty = wy / 8;
@@ -1579,7 +1593,8 @@ pub fn compose_overworld_view(
                     + video
                         .and_then(|v| v.scroll_rows.get(py))
                         .copied()
-                        .unwrap_or(0) as usize)
+                        .unwrap_or(0) as usize
+                    + room_scroll)
                     & 255;
                 let tx = wx / 8;
                 let sub_x = wx % 8;
@@ -1595,10 +1610,12 @@ pub fn compose_overworld_view(
     }
 
     if screen_id >= 9 {
-        return OverworldComposition {
-            bg,
-            oam: decor_cells.to_vec(),
-        };
+        let (_, room_shift) = room_margins(screen_id, vw);
+        let oam = decor_cells
+            .iter()
+            .map(|&(y, x, tile, attr)| (y, x.wrapping_add(room_shift), tile, attr))
+            .collect();
+        return OverworldComposition { bg, oam };
     }
 
     let mut oam = Vec::new();
@@ -2340,7 +2357,9 @@ mod wave_tests {
     #[test]
     fn a_followed_wave_turns_another_tile_set_as_far_and_repeats_every_128() {
         let block = |seed: u8| -> Vec<u8> {
-            (0..384 * 16).map(|i| (i as u8).wrapping_mul(seed).rotate_left(3)).collect()
+            (0..384 * 16)
+                .map(|i| (i as u8).wrapping_mul(seed).rotate_left(3))
+                .collect()
         };
         let (native, dx) = (block(7), block(13));
         let mut live = MapWave::seed(&native).unwrap();

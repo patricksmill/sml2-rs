@@ -9,10 +9,7 @@ fn disabled_tile_animation_preserves_vram_and_cannot_overwrite_arena_fire() {
     let mut bg = vec![0xA5; 0x1000];
     let mut rows = vec![0; 16 * 0x100];
     rows[0xB40..0xB80].fill(0x39);
-    let mut clock = sml2_core::tile_animation::TileAnimationClock {
-        timer: 8,
-        phase: 0,
-    };
+    let mut clock = sml2_core::tile_animation::TileAnimationClock { timer: 8, phase: 0 };
     update_tile_animation(&player, false, &mut bg, &rows, &mut clock);
     // Incremented to 9, then this frame's copy restarts the timer at 0.
     assert_eq!((clock.timer, clock.phase), (0, 1));

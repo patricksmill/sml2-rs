@@ -1,8 +1,8 @@
 //! Mouse picks on the title and the file select. The ROM step still owns the motion.
 
 use eframe::egui::{self, Rect};
-use sml2_core::front_end::{FileSelect, SaveSlots};
 use sml2_core::front_end::keys::{DOWN, LEFT, RIGHT};
+use sml2_core::front_end::{FileSelect, SaveSlots};
 use sml2_core::player_sim::PlayerKeys;
 use sml2_runtime::render::view::{margin, NATIVE};
 
@@ -43,7 +43,11 @@ pub(super) fn native_point(view: (usize, usize), pixel: (i32, i32)) -> Option<(u
     }
 }
 
-pub(super) fn view_pixel(rect: Rect, view: (usize, usize), pointer: egui::Pos2) -> Option<(i32, i32)> {
+pub(super) fn view_pixel(
+    rect: Rect,
+    view: (usize, usize),
+    pointer: egui::Pos2,
+) -> Option<(i32, i32)> {
     if !rect.contains(pointer) || rect.width() < 1.0 || rect.height() < 1.0 {
         return None;
     }
@@ -345,7 +349,11 @@ mod tests {
         loop {
             guard += 1;
             assert!(guard < 200, "Mario never reached the middle pipe");
-            let press = aim_keys(Aim::Pipe(0x48), file_select.menu_state(), file_select.cursor().0);
+            let press = aim_keys(
+                Aim::Pipe(0x48),
+                file_select.menu_state(),
+                file_select.cursor().0,
+            );
             let (held, pressed) = match press {
                 Some(press) => {
                     let byte = u8::from(press.keys.right) * RIGHT

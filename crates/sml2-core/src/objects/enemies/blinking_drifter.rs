@@ -46,7 +46,11 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
                 _ => (&SLOW_DOWN_74A7, true),
             };
             let step = actor.motion_step(profile, 12).map_err(Error::Profile)?;
-            let dy = if up { -i16::from(step) } else { i16::from(step) };
+            let dy = if up {
+                -i16::from(step)
+            } else {
+                i16::from(step)
+            };
             actor.position.move_y(dy);
             // `$59AFF`: the leg ends when the phase reaches the cap.
             if actor.motion_phase == 12 {

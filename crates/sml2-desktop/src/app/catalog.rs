@@ -68,8 +68,7 @@ pub(super) fn cycle(pedestal: Pedestal, settings: &mut Settings, debug: &mut boo
         Pedestal::Fullscreen => settings.fullscreen = !settings.fullscreen,
         Pedestal::Filter => settings.filter = settings.filter.cycle(1),
         Pedestal::Volume => {
-            settings.volume =
-                ((settings.volume * 10.0).round() + 1.0).rem_euclid(11.0) / 10.0;
+            settings.volume = ((settings.volume * 10.0).round() + 1.0).rem_euclid(11.0) / 10.0;
         }
         Pedestal::Mute => settings.muted = !settings.muted,
         Pedestal::DeadZone => {
@@ -209,7 +208,10 @@ mod tests {
         for _ in 0..4 {
             cycle(Pedestal::Volume, &mut settings, &mut debug);
         }
-        assert!((settings.volume - 0.1).abs() < f32::EPSILON, "100% wraps to 0%");
+        assert!(
+            (settings.volume - 0.1).abs() < f32::EPSILON,
+            "100% wraps to 0%"
+        );
         cycle(Pedestal::Mute, &mut settings, &mut debug);
         assert!(settings.muted);
         cycle(Pedestal::Toolbar, &mut settings, &mut debug);

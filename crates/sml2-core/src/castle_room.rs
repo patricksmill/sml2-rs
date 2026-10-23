@@ -343,13 +343,37 @@ impl CastleRoom {
     /// `$FFC4..$C7`; `$5297` expands its sprite id before the room decorations.
     /// The first record at `$A6B5` is the expander's blank `$7F` placeholder.
     pub fn oam_cells(&self) -> Vec<(u8, u8, u8, u8)> {
+        self.oam_cells_from(&self.metasprites, None)
+    }
+
+    /// [`Self::oam_cells`] through another revision's decoration table.
+    /// `mappings` replaces `$5297` the way DX does: `$465A` sends Mario and
+    /// Luigi through banks `$2C`/`$2D` instead of the bank-1 table.
+    pub fn oam_cells_from(
+        &self,
+        metasprites: &crate::room_sprites::RoomSpriteTable,
+        mappings: Option<&[Vec<crate::object::MappingEntry>]>,
+    ) -> Vec<(u8, u8, u8, u8)> {
         let mut cells = Vec::new();
         if self.oam[2] != 0 {
-            for (x, y, tile, attr) in
-                self.sprite_metas
-                    .expand(self.oam[2], self.oam[1], self.oam[0])
-            {
-                cells.push((y, x, tile, attr));
+            if let Some(mappings) = mappings {
+                if let Some(sprite) = mappings.get(usize::from(self.oam[2])) {
+                    for entry in sprite {
+                        cells.push((
+                            self.oam[0].wrapping_add(entry.y as u8),
+                            self.oam[1].wrapping_add(entry.x as u8),
+                            entry.tile,
+                            entry.attr,
+                        ));
+                    }
+                }
+            } else {
+                for (x, y, tile, attr) in
+                    self.sprite_metas
+                        .expand(self.oam[2], self.oam[1], self.oam[0])
+                {
+                    cells.push((y, x, tile, attr));
+                }
             }
         }
         for index in 1..16 {
@@ -359,7 +383,7 @@ impl CastleRoom {
                 continue;
             }
             cells.extend(
-                self.metasprites
+                metasprites
                     .expand(id, x, y)
                     .into_iter()
                     .filter(|&(_, y, _, _)| y != 0)
@@ -602,7 +626,11 @@ impl CastleRoom {
         }
         let (lit, dark) = (vram[BULBS[0]], vram[BULBS[2]]);
         for (index, &tile) in BULBS.iter().enumerate() {
-            vram[tile] = if index == self.shuffle_phase as usize { lit } else { dark };
+            vram[tile] = if index == self.shuffle_phase as usize {
+                lit
+            } else {
+                dark
+            };
         }
     }
 
@@ -2221,11 +2249,18 @@ mod tests {
         room.frame_sync();
         let writes = room.bg_writes(0x6E, 0x69, 0x09, 0x05);
         let at = |index: u16| writes.iter().rev().find(|w| w.0 == index).map(|w| w.1);
-        let row = |r: u16| (0..6).map(|c| at(0x8A + r * 32 + c).unwrap()).collect::<Vec<_>>();
+        let row = |r: u16| {
+            (0..6)
+                .map(|c| at(0x8A + r * 32 + c).unwrap())
+                .collect::<Vec<_>>()
+        };
         assert_eq!(row(0), [0x44, 0x44, 0x32, 0x33, 0x44, 0x44]);
         assert_eq!(row(1), [0xDA, 0x53, 0x53, 0x53, 0x53, 0x54]);
         assert_eq!(row(2), [0x44, 0x44, 0x20, 0x21, 0x44, 0x44]);
-        assert_eq!([at(0x23), at(0x24), at(0x25)], [Some(0x89), Some(0x86), Some(0x89)]);
+        assert_eq!(
+            [at(0x23), at(0x24), at(0x25)],
+            [Some(0x89), Some(0x86), Some(0x89)]
+        );
         assert_eq!([at(0x63), at(0x64)], [Some(0x80), Some(0x85)]);
 
         // Past row 29 the sync clamps the progress byte and draws row 29.

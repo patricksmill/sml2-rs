@@ -60,7 +60,9 @@ use crate::level::LevelLayout;
 
 #[path = "player/motion_tables.rs"]
 mod motion_tables;
-pub use motion_tables::{SPEED_H, SPEED_V, SPEED_V_GOO, SPEED_V_WATER, SPEED_H_WATER, SPEED_V_DEAD};
+pub use motion_tables::{
+    SPEED_H, SPEED_H_WATER, SPEED_V, SPEED_V_DEAD, SPEED_V_GOO, SPEED_V_WATER,
+};
 
 /// `$5BB4` — the vertical offset (indexed by the bump timer) the type-2/3/6
 /// draw adds to the block's screen Y before enqueueing the bump sprite.
@@ -1923,13 +1925,12 @@ impl PlayerSim {
         let x_sub_saved = self.x_sub;
         // `$1826`: the goal-bell branch selects the normal table before
         // either the swimming or grounded moon-zone checks.
-        let htable: &[u8] = if !self.goal_bell
-            && (self.swim || (self.moon & 2 != 0 && self.on_ground))
-        {
-            &SPEED_H_WATER
-        } else {
-            &SPEED_H
-        };
+        let htable: &[u8] =
+            if !self.goal_bell && (self.swim || (self.moon & 2 != 0 && self.on_ground)) {
+                &SPEED_H_WATER
+            } else {
+                &SPEED_H
+            };
         let b = htable[(self.hvel as usize + (self.phase & 7) as usize) & 0xFF];
         // $3404-$3415: XSub = XSub_old + speed, and x gets the WHOLE new XSub
         // byte — `add 16` / `sub 16` around the 16-bit add is the engine's
@@ -1997,7 +1998,11 @@ impl PlayerSim {
         if let Some(d) = hazard_dead {
             if self.dead == 0 {
                 self.dead = d;
-                self.sfx0 = if d == 0x80 || self.powerup == 0 { 15 } else { 20 };
+                self.sfx0 = if d == 0x80 || self.powerup == 0 {
+                    15
+                } else {
+                    20
+                };
             }
         }
         self.death_dispatch();
@@ -2444,15 +2449,17 @@ impl PlayerSim {
         // hub node, then `$3C7BD` loads the hub and requests track 6. These
         // branches return without the ordinary tail's second `$2934` save.
         if self.dead == 0 {
-            let hub_return = nodes.progress_slot(self.map_node).and_then(|slot| match slot {
-                5 => Some((0x19, 8)),
-                9 => Some((0x1C, 8)),
-                14 => Some((0x1B, 34)),
-                17 => Some((0x1A, 2)),
-                23 => Some((0x1E, 4)),
-                29 => Some((0x1D, 2)),
-                _ => None,
-            });
+            let hub_return = nodes
+                .progress_slot(self.map_node)
+                .and_then(|slot| match slot {
+                    5 => Some((0x19, 8)),
+                    9 => Some((0x1C, 8)),
+                    14 => Some((0x1B, 34)),
+                    17 => Some((0x1A, 2)),
+                    23 => Some((0x1E, 4)),
+                    29 => Some((0x1D, 2)),
+                    _ => None,
+                });
             if let Some((node, direction)) = hub_return {
                 out.saved_node = self.map_node;
                 self.map_node = node;

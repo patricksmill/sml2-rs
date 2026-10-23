@@ -315,7 +315,8 @@ impl SoundDriver {
         self.pulse_writes.push(PulseWrite::Ch2Envelope(0x08));
         self.noise_writes.push(NoiseWrite::Envelope(0x08));
         self.pulse_writes.push(PulseWrite::FrequencyControl(0x80));
-        self.pulse_writes.push(PulseWrite::Ch2FrequencyControl(0x80));
+        self.pulse_writes
+            .push(PulseWrite::Ch2FrequencyControl(0x80));
         self.noise_writes.push(NoiseWrite::Control(0x80));
         self.pulse_writes.push(PulseWrite::Sweep(0));
         self.wave_writes.push(WaveWrite::Enable(0));
@@ -358,7 +359,8 @@ impl SoundDriver {
         self.pulse_writes.push(PulseWrite::Ch2Envelope(8));
         self.noise_writes.push(NoiseWrite::Envelope(8));
         self.pulse_writes.push(PulseWrite::FrequencyControl(0x80));
-        self.pulse_writes.push(PulseWrite::Ch2FrequencyControl(0x80));
+        self.pulse_writes
+            .push(PulseWrite::Ch2FrequencyControl(0x80));
         self.noise_writes.push(NoiseWrite::Control(0x80));
         self.pulse_writes.push(PulseWrite::Sweep(0));
         self.wave_writes.push(WaveWrite::Enable(0));
@@ -387,7 +389,8 @@ impl SoundDriver {
         self.pulse_writes.push(PulseWrite::Ch2DutyLength(duty));
         self.pulse_writes.push(PulseWrite::Ch2Envelope(envelope));
         self.pulse_writes.push(PulseWrite::Ch2FrequencyLow(low));
-        self.pulse_writes.push(PulseWrite::Ch2FrequencyControl(control));
+        self.pulse_writes
+            .push(PulseWrite::Ch2FrequencyControl(control));
         self.pause_beep_timer = budget;
     }
 

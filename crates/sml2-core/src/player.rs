@@ -249,13 +249,7 @@ pub fn draw_streak_counter(
             attr: 0,
         });
     } else {
-        let _ = append_cells(
-            tables,
-            190,
-            streak_pos,
-            CellStyle::default(),
-            &mut cells,
-        );
+        let _ = append_cells(tables, 190, streak_pos, CellStyle::default(), &mut cells);
     }
     cells
 }

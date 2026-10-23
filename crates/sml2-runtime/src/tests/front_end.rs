@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use sml2_core::front_end::keys::{START, SELECT};
+use sml2_core::front_end::keys::{SELECT, START};
 use sml2_core::front_end::save_slots::fresh_template;
 use sml2_core::map::save_record_valid;
 use sml2_core::player_sim::PlayerKeys;
@@ -42,10 +42,14 @@ fn press_once(runner: &mut SessionRunner, keys: u8) {
 }
 
 fn finish_file_select_loading(runner: &mut SessionRunner) {
-    if !matches!(runner.state, SessionState::FileSelectLoading(_)) { return; }
+    if !matches!(runner.state, SessionState::FileSelectLoading(_)) {
+        return;
+    }
     for _ in 0..20 {
         runner.step_frame(PlayerKeys::default());
-        if !matches!(runner.state, SessionState::FileSelectLoading(_)) { return; }
+        if !matches!(runner.state, SessionState::FileSelectLoading(_)) {
+            return;
+        }
     }
     panic!("file select loader did not complete");
 }
@@ -64,10 +68,17 @@ fn boot_title_then_start_opens_the_file_select() {
     let title = runner.render_frame();
     press_once(&mut runner, START);
     assert!(matches!(runner.state, SessionState::FileSelectLoading(_)));
-    assert_eq!(runner.render_frame(), title, "pending $19 retains title VRAM");
+    assert_eq!(
+        runner.render_frame(),
+        title,
+        "pending $19 retains title VRAM"
+    );
     finish_file_select_loading(&mut runner);
     assert!(matches!(runner.state, SessionState::FileSelect(_)));
-    assert_eq!(runner.sound_driver.active_song, 13, "$30000 requests song 13");
+    assert_eq!(
+        runner.sound_driver.active_song, 13,
+        "$30000 requests song 13"
+    );
 }
 
 #[test]
@@ -200,10 +211,7 @@ fn the_demo_tape_drives_the_player_and_live_input_does_not_leak() {
     let start = demo_position("demo_start", idle, 0);
     let held_left = demo_position("demo_left", left, 30);
     let held_right = demo_position("demo_right", right, 30);
-    assert_eq!(
-        held_left, held_right,
-        "live input must not change the demo"
-    );
+    assert_eq!(held_left, held_right, "live input must not change the demo");
     assert_ne!(start, held_left, "the tape must move Mario");
 }
 

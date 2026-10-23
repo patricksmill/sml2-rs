@@ -30,7 +30,11 @@ pub(super) enum UpdateError {
 }
 
 /// `primary` is the first boss slot; other slots fall without the wait and music.
-pub(super) fn update(actor: &mut Actor, primary: bool, fall: &[u8]) -> Result<Effects, UpdateError> {
+pub(super) fn update(
+    actor: &mut Actor,
+    primary: bool,
+    fall: &[u8],
+) -> Result<Effects, UpdateError> {
     let mut effects = Effects::default();
     match actor.state {
         0 => {
@@ -90,10 +94,18 @@ use crate::object::ObjectTables;
 use crate::objects::{ObjectSim, Staging};
 
 impl ObjectSim {
-    pub(in crate::objects) fn handler_boss_anim3(&mut self, st: &mut Staging, tables: &ObjectTables) {
+    pub(in crate::objects) fn handler_boss_anim3(
+        &mut self,
+        st: &mut Staging,
+        tables: &ObjectTables,
+    ) {
         let mut actor = Actor::from_raw_slot(&st.b);
         let state = actor.state;
-        let result = update(&mut actor, self.boss_slot_ptr_lo == 0, &tables.boss_picker_profile);
+        let result = update(
+            &mut actor,
+            self.boss_slot_ptr_lo == 0,
+            &tables.boss_picker_profile,
+        );
         st.b = actor.to_raw_slot();
         let effects = match result {
             Ok(effects) => effects,

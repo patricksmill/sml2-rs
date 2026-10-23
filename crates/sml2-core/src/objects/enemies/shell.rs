@@ -329,7 +329,9 @@ mod tests {
 
     #[test]
     fn a_wall_turns_the_kicked_shell_round_with_a_bump() {
-        for (state, right_wall, turned) in [(1, true, 2), (2, false, 1), (3, true, 4), (4, false, 3)] {
+        for (state, right_wall, turned) in
+            [(1, true, 2), (2, false, 1), (3, true, 4), (4, false, 3)]
+        {
             let mut actor = Actor::default();
             actor.position.x = 0x80;
             actor.state = state;

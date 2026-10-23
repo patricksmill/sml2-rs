@@ -117,7 +117,7 @@ impl CameraSim {
             map_scroll_limit: false,
             map_scroll_flags: 0,
             prev_mario_y_lo: y as u8, // caller seeds with the live value
-            mario_screen_x: 0x40, // `$0F2A` level reset
+            mario_screen_x: 0x40,     // `$0F2A` level reset
             edge_map: [0; 48],
             edge_now: None,
             auto_scroll: 0,

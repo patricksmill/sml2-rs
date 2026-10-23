@@ -192,7 +192,10 @@ fn handler_0x59270_rider_motion_publishes_direction_gated_scroll() {
         position(&mut expected, platform_x, 100);
         check(&mut sim, &mut st, expected, 99);
         assert_eq!(sim.mario_x_adjust, Some(player_x));
-        assert_eq!([sim.scroll_delta_right, sim.scroll_delta_left], [right, left]);
+        assert_eq!(
+            [sim.scroll_delta_right, sim.scroll_delta_left],
+            [right, left]
+        );
         assert_eq!(sim.mario_y_adjust, None);
     }
 }

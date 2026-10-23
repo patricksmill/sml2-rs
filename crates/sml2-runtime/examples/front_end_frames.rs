@@ -20,13 +20,25 @@ fn main() {
     for _ in 0..64 {
         step(&mut session, PlayerKeys::default());
     }
-    step(&mut session, PlayerKeys { start: true, ..Default::default() });
+    step(
+        &mut session,
+        PlayerKeys {
+            start: true,
+            ..Default::default()
+        },
+    );
     for _ in 0..46 {
         step(&mut session, PlayerKeys::default());
     }
     write_pgm("/tmp/fe_select.pgm", &session.render_frame((160, 144)));
 
-    step(&mut session, PlayerKeys { select: true, ..Default::default() });
+    step(
+        &mut session,
+        PlayerKeys {
+            select: true,
+            ..Default::default()
+        },
+    );
     write_pgm("/tmp/fe_easy.pgm", &session.render_frame((160, 144)));
 
     // `$0B`: run the first attract demo and capture a mid-level frame.

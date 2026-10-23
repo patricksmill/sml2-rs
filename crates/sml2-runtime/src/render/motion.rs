@@ -20,7 +20,10 @@ pub struct Smooth {
 }
 
 impl Smooth {
-    pub const OFF: Self = Self { alpha: 1.0, scale: 1 };
+    pub const OFF: Self = Self {
+        alpha: 1.0,
+        scale: 1,
+    };
 }
 
 /// The largest divisor of `effective_scale` that keeps a `view` frame within
@@ -54,7 +57,8 @@ impl MotionSnapshot {
     /// and boss fights.
     pub fn of(ctx: &LevelContext) -> Option<Self> {
         let s = ctx.spr.as_ref()?;
-        if ctx.sim.paused || ctx.scene_reload_blank || ctx.cam.boss_mode() || !s.boss_oam.is_empty() {
+        if ctx.sim.paused || ctx.scene_reload_blank || ctx.cam.boss_mode() || !s.boss_oam.is_empty()
+        {
             return None;
         }
         let pans = Pans {
@@ -126,12 +130,23 @@ impl Offsets {
     /// Background pixels to render past each view edge: only a shifted
     /// background can expose them, at any scale.
     pub fn border(&self) -> usize {
-        if self.bg != (0, 0) { BORDER } else { 0 }
+        if self.bg != (0, 0) {
+            BORDER
+        } else {
+            0
+        }
     }
 
-    pub fn between(prev: Option<&MotionSnapshot>, cur: Option<&MotionSnapshot>, smooth: Smooth) -> Self {
+    pub fn between(
+        prev: Option<&MotionSnapshot>,
+        cur: Option<&MotionSnapshot>,
+        smooth: Smooth,
+    ) -> Self {
         let s = smooth.scale.max(1);
-        let mut out = Self { scale: s, ..Self::none() };
+        let mut out = Self {
+            scale: s,
+            ..Self::none()
+        };
         let (Some(prev), Some(cur)) = (prev, cur) else {
             return out;
         };
@@ -143,7 +158,9 @@ impl Offsets {
         };
         out.bg = (-cam.0, -cam.1);
         let rel = |p: Option<(u16, u16)>, c: (u16, u16)| {
-            let own = p.and_then(|p| shift(p, c, smooth.alpha, s)).unwrap_or((0, 0));
+            let own = p
+                .and_then(|p| shift(p, c, smooth.alpha, s))
+                .unwrap_or((0, 0));
             (own.0 - cam.0, own.1 - cam.1)
         };
         out.player = cur.player.map_or(out.bg, |c| rel(prev.player, c));
@@ -180,7 +197,10 @@ impl Offsets {
     }
 
     pub fn object(&self, slot: u8) -> (i32, i32) {
-        self.objects.iter().find(|o| o.0 == slot).map_or(self.bg, |o| o.1)
+        self.objects
+            .iter()
+            .find(|o| o.0 == slot)
+            .map_or(self.bg, |o| o.1)
     }
 }
 
@@ -192,7 +212,10 @@ fn shift(prev: (u16, u16), cur: (u16, u16), alpha: f32, s: usize) -> Option<(i32
         return None;
     }
     let f = (alpha.clamp(0.0, 1.0) - 1.0) * s as f32;
-    Some(((dx as f32 * f).round() as i32, (dy as f32 * f).round() as i32))
+    Some((
+        (dx as f32 * f).round() as i32,
+        (dy as f32 * f).round() as i32,
+    ))
 }
 
 #[cfg(test)]
@@ -200,7 +223,10 @@ mod tests {
     use super::*;
 
     fn snap(cam: (u16, u16)) -> MotionSnapshot {
-        MotionSnapshot { cam, ..Default::default() }
+        MotionSnapshot {
+            cam,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -221,7 +247,14 @@ mod tests {
         let mut cur = snap((104, 50));
         cur.player = Some((114, 60));
         cur.objects = vec![(3, (130, 60)), (5, (140, 60))];
-        let o = Offsets::between(Some(&prev), Some(&cur), Smooth { alpha: 0.5, scale: 2 });
+        let o = Offsets::between(
+            Some(&prev),
+            Some(&cur),
+            Smooth {
+                alpha: 0.5,
+                scale: 2,
+            },
+        );
         assert_eq!(o.bg, (4, 0));
         assert_eq!(o.player, (0, 0));
         assert_eq!(o.object(3), (4, 0));
@@ -263,15 +296,27 @@ mod tests {
 
     #[test]
     fn warps_pauses_and_full_ticks_draw_the_current_tick() {
-        let s = Smooth { alpha: 0.25, scale: 3 };
+        let s = Smooth {
+            alpha: 0.25,
+            scale: 3,
+        };
         let warp = Offsets::between(Some(&snap((100, 50))), Some(&snap((120, 50))), s);
-        assert_eq!(warp, Offsets { scale: 3, ..Offsets::none() });
+        assert_eq!(
+            warp,
+            Offsets {
+                scale: 3,
+                ..Offsets::none()
+            }
+        );
         let missing = Offsets::between(None, Some(&snap((100, 50))), s);
         assert_eq!(missing.bg, (0, 0));
         let done = Offsets::between(
             Some(&snap((100, 50))),
             Some(&snap((104, 50))),
-            Smooth { alpha: 1.0, scale: 3 },
+            Smooth {
+                alpha: 1.0,
+                scale: 3,
+            },
         );
         assert_eq!(done.bg, (0, 0));
     }
@@ -305,13 +350,23 @@ mod tests {
         prev.objects = vec![(2, (10, 10))];
         let mut cur = snap((102, 50));
         cur.objects = vec![(2, (200, 10))];
-        let o = Offsets::between(Some(&prev), Some(&cur), Smooth { alpha: 0.5, scale: 1 });
+        let o = Offsets::between(
+            Some(&prev),
+            Some(&cur),
+            Smooth {
+                alpha: 0.5,
+                scale: 1,
+            },
+        );
         assert_eq!(o.object(2), o.bg);
     }
 
     #[test]
     fn a_shifted_background_is_bordered_even_at_scale_one() {
-        let s = Smooth { alpha: 0.5, scale: 1 };
+        let s = Smooth {
+            alpha: 0.5,
+            scale: 1,
+        };
         let o = Offsets::between(Some(&snap((100, 50))), Some(&snap((102, 50))), s);
         assert_eq!(o.bg, (1, 0));
         assert_eq!(o.border(), BORDER);

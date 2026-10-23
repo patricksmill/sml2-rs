@@ -293,3 +293,28 @@ fn a_zone_screen_is_drawn_whole_and_centred() {
     let wide = session.render_frame(view);
     assert_eq!(crop(&wide, view, (64, 36, 256, 144)), full);
 }
+
+#[test]
+fn both_minigames_stay_centred_and_fill_the_wide_map() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    let view = (384, 216);
+    for screen in [9u8, 13] {
+        if screen == 9 {
+            session.begin_coin_room(screen);
+        } else {
+            session.begin_bell_room(screen, 0, 0);
+        }
+        let native = session.render_frame(NATIVE);
+        let canvas = session.render_frame((256, 144));
+        assert_eq!(
+            crop(&canvas, (256, 144), (48, 0, 160, 144)),
+            native,
+            "screen {screen}"
+        );
+        let wide = session.render_frame(view);
+        assert_eq!(crop(&wide, view, (112, 36, 160, 144)), native);
+        // Inside the 256-wide map, just left of the picture. Letterbox fill
+        // is black; this column is the wrapped tilemap.
+        assert_ne!(wide[36 * view.0 + 104], 0, "screen {screen}");
+    }
+}

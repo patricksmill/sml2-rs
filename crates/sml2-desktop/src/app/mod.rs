@@ -651,11 +651,7 @@ impl DesktopApp {
                 "pause-menu"
             }))
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-            .default_width(if settings {
-                theme::ROW_SIZE.x
-            } else {
-                260.0
-            })
+            .default_width(if settings { theme::ROW_SIZE.x } else { 260.0 })
             .collapsible(false)
             .resizable(false)
             .movable(false)

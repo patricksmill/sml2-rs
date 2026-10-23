@@ -243,13 +243,8 @@ pub(crate) fn run_play(
             }
         };
         // $05E4/$0640: dead → the arc only; the death fade freezes everything.
-        let ending_frame = scene_frame_head(
-            &mut scene_vm,
-            &mut ending_entry,
-            &mut sim,
-            &mut cam,
-            joypad,
-        );
+        let ending_frame =
+            scene_frame_head(&mut scene_vm, &mut ending_entry, &mut sim, &mut cam, joypad);
         let gameplay = matches!(ending_frame, Some(EndingFrame::Gameplay(_)));
         let input = match ending_frame {
             Some(EndingFrame::Gameplay(input)) => input,

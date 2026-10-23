@@ -188,7 +188,10 @@ fn pig2_intro_lands_in_source_leftward_state_then_crouches() {
             break;
         }
     }
-    assert_eq!((st.b[B_SCRY], st.b[B_FSTATE], st.b[B_FLIP]), (0x90, 4, 0x20));
+    assert_eq!(
+        (st.b[B_SCRY], st.b[B_FSTATE], st.b[B_FLIP]),
+        (0x90, 4, 0x20)
+    );
     assert_eq!((st.b[B_SPRITE], st.b[B_T28]), (0x20, 8));
     let x = st.b[B_SCRX];
     for remaining in (1..=7).rev() {

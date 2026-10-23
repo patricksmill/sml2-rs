@@ -78,7 +78,11 @@ fn releasing_pan_blanks_stops_music_recenters_and_fades_back_before_input_resume
         }
         match &session.state {
             SessionState::Overworld(map) => {
-                assert_eq!(map.raster_phase, start_phase.wrapping_add(phases), "frame {frame}");
+                assert_eq!(
+                    map.raster_phase,
+                    start_phase.wrapping_add(phases),
+                    "frame {frame}"
+                );
                 let mut map = map.clone();
                 map.raster_phase = start_phase;
                 assert_eq!(map, frozen_map);

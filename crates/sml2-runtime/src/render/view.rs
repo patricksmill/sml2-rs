@@ -11,7 +11,11 @@ pub fn margin(view: (usize, usize)) -> (i32, i32) {
 /// height reveal space above the native view, one quarter below it.
 /// Fixed screens and overworld composition keep the centred `margin`.
 pub fn level_bias(view: (usize, usize)) -> i32 {
-    if enlarged(view) { (view.1 as i32 - NATIVE.1 as i32) / 4 } else { 0 }
+    if enlarged(view) {
+        (view.1 as i32 - NATIVE.1 as i32) / 4
+    } else {
+        0
+    }
 }
 
 /// Native gameplay rect inside a level view (including demos).
