@@ -185,19 +185,22 @@ pub(crate) fn seed_level_timer(sim: &mut PlayerSim, manifest: &LevelManifest) {
 
 /// `$3873`: animate live VRAM only while `sTileAnimConfig` is nonzero.
 /// Disabling animation preserves the last write until a tileset reload.
+/// Returns whether this frame copied a phase.
 pub(crate) fn update_tile_animation(
     sim: &PlayerSim,
     scene_active: bool,
     bg: &mut [u8],
     rows: &[u8],
     clock: &mut sml2_core::tile_animation::TileAnimationClock,
-) {
+) -> bool {
     // `$01BF` is bypassed while `sSceneId != 0` (`$26C3` handles the
     // scene instead). In particular, `$6x` must not be overwritten before
     // the following `$2x` opcode disables animation permanently.
-    if let Some(anim) = clock.tick(sim.tile_anim_config, scene_active) {
-        crate::render::apply_tile_anim(bg, &anim, rows, clock.phase);
+    let anim = clock.tick(sim.tile_anim_config, scene_active);
+    if let Some(anim) = &anim {
+        crate::render::apply_tile_anim(bg, anim, rows, clock.phase);
     }
+    anim.is_some()
 }
 
 /// `$05E4`: countdown precedes death dispatch, player physics, and camera motion.

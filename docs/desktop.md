@@ -62,25 +62,32 @@ If the system dialog returns no file (including when a Linux desktop portal is
 unavailable), an in-app file browser opens. Navigate folders or paste the full
 ROM path and choose **Open ROM**. **Cancel** or Escape closes the browser.
 
-Import runs in the background and can be cancelled. Graphics, attributes,
-palettes and mappings are extracted locally into the application's `dx` cache
-directory. A complete bundle is validated before atomic publication. Its identity
+Import runs in the background and can be cancelled. The DX ROM's level loader
+tables and the 18 banks every level's presentation reads are stored locally in
+the application's `dx` cache directory (about 600 KB). A complete bundle is validated before atomic publication. Its identity
 includes the ROM digest, base assets, importer version and schema. Failed imports
 preserve the selected installation. Settings remember the installation, DX Mode
 and the character; startup checks the installation's integrity and base assets.
 
 DX Mode is a presentation layer over the normal game, not a separate session:
-saves, progress and the debug panel work as usual. While the opening level is on
-screen it uses DX graphics and CGB colors, including sprite overlays, tile
-animation, star colors and pause colors, and the display filter does not apply.
-**Character** picks Mario or Luigi graphics; both play with the native rules.
-Installations imported before Luigi support draw Mario until re-imported
-(**Re-import SML2DX ROM…**). Every other screen keeps the display filter, and a
-DX rendering failure falls back to it with the error shown on the Mods page.
+saves, progress and the debug panel work as usual. Every level, including its
+pipe rooms and the attract demos, uses DX graphics and CGB colors, with sprite
+overlays, tile animation, star colors and pause colors; the display filter does
+not apply there. **Character** picks Mario or Luigi graphics; both play with the
+native rules. The space levels use DX's alternate (space) Mario and Luigi.
 
-Other levels, title/map colorization, DX physics and importing without extracted
-base assets remain future work. No ROM or imported graphics are distributed with
-the application.
+The title, map and other non-level screens keep the display filter. So do boss
+arenas and boss fights: DX gives each arena its own palettes, VRAM1 graphics and
+attribute map and draws bosses through a separate path, which are not imported
+yet. Eight levels (`$03`, `$07`, `$0C`, `$0D`, `$15`, `$16`, `$18`, `$19`) also
+switch palette sets as Mario crosses regions; they currently keep their starting
+DX palette throughout. DX's palette fades are not reproduced. A DX rendering
+failure falls back to the filter with the error shown on the Mods page.
+
+Installations from earlier versions covered only the opening level and must be
+re-imported (**Re-import SML2DX ROM…**). DX physics and importing without
+extracted base assets remain future work. No ROM or imported graphics are
+distributed with the application.
 
 ## Controls and settings
 

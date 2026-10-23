@@ -228,7 +228,7 @@ impl DesktopApp {
         if let Some(preview) = &mut self.filter_preview {
             ui.add_space(4.0);
             let caption = if self.settings.dx_mode && self.dx_bundle.is_some() {
-                "DX Mode colors the opening level; the filter covers everything else"
+                "DX Mode colors the levels; the filter covers everything else"
             } else {
                 "Left / right on the filter row to compare"
             };

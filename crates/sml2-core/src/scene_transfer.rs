@@ -92,6 +92,11 @@ impl SceneScripts {
         self.transfers = assets;
     }
 
+    /// Every ROM source a `$Bx` tile transfer can copy from.
+    pub fn transfer_blocks(&self) -> &[SceneTransferBlock] {
+        &self.transfers.blocks
+    }
+
     fn tile_transfer_request(&self, pc: u16, opcode: u8) -> Option<VramTransfer> {
         let bank = self.byte_at(pc.wrapping_add(1))?;
         let address = u16::from_le_bytes([

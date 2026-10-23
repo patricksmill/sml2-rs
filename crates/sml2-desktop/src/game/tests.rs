@@ -124,24 +124,11 @@ fn real_rom_import_restart_and_dx_mode_preserve_saves_and_cancelled_installation
     let saved = slots.image();
     std::fs::write(&save, saved).unwrap();
 
-    let worker_cache = cache.clone();
-    let worker_assets = assets.clone();
-    let worker_rom = rom.clone();
-    let worker = dx_import::Worker::start(move |cancel, progress| {
-        dx_import::import_path(&worker_cache, &worker_assets, &worker_rom, cancel, progress)
-            .map_err(|e| e.to_string())
-    });
-    let (key, bundle) = loop {
-        match worker
-            .events
-            .recv_timeout(std::time::Duration::from_secs(10))
-            .unwrap()
-        {
-            dx_import::Event::Progress(message) => eprintln!("DX import: {message}"),
-            dx_import::Event::Finished(result) => break result.unwrap(),
-            dx_import::Event::FileChosen(_) => panic!("import worker unexpectedly opened a picker"),
-        }
-    };
+    let (key, bundle) =
+        dx_import::import_path(&cache, &assets, &rom, &AtomicBool::new(false), |m| {
+            eprintln!("DX import: {m}")
+        })
+        .unwrap();
     let installed = bundle.encode().unwrap();
     let mut settings = Settings::default();
     settings.dx_installation = Some(key.clone());
@@ -177,14 +164,9 @@ fn real_rom_import_restart_and_dx_mode_preserve_saves_and_cancelled_installation
     game.session.debug_warp_level(0).unwrap();
     game.session.advance(Default::default());
     assert!(game.session.dx_supported());
-    let mario = game
-        .session
-        .render_dx_frame(&bundle, Character::Mario)
-        .unwrap();
-    let luigi = game
-        .session
-        .render_dx_frame(&bundle, Character::Luigi)
-        .unwrap();
+    let (_, dx) = dx_import::presentation(Ok((restored_key, bundle))).unwrap();
+    let mario = game.session.render_dx_frame(&dx, Character::Mario).unwrap();
+    let luigi = game.session.render_dx_frame(&dx, Character::Luigi).unwrap();
     assert_eq!(mario.len(), 160 * 144);
     assert_ne!(mario, luigi);
     // DX presentation never touches progress or the save file.

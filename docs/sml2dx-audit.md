@@ -1,4 +1,4 @@
-# SML2DX opening-level presentation audit
+# SML2DX presentation audit
 
 Audited input: 1,048,576-byte patched ROM with SHA-256
 `1dd604a91b9ee99ef381cc795da3ae28c72d04ba9de78b355df829e56ce49c46`.
@@ -171,7 +171,7 @@ Real-ROM tests are explicitly opt-in so the repository carries no ROM fixtures:
 export SML2_DX_ROM=/path/to/the/audited/sml2dx.gbc
 cargo test -p sml2-dx --test revision -- --ignored
 cargo test -p sml2-runtime --test dx_preview -- --ignored
-cargo test -p sml2-desktop real_rom_import_restart_preview -- --ignored
+cargo test -p sml2-desktop real_rom_import_restart -- --ignored
 ```
 
 All three passed against the audited local input. These exercise table extraction,
@@ -217,3 +217,66 @@ Fire112 pointer `9C 4F` resolves `$B4F9C`, 13. Graphics SHA-256 values:
 Importer/schema version2 includes validated Luigi graphics. Schema1 bundles
 remain readable as Mario-only bundles; adding Luigi requires re-import from
 the same exact audited ROM. No ROM or extracted graphics are committed.
+
+## All levels
+
+Importer/schema version 3 replaces the opening-level tables with the DX ROM's
+bank-0 level loader tables and 18 raw banks; `sml2_dx::Presentation` derives
+every level from them. Schema 1 and 2 bundles are rejected with a re-import
+message. Banks `$06`, `$07` and `$1B`-`$1F` hold base-game graphics DX patched
+in place (level tilesets, enemy sets, arena tilesets, the `$Bx` transfer source
+and animation rows). The rest are DX additions: `$20` common HUD tiles, `$21`
+attributes, `$23`/`$28`/`$3A` object mappings, `$24` VRAM1 graphics and HUD
+tables, `$26` palettes, `$2A`/`$2B` player graphics and `$2C`/`$2D` mappings.
+
+`LoadMarioGFX` (`$0669`) is unchanged from the base game after its config read:
+`$0763`, `$362A` and `$36AA` are byte-identical, and only `$360A`
+(`sLevelGfxConfig`) differs. With set `s = config >> 4`, VRAM0 is bank 7
+`$0763[s]` (`$380` to `$8E80`), bank `$1B` `$7000 + s*$300` (`$300` to `$8800`),
+the level's enemy set (`$380` to `$8B00`) and tileset (`$600` to `$9200`).
+Config nibble 0 or 1 clears `$A21A`'s theme; any other nibble (5, levels `$12`,
+`$13`, `$1C`) sets theme `$10`.
+
+| Per level | Source |
+|---|---|
+| Tile attributes | `$21:$4000 + level*$100` (`$21:$732C`) |
+| BG / OBJ palettes | `$26:$4000 + level*$40`, OBJ `+$1000` (`$26:$7CD6`) |
+| HUD attributes | pointer at `$24:$6000 + level*2` (`$24:$7912`) |
+| VRAM1 `$8800..$8B00` | `$20:$5D00`, all levels |
+| VRAM1 `$8B00..$9800` | `$24:$4D00` level `$09`, `$5A00` `$0C`, `$6700` `$0D`, else `$4000` |
+| Object mappings | `$07EA`: bank `$28` for `$0B`/`$0F`, `$3A` for `$0D`, else `$23`; table `$40B1` (168) for levels below `$0A`, `$4F11` (228) from `$0A` |
+| HUD tile IDs | `$24:$7C24`, all levels |
+| Animation | bank `$1D` `$6680 + row*$100`, as the base game |
+
+The character table `$24:$7D00` is all `$FF`: no level forces a character.
+`$24:$7880` selects player graphics by `$A21A`: `$4200` normal, `$5200` Fire,
+`$5A00`/`$6200` for theme `$10`, from bank `$2A` (Mario) or `$2B` (Luigi), with
+`$4A00` to VRAM1 `$8000`. `$2C:$5D62` and `$2D:$5E16` read mappings from `$4000`,
+or `$6000` under theme `$10`.
+
+Mid-level copies keep their base addresses: `$25AF`'s tables `$268B`/`$2699`,
+the bank-7 `$7800` block and `$216C`'s transfer code are byte-identical, so the
+renderer finds the native source of every rewritten tile and reads the same
+address from the DX banks. Animation phases are identified by the copied row
+and the clock's phase, since some rows repeat a phase in the base art but not
+in DX's. Rendering level 1's surface route (3,374 frames) and a pipe-room
+route (6,000 frames), for both characters, matched the previous opening-level
+renderer frame for frame, including its PyBoy-checked first frame.
+
+Known gaps, verified against the ROM and left native or approximate:
+
+- Boss arenas: `$00:$0ECA` calls `$36:$7306`, keyed by `$A1CC` (`$05`, `$09`,
+  `$0D`, `$10`, `$13`, `$17`, `$18`, with `$18` split by `$AFC0`). Each writes a
+  32x18 VRAM1 attribute map at `$9840`/`$9860`, its own BG palettes (e.g.
+  `$26:$72DA` for `$09`) and OBJ palette pointer, and VRAM1 graphics (e.g.
+  `$36:$5850` to `$8B00`). PyBoy on this ROM, in level `$09`'s door arena,
+  showed the level's attribute table at `$D000` but those arena palettes and
+  graphics. The session flags `$25AF` reloads (`arena_loaded`) and boss fights,
+  and DX presentation leaves them native.
+- `$26:$6B0B` switches palette sets from `$26:$6100 + n*$40` for levels `$19`,
+  `$03`, `$07`, `$0D`, `$15`, `$16`, `$0C`, `$18` by Mario's position (`$AF30`-
+  `$AF33` are Mario X+8 and Y+32 from `$02:$40FD`), remembering the current set
+  in `$FFAD`. Those levels keep their load-time palette.
+- `$D300` is the blank palette buffer `$25AF`'s hook and the fades upload; DX
+  palette fades are not reproduced.
+

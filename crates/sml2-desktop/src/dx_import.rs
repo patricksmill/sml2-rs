@@ -1,7 +1,7 @@
 //! Background import/restore boundary, independent of the desktop UI.
 use sml2_dx::{
     cache::{self, CacheKey},
-    Bundle, ImportError,
+    Bundle, ImportError, Presentation,
 };
 use std::{
     path::{Path, PathBuf},
@@ -15,7 +15,8 @@ use std::{
 pub enum Event {
     Progress(&'static str),
     FileChosen(Option<PathBuf>),
-    Finished(Result<(CacheKey, Bundle), String>),
+    /// Built on the worker thread: parsing every level's tables stays off the UI.
+    Finished(Result<(CacheKey, Presentation), String>),
 }
 
 pub struct Worker {
@@ -35,6 +36,14 @@ fn check(cancel: &AtomicBool) -> Result<(), ImportError> {
     } else {
         Ok(())
     }
+}
+
+/// What the app holds for an installation: its identity and every level's tables.
+pub fn presentation(
+    result: Result<(CacheKey, Bundle), ImportError>,
+) -> Result<(CacheKey, Presentation), String> {
+    let (key, bundle) = result.map_err(|e| e.to_string())?;
+    Ok((key, Presentation::new(&bundle).map_err(|e| e.to_string())?))
 }
 
 /// A cancelled or failed replacement never changes the selected installation.
@@ -57,11 +66,11 @@ pub fn import_path(
         .take(sml2_dx::ROM_LEN as u64 + 1)
         .read_to_end(&mut bytes)?;
     check(cancel)?;
-    progress("Extracting opening-level presentation…");
+    progress("Extracting every level's DX graphics…");
     let bundle = sml2_dx::extract(&bytes)?;
     check(cancel)?;
     let payload = bundle.encode()?;
-    progress("Validating and installing DX preview…");
+    progress("Validating and installing DX graphics…");
     cache::publish(
         root,
         &key,
@@ -83,7 +92,7 @@ pub fn restore(
     let expected = CacheKey::new(sml2_dx::base_fingerprint(assets)?);
     if key != expected {
         return Err(ImportError::InvalidBundle(
-            "installed DX preview was built for different base assets or importer; import again"
+            "the installed DX graphics came from other base assets or an older importer; re-import the ROM"
                 .into(),
         ));
     }
@@ -105,7 +114,7 @@ impl Worker {
     }
 
     pub fn start(
-        job: impl FnOnce(&AtomicBool, &dyn Fn(&'static str)) -> Result<(CacheKey, Bundle), String>
+        job: impl FnOnce(&AtomicBool, &dyn Fn(&'static str)) -> Result<(CacheKey, Presentation), String>
             + Send
             + 'static,
     ) -> Self {

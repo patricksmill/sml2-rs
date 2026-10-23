@@ -3,7 +3,6 @@ use super::theme::{self, Value};
 use super::DesktopApp;
 use crate::dx_import::{self, Event, Worker};
 use eframe::egui::{Context, Ui};
-use sml2_core::character::Character;
 
 impl DesktopApp {
     pub(super) fn restore_dx(&mut self) {
@@ -11,10 +10,14 @@ impl DesktopApp {
             return;
         };
         let assets = self.options.assets.clone();
-        self.dx_message = "Checking installed DX preview…".into();
+        self.dx_message = "Checking installed DX graphics…".into();
         self.dx_worker = Some(Worker::start(move |cancel, _| {
-            dx_import::restore(&dx_import::cache_root()?, &assets, key, cancel)
-                .map_err(|e| e.to_string())
+            dx_import::presentation(dx_import::restore(
+                &dx_import::cache_root()?,
+                &assets,
+                key,
+                cancel,
+            ))
         }));
     }
 
@@ -80,8 +83,13 @@ impl DesktopApp {
         self.input.suppress_until_release();
         self.menu = Default::default();
         self.dx_worker = Some(Worker::start(move |cancel, progress| {
-            dx_import::import_path(&dx_import::cache_root()?, &assets, &path, cancel, progress)
-                .map_err(|e| e.to_string())
+            dx_import::presentation(dx_import::import_path(
+                &dx_import::cache_root()?,
+                &assets,
+                &path,
+                cancel,
+                progress,
+            ))
         }));
     }
 
@@ -100,17 +108,9 @@ impl DesktopApp {
             }
         }
         let adjust = self.menu.row_adjustment();
-        let luigi = self
-            .dx_bundle
-            .as_ref()
-            .is_some_and(|b| b.supports_character(Character::Luigi));
         let character = self.settings.character;
-        let shown = if character == Character::Luigi && installed && !luigi {
-            "Luigi (re-import)".to_string()
-        } else {
-            character.label().to_string()
-        };
-        if self.menu.row(ui, "Character", Value::Choice(shown)) || adjust != 0 {
+        let shown = Value::Choice(character.label().into());
+        if self.menu.row(ui, "Character", shown) || adjust != 0 {
             self.settings.character = character.next();
         }
         theme::section(ui, "GRAPHICS");
@@ -140,9 +140,10 @@ impl DesktopApp {
         }
         theme::note(
             ui,
-            "Supply your own SML2DX v1.8.1 ROM. DX Mode recolors and redraws the opening level, \
-             Mario or Luigi included, in the normal game with your normal saves. Other screens \
-             keep the display filter, and DX gameplay changes are not included.",
+            "Supply your own SML2DX v1.8.1 ROM. DX Mode redraws every level in DX graphics and \
+             color, as Mario or Luigi, in the normal game with your normal saves. Boss arenas, \
+             the title and the map keep the display filter for now, and DX gameplay changes are \
+             not included.",
         );
     }
 

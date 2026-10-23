@@ -1,30 +1,46 @@
-//! Synthetic bundle shape tests: real ROM bytes are not needed to validate the
-//! persisted format or prove malformed local cache content is rejected.
+//! Synthetic bundle tests: real ROM bytes are not needed to validate the
+//! persisted format, reject malformed cache content, or pin how each level's
+//! presentation is derived.
 use super::*;
+use sml2_core::{character::Character, object::MappingEntry};
+
+/// Every mapping table points at one `$80` terminator.
+const EMPTY: u16 = 0x7FF0;
+
+fn put(bundle: &mut Bundle, bank: u8, address: u16, bytes: &[u8]) {
+    let start = usize::from(address) - 0x4000;
+    bundle.banks.get_mut(&bank).unwrap()[start..start + bytes.len()].copy_from_slice(bytes);
+}
+
+fn table(bundle: &mut Bundle, bank: u8, at: u16, count: u16, target: u16) {
+    for i in 0..count {
+        put(bundle, bank, at + i * 2, &target.to_le_bytes());
+    }
+}
 
 fn fixture() -> Bundle {
-    Bundle {
+    let mut bundle = Bundle {
         schema: BUNDLE_SCHEMA,
         source_sha256: ROM_SHA256.into(),
-        background: [vec![0; 0x1000], vec![0; 0x1000]],
-        mario_normal: vec![0; 0x800],
-        mario_fire: vec![0; 0x800],
-        mario_bank1: vec![0; 0x800],
-        tile_attributes: vec![0; 256],
-        hud_tiles: vec![0; 20],
-        hud_attributes: vec![0; 20],
-        bg_palettes: vec![0; 64],
-        obj_palettes: vec![0; 64],
-        animation: vec![0; 256],
-        object_mappings: vec![vec![]; 168],
-        player_mappings: vec![vec![]; 242],
-        luigi: Some(CharacterGraphics {
-            normal: vec![0; 0x800],
-            fire: vec![0; 0x800],
-            bank1: vec![0; 0x800],
-            mappings: vec![vec![]; 242],
-        }),
+        level_config: vec![0; LEVELS],
+        enemy_sets: [0x06, 0, 0x00, 0x58].repeat(LEVELS),
+        tile_sets: [0x07, 0, 0x00, 0x40].repeat(LEVELS),
+        extra_pointers: vec![0x00, 0x6A, 0x80, 0x6D, 0x00, 0x71, 0x80, 0x74],
+        banks: BANKS.iter().map(|&b| (b, vec![0; BANK_LEN])).collect(),
+    };
+    for bank in [0x23, 0x28, 0x3A, 0x2C, 0x2D] {
+        put(&mut bundle, bank, EMPTY, &[0x80]);
     }
+    for bank in [0x23, 0x28, 0x3A] {
+        table(&mut bundle, bank, 0x40B1, 168, EMPTY);
+        table(&mut bundle, bank, 0x4F11, 228, EMPTY);
+    }
+    for bank in [0x2C, 0x2D] {
+        table(&mut bundle, bank, 0x4000, 242, EMPTY);
+        table(&mut bundle, bank, 0x6000, 242, EMPTY);
+    }
+    table(&mut bundle, 0x24, 0x6000, LEVELS as u16, 0x6040);
+    bundle
 }
 
 fn decode(value: &serde_json::Value) -> Result<Bundle, ImportError> {
@@ -32,27 +48,25 @@ fn decode(value: &serde_json::Value) -> Result<Bundle, ImportError> {
 }
 
 #[test]
-fn valid_bundle_round_trip_preserves_literal_signed_mapping_bytes() {
+fn valid_bundle_round_trips_through_hex_banks() {
     let mut bundle = fixture();
-    bundle.player_mappings[0].push(MappingEntry {
-        y: -128,
-        x: 127,
-        tile: 0xff,
-        attr: 0xef,
-    });
+    put(&mut bundle, 0x1B, 0x7000, &[0x00, 0x7F, 0x80, 0xFF]);
     let bytes = bundle.encode().unwrap();
+    let text = std::str::from_utf8(&bytes).unwrap();
+    assert!(text.contains(r#""1B":""#) && text.contains("007f80ff"));
     let decoded = Bundle::decode(&bytes).unwrap();
-    assert_eq!(decoded.player_mappings[0][0], bundle.player_mappings[0][0]);
+    assert_eq!(decoded.banks, bundle.banks);
     assert_eq!(decoded.encode().unwrap(), bytes);
 }
 
 #[test]
-fn schema_revision_unknown_and_missing_fields_are_rejected() {
+fn old_schemas_other_sources_and_unknown_fields_are_rejected() {
     let value = serde_json::to_value(fixture()).unwrap();
-    for schema in [0, BUNDLE_SCHEMA + 1] {
+    for schema in [1, 2, BUNDLE_SCHEMA + 1] {
         let mut bad = value.clone();
         bad["schema"] = schema.into();
-        assert!(decode(&bad).is_err());
+        let error = decode(&bad).unwrap_err().to_string();
+        assert!(error.contains("re-import"), "{error}");
     }
     for source in ["", &"0".repeat(64), &ROM_SHA256.to_uppercase()] {
         let mut bad = value.clone();
@@ -60,261 +74,131 @@ fn schema_revision_unknown_and_missing_fields_are_rejected() {
         assert!(decode(&bad).is_err());
     }
     let mut bad = value.clone();
-    bad["unrecognized"] = true.into();
+    bad["extra"] = 1.into();
     assert!(decode(&bad).is_err());
-    let mut bad = value;
-    bad.as_object_mut().unwrap().remove("schema");
-    assert!(decode(&bad).is_err());
-}
-
-#[test]
-fn every_fixed_byte_table_rejects_short_and_long_data() {
-    let value = serde_json::to_value(fixture()).unwrap();
     for field in [
-        "mario_normal",
-        "mario_fire",
-        "mario_bank1",
-        "tile_attributes",
-        "hud_tiles",
-        "hud_attributes",
-        "bg_palettes",
-        "obj_palettes",
-        "animation",
+        "level_config",
+        "enemy_sets",
+        "tile_sets",
+        "extra_pointers",
+        "banks",
     ] {
-        let expected = value[field].as_array().unwrap().len();
-        for length in [expected - 1, expected + 1] {
-            let mut bad = value.clone();
-            bad[field] = serde_json::json!(vec![0u8; length]);
-            assert!(decode(&bad).is_err(), "accepted {field} length {length}");
-        }
-    }
-    for bank in 0..2 {
-        for length in [0xfff, 0x1001] {
-            let mut bad = value.clone();
-            bad["background"][bank] = serde_json::json!(vec![0u8; length]);
-            assert!(decode(&bad).is_err());
-        }
-    }
-    let mut bad = value;
-    bad["background"] = serde_json::json!([vec![0u8; 0x1000]]);
-    assert!(decode(&bad).is_err());
-}
-
-#[test]
-fn sprite_mapping_counts_and_lengths_are_bounded() {
-    for players in [false, true] {
-        for delta in [-1, 1] {
-            let mut bundle = fixture();
-            let maps = if players {
-                &mut bundle.player_mappings
-            } else {
-                &mut bundle.object_mappings
-            };
-            maps.resize((maps.len() as isize + delta) as usize, vec![]);
-            assert!(bundle.encode().is_err());
-        }
-        let mut bundle = fixture();
-        let maps = if players {
-            &mut bundle.player_mappings
-        } else {
-            &mut bundle.object_mappings
-        };
-        maps[0] = vec![
-            MappingEntry {
-                y: 0,
-                x: 0,
-                tile: 0,
-                attr: 0
-            };
-            64
-        ];
-        assert!(bundle.validate().is_ok());
-        let maps = if players {
-            &mut bundle.player_mappings
-        } else {
-            &mut bundle.object_mappings
-        };
-        maps[0].push(MappingEntry {
-            y: 0,
-            x: 0,
-            tile: 0,
-            attr: 0,
-        });
-        assert!(bundle.validate().is_err());
+        let mut bad = value.clone();
+        bad.as_object_mut().unwrap().remove(field);
+        assert!(decode(&bad).is_err(), "{field}");
     }
 }
 
 #[test]
-fn invalid_json_byte_values_mapping_offsets_and_payload_size_are_rejected() {
+fn tables_and_banks_must_have_their_exact_shape() {
+    for (field, length) in [
+        ("level_config", LEVELS),
+        ("enemy_sets", LEVELS * 4),
+        ("tile_sets", LEVELS * 4),
+        ("extra_pointers", 8),
+    ] {
+        for wrong in [length - 1, length + 1] {
+            let mut value = serde_json::to_value(fixture()).unwrap();
+            value[field] = vec![0u8; wrong].into();
+            assert!(decode(&value).is_err(), "{field} {wrong}");
+        }
+    }
+    let mut missing = fixture();
+    missing.banks.remove(&0x26);
+    assert!(missing.validate().is_err());
+    let mut extra = fixture();
+    extra.banks.insert(0x01, vec![0; BANK_LEN]);
+    assert!(extra.validate().is_err());
+    let mut short = fixture();
+    short.banks.get_mut(&0x2A).unwrap().pop();
+    assert!(short.validate().is_err());
     let value = serde_json::to_value(fixture()).unwrap();
-    for number in [-1, 256] {
+    for (bank, hex) in [("1b", "00"), ("1B", "0"), ("1B", "zz"), ("100", "00")] {
         let mut bad = value.clone();
-        bad["hud_tiles"][0] = number.into();
-        assert!(decode(&bad).is_err());
-    }
-    for offset in [-129, 128] {
-        let mut bad = value.clone();
-        bad["player_mappings"][0] = serde_json::json!([{"y":offset,"x":0,"tile":0,"attr":0}]);
-        assert!(decode(&bad).is_err());
+        bad["banks"][bank] = hex.into();
+        assert!(decode(&bad).is_err(), "{bank} {hex}");
     }
     assert!(Bundle::decode(b"{").is_err());
     assert!(Bundle::decode(&vec![b' '; crate::cache::MAX_PAYLOAD_BYTES + 1]).is_err());
 }
 
-#[cfg(unix)]
 #[test]
-fn fingerprint_rejects_nested_and_required_file_symlinks() {
-    let root = tempfile::tempdir().unwrap();
-    fs::create_dir(root.path().join("levels")).unwrap();
-    fs::write(root.path().join("levels/level01.manifest.json"), b"{}").unwrap();
-    std::os::unix::fs::symlink("levels/level01.manifest.json", root.path().join("alias")).unwrap();
-    assert!(base_fingerprint(root.path()).is_err());
-    fs::remove_file(root.path().join("alias")).unwrap();
-    fs::remove_file(root.path().join("levels/level01.manifest.json")).unwrap();
-    fs::write(root.path().join("manifest"), b"{}").unwrap();
-    std::os::unix::fs::symlink(
-        "../manifest",
-        root.path().join("levels/level01.manifest.json"),
-    )
-    .unwrap();
-    assert!(base_fingerprint(root.path()).is_err());
-}
-
-#[test]
-fn fingerprint_streaming_and_resource_limits() {
-    let root = tempfile::tempdir().unwrap();
-    assert!(base_fingerprint(root.path()).is_err());
-    fs::create_dir(root.path().join("levels")).unwrap();
-    fs::write(root.path().join("levels/level01.manifest.json"), b"{}").unwrap();
-    assert!(fingerprint_with_limits(root.path(), 0, 100, 1024).is_err());
-    assert!(fingerprint_with_limits(root.path(), 32, 0, 1024).is_err());
-    assert!(fingerprint_with_limits(root.path(), 32, 100, 1).is_err());
-    assert!(fingerprint_with_limits(root.path(), 1, 1, 2).is_ok());
-    let large = root.path().join("large.bin");
-    let bytes = vec![0x5au8; 64 * 1024 + 17];
-    fs::write(&large, &bytes).unwrap();
-    let original = base_fingerprint(root.path()).unwrap();
-    let mut bytes = bytes;
-    bytes[64 * 1024 + 16] ^= 1;
-    fs::write(&large, &bytes).unwrap();
-    assert_ne!(base_fingerprint(root.path()).unwrap(), original);
-    fs::write(&large, vec![0x5au8; 64 * 1024 + 17]).unwrap();
-    fs::rename(&large, root.path().join("renamed.bin")).unwrap();
-    assert_ne!(base_fingerprint(root.path()).unwrap(), original);
-}
-
-#[cfg(unix)]
-#[test]
-fn fingerprint_distinguishes_literal_backslashes_from_path_separators() {
-    let root = tempfile::tempdir().unwrap();
-    fs::create_dir(root.path().join("levels")).unwrap();
-    fs::write(root.path().join("levels/level01.manifest.json"), b"{}").unwrap();
-    fs::write(root.path().join("levels\\extra"), b"a").unwrap();
-    let literal = base_fingerprint(root.path()).unwrap();
-    fs::rename(
-        root.path().join("levels\\extra"),
-        root.path().join("levels/extra"),
-    )
-    .unwrap();
-    assert_ne!(base_fingerprint(root.path()).unwrap(), literal);
-}
-
-#[test]
-fn legacy_schema_without_character_field_round_trips_and_keeps_mario() {
-    let mut value = serde_json::to_value(fixture()).unwrap();
-    value["schema"] = 1.into();
-    value.as_object_mut().unwrap().remove("luigi");
-    let legacy = decode(&value).unwrap();
-    assert!(legacy.supports_character(Character::Mario));
-    assert!(!legacy.supports_character(Character::Luigi));
-    assert_eq!(legacy.schema, 1);
-    assert!(legacy.luigi.is_none());
-    let encoded = legacy.encode().unwrap();
-    assert_eq!(
-        serde_json::from_slice::<serde_json::Value>(&encoded).unwrap(),
-        value
-    );
-    assert_eq!(Bundle::decode(&encoded).unwrap().encode().unwrap(), encoded);
-}
-
-#[test]
-fn character_presence_matches_schema_and_new_bundle_supports_both() {
-    let bundle = fixture();
-    assert!(bundle.supports_character(Character::Mario));
-    assert!(bundle.supports_character(Character::Luigi));
-    let value = serde_json::to_value(bundle).unwrap();
-    for schema in [1, BUNDLE_SCHEMA] {
-        let mut bad = value.clone();
-        bad["schema"] = schema.into();
-        if schema == BUNDLE_SCHEMA {
-            bad.as_object_mut().unwrap().remove("luigi");
-        }
-        assert!(decode(&bad).is_err());
-    }
-    let mut bad = value;
-    bad["luigi"] = serde_json::Value::Null;
-    assert!(decode(&bad).is_err());
-}
-
-#[test]
-fn luigi_graphics_reject_malformed_lengths_counts_and_unknown_fields() {
-    let value = serde_json::to_value(fixture()).unwrap();
-    for field in ["normal", "fire", "bank1"] {
-        for size in [0x7ff, 0x801] {
-            let mut bad = value.clone();
-            bad["luigi"][field] = serde_json::json!(vec![0u8; size]);
-            assert!(
-                decode(&bad).is_err(),
-                "accepted Luigi {field} length {size}"
-            );
-        }
-        let mut bad = value.clone();
-        bad["luigi"].as_object_mut().unwrap().remove(field);
-        assert!(decode(&bad).is_err());
-    }
-    for count in [241, 243] {
-        let mut bundle = fixture();
-        bundle
-            .luigi
-            .as_mut()
-            .unwrap()
-            .mappings
-            .resize(count, vec![]);
-        assert!(bundle.validate().is_err());
-    }
+fn malformed_level_and_mapping_tables_are_rejected() {
     let mut bundle = fixture();
-    bundle.luigi.as_mut().unwrap().mappings[0] = vec![
-        MappingEntry {
-            y: -12,
-            x: -7,
-            tile: 1,
-            attr: 0x22
-        };
-        64
-    ];
-    assert!(bundle.validate().is_ok());
-    bundle.luigi.as_mut().unwrap().mappings[0].push(MappingEntry {
-        y: 0,
-        x: 0,
-        tile: 0,
-        attr: 0,
-    });
+    bundle.level_config[3] = 0x40;
+    assert!(bundle.validate().is_err(), "graphics set past $0763");
+    let mut bundle = fixture();
+    bundle.tile_sets[4 * 5 + 3] = 0x7D; // $7D00 + $600 crosses the bank.
     assert!(bundle.validate().is_err());
-    let mut bad = value;
-    bad["luigi"]["unrecognized"] = true.into();
-    assert!(decode(&bad).is_err());
+    let mut bundle = fixture();
+    put(&mut bundle, 0x3A, 0x4F11, &0x3FFFu16.to_le_bytes());
+    assert!(bundle.validate().is_err(), "pointer below the bank");
+    let mut bundle = fixture();
+    put(&mut bundle, 0x2D, 0x6000, &0x7000u16.to_le_bytes());
+    assert!(bundle.validate().is_err(), "65 cells without $80");
 }
 
 #[test]
-fn luigi_signed_mapping_cells_round_trip_without_losing_attributes() {
+fn each_level_uses_its_own_tables_and_the_dx_loader_sources() {
     let mut bundle = fixture();
-    let cell = MappingEntry {
-        y: -12,
-        x: -7,
-        tile: 1,
-        attr: 0x22,
-    };
-    bundle.luigi.as_mut().unwrap().mappings[0].push(cell.clone());
-    let decoded = Bundle::decode(&bundle.encode().unwrap()).unwrap();
-    assert_eq!(decoded.luigi.unwrap().mappings[0][0], cell);
+    // Level 9 (config $31): set 3, Mario's normal theme, its own VRAM1 block.
+    bundle.level_config[9] = 0x31;
+    bundle.enemy_sets[9 * 4..9 * 4 + 4].copy_from_slice(&[0x1F, 0, 0x80, 0x61]);
+    bundle.tile_sets[9 * 4..9 * 4 + 4].copy_from_slice(&[0x1D, 0, 0x00, 0x46]);
+    put(&mut bundle, 0x07, 0x7480, &[0xE1]);
+    put(&mut bundle, 0x1B, 0x7000 + 3 * 0x300, &[0xE2]);
+    put(&mut bundle, 0x1F, 0x6180, &[0xE3]);
+    put(&mut bundle, 0x1D, 0x4600, &[0xE4]);
+    put(&mut bundle, 0x20, 0x5D00, &[0xE5]);
+    put(&mut bundle, 0x24, 0x4D00, &[0xE6]);
+    put(&mut bundle, 0x21, 0x4000 + 9 * 0x100, &[0xE7]);
+    put(&mut bundle, 0x26, 0x4000 + 9 * 0x40, &[0x1F, 0]);
+    put(&mut bundle, 0x26, 0x5000 + 9 * 0x40, &[0xE0, 3]);
+    put(&mut bundle, 0x24, 0x6000 + 9 * 2, &0x6100u16.to_le_bytes());
+    put(&mut bundle, 0x24, 0x6100, &[0x8F]);
+    // Level $12 (config $35) selects the alternate theme.
+    bundle.level_config[0x12] = 0x35;
+    // Level $0D draws objects from bank $3A, mode B.
+    put(&mut bundle, 0x3A, 0x7000, &[0xF8, 4, 12, 0x2B, 0x80]);
+    put(&mut bundle, 0x3A, 0x4F11, &0x7000u16.to_le_bytes());
+    // Luigi's alternate-theme fire graphics.
+    put(&mut bundle, 0x2B, 0x6200, &[0xE8]);
+
+    let p = Presentation::new(&bundle).unwrap();
+    let level = p.level(9).unwrap();
+    let [vram0, vram1] = &level.background;
+    assert_eq!(
+        [vram0[0x680], vram0[0], vram0[0x300], vram0[0xA00]],
+        [0xE1, 0xE2, 0xE3, 0xE4]
+    );
+    assert_eq!([vram1[0], vram1[0x300]], [0xE5, 0xE6]);
+    assert_eq!(level.tile_attributes[0], 0xE7);
+    assert_eq!(&level.bg_palettes[..2], &[0x1F, 0]);
+    assert_eq!(&level.obj_palettes[..2], &[0xE0, 3]);
+    assert_eq!(level.hud_attributes[0], 0x8F);
+    assert_eq!(level.theme, 0);
+    assert_eq!(
+        p.level(0).unwrap().background[1][0x300],
+        0,
+        "other levels use $4000"
+    );
+    assert_eq!(p.level(0x12).unwrap().theme, 1);
+    let level_d = p.level(0x0D).unwrap();
+    assert_eq!(
+        p.objects(level_d)[0],
+        vec![MappingEntry {
+            y: -8,
+            x: 4,
+            tile: 12,
+            attr: 0x2B
+        }]
+    );
+    assert_eq!(p.objects(level_d).len(), 228);
+    assert_eq!(p.objects(p.level(0).unwrap()).len(), 168);
+    assert!(p.objects(p.level(0x0E).unwrap()).iter().all(Vec::is_empty));
+    assert_eq!(p.player(Character::Luigi, 1).fire[0], 0xE8);
+    assert_eq!(p.player(Character::Mario, 1).fire[0], 0);
+    assert!(p.level(32).is_none());
+    assert_eq!(p.rom(0x1D, 0x4600, 1), Some(&[0xE4][..]));
+    assert_eq!(p.rom(0x01, 0x4000, 1), None, "unstored bank");
 }

@@ -144,29 +144,30 @@ fn cancelled_and_failed_replacements_preserve_selected_installation() {
     let _ = std::fs::remove_dir_all(path);
 }
 
-/// A valid bundle whose every BG color is pure red.
-fn red_bundle() -> sml2_dx::Bundle {
-    sml2_dx::Bundle {
-        schema: sml2_dx::BUNDLE_SCHEMA,
-        source_sha256: sml2_dx::ROM_SHA256.into(),
+/// Every level's BG colors are pure red; every tile is blank.
+fn red_bundle() -> sml2_dx::Presentation {
+    let level = sml2_dx::LevelGraphics {
         background: [vec![0; 0x1000], vec![0; 0x1000]],
-        mario_normal: vec![0; 0x800],
-        mario_fire: vec![0; 0x800],
-        mario_bank1: vec![0; 0x800],
         tile_attributes: vec![0; 256],
-        hud_tiles: vec![0; 20],
-        hud_attributes: vec![0; 20],
         bg_palettes: [0x1f, 0].repeat(32),
         obj_palettes: [0xe0, 3].repeat(32),
-        animation: vec![0; 256],
-        object_mappings: vec![vec![]; 168],
-        player_mappings: vec![vec![]; 242],
-        luigi: Some(sml2_dx::CharacterGraphics {
-            normal: vec![0; 0x800],
-            fire: vec![0; 0x800],
-            bank1: vec![0; 0x800],
-            mappings: vec![vec![]; 242],
-        }),
+        hud_attributes: vec![0; 20],
+        theme: 0,
+        object_table: 0,
+    };
+    let player = sml2_dx::PlayerGraphics {
+        normal: vec![0; 0x800],
+        fire: vec![0; 0x800],
+        bank1: vec![0; 0x800],
+        mappings: vec![vec![]; 242],
+    };
+    sml2_dx::Presentation {
+        levels: vec![level; 32],
+        players: [[player.clone(), player.clone()], [player.clone(), player]],
+        object_tables: vec![vec![vec![]; 228]],
+        hud_tiles: vec![0; 20],
+        animation_rows: vec![0; 0x1000],
+        banks: Default::default(),
     }
 }
 
@@ -178,31 +179,40 @@ fn is_red(image: &ColorImage) -> bool {
 }
 
 #[test]
-fn dx_mode_colors_the_normal_game_only_where_dx_data_covers_it() {
+fn dx_mode_colors_every_level_of_the_normal_game() {
     let (mut app, _, path) = super::tests::app();
     app.dx_bundle = Some(red_bundle());
-    let game = app.game.as_mut().unwrap();
-    game.session.debug_warp_level(0).unwrap();
-    // Off: the filter's native frame, even in the covered level.
-    assert!(!is_red(&app.frame_image().unwrap()));
+    // The title keeps the filter's picture.
     app.settings.dx_mode = true;
-    assert!(is_red(&app.frame_image().unwrap()));
-    // Luigi uses the same session; a Mario-only bundle quietly draws Mario.
+    assert!(!is_red(&app.frame_image().unwrap()));
+    for level in [0, 1, 0x1F] {
+        let game = app.game.as_mut().unwrap();
+        game.session.debug_warp_level(level).unwrap();
+        app.settings.dx_mode = false;
+        assert!(
+            !is_red(&app.frame_image().unwrap()),
+            "off: the filter, level {level}"
+        );
+        app.settings.dx_mode = true;
+        assert!(is_red(&app.frame_image().unwrap()), "level {level}");
+    }
+    // Luigi draws through the same session.
     app.settings.character = sml2_core::character::Character::Luigi;
     assert!(is_red(&app.frame_image().unwrap()));
-    let bundle = app.dx_bundle.as_mut().unwrap();
-    bundle.schema = 1;
-    bundle.luigi = None;
-    assert!(is_red(&app.frame_image().unwrap()));
-    // Another level keeps the native picture, and so does a DX failure.
+    // A boss arena, and any DX failure, keep the native picture.
     let game = app.game.as_mut().unwrap();
-    game.session.debug_warp_level(1).unwrap();
+    if let sml2_runtime::session::SessionState::InLevel(ctx) = &mut game.session.state {
+        ctx.arena_loaded = true;
+    }
     assert!(!is_red(&app.frame_image().unwrap()));
+    assert!(app.dx_message.is_empty(), "an arena is not a failure");
     let game = app.game.as_mut().unwrap();
     game.session.debug_warp_level(0).unwrap();
-    app.dx_bundle.as_mut().unwrap().bg_palettes.clear();
+    app.dx_bundle.as_mut().unwrap().levels[0]
+        .bg_palettes
+        .clear();
     assert!(!is_red(&app.frame_image().unwrap()));
-    assert!(app.dx_message.contains("BG palettes"));
+    assert!(!app.dx_message.is_empty());
     // The normal game keeps its save slot: DX Mode is presentation only.
     assert!(!path.join("save.sav").exists());
     let _ = std::fs::remove_dir_all(path);

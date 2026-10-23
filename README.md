@@ -22,8 +22,8 @@ debug inspection/stepping around the native session:
 cargo run -p sml2-desktop
 ```
 
-Settings → Mods offers **DX Mode**, which draws the opening level with graphics
-and colors imported from your own SML2DX ROM, as Mario or Luigi.
+Settings → Mods offers **DX Mode**, which draws every level with graphics and
+colors imported from your own SML2DX ROM, as Mario or Luigi.
 See [DX Mode setup and limits](docs/desktop.md#sml2dx-mode).
 
 See [Desktop shell](docs/desktop.md) for Linux build dependencies, controls,

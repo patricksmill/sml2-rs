@@ -89,6 +89,12 @@ pub struct LevelContext {
     pub tilesets: Tilesets,
     pub arena_layout: Option<LevelLayout>,
     pub tile_animation: TileAnimationClock,
+    /// A phase has been copied to `$9200` since the level loaded. Presentation
+    /// only: DX tells a phase from identical base tiles by it.
+    pub tile_animation_copied: bool,
+    /// `$25AF` has swapped in a boss arena's tileset. Presentation only: DX
+    /// draws arenas with their own tables, which are not imported yet.
+    pub arena_loaded: bool,
     pub frame_n: u64,
     pub map_handoff: Option<MapHandoffOutcome>,
     pub map_handoff_frame: Option<u64>,
@@ -194,6 +200,8 @@ impl LevelContext {
             tilesets,
             arena_layout,
             tile_animation: TileAnimationClock::default(),
+            tile_animation_copied: false,
+            arena_loaded: false,
             frame_n: 0,
             map_handoff: None,
             map_handoff_frame: None,
@@ -417,7 +425,7 @@ impl LevelContext {
                 self.scene_reload_blank = true;
                 let index = self.sim.level_gfx_index;
                 let obj_tiles = self.spr.as_mut().map(|s| &mut s.objblock);
-                let _ = match obj_tiles {
+                self.arena_loaded |= match obj_tiles {
                     Some(o) => self.tilesets.apply(
                         index,
                         &mut self.bg_live,
@@ -554,7 +562,7 @@ impl LevelContext {
                 self.manifest.header.palettes[2]
             };
         }
-        update_tile_animation(
+        self.tile_animation_copied |= update_tile_animation(
             &self.sim,
             self.cam.scene_id != 0,
             &mut self.bg_live,

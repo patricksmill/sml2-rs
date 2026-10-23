@@ -9,7 +9,7 @@ use crate::{
 use eframe::egui::{
     self, Color32, ColorImage, Context, RawInput, TextureHandle, TextureOptions, ViewportCommand,
 };
-use sml2_core::{character::Character, video::PalettePixel};
+use sml2_core::video::PalettePixel;
 use sml2_runtime::content::{ExtractedContent, SessionAssets};
 #[cfg(test)]
 use std::path::PathBuf;
@@ -47,7 +47,7 @@ pub struct DesktopApp {
     allow_save: bool,
     status: Option<String>,
     game: Option<Game>,
-    dx_bundle: Option<sml2_dx::Bundle>,
+    dx_bundle: Option<sml2_dx::Presentation>,
     dx_worker: Option<crate::dx_import::Worker>,
     dx_picker: Option<file_picker::FilePicker>,
     dx_message: String,
@@ -361,13 +361,8 @@ impl DesktopApp {
             .dx_bundle
             .as_ref()
             .filter(|_| self.settings.dx_mode && game.session.dx_supported());
-        if let Some(bundle) = dx {
-            let character = if bundle.supports_character(self.settings.character) {
-                self.settings.character
-            } else {
-                Character::Mario
-            };
-            match game.session.render_dx_frame(bundle, character) {
+        if let Some(dx) = dx {
+            match game.session.render_dx_frame(dx, self.settings.character) {
                 Ok(pixels) => {
                     return Some(ColorImage::new(
                         [160, 144],

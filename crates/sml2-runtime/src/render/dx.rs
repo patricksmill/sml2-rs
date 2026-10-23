@@ -1,69 +1,178 @@
-//! Opening-level DX presentation. Rendering never advances native gameplay.
+//! DX presentation of any level. Rendering never advances native gameplay.
 use super::{hud_row_status, window_coord, window_origin, HudDigits};
 use crate::session::{LevelContext, Session, SessionState};
 use sml2_core::{
     character::Character,
-    level::{HudStrip, LAYOUT_HEIGHT, LAYOUT_WIDTH},
+    level::{HudStrip, TileAnim, LAYOUT_HEIGHT, LAYOUT_WIDTH},
     player::{self, Cell, CellStyle},
+    tileset::{BG_TILES_OFFSET, EXTRA_OFFSET, OBJ_TILES_OFFSET},
     video::{
         self,
         cgb::{self, BackgroundPixel, CgbAttributes, CgbPalettes, IndexedPixel, ObjectPixel},
     },
 };
-use sml2_dx::Bundle;
+use sml2_dx::{LevelGraphics, Presentation};
 
 impl Session {
-    /// Whether the current screen is one the audited DX data covers: the
-    /// opening level. Everything else keeps its native presentation.
-    pub fn dx_supported(&self) -> bool {
-        matches!(&self.state, SessionState::InLevel(ctx) if ctx.manifest.level_id == 0)
+    /// The level a DX frame would draw: live play or an attract demo, outside
+    /// boss arenas and fights. DX's `$36:$7306` gives each arena its own
+    /// palettes, VRAM1 graphics and attribute map, and its boss sprites go
+    /// through their own draw path; neither is imported yet.
+    fn dx_level(&self) -> Option<&LevelContext> {
+        let ctx = match &self.state {
+            SessionState::InLevel(ctx) => ctx,
+            SessionState::Demo(demo) => &demo.ctx,
+            _ => return None,
+        };
+        let boss = ctx.cam.boss_fight_phase != 0
+            || ctx.spr.as_ref().is_some_and(|s| !s.boss_oam.is_empty());
+        (!ctx.arena_loaded && !boss).then_some(ctx.as_ref())
     }
 
-    /// Render the audited opening level in direct CGB RGB888 color, drawing
-    /// the player with `character`'s graphics. Physics stay native either way.
+    /// Whether DX presentation covers the current screen: every level, live
+    /// or in a demo, except boss arenas. Title, map, arenas and other screens
+    /// keep their native picture.
+    pub fn dx_supported(&self) -> bool {
+        self.dx_level().is_some()
+    }
+
+    /// Render the current level in direct CGB RGB888 color, drawing the player
+    /// with `character`'s graphics. Physics stay native either way.
     pub fn render_dx_frame(
         &self,
-        bundle: &Bundle,
+        dx: &Presentation,
         character: Character,
     ) -> Result<Vec<[u8; 3]>, String> {
-        let SessionState::InLevel(ctx) = &self.state else {
-            return Err("DX presentation requires an active opening level".into());
+        let ctx = self
+            .dx_level()
+            .ok_or("DX presentation requires an active level")?;
+        render(ctx, dx, character)
+    }
+}
+
+/// One ROM source a level can copy into VRAM0 after loading: its destination
+/// in the `$8800` block, base bytes as the native session holds them, and the
+/// address both ROMs keep them at.
+struct Source<'a> {
+    destination: usize,
+    bank: u8,
+    address: u16,
+    base: &'a [u8],
+}
+
+/// Every mid-level copy the native session can make: `$25AF`'s arena
+/// reloads and `$Bx` scene transfers.
+fn mid_level_sources(ctx: &LevelContext) -> Vec<Source<'_>> {
+    let mut sources = Vec::new();
+    for entry in &ctx.tilesets.entries {
+        sources.push(Source {
+            destination: BG_TILES_OFFSET,
+            bank: entry.bg_bank,
+            address: entry.bg_addr,
+            base: &entry.bg_tiles,
+        });
+        sources.push(Source {
+            destination: OBJ_TILES_OFFSET,
+            bank: entry.obj_bank,
+            address: entry.obj_addr,
+            base: &entry.obj_tiles,
+        });
+    }
+    sources.push(Source {
+        destination: EXTRA_OFFSET,
+        bank: 0x07,
+        address: 0x7800,
+        base: &ctx.tilesets.extra_8e80,
+    });
+    for block in ctx.scripts.transfer_blocks() {
+        // `$Bx` sends a block to `$9200` or `$8B00` by its opcode.
+        for destination in [BG_TILES_OFFSET, OBJ_TILES_OFFSET] {
+            sources.push(Source {
+                destination,
+                bank: block.bank,
+                address: block.address,
+                base: &block.bytes,
+            });
+        }
+    }
+    sources
+}
+
+/// DX VRAM0 `$8800..$97FF` for this frame. Tiles the native session still
+/// holds from the level's load come from DX's own load. DX patches the base
+/// game's graphics in place, so a tile that animation, an arena reload or a
+/// scene transfer rewrote is found by its native source and read from the
+/// same address in the DX banks. A tile with no known source keeps its
+/// native bytes.
+fn live_background(ctx: &LevelContext, dx: &Presentation, level: &LevelGraphics) -> Vec<u8> {
+    const TILE: usize = 16;
+    let mut out = level.background[0].clone();
+    let (base, live) = (&ctx.bg_base, &ctx.bg_live);
+    if base.len() != out.len() || live.len() != out.len() {
+        return out;
+    }
+    let changed = |slot: usize| live[slot * TILE..][..TILE] != base[slot * TILE..][..TILE];
+    let mut explained = vec![false; out.len() / TILE];
+    // Whole copies first, largest first, so tile animation on top wins.
+    let mut sources = if base == live {
+        Vec::new()
+    } else {
+        mid_level_sources(ctx)
+    };
+    sources.sort_by_key(|s| std::cmp::Reverse(s.base.len()));
+    for source in &sources {
+        let slots = source.base.len() / TILE;
+        let first = source.destination / TILE;
+        let fits = |slot: usize| {
+            live.get(slot * TILE..slot * TILE + TILE)
+                == source
+                    .base
+                    .get((slot - first) * TILE..(slot - first + 1) * TILE)
         };
-        if ctx.manifest.level_id != 0 {
-            return Err("DX presentation supports only the opening level".into());
+        let matched: Vec<usize> = (first..first + slots).filter(|&s| fits(s)).collect();
+        // A copy is evident when most of its tiles are present and some of
+        // them are not the level's own.
+        if matched.len() * 4 < slots * 3 || !matched.iter().any(|&s| changed(s)) {
+            continue;
         }
-        render(ctx, bundle, character)
-    }
-}
-
-/// One character's `$8000` graphics (normal, fire, VRAM1) and player mappings.
-struct PlayerGraphics<'a> {
-    normal: &'a [u8],
-    fire: &'a [u8],
-    bank1: &'a [u8],
-    mappings: &'a [Vec<sml2_core::object::MappingEntry>],
-}
-
-fn player_graphics(bundle: &Bundle, character: Character) -> Result<PlayerGraphics<'_>, String> {
-    match character {
-        Character::Mario => Ok(PlayerGraphics {
-            normal: &bundle.mario_normal,
-            fire: &bundle.mario_fire,
-            bank1: &bundle.mario_bank1,
-            mappings: &bundle.player_mappings,
-        }),
-        Character::Luigi => {
-            let luigi = bundle.luigi.as_ref().ok_or(
-                "This DX installation predates Luigi graphics; re-import the ROM to add them",
-            )?;
-            Ok(PlayerGraphics {
-                normal: &luigi.normal,
-                fire: &luigi.fire,
-                bank1: &luigi.bank1,
-                mappings: &luigi.mappings,
-            })
+        let Some(bytes) = dx.rom(source.bank, source.address, source.base.len()) else {
+            continue;
+        };
+        for slot in matched {
+            if !explained[slot] {
+                let at = (slot - first) * TILE;
+                out[slot * TILE..slot * TILE + TILE].copy_from_slice(&bytes[at..at + TILE]);
+                explained[slot] = true;
+            }
         }
     }
+    // `$3873` copies one `$40`-byte phase of the configured row to `$9200`.
+    // The config can change after the last copy (the goal does), so any row
+    // may still be showing; the configured row and the clock's last copied
+    // phase win ties, since some rows repeat a phase in the base art only.
+    let anim = TileAnim::from_table_value(ctx.sim.tile_anim_config.wrapping_sub(1));
+    let region = BG_TILES_OFFSET..BG_TILES_OFFSET + 0x40;
+    if ctx.tile_animation_copied {
+        let clock = usize::from(ctx.tile_animation.phase & 3);
+        let rows = std::iter::once(usize::from(anim.row)).chain(0..16);
+        let phases = |row| {
+            std::iter::once(clock)
+                .chain(0..4)
+                .map(move |p| row * 0x100 + p * 0x40)
+        };
+        let shown = rows
+            .flat_map(phases)
+            .find(|&at| ctx.anim_rows.get(at..at + 0x40) == Some(&live[region.clone()]));
+        if let Some(bytes) = shown.and_then(|at| dx.animation_rows.get(at..at + 0x40)) {
+            out[region.clone()].copy_from_slice(bytes);
+            explained[region.start / TILE..region.end / TILE].fill(true);
+        }
+    }
+    for slot in (0..explained.len()).filter(|&s| !explained[s] && changed(s)) {
+        out[slot * TILE..slot * TILE + TILE]
+            .copy_from_slice(&live[slot * TILE..slot * TILE + TILE]);
+    }
+    out
 }
 
 fn pause_palettes(bytes: &[u8], bright_phase: bool) -> Vec<u8> {
@@ -83,36 +192,34 @@ fn pause_palettes(bytes: &[u8], bright_phase: bool) -> Vec<u8> {
 
 fn render(
     ctx: &LevelContext,
-    bundle: &Bundle,
+    dx: &Presentation,
     character: Character,
 ) -> Result<Vec<[u8; 3]>, String> {
-    bundle.validate().map_err(|e| e.to_string())?;
-    let player = player_graphics(bundle, character)?;
+    let level_id = ctx.manifest.level_id;
+    let level = dx
+        .level(level_id)
+        .ok_or_else(|| format!("no DX graphics for level {level_id}"))?;
+    let player = dx.player(character, level.theme);
     let bg_palettes = if ctx.sim.paused {
-        pause_palettes(&bundle.bg_palettes, ctx.sim.frame_counter & 16 != 0)
+        pause_palettes(&level.bg_palettes, ctx.sim.frame_counter & 16 != 0)
     } else {
-        bundle.bg_palettes.clone()
+        level.bg_palettes.clone()
     };
     let palettes =
-        CgbPalettes::from_bytes(&bg_palettes, &bundle.obj_palettes).map_err(|e| e.to_string())?;
+        CgbPalettes::from_bytes(&bg_palettes, &level.obj_palettes).map_err(|e| e.to_string())?;
+    let background = [live_background(ctx, dx, level), level.background[1].clone()];
     // Each assembled bank starts at $8000. Signed BG tile addressing adds $800.
-    let mut banks: [Vec<u8>; 2] = std::array::from_fn(|bank| {
+    let banks: [Vec<u8>; 2] = std::array::from_fn(|bank| {
         let mut bytes = if bank == 1 {
-            player.bank1.to_vec()
+            player.bank1.clone()
         } else if ctx.sim.powerup == 3 {
-            player.fire.to_vec()
+            player.fire.clone()
         } else {
-            player.normal.to_vec()
+            player.normal.clone()
         };
-        bytes.extend_from_slice(&bundle.background[bank]);
+        bytes.extend_from_slice(&background[bank]);
         bytes
     });
-    // Level0's ROM config $4E has four $40-byte phases at $9200.
-    // The native clock is read, never ticked by rendering.
-    let phase = (ctx.tile_animation.phase & 3) as usize;
-    if phase != 0 || ctx.frame_n >= 8 {
-        banks[0][0x1200..0x1240].copy_from_slice(&bundle.animation[phase * 64..phase * 64 + 64]);
-    }
     let banks = [&banks[0][..], &banks[1][..]];
     let mut background = vec![
         BackgroundPixel {
@@ -165,7 +272,7 @@ fn render(
             } else {
                 metatile.tiles[(ty / 8) * 2 + tx / 8]
             };
-            let attr = CgbAttributes::from_byte(bundle.tile_attributes[tile as usize]);
+            let attr = CgbAttributes::from_byte(level.tile_attributes[tile as usize]);
             background[py * 160 + px] = BackgroundPixel {
                 index: cgb::sample_tile(
                     banks,
@@ -180,7 +287,7 @@ fn render(
         }
     }
     let hud = HudStrip {
-        template: bundle.hud_tiles.clone(),
+        template: dx.hud_tiles.clone(),
         ..ctx.hud.clone()
     };
     let row = hud_row_status(
@@ -200,7 +307,7 @@ fn render(
             continue;
         }
         for (col, &tile) in row.iter().take(20).enumerate() {
-            let attr = CgbAttributes::from_byte(bundle.hud_attributes[col]);
+            let attr = CgbAttributes::from_byte(level.hud_attributes[col]);
             for dx in 0..8 {
                 background[py * 160 + col * 8 + dx] = BackgroundPixel {
                     index: cgb::sample_tile(
@@ -219,8 +326,10 @@ fn render(
     let mut objects = vec![None; 160 * 144];
     if let Some(s) = &ctx.spr {
         let mut tables = s.tables.clone();
-        tables.player_mappings = player.mappings.to_vec();
-        tables.sprite_mappings_a = bundle.object_mappings.clone();
+        tables.player_mappings = player.mappings.clone();
+        // `mapping_for` picks mode A or B by level; both hold this level's table.
+        tables.sprite_mappings_a = dx.objects(level).to_vec();
+        tables.sprite_mappings_b = tables.sprite_mappings_a.clone();
         // Fireballs are staged by $0F71 before Mario's $2D0A draw.
         for &(x, y, frame) in &s.fireballs {
             let cells = player::draw_cells(&tables, frame, x, y, ctx.cam.x, ctx.cam.y, false)
@@ -273,7 +382,7 @@ fn render(
         }
         for inst in &s.insts {
             let mapping = tables
-                .mapping_for(0, inst.sprite)
+                .mapping_for(level_id, inst.sprite)
                 .ok_or_else(|| format!("missing DX object {}", inst.sprite))?;
             for entry in mapping {
                 let x = if inst.flip & 0x20 != 0 {
