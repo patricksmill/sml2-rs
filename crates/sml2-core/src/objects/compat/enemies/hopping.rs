@@ -1,6 +1,6 @@
 //! Legacy world inputs and probe effects for the native hopping enemy.
 use super::{
-    handler_0x58848::{self, World},
+    hopping::{self, World},
     terrain_probes::TerrainProbes,
     *,
 };
@@ -55,7 +55,7 @@ impl ObjectSim {
             sim: self,
             probes: TerrainProbes::new(layout, Position { x: st.px, y: st.py }),
         };
-        let result = handler_0x58848::update(&mut actor, frame, &mut inputs);
+        let result = hopping::update(&mut actor, frame, &mut inputs);
         if let Some(flags) = inputs.probes.legacy_move_flags() {
             inputs.sim.move_flags = flags;
         }

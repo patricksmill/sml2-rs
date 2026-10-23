@@ -196,7 +196,7 @@ mod handler_0x58804_adapter;
 #[path = "enemies/hopper.rs"]
 mod hopper;
 #[path = "enemies/hopping.rs"]
-mod handler_0x58848;
+mod hopping;
 #[path = "compat/enemies/hopping.rs"]
 mod handler_0x58848_adapter;
 #[path = "enemies/buried.rs"]

@@ -51,6 +51,13 @@ def handler_prompt(addr: int, *, module: str | None = None, dependencies=(), bud
                 rf'#\[path = "([^"]+)"\]\s+mod handler_0x{addr:x};',
                 registry.read_text(),
             )
+        if entry is None and registry.is_file():
+            # Native modules can use descriptive names. The address-based
+            # adapter remains the dispatch identity and mirrors the native path.
+            entry = re.search(
+                rf'#\[path = "compat/([^" ]+)"\]\s+mod handler_0x{addr:x}_adapter;',
+                registry.read_text(),
+            )
         if entry is None:
             raise ValueError('choose a descriptive native file with --module, such as objects/enemies/boo.rs')
         module = str((folder / entry[1]).relative_to(ROOT))

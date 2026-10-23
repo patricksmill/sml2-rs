@@ -564,6 +564,26 @@ class PromptTests(unittest.TestCase):
             self.assertIn('objects/enemies/tests/hopping_adapter.rs', prompt)
             self.assertNotIn('behavior_adapter.rs', prompt)
 
+    def test_handler_prompt_follows_named_native_module(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            folder = root / 'crates/sml2-core/src/objects'
+            folder.mkdir(parents=True)
+            (folder / 'mod.rs').write_text(
+                '#[path = "enemies/hopping.rs"]\nmod hopping;\n#[path = "compat/enemies/hopping.rs"]\nmod handler_0x58848_adapter;\n')
+            owner = folder / 'enemies'
+            owner.mkdir(parents=True)
+            (owner / 'hopping.rs').write_text('')
+            (folder / 'compat/enemies').mkdir(parents=True)
+            (folder / 'compat/enemies/hopping.rs').write_text(
+                '#[cfg(test)]\n#[path = "../../enemies/tests/hopping_adapter.rs"]\nmod tests;\n')
+            (root / 'tasks/handlers').mkdir(parents=True)
+            (root / 'tasks/handlers/0x58848.md').write_text('**Slice status: COMPLETE**')
+            with patch.object(dispatch_prompt, 'ROOT', root), patch.object(dispatch_prompt, 'run_handler_task'):
+                prompt = dispatch_prompt.handler_prompt(0x58848)
+            self.assertIn('objects/enemies/tests/hopping_adapter.rs', prompt)
+            self.assertNotIn('behavior_adapter.rs', prompt)
+
     def test_family_prompt_registers_owning_module_and_rejects_escape(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

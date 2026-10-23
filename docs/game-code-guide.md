@@ -66,9 +66,9 @@ Use the hopping enemy as a small example:
 5. `objects/enemies/tests/hopping_adapter.rs` checks the engine boundary;
    the behavior file also contains native tests.
 
-The filename describes the behavior, but its current Rust module is called
-`handler_0x58848` in `objects/mod.rs`. Search both the name and address when
-following callers. The address is a source-reference identity, not a suggested
+The domain module is named `hopping` in `objects/mod.rs`; its engine adapter
+retains the `handler_0x58848` dispatch identity. Search the behavior name for
+game rules and the address when following engine callers. The address is a source-reference identity, not a suggested
 name for new game logic. `objects/enemies/walker.rs` provides another example
 with named states and explicit movement outcomes.
 
