@@ -127,7 +127,8 @@ fn menu_confirm_opens_settings_and_escape_returns_to_the_title() {
     assert_eq!(app.screen, Screen::Home);
     app.input.event(Button::Pad(PadButton::South), true);
     frame(&mut app, &ctx, vec![]);
-    assert_eq!(app.screen, Screen::Settings, "the first menu row is Settings");
+    assert!(app.settings_open, "the first menu row is Settings");
+    assert_eq!(app.screen, Screen::Home);
     assert!(matches!(
         app.game.as_ref().unwrap().session.state,
         SessionState::Title(_)
@@ -696,6 +697,23 @@ fn the_scenery_editor_opens_without_changing_the_game_view() {
     let view = app.settings.view();
     frame(&mut app, &ctx, vec![]);
     assert_eq!(app.settings.view(), view);
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn f10_hides_the_toolbar_and_the_settings_button_opens_a_window() {
+    let (mut app, ctx, path) = app();
+    app.screen = Screen::Game;
+    app.settings.show_toolbar = true;
+    frame(&mut app, &ctx, vec![key(egui::Key::F10, true)]);
+    assert!(!app.settings.show_toolbar);
+    app.settings.show_toolbar = true;
+    app.input.event(Button::key("F10"), false);
+    frame(&mut app, &ctx, vec![]);
+    app.settings_open = true;
+    frame(&mut app, &ctx, vec![]);
+    assert!(app.settings_open);
+    assert_ne!(app.screen, Screen::Settings);
     let _ = std::fs::remove_dir_all(path);
 }
 

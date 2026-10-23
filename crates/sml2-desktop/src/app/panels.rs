@@ -1,3 +1,4 @@
+use super::catalog;
 use super::theme::{self, Value};
 use super::{DesktopApp, Screen};
 use crate::{
@@ -62,8 +63,7 @@ impl DesktopApp {
                 }
             }
             if self.menu.button(ui, "Settings") {
-                self.return_screen = Screen::Home;
-                self.navigate(ctx, Screen::Settings);
+                self.settings_open = true;
             }
             if self.game.is_some() && self.menu.button(ui, "Scenery editor") {
                 self.open_editor(ctx);
@@ -367,6 +367,38 @@ impl DesktopApp {
             }
         }
         theme::note(ui, &format!("{}", self.options.paths.settings.display()));
+    }
+
+    pub(super) fn settings_window(&mut self, ctx: &Context) {
+        if !self.settings_open {
+            return;
+        }
+        let mut open = self.settings_open;
+        egui::Window::new("Settings")
+            .open(&mut open)
+            .default_width(360.0)
+            .show(ctx, |ui| {
+                for pedestal in catalog::PEDESTALS {
+                    let text = catalog::label(pedestal, &self.settings, self.debug);
+                    if ui.button(text).clicked() {
+                        if pedestal == catalog::Pedestal::Fullscreen {
+                            self.fullscreen(ctx);
+                        } else {
+                            catalog::cycle(pedestal, &mut self.settings, &mut self.debug);
+                        }
+                        self.persist();
+                        release_focus(ctx);
+                    }
+                }
+                ui.separator();
+                ui.label("F10 hides this bar. Bindings, ROM import, and reset stay on the full settings page.");
+                if ui.button("All settings").clicked() {
+                    self.return_screen = self.screen;
+                    self.navigate(ctx, Screen::Settings);
+                    release_focus(ctx);
+                }
+            });
+        self.settings_open = open;
     }
 
     pub(super) fn debug_panel(&mut self, ctx: &Context) {

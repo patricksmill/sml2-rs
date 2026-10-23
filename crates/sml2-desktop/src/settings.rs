@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const SETTINGS_VERSION: u32 = 2;
+pub const SETTINGS_VERSION: u32 = 3;
 
 mod filter;
 pub use filter::Filter;
@@ -44,6 +44,13 @@ pub struct Settings {
     pub camera_zoom: CameraZoom,
     /// Draw levels between the last two ticks on fast displays (Mods).
     pub motion_smoothing: bool,
+    /// Draw the top toolbar. F10 toggles this while it is hidden.
+    #[serde(default = "toolbar_shown")]
+    pub show_toolbar: bool,
+}
+
+fn toolbar_shown() -> bool {
+    true
 }
 
 impl Default for Settings {
@@ -65,6 +72,7 @@ impl Default for Settings {
             widescreen: Widescreen::Off,
             camera_zoom: CameraZoom::Native,
             motion_smoothing: false,
+            show_toolbar: true,
         }
     }
 }
@@ -110,7 +118,9 @@ impl Settings {
             serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
         let version = value.get("version");
         if value.is_object()
-            && (version.is_none() || version.and_then(serde_json::Value::as_u64) == Some(1))
+            && (version.is_none()
+                || version.and_then(serde_json::Value::as_u64) == Some(1)
+                || version.and_then(serde_json::Value::as_u64) == Some(2))
         {
             value["version"] = SETTINGS_VERSION.into();
             if value.get("filter").and_then(serde_json::Value::as_str) == Some("Sgb") {

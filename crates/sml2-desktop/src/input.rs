@@ -42,7 +42,9 @@ impl Button {
     }
     pub fn reserved(&self) -> bool {
         match self {
-            Self::Key(key) => ["Escape", "F1", "F2", "F3", "F11", "Plus", "Equals", "Minus"]
+            Self::Key(key) => [
+                "Escape", "F1", "F2", "F3", "F10", "F11", "Plus", "Equals", "Minus",
+            ]
                 .contains(&key.as_str()),
             Self::Pad(PadButton::Start) => true,
             _ => false,

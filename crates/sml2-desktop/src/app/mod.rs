@@ -24,6 +24,7 @@ mod dx;
 mod editor;
 mod file_picker;
 mod filter_preview;
+mod catalog;
 mod panels;
 mod pointer;
 mod startup;
@@ -100,6 +101,7 @@ pub struct DesktopApp {
     aim: Option<pointer::Aim>,
     start_click: bool,
     validation_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
+    settings_open: bool,
 }
 
 impl DesktopApp {
@@ -148,7 +150,7 @@ impl DesktopApp {
             show_native_border: false,
             levels: Vec::new(),
             editor: editor::Editor::default(),
-            focused: false,
+            focused: true,
             last_update: Instant::now(),
             last_save: Instant::now(),
             budget: TickBudget::default(),
@@ -160,6 +162,7 @@ impl DesktopApp {
             aim: None,
             start_click: false,
             validation_error: Default::default(),
+            settings_open: false,
         };
         app.load_game();
         app.restore_dx();
@@ -279,7 +282,7 @@ impl DesktopApp {
             }
         }
 
-        if self.screen == Screen::Game || self.screen == Screen::Editor {
+        if self.settings.show_toolbar && (self.screen == Screen::Game || self.screen == Screen::Editor) {
             self.toolbar(ctx);
         }
         egui::CentralPanel::default()
@@ -300,6 +303,7 @@ impl DesktopApp {
         if self.debug {
             self.debug_panel(ctx);
         }
+        self.settings_window(ctx);
 
         let now = Instant::now();
         let elapsed = now.duration_since(self.last_update);
@@ -454,8 +458,8 @@ impl DesktopApp {
                     self.open_editor(ctx);
                 }
                 if ui.button("Settings").clicked() {
-                    self.return_screen = self.screen;
-                    self.navigate(ctx, Screen::Settings);
+                    self.settings_open = true;
+                    release_focus(ctx);
                 }
                 if ui.button("Debug · F1").clicked() {
                     self.debug = !self.debug;
