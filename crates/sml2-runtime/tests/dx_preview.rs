@@ -462,3 +462,30 @@ fn audited_rom_draws_the_hub_and_zone_screens() {
         }
     }
 }
+
+#[test]
+fn dx_smoothing_at_a_full_tick_is_the_dx_frame_upsampled() {
+    let bundle = synthetic_bundle();
+    let mut game = session();
+    game.begin_level(0, 0).unwrap();
+    for _ in 0..30 {
+        game.advance(FrameInput::default());
+    }
+    let native = game.render_dx_frame(&bundle, Mario, (256, 144)).unwrap();
+    let (smooth, scale) = game
+        .render_dx_frame_smooth(
+            &bundle,
+            Mario,
+            (256, 144),
+            sml2_runtime::render::motion::Smooth {
+                alpha: 1.0,
+                scale: 3,
+            },
+        )
+        .unwrap();
+    assert_eq!(scale, 3);
+    assert_eq!(smooth.len(), 768 * 432);
+    assert!(
+        (0..432).all(|y| (0..768).all(|x| smooth[y * 768 + x] == native[(y / 3) * 256 + x / 3]))
+    );
+}

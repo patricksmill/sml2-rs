@@ -48,34 +48,48 @@ impl Session {
         character: Character,
         view: (usize, usize),
     ) -> Result<Vec<[u8; 3]>, String> {
+        self.render_dx_frame_smooth(dx, character, view, super::motion::Smooth::OFF)
+            .map(|(frame, _)| frame)
+    }
+
+    /// [`Self::render_dx_frame`] with level frames smoothed by `smooth`,
+    /// returning the frame and its output pixels per game pixel.
+    pub fn render_dx_frame_smooth(
+        &self,
+        dx: &Presentation,
+        character: Character,
+        view: (usize, usize),
+        smooth: super::motion::Smooth,
+    ) -> Result<(Vec<[u8; 3]>, usize), String> {
         use super::view::fixed_screen;
         const BAR: [u8; 3] = [0, 0, 0];
         match &self.state {
             SessionState::Title(_) => {
                 let title = screen(&dx.title, &[], None)?;
-                return Ok(fixed_screen(view, BAR, |_| title));
+                return Ok((fixed_screen(view, BAR, |_| title), 1));
             }
             SessionState::FileSelectLoading(loading) => {
                 // `$19` keeps the title until its transfers turn the LCD off.
                 if loading.lcd_disabled() {
-                    return Ok(vec![[255; 3]; view.0 * view.1]);
+                    return Ok((vec![[255; 3]; view.0 * view.1], 1));
                 }
                 let title = screen(&dx.title, &[], None)?;
-                return Ok(fixed_screen(view, BAR, |_| title));
+                return Ok((fixed_screen(view, BAR, |_| title), 1));
             }
             SessionState::FileSelect(file_select) => {
                 let frame = self.render_dx_file_select(file_select, dx, character)?;
-                return Ok(fixed_screen(view, BAR, |_| frame));
+                return Ok((fixed_screen(view, BAR, |_| frame), 1));
             }
             SessionState::Overworld(map_sim) => {
-                return self.render_dx_map(map_sim, dx, character, view)
+                return Ok((self.render_dx_map(map_sim, dx, character, view)?, 1))
             }
             _ => {}
         }
         let ctx = self
             .dx_level()
             .ok_or("DX presentation requires the title, file select or a level")?;
-        render(ctx, dx, character, view)
+        let offsets = self.motion_offsets(smooth);
+        Ok((render(ctx, dx, character, view, &offsets)?, offsets.scale))
     }
 
     /// `$30000`'s screen with its OAM: the pipe tallies, the Easy banner, the
@@ -289,8 +303,9 @@ fn screen(
             });
         }
     }
-    let mut objects = vec![None; 160 * 144];
-    draw_cells(&mut objects, (160, 144), banks, cells.to_vec(), 0, (0, 0))?;
+    let mut layers = super::layers::Layers::new((160, 144), 0, background[0]);
+    push_cells(&mut layers.cells, banks, cells.to_vec(), 0, (0, 0), (0, 0))?;
+    let (_, objects) = layers.compose(1, (0, 0), |_, _| false);
     cgb::compose_frame(&background, &objects, true, &palettes).map_err(|e| e.to_string())
 }
 
@@ -453,6 +468,7 @@ fn render(
     dx: &Presentation,
     character: Character,
     view: (usize, usize),
+    offsets: &super::motion::Offsets,
 ) -> Result<Vec<[u8; 3]>, String> {
     let (vw, vh) = view;
     let (mx, _) = super::view::margin(view);
@@ -482,13 +498,12 @@ fn render(
         bytes
     });
     let banks = [&banks[0][..], &banks[1][..]];
-    let mut background = vec![
-        BackgroundPixel {
-            index: IndexedPixel::new(0, 0).unwrap(),
-            priority: false,
-        };
-        vw * vh
-    ];
+    let border = offsets.border() as i32;
+    let blank = BackgroundPixel {
+        index: IndexedPixel::new(0, 0).unwrap(),
+        priority: false,
+    };
+    let mut layers = super::layers::Layers::new(view, offsets.border(), blank);
     let sx = ctx.cam.x as i32 - vw as i32 / 2;
     let sy = ctx.cam.y as i32 - vh as i32 / 2 - ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
     let world_w = (LAYOUT_WIDTH * 16) as i32;
@@ -498,16 +513,16 @@ fn render(
         window_origin(sx, world_w, span_x),
         window_origin(sy, world_h, span_y),
     );
-    for py in 0..vh {
-        for px in 0..vw {
+    for py in -border..vh as i32 + border {
+        for px in -border..vw as i32 + border {
             let (mut wx, mut wy) = (
-                window_coord(sx + px as i32, ox, span_x),
-                window_coord(sy + py as i32, oy, span_y),
+                window_coord(sx + px, ox, span_x),
+                window_coord(sy + py, oy, span_y),
             );
             if let Some(pipe) = ctx.spr.as_ref().and_then(|s| s.pipe_background) {
-                let (x, y) = pipe.sample(sx + px as i32, sy + py as i32);
+                let (x, y) = pipe.sample(sx + px, sy + py);
                 let (dx, dy) = pipe.source_offset();
-                let (vx, vy) = if pipe.retains_source(sx + px as i32) {
+                let (vx, vy) = if pipe.retains_source(sx + px) {
                     (sx + dx, sy + dy)
                 } else {
                     (sx, sy)
@@ -537,7 +552,7 @@ fn render(
                 metatile.tiles[(ty / 8) * 2 + tx / 8]
             };
             let attr = CgbAttributes::from_byte(level.tile_attributes[tile as usize]);
-            background[py * vw + px] = BackgroundPixel {
+            *layers.bg_mut(px, py) = BackgroundPixel {
                 index: cgb::sample_tile(
                     banks,
                     0x800 + video::bg_tile_offset(tile),
@@ -577,7 +592,7 @@ fn render(
                 if !(0..vw as i32).contains(&x) {
                     continue;
                 }
-                background[py as usize * vw + x as usize] = BackgroundPixel {
+                layers.window[py as usize * vw + x as usize] = Some(BackgroundPixel {
                     index: cgb::sample_tile(
                         banks,
                         0x800 + video::bg_tile_offset(tile),
@@ -587,11 +602,10 @@ fn render(
                     )
                     .map_err(|e| e.to_string())?,
                     priority: attr.priority(),
-                };
+                });
             }
         }
     }
-    let mut objects = vec![None; vw * vh];
     if let Some(s) = &ctx.spr {
         let mut tables = s.tables.clone();
         tables.player_mappings = player.mappings.clone();
@@ -600,11 +614,18 @@ fn render(
         tables.sprite_mappings_b = tables.sprite_mappings_a.clone();
         let place = |x, y| super::view::sprite_anchor(view, (ctx.cam.x, ctx.cam.y), (x, y));
         // Fireballs are staged by $0F71 before Mario's $2D0A draw.
-        for &(x, y, frame) in &s.fireballs {
+        for (i, &(x, y, frame)) in s.fireballs.iter().enumerate() {
             let ((ax, ay), offset) = place(x, y);
             let cells = player::draw_cells(&tables, frame, x, y, ax, ay, false)
                 .ok_or_else(|| format!("missing DX fireball frame {frame}"))?;
-            draw_cells(&mut objects, view, banks, cells, 0, offset)?;
+            push_cells(
+                &mut layers.cells,
+                banks,
+                cells,
+                0,
+                offset,
+                offsets.fireball(i),
+            )?;
         }
         if let Some((x, y, frame)) = s.player {
             let ((ax, ay), offset) = place(x, y);
@@ -629,30 +650,51 @@ fn render(
                     cell.attr |= 0x80;
                 }
             }
-            draw_cells(&mut objects, view, banks, cells, s.player_pan, offset)?;
+            push_cells(
+                &mut layers.cells,
+                banks,
+                cells,
+                s.player_pan,
+                offset,
+                offsets.player,
+            )?;
         }
         if let Some((x, y, frame)) = s.player_shield {
             let ((ax, ay), offset) = place(x, y);
             if let Some(cells) = player::draw_cells(&tables, frame, x, y, ax, ay, false) {
-                draw_cells(&mut objects, view, banks, cells, s.player_pan, offset)?;
+                push_cells(
+                    &mut layers.cells,
+                    banks,
+                    cells,
+                    s.player_pan,
+                    offset,
+                    offsets.shield,
+                )?;
             }
         }
         if let (Some((x, y, _)), Some((timer, chain))) = (s.player, s.streak_counter) {
             let ((ax, ay), offset) = place(x, y);
-            draw_cells(
-                &mut objects,
-                view,
+            push_cells(
+                &mut layers.cells,
                 banks,
                 player::draw_streak_counter(&tables, timer, chain, x, y, ax, ay),
                 s.player_pan,
                 offset,
+                offsets.player,
             )?;
         }
-        for &(x, y, frame) in &s.bumpers {
+        for (i, &(x, y, frame)) in s.bumpers.iter().enumerate() {
             let ((ax, ay), offset) = place(x, y);
             let cells = player::draw_cells(&tables, frame, x, y, ax, ay, false)
                 .ok_or_else(|| format!("missing DX bump frame {frame}"))?;
-            draw_cells(&mut objects, view, banks, cells, 0, offset)?;
+            push_cells(
+                &mut layers.cells,
+                banks,
+                cells,
+                0,
+                offset,
+                offsets.bumper(i),
+            )?;
         }
         for inst in &s.insts {
             let mapping = tables
@@ -669,78 +711,78 @@ fn render(
                 } else {
                     entry.y
                 };
-                blit(
-                    &mut objects,
-                    view,
+                layers.cells.push(obj_cell(
                     banks,
                     inst.x as i32 - sx + x as i32,
                     inst.y as i32 - sy + y as i32,
                     entry.tile,
                     entry.attr ^ inst.flip,
-                )?;
+                    offsets.object(inst.slot),
+                )?);
             }
         }
     }
     if ctx.scene_reload_blank {
-        return Ok(vec![[255; 3]; vw * vh]);
+        return Ok(vec![[255; 3]; vw * vh * offsets.scale * offsets.scale]);
     }
+    let (background, objects) = layers.compose(offsets.scale, offsets.bg, |_, _| false);
     cgb::compose_frame(&background, &objects, true, &palettes).map_err(|e| e.to_string())
 }
 
-fn draw_cells(
-    objects: &mut [Option<ObjectPixel>],
-    size: (usize, usize),
-    banks: [&[u8]; 2],
-    cells: Vec<Cell>,
-    pan: u8,
-    offset: (i32, i32),
-) -> Result<(), String> {
-    for cell in cells {
-        blit(
-            objects,
-            size,
-            banks,
-            cell.x as i32 - 8 + offset.0,
-            cell.y.wrapping_sub(pan) as i32 - 16 + offset.1,
-            cell.tile,
-            cell.attr,
-        )?;
-    }
-    Ok(())
-}
-
-fn blit(
-    objects: &mut [Option<ObjectPixel>],
-    (w, h): (usize, usize),
+/// One 8x8 CGB OBJ cell at screen `(x, y)`; colour 0 is transparent.
+fn obj_cell(
     banks: [&[u8]; 2],
     x: i32,
     y: i32,
     tile: u8,
     attr: u8,
-) -> Result<(), String> {
-    if x <= -8 || x >= w as i32 || y <= -8 || y >= h as i32 {
-        return Ok(());
-    }
+    shift: (i32, i32),
+) -> Result<Cell8, String> {
     let attr = CgbAttributes::from_byte(attr);
-    for dy in 0..8 {
-        for dx in 0..8 {
-            let (px, py) = (x + dx, y + dy);
-            if !(0..w as i32).contains(&px) || !(0..h as i32).contains(&py) {
-                continue;
-            }
-            let target = &mut objects[py as usize * w + px as usize];
-            if target.is_some() {
-                continue;
-            }
-            let index = cgb::sample_tile(banks, tile as usize * 16, attr, dx as u8, dy as u8)
-                .map_err(|e| e.to_string())?;
-            if index.color() != 0 {
-                *target = Some(ObjectPixel {
-                    index,
-                    behind_background: attr.priority(),
-                });
-            }
+    let mut pixels = [None; 64];
+    for (i, pixel) in pixels.iter_mut().enumerate() {
+        let index = cgb::sample_tile(
+            banks,
+            tile as usize * 16,
+            attr,
+            (i % 8) as u8,
+            (i / 8) as u8,
+        )
+        .map_err(|e| e.to_string())?;
+        if index.color() != 0 {
+            *pixel = Some(ObjectPixel {
+                index,
+                behind_background: attr.priority(),
+            });
         }
+    }
+    Ok(Cell8 {
+        x,
+        y,
+        shift,
+        pixels,
+    })
+}
+
+type Cell8 = super::layers::Cell<ObjectPixel>;
+
+fn push_cells(
+    out: &mut Vec<Cell8>,
+    banks: [&[u8]; 2],
+    cells: Vec<Cell>,
+    pan: u8,
+    offset: (i32, i32),
+    shift: (i32, i32),
+) -> Result<(), String> {
+    for cell in cells {
+        out.push(obj_cell(
+            banks,
+            cell.x as i32 - 8 + offset.0,
+            cell.y.wrapping_sub(pan) as i32 - 16 + offset.1,
+            cell.tile,
+            cell.attr,
+            shift,
+        )?);
     }
     Ok(())
 }
@@ -760,9 +802,18 @@ mod tests {
         let bank0 = [0; 32];
         let mut bank1 = [0; 32];
         bank1[..16].copy_from_slice(&[0x80, 0].repeat(8));
-        let mut objects = vec![None; 160 * 144];
-        blit(&mut objects, (160, 144), [&bank0, &bank1], 0, 0, 0, 0x8c).unwrap();
-        blit(&mut objects, (160, 144), [&bank0, &bank1], 0, 0, 0, 0x0e).unwrap();
+        let blank = BackgroundPixel {
+            index: IndexedPixel::new(0, 0).unwrap(),
+            priority: false,
+        };
+        let mut layers = crate::render::layers::Layers::new((160, 144), 0, blank);
+        layers
+            .cells
+            .push(obj_cell([&bank0, &bank1], 0, 0, 0, 0x8c, (0, 0)).unwrap());
+        layers
+            .cells
+            .push(obj_cell([&bank0, &bank1], 0, 0, 0, 0x0e, (0, 0)).unwrap());
+        let (_, objects) = layers.compose(1, (0, 0), |_, _| false);
         assert_eq!(
             objects[0],
             Some(ObjectPixel {
