@@ -78,7 +78,7 @@ mod tests {
     use sml2_core::scenery::{SceneryOverlay, SceneryPaint};
 
     #[test]
-    fn the_native_picture_and_a_native_view_stay_on_the_window_path() {
+    fn native_views_use_the_window_path_and_enlarged_views_sample_real_level_cells() {
         let overlay = SceneryOverlay::try_from_paints(
             vec![SceneryPaint {
                 x: 0,
@@ -94,7 +94,9 @@ mod tests {
         );
         assert_eq!(
             margin_sample((384, 216), 112, 54, (80, 448), 0, &overlay),
-            MarginSample::Native
+            // Enlarged views draw the real layout even inside the native
+            // picture. The existing paint must not cover this terrain cell.
+            MarginSample::Level { wx: 0, wy: 376 }
         );
     }
 
