@@ -137,6 +137,8 @@ mod central_door;
 mod central_door_adapter;
 #[path = "enemies/charging_enemy.rs"]
 mod charging_enemy;
+#[path = "compat/enemies/charging_enemy.rs"]
+mod charging_enemy_adapter;
 #[path = "bosses/circuit/behavior.rs"]
 mod circuit_boss;
 #[path = "bosses/circuit/adapter.rs"]

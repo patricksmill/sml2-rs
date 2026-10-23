@@ -6,7 +6,8 @@
 //! In State 1/2: pauses for 24 frames, then creeps forward for 24 steps at 1 px/frame.
 //! When 24 steps finish: becomes vulnerable (defeat_mode 0), plays SFX 16,
 //! and enters State 3 (charge left) or State 4 (charge right) at 3 px/frame.
-//! When it reaches offscreen (screen X >= 184 / 0xB8), it resets to its spawn point ($5B2BF).
+//! Resets at the native screen-X gate ($B8) or beyond the enlarged view's
+//! world bounds, returning to its spawn point ($5B2BF).
 //!
 //! Follows the idiomatic Rust porting guide: typed actor state, domain methods,
 //! zero raw hex offsets or register plumbing.
@@ -48,8 +49,12 @@ impl ChargingEnemyState {
     }
 }
 
+#[derive(Default)]
 pub struct ChargingEnemyContext {
     pub mario_ref_x: u16,
+    /// World bounds for enlarged views. Native play keeps the ROM's wrapped
+    /// distance and preceding draw's screen-X reset gate.
+    pub charge_bounds: Option<std::ops::Range<i32>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,14 +87,18 @@ pub fn update(actor: &mut Actor, context: ChargingEnemyContext) -> ChargingEnemy
             let mario_lo = context.mario_ref_x as u8;
             let actor_lo = actor.position.x as u8;
             let diff = mario_lo.wrapping_sub(actor_lo);
-            let dist = if diff & 0x80 == 0 {
-                diff
+            let dist = if context.charge_bounds.is_some() {
+                context.mario_ref_x.abs_diff(actor.position.x)
             } else {
-                (!diff).wrapping_add(1)
+                u16::from(if diff & 0x80 == 0 {
+                    diff
+                } else {
+                    diff.wrapping_neg()
+                })
             };
 
             // ROM $5AA0D: cp $28 (ret c if < 40)
-            if dist < DISTANCE_THRESHOLD_X {
+            if dist < u16::from(DISTANCE_THRESHOLD_X) {
                 return ChargingEnemyEffect::None;
             }
 
@@ -147,24 +156,24 @@ pub fn update(actor: &mut Actor, context: ChargingEnemyContext) -> ChargingEnemy
                 }
             }
         }
-        ChargingEnemyState::ChargeLeft => {
-            actor.position.move_x(-3);
-            if actor.screen.x >= OFFSCREEN_SCREEN_X {
+        ChargingEnemyState::ChargeLeft | ChargingEnemyState::ChargeRight => {
+            let offscreen = context
+                .charge_bounds
+                .as_ref()
+                .map_or(actor.screen.x >= OFFSCREEN_SCREEN_X, |bounds| {
+                    !bounds.contains(&i32::from(actor.position.x))
+                });
+            actor
+                .position
+                .move_x(if state == ChargingEnemyState::ChargeLeft {
+                    -3
+                } else {
+                    3
+                });
+            if offscreen {
                 ChargingEnemyEffect::OffscreenReset
             } else {
-                ChargingEnemyEffect::Charging {
-                    state: ChargingEnemyState::ChargeLeft,
-                }
-            }
-        }
-        ChargingEnemyState::ChargeRight => {
-            actor.position.move_x(3);
-            if actor.screen.x >= OFFSCREEN_SCREEN_X {
-                ChargingEnemyEffect::OffscreenReset
-            } else {
-                ChargingEnemyEffect::Charging {
-                    state: ChargingEnemyState::ChargeRight,
-                }
+                ChargingEnemyEffect::Charging { state }
             }
         }
     }
@@ -179,7 +188,13 @@ mod tests {
         let mut actor = Actor::default();
         actor.position.y = 100;
 
-        let eff = update(&mut actor, ChargingEnemyContext { mario_ref_x: 0 });
+        let eff = update(
+            &mut actor,
+            ChargingEnemyContext {
+                mario_ref_x: 0,
+                ..Default::default()
+            },
+        );
         assert_eq!(eff, ChargingEnemyEffect::Initialized);
         assert_eq!(actor.position.y, 102, "moves Y by +2");
         assert_eq!(actor.defeat_mode, 0x80, "defeat mode armored 0x80");
@@ -196,7 +211,13 @@ mod tests {
         actor.state = ChargingEnemyState::Wait.to_raw();
 
         // Mario 20 px away (< 40)
-        let eff = update(&mut actor, ChargingEnemyContext { mario_ref_x: 120 });
+        let eff = update(
+            &mut actor,
+            ChargingEnemyContext {
+                mario_ref_x: 120,
+                ..Default::default()
+            },
+        );
         assert_eq!(eff, ChargingEnemyEffect::None);
         assert_eq!(actor.state, ChargingEnemyState::Wait.to_raw());
     }
@@ -208,7 +229,13 @@ mod tests {
         actor.state = ChargingEnemyState::Wait.to_raw();
 
         // Mario 50 px to the right (>= 40)
-        let eff = update(&mut actor, ChargingEnemyContext { mario_ref_x: 150 });
+        let eff = update(
+            &mut actor,
+            ChargingEnemyContext {
+                mario_ref_x: 150,
+                ..Default::default()
+            },
+        );
         assert_eq!(eff, ChargingEnemyEffect::FacingSelected { facing: 1 });
         assert_eq!(actor.state, ChargingEnemyState::CreepRight.to_raw());
         assert!(actor.sprite_flip.horizontal());
@@ -226,7 +253,13 @@ mod tests {
 
         // 24 frames of pause
         for t in 1..=24 {
-            let eff = update(&mut actor, ChargingEnemyContext { mario_ref_x: 0 });
+            let eff = update(
+                &mut actor,
+                ChargingEnemyContext {
+                    mario_ref_x: 0,
+                    ..Default::default()
+                },
+            );
             assert_eq!(eff, ChargingEnemyEffect::None);
             assert_eq!(actor.timer, 24 - t as u8);
             assert_eq!(actor.position.x, 100);
@@ -234,7 +267,13 @@ mod tests {
 
         // 23 creep steps
         for step in 1..=23 {
-            let eff = update(&mut actor, ChargingEnemyContext { mario_ref_x: 0 });
+            let eff = update(
+                &mut actor,
+                ChargingEnemyContext {
+                    mario_ref_x: 0,
+                    ..Default::default()
+                },
+            );
             assert_eq!(
                 eff,
                 ChargingEnemyEffect::Creeping {
@@ -246,7 +285,13 @@ mod tests {
         }
 
         // 24th creep step triggers charge!
-        let eff = update(&mut actor, ChargingEnemyContext { mario_ref_x: 0 });
+        let eff = update(
+            &mut actor,
+            ChargingEnemyContext {
+                mario_ref_x: 0,
+                ..Default::default()
+            },
+        );
         assert_eq!(
             eff,
             ChargingEnemyEffect::ChargeTriggered {
@@ -261,7 +306,13 @@ mod tests {
         assert_eq!(actor.state, ChargingEnemyState::ChargeLeft.to_raw());
 
         // Charge step 1: moves X by -3
-        let eff = update(&mut actor, ChargingEnemyContext { mario_ref_x: 0 });
+        let eff = update(
+            &mut actor,
+            ChargingEnemyContext {
+                mario_ref_x: 0,
+                ..Default::default()
+            },
+        );
         assert_eq!(
             eff,
             ChargingEnemyEffect::Charging {
@@ -272,7 +323,13 @@ mod tests {
 
         // When offscreen (screen.x >= 184 / 0xB8): returns OffscreenReset
         actor.screen.x = 184;
-        let eff = update(&mut actor, ChargingEnemyContext { mario_ref_x: 0 });
+        let eff = update(
+            &mut actor,
+            ChargingEnemyContext {
+                mario_ref_x: 0,
+                ..Default::default()
+            },
+        );
         assert_eq!(eff, ChargingEnemyEffect::OffscreenReset);
     }
 }

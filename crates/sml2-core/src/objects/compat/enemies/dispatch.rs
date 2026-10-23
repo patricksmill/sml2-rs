@@ -294,28 +294,6 @@ impl ObjectSim {
         }
     }
 
-    pub(super) fn handler_charging_enemy(&mut self, st: &mut Staging, tables: &ObjectTables) {
-        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
-        let context = charging_enemy::ChargingEnemyContext {
-            mario_ref_x: self.mario_ref_x,
-        };
-        let effect = charging_enemy::update(&mut actor, context);
-        match effect {
-            charging_enemy::ChargingEnemyEffect::FacingSelected { facing } => {
-                self.facing = facing;
-            }
-            charging_enemy::ChargingEnemyEffect::ChargeTriggered { sfx, .. } => {
-                self.sfx1 = sfx;
-            }
-            charging_enemy::ChargingEnemyEffect::OffscreenReset => {
-                self.respawn_object_5b2bf(st, tables);
-                return;
-            }
-            _ => {}
-        }
-        st.b = actor.to_raw_slot();
-    }
-
     pub(super) fn handler_wave_flyer(&mut self, st: &mut Staging) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = wave_flyer::WaveFlyerContext {
