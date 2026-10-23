@@ -40,7 +40,7 @@ impl Session {
         let Some(ctx) = self.level_ctx() else {
             return Vec::new();
         };
-        let margin = view::margin(view);
+        let margin = view::level_margin(view);
         let obj = &ctx.obj;
         let (cx, cy) = (obj.camera_position.x, obj.camera_position.y);
         let mut out = Vec::new();
@@ -72,7 +72,11 @@ impl Session {
         if !shown || !view::enlarged(view) {
             return None;
         }
-        let (mx, my) = view::margin(view);
+        let (mx, my) = if self.level_ctx().is_some() {
+            view::level_margin(view)
+        } else {
+            view::margin(view)
+        };
         Some((mx, my, 160, 144))
     }
 }
@@ -140,7 +144,7 @@ mod tests {
         );
         assert!(x >= 0 && y >= 0 && x + w <= 160 && y + h <= 144);
         let (wx, wy, ww, wh) = mario_box(&session, (384, 216));
-        assert_eq!((wx - x, wy - y, ww, wh), (112, 36, w, h));
+        assert_eq!((wx - x, wy - y, ww, wh), (112, 54, w, h));
     }
 
     #[test]
@@ -175,6 +179,6 @@ mod tests {
         assert_eq!(session.native_border((384, 216)), Some((112, 36, 160, 144)));
         session.begin_level(0, 0).unwrap();
         assert_eq!(session.native_border((160, 144)), None);
-        assert_eq!(session.native_border((384, 216)), Some((112, 36, 160, 144)));
+        assert_eq!(session.native_border((384, 216)), Some((112, 54, 160, 144)));
     }
 }

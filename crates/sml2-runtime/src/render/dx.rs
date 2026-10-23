@@ -531,7 +531,8 @@ fn render(
     };
     let mut layers = super::layers::Layers::new(view, offsets.border(), blank);
     let sx = ctx.cam.x as i32 - vw as i32 / 2;
-    let sy = ctx.cam.y as i32 - vh as i32 / 2 - ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
+    let sy = ctx.cam.y as i32 - vh as i32 / 2 - super::view::level_bias(view)
+        - ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
     let world_w = (LAYOUT_WIDTH * 16) as i32;
     let world_h = (LAYOUT_HEIGHT * 16) as i32;
     let (span_x, span_y) = (super::view::window_span(vw), super::view::window_span(vh));

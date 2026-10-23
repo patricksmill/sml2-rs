@@ -142,7 +142,7 @@ fn dx_frames_take_the_view_size_and_keep_native_parity() {
     let wide = game.render_dx_frame(&bundle, Mario, (384, 216)).unwrap();
     assert_eq!(wide.len(), 384 * 216);
     let centre: Vec<_> = (0..136)
-        .flat_map(|y| wide[(36 + y) * 384 + 112..(36 + y) * 384 + 272].to_vec())
+        .flat_map(|y| wide[(54 + y) * 384 + 112..(54 + y) * 384 + 272].to_vec())
         .collect();
     assert_eq!(centre, native[..160 * 136].to_vec());
     // The HUD keeps to the view's bottom rows.

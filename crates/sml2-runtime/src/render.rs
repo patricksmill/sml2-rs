@@ -207,7 +207,8 @@ pub fn render_view_output_smooth(
     // top 632 is past 768 - 144), every tile drew 8 px low and Mario looked like he floated
     // above the block row the console puts him on.
     let sx = cam_x as i32 - vw as i32 / 2;
-    let sy = cam_y as i32 - vh as i32 / 2 - spr.map_or(0, |s| s.scroll_pan as i32);
+    let sy = cam_y as i32 - vh as i32 / 2 - view::level_bias((vw, vh))
+        - spr.map_or(0, |s| s.scroll_pan as i32);
     let (span_x, span_y) = (view::window_span(vw), view::window_span(vh));
     let (ox, oy) = (
         window_origin(sx, world_w, span_x),
@@ -301,7 +302,7 @@ pub fn render_view_output_smooth(
     // non-transparent.
     if let Some(s) = spr {
         let resized = (vw, vh) != view::NATIVE;
-        let (mx, my) = view::margin((vw, vh));
+        let (mx, my) = view::level_margin((vw, vh));
         let place = |x, y| view::sprite_anchor((vw, vh), (cam_x, cam_y), (x, y));
         let pal0 = output.palette(s.obp0, video::PaletteSource::Obj0);
         let pal1 = output.palette(s.obp1, video::PaletteSource::Obj1);

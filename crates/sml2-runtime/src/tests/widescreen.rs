@@ -22,12 +22,12 @@ fn crop(frame: &[u8], view: (usize, usize), rect: (usize, usize, usize, usize)) 
 }
 
 #[test]
-fn the_centre_of_an_enlarged_level_view_matches_native_above_the_status_bar() {
+fn the_biased_native_rect_matches_native_above_the_status_bar() {
     let session = level(1);
     let native = session.render_frame(NATIVE);
-    for view in [(256, 144), (320, 180), (384, 216), (200, 180), (240, 216)] {
+    for view in [(256, 144), (320, 180), (384, 216), (200, 180), (240, 216), (320, 288), (512, 288)] {
         let wide = session.render_frame(view);
-        let (mx, my) = crate::render::view::margin(view);
+        let (mx, my) = crate::render::view::level_margin(view);
         assert_eq!(
             crop(&wide, view, (mx as usize, my as usize, 160, 136)),
             crop(&native, NATIVE, (0, 0, 160, 136)),

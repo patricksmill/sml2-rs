@@ -7,6 +7,19 @@ pub fn margin(view: (usize, usize)) -> (i32, i32) {
     ((view.0 as i32 - 160) / 2, (view.1 as i32 - 144) / 2)
 }
 
+/// Raise a zoomed-out level's bottom edge: three quarters of the extra
+/// height reveal space above the native view, one quarter below it.
+/// Fixed screens and overworld composition keep the centred `margin`.
+pub fn level_bias(view: (usize, usize)) -> i32 {
+    if enlarged(view) { (view.1 as i32 - NATIVE.1 as i32) / 4 } else { 0 }
+}
+
+/// Native gameplay rect inside a level view (including demos).
+pub fn level_margin(view: (usize, usize)) -> (i32, i32) {
+    let (x, y) = margin(view);
+    (x, y + level_bias(view))
+}
+
 /// The camera to draw an 8-bit-OAM sprite with, and the offset to add to its
 /// cells. A native view keeps the wrapped camera-relative path; a resized one
 /// draws the sprite with the camera on its own anchor and adds the true offset.
@@ -18,7 +31,7 @@ pub fn sprite_anchor(
     if view == NATIVE {
         return (cam, (0, 0));
     }
-    let (mx, my) = margin(view);
+    let (mx, my) = level_margin(view);
     (
         at,
         (
@@ -118,6 +131,23 @@ mod tests {
     }
 
     #[test]
+    fn level_zoom_reveals_three_quarters_above_and_one_below() {
+        for (view, bias, top, bottom) in [
+            (NATIVE, 0, 0, 0),
+            ((256, 144), 0, 0, 0),
+            ((200, 180), 9, 27, 9),
+            ((384, 216), 18, 54, 18),
+            ((512, 288), 36, 108, 36),
+        ] {
+            assert_eq!(level_bias(view), bias);
+            assert_eq!(level_margin(view).1, top);
+            assert_eq!(view.1 as i32 - top - 144, bottom);
+            assert_eq!(margin(view).1, (view.1 as i32 - 144) / 2);
+        }
+        assert_eq!(level_bias((80, 72)), 0);
+    }
+
+    #[test]
     fn sprite_anchor_keeps_native_and_offsets_resized_views() {
         assert_eq!(
             sprite_anchor(NATIVE, (100, 50), (130, 60)),
@@ -125,7 +155,7 @@ mod tests {
         );
         assert_eq!(
             sprite_anchor((384, 216), (100, 50), (130, 60)),
-            ((130, 60), (142, 46))
+            ((130, 60), (142, 64))
         );
     }
 
