@@ -36,4 +36,5 @@ mod pause_audio;
 mod played_routes;
 mod scene_pipe;
 mod session;
+mod widescreen;
 mod zone_animations;

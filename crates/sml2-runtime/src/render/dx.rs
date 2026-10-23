@@ -464,12 +464,15 @@ fn render(
     let sy = ctx.cam.y as i32 - 72 - ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
     let world_w = (LAYOUT_WIDTH * 16) as i32;
     let world_h = (LAYOUT_HEIGHT * 16) as i32;
-    let (ox, oy) = (window_origin(sx, world_w), window_origin(sy, world_h));
+    let (ox, oy) = (
+        window_origin(sx, world_w, 256),
+        window_origin(sy, world_h, 256),
+    );
     for py in 0..144 {
         for px in 0..160 {
             let (mut wx, mut wy) = (
-                window_coord(sx + px as i32, ox),
-                window_coord(sy + py as i32, oy),
+                window_coord(sx + px as i32, ox, 256),
+                window_coord(sy + py as i32, oy, 256),
             );
             if let Some(pipe) = ctx.spr.as_ref().and_then(|s| s.pipe_background) {
                 let (x, y) = pipe.sample(sx + px as i32, sy + py as i32);
@@ -479,8 +482,8 @@ fn render(
                 } else {
                     (sx, sy)
                 };
-                wx = window_coord(x, window_origin(vx, world_w));
-                wy = window_coord(y, window_origin(vy, world_h));
+                wx = window_coord(x, window_origin(vx, world_w, 256), 256);
+                wy = window_coord(y, window_origin(vy, world_h, 256), 256);
             }
             let (cx, cy) = (wx as usize / 16, wy as usize / 16);
             let (tx, ty) = (wx as usize & 15, wy as usize & 15);

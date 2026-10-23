@@ -20,6 +20,7 @@ pub struct SpriteInst {
 
 mod pipe_background;
 mod dx;
+pub mod view;
 pub use pipe_background::PipeBackground;
 
 /// Everything needed for the OBJ pass.
@@ -68,15 +69,15 @@ pub struct SpriteCtx {
 /// The BG is a 32x32-tile tilemap = 256 px. The engine loads it with the level's rows and
 /// columns around the camera — clamped into the level, because the window has to hold real
 /// level rows — and never clamps the camera or the view.
-fn window_origin(view: i32, world: i32) -> i32 {
-    view.clamp(0, world - 256)
+pub(crate) fn window_origin(view: i32, world: i32, span: i32) -> i32 {
+    view.clamp(0, world - span)
 }
 
 /// A screen row/column seen through that window: itself inside the level, the window's own
-/// rows again outside it. A 256-px window is a whole number of 16-px metatiles and of 8-px
+/// rows again outside it. A span is a whole number of 16-px metatiles and of 8-px
 /// tiles, so the wrap keeps both grids and the fine scroll intact.
-fn window_coord(v: i32, origin: i32) -> i32 {
-    origin + (v - origin).rem_euclid(256)
+pub(crate) fn window_coord(v: i32, origin: i32, span: i32) -> i32 {
+    origin + (v - origin).rem_euclid(span)
 }
 
 /// Render a `vw`x`vh` view centred on the camera as an 8-bit grey frame. The
@@ -164,14 +165,18 @@ pub fn render_view_output(
     // above the block row the console puts him on.
     let sx = cam_x as i32 - vw as i32 / 2;
     let sy = cam_y as i32 - vh as i32 / 2 - spr.map_or(0, |s| s.scroll_pan as i32);
-    let (ox, oy) = (window_origin(sx, world_w), window_origin(sy, world_h));
+    let (span_x, span_y) = (view::window_span(vw), view::window_span(vh));
+    let (ox, oy) = (
+        window_origin(sx, world_w, span_x),
+        window_origin(sy, world_h, span_y),
+    );
     let mut img = vec![shades[0]; vw * vh];
     let mut bg_idx = vec![0u8; vw * vh];
     for py in 0..vh {
-        let wy = window_coord(sy + py as i32, oy);
+        let wy = window_coord(sy + py as i32, oy, span_y);
 
         for px in 0..vw {
-            let wx = window_coord(sx + px as i32, ox);
+            let wx = window_coord(sx + px as i32, ox, span_x);
             let (wx, wy) = spr
                 .and_then(|s| s.pipe_background)
                 .map_or((wx, wy), |pipe| {
@@ -180,8 +185,8 @@ pub fn render_view_output(
                     let source = pipe.retains_source(sx + px as i32);
                     let (vx, vy) = if source { (sx + dx, sy + dy) } else { (sx, sy) };
                     (
-                        window_coord(x, window_origin(vx, world_w)),
-                        window_coord(y, window_origin(vy, world_h)),
+                        window_coord(x, window_origin(vx, world_w, span_x), span_x),
+                        window_coord(y, window_origin(vy, world_h, span_y), span_y),
                     )
                 });
             let (cx, tx) = ((wx as usize) >> 4, (wx as usize) & 15);
@@ -211,10 +216,10 @@ pub fn render_view_output(
         }
     }
     // Window layer: the status-bar strip (no scroll; window at WX=7 -> px 0).
-    // It stays in the native rect, centred in a larger viewport.
+    // It stays horizontally centred and on the bottom rows of a larger viewport.
     if let Some((row, wy)) = hud {
         let hx0 = (vw as i32 - SCREEN_W as i32) / 2;
-        let hy0 = (vh as i32 - SCREEN_H as i32) / 2 + wy as i32;
+        let hy0 = vh as i32 - SCREEN_H as i32 + wy as i32;
         for dy in 0..8usize {
             let py = hy0 + dy as i32;
             if py < 0 || py >= vh as i32 {
@@ -241,17 +246,33 @@ pub fn render_view_output(
     // earlier instance; BG wins where attr bit 7 is set and the BG pixel is
     // non-transparent.
     if let Some(s) = spr {
+        // `draw_cells` wraps screen positions in 8 bits like OAM. A native view
+        // keeps that wrap; a resized one draws each sprite with the camera on
+        // its own anchor and adds the true offset.
+        let resized = (vw, vh) != view::NATIVE;
+        let (mx, my) = view::margin((vw, vh));
+        let place = |x: u16, y: u16| -> ((u16, u16), (i32, i32)) {
+            if resized {
+                (
+                    (x, y),
+                    (x as i32 - cam_x as i32 + mx, y as i32 - cam_y as i32 + my),
+                )
+            } else {
+                ((cam_x, cam_y), (0, 0))
+            }
+        };
         let pal0 = output.palette(s.obp0, video::PaletteSource::Obj0);
         let pal1 = output.palette(s.obp1, video::PaletteSource::Obj1);
         let mut taken = vec![false; vw * vh];
-        if let Some((mx, my, frame)) = s.player {
+        if let Some((px, py, frame)) = s.player {
+            let ((ax, ay), (ox, oy)) = place(px, py);
             let cells = sml2_core::player::draw_cells_styled(
                 &s.tables,
                 frame,
-                mx,
-                my,
-                cam_x,
-                cam_y,
+                px,
+                py,
+                ax,
+                ay,
                 sml2_core::player::CellStyle {
                     force_palette_one: s.player_star_flash,
                     behind_background: s.player_behind_bg,
@@ -269,8 +290,8 @@ pub fn render_view_output(
                     &s.objblock,
                     &pal0,
                     &pal1,
-                    c.x as i32 - 8,
-                    c.y.wrapping_sub(s.player_pan) as i32 - 16,
+                    c.x as i32 - 8 + ox,
+                    c.y.wrapping_sub(s.player_pan) as i32 - 16 + oy,
                     c.tile,
                     c.attr,
                     vw,
@@ -278,10 +299,31 @@ pub fn render_view_output(
                 );
             }
         }
-        if let Some((sx, sy, sframe)) = s.player_shield {
+        if let Some((shx, shy, sframe)) = s.player_shield {
+            let ((ax, ay), (ox, oy)) = place(shx, shy);
+            let cells = sml2_core::player::draw_cells(&s.tables, sframe, shx, shy, ax, ay, false)
+                .ok_or_else(|| format!("player shield frame {sframe} has no mapping"))?;
+            for c in cells {
+                blit_obj_cell(
+                    &mut img,
+                    &bg_idx,
+                    &mut taken,
+                    &s.objblock,
+                    &pal0,
+                    &pal1,
+                    c.x as i32 - 8 + ox,
+                    c.y.wrapping_sub(s.player_pan) as i32 - 16 + oy,
+                    c.tile,
+                    c.attr,
+                    vw,
+                    vh,
+                );
+            }
+        }
+        if let (Some((px, py, _)), Some((timer, chain))) = (s.player, s.streak_counter) {
+            let ((ax, ay), (ox, oy)) = place(px, py);
             let cells =
-                sml2_core::player::draw_cells(&s.tables, sframe, sx, sy, cam_x, cam_y, false)
-                    .ok_or_else(|| format!("player shield frame {sframe} has no mapping"))?;
+                sml2_core::player::draw_streak_counter(&s.tables, timer, chain, px, py, ax, ay);
             for c in cells {
                 blit_obj_cell(
                     &mut img,
@@ -290,29 +332,8 @@ pub fn render_view_output(
                     &s.objblock,
                     &pal0,
                     &pal1,
-                    c.x as i32 - 8,
-                    c.y.wrapping_sub(s.player_pan) as i32 - 16,
-                    c.tile,
-                    c.attr,
-                    vw,
-                    vh,
-                );
-            }
-        }
-        if let (Some((mx, my, _)), Some((timer, chain))) = (s.player, s.streak_counter) {
-            let cells = sml2_core::player::draw_streak_counter(
-                &s.tables, timer, chain, mx, my, cam_x, cam_y,
-            );
-            for c in cells {
-                blit_obj_cell(
-                    &mut img,
-                    &bg_idx,
-                    &mut taken,
-                    &s.objblock,
-                    &pal0,
-                    &pal1,
-                    c.x as i32 - 8,
-                    c.y.wrapping_sub(s.player_pan) as i32 - 16,
+                    c.x as i32 - 8 + ox,
+                    c.y.wrapping_sub(s.player_pan) as i32 - 16 + oy,
                     c.tile,
                     c.attr,
                     vw,
@@ -328,7 +349,8 @@ pub fn render_view_output(
         // a console frame yet, and it can only show while they overlap.
         let fireballs = s.fireballs.clone();
         for (fx, fy, ff) in fireballs {
-            let cells = sml2_core::player::draw_cells(&s.tables, ff, fx, fy, cam_x, cam_y, false)
+            let ((ax, ay), (ox, oy)) = place(fx, fy);
+            let cells = sml2_core::player::draw_cells(&s.tables, ff, fx, fy, ax, ay, false)
                 .ok_or_else(|| format!("fireball mapping {ff} has no entry"))?;
             for c in cells {
                 blit_obj_cell(
@@ -338,8 +360,8 @@ pub fn render_view_output(
                     &s.objblock,
                     &pal0,
                     &pal1,
-                    c.x as i32 - 8,
-                    c.y as i32 - 16,
+                    c.x as i32 - 8 + ox,
+                    c.y as i32 - 16 + oy,
                     c.tile,
                     c.attr,
                     vw,
@@ -351,7 +373,8 @@ pub fn render_view_output(
         // cells and before the objects — the engine's OAM order.
         let bumpers = s.bumpers.clone();
         for (bx, by, bf) in bumpers {
-            let cells = sml2_core::player::draw_cells(&s.tables, bf, bx, by, cam_x, cam_y, false)
+            let ((ax, ay), (ox, oy)) = place(bx, by);
+            let cells = sml2_core::player::draw_cells(&s.tables, bf, bx, by, ax, ay, false)
                 .ok_or_else(|| format!("bump frame {bf} has no mapping"))?;
             for c in cells {
                 blit_obj_cell(
@@ -361,8 +384,8 @@ pub fn render_view_output(
                     &s.objblock,
                     &pal0,
                     &pal1,
-                    c.x as i32 - 8,
-                    c.y as i32 - 16,
+                    c.x as i32 - 8 + ox,
+                    c.y as i32 - 16 + oy,
                     c.tile,
                     c.attr,
                     vw,
@@ -413,6 +436,7 @@ pub fn render_view_output(
         // attr byte stands (the pass XORed the flip flags in itself). Drawn last
         // so the fight's parts layer over the level's objects, and after Mario,
         // who keeps OAM's first entries.
+        let boss_shift = if resized { (mx, my) } else { (0, 0) };
         for c in &s.boss_oam {
             blit_obj_cell(
                 &mut img,
@@ -421,8 +445,8 @@ pub fn render_view_output(
                 &s.objblock,
                 &pal0,
                 &pal1,
-                c.x as i32 - 8,
-                c.y as i32 - 16,
+                c.x as i32 - 8 + boss_shift.0,
+                c.y as i32 - 16 + boss_shift.1,
                 c.tile,
                 c.attr,
                 vw,
