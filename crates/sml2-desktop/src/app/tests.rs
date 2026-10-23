@@ -577,3 +577,11 @@ fn home_pipes_show_the_saved_stage_tally_across_a_restart() {
     assert_eq!(slots(&restarted), [Some(31), None, None]);
     let _ = std::fs::remove_dir_all(path);
 }
+
+#[test]
+fn overlay_rects_scale_view_pixels_from_the_image_origin() {
+    let rect = egui::Rect::from_min_size(egui::pos2(10.0, 20.0), egui::vec2(480.0, 432.0));
+    let r = overlay_rect(rect, (160, 144), (5, 7, 10, 21));
+    assert_eq!(r.min, egui::pos2(25.0, 41.0));
+    assert_eq!(r.size(), egui::vec2(30.0, 63.0));
+}

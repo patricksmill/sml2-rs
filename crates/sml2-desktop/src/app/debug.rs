@@ -230,6 +230,14 @@ impl DesktopApp {
             });
 
         ui.separator();
+        egui::CollapsingHeader::new("Overlays")
+            .default_open(true)
+            .show(ui, |ui| {
+                ui.checkbox(&mut self.show_hitboxes, "Hitboxes");
+                ui.checkbox(&mut self.show_native_border, "Original screen border");
+            });
+
+        ui.separator();
         ui.horizontal(|ui| {
             let pipe = self.game.as_ref().and_then(|game| game.session.active_slot);
             let label = match pipe {

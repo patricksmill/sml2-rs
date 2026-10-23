@@ -4448,3 +4448,70 @@ fn an_enlarged_view_never_excludes_boss_contacts() {
         "level mode: past the native window"
     );
 }
+
+/// The debug contact boxes overlap exactly when `$2EF5` touches the slot.
+#[test]
+fn contact_boxes_overlap_exactly_when_collide_touches() {
+    let layout = blank_layout();
+    let (cam_x, cam_y) = (0x0200u16, 0x0100u16);
+    let mut base = ObjectSim::new(Vec::new(), cam_x);
+    base.camera_position = crate::actor::Position { x: cam_x, y: cam_y };
+    let (sx, sy) = (cam_x + 3, cam_y + 5);
+    let mut hits = 0;
+    for pan in [0u8, 2] {
+        for powerup in [0u8, 1] {
+            for ducking in [false, true] {
+                for dy in -48..48 {
+                    for dx in -40..40 {
+                        let mut o = base.clone();
+                        o.mario = MarioContact {
+                            x: (i32::from(cam_x) + dx) as u16,
+                            y: (i32::from(cam_y) + dy) as u16,
+                            powerup,
+                            ducking,
+                            pan,
+                            ..Default::default()
+                        };
+                        let s = &mut o.slots[0];
+                        s.b[B_STATE] = 2;
+                        s.b[B_TYPE] = 0x40;
+                        s.b[B_HB_TOP] = 0xF8;
+                        s.b[B_HB_BOTTOM] = 8;
+                        s.b[B_HB_LEFT] = 0xFA;
+                        s.b[B_HB_RIGHT] = 6;
+                        set_x(&mut s.b, sx);
+                        set_y(&mut s.b, sy);
+                        let scroll_x = cam_x.wrapping_sub(80);
+                        let scroll_y = cam_y.wrapping_sub(72).wrapping_sub(u16::from(pan & 3));
+                        s.b[B_SCRY] = sy.wrapping_add(16).wrapping_sub(scroll_y) as u8;
+                        s.b[B_SCRX] = sx.wrapping_add(8).wrapping_sub(scroll_x) as u8;
+                        let m = o.mario_contact_box(cam_x, cam_y);
+                        let b = o.slot_contact_box(0, cam_x, cam_y).expect("gated in");
+                        let overlap = m.x0 < b.x1 && b.x0 < m.x1 && m.y0 < b.y1 && b.y0 < m.y1;
+                        o.collide(cam_x, cam_y, &layout);
+                        let touched = o.slots[0].b[B_FLAGS] & 0x10 != 0;
+                        assert_eq!(
+                            touched, overlap,
+                            "pan {pan} powerup {powerup} ducking {ducking} dx {dx} dy {dy}"
+                        );
+                        hits += usize::from(touched);
+                    }
+                }
+            }
+        }
+    }
+    assert!(hits > 0);
+}
+
+#[test]
+fn contact_box_skips_inactive_and_gated_out_slots() {
+    let mut obj = ObjectSim::new(Vec::new(), 0x0200);
+    obj.slots[0].b[B_TYPE] = 0x40;
+    assert_eq!(obj.slot_contact_box(0, 0x0200, 0x0100), None, "inactive");
+    obj.slots[0].b[B_STATE] = 2;
+    assert!(obj.slot_contact_box(0, 0x0200, 0x0100).is_some());
+    obj.slots[0].b[B_TYPE] = 0x80;
+    assert_eq!(obj.slot_contact_box(0, 0x0200, 0x0100), None, "bare $80");
+    obj.slots[0].b[B_TYPE] = 0x04;
+    assert_eq!(obj.slot_contact_box(0, 0x0200, 0x0100), None, "no $63 bit");
+}

@@ -25,6 +25,7 @@ mod pipe_background;
 mod dx;
 mod layers;
 pub mod motion;
+pub mod overlay;
 pub mod view;
 pub use pipe_background::PipeBackground;
 

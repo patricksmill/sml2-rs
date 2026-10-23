@@ -527,6 +527,7 @@ mod helpers;
 #[path = "platforms/horizontal.rs"]
 mod horizontal_platform;
 mod interaction;
+pub use interaction::ContactBox;
 #[path = "items/floater.rs"]
 mod floater;
 #[path = "items/grower.rs"]

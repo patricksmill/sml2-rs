@@ -5,7 +5,63 @@
 
 use super::*;
 
+/// A half-open contact box in `$2EF5`'s OAM space (screen px = x − 8,
+/// y − 16), in true `i32` positions: Mario's box overlaps a slot's exactly
+/// when `collide` touches the slot (screen-byte wrap aside).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ContactBox {
+    pub x0: i32,
+    pub y0: i32,
+    pub x1: i32,
+    pub y1: i32,
+}
+
+/// `$2EDD`: the type gate of `collide`.
+fn contact_type(ty: u8) -> bool {
+    if ty & 0x80 != 0 {
+        ty & 0x7F != 0
+    } else {
+        ty & 0x63 != 0
+    }
+}
+
 impl ObjectSim {
+    /// Mario's side of `$2EF5` for the last stepped Mario state.
+    pub fn mario_contact_box(&self, cam_x: u16, cam_y: u16) -> ContactBox {
+        let mx = i32::from(self.mario.x) - i32::from(cam_x) + 96;
+        let my = i32::from(self.mario.y) - i32::from(cam_y) + 98;
+        let big = self.mario.powerup != 0;
+        let e = match (self.mario.ducking, big) {
+            (false, true) => 8,
+            (false, false) | (true, true) => 0,
+            (true, false) => -8,
+        };
+        ContactBox {
+            x0: mx - 4,
+            y0: my - e,
+            x1: mx + 6,
+            y1: my + 21,
+        }
+    }
+
+    /// Slot `i`'s side of `$2EF5`; `None` unless the slot is active and
+    /// passes the `$2EDD` type gate.
+    pub fn slot_contact_box(&self, i: usize, cam_x: u16, cam_y: u16) -> Option<ContactBox> {
+        let s = &self.slots[i];
+        if !s.active() || !contact_type(s.b[B_TYPE]) {
+            return None;
+        }
+        let ox = i32::from(s.x()) - i32::from(cam_x) + 88;
+        let oy = i32::from(s.y()) - i32::from(cam_y) + 88 + i32::from(self.mario.pan & 3);
+        let hb = |k: usize| i32::from(s.b[k] as i8);
+        Some(ContactBox {
+            x0: ox + hb(B_HB_LEFT),
+            y0: oy + hb(B_HB_TOP),
+            x1: ox + hb(B_HB_RIGHT),
+            y1: oy + hb(B_HB_BOTTOM),
+        })
+    }
+
     pub(super) fn interaction_dispatch(&mut self, st: &mut Staging, tables: &ObjectTables) {
         let f = st.b[B_FLAGS];
         if f == 0 {
@@ -267,13 +323,7 @@ impl ObjectSim {
             if self.slots[i].b[B_FLAGS] & 0xF7 != 0 {
                 continue;
             }
-            // $2EDD: type gate.
-            let ty = self.slots[i].b[B_TYPE];
-            if ty & 0x80 != 0 {
-                if ty & 0x7F == 0 {
-                    continue;
-                }
-            } else if ty & 0x63 == 0 {
+            if !contact_type(self.slots[i].b[B_TYPE]) {
                 continue;
             }
             if self.contact_excluded(i) {

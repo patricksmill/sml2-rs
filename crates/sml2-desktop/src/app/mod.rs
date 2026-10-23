@@ -78,6 +78,9 @@ pub struct DesktopApp {
     debug_note: Option<String>,
     /// Whether that note is a failure (drawn red instead of green).
     debug_note_error: bool,
+    /// Debug overlays painted over the game image.
+    show_hitboxes: bool,
+    show_native_border: bool,
     /// Level picker entries, cached when the assets load.
     levels: Vec<(u8, String)>,
     focused: bool,
@@ -139,6 +142,8 @@ impl DesktopApp {
             debug_level: 0,
             debug_note: None,
             debug_note_error: false,
+            show_hitboxes: false,
+            show_native_border: false,
             levels: Vec::new(),
             focused: false,
             last_update: Instant::now(),
@@ -520,6 +525,7 @@ impl DesktopApp {
             egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
             Color32::WHITE,
         );
+        self.paint_overlays(ui, rect);
         if self.paused {
             ui.painter().text(
                 available.min + egui::vec2(12.0, 12.0),
@@ -531,6 +537,38 @@ impl DesktopApp {
         }
     }
 
+    fn paint_overlays(&self, ui: &egui::Ui, rect: egui::Rect) {
+        use sml2_runtime::render::overlay::OverlayKind;
+        let Some(game) = &self.game else {
+            return;
+        };
+        let view = self.settings.view();
+        let painter = ui.painter().with_clip_rect(rect);
+        let outline = |r: (i32, i32, i32, i32), color| {
+            painter.rect_stroke(
+                overlay_rect(rect, view, r),
+                0.0,
+                egui::Stroke::new(1.0_f32, color),
+                egui::StrokeKind::Inside,
+            );
+        };
+        if self.show_hitboxes {
+            for b in game.session.overlay_boxes(view) {
+                let color = match b.kind {
+                    OverlayKind::Mario => Color32::GREEN,
+                    OverlayKind::Object => Color32::YELLOW,
+                    OverlayKind::Excluded => Color32::GRAY,
+                };
+                outline((b.x, b.y, b.w, b.h), color);
+            }
+        }
+        if self.show_native_border {
+            if let Some(r) = game.session.native_border(view) {
+                outline(r, Color32::from_rgb(255, 0, 255));
+            }
+        }
+    }
+
     fn persist(&mut self) {
         if self.allow_save && self.settings != self.saved_settings {
             match self.settings.save(&self.options.paths.settings) {
@@ -539,6 +577,19 @@ impl DesktopApp {
             }
         }
     }
+}
+
+/// View pixels `(x, y, w, h)` to the screen rect of a game image drawn into `rect`.
+fn overlay_rect(
+    rect: egui::Rect,
+    view: (usize, usize),
+    (x, y, w, h): (i32, i32, i32, i32),
+) -> egui::Rect {
+    let scale = rect.width() / view.0 as f32;
+    egui::Rect::from_min_size(
+        rect.min + egui::vec2(x as f32, y as f32) * scale,
+        egui::vec2(w as f32, h as f32) * scale,
+    )
 }
 
 /// Keep the winning BG/OBJ source until its mapped shade reaches presentation.
