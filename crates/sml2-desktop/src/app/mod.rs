@@ -322,7 +322,12 @@ impl DesktopApp {
                 );
             }
         }
-        let smooth = if self.settings.motion_smoothing && running && !stepped {
+        // A screenshot is checked against this CPU frame, which must be a tick.
+        let smooth = if self.settings.motion_smoothing
+            && running
+            && !stepped
+            && self.options.screenshot.is_none()
+        {
             Smooth {
                 alpha: self.budget.fraction(),
                 scale: pick_scale(self.settings.view(), self.effective_scale),
