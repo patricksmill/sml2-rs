@@ -621,6 +621,16 @@ impl DesktopApp {
         }
     }
 
+    /// Fit follows window resizes; switching it off selects the nearest manual scale
+    /// without changing the window dimensions or the logical game view.
+    fn fit_to_window(&mut self, enabled: bool) {
+        self.settings.zoom = if enabled {
+            Zoom::Auto
+        } else {
+            Zoom::Integer(self.effective_scale.clamp(1, 8) as u8)
+        };
+    }
+
     fn fullscreen(&mut self, ctx: &Context) {
         self.settings.fullscreen = !self.settings.fullscreen;
         ctx.send_viewport_cmd(ViewportCommand::Fullscreen(self.settings.fullscreen));

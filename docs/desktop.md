@@ -142,7 +142,7 @@ suspends play. Confirmation/binding-capture buttons wait for release before
 they can affect gameplay. Buttons tapped between ticks survive until the next
 tick; opposite directions cancel consistently across devices.
 
-Settings include auto integer fit, 1x–8x output scale, fullscreen, volume/mute,
+Settings include **Fit to window**, 1x–8x output scale, fullscreen, volume/mute,
 controller selection, stick dead zone, and gameplay rebinding. Selecting a
 binding row captures a single keyboard key or controller button. Esc cancels;
 conflicts and reserved desktop shortcuts are reported. Rebinding one device
@@ -166,8 +166,13 @@ spawn and update objects across the wider window, so gameplay differs from the
 original (attract demos keep native spawning); the status bar sits bottom
 centre, and fixed screens are letterboxed. Output scaling uses integer **physical** pixels,
 with nearest sampling and centered letterboxing, independent of UI DPI.
-Manual scale presets resize the window when windowed and fit within the current
-window if the platform limits its size. Auto fit follows window dimensions.
+**Fit to window** is available in the toolbar's Settings popup and under
+**Settings → Display**. It automatically adjusts the output scale as you resize
+the window, keeping the same game resolution and visible area. Scaling changes
+in whole-number steps; borders preserve the aspect ratio. Turning it off selects
+a fixed scale without resizing the window and reveals the **Window scale**
+presets. Manual presets resize the window when windowed and fit within the
+current window if the platform limits its size. The fit preference is saved.
 Debug inspection shows map/player/camera/scene state, object slots, sound-driver
 state and diagnostics. Debug stepping advances exactly one outer session tick.
 

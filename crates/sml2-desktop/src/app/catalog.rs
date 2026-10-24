@@ -96,7 +96,7 @@ pub(super) fn cycle(pedestal: Pedestal, settings: &mut Settings, debug: &mut boo
 pub(super) fn label(pedestal: Pedestal, settings: &Settings, debug: bool) -> String {
     match pedestal {
         Pedestal::Zoom => format!(
-            "Zoom {}",
+            "Window scale {}",
             match settings.zoom {
                 Zoom::Auto => "auto".to_string(),
                 Zoom::Integer(n) => format!("{n}×"),

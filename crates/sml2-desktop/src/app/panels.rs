@@ -246,19 +246,30 @@ impl DesktopApp {
 
     fn display_page(&mut self, ctx: &Context, ui: &mut Ui) {
         theme::section(ui, "SCREEN");
-        let adjust = self.menu.row_adjustment();
-        let zoom = match self.settings.zoom {
-            Zoom::Auto => "Auto fit".into(),
-            Zoom::Integer(n) => format!("{n}×"),
-        };
-        if self.menu.row(ui, "Zoom", Value::Choice(zoom)) || adjust != 0 {
-            let current = match self.settings.zoom {
-                Zoom::Auto => 0,
-                Zoom::Integer(n) => n as i32,
-            };
-            let next = (current + if adjust != 0 { adjust } else { 1 }).rem_euclid(9);
-            self.zoom(ctx, if next == 0 { None } else { Some(next as u8) });
+        let fit = self.settings.zoom == Zoom::Auto;
+        if self.menu.row(ui, "Fit to window", Value::Toggle(fit)) {
+            self.fit_to_window(!fit);
         }
+        if let Zoom::Integer(scale) = self.settings.zoom {
+            let adjust = self.menu.row_adjustment();
+            if self
+                .menu
+                .row(ui, "Window scale", Value::Choice(format!("{scale}×")))
+                || adjust != 0
+            {
+                let next =
+                    (i32::from(scale) - 1 + if adjust != 0 { adjust } else { 1 }).rem_euclid(8) + 1;
+                self.zoom(ctx, Some(next as u8));
+            }
+        }
+        theme::note(
+            ui,
+            "Fit scales the same game view as you resize the window.",
+        );
+        theme::note(
+            ui,
+            "Whole-number scaling keeps pixels crisp; borders preserve the aspect ratio.",
+        );
         if self
             .menu
             .row(ui, "Fullscreen", Value::Toggle(self.settings.fullscreen))
@@ -457,7 +468,19 @@ impl DesktopApp {
             .frame(theme::popup_frame())
             .show(ctx, |ui| {
                 ui.visuals_mut().override_text_color = Some(theme::INK);
+                let mut fit = self.settings.zoom == Zoom::Auto;
+                if ui.checkbox(&mut fit, "Fit to window")
+                    .on_hover_text("Scale the same game view to fit the window, preserving crisp pixels and aspect ratio.")
+                    .changed()
+                {
+                    self.fit_to_window(fit);
+                    self.persist();
+                    release_focus(ctx);
+                }
                 for pedestal in catalog::PEDESTALS {
+                    if pedestal == catalog::Pedestal::Zoom && self.settings.zoom == Zoom::Auto {
+                        continue;
+                    }
                     let text = catalog::label(pedestal, &self.settings, self.debug);
                     if ui.button(text).clicked() {
                         match pedestal {

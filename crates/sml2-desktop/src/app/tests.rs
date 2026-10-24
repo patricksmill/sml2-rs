@@ -474,6 +474,61 @@ fn every_filter_colorizes_the_native_source_and_shade_frame() {
 }
 
 #[test]
+fn fit_to_window_scales_the_same_view_and_toggles_without_resizing_the_window() {
+    let (mut app, ctx, path) = app();
+    app.paused = true;
+    app.screen = Screen::Settings;
+    app.settings.zoom = Zoom::Integer(2);
+    frame(&mut app, &ctx, vec![]);
+    app.menu.selected = 1; // Display: Fit to window, after the tab strip.
+    let output = frame(&mut app, &ctx, vec![key(egui::Key::Enter, true)]);
+    assert_eq!(app.settings.zoom, Zoom::Auto);
+    assert!(!output.viewport_output[&egui::ViewportId::ROOT]
+        .commands
+        .iter()
+        .any(|command| matches!(command, ViewportCommand::InnerSize(_))));
+    frame(&mut app, &ctx, vec![key(egui::Key::Enter, false)]);
+    app.screen = Screen::Game;
+    let view = app.settings.view();
+    let mut scales = Vec::new();
+    for size in [egui::vec2(800.0, 720.0), egui::vec2(1200.0, 1000.0)] {
+        let mut raw = RawInput {
+            focused: true,
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
+            ..Default::default()
+        };
+        raw.viewports
+            .get_mut(&egui::ViewportId::ROOT)
+            .unwrap()
+            .inner_rect = raw.screen_rect;
+        let _ = ctx.run(raw, |ctx| app.ui(ctx));
+        assert_eq!(app.settings.view(), view);
+        assert_eq!(app.texture.size(), [view.0, view.1]);
+        assert_eq!(app.game_rect[2], view.0 as u32 * app.effective_scale);
+        assert_eq!(app.game_rect[3], view.1 as u32 * app.effective_scale);
+        assert_eq!(app.game.as_ref().unwrap().session.frame_n, 0);
+        scales.push(app.effective_scale);
+    }
+    assert!(scales[1] > scales[0]);
+    app.screen = Screen::Settings;
+    frame(&mut app, &ctx, vec![]);
+    let scale = app.effective_scale as u8;
+    app.menu.selected = 1;
+    let output = frame(&mut app, &ctx, vec![key(egui::Key::Enter, true)]);
+    assert_eq!(app.settings.zoom, Zoom::Integer(scale));
+    assert!(!output.viewport_output[&egui::ViewportId::ROOT]
+        .commands
+        .iter()
+        .any(|command| matches!(command, ViewportCommand::InnerSize(_))));
+    app.persist();
+    assert_eq!(
+        Settings::load(&app.options.paths.settings).unwrap().zoom,
+        app.settings.zoom
+    );
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
 fn the_frame_follows_the_view_settings() {
     let (mut app, _, path) = app();
     app.settings.widescreen = crate::settings::Widescreen::Wide16x9;
