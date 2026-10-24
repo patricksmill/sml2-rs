@@ -151,7 +151,7 @@ fn quit_to_title_is_absent_while_the_session_is_on_the_title() {
     app.game.as_mut().unwrap().session.enter_title();
     app.screen = Screen::Home;
     frame(&mut app, &ctx, vec![]);
-    for _ in 0..3 {
+    for _ in 0..2 {
         app.input.event(Button::Pad(PadButton::Down), true);
         frame(&mut app, &ctx, vec![]);
         app.input.event(Button::Pad(PadButton::Down), false);
@@ -163,7 +163,7 @@ fn quit_to_title_is_absent_while_the_session_is_on_the_title() {
             .commands
             .iter()
             .any(|c| matches!(c, ViewportCommand::Close)),
-        "Resume, Settings, Scenery editor, Quit — the fourth row closes the window"
+        "Resume, Settings, Quit — the third row closes the window"
     );
     assert_eq!(app.screen, Screen::Home);
     let _ = std::fs::remove_dir_all(path);
@@ -199,7 +199,7 @@ fn quit_to_title_from_the_map_opens_the_in_game_title() {
     frame(&mut app, &ctx, vec![]);
     app.input.event(Button::key("Escape"), false);
     assert_eq!(app.screen, Screen::Home);
-    for _ in 0..3 {
+    for _ in 0..2 {
         app.input.event(Button::Pad(PadButton::Down), true);
         frame(&mut app, &ctx, vec![]);
         app.input.event(Button::Pad(PadButton::Down), false);

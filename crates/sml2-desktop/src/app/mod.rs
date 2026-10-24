@@ -493,40 +493,50 @@ impl DesktopApp {
     }
 
     fn play_library(&mut self) {
-        if !self.library.play_enabled() {
+        if !self.load_library_game() {
             return;
         }
-        let assets = match vanilla_import::vanilla_cache() {
-            Ok(path) => path,
-            Err(error) => {
-                self.library.rom_error = error;
-                return;
-            }
-        };
-        self.options.assets = assets;
         self.options.launch_library = false;
-        self.load_game();
-        if self.game.is_none() {
-            self.options.launch_library = true;
-            if let Some(error) = self.status.clone() {
-                self.library.rom_error = error;
-            }
-            return;
-        }
-        if self.settings.dx_mode {
-            self.restore_dx();
-        }
+        self.editor.playtesting = false;
         if let Some(game) = self.game.as_mut() {
             game.session.enter_title();
         }
         self.screen = Screen::Game;
     }
 
+    fn load_library_game(&mut self) -> bool {
+        if !self.library.play_enabled() {
+            return false;
+        }
+        if self.game.is_some() {
+            return true;
+        }
+        let assets = match vanilla_import::vanilla_cache() {
+            Ok(path) => path,
+            Err(error) => {
+                self.library.rom_error = error;
+                return false;
+            }
+        };
+        self.options.assets = assets;
+        self.load_game();
+        if self.game.is_none() {
+            if let Some(error) = self.status.clone() {
+                self.library.rom_error = error;
+            }
+            return false;
+        }
+        if self.settings.dx_mode {
+            self.restore_dx();
+        }
+        true
+    }
+
     fn quit_library_on_escape(&mut self, ctx: &Context) {
         if self.dx_picker.is_some() || self.capture.is_some() || self.settings_open {
             return;
         }
-        if self.screen != Screen::Home || !self.options.launch_library || self.game.is_some() {
+        if self.screen != Screen::Home || !self.options.launch_library {
             return;
         }
         // `pressed` consumes Esc. Exit and Esc share one quit, including while import disables it.
@@ -1032,7 +1042,7 @@ impl DesktopApp {
     /// Pause and settings popups share the actual game's paused frame.
     fn pause_menu(&mut self, ctx: &Context) {
         let settings = self.screen == Screen::Settings;
-        let library = !settings && self.options.launch_library && self.game.is_none();
+        let library = !settings && self.options.launch_library;
         let title = if settings { "Settings" } else { "Menu" };
         egui::Window::new(egui::RichText::new(title).color(theme::INK))
             .id(egui::Id::new(if settings {

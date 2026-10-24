@@ -30,7 +30,13 @@ pub(super) struct Editor {
 impl DesktopApp {
     pub(super) fn open_editor(&mut self, ctx: &Context) {
         if self.game.is_none() {
-            self.load_game();
+            if self.options.launch_library {
+                if !self.load_library_game() {
+                    return;
+                }
+            } else {
+                self.load_game();
+            }
         }
         if self.game.is_none() {
             return;

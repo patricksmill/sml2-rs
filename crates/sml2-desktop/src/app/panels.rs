@@ -68,9 +68,6 @@ impl DesktopApp {
             self.return_screen = Screen::Home;
             self.navigate(ctx, Screen::Settings);
         }
-        if self.game.is_some() && self.menu.button(ui, "Scenery editor") {
-            self.open_editor(ctx);
-        }
         let quit_to_title = self
             .game
             .as_ref()
@@ -100,6 +97,15 @@ impl DesktopApp {
         if self.menu.button(ui, "Play") {
             if self.library.play_enabled() {
                 self.play_library();
+            } else {
+                self.return_screen = Screen::Home;
+                self.page = Page::Game;
+                self.navigate(ctx, Screen::Settings);
+            }
+        }
+        if self.menu.button(ui, "Scenery") {
+            if self.library.play_enabled() {
+                self.open_editor(ctx);
             } else {
                 self.return_screen = Screen::Home;
                 self.page = Page::Game;

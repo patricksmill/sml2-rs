@@ -46,17 +46,17 @@ fn launch_menu_stays_compact_before_and_after_rom_verification() {
         let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
         assert_eq!(
             text,
-            "Play\nSettings\nExit\nEnter: select · Esc: exit\nMenu\n"
+            "Play\nScenery\nSettings\nExit\nEnter: select · Esc: exit\nMenu\n"
         );
     }
     let popup = ctx
         .memory(|memory| memory.area_rect(egui::Id::new("pause-menu")))
         .unwrap();
     assert!(
-        popup.width() <= 320.0 && popup.height() <= 240.0,
+        popup.width() <= 320.0 && popup.height() <= 275.0,
         "{popup:?}"
     );
-    let output = confirm(&mut app, &ctx, 2);
+    let output = confirm(&mut app, &ctx, 3);
     assert!(output.viewport_output[&egui::ViewportId::ROOT]
         .commands
         .iter()
@@ -67,7 +67,7 @@ fn launch_menu_stays_compact_before_and_after_rom_verification() {
 #[test]
 fn settings_opens_usual_options_and_escape_returns_to_the_launch_menu() {
     let (mut app, ctx, path) = launcher();
-    confirm(&mut app, &ctx, 1);
+    confirm(&mut app, &ctx, 2);
     assert_eq!(app.screen, Screen::Settings);
     assert_eq!(app.page, Page::Display);
     let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
@@ -119,6 +119,70 @@ fn play_without_a_usable_rom_opens_settings_for_import_or_repair() {
 }
 
 #[test]
+fn scenery_without_a_usable_rom_opens_game_settings() {
+    let (mut app, ctx, path) = launcher();
+    confirm(&mut app, &ctx, 1);
+    assert_eq!(app.screen, Screen::Settings);
+    assert_eq!(app.page, Page::Game);
+    assert!(app.game.is_none());
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn scenery_returns_to_the_launcher_and_play_removes_its_menu_entry() {
+    let (mut app, ctx, path) = super::tests::app();
+    app.options.launch_library = true;
+    app.library.vanilla_ready = true;
+    app.screen = Screen::Home;
+    super::tests::frame(&mut app, &ctx, vec![]);
+    confirm(&mut app, &ctx, 1);
+    assert_eq!(app.screen, Screen::Editor);
+    assert!(app.options.launch_library);
+
+    app.input.event(Button::key("Escape"), true);
+    super::tests::frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::key("Escape"), false);
+    let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
+    assert_eq!(app.screen, Screen::Home);
+    assert!(text.contains("Play\nScenery\nSettings\nExit\n"), "{text}");
+
+    // Play must clear the editor's playtest shortcut as well as enter the title.
+    app.editor.playtesting = true;
+    confirm(&mut app, &ctx, 0);
+    assert_eq!(app.screen, Screen::Game);
+    assert!(!app.editor.playtesting);
+    assert!(!app.options.launch_library);
+    assert!(matches!(
+        app.game.as_ref().unwrap().session.state,
+        sml2_runtime::session::SessionState::Title(_)
+    ));
+    app.input.event(Button::key("Escape"), true);
+    super::tests::frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::key("Escape"), false);
+    let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
+    assert_eq!(app.screen, Screen::Home);
+    assert!(!text.contains("Scenery"), "{text}");
+    assert!(text.contains("Resume\nSettings\nQuit\n"), "{text}");
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn escape_exits_the_launcher_after_the_editor_has_loaded_a_game() {
+    let (mut app, ctx, path) = super::tests::app();
+    app.options.launch_library = true;
+    app.screen = Screen::Home;
+    super::tests::frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::key("Escape"), true);
+    let output = super::tests::frame(&mut app, &ctx, vec![]);
+    assert_eq!(app.screen, Screen::Home);
+    assert!(output.viewport_output[&egui::ViewportId::ROOT]
+        .commands
+        .iter()
+        .any(|command| matches!(command, ViewportCommand::Close)));
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
 fn settings_game_has_dx_import_and_persists_the_mode_choice() {
     let (mut app, ctx, path) = launcher();
     app.library.vanilla_ready = true;
@@ -152,7 +216,7 @@ fn settings_game_has_dx_import_and_persists_the_mode_choice() {
 #[test]
 fn display_replaces_scaling_explanations_with_a_saved_integer_scaling_toggle() {
     let (mut app, ctx, path) = launcher();
-    confirm(&mut app, &ctx, 1);
+    confirm(&mut app, &ctx, 2);
     let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
     assert!(text.contains("Integer scaling"));
     assert!(!text.contains("Fit scales the same game view"));
