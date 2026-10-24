@@ -111,6 +111,71 @@ pub struct MapGraphics {
     pub sprites: MapSprites,
 }
 
+/// A DX VRAM copy: `bytes` land at `offset` past `$8000`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VramCopy {
+    pub offset: usize,
+    pub bytes: Vec<u8>,
+}
+
+/// A boss fight's DX look, from `$36:$7306` (run by `$0ECA` once the fight's
+/// scene load ends).
+#[derive(Clone, Debug)]
+pub struct BossFight {
+    /// `$77BA`'s 32-column VRAM1 attribute rows, written from tilemap row
+    /// `attribute_row`.
+    pub attributes: Vec<u8>,
+    pub attribute_row: usize,
+    /// Rows `$9940..$99BF` that `$7443` fills with attribute 3.
+    pub filled_rows: Option<(usize, usize)>,
+    /// `$D000`'s per-tile attributes for tiles drawn after the load, when
+    /// the fight replaces the level's.
+    pub tile_attributes: Option<Vec<u8>>,
+    /// `$1905`'s `$26` BG palettes and the `$A1DE`/`$A1DF` OBJ palettes.
+    pub bg_palettes: Vec<u8>,
+    pub obj_palettes: Vec<u8>,
+    /// VRAM0 copies made with the palettes (`$74A4`).
+    pub vram0: Vec<VramCopy>,
+}
+
+/// A boss level's arena: `$02:$7500` keys `$A1CC` by the level and
+/// `$36:$7654` copies the arena's VRAM1 tiles on every `$25AF` reload.
+#[derive(Clone, Debug)]
+pub struct BossArena {
+    pub level: u8,
+    pub vram1: VramCopy,
+    /// Added to `$A21A`'s high nibble: the player mapping theme.
+    pub theme: u8,
+    /// The fight's look by `sObjectDefIndex` (`$AFC0`); key `None` is any
+    /// definition. Level `$18` keys its fights.
+    pub fights: Vec<(Option<u8>, BossFight)>,
+}
+
+impl BossFight {
+    /// The attribute this fight's load left on tilemap cell `(column, row)`,
+    /// or `None` where tiles keep their per-tile attribute.
+    pub fn cell_attribute(&self, column: usize, row: usize) -> Option<u8> {
+        if self
+            .filled_rows
+            .is_some_and(|(top, end)| (top..end).contains(&row))
+        {
+            return Some(3);
+        }
+        let row = row.checked_sub(self.attribute_row)?;
+        self.attributes.get(row * 32 + column).copied()
+    }
+}
+
+impl BossArena {
+    /// The fight look for `definition`, if the fight loader changes it.
+    pub fn fight(&self, definition: u8) -> Option<&BossFight> {
+        self.fights
+            .iter()
+            .find(|(key, _)| key.is_none_or(|k| k == definition))
+            .map(|(_, fight)| fight)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Presentation {
     pub levels: Vec<LevelGraphics>,
@@ -131,6 +196,14 @@ pub struct Presentation {
     /// `$2B8B` plus `$25:$4234`'s file select.
     pub file_select: Screen,
     pub map: MapGraphics,
+    /// Each boss level's arena and fight colors.
+    pub arenas: Vec<BossArena>,
+    /// `$26B5`'s arena metatile tables, by `sLevelGfxIndex`, which DX edits
+    /// in place.
+    pub arena_metatiles: Vec<MetatileTable>,
+    /// `$19:$6092`: the boss render pass's 118 OAM record lists, in the
+    /// native extractor's raw form (DX moves and recolors some).
+    pub boss_oam_lists: Vec<Vec<u8>>,
 }
 
 /// One sprite or player mapping table: cells per sprite ID.
@@ -213,7 +286,23 @@ impl Presentation {
             title: title(bundle)?,
             file_select: file_select(bundle)?,
             map: map(bundle)?,
+            arenas: arenas(bundle)?,
+            arena_metatiles: bundle
+                .arena_maps
+                .chunks_exact(2)
+                .map(|p| {
+                    let address = u16::from_le_bytes([p[0], p[1]]);
+                    MetatileTable::from_bytes(bundle.banked(METATILE_BANK, address, 0x200)?)
+                        .map_err(ImportError::InvalidBundle)
+                })
+                .collect::<Result<_, _>>()?,
+            boss_oam_lists: boss_oam_lists(bundle)?,
         })
+    }
+
+    /// The arena of a boss level.
+    pub fn arena(&self, level: u8) -> Option<&BossArena> {
+        self.arenas.iter().find(|a| a.level == level)
     }
 
     pub fn level(&self, level: u8) -> Option<&LevelGraphics> {
@@ -611,6 +700,148 @@ pub(crate) fn mappings(
             Err(ImportError::InvalidBundle(format!(
                 "unterminated sprite mapping {i} in bank ${bank:02X}"
             )))
+        })
+        .collect()
+}
+
+const ARENA_BANK: u8 = 0x36;
+
+/// `$36:$7654`'s VRAM1 copies and `$7306`'s fight looks, per boss level.
+fn arenas(bundle: &Bundle) -> Result<Vec<BossArena>, ImportError> {
+    let vram1 = |address: u16, length: usize, at: u16| -> Result<VramCopy, ImportError> {
+        Ok(VramCopy {
+            offset: usize::from(at - 0x8000),
+            bytes: bundle.banked(ARENA_BANK, address, length)?.to_vec(),
+        })
+    };
+    // `$77BA` copies 18 rows; `$1905` loads `$26` BG palettes to `$D200`;
+    // `$18DA` loads the OBJ set at `$A1DE:$A1DF`.
+    let fight = |attributes: u16, at: u16, bg: u16, obj: u16| -> Result<BossFight, ImportError> {
+        Ok(BossFight {
+            attributes: bundle.banked(ARENA_BANK, attributes, 18 * 32)?.to_vec(),
+            attribute_row: usize::from(at - 0x9800) / 32,
+            filled_rows: None,
+            tile_attributes: None,
+            bg_palettes: bundle.banked(PALETTE_BANK, bg, 0x40)?.to_vec(),
+            obj_palettes: bundle.banked(PALETTE_BANK, obj, 0x40)?.to_vec(),
+            vram0: Vec::new(),
+        })
+    };
+    let arena = |level: u8, copy: VramCopy, theme: u8, look: BossFight| BossArena {
+        level,
+        vram1: copy,
+        theme,
+        fights: vec![(None, look)],
+    };
+    let mut arenas = vec![
+        arena(
+            0x05,
+            vram1(0x4000, 0x300, 0x8B00)?,
+            0,
+            fight(0x5D50, 0x9860, 0x70DA, 0x711A)?,
+        ),
+        arena(
+            0x09,
+            vram1(0x5850, 0x500, 0x8B00)?,
+            0,
+            fight(0x65A0, 0x9840, 0x72DA, 0x731A)?,
+        ),
+        arena(
+            0x0D,
+            vram1(0x4D50, 0x400, 0x8B00)?,
+            0,
+            fight(0x67B4, 0x9860, 0x735A, 0x739A)?,
+        ),
+        arena(
+            0x10,
+            vram1(0x4300, 0x300, 0x8B00)?,
+            0,
+            fight(0x638C, 0x9860, 0x725A, 0x729A)?,
+        ),
+        arena(
+            0x13,
+            vram1(0x4950, 0x400, 0x8B00)?,
+            1,
+            fight(0x5F64, 0x9840, 0x715A, 0x719A)?,
+        ),
+        arena(
+            0x17,
+            vram1(0x4600, 0x350, 0x8B00)?,
+            0,
+            fight(0x6178, 0x9840, 0x71DA, 0x721A)?,
+        ),
+    ];
+    // Level `$18` keys its fights by `$AFC0` (defs 6-8). `$7435` gives def 7
+    // nothing new, so it keeps def 6's look; def 8 patches palette RAM in
+    // place, which still holds def 6's sets (not checked on hardware).
+    let mut wario_6 = fight(0x69C8, 0x99C0, 0x73DA, 0x741A)?;
+    wario_6.filled_rows = Some((10, 14));
+    wario_6.tile_attributes = Some(bundle.banked(ARENA_BANK, 0x7554, 0x100)?.to_vec());
+    let mut wario_8 = BossFight {
+        attributes: Vec::new(),
+        attribute_row: 0,
+        filled_rows: None,
+        vram0: vec![
+            VramCopy {
+                offset: 0x900,
+                bytes: bundle.banked(ARENA_BANK, 0x6C06, 0x400)?.to_vec(),
+            },
+            VramCopy {
+                offset: 0xD00,
+                bytes: bundle.banked(ARENA_BANK, 0x7006, 0x300)?.to_vec(),
+            },
+        ],
+        ..wario_6.clone()
+    };
+    // `$74FE`: OBJ palette 3 color 2, OBJ palette 7 colors 1-2 and BG
+    // palette 4 colors 1-2.
+    wario_8.obj_palettes[0x1C..0x1E].copy_from_slice(&[0xC8, 0x02]);
+    wario_8.obj_palettes[0x3A..0x3E].copy_from_slice(&[0x5F, 0x13, 0xBF, 0x3A]);
+    wario_8.bg_palettes[0x22..0x26].copy_from_slice(&[0x33, 0x4A, 0xB0, 0x39]);
+    arenas.push(BossArena {
+        level: 0x18,
+        vram1: vram1(0x5150, 0x700, 0x8900)?,
+        theme: 0,
+        fights: vec![
+            (Some(6), wario_6.clone()),
+            (Some(7), wario_6),
+            (Some(8), wario_8),
+        ],
+    });
+    for arena in &arenas {
+        for (_, look) in &arena.fights {
+            CgbPalettes::from_bytes(&look.bg_palettes, &look.obj_palettes).map_err(|e| {
+                ImportError::InvalidBundle(format!("arena {:#04x} palettes: {e}", arena.level))
+            })?;
+        }
+    }
+    Ok(arenas)
+}
+
+/// `$19:$6092`'s 118 boss OAM lists, cut the way the native extractor cuts
+/// them: 4-byte cells, `$88 <adj>` markers, through the `$80` terminator.
+fn boss_oam_lists(bundle: &Bundle) -> Result<Vec<Vec<u8>>, ImportError> {
+    const BANK: u8 = 0x19;
+    (0..118u16)
+        .map(|i| {
+            let ptr = bundle.banked(BANK, 0x6092 + i * 2, 2)?;
+            let mut at = u16::from_le_bytes([ptr[0], ptr[1]]);
+            let mut list = Vec::new();
+            loop {
+                let first = bundle.banked(BANK, at, 1)?[0];
+                if first == 0x80 {
+                    list.push(first);
+                    return Ok(list);
+                }
+                if list.len() > 0x400 {
+                    return Err(ImportError::InvalidBundle(format!(
+                        "boss OAM list {i} never ends"
+                    )));
+                }
+                let n = if first == 0x88 { 2 } else { 4 };
+                list.extend_from_slice(bundle.banked(BANK, at, n)?);
+                at += n as u16;
+            }
         })
         .collect()
 }

@@ -16,21 +16,16 @@ use sml2_core::{
 use sml2_dx::{LevelGraphics, Presentation, Screen};
 
 impl Session {
-    /// The level a DX frame would draw: live play or an attract demo, outside
-    /// boss arenas and fights. DX's `$36:$7306` gives each arena its own
-    /// palettes, VRAM1 graphics and attribute map, and its boss sprites go
-    /// through their own draw path; neither is imported yet.
+    /// The level a DX frame would draw: live play or an attract demo,
+    /// arenas and boss fights included.
     fn dx_level(&self) -> Option<&LevelContext> {
-        let ctx = self.level_ctx()?;
-        let boss = ctx.cam.boss_fight_phase != 0
-            || ctx.spr.as_ref().is_some_and(|s| !s.boss_oam.is_empty());
-        (!ctx.arena_loaded && !boss).then_some(ctx)
+        self.level_ctx()
     }
 
     /// Whether DX presentation covers the current screen: the title, the
     /// file select, the overworld (hub, zones and both minigames) and every
-    /// level, live or in a demo, except boss arenas. Arenas and the other
-    /// screens keep their native picture.
+    /// level, live or in a demo, boss fights included. The other screens keep
+    /// their native picture.
     pub fn dx_supported(&self) -> bool {
         match &self.state {
             SessionState::Title(_)
@@ -754,16 +749,27 @@ fn render(
         .level(level_id)
         .ok_or_else(|| format!("no DX graphics for level {level_id}"))?;
     let player = dx.player(character, level.theme);
+    // `$02:$7500` on every `$25AF` reload; `$36:$7306` once a fight loads.
+    let arena = dx.arena(level_id).filter(|_| ctx.arena_loaded);
+    let fight = arena
+        .zip(ctx.boss_definition)
+        .and_then(|(arena, definition)| arena.fight(definition));
+    // The reload's `$A21A` bump moves `$2C:$5D62` to the other mapping table.
+    let mappings = &dx
+        .player(character, level.theme + arena.map_or(0, |a| a.theme))
+        .mappings;
+    let (bg_source, obj_source) = fight.map_or((&level.bg_palettes, &level.obj_palettes), |f| {
+        (&f.bg_palettes, &f.obj_palettes)
+    });
     let bg_palettes = if ctx.sim.paused {
-        pause_palettes(&level.bg_palettes, ctx.sim.frame_counter & 16 != 0)
+        pause_palettes(bg_source, ctx.sim.frame_counter & 16 != 0)
     } else {
-        level.bg_palettes.clone()
+        bg_source.clone()
     };
-    let palettes =
-        CgbPalettes::from_bytes(&bg_palettes, &level.obj_palettes).map_err(|e| e.to_string())?;
+    let palettes = CgbPalettes::from_bytes(&bg_palettes, obj_source).map_err(|e| e.to_string())?;
     let background = [live_background(ctx, dx, level), level.background[1].clone()];
     // Each assembled bank starts at $8000. Signed BG tile addressing adds $800.
-    let banks: [Vec<u8>; 2] = std::array::from_fn(|bank| {
+    let mut banks: [Vec<u8>; 2] = std::array::from_fn(|bank| {
         let mut bytes = if bank == 1 {
             player.bank1.clone()
         } else if ctx.sim.powerup == 3 {
@@ -774,7 +780,35 @@ fn render(
         bytes.extend_from_slice(&background[bank]);
         bytes
     });
+    if let Some(arena) = arena {
+        copy_vram(&mut banks[1], &arena.vram1);
+    }
+    for copy in fight.iter().flat_map(|f| &f.vram0) {
+        copy_vram(&mut banks[0], copy);
+    }
     let banks = [&banks[0][..], &banks[1][..]];
+    // A fight's load writes its own VRAM1 attribute rows; tiles drawn since
+    // (layout rewrites) take the per-tile table.
+    let tile_attributes = fight
+        .and_then(|f| f.tile_attributes.as_deref())
+        .unwrap_or(&level.tile_attributes);
+    // `$25AF` swaps in an arena's layout and its `$26B5` metatile table,
+    // which DX edits in place.
+    let arena_metatiles = ctx
+        .arena_loaded
+        .then(|| dx.arena_metatiles.get(usize::from(ctx.sim.level_gfx_index)))
+        .flatten();
+    let metatiles = arena_metatiles.unwrap_or(&level.metatiles);
+    let cell_at = |cx: usize, cy: usize| match arena_metatiles {
+        Some(_) => ctx.layout_live.get(cx, cy),
+        None => dx_cell(ctx, level, cx, cy),
+    };
+    let bg_attr = |tile: u8, (wx, wy): (usize, usize), rewritten: bool| {
+        let cell = fight
+            .filter(|_| !rewritten)
+            .and_then(|f| f.cell_attribute(wx / 8 % 32, wy / 8 % 32));
+        CgbAttributes::from_byte(cell.unwrap_or(tile_attributes[usize::from(tile)]))
+    };
     let border = offsets.border() as i32;
     let blank = BackgroundPixel {
         index: IndexedPixel::new(0, 0).unwrap(),
@@ -819,11 +853,10 @@ fn render(
                 .iter()
                 .find(|(k, _)| *k == key)
                 .map(|(_, v)| *v);
-            let Some(id) = rewritten.or_else(|| dx_cell(ctx, level, cx, cy)) else {
+            let Some(id) = rewritten.or_else(|| cell_at(cx, cy)) else {
                 continue;
             };
-            let metatile = level
-                .metatiles
+            let metatile = metatiles
                 .get(id)
                 .ok_or_else(|| format!("invalid DX metatile {id}"))?;
             let tile = if rewritten == Some(24) {
@@ -831,7 +864,7 @@ fn render(
             } else {
                 metatile.tiles[(ty / 8) * 2 + tx / 8]
             };
-            let attr = CgbAttributes::from_byte(level.tile_attributes[tile as usize]);
+            let attr = bg_attr(tile, (wx as usize, wy as usize), rewritten.is_some());
             *layers.bg_mut(px, py) = BackgroundPixel {
                 index: cgb::sample_tile(
                     banks,
@@ -864,12 +897,11 @@ fn render(
                     let (cx, cy) = (wx as usize / 16, wy as usize / 16);
                     let (tx, ty) = (wx as usize & 15, wy as usize & 15);
                     let rewritten = scenery_window.rewrite(px, py);
-                    let Some(id) = rewritten.or_else(|| dx_cell(ctx, level, cx, cy)) else {
+                    let Some(id) = rewritten.or_else(|| cell_at(cx, cy)) else {
                         *layers.bg_mut(px, py) = blank;
                         continue;
                     };
-                    let metatile = level
-                        .metatiles
+                    let metatile = metatiles
                         .get(id)
                         .ok_or_else(|| format!("invalid DX metatile {id}"))?;
                     let tile = if rewritten == Some(24) {
@@ -877,7 +909,7 @@ fn render(
                     } else {
                         metatile.tiles[(ty / 8) * 2 + tx / 8]
                     };
-                    let attr = CgbAttributes::from_byte(level.tile_attributes[tile as usize]);
+                    let attr = bg_attr(tile, (wx as usize, wy as usize), rewritten.is_some());
                     *layers.bg_mut(px, py) = BackgroundPixel {
                         index: cgb::sample_tile(
                             banks,
@@ -954,7 +986,7 @@ fn render(
     }
     if let Some(s) = &ctx.spr {
         let mut tables = s.tables.clone();
-        tables.player_mappings = player.mappings.clone();
+        tables.player_mappings = mappings.clone();
         // `mapping_for` picks mode A or B by level; both hold this level's table.
         tables.sprite_mappings_a = dx.objects(level).to_vec();
         tables.sprite_mappings_b = tables.sprite_mappings_a.clone();
@@ -1067,6 +1099,26 @@ fn render(
                 )?);
             }
         }
+        // The boss pass's records replayed through DX's lists, which move
+        // and recolor some. These are already OAM bytes, so an enlarged view
+        // offsets them by the same level margin as the native blit.
+        let (bx, by) = super::view::level_margin(view);
+        let mut boss = Vec::new();
+        for &draw in &s.boss_draws {
+            if let Some(list) = dx.boss_oam_lists.get(usize::from(draw.sprite)) {
+                sml2_core::objects::expand_boss_list(list, draw, &mut boss);
+            }
+        }
+        for c in boss {
+            layers.cells.push(obj_cell(
+                banks,
+                i32::from(c.x) - 8 + bx,
+                i32::from(c.y) - 16 + by,
+                c.tile,
+                c.attr,
+                (0, 0),
+            )?);
+        }
     }
     if ctx.scene_reload_blank {
         return Ok(vec![[255; 3]; vw * vh * offsets.scale * offsets.scale]);
@@ -1077,6 +1129,13 @@ fn render(
     }
     let (background, objects) = layers.compose(offsets.scale, viewport.bg_shift, |_, _| false);
     cgb::compose_frame(&background, &objects, true, &palettes).map_err(|e| e.to_string())
+}
+
+/// Lay a DX VRAM copy over an assembled bank.
+fn copy_vram(bank: &mut [u8], copy: &sml2_dx::VramCopy) {
+    if let Some(target) = bank.get_mut(copy.offset..copy.offset + copy.bytes.len()) {
+        target.copy_from_slice(&copy.bytes);
+    }
 }
 
 /// One 8x8 CGB OBJ cell at screen `(x, y)`; colour 0 is transparent.

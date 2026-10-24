@@ -69,6 +69,8 @@ pub struct SpriteCtx {
     /// these frames, because the boss slots' state byte carries HP, not a slot
     /// state, and the engine's own draw never runs in the boss path.
     pub boss_oam: Vec<sml2_core::objects::BossOamCell>,
+    /// The records behind `boss_oam`, for a presentation with its own lists.
+    pub boss_draws: Vec<sml2_core::objects::BossDraw>,
     /// Distinct phases: Mario subtracts the decremented phase; BG/objects use latched scroll.
     pub player_pan: u8,
     pub scroll_pan: u8,

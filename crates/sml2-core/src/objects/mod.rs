@@ -751,6 +751,8 @@ pub struct ObjectSim {
     pub boss_defeated: u8,
     pub boss_slots_raw: [u8; 512],
     pub boss_oam: Vec<BossOamCell>,
+    /// The records behind `boss_oam`, in draw order.
+    pub boss_draws: Vec<BossDraw>,
     pub unported: Vec<u32>,
     /// Extra half-width/half-height of an enlarged view. Not ROM state: zero
     /// keeps every window at the engine's own size.
@@ -862,6 +864,7 @@ impl ObjectSim {
             boss_defeated: 0,
             boss_slots_raw: [0; 512],
             boss_oam: Vec::new(),
+            boss_draws: Vec::new(),
             unported: Vec::new(),
             view_margin: (0, 0),
             view_bias_y: 0,

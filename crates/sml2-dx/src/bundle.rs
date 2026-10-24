@@ -18,11 +18,12 @@ mod bundle_tests;
 /// tiles, `$21` tile attributes, `$23`/`$28`/`$3A` object mappings, `$24` VRAM1
 /// graphics and HUD tables, `$25` the file-select attribute map, `$26`
 /// palettes, `$29` the overworld's attributes, `$2A`/`$2B` Mario/Luigi
-/// graphics, `$2C`/`$2D` their mappings and `$37` the minigame attribute maps.
-pub const BANKS: [u8; 39] = [
+/// graphics, `$2C`/`$2D` their mappings, `$36` the boss arenas and `$37` the
+/// minigame attribute maps.
+pub const BANKS: [u8; 40] = [
     0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14,
     0x15, 0x17, 0x18, 0x19, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x23, 0x24, 0x25, 0x26, 0x28,
-    0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x37, 0x3A,
+    0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x36, 0x37, 0x3A,
 ];
 pub const BANK_LEN: usize = 0x4000;
 pub const LEVELS: usize = 32;
@@ -33,6 +34,9 @@ const LEVEL_CONFIG: usize = 0x360A;
 const ENEMY_SETS: usize = 0x362A;
 const TILE_SETS: usize = 0x36AA;
 const EXTRA_POINTERS: usize = 0x0763;
+/// `$26B5`: `$25AF`'s seven arena metatile-table pointers (bank 8).
+const ARENA_MAPS: usize = 0x26B5;
+pub const ARENA_MAP_COUNT: usize = 7;
 /// Bank 1 `Level_Header_Pointers`: each level's 20-byte header, which
 /// `$5579` copies to `$A800` (metatile table pointer `+$0B`, layout bank
 /// `+$0D`, layout index `+$12`).
@@ -51,6 +55,8 @@ pub struct Bundle {
     pub tile_sets: Vec<u8>,
     /// `$0763`: four bank-7 pointers for the `$8E80` block.
     pub extra_pointers: Vec<u8>,
+    /// `$26B5`: the arena metatile-table pointers, by `sLevelGfxIndex`.
+    pub arena_maps: Vec<u8>,
     /// Every level's header, in level order.
     pub level_headers: Vec<u8>,
     #[serde(with = "hex_banks")]
@@ -78,6 +84,7 @@ impl Bundle {
             ("enemy sets", &self.enemy_sets, LEVELS * 4),
             ("tile sets", &self.tile_sets, LEVELS * 4),
             ("extra pointers", &self.extra_pointers, 8),
+            ("arena maps", &self.arena_maps, ARENA_MAP_COUNT * 2),
             ("level headers", &self.level_headers, LEVELS * HEADER_LEN),
         ] {
             if data.len() != length {
@@ -133,6 +140,7 @@ pub fn extract(bytes: &[u8]) -> Result<Bundle, ImportError> {
         enemy_sets: rom.read(ENEMY_SETS, LEVELS * 4)?.to_vec(),
         tile_sets: rom.read(TILE_SETS, LEVELS * 4)?.to_vec(),
         extra_pointers: rom.read(EXTRA_POINTERS, 8)?.to_vec(),
+        arena_maps: rom.read(ARENA_MAPS, ARENA_MAP_COUNT * 2)?.to_vec(),
         level_headers: (0..LEVELS)
             .map(|level| {
                 let pointer = rom.word(HEADER_POINTERS + level * 2)?;

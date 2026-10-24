@@ -392,6 +392,7 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
                 bumpers: Vec::new(),
                 fireballs: Vec::new(),
                 boss_oam: Vec::new(),
+                boss_draws: Vec::new(),
             })
         } else {
             None

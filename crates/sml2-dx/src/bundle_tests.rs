@@ -26,6 +26,8 @@ fn fixture() -> Bundle {
         enemy_sets: [0x06, 0, 0x00, 0x58].repeat(LEVELS),
         tile_sets: [0x07, 0, 0x00, 0x40].repeat(LEVELS),
         extra_pointers: vec![0x00, 0x6A, 0x80, 0x6D, 0x00, 0x71, 0x80, 0x74],
+        // Every arena map at the levels' metatiles, `$08:$4000`.
+        arena_maps: [0x00, 0x40].repeat(7),
         // Metatiles at `$08:$4000`, layout 0 of bank `$09`.
         level_headers: [&[0; 11][..], &[0x00, 0x40, 0x09], &[0; 4], &[0x00, 0]]
             .concat()
@@ -56,6 +58,9 @@ fn fixture() -> Bundle {
     table(&mut bundle, 0x18, 0x62E6, 188, 0x7000);
     table(&mut bundle, 0x0F, 0x4AD7, 16, 0x7000);
     table(&mut bundle, 0x0F, 0x4C4D, 17, 0x7000);
+    // The boss render pass's lists, all empty.
+    put(&mut bundle, 0x19, EMPTY, &[0x80]);
+    table(&mut bundle, 0x19, 0x6092, 118, EMPTY);
     bundle
 }
 
@@ -78,7 +83,7 @@ fn valid_bundle_round_trips_through_hex_banks() {
 #[test]
 fn old_schemas_other_sources_and_unknown_fields_are_rejected() {
     let value = serde_json::to_value(fixture()).unwrap();
-    for schema in [1, 2, 3, 4, 5, BUNDLE_SCHEMA + 1] {
+    for schema in [1, 2, 3, 4, 5, 6, BUNDLE_SCHEMA + 1] {
         let mut bad = value.clone();
         bad["schema"] = schema.into();
         let error = decode(&bad).unwrap_err().to_string();
@@ -241,4 +246,47 @@ fn each_level_uses_its_own_tables_and_the_dx_loader_sources() {
         p.map.screens[9].attributes.as_ref().map(Vec::len),
         Some(0x240)
     );
+}
+
+#[test]
+fn each_boss_arena_reads_its_loader_sources() {
+    let mut bundle = fixture();
+    // Level `$09`: `$7654` copies `$36:$5850` to VRAM1 `$8B00`; `$7306` loads
+    // attributes `$65A0` from row 2, BG `$26:$72DA` and OBJ `$26:$731A`.
+    put(&mut bundle, 0x36, 0x5850, &[0xAB]);
+    put(&mut bundle, 0x36, 0x65A0 + 33, &[0x0C]);
+    put(&mut bundle, 0x26, 0x72DA, &[0x1F]);
+    put(&mut bundle, 0x26, 0x731A, &[0xE0]);
+    // The arena maps' first pointer.
+    bundle.arena_maps[..2].copy_from_slice(&0x4200u16.to_le_bytes());
+    put(&mut bundle, 0x08, 0x4200, &[0x77]);
+    let p = Presentation::new(&bundle).unwrap();
+    let arena = p.arena(0x09).unwrap();
+    assert_eq!(
+        (arena.vram1.offset, arena.vram1.bytes.len()),
+        (0xB00, 0x500)
+    );
+    assert_eq!(arena.vram1.bytes[0], 0xAB);
+    let fight = arena.fight(1).unwrap();
+    assert_eq!(
+        fight.cell_attribute(1, 3),
+        Some(0x0C),
+        "row 2 is the map's first"
+    );
+    assert_eq!(
+        fight.cell_attribute(1, 1),
+        None,
+        "rows above it keep per-tile"
+    );
+    assert_eq!((fight.bg_palettes[0], fight.obj_palettes[0]), (0x1F, 0xE0));
+    assert!(p.arena(0x0A).is_none());
+    // Wario's defs 6-8 differ; def 7 keeps def 6's look.
+    let wario = p.arena(0x18).unwrap();
+    assert_eq!(wario.vram1.offset, 0x900);
+    assert_eq!(wario.fight(6).unwrap().cell_attribute(0, 10), Some(3));
+    assert!(wario.fight(8).unwrap().vram0.len() == 2);
+    assert!(wario.fight(9).is_none());
+    assert_eq!(p.boss_oam_lists.len(), 118);
+    assert_eq!(p.arena_metatiles.len(), 7);
+    assert_eq!(p.arena_metatiles[0].get(0).unwrap().tiles[0], 0x77);
 }

@@ -68,6 +68,9 @@ fn synthetic_bundle() -> Presentation {
                 room_metasprites: Default::default(),
             },
         },
+        arenas: Vec::new(),
+        arena_metatiles: Vec::new(),
+        boss_oam_lists: Vec::new(),
     }
 }
 
@@ -105,13 +108,16 @@ fn dx_public_api_covers_every_level_with_its_own_tables() {
         game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(),
         vec![[0, 255, 0]; 160 * 144]
     );
-    // Boss arenas use DX tables that are not imported: native picture.
+    // An arena the bundle has no look for keeps the level's.
     let SessionState::InLevel(ctx) = &mut game.state else {
         unreachable!()
     };
     ctx.arena_loaded = true;
-    assert!(!game.dx_supported());
-    assert!(game.render_dx_frame(&bundle, Mario, (160, 144)).is_err());
+    assert!(game.dx_supported());
+    assert_eq!(
+        game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(),
+        vec![[0, 255, 0]; 160 * 144]
+    );
 }
 
 #[test]
@@ -513,11 +519,11 @@ fn audited_rom_forms_effects_and_initial_frame() {
     assert_ne!(luigi_frames[1], luigi_frames[3]);
 }
 
-/// Every level runs in DX for both characters, and a boss arena hands back to
-/// the native picture once `$25AF` swaps its tileset in.
+/// Every level runs in DX for both characters, and so does a boss arena once
+/// `$25AF` swaps its tileset in.
 #[test]
 #[ignore = "requires SML2_DX_ROM with the audited local ROM"]
-fn audited_rom_draws_every_level_and_leaves_arenas_native() {
+fn audited_rom_draws_every_level_and_its_arenas() {
     let bundle = audited();
     for level in 0..32u8 {
         let mut game = session();
@@ -575,7 +581,11 @@ fn audited_rom_draws_every_level_and_leaves_arenas_native() {
         panic!("the arena is part of the level")
     };
     assert!(ctx.arena_loaded);
-    assert!(!game.dx_supported());
+    assert!(game.dx_supported());
+    for character in [Mario, Luigi] {
+        game.render_dx_frame(&bundle, character, (160, 144))
+            .unwrap();
+    }
 }
 
 /// The title, and the file select 60 ticks after it opens, matched PyBoy's

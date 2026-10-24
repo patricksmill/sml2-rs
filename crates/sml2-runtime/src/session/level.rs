@@ -40,8 +40,11 @@ pub struct LevelContext {
     /// only: DX tells a phase from identical base tiles by it.
     pub tile_animation_copied: bool,
     /// `$25AF` has swapped in a boss arena's tileset. Presentation only: DX
-    /// draws arenas with their own tables, which are not imported yet.
+    /// adds the arena's VRAM1 tiles on that reload.
     pub arena_loaded: bool,
+    /// `sObjectDefIndex` of the last boss fight whose scene load ran
+    /// (`$0EB0` -> `$3C94`).
+    pub boss_definition: Option<u8>,
     pub frame_n: u64,
     pub map_handoff: Option<MapHandoffOutcome>,
     pub map_handoff_frame: Option<u64>,
@@ -122,6 +125,7 @@ impl LevelContext {
             bumpers: Vec::new(),
             fireballs: Vec::new(),
             boss_oam: Vec::new(),
+            boss_draws: Vec::new(),
         });
 
         Self {
@@ -150,6 +154,7 @@ impl LevelContext {
             tile_animation: TileAnimationClock::default(),
             tile_animation_copied: false,
             arena_loaded: false,
+            boss_definition: None,
             frame_n: 0,
             map_handoff: None,
             map_handoff_frame: None,
@@ -321,6 +326,7 @@ impl LevelContext {
                             self.sim.music_request = music;
                             self.sim.level_song = level_song;
                             self.obj.spawn_boss(def_index);
+                            self.boss_definition = Some(def_index);
                             // `$3C94` runs inside this update and outlasts its
                             // frame: a VBlank lands before it returns and
                             // decrements `sFadeTimer` with no update of its own.
@@ -442,8 +448,10 @@ impl LevelContext {
             if self.cam.boss_mode() {
                 s.insts.clear();
                 s.boss_oam = self.obj.boss_oam.clone();
+                s.boss_draws = self.obj.boss_draws.clone();
             } else {
                 s.boss_oam.clear();
+                s.boss_draws.clear();
                 s.insts = self
                     .obj
                     .slots

@@ -713,6 +713,7 @@ fn pan_sprites(player: Option<(u16, u16, u8)>) -> SpriteCtx {
         bumpers: Vec::new(),
         fireballs: Vec::new(),
         boss_oam: Vec::new(),
+        boss_draws: Vec::new(),
         player_pan: 0,
         scroll_pan: 0,
     }

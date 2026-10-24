@@ -329,16 +329,30 @@ in DX's. Rendering level 1's surface route (3,374 frames) and a pipe-room
 route (6,000 frames), for both characters, matched the previous opening-level
 renderer frame for frame, including its PyBoy-checked first frame.
 
+Boss arenas: every `$25AF` reload calls `$02:$7500`, which keys `$A1CC` by
+the level (the six zone bosses' ids from `$02:$4E03`.., else `sCurLevel`), then
+`$36:$7654` copies that arena's VRAM1 tiles (`$8B00`, or `$8900` for `$18`) and
+adds `$10` to `$A21A` for `$13`, moving Mario's mappings to the `$6000` table.
+The reload swaps in `$26B5`'s metatile table, which DX edits in place, so DX
+arenas read DX's bytes at that pointer with the native arena layout. When the
+fight's scene load ends, `$0ECA` calls `$36:$7306`: a 32x18 VRAM1 attribute
+map at `$9840`/`$9860` (`$77BA`), BG palettes from `$26` into `$D200`
+(`$1905`), and the OBJ set at `$A1DE:$A1DF` (`$18DA`). Cells streamed later
+take the per-tile table. `$18` keys its fights by `$AFC0`: def 6 also fills
+`$9940..$99BF` with attribute 3 and swaps `$D000` for `$36:$7554`. The boss
+render pass reads DX's `$19:$6092` lists, where DX moved 30 of the 118
+records and recolored most cells, so the port records each draw's sprite id,
+base and flip flags and replays the walk through DX's lists. Level `$09`'s
+fight matched a PyBoy capture except where Mario stood elsewhere; the
+witch's OAM attributes matched list 16 under its flip.
+
 Known gaps, verified against the ROM and left native or approximate:
 
-- Boss arenas: `$00:$0ECA` calls `$36:$7306`, keyed by `$A1CC` (`$05`, `$09`,
-  `$0D`, `$10`, `$13`, `$17`, `$18`, with `$18` split by `$AFC0`). Each writes a
-  32x18 VRAM1 attribute map at `$9840`/`$9860`, its own BG palettes (e.g.
-  `$26:$72DA` for `$09`) and OBJ palette pointer, and VRAM1 graphics (e.g.
-  `$36:$5850` to `$8B00`). PyBoy on this ROM, in level `$09`'s door arena,
-  showed the level's attribute table at `$D000` but those arena palettes and
-  graphics. The session flags `$25AF` reloads (`arena_loaded`) and boss fights,
-  and DX presentation leaves them native.
+- Boss arenas, `$18`'s later fights: Wario's defs 7 and 8 (`$AFC0`) are not
+  checked on hardware. Def 7 loads nothing new and keeps def 6's look; def 8's
+  `$74A4` VRAM0 copies and palette-entry patches are applied over def 6's sets.
+  The other boss levels went through `$36:$7306`'s table path, and only `$09`
+  was compared with PyBoy.
 - `$26:$6B0B` switches palette sets from `$26:$6100 + n*$40` for levels `$19`,
   `$03`, `$07`, `$0D`, `$15`, `$16`, `$0C`, `$18` by Mario's position (`$AF30`-
   `$AF33` are Mario X+8 and Y+32 from `$02:$40FD`), remembering the current set

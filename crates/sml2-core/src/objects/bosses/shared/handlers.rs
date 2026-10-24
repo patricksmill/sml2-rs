@@ -106,6 +106,7 @@ impl ObjectSim {
         // The frame's OAM output is rebuilt from scratch: `$66000` writes into
         // the shadow OAM through `$FF8D`, which the frame's own draw reset.
         self.boss_oam.clear();
+        self.boss_draws.clear();
 
         let mut remaining = self.boss_def_count.wrapping_add(1);
         let mut page = 0xAD00usize;
@@ -180,62 +181,14 @@ impl ObjectSim {
             self.note_unported(0x66092);
             return;
         };
-        let base_x = st.b[B_SCRX];
-        let mut base_y = st.b[B_SCRY];
-        let mut i = 0usize;
-        while i < rec.len() {
-            let first = rec[i];
-            if first == 0x80 {
-                break; // $66039: `cp $80 / ret z`
-            }
-            if first == 0x88 {
-                if i + 1 >= rec.len() {
-                    break;
-                }
-                if flags & 0x40 != 0 {
-                    base_y = base_y.wrapping_add(rec[i + 1]);
-                }
-                i += 2;
-                continue;
-            }
-            if i + 3 >= rec.len() {
-                break;
-            }
-            let (dy, dx, tile, attr) = (rec[i], rec[i + 1], rec[i + 2], rec[i + 3]);
-            i += 4;
-            let y = if flags & 0x40 != 0 {
-                (!dy).wrapping_sub(7).wrapping_add(base_y)
-            } else {
-                dy.wrapping_add(base_y)
-            };
-            if y >= 0xA0 {
-                continue; // $6605F: off the screen vertically — the cell is skipped
-            }
-            let x = if flags & 0x20 != 0 {
-                (!dx).wrapping_sub(7).wrapping_add(base_x)
-            } else {
-                dx.wrapping_add(base_x)
-            };
-            if x >= 0xA8 {
-                // $66065: `dec l / ld [hl],0` — the Y byte is zeroed and the
-                // other three OAM bytes are left as they were. A fresh entry
-                // draws nothing either way, so the port keeps the record's
-                // remaining bytes rather than inventing stale OAM.
-                self.boss_oam.push(BossOamCell {
-                    y: 0,
-                    x,
-                    tile,
-                    attr,
-                });
-                continue;
-            }
-            self.boss_oam.push(BossOamCell {
-                y,
-                x,
-                tile,
-                attr: attr ^ flags,
-            });
-        }
+        let draw = BossDraw {
+            sprite: st.b[B_SPRITE],
+            x: st.b[B_SCRX],
+            y: st.b[B_SCRY],
+            flags,
+        };
+        self.boss_draws.push(draw);
+        expand_boss_list(rec, draw, &mut self.boss_oam);
     }
 }
 

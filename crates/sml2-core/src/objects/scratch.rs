@@ -364,6 +364,17 @@ mod tests {
         assert!(sim.unported.is_empty(), "no unported path in the fight");
         assert_eq!(sim.slots[1].b[B_DEF], 21);
         assert!(!sim.boss_oam.is_empty(), "the staged fight renders");
+        // Its recorded draws replay to the same OAM, so another revision's
+        // lists can redraw the frame.
+        let mut replayed = Vec::new();
+        for &draw in &sim.boss_draws {
+            crate::objects::expand_boss_list(
+                tables.boss_oam_list(draw.sprite).unwrap(),
+                draw,
+                &mut replayed,
+            );
+        }
+        assert_eq!(replayed, sim.boss_oam);
     }
 
     /// The level-(re)load tail runs the same `$EC40` first, then `$EC17`

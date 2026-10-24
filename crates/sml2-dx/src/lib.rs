@@ -11,15 +11,16 @@ mod presentation;
 pub use bundle::{extract, Bundle, BANKS};
 pub use fingerprint::base_fingerprint;
 pub use presentation::{
-    LevelGraphics, MapGraphics, MapScreen, MapSprites, PlayerGraphics, Presentation, Screen,
+    BossArena, BossFight, LevelGraphics, MapGraphics, MapScreen, MapSprites, PlayerGraphics,
+    Presentation, Screen, VramCopy,
 };
 
 pub const REVISION: &str = "SML2DX v1.8.1 (UE v1.0)";
 pub const ROM_LEN: usize = 0x100000;
 /// User-supplied ROM built from the official IPS patch against UE v1.0.
 pub const ROM_SHA256: &str = "1dd604a91b9ee99ef381cc795da3ae28c72d04ba9de78b355df829e56ce49c46";
-pub const IMPORTER_VERSION: u32 = 6;
-pub const BUNDLE_SCHEMA: u32 = 6;
+pub const IMPORTER_VERSION: u32 = 7;
+pub const BUNDLE_SCHEMA: u32 = 7;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportError {

@@ -17,6 +17,80 @@ pub struct BossOamCell {
     pub attr: u8,
 }
 
+/// One record the boss render pass drew: the sprite id it looked up and the
+/// base and flip flags it walked the record with. A presentation with its own
+/// record lists replays the walk from these.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct BossDraw {
+    pub sprite: u8,
+    pub x: u8,
+    pub y: u8,
+    pub flags: u8,
+}
+
+/// `$66000`'s walk of one record list from `draw`'s base, appending the OAM
+/// entries it emits.
+pub fn expand_boss_list(rec: &[u8], draw: BossDraw, out: &mut Vec<BossOamCell>) {
+    let BossDraw {
+        x: base_x, flags, ..
+    } = draw;
+    let mut base_y = draw.y;
+    let mut i = 0usize;
+    while i < rec.len() {
+        let first = rec[i];
+        if first == 0x80 {
+            break; // $66039: `cp $80 / ret z`
+        }
+        if first == 0x88 {
+            if i + 1 >= rec.len() {
+                break;
+            }
+            if flags & 0x40 != 0 {
+                base_y = base_y.wrapping_add(rec[i + 1]);
+            }
+            i += 2;
+            continue;
+        }
+        if i + 3 >= rec.len() {
+            break;
+        }
+        let (dy, dx, tile, attr) = (rec[i], rec[i + 1], rec[i + 2], rec[i + 3]);
+        i += 4;
+        let y = if flags & 0x40 != 0 {
+            (!dy).wrapping_sub(7).wrapping_add(base_y)
+        } else {
+            dy.wrapping_add(base_y)
+        };
+        if y >= 0xA0 {
+            continue; // $6605F: off the screen vertically — the cell is skipped
+        }
+        let x = if flags & 0x20 != 0 {
+            (!dx).wrapping_sub(7).wrapping_add(base_x)
+        } else {
+            dx.wrapping_add(base_x)
+        };
+        if x >= 0xA8 {
+            // $66065: `dec l / ld [hl],0` — the Y byte is zeroed and the
+            // other three OAM bytes are left as they were. A fresh entry
+            // draws nothing either way, so the port keeps the record's
+            // remaining bytes rather than inventing stale OAM.
+            out.push(BossOamCell {
+                y: 0,
+                x,
+                tile,
+                attr,
+            });
+            continue;
+        }
+        out.push(BossOamCell {
+            y,
+            x,
+            tile,
+            attr: attr ^ flags,
+        });
+    }
+}
+
 // --- slot / staging byte offsets (ram.asm `$FFD0-$FFEF` map) ---
 pub const B_XHI: usize = 0;
 pub const B_XLO: usize = 1;

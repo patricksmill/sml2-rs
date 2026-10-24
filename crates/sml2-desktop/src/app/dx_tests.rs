@@ -336,6 +336,9 @@ pub(super) fn red_bundle() -> sml2_dx::Presentation {
                 room_metasprites: Default::default(),
             },
         },
+        arenas: Vec::new(),
+        arena_metatiles: Vec::new(),
+        boss_oam_lists: Vec::new(),
     }
 }
 
@@ -411,16 +414,16 @@ fn dx_mode_colors_every_level_of_the_normal_game() {
         &app.frame_image(sml2_runtime::render::motion::Smooth::OFF)
             .unwrap()
     ));
-    // A boss arena, and any DX failure, keep the native picture.
+    // A boss arena draws in DX too.
     let game = app.game.as_mut().unwrap();
     if let sml2_runtime::session::SessionState::InLevel(ctx) = &mut game.session.state {
         ctx.arena_loaded = true;
     }
-    assert!(!is_red(
+    assert!(is_red(
         &app.frame_image(sml2_runtime::render::motion::Smooth::OFF)
             .unwrap()
     ));
-    assert!(app.dx_message.is_empty(), "an arena is not a failure");
+    assert!(app.dx_message.is_empty());
     let game = app.game.as_mut().unwrap();
     game.session.debug_warp_level(0).unwrap();
     app.dx_bundle.as_mut().unwrap().levels[0]

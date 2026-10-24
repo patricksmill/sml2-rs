@@ -319,6 +319,7 @@ impl RouteAssets {
             bumpers: Vec::new(),
             fireballs: Vec::new(),
             boss_oam: Vec::new(),
+            boss_draws: Vec::new(),
         };
         let frames = tape.len() as u64;
         let map_node = sim.map_node;
