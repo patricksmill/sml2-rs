@@ -99,6 +99,35 @@ impl Menu {
             theme::option_row(ui, label, &value, selected)
         })
     }
+
+    /// Signed choice input: keyboard/controller arrows and the painted arrows
+    /// agree. Confirming or clicking the rest of the row advances one choice.
+    pub fn choice(&mut self, ui: &mut Ui, label: &str, text: String) -> i32 {
+        let adjustment = self.row_adjustment();
+        let mut pointer_direction = 0;
+        let activated = self.item(ui, |ui, selected| {
+            let response = theme::option_row(ui, label, &Value::Choice(text.clone()), selected);
+            if response.clicked_by(egui::PointerButton::Primary) {
+                let (previous, _) = theme::choice_arrows(ui, response.rect, &text);
+                pointer_direction = if response.interact_pointer_pos().is_some_and(|pos| {
+                    egui::Rect::from_center_size(previous, egui::vec2(28.0, response.rect.height()))
+                        .contains(pos)
+                }) {
+                    -1
+                } else {
+                    1
+                };
+            }
+            response
+        });
+        if pointer_direction != 0 {
+            pointer_direction
+        } else if adjustment != 0 {
+            adjustment
+        } else {
+            i32::from(activated)
+        }
+    }
     /// A tab strip occupying one row: left/right move between tabs while it is
     /// selected, and a click picks a tab directly. Returns whether `current` changed.
     pub fn tabs(&mut self, ui: &mut Ui, labels: &[&str], current: &mut usize) -> bool {
@@ -167,3 +196,6 @@ pub fn release_focus(ctx: &egui::Context) {
         }
     });
 }
+
+#[cfg(test)]
+mod tests;

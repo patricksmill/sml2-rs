@@ -144,6 +144,11 @@ tick; opposite directions cancel consistently across devices.
 
 Settings include **Fit to window**, 1x–8x output scale, fullscreen, volume/mute,
 controller selection, stick dead zone, and gameplay rebinding. Selecting a
+choice with the left or right key (or controller direction) moves backward or
+forward. The visible arrow controls do the same when clicked. Enter or clicking
+the row advances one choice; plain On/Off rows and the controller selector are
+buttons.
+Selecting a
 binding row captures a single keyboard key or controller button. Esc cancels;
 conflicts and reserved desktop shortcuts are reported. Rebinding one device
 keeps the other device's bindings; Reset controls restores the defaults.

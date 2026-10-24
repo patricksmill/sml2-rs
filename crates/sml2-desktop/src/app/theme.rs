@@ -154,6 +154,21 @@ pub enum Value {
     Text(String),
 }
 
+/// The two arrow centers, shared by painting and pointer hit testing.
+pub fn choice_arrows(ui: &Ui, rect: Rect, text: &str) -> (Pos2, Pos2) {
+    let width = ui
+        .painter()
+        .layout_no_wrap(text.into(), FontId::proportional(15.0), NAVY)
+        .size()
+        .x
+        .max(60.0);
+    let right = rect.right_center() - Vec2::new(14.0, 0.0);
+    (
+        right - Vec2::new(32.0 + width, 0.0),
+        right - Vec2::new(4.0, 0.0),
+    )
+}
+
 /// A full-width settings row: label left, value right.
 pub fn option_row(ui: &mut Ui, label: &str, value: &Value, selected: bool) -> Response {
     let (rect, response) = interact(ui, ROW_SIZE);
@@ -192,7 +207,8 @@ pub fn option_row(ui: &mut Ui, label: &str, value: &Value, selected: bool) -> Re
         Value::Choice(text) => {
             let galley = painter.layout_no_wrap(text.clone(), font.clone(), soft);
             let width = galley.size().x.max(60.0);
-            arrow(ui, right - Vec2::new(4.0, 0.0), false, soft);
+            let (previous, next) = choice_arrows(ui, face, text);
+            arrow(ui, next, false, soft);
             painter.text(
                 right - Vec2::new(18.0 + width / 2.0, 0.0),
                 Align2::CENTER_CENTER,
@@ -200,7 +216,7 @@ pub fn option_row(ui: &mut Ui, label: &str, value: &Value, selected: bool) -> Re
                 font,
                 soft,
             );
-            arrow(ui, right - Vec2::new(32.0 + width, 0.0), true, soft);
+            arrow(ui, previous, true, soft);
         }
         Value::Meter(level, text) => {
             painter.text(right, Align2::RIGHT_CENTER, text, font, soft);

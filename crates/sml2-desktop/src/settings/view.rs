@@ -41,12 +41,18 @@ impl CameraZoom {
         }
     }
     pub fn next(self) -> Self {
-        match self {
-            Self::Native => Self::Zoom125,
-            Self::Zoom125 => Self::Zoom150,
-            Self::Zoom150 => Self::Zoom200,
-            Self::Zoom200 => Self::Native,
-        }
+        self.cycle(1)
+    }
+
+    pub fn cycle(self, direction: i32) -> Self {
+        const ALL: [CameraZoom; 4] = [
+            CameraZoom::Native,
+            CameraZoom::Zoom125,
+            CameraZoom::Zoom150,
+            CameraZoom::Zoom200,
+        ];
+        let index = ALL.iter().position(|zoom| *zoom == self).unwrap_or(0) as i32;
+        ALL[(index + direction).rem_euclid(ALL.len() as i32) as usize]
     }
 }
 

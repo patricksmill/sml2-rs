@@ -541,6 +541,41 @@ fn the_frame_follows_the_view_settings() {
 }
 
 #[test]
+fn camera_zoom_moves_backward_and_forward_with_keyboard_and_controller() {
+    let (mut app, ctx, path) = app();
+    app.navigate(&ctx, Screen::Settings);
+    app.page = Page::Mods;
+    frame(&mut app, &ctx, vec![]);
+    app.menu.selected = 2; // Camera zoom, after tabs and Widescreen.
+    frame(&mut app, &ctx, vec![key(egui::Key::ArrowLeft, true)]);
+    assert_eq!(
+        app.settings.camera_zoom,
+        crate::settings::CameraZoom::Zoom200
+    );
+    frame(&mut app, &ctx, vec![key(egui::Key::ArrowLeft, false)]);
+    frame(&mut app, &ctx, vec![key(egui::Key::ArrowRight, true)]);
+    assert_eq!(
+        app.settings.camera_zoom,
+        crate::settings::CameraZoom::Native
+    );
+    frame(&mut app, &ctx, vec![key(egui::Key::ArrowRight, false)]);
+    app.input.event(Button::Pad(PadButton::Left), true);
+    frame(&mut app, &ctx, vec![]);
+    assert_eq!(
+        app.settings.camera_zoom,
+        crate::settings::CameraZoom::Zoom200
+    );
+    app.input.event(Button::Pad(PadButton::Left), false);
+    app.input.event(Button::Pad(PadButton::Right), true);
+    frame(&mut app, &ctx, vec![]);
+    assert_eq!(
+        app.settings.camera_zoom,
+        crate::settings::CameraZoom::Native
+    );
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
 fn mods_rows_cycle_the_view_settings() {
     let (mut app, ctx, path) = app();
     app.screen = Screen::Settings;

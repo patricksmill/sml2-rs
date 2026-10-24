@@ -251,14 +251,9 @@ impl DesktopApp {
             self.fit_to_window(!fit);
         }
         if let Zoom::Integer(scale) = self.settings.zoom {
-            let adjust = self.menu.row_adjustment();
-            if self
-                .menu
-                .row(ui, "Window scale", Value::Choice(format!("{scale}×")))
-                || adjust != 0
-            {
-                let next =
-                    (i32::from(scale) - 1 + if adjust != 0 { adjust } else { 1 }).rem_euclid(8) + 1;
+            let adjust = self.menu.choice(ui, "Window scale", format!("{scale}×"));
+            if adjust != 0 {
+                let next = (i32::from(scale) - 1 + adjust).rem_euclid(8) + 1;
                 self.zoom(ctx, Some(next as u8));
             }
         }
@@ -277,14 +272,11 @@ impl DesktopApp {
             self.fullscreen(ctx);
         }
         theme::section(ui, "COLOR");
-        let adjust = self.menu.row_adjustment();
-        if self.menu.row(
-            ui,
-            "Palette filter",
-            Value::Choice(self.settings.filter.label()),
-        ) || adjust != 0
-        {
-            self.cycle_filter(if adjust != 0 { adjust } else { 1 });
+        let adjust = self
+            .menu
+            .choice(ui, "Palette filter", self.settings.filter.label());
+        if adjust != 0 {
+            self.cycle_filter(adjust);
         }
         if let Some(preview) = &mut self.filter_preview {
             ui.add_space(4.0);
@@ -301,23 +293,18 @@ impl DesktopApp {
     /// Settings → Mods: the enlarged view.
     fn view_controls(&mut self, ui: &mut Ui) {
         theme::section(ui, "VIEW");
-        let adjust = self.menu.row_adjustment();
         let widescreen = self.settings.widescreen;
         if self
             .menu
-            .row(ui, "Widescreen", Value::Choice(widescreen.label().into()))
-            || adjust != 0
+            .choice(ui, "Widescreen", widescreen.label().into())
+            != 0
         {
             self.settings.widescreen = widescreen.next();
         }
-        let adjust = self.menu.row_adjustment();
         let zoom = self.settings.camera_zoom;
-        if self
-            .menu
-            .row(ui, "Camera zoom", Value::Choice(zoom.label().into()))
-            || adjust != 0
-        {
-            self.settings.camera_zoom = zoom.next();
+        let adjust = self.menu.choice(ui, "Camera zoom", zoom.label().into());
+        if adjust != 0 {
+            self.settings.camera_zoom = zoom.cycle(adjust);
         }
         if self.menu.row(
             ui,
@@ -366,7 +353,7 @@ impl DesktopApp {
         if self.menu.row(
             ui,
             "Device",
-            Value::Choice(self.controllers.name().to_string()),
+            Value::Text(self.controllers.name().to_string()),
         ) {
             self.settings.preferred_controller = self.controllers.cycle(&mut self.input);
             self.input.suppress_until_release();

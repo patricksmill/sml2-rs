@@ -1,5 +1,5 @@
 use super::file_picker::{FilePicker, InputKind, PickerResult};
-use super::theme::{self, Value};
+use super::theme;
 use super::DesktopApp;
 use crate::dx_import::{self, Event, Worker};
 use eframe::egui::{Context, Ui};
@@ -143,10 +143,8 @@ impl DesktopApp {
     /// Settings → Mods keeps the character. Import and the DX switch live on the library.
     pub(super) fn dx_controls(&mut self, ui: &mut Ui) {
         theme::section(ui, "SML2DX");
-        let adjust = self.menu.row_adjustment();
         let character = self.settings.character;
-        let shown = Value::Choice(character.label().into());
-        if self.menu.row(ui, "Character", shown) || adjust != 0 {
+        if self.menu.choice(ui, "Character", character.label().into()) != 0 {
             self.settings.character = character.next();
         }
         if !self.dx_message.is_empty() {
