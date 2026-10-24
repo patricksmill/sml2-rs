@@ -14,14 +14,17 @@
 //! 3. Emit one structured manifest per level plus a usage index:
 //!    `extracted/levels/levelNN.manifest.json` and `index.json`.
 
-mod cartridge;
-mod castle;
-mod ending;
-mod front_end;
+use sml2_extract::cartridge;
+use sml2_extract::castle;
+use sml2_extract::ending;
+use sml2_extract::front_end;
 use sml2_extract::map;
-mod objects;
-mod parse;
-mod render;
+use sml2_extract::objects;
+use sml2_extract::parse;
+use sml2_extract::render;
+use sml2_extract::vanilla::{
+    decode_object_stream, decompress_level, hex_encode, read_packed_stream,
+};
 
 use std::env;
 use std::error::Error;
@@ -31,9 +34,9 @@ use std::path::{Path, PathBuf};
 use sml2_core::collision;
 use sml2_core::level::{
     GraphicsRef, HudStrip, IndexLevel, IndexTilesetMap, LayoutSummary, LevelHeader, LevelLayout,
-    LevelManifest, LevelProperties, LevelsIndex, MetatileTable, ObjectStream, SpawnRecord,
-    TileAnim, TilesetMapRef, INDEX_SCHEMA, LAYOUT_HEIGHT, LAYOUT_SIZE, LAYOUT_WIDTH,
-    MANIFEST_SCHEMA, METATILE_COUNT,
+    LevelManifest, LevelProperties, LevelsIndex, MetatileTable, ObjectStream, TileAnim,
+    TilesetMapRef, INDEX_SCHEMA, LAYOUT_HEIGHT, LAYOUT_SIZE, LAYOUT_WIDTH, MANIFEST_SCHEMA,
+    METATILE_COUNT,
 };
 use sml2_core::object;
 
@@ -43,53 +46,6 @@ const METATILE_TABLE_COUNT: usize = 28;
 const TILEANIM_TABLE_ROM: usize = 0x35EA;
 /// Bank-$1D tile-animation frame data: 16 rows x 4 phases x 64 bytes.
 const TILEANIM_ROWS_ROM: usize = 0x76680;
-
-/// Decompresses SML2 level RLE format (home.asm: Read_Level_Data, $0386).
-///
-/// Control byte bit 7 clear: literal byte. Bit 7 set: output `c & $7F`, then
-/// a count byte (0 = a full 256-value pass) of repeats. Stops at exactly
-/// `$3000` bytes.
-pub fn decompress_level(input: &[u8]) -> Result<Vec<u8>, String> {
-    let mut out = Vec::with_capacity(LAYOUT_SIZE);
-    let mut in_idx = 0;
-
-    while out.len() < LAYOUT_SIZE && in_idx < input.len() {
-        let b = input[in_idx];
-        in_idx += 1;
-
-        if (b & 0x80) == 0 {
-            out.push(b);
-        } else {
-            let val = b & 0x7F;
-            out.push(val);
-            if out.len() >= LAYOUT_SIZE {
-                break;
-            }
-            if in_idx >= input.len() {
-                return Err("Unexpected EOF while reading RLE repeat count".to_string());
-            }
-            let count = input[in_idx];
-            in_idx += 1;
-            let repeat = if count == 0 { 256 } else { count as usize };
-            for _ in 0..repeat {
-                out.push(val);
-                if out.len() >= LAYOUT_SIZE {
-                    break;
-                }
-            }
-        }
-    }
-
-    if out.len() == LAYOUT_SIZE {
-        Ok(out)
-    } else {
-        Err(format!(
-            "Decompressed {} bytes, expected {}",
-            out.len(),
-            LAYOUT_SIZE
-        ))
-    }
-}
 
 /// Decodes a 16-byte GB 2bpp slice into an 8x8 grid of color indices (0..=3).
 #[allow(dead_code)]
@@ -105,75 +61,6 @@ pub fn decode_2bpp_tile(bytes: &[u8; 16]) -> [u8; 64] {
         }
     }
     tile
-}
-
-/// Read one packed spawn stream from the ROM: 3-byte packs, terminated by a
-/// `$FF` control byte (returned inclusive).
-fn read_packed_stream(rom: &[u8], start: usize) -> Result<Vec<u8>, String> {
-    let mut out = Vec::new();
-    let mut p = start;
-    loop {
-        let c = *rom
-            .get(p)
-            .ok_or_else(|| format!("spawn stream at ${start:05X}: ran past the end of the ROM"))?;
-        out.push(c);
-        if c == 0xFF {
-            return Ok(out);
-        }
-        let b2 = *rom
-            .get(p + 1)
-            .ok_or_else(|| format!("spawn stream at ${start:05X}: truncated pack"))?;
-        let b3 = *rom
-            .get(p + 2)
-            .ok_or_else(|| format!("spawn stream at ${start:05X}: truncated pack"))?;
-        out.push(b2);
-        out.push(b3);
-        p += 3;
-    }
-}
-
-/// Expand 3-byte packs into 6-byte spawn records (mirror of `$EBBB`).
-///
-/// Pack `c b2 b3` becomes record `[r0..r5]`:
-/// `r0 = c & $0F` (X hi), `r1 = (b2 & $1F) << 3` (X lo),
-/// `r2 = b3 >> 7` (mode flag), `r3 = (b3 >> 5) & 3` (Y hi),
-/// `r4 = (b3 & $1F) << 3` (Y lo),
-/// `r5 = ((c >> 5) & 7) * 8 + ($40 if c bit 4) + ((b2 >> 5) & 7)` (anim).
-fn decode_object_stream(packed: &[u8]) -> Result<Vec<SpawnRecord>, String> {
-    let mut records = Vec::new();
-    let mut p = 0;
-    while p < packed.len() {
-        let c = packed[p];
-        if c == 0xFF {
-            break;
-        }
-        if p + 2 >= packed.len() {
-            return Err("spawn stream: truncated pack at the stream end".to_string());
-        }
-        let b2 = packed[p + 1];
-        let b3 = packed[p + 2];
-        let r0 = c & 0x0F;
-        let r1 = (b2 & 0x1F) << 3;
-        let r2 = (b3 >> 7) & 0x01;
-        let r3 = (b3 >> 5) & 0x03;
-        let r4 = (b3 & 0x1F) << 3;
-        let r5 = ((c >> 5) & 0x07) * 8 + if c & 0x10 != 0 { 0x40 } else { 0 } + ((b2 >> 5) & 0x07);
-        records.push(SpawnRecord {
-            x: ((r0 as u16) << 8) | r1 as u16,
-            y: ((r3 as u16) << 8) | r4 as u16,
-            anim_index: r5,
-            mode_flag: r2,
-            sprite_id: 0,
-            hitbox: [0; 4],
-            raw: [r0, r1, r2, r3, r4, r5],
-        });
-        p += 3;
-    }
-    Ok(records)
-}
-
-fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Workspace root (`sml2-rs/`), via this crate's manifest dir.

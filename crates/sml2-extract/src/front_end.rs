@@ -37,8 +37,12 @@ const FILE_SELECT_BLOCKS: [(usize, usize, usize); 4] = [
 const MARIO_LEN: usize = 0x800;
 
 fn take<'a>(rom: &'a [u8], offset: usize, len: usize, what: &str) -> Result<&'a [u8], String> {
-    rom.get(offset..offset + len)
-        .ok_or_else(|| format!("{what}: truncated at ROM ${offset:05X}..${:05X}", offset + len))
+    rom.get(offset..offset + len).ok_or_else(|| {
+        format!(
+            "{what}: truncated at ROM ${offset:05X}..${:05X}",
+            offset + len
+        )
+    })
 }
 
 /// Compose both screens from the ROM plus the decomp's `gfx/mario.2bpp`.
@@ -100,6 +104,25 @@ pub fn emit(rom: &[u8], decomp: &Path, extracted: &Path) -> Result<(), Box<dyn E
     Ok(())
 }
 
+pub fn emit_rom(rom: &[u8], extracted: &Path) -> Result<(), Box<dyn Error>> {
+    // `GFX_Mario` is at ROM `$18000` (`main.asm`).
+    let mario = rom
+        .get(0x18000..0x18000 + MARIO_LEN)
+        .ok_or("GFX_Mario is outside the ROM")?;
+    let assets = extract(rom, mario)?;
+    let dir = extracted.join("frontend");
+    fs::create_dir_all(&dir)?;
+    fs::write(dir.join("title_vram.bin"), assets.title_vram())?;
+    fs::write(dir.join("title_tilemap.bin"), assets.title_tilemap())?;
+    fs::write(dir.join("file_select_vram.bin"), assets.file_select_vram())?;
+    fs::write(
+        dir.join("file_select_tilemap.bin"),
+        assets.file_select_tilemap(),
+    )?;
+    fs::write(dir.join("demo_tapes.bin"), assets.demo_tapes())?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,7 +157,10 @@ mod tests {
     fn both_windows_are_composed_from_the_source_slices() {
         let (rom, mario) = synthetic();
         let assets = extract(&rom, &mario).unwrap();
-        assert_eq!(assets.title_vram(), &rom[TITLE_VRAM_ROM..TITLE_VRAM_ROM + VRAM_LEN]);
+        assert_eq!(
+            assets.title_vram(),
+            &rom[TITLE_VRAM_ROM..TITLE_VRAM_ROM + VRAM_LEN]
+        );
         assert_eq!(
             assets.title_tilemap(),
             &rom[TITLE_TILEMAP_ROM..TITLE_TILEMAP_ROM + TILEMAP_LEN]
@@ -158,7 +184,10 @@ mod tests {
     fn truncated_sources_and_a_wrong_mario_length_are_rejected() {
         let (rom, mario) = synthetic();
         assert!(extract(&rom[..ROM_LEN - 1], &mario).is_err());
-        assert!(extract(&rom[..0x159E5], &mario).is_err(), "title tilemap cut");
+        assert!(
+            extract(&rom[..0x159E5], &mario).is_err(),
+            "title tilemap cut"
+        );
         assert!(extract(&rom, &mario[..MARIO_LEN - 1]).is_err());
     }
 }
