@@ -719,6 +719,15 @@ pub fn extract(rom: &[u8], dest: &Path) -> Result<&'static Revision, String> {
     crate::castle::emit(rom, dest).map_err(|e| e.to_string())?;
     crate::front_end::emit_rom(rom, dest).map_err(|e| e.to_string())?;
     emit_game(rom, dest)?;
+    // Bank 4 (`$10000..$14000`) is `audio/music_bank04.bin`. A short ROM
+    // fails `identify` before this write; still refuse a partial file.
+    if rom.len() < 0x14000 {
+        return Err("ROM is shorter than $14000".into());
+    }
+    write_out(
+        &dest.join("audio/music_bank04.bin"),
+        &rom[0x10000..0x14000],
+    )?;
     remove_pngs(dest)?;
     Ok(revision)
 }
@@ -1361,13 +1370,32 @@ mod tests {
         assert!(files
             .iter()
             .any(|path| path.ends_with("levels/level01.manifest.json")));
-        for relative in files {
+        for relative in &files {
             assert!(!relative.ends_with(".png"), "{relative}");
             assert!(!relative.starts_with("renders/"), "{relative}");
-            let left = std::fs::read(out.join(&relative)).unwrap();
-            let right = std::fs::read(std::path::Path::new(&extracted).join(&relative))
+            let left = std::fs::read(out.join(relative)).unwrap();
+            let right = std::fs::read(std::path::Path::new(&extracted).join(relative))
                 .unwrap_or_else(|error| panic!("{relative}: {error}"));
             assert_eq!(left, right, "{relative}");
+        }
+        let extracted_root = std::path::Path::new(&extracted);
+        let mut reference = Vec::new();
+        walk(extracted_root, extracted_root, &mut reference);
+        for relative in reference {
+            if relative.starts_with("renders/") || relative.ends_with(".png") {
+                continue;
+            }
+            let produced = out.join(&relative);
+            assert!(
+                produced.is_file(),
+                "{relative} missing from ROM-only output"
+            );
+            assert_eq!(
+                std::fs::read(&produced).unwrap(),
+                std::fs::read(extracted_root.join(&relative)).unwrap(),
+                "{relative}"
+            );
+            assert!(files.iter().any(|path| path == &relative), "{relative}");
         }
     }
 
