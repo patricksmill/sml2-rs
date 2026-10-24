@@ -121,19 +121,3 @@ fn file_select_backdrop_repeats_the_blocks_and_runs_pipes_on() {
     assert_eq!(file_select_backdrop(&map, 3, 20, 1), ((3, 17), 1));
     assert_eq!(file_select_backdrop(&map, 2, 20, 1), ((0, 0), 1));
 }
-
-#[test]
-fn hall_backdrop_opens_the_room_to_the_left() {
-    let map = vec![0u8; TILEMAP_LEN];
-    // The three save pipes and Clear stay the real map.
-    assert_eq!(hall_backdrop(&map, 10, 4, 1), ((10, 4), 1));
-    assert_eq!(hall_backdrop(&map, 2, 16, 0), ((2, 16), 0));
-    // Left of column 2: open sky, brick ceiling, brick floor. Not pipes.
-    assert_eq!(hall_backdrop(&map, 0, 4, 2), ((4, 4), 2));
-    assert_eq!(hall_backdrop(&map, -1, 4, 2), ((4, 4), 2));
-    assert_eq!(hall_backdrop(&map, -1, 0, 3), ((1, 0), 3));
-    assert_eq!(hall_backdrop(&map, -2, 16, 7), ((0, 0), 7));
-    assert_eq!(hall_backdrop(&map, -1, 16, 0), ((1, 0), 0));
-    assert_eq!(hall_backdrop(&map, 0, 17, 4), ((0, 1), 4));
-    assert_eq!(hall_backdrop(&map, 1, 17, 4), ((1, 1), 4));
-}

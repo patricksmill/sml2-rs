@@ -454,71 +454,7 @@ fn mods_enter_on_the_old_dx_row_does_not_start_an_import() {
 }
 
 #[test]
-fn dx_mode_colors_the_settings_hall() {
-    use sml2_core::hardware_palettes::rgb555;
-    let (mut app, _, path) = super::tests::app();
-    app.game.as_mut().unwrap().session.enter_file_select();
-    let mut dx = red_bundle();
-    dx.file_select.bg_palettes[6] = 0;
-    dx.file_select.bg_palettes[7] = 0x7c; // dark sign ink is blue
-    dx.file_select.bg_palettes[8] = 0xe0;
-    dx.file_select.bg_palettes[9] = 0x03;
-    dx.file_select.attributes[0] = 1;
-    dx.file_select.attributes[1] = 1;
-    dx.file_select.attributes[32] = 1;
-    dx.file_select.attributes[33] = 1;
-    app.dx_bundle = Some(dx);
-    app.settings.dx_mode = true;
-    app.settings.widescreen = crate::settings::Widescreen::Off;
-    app.settings.camera_zoom = crate::settings::CameraZoom::Native;
-    let mut hall = hall::Hall::enter();
-    hall.mario = hall::pedestal_x(1);
-    hall.camera = -72;
-    app.hall = Some(hall);
-    let image = app.frame_image(Smooth::OFF).unwrap();
-    assert_eq!(
-        image.pixels[0],
-        Color32::from_rgb(rgb555(0x03e0)[0], rgb555(0x03e0)[1], rgb555(0x03e0)[2])
-    );
-    assert_eq!(
-        image.pixels[32 * 160],
-        Color32::from_rgb(rgb555(0x001f)[0], rgb555(0x001f)[1], rgb555(0x001f)[2])
-    );
-    assert!(
-        image.pixels[48 * 160..72 * 160]
-            .iter()
-            .any(|&pixel| pixel == Color32::BLUE),
-        "the option sign uses DX background color 3"
-    );
-    let _ = std::fs::remove_dir_all(path);
-}
-
-#[test]
-fn resting_on_the_hall_door_keeps_the_live_file_select_picture() {
-    let (mut app, _, path) = super::tests::app();
-    app.dx_bundle = Some(red_bundle());
-    app.game.as_mut().unwrap().session.enter_file_select();
-    for _ in 0..64 {
-        app.game
-            .as_mut()
-            .unwrap()
-            .session
-            .advance(Default::default());
-    }
-    for dx_mode in [false, true] {
-        app.settings.dx_mode = dx_mode;
-        app.hall = None;
-        let file_select = app.frame_image(Smooth::OFF).unwrap();
-        app.hall = Some(hall::Hall::enter());
-        let doorway = app.frame_image(Smooth::OFF).unwrap();
-        assert_eq!(doorway.size, file_select.size);
-        assert!(doorway.pixels == file_select.pixels, "DX mode {dx_mode}");
-    }
-    let _ = std::fs::remove_dir_all(path);
-}
-
-#[test]
-fn file_select_and_hall_expand_with_widescreen_and_camera_zoom() {
+fn file_select_expands_with_widescreen_and_camera_zoom() {
     use crate::settings::{CameraZoom, Widescreen};
     let (mut app, _, path) = super::tests::app();
     app.dx_bundle = Some(red_bundle());
@@ -532,45 +468,38 @@ fn file_select_and_hall_expand_with_widescreen_and_camera_zoom() {
     }
     for dx_mode in [false, true] {
         app.settings.dx_mode = dx_mode;
-        for in_hall in [false, true] {
-            app.hall = in_hall.then(|| {
-                let mut h = hall::Hall::enter();
-                h.walk = -32;
-                h
-            });
-            app.settings.widescreen = Widescreen::Off;
-            app.settings.camera_zoom = CameraZoom::Native;
-            let native = app.frame_image(Smooth::OFF).unwrap();
-            for (wide, zoom) in [
-                (Widescreen::Wide16x9, CameraZoom::Native),
-                (Widescreen::Off, CameraZoom::Zoom125),
-                (Widescreen::Wide16x9, CameraZoom::Zoom150),
-                (Widescreen::Wide16x9, CameraZoom::Zoom200),
-            ] {
-                app.settings.widescreen = wide;
-                app.settings.camera_zoom = zoom;
-                let view = app.settings.view();
-                let frame = app.frame_image(Smooth::OFF).unwrap();
-                assert_eq!(frame.size, [view.0, view.1]);
-                let boxed = sml2_runtime::render::view::letterbox(
-                    &native.pixels,
-                    (160, 144),
-                    view,
-                    Color32::BLACK,
-                );
-                assert_ne!(
-                    frame.pixels, boxed,
-                    "the room fills {view:?}, DX {dx_mode}, hall {in_hall}"
-                );
-                let (mx, my) = sml2_runtime::render::view::margin(view);
-                for y in 0..144 {
-                    for x in 0..160 {
-                        assert_eq!(
-                            frame.pixels[(y + my as usize) * view.0 + x + mx as usize],
-                            native.pixels[y * 160 + x],
-                            "same room anchor"
-                        );
-                    }
+        app.settings.widescreen = Widescreen::Off;
+        app.settings.camera_zoom = CameraZoom::Native;
+        let native = app.frame_image(Smooth::OFF).unwrap();
+        for (wide, zoom) in [
+            (Widescreen::Wide16x9, CameraZoom::Native),
+            (Widescreen::Off, CameraZoom::Zoom125),
+            (Widescreen::Wide16x9, CameraZoom::Zoom150),
+            (Widescreen::Wide16x9, CameraZoom::Zoom200),
+        ] {
+            app.settings.widescreen = wide;
+            app.settings.camera_zoom = zoom;
+            let view = app.settings.view();
+            let frame = app.frame_image(Smooth::OFF).unwrap();
+            assert_eq!(frame.size, [view.0, view.1]);
+            let boxed = sml2_runtime::render::view::letterbox(
+                &native.pixels,
+                (160, 144),
+                view,
+                Color32::BLACK,
+            );
+            assert_ne!(
+                frame.pixels, boxed,
+                "the file select fills {view:?}, DX {dx_mode}"
+            );
+            let (mx, my) = sml2_runtime::render::view::margin(view);
+            for y in 0..144 {
+                for x in 0..160 {
+                    assert_eq!(
+                        frame.pixels[(y + my as usize) * view.0 + x + mx as usize],
+                        native.pixels[y * 160 + x],
+                        "same room anchor"
+                    );
                 }
             }
         }

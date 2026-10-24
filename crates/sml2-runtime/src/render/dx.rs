@@ -219,54 +219,6 @@ impl Session {
         Ok(extended)
     }
 
-    pub fn render_dx_hall(
-        &self,
-        dx: &Presentation,
-        character: Character,
-        scroll_x: i32,
-        mario: (u8, u8, u8),
-    ) -> Result<Vec<[u8; 3]>, String> {
-        self.render_dx_hall_view(dx, character, (160, 144), scroll_x, mario)
-    }
-
-    /// The settings room fills widescreen and zoomed-out views.
-    pub fn render_dx_hall_view(
-        &self,
-        dx: &Presentation,
-        character: Character,
-        view: (usize, usize),
-        scroll_x: i32,
-        mario: (u8, u8, u8),
-    ) -> Result<Vec<[u8; 3]>, String> {
-        use sml2_core::actor::ScreenPosition;
-        use sml2_core::front_end::screen::hall_backdrop;
-        use sml2_core::player::{append_cells, CellStyle};
-        let player = dx.player(character, 0);
-        let mut tables = self.assets.object_tables.clone();
-        tables.player_mappings = player.mappings.clone();
-        let mut cells = Vec::new();
-        let _ = append_cells(
-            &tables,
-            mario.2,
-            ScreenPosition {
-                x: mario.0,
-                y: mario.1,
-            },
-            CellStyle::default(),
-            &mut cells,
-        );
-        screen_layers(
-            &dx.file_select,
-            &cells,
-            Some(player),
-            view,
-            hall_backdrop,
-            scroll_x,
-            false,
-            true,
-        )
-    }
-
     /// `$30000`'s screen with its OAM: the pipe tallies, the Easy banner, the
     /// erase hop and the cursor, through DX's player mappings and graphics.
     fn render_dx_file_select(
@@ -275,30 +227,6 @@ impl Session {
         dx: &Presentation,
         character: Character,
         view: (usize, usize),
-    ) -> Result<Vec<[u8; 3]>, String> {
-        self.render_dx_file_select_with_backdrop(fs, dx, character, view, false)
-    }
-
-    /// File-select sprites in the open room shared with the desktop hall.
-    pub fn render_dx_file_select_room(
-        &self,
-        dx: &Presentation,
-        character: Character,
-        view: (usize, usize),
-    ) -> Result<Vec<[u8; 3]>, String> {
-        let SessionState::FileSelect(fs) = &self.state else {
-            return Err("the settings room requires file select".into());
-        };
-        self.render_dx_file_select_with_backdrop(fs, dx, character, view, true)
-    }
-
-    fn render_dx_file_select_with_backdrop(
-        &self,
-        fs: &sml2_core::front_end::FileSelect,
-        dx: &Presentation,
-        character: Character,
-        view: (usize, usize),
-        room: bool,
     ) -> Result<Vec<[u8; 3]>, String> {
         let player = dx.player(character, 0);
         let mut tables = self.assets.object_tables.clone();
@@ -336,19 +264,13 @@ impl Session {
         // cursor so the walk stays on screen instead of leaving through the edge.
         // Clamp before widening: signed saturation would permit negative scroll.
         let scroll_x = i32::from(fs.cursor().0.saturating_sub(152));
-        screen_layers(
+        screen(
             &dx.file_select,
             &cells,
             Some(player),
             view,
-            if room {
-                sml2_core::front_end::screen::hall_backdrop
-            } else {
-                file_select_backdrop
-            },
+            file_select_backdrop,
             scroll_x,
-            true,
-            room,
         )
     }
 }
@@ -651,20 +573,6 @@ fn screen(
     backdrop: Backdrop,
     scroll_x: i32,
 ) -> Result<Vec<[u8; 3]>, String> {
-    screen_layers(screen, cells, player, view, backdrop, scroll_x, true, false)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn screen_layers(
-    screen: &Screen,
-    cells: &[Cell],
-    player: Option<&sml2_dx::PlayerGraphics>,
-    view: (usize, usize),
-    backdrop: Backdrop,
-    scroll_x: i32,
-    cells_follow_scroll: bool,
-    backdrop_everywhere: bool,
-) -> Result<Vec<[u8; 3]>, String> {
     use super::view::{enlarged, margin, NATIVE};
     let (view, at) = if enlarged(view) {
         (view, margin(view))
@@ -685,8 +593,7 @@ fn screen_layers(
         for x in 0..view.0 as i32 {
             let nx = x - at.0;
             let world_x = nx + scroll_x;
-            let on_map =
-                !backdrop_everywhere && (0..160).contains(&world_x) && (0..144).contains(&ny);
+            let on_map = (0..160).contains(&world_x) && (0..144).contains(&ny);
             let ((col, row), line) = if on_map {
                 (
                     ((world_x / 8) as usize, (ny / 8) as usize),
@@ -716,7 +623,7 @@ fn screen_layers(
         }
     }
     let mut layers = super::layers::Layers::new(view, 0, background[0]);
-    let cell_scroll = if cells_follow_scroll { scroll_x } else { 0 };
+    let cell_scroll = scroll_x;
     push_cells(
         &mut layers.cells,
         banks,
@@ -1443,94 +1350,6 @@ mod tests {
         .unwrap();
         assert_eq!(out[0], [0, 0, 0], "flipped: bank 1's row 7 is color 0");
         assert_eq!(out[1], rgb555(0x7fff), "the sprite reads bank 1's color 2");
-    }
-
-    #[test]
-    fn dx_hall_colors_the_open_room_and_not_the_bricks() {
-        use sml2_core::front_end::screen::hall_backdrop;
-        use sml2_core::hardware_palettes::rgb555;
-        let mut bg = [0x1f, 0].repeat(32);
-        bg[8] = 0xe0;
-        bg[9] = 0x03;
-        let mut attributes = vec![0u8; 0x400];
-        attributes[0] = 1;
-        attributes[1] = 1;
-        attributes[32] = 1;
-        attributes[33] = 1;
-        let picture = Screen {
-            vram: [vec![0; 0x1800], vec![0; 0x1800]],
-            tilemap: vec![0; 0x400],
-            attributes,
-            bg_palettes: bg,
-            obj_palettes: [0xe0, 3].repeat(32),
-        };
-        let frame = screen_layers(
-            &picture,
-            &[],
-            None,
-            (160, 144),
-            hall_backdrop,
-            -72,
-            false,
-            true,
-        )
-        .unwrap();
-        assert_eq!(frame[0], rgb555(0x03e0), "ceiling bricks use palette 1");
-        assert_eq!(
-            frame[32 * 160],
-            rgb555(0x001f),
-            "the open room is not the brick checker"
-        );
-        let doorway = screen_layers(
-            &picture,
-            &[],
-            None,
-            (160, 144),
-            hall_backdrop,
-            0,
-            false,
-            true,
-        )
-        .unwrap();
-        assert_eq!(
-            doorway[32 * 160],
-            rgb555(0x001f),
-            "columns zero and one also open into the room"
-        );
-    }
-
-    #[test]
-    fn dx_hall_scroll_keeps_mario_in_screen_space() {
-        use sml2_core::front_end::screen::hall_backdrop;
-        let mut picture = Screen {
-            vram: [vec![0; 0x1800], vec![0; 0x1800]],
-            tilemap: vec![0; 0x400],
-            attributes: vec![0; 0x400],
-            bg_palettes: [0x1f, 0].repeat(32),
-            obj_palettes: [0xe0, 3].repeat(32),
-        };
-        for row in 0..8 {
-            picture.vram[0][row * 2] = 255;
-        }
-        let mario = Cell {
-            x: 56,
-            y: 64,
-            tile: 0,
-            attr: 0,
-        };
-        let frame = screen_layers(
-            &picture,
-            &[mario],
-            None,
-            (160, 144),
-            hall_backdrop,
-            -72,
-            false,
-            true,
-        )
-        .unwrap();
-        assert_eq!(frame[48 * 160 + 48], [0, 255, 0]);
-        assert_eq!(frame[48 * 160 + 120], [255, 0, 0]);
     }
 
     #[test]

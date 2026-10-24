@@ -865,47 +865,6 @@ fn file_select_camera_stays_at_zero_across_the_three_pipes_and_clear() {
 }
 
 #[test]
-fn dx_settings_room_fills_the_view_and_projects_sprites_beyond_oam_width() {
-    use sml2_core::object::MappingEntry;
-    let mut bundle = synthetic_bundle();
-    bundle.players[0][0].normal[..16].copy_from_slice(&[255, 0].repeat(8));
-    bundle.players[0][0].mappings = vec![
-        vec![MappingEntry {
-            x: 0,
-            y: 0,
-            tile: 0,
-            attr: 0
-        }];
-        242
-    ];
-    let mut game = session();
-    game.enter_file_select();
-    for _ in 0..64 {
-        game.advance(FrameInput::default());
-    }
-    let hall = game
-        .render_dx_hall_view(&bundle, Mario, (512, 288), -200, (152, 124, 4))
-        .unwrap();
-    assert_eq!(hall.len(), 512 * 288);
-    assert_eq!(
-        hall[180 * 512 + 320],
-        [0, 255, 0],
-        "Mario is offset after OAM expansion"
-    );
-    assert_eq!(hall[0], RED, "the room fills the enlarged picture");
-    let files = game
-        .render_dx_file_select_room(&bundle, Mario, (512, 288))
-        .unwrap();
-    assert_eq!(files.len(), 512 * 288);
-    assert_eq!(
-        files[180 * 512 + 208],
-        [0, 255, 0],
-        "the live file-select cursor uses the same anchor"
-    );
-    assert_eq!(files[0], RED);
-}
-
-#[test]
 fn minigame_surrounds_use_room_color_instead_of_unused_map_columns() {
     let mut bundle = synthetic_bundle();
     for screen in 9..=14 {

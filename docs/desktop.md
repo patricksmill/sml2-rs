@@ -35,7 +35,7 @@ Play starts the game with the selected DX Mode setting.
 Play opens the game's own
 title screen. START, or a click on the
 picture, opens the file select: Mario walks to a pipe and ducks into it, and
-he jumps on Clear. Walk left from the first pipe to open the settings hall.
+he jumps on Clear. Settings are available from the launcher and desktop menus.
 F10 shows or hides the toolbar. Its **Display**, **Audio**, **Controls**,
 **Mods**, **Game**, and **Debug** tabs open the matching settings page.
 Esc, or the toolbar Menu button, opens the

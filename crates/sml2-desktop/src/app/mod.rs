@@ -12,7 +12,7 @@ use eframe::egui::{
     self, Color32, ColorImage, Context, RawInput, TextureHandle, TextureOptions, ViewportCommand,
 };
 use sml2_core::player_sim::PlayerKeys;
-use sml2_core::video::{OutputMode, PalettePixel};
+use sml2_core::video::PalettePixel;
 use sml2_runtime::content::{ExtractedContent, SessionAssets};
 use sml2_runtime::render::motion::{pick_scale, Smooth};
 #[cfg(test)]
@@ -20,14 +20,12 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 mod castle_backdrop;
-mod catalog;
 mod controls;
 mod debug;
 mod dx;
 mod editor;
 mod file_picker;
 mod filter_preview;
-mod hall;
 mod installation;
 mod launcher;
 mod panels;
@@ -110,9 +108,6 @@ pub struct DesktopApp {
     game_rect: [u32; 4],
     aim: Option<pointer::Aim>,
     start_click: bool,
-    hall: Option<hall::Hall>,
-    prev_hall_a: bool,
-    prev_hall_left: bool,
     validation_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
     library: Library,
     vanilla_check: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
@@ -185,9 +180,6 @@ impl DesktopApp {
             game_rect: [0; 4],
             aim: None,
             start_click: false,
-            hall: None,
-            prev_hall_a: false,
-            prev_hall_left: false,
             validation_error: Default::default(),
             library: Library::default(),
             vanilla_check: None,
@@ -628,16 +620,6 @@ impl DesktopApp {
         release_focus(ctx);
         self.aim = None;
         self.start_click = false;
-        if screen == Screen::Editor
-            || !self.game.as_ref().is_some_and(|game| {
-                matches!(
-                    game.session.state,
-                    sml2_runtime::session::SessionState::FileSelect(_)
-                )
-            })
-        {
-            self.hall = None;
-        }
     }
 
     fn zoom(&mut self, ctx: &Context, scale: Option<u8>) {
@@ -787,65 +769,16 @@ impl DesktopApp {
                 if let Some(game) = self.game.as_mut() {
                     dx::prepare_tick(&mut game.session, &self.settings, self.dx_bundle.is_some());
                 }
-                let mut keys = if running {
+                let keys = if running {
                     self.input.sample_player(&self.settings.bindings)
                 } else {
                     PlayerKeys::default()
                 };
                 let merged = pointer::merge_pointer(&snap, &keys, self.aim, self.start_click);
-                keys = merged.keys;
+                let keys = merged.keys;
                 clear_aim = merged.clear_aim;
                 clear_start = merged.clear_start;
-                if let Some(mut hall) = self.hall.take() {
-                    let jump = keys.a && !self.prev_hall_a;
-                    self.prev_hall_a = keys.a;
-                    let fullscreen_was = self.settings.fullscreen;
-                    let zoom_was = self.settings.zoom;
-                    let leave = hall::step(
-                        &mut hall,
-                        keys.left,
-                        keys.right,
-                        jump,
-                        &mut self.settings,
-                        &mut self.debug,
-                    );
-                    if self.settings.fullscreen != fullscreen_was {
-                        ctx.send_viewport_cmd(ViewportCommand::Fullscreen(
-                            self.settings.fullscreen,
-                        ));
-                    }
-                    if self.settings.zoom != zoom_was {
-                        let scale = match self.settings.zoom {
-                            Zoom::Auto => None,
-                            Zoom::Integer(scale) => Some(scale),
-                        };
-                        self.zoom(ctx, scale);
-                    }
-                    if leave {
-                        self.persist();
-                    } else {
-                        self.hall = Some(hall);
-                    }
-                    keys = PlayerKeys::default();
-                } else if let Some(game) = self.game.as_ref() {
-                    if let sml2_runtime::session::SessionState::FileSelect(file_select) =
-                        &game.session.state
-                    {
-                        if file_select.menu_state() == 1
-                            && file_select.cursor().0 == 0x28
-                            && keys.left
-                            && !self.prev_hall_left
-                        {
-                            self.hall = Some(hall::Hall::enter());
-                            keys.left = false;
-                        }
-                        self.prev_hall_left = keys.left;
-                    }
-                }
                 if let Some(game) = self.game.as_mut() {
-                    // The hall may have changed Character after prepare_tick.
-                    // Apply that, then let the file-select door win and save it.
-                    game.session.character = self.settings.character;
                     game.tick(keys, volume);
                     self.settings.character = game.session.character;
                 }
@@ -925,91 +858,6 @@ impl DesktopApp {
         smooth: Smooth,
     ) -> Option<ColorImage> {
         let game = self.game.as_ref()?;
-        if let sml2_runtime::session::SessionState::FileSelect(file_select) = &game.session.state {
-            let mut doorway = hall::Hall::enter();
-            doorway.camera = i32::from(file_select.cursor().0.saturating_sub(152));
-            let hall = self.hall.as_ref().unwrap_or(&doorway);
-            let on_door = hall.mario == hall::DOOR && hall.walk == 0 && hall.hop == 0;
-            let dx = self
-                .dx_bundle
-                .as_ref()
-                .filter(|_| self.settings.dx_mode && game.session.dx_supported());
-            if let Some(dx) = dx {
-                let frame = if on_door {
-                    game.session
-                        .render_dx_file_select_room(dx, self.settings.character, view)
-                } else {
-                    game.session.render_dx_hall_view(
-                        dx,
-                        self.settings.character,
-                        view,
-                        hall.camera,
-                        hall::presentation(hall),
-                    )
-                };
-                match frame {
-                    Ok(mut rgb) => {
-                        let palette = &dx.file_select.bg_palettes;
-                        let ink = sml2_core::hardware_palettes::rgb555(u16::from_le_bytes([
-                            palette[6], palette[7],
-                        ]));
-                        hall::stamp_signs(
-                            &mut rgb,
-                            hall,
-                            &game.session.assets.front_end,
-                            hall::alphabet(&game.session.assets),
-                            &self.settings,
-                            self.debug,
-                            ink,
-                        );
-                        return Some(ColorImage::new(
-                            [view.0, view.1],
-                            rgb.into_iter()
-                                .map(|[r, g, b]| Color32::from_rgb(r, g, b))
-                                .collect(),
-                        ));
-                    }
-                    Err(error) => self.dx_message = error,
-                }
-            }
-            let mut indices = if on_door {
-                sml2_core::front_end::render::render_file_select_room_output(
-                    file_select,
-                    &game.session.slots,
-                    &game.session.assets.front_end,
-                    &game.session.assets.object_tables,
-                    view,
-                    OutputMode::PaletteIndices,
-                )
-            } else {
-                hall::pixels(
-                    hall,
-                    &game.session.assets.front_end,
-                    &game.session.assets.object_tables,
-                    hall::alphabet(&game.session.assets),
-                    &self.settings,
-                    self.debug,
-                )
-            };
-            if on_door {
-                hall::stamp_signs(
-                    &mut indices,
-                    hall,
-                    &game.session.assets.front_end,
-                    hall::alphabet(&game.session.assets),
-                    &self.settings,
-                    self.debug,
-                    3,
-                );
-            }
-            let pixels: Vec<_> = indices.into_iter().map(PalettePixel::from_token).collect();
-            return Some(colorized(
-                &pixels,
-                self.settings.filter,
-                &game.session.assets.cartridge_header,
-                view,
-            ));
-        }
         let dx = self
             .dx_bundle
             .as_ref()
@@ -1142,18 +990,7 @@ impl DesktopApp {
         let picture = ui.interact(rect, egui::Id::new("game-picture"), egui::Sense::click());
         if self.screen == Screen::Game && self.dx_picker.is_none() && picture.clicked() {
             if let Some(pos) = picture.interact_pointer_pos() {
-                if let Some(hall) = &mut self.hall {
-                    let view = self.settings.view();
-                    if let Some(pixel) = pointer::view_pixel(rect, view, pos) {
-                        if let Some(index) =
-                            hall::pedestal_at(pixel, hall, &self.settings, self.debug)
-                        {
-                            hall.goal = Some(index);
-                        }
-                    }
-                } else {
-                    self.on_picture_click(pos, rect);
-                }
+                self.on_picture_click(pos, rect);
             }
         }
         if self.paused {

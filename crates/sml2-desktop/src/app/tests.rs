@@ -926,23 +926,6 @@ fn pause_menu_keeps_the_actual_game_frame_visible_and_blocks_input() {
 }
 
 #[test]
-fn opening_the_pause_menu_preserves_the_walk_through_settings_hall() {
-    let (mut app, ctx, path) = app();
-    app.game.as_mut().unwrap().session.enter_file_select();
-    let mut hall = hall::Hall::enter();
-    hall.mario = hall::pedestal_x(2);
-    hall.camera = hall.mario - hall::DOOR;
-    app.hall = Some(hall.clone());
-    app.navigate(&ctx, Screen::Home);
-    assert_eq!(app.hall, Some(hall.clone()));
-    frame(&mut app, &ctx, vec![]);
-    assert_eq!(app.hall, Some(hall.clone()));
-    app.navigate(&ctx, Screen::Game);
-    assert_eq!(app.hall, Some(hall));
-    let _ = std::fs::remove_dir_all(path);
-}
-
-#[test]
 fn settings_pause_gameplay_and_escape_returns_to_the_game() {
     let (mut app, ctx, path) = app();
     app.apply_debug(DebugAction::WarpLevel(4));
