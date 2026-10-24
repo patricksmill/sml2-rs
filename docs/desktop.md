@@ -19,14 +19,12 @@ Or launch the built executable:
 ./target/debug/sml2-desktop --play
 ```
 
-A normal launch opens setup in two steps:
-
-1. Add the original **Super Mario Land 2 UE v1.0** ROM. Either `.gb` or `.gbc`
-   works when the contents match the supported original release. A patched DX
-   ROM cannot replace this step.
-2. Optionally add **SML2DX v1.8.1** as a patched `.gbc` / `.gb` ROM or an `.ips`
-   patch. This step appears after the original ROM is verified. Choose **Play
-   original** to skip DX, or **Play with DX** after installing it.
+A normal launch opens a compact menu: **Play**, **Settings**, **Exit**.
+**Settings → Game** contains the original ROM importer, ROM replacement,
+and optional DX setup. On first use, Play opens that page so you can add the
+original **Super Mario Land 2 UE v1.0** ROM (`.gb` or `.gbc`). Play also opens
+that page if the installed game needs repair. Once the ROM is verified,
+Play starts the game with the selected DX Mode setting.
 
 Play opens the game's own
 title screen. START, or a click on the
@@ -71,12 +69,12 @@ Use `--assets /path/to/extracted` to run from another directory.
 
 ## SML2DX Mode
 
-In step 1, **Import ROM…** (or **Replace ROM…** after a ROM is installed)
-adds the original game. Step 2's **Add DX ROM / IPS…** accepts either a patched
-ROM or an IPS patch. Once SML2DX graphics are installed,
-the library's On/Off switch chooses whether the next Play uses them, and
-**Replace DX ROM / IPS…** imports another one. Widescreen, camera zoom, and
-character remain in **Settings**.
+In **Settings → Game**, **Import ROM…** (or **Replace ROM…** after a ROM is
+installed) adds the original game. **Add DX ROM / IPS…** accepts either a
+patched ROM or an IPS patch after the original game is verified.
+Once SML2DX graphics are installed, **DX Mode** chooses whether Play uses them,
+and **Replace DX ROM / IPS…** imports another one. Widescreen, camera zoom,
+and character are in **Settings → Mods**.
 Select your patched v1.8.1 ROM built against the original UE v1.0 release.
 For IPS input, the app applies the patch to a locally retained copy of the
 original ROM without modifying your file. The resulting ROM must pass the same
@@ -111,10 +109,10 @@ castle reveal, ending and credits use DX graphics and colors. Boss arenas and
 fights use their own DX tiles, palettes and sprite lists too. Seven levels (`$03`, `$07`, `$0D`, `$15`, `$16`, `$18`, `$19`) also
 switch palette sets as Mario crosses regions; they currently keep their starting
 DX palette throughout. DX's palette fades are not reproduced. A DX rendering
-failure falls back to the filter with the error shown on the Mods page.
+failure falls back to the filter with the error shown in Settings → Game.
 
 Installations from earlier versions, including ones from before the minigames
-and scene screens were colored, must be re-imported from the library (**Replace DX ROM / IPS…**).
+and scene screens were colored, must be re-imported from **Settings → Game** (**Replace DX ROM / IPS…**).
 DX physics remain future work. No ROM or imported graphics are
 distributed with the application.
 

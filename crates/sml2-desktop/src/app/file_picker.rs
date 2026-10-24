@@ -33,8 +33,8 @@ impl InputKind {
 
     pub fn title(self) -> &'static str {
         match self {
-            Self::Original => "Step 1: Choose original ROM",
-            Self::Dx => "Step 2: Add DX ROM or IPS (optional)",
+            Self::Original => "Choose original ROM",
+            Self::Dx => "Add DX ROM or IPS",
         }
     }
 

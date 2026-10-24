@@ -139,7 +139,7 @@ impl Menu {
         }
         let response = ui
             .add_enabled_ui(self.enabled, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
                     for (index, label) in labels.iter().enumerate() {
                         if theme::tab(ui, label, index == *current, focused)

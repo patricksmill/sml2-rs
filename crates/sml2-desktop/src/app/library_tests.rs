@@ -18,36 +18,133 @@ fn visible_text(output: egui::FullOutput) -> String {
     text
 }
 
-#[test]
-fn setup_reveals_optional_dx_only_after_original_verification() {
+fn launcher() -> (DesktopApp, egui::Context, std::path::PathBuf) {
     let (mut app, ctx, path) = super::tests::app();
     app.game = None;
     app.screen = Screen::Home;
     app.options.launch_library = true;
-    app.start_library_import(LibraryPick::Dx);
-    assert!(
-        app.dx_worker.is_none(),
-        "DX cannot precede the original ROM"
-    );
     super::tests::frame(&mut app, &ctx, vec![]);
-    let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
-    assert!(text.contains("1. ORIGINAL GAME"));
-    assert!(text.contains("Import ROM"));
-    assert!(!text.contains("2. DX MODE"));
-    assert!(!text.contains("Play original"));
+    (app, ctx, path)
+}
 
-    let (sender, receiver) = std::sync::mpsc::channel();
-    app.library.checking = true;
-    app.vanilla_check = Some(receiver);
-    sender.send(Ok("Super Mario Land 2".into())).unwrap();
-    app.poll_imports();
-    assert!(app.library.play_enabled(), "DX is optional");
+fn confirm(app: &mut DesktopApp, ctx: &egui::Context, row: usize) -> egui::FullOutput {
+    app.menu.selected = row;
+    app.input.event(Button::key("Enter"), true);
+    let output = super::tests::frame(app, ctx, vec![]);
+    app.input.event(Button::key("Enter"), false);
+    super::tests::frame(app, ctx, vec![]);
+    output
+}
+
+#[test]
+fn launch_menu_stays_compact_before_and_after_rom_verification() {
+    let (mut app, ctx, path) = launcher();
+    for ready in [false, true] {
+        app.library.vanilla_ready = ready;
+        app.library.dx_installed = ready;
+        app.settings.dx_mode = ready;
+        let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
+        assert_eq!(
+            text,
+            "Play\nSettings\nExit\nEnter: select · Esc: exit\nMenu\n"
+        );
+    }
+    let popup = ctx
+        .memory(|memory| memory.area_rect(egui::Id::new("pause-menu")))
+        .unwrap();
+    assert!(
+        popup.width() <= 320.0 && popup.height() <= 240.0,
+        "{popup:?}"
+    );
+    let output = confirm(&mut app, &ctx, 2);
+    assert!(output.viewport_output[&egui::ViewportId::ROOT]
+        .commands
+        .iter()
+        .any(|command| matches!(command, ViewportCommand::Close)));
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn settings_opens_usual_options_and_escape_returns_to_the_launch_menu() {
+    let (mut app, ctx, path) = launcher();
+    confirm(&mut app, &ctx, 1);
+    assert_eq!(app.screen, Screen::Settings);
+    assert_eq!(app.page, Page::Display);
+    let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
+    assert!(text.contains("Fit to window"));
+    assert!(text.contains("Fullscreen"));
+    assert!(text.contains("GAME"));
+    app.input.event(Button::key("Escape"), true);
+    let output = super::tests::frame(&mut app, &ctx, vec![]);
+    assert_eq!(app.screen, Screen::Home);
+    assert!(!output.viewport_output[&egui::ViewportId::ROOT]
+        .commands
+        .iter()
+        .any(|command| matches!(command, ViewportCommand::Close)));
+    let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn play_without_a_usable_rom_opens_settings_for_import_or_repair() {
+    for corrupted in [false, true] {
+        let (mut app, ctx, path) = launcher();
+        if corrupted {
+            app.settings.vanilla = Some(VanillaInstall::default());
+            app.library.rom_error = "The ROM installation is damaged.".into();
+        }
+        confirm(&mut app, &ctx, 0);
+        assert_eq!(app.screen, Screen::Settings);
+        assert_eq!(app.page, Page::Game);
+        assert!(app.game.is_none());
+        let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
+        assert!(text.contains(if corrupted {
+            "Replace ROM"
+        } else {
+            "Import ROM"
+        }));
+        if corrupted {
+            assert!(text.contains(&app.library.rom_error));
+        }
+        assert!(text.contains("Add DX ROM / IPS"));
+        app.start_library_import(LibraryPick::Dx);
+        assert!(app.dx_worker.is_none(), "DX requires a verified base ROM");
+        confirm(&mut app, &ctx, 1); // Original ROM, after tabs.
+        assert!(matches!(app.library_pick, Some(LibraryPick::Rom)));
+        assert!(app.dx_worker.is_some() || app.dx_picker.is_some());
+        if let Some(worker) = &app.dx_worker {
+            worker.cancel();
+        }
+        let _ = std::fs::remove_dir_all(path);
+    }
+}
+
+#[test]
+fn settings_game_has_dx_import_and_persists_the_mode_choice() {
+    let (mut app, ctx, path) = launcher();
+    app.library.vanilla_ready = true;
+    app.library.revision_name = "Super Mario Land 2".into();
+    app.settings.vanilla = Some(VanillaInstall::default());
+    app.settings.dx_installation = Some(sml2_dx::cache::CacheKey::new("1".repeat(64)));
+    app.library.dx_installed = true;
+    app.navigate(&ctx, Screen::Settings);
+    app.page = Page::Game;
     super::tests::frame(&mut app, &ctx, vec![]);
     let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
-    assert!(text.contains("2. DX MODE · OPTIONAL"));
-    assert!(text.contains("Add DX ROM / IPS"));
-    assert!(text.contains("Play original"));
-    assert!(!text.contains("Level packs"));
-    assert!(!text.contains("Level editor"));
+    assert!(text.contains("Replace ROM"));
+    assert!(text.contains("DX Mode"));
+    assert!(text.contains("Replace DX ROM / IPS"));
+    confirm(&mut app, &ctx, 2); // DX Mode, after tabs and ROM.
+    assert!(app.settings.dx_mode);
+    assert!(app.library.dx_mode);
+    app.persist();
+    assert!(Settings::load(&app.options.paths.settings).unwrap().dx_mode);
+    confirm(&mut app, &ctx, 3); // DX importer.
+    assert!(matches!(app.library_pick, Some(LibraryPick::Dx)));
+    assert!(app.dx_worker.is_some() || app.dx_picker.is_some());
+    let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
+    assert!(text.contains("Cancel import") || app.dx_picker.is_some());
+    if let Some(worker) = &app.dx_worker {
+        worker.cancel();
+    }
     let _ = std::fs::remove_dir_all(path);
 }

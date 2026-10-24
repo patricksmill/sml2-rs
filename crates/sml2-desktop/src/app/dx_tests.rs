@@ -224,9 +224,9 @@ fn selecting_rom_does_not_activate_quit_from_browser_keyboard_input() {
         let rom = path.join("unsupported.gbc");
         std::fs::write(&rom, [0; 16]).unwrap();
         app.screen = Screen::Settings;
-        app.page = super::panels::Page::Mods;
+        app.page = super::panels::Page::Game;
         super::tests::frame(&mut app, &ctx, vec![]);
-        app.menu.selected = 5; // Import, after the tab strip, view rows, DX Mode and Character.
+        app.menu.selected = 2; // DX import, after the tab strip and original ROM.
         app.dx_picker = Some(super::file_picker::FilePicker::new(path.clone()));
         super::tests::frame(
             &mut app,

@@ -28,6 +28,7 @@ mod editor;
 mod file_picker;
 mod filter_preview;
 mod hall;
+mod installation;
 mod panels;
 mod pointer;
 mod startup;
@@ -191,15 +192,13 @@ impl DesktopApp {
             dx_restore: false,
             library_pick: None,
         };
+        app.library.dx_installed = app.settings.dx_installation.is_some();
+        app.library.dx_mode = app.settings.dx_mode;
         if !app.options.launch_library {
             app.load_game();
             app.restore_dx();
-        } else {
-            app.library.dx_installed = app.settings.dx_installation.is_some();
-            app.library.dx_mode = app.settings.dx_mode;
-            if app.settings.vanilla.is_some() {
-                app.start_vanilla_check();
-            }
+        } else if app.settings.vanilla.is_some() {
+            app.start_vanilla_check();
         }
         if app.game.is_some() {
             app.screen = Screen::Game;
@@ -560,10 +559,14 @@ impl DesktopApp {
     }
 
     fn import_library_dx(&mut self, path: std::path::PathBuf) {
-        if !self.library.row_enabled(Row::Dx) || self.dx_worker.is_some() {
+        if !self.can_import_dx() || self.dx_worker.is_some() {
             return;
         }
-        let assets = match vanilla_import::vanilla_cache() {
+        let assets = match if self.game.is_some() {
+            Ok(self.options.assets.clone())
+        } else {
+            vanilla_import::vanilla_cache()
+        } {
             Ok(assets) => assets,
             Err(error) => {
                 self.dx_message = error.clone();
@@ -1030,13 +1033,7 @@ impl DesktopApp {
     fn pause_menu(&mut self, ctx: &Context) {
         let settings = self.screen == Screen::Settings;
         let library = !settings && self.options.launch_library && self.game.is_none();
-        let title = if settings {
-            "Settings"
-        } else if library {
-            "Library"
-        } else {
-            "Menu"
-        };
+        let title = if settings { "Settings" } else { "Menu" };
         egui::Window::new(egui::RichText::new(title).color(theme::INK))
             .id(egui::Id::new(if settings {
                 "settings-popup"
@@ -1044,11 +1041,7 @@ impl DesktopApp {
                 "pause-menu"
             }))
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-            .default_width(if settings || library {
-                theme::ROW_SIZE.x
-            } else {
-                260.0
-            })
+            .default_width(if settings { theme::ROW_SIZE.x } else { 260.0 })
             .collapsible(false)
             .resizable(false)
             .movable(false)

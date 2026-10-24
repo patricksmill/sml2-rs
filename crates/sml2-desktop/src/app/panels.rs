@@ -1,6 +1,6 @@
 use super::catalog;
 use super::theme::{self, Value};
-use super::{DesktopApp, LibraryPick, Screen};
+use super::{DesktopApp, Screen};
 use crate::library::Row;
 use crate::{
     input::{Action, Bindings, Button, PadButton},
@@ -17,15 +17,17 @@ pub(super) enum Page {
     Audio,
     Controls,
     Mods,
+    Game,
     Debug,
 }
 
 impl Page {
-    pub(super) const ALL: [Page; 5] = [
+    pub(super) const ALL: [Page; 6] = [
         Page::Display,
         Page::Audio,
         Page::Controls,
         Page::Mods,
+        Page::Game,
         Page::Debug,
     ];
     fn label(self) -> &'static str {
@@ -34,6 +36,7 @@ impl Page {
             Page::Audio => "AUDIO",
             Page::Controls => "CONTROLS",
             Page::Mods => "MODS",
+            Page::Game => "GAME",
             Page::Debug => "DEBUG",
         }
     }
@@ -90,89 +93,27 @@ impl DesktopApp {
         }
     }
 
-    /// Cold-start library. A loaded game keeps [`Self::home_panel`].
+    /// Cold-start menu. Installation controls live in Settings → Game.
     pub(super) fn library_panel(&mut self, ctx: &Context, ui: &mut Ui) {
-        ui.set_width(theme::ROW_SIZE.x);
+        ui.set_width(260.0);
         ui.spacing_mut().item_spacing.y = 4.0;
-        theme::section(ui, "1. ORIGINAL GAME");
-        theme::note(ui, "Add the original Super Mario Land 2 ROM (UE v1.0).");
-        theme::note(
-            ui,
-            ".gb or .gbc is fine; the file must contain the original game.",
-        );
-        let rom_label = if self.settings.vanilla.is_some() || self.library.vanilla_ready {
-            "Replace ROM…"
-        } else {
-            "Import ROM…"
-        };
-        if self.menu.row(
-            ui,
-            rom_label,
-            Value::Text(self.library.row_status(Row::Rom)),
-        ) && self.library.row_enabled(Row::Rom)
-            && !self.library.checking
-        {
-            self.start_library_import(LibraryPick::Rom);
-        }
-        if self.library.vanilla_ready && !self.library.checking {
-            ui.add_space(10.0);
-            theme::section(ui, "2. DX MODE · OPTIONAL");
-            theme::note(ui, "Add SML2DX v1.8.1 as a patched ROM or an IPS patch.");
-            theme::note(ui, "You can skip this and play the original game.");
-            let dx_status = self.library.row_status(Row::Dx);
-            let show_switch =
-                self.library.vanilla_ready && self.library.dx_installed && !self.library.checking;
-            if show_switch
-                && self
-                    .menu
-                    .row(ui, "DX Mode", Value::Toggle(self.settings.dx_mode))
-                && self.library.row_enabled(Row::Dx)
-            {
-                self.settings.dx_mode = !self.settings.dx_mode;
-                self.library.dx_mode = self.settings.dx_mode;
-            }
-            let dx_label = if self.library.dx_installed {
-                "Replace DX ROM / IPS…"
-            } else {
-                "Add DX ROM / IPS…"
-            };
-            let dx_value = if show_switch {
-                Value::None
-            } else {
-                Value::Text(dx_status)
-            };
-            if self.menu.row(ui, dx_label, dx_value) && self.library.row_enabled(Row::Dx) {
-                self.start_library_import(LibraryPick::Dx);
-            }
-            if self.menu.button(ui, self.library.play_label())
-                && self.library.row_enabled(Row::Play)
-            {
+        if self.menu.button(ui, "Play") {
+            if self.library.play_enabled() {
                 self.play_library();
+            } else {
+                self.return_screen = Screen::Home;
+                self.page = Page::Game;
+                self.navigate(ctx, Screen::Settings);
             }
+        }
+        if self.menu.button(ui, "Settings") {
+            self.return_screen = Screen::Home;
+            self.navigate(ctx, Screen::Settings);
         }
         if self.menu.button(ui, "Exit") && self.library.row_enabled(Row::Exit) {
             ctx.send_viewport_cmd(ViewportCommand::Close);
         }
-        if self.library.importing
-            && self.library_dx_import
-            && self.dx_worker.is_some()
-            && self.menu.row(ui, "Cancel", Value::None)
-        {
-            if let Some(worker) = &self.dx_worker {
-                worker.cancel();
-            }
-            self.dx_message = "Cancelling DX import…".into();
-        }
-        if !self.dx_message.is_empty() {
-            ui.add_space(6.0);
-            theme::note(ui, &self.dx_message);
-        }
-        if !self.library.dx_error.is_empty() {
-            ui.add_space(6.0);
-            theme::note(ui, &self.library.dx_error);
-        }
         if let Some(message) = &self.status {
-            ui.add_space(6.0);
             theme::error(ui, message);
         }
     }
@@ -232,6 +173,7 @@ impl DesktopApp {
                 self.view_controls(ui);
                 self.dx_controls(ui);
             }
+            Page::Game => self.installation_page(ui),
             Page::Debug => self.debug_page(ui),
         }
         ui.add_space(6.0);

@@ -140,15 +140,12 @@ impl DesktopApp {
         }));
     }
 
-    /// Settings → Mods keeps the character. Import and the DX switch live on the library.
+    /// Settings → Mods keeps the character. Settings → Game owns installation.
     pub(super) fn dx_controls(&mut self, ui: &mut Ui) {
         theme::section(ui, "SML2DX");
         let character = self.settings.character;
         if self.menu.choice(ui, "Character", character.label().into()) != 0 {
             self.settings.character = character.next();
-        }
-        if !self.dx_message.is_empty() {
-            theme::note(ui, &self.dx_message);
         }
     }
 
@@ -161,7 +158,11 @@ impl DesktopApp {
             super::LibraryPick::Rom => crate::library::Row::Rom,
             super::LibraryPick::Dx => crate::library::Row::Dx,
         };
-        if !self.library.row_enabled(row) || self.library.checking {
+        let enabled = match kind {
+            super::LibraryPick::Dx => self.can_import_dx(),
+            super::LibraryPick::Rom => self.library.row_enabled(row) && !self.library.checking,
+        };
+        if !enabled {
             return;
         }
         let input_kind = match kind {
