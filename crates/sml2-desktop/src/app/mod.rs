@@ -699,9 +699,6 @@ impl DesktopApp {
         {
             self.toolbar(ctx);
         }
-        if self.options.launch_library && matches!(self.screen, Screen::Home | Screen::Settings) {
-            self.launcher_bar(ctx);
-        }
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(Color32::BLACK))
             .show(ctx, |ui| {

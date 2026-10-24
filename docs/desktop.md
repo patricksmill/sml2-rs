@@ -20,9 +20,10 @@ Or launch the built executable:
 ```
 
 A normal launch shows the game's title sign, with its wall and grass filling
-the window, and a bottom bar: **Play**, **Scenery Editor**, **Settings**, **Quit**.
+the window, and a transparent floating bar in the grass below the sign:
+**Play**, **Scenery Editor**, **Settings**, **Quit**.
 The title preview uses the selected filter or installed DX graphics and stays
-still while you browse. Left/right or the controller D-pad selects a bottom-bar
+still while you browse. Left/right or the controller D-pad selects an
 action; Enter, Space, or the controller's South button activates it.
 Desktop controls, settings, and the editor use standard, minimal egui styling.
 **Settings → Game** contains the original ROM importer, ROM replacement,
