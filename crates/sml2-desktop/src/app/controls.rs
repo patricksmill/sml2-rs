@@ -66,7 +66,11 @@ impl DesktopApp {
             if back || self.input.take_press(&Button::Pad(PadButton::East)) {
                 self.dx_picker = None;
                 self.menu = Default::default();
-                self.dx_message = "DX import cancelled; previous installation retained".into();
+                let pick = self.library_pick.take();
+                self.dx_message = match pick {
+                    Some(super::LibraryPick::Rom) => "ROM import cancelled.".into(),
+                    _ => "DX import cancelled; previous installation retained".into(),
+                };
                 self.input.suppress_until_release();
             }
             // Text entry and browser navigation own the keyboard while open.

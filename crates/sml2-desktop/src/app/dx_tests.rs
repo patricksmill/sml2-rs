@@ -440,19 +440,16 @@ fn dx_mode_colors_every_level_of_the_normal_game() {
 }
 
 #[test]
-fn enabling_dx_mode_without_graphics_starts_the_import() {
+fn mods_enter_on_the_old_dx_row_does_not_start_an_import() {
     let (mut app, ctx, path) = super::tests::app();
     app.screen = Screen::Settings;
     app.page = super::panels::Page::Mods;
     super::tests::frame(&mut app, &ctx, vec![]);
-    app.menu.selected = 4; // DX Mode, after the tab strip and the view rows.
+    app.menu.selected = 4; // Was DX Mode, after the tab strip and the view rows.
     app.input.event(crate::input::Button::key("Enter"), true);
     super::tests::frame(&mut app, &ctx, vec![]);
-    assert!(app.settings.dx_mode);
-    assert!(app.dx_worker.is_some(), "the ROM chooser opens");
-    // The test chooser returns no file, so the in-app browser takes over.
-    wait_for_dx(&mut app);
-    assert!(app.dx_picker.is_some());
+    assert!(app.dx_worker.is_none());
+    assert!(app.dx_picker.is_none());
     let _ = std::fs::remove_dir_all(path);
 }
 

@@ -3290,6 +3290,7 @@ dependencies = [
  "serde_json",
  "sml2-core",
  "sml2-dx",
+ "sml2-extract",
  "sml2-runtime",
  "tempfile",
  "wgpu",
@@ -3314,6 +3315,7 @@ dependencies = [
  "png 0.17.16",
  "serde",
  "serde_json",
+ "sha2",
  "sml2-core",
 ]
 

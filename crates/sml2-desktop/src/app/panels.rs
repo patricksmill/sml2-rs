@@ -1,6 +1,7 @@
 use super::catalog;
 use super::theme::{self, Value};
-use super::{DesktopApp, Screen};
+use super::{DesktopApp, LibraryPick, Screen};
+use crate::library::Row;
 use crate::{
     input::{Action, Bindings, Button, PadButton},
     menu::{pressed, release_focus},
@@ -86,6 +87,89 @@ impl DesktopApp {
         }
         if !self.allow_save && self.menu.button(ui, "Reset unreadable settings") {
             self.reset_settings();
+        }
+    }
+
+    /// Cold-start library. A loaded game keeps [`Self::home_panel`].
+    pub(super) fn library_panel(&mut self, ctx: &Context, ui: &mut Ui) {
+        ui.set_width(theme::ROW_SIZE.x);
+        ui.spacing_mut().item_spacing.y = 4.0;
+        let rom_label = if self.settings.vanilla.is_some() || self.library.vanilla_ready {
+            "Replace ROM…"
+        } else {
+            "Import ROM…"
+        };
+        if self.menu.row(
+            ui,
+            rom_label,
+            Value::Text(self.library.row_status(Row::Rom)),
+        ) && self.library.row_enabled(Row::Rom)
+            && !self.library.checking
+        {
+            self.start_library_import(LibraryPick::Rom);
+        }
+        let dx_status = self.library.row_status(Row::Dx);
+        let show_switch =
+            self.library.vanilla_ready && self.library.dx_installed && !self.library.checking;
+        if show_switch
+            && self
+                .menu
+                .row(ui, "DX Mode", Value::Toggle(self.settings.dx_mode))
+            && self.library.row_enabled(Row::Dx)
+        {
+            self.settings.dx_mode = !self.settings.dx_mode;
+            self.library.dx_mode = self.settings.dx_mode;
+        }
+        let dx_label = if self.library.dx_installed {
+            "Replace SML2DX ROM…"
+        } else {
+            "Import SML2DX ROM…"
+        };
+        let dx_value = if show_switch {
+            Value::None
+        } else {
+            Value::Text(dx_status)
+        };
+        if self.menu.row(ui, dx_label, dx_value) && self.library.row_enabled(Row::Dx) {
+            self.start_library_import(LibraryPick::Dx);
+        }
+        let _ = self.menu.row(
+            ui,
+            "Level packs",
+            Value::Text(self.library.row_status(Row::Packs)),
+        );
+        let _ = self.menu.row(
+            ui,
+            "Level editor",
+            Value::Text(self.library.row_status(Row::Editor)),
+        );
+        if self.menu.button(ui, self.library.play_label()) && self.library.row_enabled(Row::Play) {
+            self.play_library();
+        }
+        if self.menu.button(ui, "Exit") && self.library.row_enabled(Row::Exit) {
+            ctx.send_viewport_cmd(ViewportCommand::Close);
+        }
+        if self.library.importing
+            && self.library_dx_import
+            && self.dx_worker.is_some()
+            && self.menu.row(ui, "Cancel", Value::None)
+        {
+            if let Some(worker) = &self.dx_worker {
+                worker.cancel();
+            }
+            self.dx_message = "Cancelling DX import…".into();
+        }
+        if !self.dx_message.is_empty() {
+            ui.add_space(6.0);
+            theme::note(ui, &self.dx_message);
+        }
+        if !self.library.dx_error.is_empty() {
+            ui.add_space(6.0);
+            theme::note(ui, &self.library.dx_error);
+        }
+        if let Some(message) = &self.status {
+            ui.add_space(6.0);
+            theme::error(ui, message);
         }
     }
 

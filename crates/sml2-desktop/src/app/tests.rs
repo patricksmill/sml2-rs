@@ -31,6 +31,7 @@ pub(super) fn app() -> (DesktopApp, Context, PathBuf) {
         fullscreen: false,
         smoke_frames: None,
         screenshot: None,
+        launch_library: false,
     };
     let ctx = Context::default();
     let mut app = DesktopApp::new(&ctx, options, Settings::default(), None);
@@ -102,6 +103,7 @@ fn play_flag_skips_the_title_for_the_overworld() {
         fullscreen: false,
         smoke_frames: None,
         screenshot: None,
+        launch_library: false,
     };
     let restarted = DesktopApp::new(&Context::default(), options, Settings::default(), None);
     assert_eq!(restarted.screen, Screen::Game);
@@ -188,6 +190,7 @@ fn quit_to_title_from_the_map_opens_the_in_game_title() {
         fullscreen: false,
         smoke_frames: None,
         screenshot: None,
+        launch_library: false,
     };
     let mut app = DesktopApp::new(&Context::default(), options, Settings::default(), None);
     app.controllers = Controllers::disconnected();
@@ -687,6 +690,7 @@ fn home_pipes_show_the_saved_stage_tally_across_a_restart() {
         fullscreen: false,
         smoke_frames: None,
         screenshot: None,
+        launch_library: false,
     };
     let restarted = DesktopApp::new(&Context::default(), options, Settings::default(), None);
     assert_eq!(tally(&restarted), Some(0x31));
@@ -821,4 +825,99 @@ fn enter_uses_the_popup_in_levels_and_confirms_resume() {
     };
     assert!(!level.sim.paused);
     let _ = std::fs::remove_dir_all(path);
+}
+
+#[test]
+fn library_launch_checks_the_saved_install_and_keeps_play_off() {
+    let directory =
+        std::env::temp_dir().join(format!("sml2_library_launch_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    let assets = PathBuf::from("/sml2-library-must-not-load");
+    let save = directory.join("save.sav");
+    let options = Options {
+        assets: assets.clone(),
+        paths: AppPaths {
+            settings: directory.join("settings.json"),
+            save: save.clone(),
+        },
+        audio: false,
+        filter: None,
+        play: false,
+        boot_title: false,
+        boot_select: false,
+        room: None,
+        reveal: false,
+        scale: None,
+        fullscreen: false,
+        smoke_frames: None,
+        screenshot: None,
+        launch_library: true,
+    };
+    let mut settings = crate::settings::Settings::default();
+    settings.vanilla = Some(crate::settings::VanillaInstall {
+        revision: "ue-v1.0".into(),
+        sha256: "nope".into(),
+    });
+    let mut app = DesktopApp::new(&Context::default(), options, settings, None);
+    assert!(app.game.is_none(), "a library launch must not load assets");
+    assert!(app.library.checking);
+    assert!(!app.library.play_enabled());
+    assert_eq!(app.options.assets, assets);
+    assert_eq!(app.options.paths.save, save);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while app.library.checking {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "vanilla check did not finish"
+        );
+        app.poll_imports();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    assert!(app.game.is_none());
+    assert!(!app.library.vanilla_ready);
+    assert!(!app.library.play_enabled());
+    assert_eq!(
+        app.library.row_status(crate::library::Row::Rom),
+        app.library.rom_error
+    );
+    assert!(!app.library.rom_error.is_empty());
+    assert_eq!(app.options.assets, assets);
+    app.play_library();
+    assert!(app.game.is_none());
+    assert!(app.options.launch_library);
+    assert_eq!(app.options.paths.save, save);
+
+    let mut fresh = DesktopApp::new(
+        &Context::default(),
+        Options {
+            assets: assets.clone(),
+            paths: AppPaths {
+                settings: directory.join("settings.json"),
+                save: save.clone(),
+            },
+            audio: false,
+            filter: None,
+            play: false,
+            boot_title: false,
+            boot_select: false,
+            room: None,
+            reveal: false,
+            scale: None,
+            fullscreen: false,
+            smoke_frames: None,
+            screenshot: None,
+            launch_library: true,
+        },
+        crate::settings::Settings::default(),
+        None,
+    );
+    fresh.install_vanilla_rom(&[0; 32]);
+    assert!(fresh.library.rom_error.contains("Unsupported"));
+    assert!(!fresh.library.vanilla_ready);
+    assert!(fresh.game.is_none());
+    assert_eq!(fresh.options.paths.save, save);
+    fresh.library.importing = true;
+    fresh.import_library_dx(PathBuf::from("ignored.gbc"));
+    assert!(fresh.dx_worker.is_none());
+    let _ = std::fs::remove_dir_all(&directory);
 }

@@ -13,6 +13,12 @@ pub use filter::Filter;
 mod view;
 pub use view::{CameraZoom, Widescreen};
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct VanillaInstall {
+    pub revision: String,
+    pub sha256: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Zoom {
     #[default]
@@ -47,6 +53,8 @@ pub struct Settings {
     /// Draw the top toolbar. F10 toggles this while it is hidden.
     #[serde(default = "toolbar_shown")]
     pub show_toolbar: bool,
+    #[serde(default)]
+    pub vanilla: Option<VanillaInstall>,
 }
 
 fn toolbar_shown() -> bool {
@@ -73,6 +81,7 @@ impl Default for Settings {
             camera_zoom: CameraZoom::Native,
             motion_smoothing: false,
             show_toolbar: true,
+            vanilla: None,
         }
     }
 }
@@ -269,5 +278,23 @@ mod tests {
             ..Default::default()
         };
         assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn a_version_three_file_without_vanilla_still_loads() {
+        let path = std::env::temp_dir().join(format!(
+            "sml2_vanilla_settings_{}.json",
+            std::process::id()
+        ));
+        let settings = Settings::default();
+        settings.save(&path).unwrap();
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        value.as_object_mut().unwrap().remove("vanilla");
+        std::fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+        let loaded = Settings::load(&path).unwrap();
+        assert!(loaded.vanilla.is_none());
+        assert_eq!(loaded.version, 3);
+        std::fs::remove_file(path).unwrap();
     }
 }

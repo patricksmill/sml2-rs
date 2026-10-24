@@ -1,10 +1,12 @@
 use crate::{
     controllers::Controllers,
     game::Game,
-    input::{Action, InputState},
-    menu::{release_focus, Menu},
-    settings::{Filter, Settings, Zoom},
+    input::{Action, Button, InputState},
+    library::{Library, Row},
+    menu::{pressed, release_focus, Menu},
+    settings::{Filter, Settings, VanillaInstall, Zoom},
     timing::{game_rectangle, TickBudget},
+    vanilla_import,
 };
 use eframe::egui::{
     self, Color32, ColorImage, Context, RawInput, TextureHandle, TextureOptions, ViewportCommand,
@@ -103,6 +105,18 @@ pub struct DesktopApp {
     prev_hall_left: bool,
     validation_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
     settings_open: bool,
+    library: Library,
+    vanilla_check: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
+    library_dx_import: bool,
+    /// The active worker is restoring a saved install. Import failures must not use this path.
+    dx_restore: bool,
+    /// Which library row is waiting on the system dialog or the in-app browser.
+    library_pick: Option<LibraryPick>,
+}
+
+enum LibraryPick {
+    Rom,
+    Dx,
 }
 
 impl DesktopApp {
@@ -166,9 +180,22 @@ impl DesktopApp {
             prev_hall_left: false,
             validation_error: Default::default(),
             settings_open: false,
+            library: Library::default(),
+            vanilla_check: None,
+            library_dx_import: false,
+            dx_restore: false,
+            library_pick: None,
         };
-        app.load_game();
-        app.restore_dx();
+        if !app.options.launch_library {
+            app.load_game();
+            app.restore_dx();
+        } else {
+            app.library.dx_installed = app.settings.dx_installation.is_some();
+            app.library.dx_mode = app.settings.dx_mode;
+            if app.settings.vanilla.is_some() {
+                app.start_vanilla_check();
+            }
+        }
         if app.game.is_some() {
             app.screen = Screen::Game;
             if app.options.boot_select {
@@ -215,6 +242,342 @@ impl DesktopApp {
             }
             Err(e) => self.status = Some(format!("Game data could not be loaded: {e}")),
         }
+    }
+
+    fn start_vanilla_check(&mut self) {
+        let Some(expected) = self.settings.vanilla.clone() else {
+            return;
+        };
+        let dir = match vanilla_import::vanilla_cache() {
+            Ok(dir) => dir,
+            Err(error) => {
+                self.library.checking = false;
+                self.library.vanilla_ready = false;
+                self.library.rom_error = error;
+                return;
+            }
+        };
+        self.library.checking = true;
+        self.library.vanilla_ready = false;
+        self.library.rom_error.clear();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let result = vanilla_import::check_install(&dir, &expected).and_then(|()| {
+                sml2_extract::vanilla::REVISIONS
+                    .iter()
+                    .find(|revision| revision.id == expected.revision)
+                    .map(|revision| revision.name.to_string())
+                    .ok_or_else(|| "The vanilla install does not match the saved identity.".into())
+            });
+            let _ = sender.send(result);
+        });
+        self.vanilla_check = Some(receiver);
+    }
+
+    fn poll_imports(&mut self) {
+        let watching = self.library_dx_import && self.dx_worker.is_some();
+        let dx_mode = self.settings.dx_mode;
+        let dx_installation = self.settings.dx_installation.clone();
+        self.poll_dx();
+        self.poll_vanilla_check();
+        if watching && self.dx_worker.is_none() {
+            self.finish_library_dx(dx_mode, dx_installation);
+        }
+    }
+
+    fn poll_vanilla_check(&mut self) {
+        let ready = match self.vanilla_check.as_ref() {
+            Some(receiver) => match receiver.try_recv() {
+                Ok(result) => Some(Ok(result)),
+                Err(std::sync::mpsc::TryRecvError::Empty) => None,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => Some(Err(())),
+            },
+            None => None,
+        };
+        let Some(ready) = ready else {
+            return;
+        };
+        self.vanilla_check = None;
+        self.library.checking = false;
+        match ready {
+            Ok(Ok(name)) => {
+                self.library.vanilla_ready = true;
+                self.library.revision_name = name;
+                self.library.rom_error.clear();
+            }
+            Ok(Err(error)) => {
+                self.library.vanilla_ready = false;
+                self.library.rom_error = error;
+            }
+            Err(()) => {
+                self.library.vanilla_ready = false;
+                self.library.rom_error = "The vanilla check stopped before it finished.".into();
+            }
+        }
+    }
+
+    fn finish_library_dx(
+        &mut self,
+        dx_mode: bool,
+        dx_installation: Option<sml2_dx::cache::CacheKey>,
+    ) {
+        self.library.importing = false;
+        self.library_dx_import = false;
+        if self.dx_message.starts_with("Installed ") {
+            self.settings.dx_mode = true;
+            self.library.dx_mode = true;
+            self.library.dx_installed = self.settings.dx_installation.is_some();
+            self.library.dx_error.clear();
+            match self.settings.save(&self.options.paths.settings) {
+                Ok(()) => {
+                    self.saved_settings = self.settings.clone();
+                    self.allow_save = true;
+                }
+                Err(error) => {
+                    self.status = Some(format!("Settings could not be saved: {error}"));
+                }
+            }
+        } else {
+            self.settings.dx_mode = dx_mode;
+            self.settings.dx_installation = dx_installation.clone();
+            self.library.dx_mode = dx_mode;
+            self.library.dx_installed = dx_installation.is_some();
+            if !self.dx_message.is_empty() {
+                self.library.dx_error = self.dx_message.clone();
+            }
+        }
+    }
+
+    fn install_vanilla_rom(&mut self, rom: &[u8]) {
+        if self.library.importing || self.library.checking {
+            return;
+        }
+        self.library.importing = true;
+        let dest = match vanilla_import::vanilla_cache() {
+            Ok(dest) => dest,
+            Err(error) => {
+                self.library.importing = false;
+                self.library.rom_error = error;
+                return;
+            }
+        };
+        let commit = match vanilla_import::install_rom(&dest, rom) {
+            Ok(commit) => commit,
+            Err(error) => {
+                self.library.importing = false;
+                self.library.rom_error = error;
+                return;
+            }
+        };
+        let revision = match sml2_extract::vanilla::identify(rom) {
+            Ok(revision) => revision,
+            Err(error) => {
+                if let Err(rollback_error) = sml2_extract::vanilla::rollback(&dest, &commit) {
+                    self.status = Some(vanilla_import::publish_error(rollback_error));
+                }
+                self.library.importing = false;
+                self.library.rom_error = vanilla_import::identify_error(error);
+                return;
+            }
+        };
+        let previous_settings = self.settings.clone();
+        let previous_bundle = self.dx_bundle.clone();
+        let previous_dx_error = self.library.dx_error.clone();
+        let previous_dx_message = self.dx_message.clone();
+        self.settings.vanilla = Some(VanillaInstall {
+            revision: revision.id.to_string(),
+            sha256: sml2_extract::vanilla::sha256(rom),
+        });
+        let remove_dx_after_save = self.mark_dx_for_vanilla(&dest);
+        match self.settings.save(&self.options.paths.settings) {
+            Ok(()) => {
+                sml2_extract::vanilla::discard_backup(&commit);
+                self.saved_settings = self.settings.clone();
+                self.allow_save = true;
+                if remove_dx_after_save {
+                    self.delete_retired_dx();
+                }
+                self.library.importing = false;
+                self.library.checking = false;
+                self.library.vanilla_ready = true;
+                self.library.revision_name = revision.name.to_string();
+                self.library.rom_error.clear();
+                self.library.dx_installed = self.settings.dx_installation.is_some();
+                self.library.dx_mode = self.settings.dx_mode;
+            }
+            Err(error) => {
+                let mut message = format!("Settings could not be saved: {error}");
+                if let Err(rollback_error) = sml2_extract::vanilla::rollback(&dest, &commit) {
+                    message = format!(
+                        "{message} {}",
+                        vanilla_import::publish_error(rollback_error)
+                    );
+                }
+                self.settings = previous_settings;
+                self.dx_bundle = previous_bundle;
+                self.library.dx_error = previous_dx_error;
+                self.dx_message = previous_dx_message;
+                self.library.dx_installed = self.settings.dx_installation.is_some();
+                self.library.dx_mode = self.settings.dx_mode;
+                self.library.importing = false;
+                self.library.rom_error = message.clone();
+                self.status = Some(message);
+            }
+        }
+    }
+
+    /// Record how the published vanilla tree relates to the installed DX key.
+    ///
+    /// Returns whether that DX directory should be deleted after settings save.
+    /// This never deletes files: a failed save must still be able to roll vanilla back.
+    fn mark_dx_for_vanilla(&mut self, dest: &std::path::Path) -> bool {
+        let Some(base_sha256) = self
+            .settings
+            .dx_installation
+            .as_ref()
+            .map(|key| key.base_sha256.clone())
+        else {
+            return false;
+        };
+        let fingerprint = match sml2_dx::base_fingerprint(dest) {
+            Ok(fingerprint) => fingerprint,
+            Err(error) => {
+                self.settings.dx_mode = false;
+                self.library.dx_mode = false;
+                let message = error.to_string();
+                self.library.dx_error = message.clone();
+                self.dx_message = message;
+                return false;
+            }
+        };
+        if fingerprint == base_sha256 {
+            return false;
+        }
+        self.settings.dx_mode = false;
+        self.library.dx_mode = false;
+        true
+    }
+
+    fn delete_retired_dx(&mut self) {
+        let Some(key) = self.settings.dx_installation.clone() else {
+            return;
+        };
+        match crate::dx_import::cache_root().and_then(|root| {
+            let dir = root.join(key.directory_name());
+            match std::fs::remove_dir_all(&dir) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error.to_string()),
+            }
+        }) {
+            Ok(()) => {
+                self.settings.dx_installation = None;
+                self.dx_bundle = None;
+                match self.settings.save(&self.options.paths.settings) {
+                    Ok(()) => self.saved_settings = self.settings.clone(),
+                    Err(error) => {
+                        self.status = Some(format!("Settings could not be saved: {error}"));
+                    }
+                }
+            }
+            Err(error) => {
+                let message = format!("The old DX install could not be removed: {error}");
+                self.library.dx_error = message.clone();
+                self.dx_message = message;
+            }
+        }
+    }
+
+    fn play_library(&mut self) {
+        if !self.library.play_enabled() {
+            return;
+        }
+        let assets = match vanilla_import::vanilla_cache() {
+            Ok(path) => path,
+            Err(error) => {
+                self.library.rom_error = error;
+                return;
+            }
+        };
+        self.options.assets = assets;
+        self.options.launch_library = false;
+        self.load_game();
+        if self.game.is_none() {
+            self.options.launch_library = true;
+            if let Some(error) = self.status.clone() {
+                self.library.rom_error = error;
+            }
+            return;
+        }
+        if self.settings.dx_mode {
+            self.restore_dx();
+        }
+        if let Some(game) = self.game.as_mut() {
+            game.session.enter_title();
+        }
+        self.screen = Screen::Game;
+    }
+
+    fn quit_library_on_escape(&mut self, ctx: &Context) {
+        if self.dx_picker.is_some() || self.capture.is_some() || self.settings_open {
+            return;
+        }
+        if self.screen != Screen::Home || !self.options.launch_library || self.game.is_some() {
+            return;
+        }
+        // `pressed` consumes Esc. Exit and Esc share one quit, including while import disables it.
+        if pressed(&mut self.input, &[Button::key("Escape")]) && self.library.row_enabled(Row::Exit)
+        {
+            ctx.send_viewport_cmd(ViewportCommand::Close);
+        }
+    }
+
+    fn accept_library_file(&mut self, path: std::path::PathBuf) {
+        let kind = self.library_pick.take();
+        self.dx_picker = None;
+        self.input.suppress_until_release();
+        self.menu = Default::default();
+        match kind {
+            Some(LibraryPick::Rom) => self.import_library_rom(path),
+            Some(LibraryPick::Dx) => self.import_library_dx(path),
+            None => self.import_dx_path(path),
+        }
+    }
+
+    fn import_library_rom(&mut self, path: std::path::PathBuf) {
+        if self.library.importing {
+            return;
+        }
+        match vanilla_import::read_rom(&path) {
+            Ok(rom) => self.install_vanilla_rom(&rom),
+            Err(error) => self.library.rom_error = error,
+        }
+    }
+
+    fn import_library_dx(&mut self, path: std::path::PathBuf) {
+        if self.library.importing || self.dx_worker.is_some() {
+            return;
+        }
+        let assets = match vanilla_import::vanilla_cache() {
+            Ok(assets) => assets,
+            Err(error) => {
+                self.dx_message = error.clone();
+                self.library.dx_error = error;
+                return;
+            }
+        };
+        self.library.importing = true;
+        self.library_dx_import = true;
+        self.dx_restore = false;
+        self.dx_worker = Some(crate::dx_import::Worker::start(move |cancel, progress| {
+            crate::dx_import::presentation(crate::dx_import::import_path(
+                &crate::dx_import::cache_root()?,
+                &assets,
+                &path,
+                cancel,
+                progress,
+            ))
+        }));
     }
 
     fn navigate(&mut self, ctx: &Context, screen: Screen) {
@@ -281,8 +644,9 @@ impl DesktopApp {
             self.last_update = Instant::now();
         }
         self.focused = focused;
+        self.quit_library_on_escape(ctx);
         self.shortcuts(ctx);
-        self.poll_dx();
+        self.poll_imports();
         if self.screen != Screen::Game {
             if self.capture.is_some() || self.dx_picker.is_some() {
                 self.menu.freeze();
@@ -643,7 +1007,14 @@ impl DesktopApp {
     /// Pause and settings popups share the actual game's paused frame.
     fn pause_menu(&mut self, ctx: &Context) {
         let settings = self.screen == Screen::Settings;
-        let title = if settings { "Settings" } else { "Menu" };
+        let library = !settings && self.options.launch_library && self.game.is_none();
+        let title = if settings {
+            "Settings"
+        } else if library {
+            "Library"
+        } else {
+            "Menu"
+        };
         egui::Window::new(egui::RichText::new(title).color(theme::INK))
             .id(egui::Id::new(if settings {
                 "settings-popup"
@@ -651,7 +1022,11 @@ impl DesktopApp {
                 "pause-menu"
             }))
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-            .default_width(if settings { theme::ROW_SIZE.x } else { 260.0 })
+            .default_width(if settings || library {
+                theme::ROW_SIZE.x
+            } else {
+                260.0
+            })
             .collapsible(false)
             .resizable(false)
             .movable(false)
@@ -663,6 +1038,8 @@ impl DesktopApp {
                     .show(ui, |ui| {
                         if settings {
                             self.settings_panel(ctx, ui);
+                        } else if library {
+                            self.library_panel(ctx, ui);
                         } else {
                             self.home_panel(ctx, ui);
                         }
@@ -672,6 +1049,8 @@ impl DesktopApp {
                     ui,
                     if settings {
                         "Esc: back · L / R: page"
+                    } else if library {
+                        "Enter: select · Esc: exit"
                     } else {
                         "Esc / Start: resume"
                     },
