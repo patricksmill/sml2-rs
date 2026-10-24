@@ -1,4 +1,4 @@
-//! ROM `$5A355` (mode B anim 67): a curved moving platform.
+//! ROM `$5A355` (mode B anim 67): the rotating spike's circular movement.
 //!
 //! State 0 rises 36 pixels, faces Mario, and arms contact 72. Mario on the
 //! right starts at state `$10` with the long horizontal index; otherwise the
@@ -8,7 +8,7 @@
 use crate::actor::{Actor, ContactKind, FrameTick};
 use std::cmp::Ordering;
 
-/// ROM `$6519`, 22 bytes. Index `$15` is the following byte the CPU would read.
+/// ROM `$6519`. Movement uses indices 1 through 20, between the `$80` boundaries.
 const CURVE_A: [u8; 22] = [
     128, 1, 0, 1, 0, 2, 1, 1, 2, 2, 2, 3, 2, 3, 2, 3, 3, 3, 3, 3, 3, 128,
 ];
@@ -53,11 +53,11 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Effe
 }
 
 fn step_y(actor: &mut Actor) -> i16 {
-    let (curve, down, advance) = match actor.state >> 4 {
-        1 => (&CURVE_A, true, true),
-        2 => (&CURVE_B, true, true),
-        3 => (&CURVE_B, false, false),
-        _ => (&CURVE_A, false, false),
+    let (curve, down, advance, restart) = match actor.state >> 4 {
+        1 => (&CURVE_A, true, true, 1),
+        2 => (&CURVE_B, true, true, 20),
+        3 => (&CURVE_B, false, false, 20),
+        _ => (&CURVE_A, false, false, 1),
     };
     let step = sample(curve, actor.motion_leg);
     let dy = if down {
@@ -70,6 +70,7 @@ fn step_y(actor: &mut Actor) -> i16 {
         actor.motion_leg = actor.motion_leg.wrapping_add(1);
         if actor.motion_leg == 0x15 {
             actor.state = actor.state.wrapping_add(0x10);
+            actor.motion_leg = restart;
         }
     } else {
         actor.motion_leg = actor.motion_leg.wrapping_sub(1);
@@ -79,6 +80,7 @@ fn step_y(actor: &mut Actor) -> i16 {
                 next = next.wrapping_sub(0x40);
             }
             actor.state = next;
+            actor.motion_leg = restart;
         }
     }
     dy
@@ -86,11 +88,11 @@ fn step_y(actor: &mut Actor) -> i16 {
 
 fn step_x(actor: &mut Actor) -> i16 {
     let index = actor.travel_span();
-    let (curve, right, retreat) = match actor.state & 0x0F {
-        0 => (&CURVE_A, true, true),
-        1 => (&CURVE_A, false, false),
-        2 => (&CURVE_B, false, false),
-        _ => (&CURVE_B, true, true),
+    let (curve, right, retreat, restart) = match actor.state & 0x0F {
+        0 => (&CURVE_A, true, true, 1),
+        1 => (&CURVE_A, false, false, 1),
+        2 => (&CURVE_B, false, false, 20),
+        _ => (&CURVE_B, true, true, 20),
     };
     let step = sample(curve, index);
     let dx = if right {
@@ -108,12 +110,14 @@ fn step_x(actor: &mut Actor) -> i16 {
                 state = state.wrapping_sub(4);
             }
             actor.state = state;
+            actor.set_travel_span(restart);
         }
     } else {
         let next = index.wrapping_add(1);
         actor.set_travel_span(next);
         if next == 0x15 {
             actor.state = actor.state.wrapping_add(1);
+            actor.set_travel_span(restart);
         }
     }
     dx
