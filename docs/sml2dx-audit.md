@@ -356,7 +356,11 @@ Known gaps, verified against the ROM and left native or approximate:
 - `$26:$6B0B` switches palette sets from `$26:$6100 + n*$40` for levels `$19`,
   `$03`, `$07`, `$0D`, `$15`, `$16`, `$0C`, `$18` by Mario's position (`$AF30`-
   `$AF33` are Mario X+8 and Y+32 from `$02:$40FD`), remembering the current set
-  in `$FFAD`. Those levels keep their load-time palette.
+  in `$FFAD`. Mario Zone 3 (`$0C`, `$26:$6B39`) now retains this selector
+  across corridors and switches BG sets `$6100` / `$6140` / `$6180`. It compares
+  the high byte of Mario X+8: sections 1/14 select 0, 2/4/10/13 select 1,
+  and 5/7/9 select 2. This supplies the conveyor blues without recoloring tiles
+  or OBJ palettes. The other seven levels keep their load-time palette.
 - `$D300` is the blank palette buffer `$25AF`'s hook and the fades upload; DX
   palette fades are not reproduced.
 

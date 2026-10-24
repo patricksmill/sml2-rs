@@ -892,10 +892,18 @@ fn render(
     let (bg_source, obj_source) = fight.map_or((&level.bg_palettes, &level.obj_palettes), |f| {
         (&f.bg_palettes, &f.obj_palettes)
     });
+    // $26:$6B39 swaps only BG colors in Mario Zone 3. Other levels and
+    // boss scene loads continue to use their own palette sources.
+    let bg_source = if level_id == 0x0c && fight.is_none() {
+        dx.rom(0x26, 0x6100 + u16::from(ctx.dx_conveyor_palette) * 0x40, 64)
+            .ok_or("DX conveyor palette missing; re-import DX ROM")?
+    } else {
+        bg_source.as_slice()
+    };
     let bg_palettes = if ctx.sim.paused {
         pause_palettes(bg_source, ctx.sim.frame_counter & 16 != 0)
     } else {
-        bg_source.clone()
+        bg_source.to_vec()
     };
     let palettes = CgbPalettes::from_bytes(&bg_palettes, obj_source).map_err(|e| e.to_string())?;
     let background = [live_background(ctx, dx, level), level.background[1].clone()];

@@ -40,7 +40,13 @@ fn synthetic_bundle() -> Presentation {
         object_tables: vec![vec![vec![]; 228]],
         hud_tiles: vec![0; 20],
         animation_rows: vec![0; 0x1000],
-        banks: Default::default(),
+        banks: [(0x26, {
+            let mut bank = vec![0; 0x4000];
+            bank[0x2100..0x21c0].copy_from_slice(&[0x1f, 0].repeat(96));
+            bank
+        })]
+        .into_iter()
+        .collect(),
         title: screen(),
         file_select: screen(),
         map: sml2_dx::MapGraphics {
@@ -802,4 +808,29 @@ fn castle_reveal_and_game_over_use_their_own_dx_palettes() {
     assert_eq!(large.len(),384*216);
     assert_eq!(large[36*384+112], [0,255,0]);
     assert_eq!(large[0], [0;3]);
+}
+
+#[test]
+fn conveyor_section_colors_survive_corridors_and_widescreen() {
+    let mut bundle = synthetic_bundle();
+    let bank = bundle.banks.get_mut(&0x26).unwrap();
+    bank[0x2140..0x2180].copy_from_slice(&[0xe0, 3].repeat(32));
+    bank[0x2180..0x21c0].copy_from_slice(&[0, 0x7c].repeat(32));
+    let mut game = session();
+    game.begin_level(0x0c, 0).unwrap();
+    for (x, expected) in [
+        (0x200, [0, 255, 0]),
+        (0x300, [0, 255, 0]),
+        (0x500, [0, 0, 255]),
+        (0x600, [0, 0, 255]),
+        (0xe00, RED),
+    ] {
+        let SessionState::InLevel(ctx) = &mut game.state else {
+            panic!("level")
+        };
+        ctx.sim.x = x;
+        game.advance(FrameInput::default());
+        let frame = game.render_dx_frame(&bundle, Mario, (256, 144)).unwrap();
+        assert_eq!(frame[0], expected, "Mario X {x:04x}");
+    }
 }
