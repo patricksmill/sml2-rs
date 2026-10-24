@@ -86,6 +86,7 @@ mod tests {
         library.dx_mode = true;
         assert_eq!(library.play_label(), "Play with DX");
         library.importing = true;
+        assert!(!library.play_enabled());
         assert!(!library.row_enabled(Row::Dx));
         assert!(!library.row_enabled(Row::Rom));
     }
