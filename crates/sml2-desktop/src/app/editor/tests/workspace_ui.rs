@@ -307,6 +307,8 @@ fn wheel_and_space_pan_do_not_paint_or_change_gameplay_zoom() {
 #[test]
 fn playtest_restarts_with_scenery_and_escape_restores_the_workspace() {
     let (mut app, ctx, path) = app();
+    app.options.launch_library = true;
+    app.load_launcher();
     app.open_editor(&ctx);
     let work = app.editor.work.as_mut().unwrap();
     work.viewport.center = egui::pos2(-200.0, 800.0);
@@ -316,9 +318,15 @@ fn playtest_restarts_with_scenery_and_escape_restores_the_workspace() {
     work.begin((-1, 48), false);
     work.finish();
     let size = (800.0, 720.0);
-    frame(&mut app, &ctx, size, vec![key(Key::Enter, Modifiers::NONE)]);
+    let output = frame(&mut app, &ctx, size, vec![key(Key::Enter, Modifiers::NONE)]);
     assert!(app.screen == Screen::Game);
     assert!(app.editor.playtesting);
+    assert!(
+        output.shapes.iter().any(|shape| matches!(
+            &shape.shape, egui::Shape::Mesh(mesh) if mesh.texture_id == app.texture.id()
+        )),
+        "playtesting from the launcher draws the game"
+    );
     let sml2_runtime::session::SessionState::InLevel(level) =
         &app.game.as_ref().unwrap().session.state
     else {

@@ -88,6 +88,18 @@ impl Menu {
         );
         self.row = 0;
     }
+    pub fn start_horizontal(&mut self, input: &mut InputState) {
+        self.start(input);
+        self.selected =
+            (self.selected as i32 + self.adjustment).rem_euclid(self.count.max(1) as i32) as usize;
+        self.moved |= self.adjustment != 0;
+        self.adjustment = 0;
+    }
+    pub fn compact_button(&mut self, ui: &mut Ui, text: &str) -> bool {
+        self.item(ui, |ui, selected| {
+            ui.add(egui::Button::new(text).selected(selected))
+        })
+    }
     pub fn button(&mut self, ui: &mut Ui, text: impl Into<String>) -> bool {
         let text = text.into();
         self.item(ui, |ui, selected| theme::menu_button(ui, &text, selected))

@@ -23,6 +23,7 @@ fn launcher() -> (DesktopApp, egui::Context, std::path::PathBuf) {
     app.game = None;
     app.screen = Screen::Home;
     app.options.launch_library = true;
+    app.load_launcher();
     super::tests::frame(&mut app, &ctx, vec![]);
     (app, ctx, path)
 }
@@ -37,25 +38,19 @@ fn confirm(app: &mut DesktopApp, ctx: &egui::Context, row: usize) -> egui::FullO
 }
 
 #[test]
-fn launch_menu_stays_compact_before_and_after_rom_verification() {
+fn launcher_shows_the_title_and_bottom_actions_before_and_after_rom_verification() {
     let (mut app, ctx, path) = launcher();
     for ready in [false, true] {
         app.library.vanilla_ready = ready;
         app.library.dx_installed = ready;
         app.settings.dx_mode = ready;
         let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
-        assert_eq!(
-            text,
-            "Play\nScenery\nSettings\nExit\nEnter: select · Esc: exit\nMenu\n"
-        );
+        assert_eq!(text, "Play\nScenery Editor\nSettings\nQuit\n");
     }
-    let popup = ctx
+    assert!(app.launcher.is_some());
+    assert!(ctx
         .memory(|memory| memory.area_rect(egui::Id::new("pause-menu")))
-        .unwrap();
-    assert!(
-        popup.width() <= 320.0 && popup.height() <= 275.0,
-        "{popup:?}"
-    );
+        .is_none());
     let output = confirm(&mut app, &ctx, 3);
     assert!(output.viewport_output[&egui::ViewportId::ROOT]
         .commands
@@ -144,7 +139,10 @@ fn scenery_returns_to_the_launcher_and_play_removes_its_menu_entry() {
     app.input.event(Button::key("Escape"), false);
     let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
     assert_eq!(app.screen, Screen::Home);
-    assert!(text.contains("Play\nScenery\nSettings\nExit\n"), "{text}");
+    assert!(
+        text.contains("Play\nScenery Editor\nSettings\nQuit\n"),
+        "{text}"
+    );
 
     // Play must clear the editor's playtest shortcut as well as enter the title.
     app.editor.playtesting = true;

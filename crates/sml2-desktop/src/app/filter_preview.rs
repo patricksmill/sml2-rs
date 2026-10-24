@@ -1,13 +1,9 @@
 //! The Display page's filter preview: one opening-level frame with Mario, an
 //! enemy and the HUD, so BG and both OBJ palettes all show, recolored per
-//! filter inside a DMG-style screen bezel.
+//! filter with a plain image and caption.
 
-use super::theme;
 use crate::settings::Filter;
-use eframe::egui::{
-    self, Align2, Color32, CornerRadius, FontId, Rect, Sense, TextureHandle, TextureOptions, Ui,
-    Vec2,
-};
+use eframe::egui::{self, TextureHandle, TextureOptions, Ui};
 use sml2_core::video::PalettePixel;
 use sml2_runtime::{content::SessionAssets, FrameInput, Session};
 
@@ -51,61 +47,12 @@ impl FilterPreview {
         &self.texture.as_ref().expect("texture just set").1
     }
 
-    /// The sample at 2× inside a slate bezel with the power LED.
+    /// The sample at 2×, without a decorative console frame.
     pub(super) fn show(&mut self, ui: &mut Ui, filter: Filter, caption: &str) {
-        let screen = Vec2::new(320.0, 288.0);
-        let size = screen + Vec2::new(64.0, 58.0);
-        let (outer, _) = ui.allocate_exact_size(size, Sense::hover());
-        let painter = ui.painter();
-        painter.rect_filled(
-            outer,
-            CornerRadius {
-                nw: 8,
-                ne: 8,
-                sw: 8,
-                se: 36,
-            },
-            theme::BEZEL,
-        );
-        // The two stripes across the top of the DMG lens.
-        for (offset, color) in [(10.0, theme::MAGENTA_DARK), (14.0, theme::NAVY)] {
-            let y = outer.min.y + offset;
-            painter.line_segment(
-                [
-                    egui::pos2(outer.min.x + 12.0, y),
-                    egui::pos2(outer.max.x - 12.0, y),
-                ],
-                egui::Stroke::new(2.0_f32, color),
-            );
-        }
-        let image = Rect::from_min_size(
-            egui::pos2(outer.center().x - screen.x / 2.0 + 8.0, outer.min.y + 26.0),
-            screen,
-        );
-        let led = egui::pos2(outer.min.x + 18.0, image.min.y + 60.0);
-        painter.circle_filled(led, 4.0, theme::LED);
-        painter.text(
-            led + Vec2::new(0.0, 12.0),
-            Align2::CENTER_TOP,
-            "POWER",
-            FontId::proportional(8.0),
-            theme::SHELL,
-        );
         let id = self.texture(ui.ctx(), filter).id();
-        let painter = ui.painter();
-        painter.rect_filled(image.expand(2.0), 2, Color32::BLACK);
-        painter.image(
-            id,
-            image,
-            Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
-            Color32::WHITE,
-        );
-        painter.text(
-            egui::pos2(image.center().x, image.max.y + 15.0),
-            Align2::CENTER_CENTER,
-            caption,
-            FontId::proportional(12.0),
-            theme::SHELL,
-        );
+        ui.vertical_centered(|ui| {
+            ui.image((id, egui::vec2(320.0, 288.0)));
+            ui.weak(caption);
+        });
     }
 }

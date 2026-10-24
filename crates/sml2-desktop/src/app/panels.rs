@@ -91,9 +91,7 @@ impl DesktopApp {
 
     /// Cold-start menu. Installation controls live in Settings → Game.
     pub(super) fn library_panel(&mut self, ctx: &Context, ui: &mut Ui) {
-        ui.set_width(260.0);
-        ui.spacing_mut().item_spacing.y = 4.0;
-        if self.menu.button(ui, "Play") {
+        if self.menu.compact_button(ui, "Play") {
             if self.library.play_enabled() {
                 self.play_library();
             } else {
@@ -102,7 +100,7 @@ impl DesktopApp {
                 self.navigate(ctx, Screen::Settings);
             }
         }
-        if self.menu.button(ui, "Scenery") {
+        if self.menu.compact_button(ui, "Scenery Editor") {
             if self.library.play_enabled() {
                 self.open_editor(ctx);
             } else {
@@ -111,11 +109,11 @@ impl DesktopApp {
                 self.navigate(ctx, Screen::Settings);
             }
         }
-        if self.menu.button(ui, "Settings") {
+        if self.menu.compact_button(ui, "Settings") {
             self.return_screen = Screen::Home;
             self.navigate(ctx, Screen::Settings);
         }
-        if self.menu.button(ui, "Exit") && self.library.row_enabled(Row::Exit) {
+        if self.menu.compact_button(ui, "Quit") && self.library.row_enabled(Row::Exit) {
             ctx.send_viewport_cmd(ViewportCommand::Close);
         }
         if let Some(message) = &self.status {

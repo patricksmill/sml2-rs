@@ -29,6 +29,7 @@ mod file_picker;
 mod filter_preview;
 mod hall;
 mod installation;
+mod launcher;
 mod panels;
 mod pointer;
 mod startup;
@@ -59,6 +60,7 @@ pub struct DesktopApp {
     allow_save: bool,
     status: Option<String>,
     game: Option<Game>,
+    launcher: Option<launcher::Launcher>,
     dx_bundle: Option<sml2_dx::Presentation>,
     dx_worker: Option<crate::dx_import::Worker>,
     dx_picker: Option<file_picker::FilePicker>,
@@ -125,10 +127,7 @@ enum LibraryPick {
 
 impl DesktopApp {
     fn new(ctx: &Context, options: Options, settings: Settings, error: Option<String>) -> Self {
-        let mut visuals = egui::Visuals::dark();
-        visuals.panel_fill = Color32::from_rgb(0x2B, 0x2D, 0x38);
-        visuals.selection.bg_fill = theme::MAGENTA;
-        ctx.set_visuals(visuals);
+        ctx.set_visuals(egui::Visuals::dark());
         ctx.options_mut(|o| o.zoom_with_keyboard = false);
         let texture = ctx.load_texture(
             "sml2-frame",
@@ -142,6 +141,7 @@ impl DesktopApp {
             allow_save: error.is_none(),
             status: error,
             game: None,
+            launcher: None,
             dx_bundle: None,
             dx_worker: None,
             dx_picker: None,
@@ -197,6 +197,8 @@ impl DesktopApp {
             app.restore_dx();
         } else if app.settings.vanilla.is_some() {
             app.start_vanilla_check();
+        } else {
+            app.load_launcher();
         }
         if app.game.is_some() {
             app.screen = Screen::Game;
@@ -306,6 +308,10 @@ impl DesktopApp {
                 self.library.vanilla_ready = true;
                 self.library.revision_name = name;
                 self.library.rom_error.clear();
+                if self.options.launch_library {
+                    self.load_launcher();
+                    self.restore_dx();
+                }
             }
             Ok(Err(error)) => {
                 self.library.vanilla_ready = false;
@@ -406,6 +412,9 @@ impl DesktopApp {
                 self.library.rom_error.clear();
                 self.library.dx_installed = self.settings.dx_installation.is_some();
                 self.library.dx_mode = self.settings.dx_mode;
+                if self.options.launch_library {
+                    self.load_launcher();
+                }
             }
             Err(error) => {
                 let mut message = format!("Settings could not be saved: {error}");
@@ -676,24 +685,39 @@ impl DesktopApp {
         if self.screen != Screen::Game {
             if self.capture.is_some() || self.dx_picker.is_some() {
                 self.menu.freeze();
+            } else if self.options.launch_library && self.screen == Screen::Home {
+                self.menu.start_horizontal(&mut self.input);
             } else {
                 self.menu.start(&mut self.input);
             }
         }
 
-        if self.settings.show_toolbar && self.game.is_some() {
+        if self.settings.show_toolbar
+            && self.game.is_some()
+            && (!self.options.launch_library
+                || matches!(self.screen, Screen::Editor | Screen::Game))
+        {
             self.toolbar(ctx);
+        }
+        if self.options.launch_library && matches!(self.screen, Screen::Home | Screen::Settings) {
+            self.launcher_bar(ctx);
         }
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(Color32::BLACK))
             .show(ctx, |ui| {
                 if self.screen == Screen::Editor {
                     self.editor_view(ctx, ui);
+                } else if self.options.launch_library
+                    && matches!(self.screen, Screen::Home | Screen::Settings)
+                {
+                    self.launcher_view(ui);
                 } else if self.game.is_some() {
                     self.game_view(ui);
                 }
             });
-        if matches!(self.screen, Screen::Home | Screen::Settings) {
+        if self.screen == Screen::Settings
+            || self.screen == Screen::Home && !self.options.launch_library
+        {
             self.pause_menu(ctx);
         }
         self.dx_picker_window(ctx);
@@ -1023,9 +1047,8 @@ impl DesktopApp {
     /// Pause and settings popups share the actual game's paused frame.
     fn pause_menu(&mut self, ctx: &Context) {
         let settings = self.screen == Screen::Settings;
-        let library = !settings && self.options.launch_library;
         let title = if settings { "Settings" } else { "Menu" };
-        egui::Window::new(egui::RichText::new(title).color(theme::INK))
+        egui::Window::new(title)
             .id(egui::Id::new(if settings {
                 "settings-popup"
             } else {
@@ -1036,16 +1059,12 @@ impl DesktopApp {
             .collapsible(false)
             .resizable(false)
             .movable(false)
-            .frame(theme::popup_frame())
             .show(ctx, |ui| {
-                ui.visuals_mut().override_text_color = Some(theme::INK);
                 egui::ScrollArea::vertical()
                     .max_height((ctx.content_rect().height() - 100.0).max(160.0))
                     .show(ui, |ui| {
                         if settings {
                             self.settings_panel(ctx, ui);
-                        } else if library {
-                            self.library_panel(ctx, ui);
                         } else {
                             self.home_panel(ctx, ui);
                         }
@@ -1055,8 +1074,6 @@ impl DesktopApp {
                     ui,
                     if settings {
                         "Esc: back · L / R: page"
-                    } else if library {
-                        "Enter: select · Esc: exit"
                     } else {
                         "Esc / Start: resume"
                     },

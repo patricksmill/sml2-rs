@@ -43,12 +43,13 @@ impl Options {
     }
 
     pub fn finish_launch(&mut self, explicit_assets: bool) {
-        self.launch_library = !(self.play
-            || self.boot_select
-            || self.room.is_some()
-            || self.reveal
-            || self.smoke_frames.is_some()
-            || explicit_assets);
+        self.launch_library = self.boot_title
+            || !(self.play
+                || self.boot_select
+                || self.room.is_some()
+                || self.reveal
+                || self.smoke_frames.is_some()
+                || explicit_assets);
     }
 }
 
@@ -112,5 +113,12 @@ mod tests {
         options.smoke_frames = None;
         options.finish_launch(true);
         assert!(!options.launch_library);
+        options.boot_title = true;
+        options.smoke_frames = Some(20);
+        options.finish_launch(true);
+        assert!(
+            options.launch_library,
+            "an explicit title launch also supports previews"
+        );
     }
 }

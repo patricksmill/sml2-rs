@@ -136,33 +136,21 @@ impl DesktopApp {
     pub(super) fn editor_view(&mut self, ctx: &Context, ui: &mut Ui) {
         self.editor_atlas(ctx);
         ui.scope(|ui| {
-            let visuals = &mut ui.style_mut().visuals;
-            visuals.override_text_color = None;
-            for (widget, fill) in [
-                (&mut visuals.widgets.noninteractive, theme::SHELL),
-                (&mut visuals.widgets.inactive, theme::SHELL_LIGHT),
-                (&mut visuals.widgets.hovered, theme::SHELL),
-                (&mut visuals.widgets.active, theme::SHELL_SHADOW),
-                (&mut visuals.widgets.open, theme::SHELL_LIGHT),
-            ] {
-                widget.bg_fill = fill;
-                widget.weak_bg_fill = fill;
-                widget.fg_stroke.color = theme::INK;
-                widget.bg_stroke = egui::Stroke::new(1.0_f32, theme::SHELL_SHADOW);
-            }
-            visuals.selection.bg_fill = theme::MAGENTA;
-            visuals.selection.stroke.color = egui::Color32::WHITE;
             ui.spacing_mut().interact_size.y = 26.0;
             ui.spacing_mut().button_padding = egui::vec2(7.0, 4.0);
             egui::Frame::NONE
-                .fill(theme::SHELL)
+                .fill(ui.visuals().panel_fill)
                 .inner_margin(8)
                 .show(ui, |ui| {
                     self.editor_tools(ctx, ui);
                     self.editor.tile_tray(ui);
                 });
             egui::TopBottomPanel::bottom("scenery-status")
-                .frame(egui::Frame::NONE.fill(theme::SHELL).inner_margin(5))
+                .frame(
+                    egui::Frame::NONE
+                        .fill(ui.visuals().panel_fill)
+                        .inner_margin(5),
+                )
                 .show_inside(ui, |ui| {
                     self.editor_status(ui);
                 });
@@ -195,10 +183,7 @@ impl DesktopApp {
                         ui.selectable_value(&mut level, *id, label);
                     }
                 });
-            if ui
-                .add(egui::Button::new("Play · Enter").fill(theme::GOLD))
-                .clicked()
-            {
+            if ui.button("Play · Enter").clicked() {
                 self.play_editor(ctx);
             }
             if ui.button("Back").clicked() {

@@ -19,7 +19,12 @@ Or launch the built executable:
 ./target/debug/sml2-desktop --play
 ```
 
-A normal launch opens a compact menu: **Play**, **Settings**, **Exit**.
+A normal launch shows the game's title sign, with its wall and grass filling
+the window, and a bottom bar: **Play**, **Scenery Editor**, **Settings**, **Quit**.
+The title preview uses the selected filter or installed DX graphics and stays
+still while you browse. Left/right or the controller D-pad selects a bottom-bar
+action; Enter, Space, or the controller's South button activates it.
+Desktop controls, settings, and the editor use standard, minimal egui styling.
 **Settings → Game** contains the original ROM importer, ROM replacement,
 and optional DX setup. On first use, Play opens that page so you can add the
 original **Super Mario Land 2 UE v1.0** ROM (`.gb` or `.gbc`). Play also opens
@@ -33,11 +38,12 @@ he jumps on Clear. Walk left from the first pipe to open the settings hall.
 F10 shows or hides the toolbar. Its **Display**, **Audio**, **Controls**,
 **Mods**, **Game**, and **Debug** tabs open the matching settings page.
 Esc, or the toolbar Menu button, opens the
-compact translucent pause menu over the current game frame, with Resume,
-Settings, the scenery editor, and Quit. Quit to title is on
+compact pause menu over the current game frame, with Resume,
+Settings and Quit. Quit to title is on
 that menu only after you have left the title. `--play` skips the library and
 the title and opens the overworld. `--title` opens the library, the same as a
-normal launch. `--file-select` skips the library and opens the pipes directly.
+normal launch; it can also be combined with `--smoke-frames` and `--screenshot`
+to preview the launcher. `--file-select` skips the library and opens the pipes directly.
 
 Linux builds require a C toolchain, pkg-config, and libudev development files
 for gilrs. X11 sessions also need libxkbcommon-x11 at runtime. For Fedora:

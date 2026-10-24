@@ -265,7 +265,7 @@ impl Editor {
         painter.rect_stroke(
             level_rect,
             0.0,
-            Stroke::new(2.0_f32, theme::MAGENTA),
+            Stroke::new(2.0_f32, theme::ACCENT),
             StrokeKind::Inside,
         );
         if level_rect.left() > rect.left() + 140.0 {
@@ -274,7 +274,7 @@ impl Editor {
                 egui::Align2::LEFT_TOP,
                 "SCENERY · paint here",
                 egui::FontId::proportional(12.0),
-                theme::SHELL_LIGHT,
+                ui.visuals().text_color(),
             );
         }
         if let Some(Gesture::Rectangle { start, end, value }) = &work.gesture {
@@ -288,7 +288,7 @@ impl Editor {
             painter.rect_stroke(
                 outline,
                 0.0,
-                Stroke::new(2.0_f32, theme::GOLD),
+                Stroke::new(2.0_f32, theme::HIGHLIGHT),
                 StrokeKind::Inside,
             );
         } else if self.pan_button.is_none() {
@@ -299,7 +299,7 @@ impl Editor {
                 let color = if erasing {
                     Color32::LIGHT_RED
                 } else {
-                    theme::GOLD
+                    theme::HIGHLIGHT
                 };
                 if !erasing && work.tool != Tool::Eyedropper {
                     draw_tile(work.metatile, at, Color32::from_white_alpha(140));

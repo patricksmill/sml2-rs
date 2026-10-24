@@ -922,10 +922,6 @@ fn pause_menu_keeps_the_actual_game_frame_visible_and_blocks_input() {
         popup.width() <= 320.0 && popup.height() <= 350.0,
         "compact popup: {popup:?}"
     );
-    assert!(
-        theme::popup_frame().fill.a() < 255,
-        "the game remains visible through the popup"
-    );
     let _ = std::fs::remove_dir_all(path);
 }
 
