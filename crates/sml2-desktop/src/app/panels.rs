@@ -94,6 +94,12 @@ impl DesktopApp {
     pub(super) fn library_panel(&mut self, ctx: &Context, ui: &mut Ui) {
         ui.set_width(theme::ROW_SIZE.x);
         ui.spacing_mut().item_spacing.y = 4.0;
+        theme::section(ui, "1. ORIGINAL GAME");
+        theme::note(ui, "Add the original Super Mario Land 2 ROM (UE v1.0).");
+        theme::note(
+            ui,
+            ".gb or .gbc is fine; the file must contain the original game.",
+        );
         let rom_label = if self.settings.vanilla.is_some() || self.library.vanilla_ready {
             "Replace ROM…"
         } else {
@@ -108,43 +114,41 @@ impl DesktopApp {
         {
             self.start_library_import(LibraryPick::Rom);
         }
-        let dx_status = self.library.row_status(Row::Dx);
-        let show_switch =
-            self.library.vanilla_ready && self.library.dx_installed && !self.library.checking;
-        if show_switch
-            && self
-                .menu
-                .row(ui, "DX Mode", Value::Toggle(self.settings.dx_mode))
-            && self.library.row_enabled(Row::Dx)
-        {
-            self.settings.dx_mode = !self.settings.dx_mode;
-            self.library.dx_mode = self.settings.dx_mode;
-        }
-        let dx_label = if self.library.dx_installed {
-            "Replace SML2DX ROM…"
-        } else {
-            "Import SML2DX ROM…"
-        };
-        let dx_value = if show_switch {
-            Value::None
-        } else {
-            Value::Text(dx_status)
-        };
-        if self.menu.row(ui, dx_label, dx_value) && self.library.row_enabled(Row::Dx) {
-            self.start_library_import(LibraryPick::Dx);
-        }
-        let _ = self.menu.row(
-            ui,
-            "Level packs",
-            Value::Text(self.library.row_status(Row::Packs)),
-        );
-        let _ = self.menu.row(
-            ui,
-            "Level editor",
-            Value::Text(self.library.row_status(Row::Editor)),
-        );
-        if self.menu.button(ui, self.library.play_label()) && self.library.row_enabled(Row::Play) {
-            self.play_library();
+        if self.library.vanilla_ready && !self.library.checking {
+            ui.add_space(10.0);
+            theme::section(ui, "2. DX MODE · OPTIONAL");
+            theme::note(ui, "Add SML2DX v1.8.1 as a patched ROM or an IPS patch.");
+            theme::note(ui, "You can skip this and play the original game.");
+            let dx_status = self.library.row_status(Row::Dx);
+            let show_switch =
+                self.library.vanilla_ready && self.library.dx_installed && !self.library.checking;
+            if show_switch
+                && self
+                    .menu
+                    .row(ui, "DX Mode", Value::Toggle(self.settings.dx_mode))
+                && self.library.row_enabled(Row::Dx)
+            {
+                self.settings.dx_mode = !self.settings.dx_mode;
+                self.library.dx_mode = self.settings.dx_mode;
+            }
+            let dx_label = if self.library.dx_installed {
+                "Replace DX ROM / IPS…"
+            } else {
+                "Add DX ROM / IPS…"
+            };
+            let dx_value = if show_switch {
+                Value::None
+            } else {
+                Value::Text(dx_status)
+            };
+            if self.menu.row(ui, dx_label, dx_value) && self.library.row_enabled(Row::Dx) {
+                self.start_library_import(LibraryPick::Dx);
+            }
+            if self.menu.button(ui, self.library.play_label())
+                && self.library.row_enabled(Row::Play)
+            {
+                self.play_library();
+            }
         }
         if self.menu.button(ui, "Exit") && self.library.row_enabled(Row::Exit) {
             ctx.send_viewport_cmd(ViewportCommand::Close);

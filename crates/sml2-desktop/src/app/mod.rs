@@ -34,6 +34,8 @@ pub(crate) mod theme;
 pub use startup::{run, Options};
 #[cfg(test)]
 mod dx_tests;
+#[cfg(test)]
+mod library_tests;
 mod screenshot;
 #[cfg(test)]
 mod tests;
@@ -555,7 +557,7 @@ impl DesktopApp {
     }
 
     fn import_library_dx(&mut self, path: std::path::PathBuf) {
-        if self.library.importing || self.dx_worker.is_some() {
+        if !self.library.row_enabled(Row::Dx) || self.dx_worker.is_some() {
             return;
         }
         let assets = match vanilla_import::vanilla_cache() {

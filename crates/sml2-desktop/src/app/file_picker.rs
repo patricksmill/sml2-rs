@@ -17,13 +17,39 @@ struct Entry {
     directory: bool,
 }
 
-fn rom_extension(path: &Path) -> bool {
-    path.extension()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.eq_ignore_ascii_case("gb") || name.eq_ignore_ascii_case("gbc"))
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InputKind {
+    Original,
+    Dx,
 }
 
-fn directory_entries(directory: &Path) -> Result<Vec<Entry>, String> {
+impl InputKind {
+    pub fn extensions(self) -> &'static [&'static str] {
+        match self {
+            Self::Original => &["gb", "gbc"],
+            Self::Dx => &["gb", "gbc", "ips"],
+        }
+    }
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Self::Original => "Step 1: Choose original ROM",
+            Self::Dx => "Step 2: Add DX ROM or IPS (optional)",
+        }
+    }
+
+    fn accepts(self, path: &Path) -> bool {
+        path.extension()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| {
+                self.extensions()
+                    .iter()
+                    .any(|ext| name.eq_ignore_ascii_case(ext))
+            })
+    }
+}
+
+fn directory_entries(directory: &Path, kind: InputKind) -> Result<Vec<Entry>, String> {
     let mut entries = Vec::new();
     for entry in fs::read_dir(directory).map_err(|e| format!("Cannot read directory: {e}"))? {
         let entry = entry.map_err(|e| format!("Cannot read directory entry: {e}"))?;
@@ -34,7 +60,7 @@ fn directory_entries(directory: &Path) -> Result<Vec<Entry>, String> {
             continue;
         };
         let directory = metadata.is_dir();
-        if directory || metadata.is_file() && rom_extension(&path) {
+        if directory || metadata.is_file() && kind.accepts(&path) {
             entries.push(Entry { path, directory });
         }
     }
@@ -60,7 +86,7 @@ fn classify(path: &Path) -> Result<PathSelection, String> {
     } else if metadata.is_file() {
         Ok(PathSelection::File)
     } else {
-        Err("Choose a regular ROM file or a directory".into())
+        Err("Choose a regular file or a directory".into())
     }
 }
 
@@ -71,6 +97,7 @@ fn home_directory() -> Option<PathBuf> {
 }
 
 pub struct FilePicker {
+    kind: InputKind,
     directory: PathBuf,
     entries: Vec<Entry>,
     /// Kept separately from display text so clicked non-UTF8 paths round-trip.
@@ -82,6 +109,10 @@ pub struct FilePicker {
 
 impl FilePicker {
     pub fn new(start: PathBuf) -> Self {
+        Self::for_kind(start, InputKind::Dx)
+    }
+
+    pub fn for_kind(start: PathBuf, kind: InputKind) -> Self {
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
         let start = if start.is_absolute() {
             start
@@ -89,6 +120,7 @@ impl FilePicker {
             cwd.join(start)
         };
         let mut picker = Self {
+            kind,
             directory: cwd.clone(),
             entries: Vec::new(),
             target: start.clone(),
@@ -117,7 +149,7 @@ impl FilePicker {
     }
 
     fn navigate(&mut self, directory: PathBuf) {
-        match directory_entries(&directory) {
+        match directory_entries(&directory, self.kind) {
             Ok(entries) => {
                 self.entries = entries;
                 self.directory = directory.clone();
@@ -139,7 +171,16 @@ impl FilePicker {
                 self.navigate(path);
                 None
             }
-            Ok(PathSelection::File) => Some(PickerResult::Selected(path)),
+            Ok(PathSelection::File) if self.kind.accepts(&path) => {
+                Some(PickerResult::Selected(path))
+            }
+            Ok(PathSelection::File) => {
+                self.error = Some(format!(
+                    "Choose a {} file",
+                    self.kind.extensions().join(", ")
+                ));
+                None
+            }
             Err(error) => {
                 self.error = Some(error);
                 None
@@ -155,14 +196,21 @@ impl FilePicker {
         let modal = egui::Modal::new(egui::Id::new("dx-rom-picker")).show(ctx, |ui| {
             ui.set_width(560.0_f32.min((ctx.content_rect().width() - 40.0).max(240.0)));
             ui.horizontal(|ui| {
-                ui.heading("Choose SML2DX ROM");
+                ui.heading(self.kind.title());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("×").on_hover_text("Cancel").clicked() {
                         result = Some(PickerResult::Cancelled);
                     }
                 });
             });
-            ui.label("Choose your patched SML2DX v1.8.1 ROM (.gb or .gbc).");
+            ui.label(match self.kind {
+                InputKind::Original => {
+                    "Choose the original Super Mario Land 2 UE v1.0 ROM (.gb or .gbc)."
+                }
+                InputKind::Dx => {
+                    "Choose a patched SML2DX v1.8.1 ROM (.gb or .gbc), or its .ips patch."
+                }
+            });
             ui.horizontal(|ui| {
                 if ui.button("Up").clicked() {
                     if let Some(parent) = self.directory.parent() {
@@ -234,7 +282,7 @@ impl FilePicker {
                 ui.colored_label(egui::Color32::LIGHT_RED, error);
             }
             ui.horizontal(|ui| {
-                if ui.button("Open ROM").clicked() {
+                if ui.button("Open file").clicked() {
                     result = self.open_target();
                 }
                 if ui.button("Cancel").clicked() {
@@ -262,11 +310,27 @@ mod tests {
         for file in ["a.GBC", "b.gb", "c.txt", "d.gbc.bak"] {
             fs::write(temp.path().join(file), b"").unwrap();
         }
-        let entries = directory_entries(temp.path()).unwrap();
+        let entries = directory_entries(temp.path(), InputKind::Original).unwrap();
         assert_eq!(entries.len(), 3);
         assert!(entries[0].directory);
         assert_eq!(entries[1].path.file_name().unwrap(), "a.GBC");
         assert_eq!(entries[2].path.file_name().unwrap(), "b.gb");
+    }
+
+    #[test]
+    fn ips_files_are_available_only_for_the_optional_dx_step() {
+        let temp = tempfile::tempdir().unwrap();
+        let patch = temp.path().join("dx.IPS");
+        fs::write(&patch, b"PATCHEOF").unwrap();
+        let mut original = FilePicker::for_kind(temp.path().to_owned(), InputKind::Original);
+        assert!(original.entries.is_empty());
+        original.set_target(patch.clone());
+        assert_eq!(original.open_target(), None);
+        assert!(original.error.is_some());
+        let mut dx = FilePicker::new(temp.path().to_owned());
+        assert_eq!(dx.entries[0].path, patch);
+        dx.set_target(patch.clone());
+        assert_eq!(dx.open_target(), Some(PickerResult::Selected(patch)));
     }
 
     #[test]
@@ -321,7 +385,7 @@ mod tests {
         std::os::unix::fs::symlink("missing", temp.path().join("broken.gbc")).unwrap();
         let rom = temp.path().join("working.gbc");
         fs::write(&rom, b"").unwrap();
-        let entries = directory_entries(temp.path()).unwrap();
+        let entries = directory_entries(temp.path(), InputKind::Original).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].path, rom);
     }

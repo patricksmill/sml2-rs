@@ -41,6 +41,11 @@ fn fingerprint_with_limits(
             if kind.is_dir() {
                 collect(root, &entry.path(), files, depth + 1, max_depth, max_files)?;
             } else if kind.is_file() {
+                // The optional patch input is not a presentation asset. Keeping it
+                // must not invalidate DX installs made before IPS support existed.
+                if dir == root && entry.file_name() == crate::SOURCE_ROM {
+                    continue;
+                }
                 if files.len() >= max_files {
                     return Err(ImportError::InvalidBundle(
                         "base assets exceed file count limit".into(),
@@ -187,5 +192,17 @@ mod tests {
         fs::write(&file, b"{}").unwrap();
         fs::write(dir.path().join("extra"), b"").unwrap();
         assert_ne!(base_fingerprint(dir.path()).unwrap(), original);
+    }
+
+    #[test]
+    fn retaining_patch_input_preserves_the_existing_asset_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("levels")).unwrap();
+        fs::write(dir.path().join("levels/level01.manifest.json"), b"{}").unwrap();
+        let before = base_fingerprint(dir.path()).unwrap();
+        fs::write(dir.path().join(crate::SOURCE_ROM), b"local original").unwrap();
+        assert_eq!(base_fingerprint(dir.path()).unwrap(), before);
+        fs::write(dir.path().join("levels").join(crate::SOURCE_ROM), b"asset").unwrap();
+        assert_ne!(base_fingerprint(dir.path()).unwrap(), before);
     }
 }

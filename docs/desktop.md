@@ -19,8 +19,16 @@ Or launch the built executable:
 ./target/debug/sml2-desktop --play
 ```
 
-A normal launch opens the library. Import a Super Mario Land 2 ROM there,
-optionally import an SML2DX ROM, then choose Play. Play opens the game's own
+A normal launch opens setup in two steps:
+
+1. Add the original **Super Mario Land 2 UE v1.0** ROM. Either `.gb` or `.gbc`
+   works when the contents match the supported original release. A patched DX
+   ROM cannot replace this step.
+2. Optionally add **SML2DX v1.8.1** as a patched `.gbc` / `.gb` ROM or an `.ips`
+   patch. This step appears after the original ROM is verified. Choose **Play
+   original** to skip DX, or **Play with DX** after installing it.
+
+Play opens the game's own
 title screen. START, or a click on the
 picture, opens the file select: Mario walks to a pipe and ducks into it, and
 he jumps on Clear. Walk left from the first pipe to open the settings hall.
@@ -63,18 +71,24 @@ Use `--assets /path/to/extracted` to run from another directory.
 
 ## SML2DX Mode
 
-On the library, **Import ROM…** (or **Replace ROM…** after a ROM is installed)
-and **Import SML2DX ROM…** add both ROMs. Once SML2DX graphics are installed,
+In step 1, **Import ROM…** (or **Replace ROM…** after a ROM is installed)
+adds the original game. Step 2's **Add DX ROM / IPS…** accepts either a patched
+ROM or an IPS patch. Once SML2DX graphics are installed,
 the library's On/Off switch chooses whether the next Play uses them, and
-**Replace SML2DX ROM…** imports another one. Widescreen, camera zoom, and
+**Replace DX ROM / IPS…** imports another one. Widescreen, camera zoom, and
 character remain in **Settings**.
 Select your patched v1.8.1 ROM built against the original UE v1.0 release.
+For IPS input, the app applies the patch to a locally retained copy of the
+original ROM without modifying your file. The resulting ROM must pass the same
+exact digest check as a patched ROM. For original-game installs made before IPS
+support, use **Replace ROM…** once to retain the original for patching.
 The importer supports the exact ROM digest documented in the
 [DX audit](sml2dx-audit.md); other revisions and modified builds are rejected.
 
 If the system dialog returns no file (including when a Linux desktop portal is
 unavailable), an in-app file browser opens. Navigate folders or paste the full
-ROM path and choose **Open ROM**. **Cancel** or Escape closes the browser.
+file path and choose **Open file**. The browser shows the file types for the
+current step. **Cancel** or Escape closes the browser.
 
 Import runs in the background and can be cancelled. The DX ROM's level loader
 tables and the 18 banks every level's presentation reads are stored locally in
@@ -100,7 +114,7 @@ DX palette throughout. DX's palette fades are not reproduced. A DX rendering
 failure falls back to the filter with the error shown on the Mods page.
 
 Installations from earlier versions, including ones from before the minigames
-and scene screens were colored, must be re-imported from the library (**Replace SML2DX ROM…**).
+and scene screens were colored, must be re-imported from the library (**Replace DX ROM / IPS…**).
 DX physics remain future work. No ROM or imported graphics are
 distributed with the application.
 

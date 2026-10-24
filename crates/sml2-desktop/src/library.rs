@@ -29,7 +29,7 @@ impl Library {
         if self.dx_installed && self.dx_mode {
             "Play with DX"
         } else {
-            "Play"
+            "Play original"
         }
     }
 
@@ -85,7 +85,7 @@ mod tests {
         assert_eq!(library.row_status(Row::Rom), "Super Mario Land 2");
         assert_eq!(library.row_status(Row::Dx), "not installed");
         assert!(library.row_enabled(Row::Dx));
-        assert_eq!(library.play_label(), "Play");
+        assert_eq!(library.play_label(), "Play original");
         library.dx_installed = true;
         library.dx_mode = true;
         assert_eq!(library.play_label(), "Play with DX");

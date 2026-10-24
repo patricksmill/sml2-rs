@@ -58,13 +58,8 @@ pub fn import_path(
     progress("Checking base assets…");
     let key = CacheKey::new(sml2_dx::base_fingerprint(assets)?);
     check(cancel)?;
-    progress("Reading and verifying DX ROM…");
-    let mut file = std::fs::File::open(path)?;
-    let mut bytes = Vec::new();
-    use std::io::Read;
-    (&mut file)
-        .take(sml2_dx::ROM_LEN as u64 + 1)
-        .read_to_end(&mut bytes)?;
+    progress("Reading and verifying DX ROM or IPS patch…");
+    let bytes = read_input(assets, path)?;
     check(cancel)?;
     progress("Extracting every level's DX graphics…");
     let bundle = sml2_dx::extract(&bytes)?;
@@ -80,6 +75,41 @@ pub fn import_path(
     )?;
     check(cancel)?;
     Ok((key, bundle))
+}
+
+fn read_input(assets: &Path, path: &Path) -> Result<Vec<u8>, ImportError> {
+    use std::io::Read;
+    let is_patch = path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("ips"));
+    // One-byte literal records have six bytes of overhead. Bound redundant
+    // records too, without limiting the patch to the expanded ROM's byte size.
+    let limit = if is_patch {
+        8 * sml2_dx::ROM_LEN
+    } else {
+        sml2_dx::ROM_LEN
+    };
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)?
+        .take(limit as u64 + 1)
+        .read_to_end(&mut bytes)?;
+    if is_patch {
+        if bytes.len() > limit {
+            return Err(ImportError::InvalidPatch("the patch is too large".into()));
+        }
+        let base = crate::vanilla_import::read_rom(&assets.join(sml2_dx::SOURCE_ROM))
+            .map_err(|error| ImportError::InvalidPatch(format!(
+                "the original ROM is unavailable. Replace the original ROM in step 1, then add the IPS again. {error}"
+            )))?;
+        sml2_extract::vanilla::identify(&base).map_err(|_| {
+            ImportError::InvalidPatch(
+                "the original ROM is invalid. Replace it in step 1, then add the IPS again.".into(),
+            )
+        })?;
+        sml2_dx::apply_ips(&base, &bytes)
+    } else {
+        Ok(bytes)
+    }
 }
 
 pub fn restore(
@@ -170,5 +200,75 @@ mod tests {
         assert!(
             matches!(worker.events.recv().unwrap(), Event::Finished(Err(e)) if e == "unsupported ROM")
         );
+    }
+
+    #[test]
+    fn ips_import_reports_missing_or_invalid_original_without_publishing() {
+        let temp = tempfile::tempdir().unwrap();
+        let assets = temp.path().join("vanilla");
+        std::fs::create_dir_all(assets.join("levels")).unwrap();
+        std::fs::write(assets.join("levels/level01.manifest.json"), b"{}").unwrap();
+        let patch = temp.path().join("dx.IPS");
+        std::fs::write(&patch, b"PATCHEOF").unwrap();
+        let root = temp.path().join("dx");
+        let cancel = AtomicBool::new(false);
+        let error = import_path(&root, &assets, &patch, &cancel, |_| {}).unwrap_err();
+        assert!(error.to_string().contains("step 1"));
+        std::fs::write(assets.join(sml2_dx::SOURCE_ROM), b"wrong original").unwrap();
+        let error = import_path(&root, &assets, &patch, &cancel, |_| {}).unwrap_err();
+        assert!(error.to_string().contains("original ROM is invalid"));
+        assert!(!root.exists());
+    }
+
+    #[test]
+    #[ignore = "requires SML2_ROM and SML2_DX_ROM pointing to local user-supplied ROMs"]
+    fn original_gbc_then_ips_and_patched_rom_install_the_same_dx_bundle() {
+        let temp = tempfile::tempdir().unwrap();
+        let original = std::fs::read(std::env::var_os("SML2_ROM").expect("set SML2_ROM")).unwrap();
+        let dx_path = PathBuf::from(std::env::var_os("SML2_DX_ROM").expect("set SML2_DX_ROM"));
+        let dx = std::fs::read(&dx_path).unwrap();
+        sml2_dx::identify(&dx).unwrap();
+        // File extensions do not substitute for original-ROM content validation.
+        let original_path = temp.path().join("original.gbc");
+        std::fs::write(&original_path, &original).unwrap();
+        let assets = temp.path().join("vanilla");
+        let commit = crate::vanilla_import::install_rom(
+            &assets,
+            &crate::vanilla_import::read_rom(&original_path).unwrap(),
+        )
+        .unwrap();
+        sml2_extract::vanilla::discard_backup(&commit);
+        assert_eq!(
+            std::fs::read(assets.join(sml2_dx::SOURCE_ROM)).unwrap(),
+            original
+        );
+        std::fs::remove_file(original_path).unwrap();
+        // Build an IPS in memory from the audited output. No ROM or patch fixture
+        // is checked in, and import uses only the retained original from here on.
+        let mut patch = b"PATCH".to_vec();
+        for (index, chunk) in dx.chunks(0xFFFF).enumerate() {
+            let offset = (index * 0xFFFF) as u32;
+            patch.extend_from_slice(&offset.to_be_bytes()[1..]);
+            patch.extend_from_slice(&(chunk.len() as u16).to_be_bytes());
+            patch.extend_from_slice(chunk);
+        }
+        patch.extend_from_slice(b"EOF");
+        let patch_path = temp.path().join("dx.ips");
+        std::fs::write(&patch_path, patch).unwrap();
+        let root = temp.path().join("dx");
+        let cancel = AtomicBool::new(false);
+        let (ips_key, ips_bundle) =
+            import_path(&root, &assets, &patch_path, &cancel, |_| {}).unwrap();
+        let (rom_key, rom_bundle) = import_path(&root, &assets, &dx_path, &cancel, |_| {}).unwrap();
+        assert_eq!(ips_key, rom_key);
+        assert_eq!(ips_bundle.encode().unwrap(), rom_bundle.encode().unwrap());
+        restore(&root, &assets, ips_key.clone(), &cancel).unwrap();
+        // A valid IPS with an unsupported output must leave the install usable.
+        std::fs::write(&patch_path, b"PATCHEOF").unwrap();
+        assert!(matches!(
+            import_path(&root, &assets, &patch_path, &cancel, |_| {}),
+            Err(ImportError::UnsupportedRevision { .. })
+        ));
+        restore(&root, &assets, ips_key, &cancel).unwrap();
     }
 }

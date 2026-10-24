@@ -1,4 +1,4 @@
-use super::file_picker::{FilePicker, PickerResult};
+use super::file_picker::{FilePicker, InputKind, PickerResult};
 use super::theme::{self, Value};
 use super::DesktopApp;
 use crate::dx_import::{self, Event, Worker};
@@ -65,11 +65,16 @@ impl DesktopApp {
                         }
                     } else {
                         self.dx_message =
-                            "No file selected in the system dialog. Choose a ROM in the file browser or cancel."
+                            "No file selected in the system dialog. Choose a file in the browser or cancel."
                                 .into();
-                        self.dx_picker = Some(FilePicker::new(
-                            std::env::current_dir().unwrap_or_else(|_| self.options.assets.clone()),
-                        ));
+                        let start =
+                            std::env::current_dir().unwrap_or_else(|_| self.options.assets.clone());
+                        self.dx_picker = Some(match self.library_pick {
+                            Some(super::LibraryPick::Rom) => {
+                                FilePicker::for_kind(start, InputKind::Original)
+                            }
+                            _ => FilePicker::new(start),
+                        });
                     }
                 }
                 Event::Progress(text) => self.dx_message = text.into(),
@@ -154,9 +159,16 @@ impl DesktopApp {
         if self.library.importing || self.dx_worker.is_some() || self.library_pick.is_some() {
             return;
         }
-        let title = match kind {
-            super::LibraryPick::Rom => "Import Super Mario Land 2",
-            super::LibraryPick::Dx => "Import SML2DX v1.8.1",
+        let row = match kind {
+            super::LibraryPick::Rom => crate::library::Row::Rom,
+            super::LibraryPick::Dx => crate::library::Row::Dx,
+        };
+        if !self.library.row_enabled(row) || self.library.checking {
+            return;
+        }
+        let input_kind = match kind {
+            super::LibraryPick::Rom => InputKind::Original,
+            super::LibraryPick::Dx => InputKind::Dx,
         };
         self.library_pick = Some(kind);
         self.dx_restore = false;
@@ -166,8 +178,8 @@ impl DesktopApp {
                 return None;
             }
             rfd::FileDialog::new()
-                .set_title(title)
-                .add_filter("Game Boy ROM", &["gb", "gbc"])
+                .set_title(input_kind.title())
+                .add_filter("Supported files", input_kind.extensions())
                 .pick_file()
         }));
     }

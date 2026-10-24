@@ -7,9 +7,11 @@ use std::{error::Error, fmt, ops::Range};
 mod bundle;
 pub mod cache;
 mod fingerprint;
+mod ips;
 mod presentation;
 pub use bundle::{extract, Bundle, BANKS};
 pub use fingerprint::base_fingerprint;
+pub use ips::apply_ips;
 pub use presentation::{
     BossArena, BossFight, LevelGraphics, MapGraphics, MapScreen, MapSprites, PlayerGraphics,
     Presentation, Screen, VramCopy,
@@ -17,6 +19,8 @@ pub use presentation::{
 
 pub const REVISION: &str = "SML2DX v1.8.1 (UE v1.0)";
 pub const ROM_LEN: usize = 0x100000;
+/// Locally retained original ROM, used only as the input to an optional IPS patch.
+pub const SOURCE_ROM: &str = "source.gb";
 /// User-supplied ROM built from the official IPS patch against UE v1.0.
 pub const ROM_SHA256: &str = "1dd604a91b9ee99ef381cc795da3ae28c72d04ba9de78b355df829e56ce49c46";
 pub const IMPORTER_VERSION: u32 = 8;
@@ -28,6 +32,7 @@ pub enum ImportError {
     InvalidRange { offset: usize, length: usize },
     InvalidPointer { bank: u8, address: u16 },
     InvalidBundle(String),
+    InvalidPatch(String),
     Cancelled,
     Io(String),
 }
@@ -47,6 +52,7 @@ impl fmt::Display for ImportError {
                 write!(f, "Invalid DX ROM pointer {bank:02X}:${address:04X}")
             }
             Self::InvalidBundle(message) => write!(f, "Invalid DX presentation bundle: {message}"),
+            Self::InvalidPatch(message) => write!(f, "Invalid DX IPS patch: {message}"),
             Self::Cancelled => f.write_str("DX import cancelled"),
             Self::Io(message) => write!(f, "DX import: {message}"),
         }

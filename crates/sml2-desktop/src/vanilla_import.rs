@@ -40,6 +40,9 @@ pub fn install_rom(dest: &Path, rom: &[u8]) -> Result<sml2_extract::vanilla::Com
                     "extract revision did not match the identified ROM".into(),
                 ));
             }
+            // Keep the supplied original for optional IPS imports, including after restart.
+            std::fs::write(stage.join(sml2_dx::SOURCE_ROM), rom)
+                .map_err(|error| PublishError::Prepare(error.to_string()))?;
             Ok(())
         },
         validate_assets,
