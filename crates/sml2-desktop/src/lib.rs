@@ -5,6 +5,7 @@ pub mod input;
 pub mod library;
 pub mod settings;
 pub mod timing;
+pub mod vanilla_import;
 
 #[cfg(feature = "native")]
 pub mod app;

@@ -8,13 +8,15 @@ pub enum Row {
     Exit,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Library {
     pub vanilla_ready: bool,
     pub checking: bool,
     pub revision_name: String,
+    pub rom_error: String,
     pub dx_installed: bool,
     pub dx_mode: bool,
+    pub dx_error: String,
     pub importing: bool,
 }
 
@@ -44,9 +46,11 @@ impl Library {
     pub fn row_status(&self, row: Row) -> String {
         match row {
             Row::Rom if self.checking => "Checking install…".into(),
+            Row::Rom if !self.rom_error.is_empty() => self.rom_error.clone(),
             Row::Rom if self.vanilla_ready => self.revision_name.clone(),
             Row::Rom => "Required".into(),
             Row::Dx if !self.vanilla_ready || self.checking => "Add a ROM first".into(),
+            Row::Dx if !self.dx_error.is_empty() => self.dx_error.clone(),
             Row::Dx if !self.dx_installed => "not installed".into(),
             Row::Dx if self.dx_mode => "On".into(),
             Row::Dx => "Off".into(),
