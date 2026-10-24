@@ -50,10 +50,17 @@ impl DesktopApp {
                         .is_some_and(|w| w.cancelled.load(std::sync::atomic::Ordering::Acquire));
                     self.dx_worker = None;
                     if cancelled {
-                        self.dx_message =
-                            "DX import cancelled; previous installation retained".into();
+                        let pick = self.library_pick.take();
+                        self.dx_message = match pick {
+                            Some(super::LibraryPick::Rom) => "ROM import cancelled.".into(),
+                            _ => "DX import cancelled; previous installation retained".into(),
+                        };
                     } else if let Some(path) = path {
-                        self.import_dx_path(path);
+                        if self.library_pick.is_some() {
+                            self.accept_library_file(path);
+                        } else {
+                            self.import_dx_path(path);
+                        }
                     } else {
                         self.dx_message =
                             "No file selected in the system dialog. Choose a ROM in the file browser or cancel."
@@ -105,71 +112,38 @@ impl DesktopApp {
         }));
     }
 
-    /// Settings → Mods: DX Mode, its character and the ROM import.
+    /// Settings → Mods keeps the character. Import and the DX switch live on the library.
     pub(super) fn dx_controls(&mut self, ui: &mut Ui) {
         theme::section(ui, "SML2DX");
-        let installed = self.dx_bundle.is_some();
-        if self
-            .menu
-            .row(ui, "DX Mode", Value::Toggle(self.settings.dx_mode))
-        {
-            self.settings.dx_mode = !self.settings.dx_mode;
-            // Turning DX Mode on without graphics goes straight to the import.
-            if self.settings.dx_mode && !installed && self.dx_worker.is_none() {
-                self.choose_dx_rom();
-            }
-        }
         let adjust = self.menu.row_adjustment();
         let character = self.settings.character;
         let shown = Value::Choice(character.label().into());
         if self.menu.row(ui, "Character", shown) || adjust != 0 {
             self.settings.character = character.next();
         }
-        theme::section(ui, "GRAPHICS");
-        if self.dx_worker.is_none() {
-            let (label, status) = if installed {
-                ("Re-import SML2DX ROM…", "v1.8.1 installed")
-            } else {
-                ("Import SML2DX ROM…", "not installed")
-            };
-            if self.dx_picker.is_none() && self.menu.row(ui, label, Value::Text(status.into())) {
-                self.choose_dx_rom();
-            }
-        } else {
-            ui.horizontal(|ui| {
-                ui.spinner();
-                theme::note(ui, "Working…");
-            });
-            if self.menu.row(ui, "Cancel DX import", Value::None) {
-                if let Some(worker) = &self.dx_worker {
-                    worker.cancel();
-                }
-                self.dx_message = "Cancelling DX import…".into();
-            }
-        }
         if !self.dx_message.is_empty() {
             theme::note(ui, &self.dx_message);
         }
-        theme::note(
-            ui,
-            "Supply your own SML2DX v1.8.1 ROM. DX Mode redraws the title, file select, map, \
-             both minigames and every level in DX graphics and color, as Mario or Luigi, in \
-             the normal game with your normal saves. Boss arenas keep the display filter for \
-             now, and DX gameplay changes are not included. Re-import if this installation \
-             predates the minigames.",
-        );
     }
 
-    fn choose_dx_rom(&mut self) {
-        self.dx_message = "Choose the patched SML2DX v1.8.1 ROM…".into();
-        self.dx_worker = Some(Worker::choose_file(|| {
+    /// One chooser at a time. A second request is ignored while an import is running.
+    pub(super) fn start_library_import(&mut self, kind: super::LibraryPick) {
+        if self.library.importing || self.dx_worker.is_some() || self.library_pick.is_some() {
+            return;
+        }
+        let title = match kind {
+            super::LibraryPick::Rom => "Import Super Mario Land 2",
+            super::LibraryPick::Dx => "Import SML2DX v1.8.1",
+        };
+        self.library_pick = Some(kind);
+        self.dx_worker = Some(Worker::choose_file(move || {
             // Unit tests drive this path; they must never open a native dialog.
             if cfg!(test) {
                 return None;
             }
             rfd::FileDialog::new()
-                .set_title("Import SML2DX v1.8.1")
-                .add_filter("Game Boy Color ROM", &["gbc", "gb"])
+                .set_title(title)
+                .add_filter("Game Boy ROM", &["gb", "gbc"])
                 .pick_file()
         }));
     }
@@ -178,12 +152,22 @@ impl DesktopApp {
     pub(super) fn dx_picker_window(&mut self, ctx: &Context) {
         let choice = self.dx_picker.as_mut().and_then(|picker| picker.show(ctx));
         match choice {
-            Some(PickerResult::Selected(path)) => self.import_dx_path(path),
+            Some(PickerResult::Selected(path)) => {
+                if self.library_pick.is_some() {
+                    self.accept_library_file(path);
+                } else {
+                    self.import_dx_path(path);
+                }
+            }
             Some(PickerResult::Cancelled) => {
                 self.dx_picker = None;
                 self.input.suppress_until_release();
                 self.menu = Default::default();
-                self.dx_message = "DX import cancelled; previous installation retained".into();
+                let pick = self.library_pick.take();
+                self.dx_message = match pick {
+                    Some(super::LibraryPick::Rom) => "ROM import cancelled.".into(),
+                    _ => "DX import cancelled; previous installation retained".into(),
+                };
             }
             None => {}
         }

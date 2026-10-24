@@ -19,15 +19,17 @@ Or launch the built executable:
 ./target/debug/sml2-desktop --play
 ```
 
-A normal launch opens the game's own title screen. START, or a click on the
+A normal launch opens the library. Import a Super Mario Land 2 ROM there,
+optionally import an SML2DX ROM, then choose Play. Play opens the game's own
+title screen. START, or a click on the
 picture, opens the file select: Mario walks to a pipe and ducks into it, and
 he jumps on Clear. Walk left from the first pipe to open the settings hall.
 F10 shows or hides the toolbar. Esc, or the toolbar Menu button, opens the
 compact translucent pause menu over the current game frame, with Resume,
 Settings, the scenery editor, and Quit. Quit to title is on
-that menu only after you have left the title. `--play` skips the title and
-opens the overworld. `--title` is the same as a normal launch.
-`--file-select` opens the pipes directly.
+that menu only after you have left the title. `--play` skips the library and
+the title and opens the overworld. `--title` opens the library, the same as a
+normal launch. `--file-select` skips the library and opens the pipes directly.
 
 Linux builds require a C toolchain, pkg-config, and libudev development files
 for gilrs. X11 sessions also need libxkbcommon-x11 at runtime. For Fedora:
@@ -61,12 +63,14 @@ Use `--assets /path/to/extracted` to run from another directory.
 
 ## SML2DX Mode
 
-In **Settings → Mods**, turn on **DX Mode** or choose **Import SML2DX ROM…**, and
-select your patched v1.8.1 ROM built against the original UE v1.0 release.
-Turning DX Mode on before anything is installed opens the import straight away.
+On the library, **Import ROM…** (or **Replace ROM…** after a ROM is installed)
+and **Import SML2DX ROM…** add both ROMs. Once SML2DX graphics are installed,
+the library's On/Off switch chooses whether the next Play uses them, and
+**Replace SML2DX ROM…** imports another one. Widescreen, camera zoom, and
+character remain in **Settings**.
+Select your patched v1.8.1 ROM built against the original UE v1.0 release.
 The importer supports the exact ROM digest documented in the
 [DX audit](sml2dx-audit.md); other revisions and modified builds are rejected.
-Existing extracted base assets are required.
 
 If the system dialog returns no file (including when a Linux desktop portal is
 unavailable), an in-app file browser opens. Navigate folders or paste the full
@@ -99,8 +103,8 @@ DX palette throughout. DX's palette fades are not reproduced. A DX rendering
 failure falls back to the filter with the error shown on the Mods page.
 
 Installations from earlier versions, including ones from before the minigames
-were colored, must be re-imported (**Re-import SML2DX ROM…**). DX physics and importing without
-extracted base assets remain future work. No ROM or imported graphics are
+were colored, must be re-imported from the library (**Replace SML2DX ROM…**).
+DX physics remain future work. No ROM or imported graphics are
 distributed with the application.
 
 ## Controls and settings

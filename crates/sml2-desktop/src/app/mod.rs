@@ -1,9 +1,9 @@
 use crate::{
     controllers::Controllers,
     game::Game,
-    input::{Action, InputState},
-    library::Library,
-    menu::{release_focus, Menu},
+    input::{Action, Button, InputState},
+    library::{Library, Row},
+    menu::{pressed, release_focus, Menu},
     settings::{Filter, Settings, VanillaInstall, Zoom},
     timing::{game_rectangle, TickBudget},
     vanilla_import,
@@ -108,6 +108,13 @@ pub struct DesktopApp {
     library: Library,
     vanilla_check: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
     library_dx_import: bool,
+    /// Which library row is waiting on the system dialog or the in-app browser.
+    library_pick: Option<LibraryPick>,
+}
+
+enum LibraryPick {
+    Rom,
+    Dx,
 }
 
 impl DesktopApp {
@@ -174,6 +181,7 @@ impl DesktopApp {
             library: Library::default(),
             vanilla_check: None,
             library_dx_import: false,
+            library_pick: None,
         };
         if !app.options.launch_library {
             app.load_game();
@@ -507,6 +515,42 @@ impl DesktopApp {
         self.screen = Screen::Game;
     }
 
+    fn quit_library_on_escape(&mut self, ctx: &Context) {
+        if self.dx_picker.is_some() || self.capture.is_some() || self.settings_open {
+            return;
+        }
+        if self.screen != Screen::Home || !self.options.launch_library || self.game.is_some() {
+            return;
+        }
+        // `pressed` consumes Esc. Exit and Esc share one quit, including while import disables it.
+        if pressed(&mut self.input, &[Button::key("Escape")]) && self.library.row_enabled(Row::Exit)
+        {
+            ctx.send_viewport_cmd(ViewportCommand::Close);
+        }
+    }
+
+    fn accept_library_file(&mut self, path: std::path::PathBuf) {
+        let kind = self.library_pick.take();
+        self.dx_picker = None;
+        self.input.suppress_until_release();
+        self.menu = Default::default();
+        match kind {
+            Some(LibraryPick::Rom) => self.import_library_rom(path),
+            Some(LibraryPick::Dx) => self.import_library_dx(path),
+            None => self.import_dx_path(path),
+        }
+    }
+
+    fn import_library_rom(&mut self, path: std::path::PathBuf) {
+        if self.library.importing {
+            return;
+        }
+        match vanilla_import::read_rom(&path) {
+            Ok(rom) => self.install_vanilla_rom(&rom),
+            Err(error) => self.library.rom_error = error,
+        }
+    }
+
     fn import_library_dx(&mut self, path: std::path::PathBuf) {
         if self.library.importing || self.dx_worker.is_some() {
             return;
@@ -596,6 +640,7 @@ impl DesktopApp {
             self.last_update = Instant::now();
         }
         self.focused = focused;
+        self.quit_library_on_escape(ctx);
         self.shortcuts(ctx);
         self.poll_imports();
         if self.screen != Screen::Game {
@@ -958,7 +1003,14 @@ impl DesktopApp {
     /// Pause and settings popups share the actual game's paused frame.
     fn pause_menu(&mut self, ctx: &Context) {
         let settings = self.screen == Screen::Settings;
-        let title = if settings { "Settings" } else { "Menu" };
+        let library = !settings && self.options.launch_library && self.game.is_none();
+        let title = if settings {
+            "Settings"
+        } else if library {
+            "Library"
+        } else {
+            "Menu"
+        };
         egui::Window::new(egui::RichText::new(title).color(theme::INK))
             .id(egui::Id::new(if settings {
                 "settings-popup"
@@ -966,7 +1018,11 @@ impl DesktopApp {
                 "pause-menu"
             }))
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-            .default_width(if settings { theme::ROW_SIZE.x } else { 260.0 })
+            .default_width(if settings || library {
+                theme::ROW_SIZE.x
+            } else {
+                260.0
+            })
             .collapsible(false)
             .resizable(false)
             .movable(false)
@@ -978,6 +1034,8 @@ impl DesktopApp {
                     .show(ui, |ui| {
                         if settings {
                             self.settings_panel(ctx, ui);
+                        } else if library {
+                            self.library_panel(ctx, ui);
                         } else {
                             self.home_panel(ctx, ui);
                         }
@@ -987,6 +1045,8 @@ impl DesktopApp {
                     ui,
                     if settings {
                         "Esc: back · L / R: page"
+                    } else if library {
+                        "Enter: select · Esc: exit"
                     } else {
                         "Esc / Start: resume"
                     },
