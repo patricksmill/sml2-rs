@@ -108,6 +108,8 @@ pub struct DesktopApp {
     library: Library,
     vanilla_check: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
     library_dx_import: bool,
+    /// The active worker is restoring a saved install. Import failures must not use this path.
+    dx_restore: bool,
     /// Which library row is waiting on the system dialog or the in-app browser.
     library_pick: Option<LibraryPick>,
 }
@@ -181,6 +183,7 @@ impl DesktopApp {
             library: Library::default(),
             vanilla_check: None,
             library_dx_import: false,
+            dx_restore: false,
             library_pick: None,
         };
         if !app.options.launch_library {
@@ -565,6 +568,7 @@ impl DesktopApp {
         };
         self.library.importing = true;
         self.library_dx_import = true;
+        self.dx_restore = false;
         self.dx_worker = Some(crate::dx_import::Worker::start(move |cancel, progress| {
             crate::dx_import::presentation(crate::dx_import::import_path(
                 &crate::dx_import::cache_root()?,

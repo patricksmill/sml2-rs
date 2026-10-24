@@ -23,6 +23,7 @@ impl DesktopApp {
         };
         let assets = self.options.assets.clone();
         self.dx_message = "Checking installed DX graphics…".into();
+        self.dx_restore = true;
         self.dx_worker = Some(Worker::start(move |cancel, _| {
             dx_import::presentation(dx_import::restore(
                 &dx_import::cache_root()?,
@@ -42,6 +43,7 @@ impl DesktopApp {
         for event in events {
             match event {
                 Event::FileChosen(path) => {
+                    self.dx_restore = false;
                     self.input.suppress_until_release();
                     self.menu = Default::default();
                     let cancelled = self
@@ -76,6 +78,8 @@ impl DesktopApp {
                         .dx_worker
                         .as_ref()
                         .is_some_and(|w| w.cancelled.load(std::sync::atomic::Ordering::Acquire));
+                    let restore = self.dx_restore;
+                    self.dx_restore = false;
                     self.dx_worker = None;
                     if cancelled {
                         self.dx_message =
@@ -87,6 +91,7 @@ impl DesktopApp {
                                 self.dx_bundle = Some(bundle);
                                 self.dx_message = format!("Installed {}", sml2_dx::REVISION);
                             }
+                            Err(error) if restore => self.fail_dx_restore(error),
                             Err(error) => self.dx_message = error,
                         }
                     }
@@ -95,9 +100,27 @@ impl DesktopApp {
         }
     }
 
+    /// Missing files or a fingerprint mismatch turn DX mode off. The install stays.
+    fn fail_dx_restore(&mut self, error: String) {
+        self.settings.dx_mode = false;
+        self.library.dx_mode = false;
+        self.library.dx_error = error.clone();
+        self.dx_message = error;
+        match self.settings.save(&self.options.paths.settings) {
+            Ok(()) => {
+                self.saved_settings = self.settings.clone();
+                self.allow_save = true;
+            }
+            Err(error) => {
+                self.status = Some(format!("Settings could not be saved: {error}"));
+            }
+        }
+    }
+
     pub(super) fn import_dx_path(&mut self, path: std::path::PathBuf) {
         let assets = self.options.assets.clone();
         self.dx_picker = None;
+        self.dx_restore = false;
         // Enter/Space used by the picker must not activate a Home menu item.
         self.input.suppress_until_release();
         self.menu = Default::default();
@@ -136,6 +159,7 @@ impl DesktopApp {
             super::LibraryPick::Dx => "Import SML2DX v1.8.1",
         };
         self.library_pick = Some(kind);
+        self.dx_restore = false;
         self.dx_worker = Some(Worker::choose_file(move || {
             // Unit tests drive this path; they must never open a native dialog.
             if cfg!(test) {

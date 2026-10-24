@@ -109,7 +109,8 @@ impl DesktopApp {
             self.start_library_import(LibraryPick::Rom);
         }
         let dx_status = self.library.row_status(Row::Dx);
-        let show_switch = self.library.dx_installed;
+        let show_switch =
+            self.library.vanilla_ready && self.library.dx_installed && !self.library.checking;
         if show_switch
             && self
                 .menu
