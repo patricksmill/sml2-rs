@@ -180,6 +180,35 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_validate_leaves_the_previous_install() {
+        let root = std::env::temp_dir().join(format!("sml2_pub_val_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dest = root.join("vanilla");
+        std::fs::create_dir_all(&dest).unwrap();
+        std::fs::write(dest.join("keep.txt"), b"old").unwrap();
+        let manifest = Manifest {
+            revision: "ue-v1.0".into(),
+            sha256: "ef".into(),
+            importer_version: IMPORTER_VERSION,
+            schema: SCHEMA,
+        };
+        let err = publish_directory(
+            &dest,
+            &manifest,
+            |stage| {
+                std::fs::write(stage.join("keep.txt"), b"new").unwrap();
+                Ok(())
+            },
+            |_| Err(PublishError::Validate("bad".into())),
+        )
+        .unwrap_err();
+        assert!(matches!(err, PublishError::Validate(_)));
+        assert_eq!(std::fs::read(dest.join("keep.txt")).unwrap(), b"old");
+        assert!(!dest.join("manifest.json").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn settings_failure_rolls_the_new_install_back() {
         let root = std::env::temp_dir().join(format!("sml2_roll_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
