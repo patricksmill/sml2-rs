@@ -201,13 +201,7 @@ impl Menu {
     }
 }
 
-pub fn release_focus(ctx: &egui::Context) {
-    ctx.memory_mut(|m| {
-        if let Some(id) = m.focused() {
-            m.surrender_focus(id);
-        }
-    });
-}
+pub use crate::ui::release_focus;
 
 #[cfg(test)]
 mod tests;

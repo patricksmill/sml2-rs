@@ -7,10 +7,6 @@ use std::collections::BTreeMap;
 
 pub(super) type Cell = (i16, i16);
 
-pub(super) fn outside_map((x, y): Cell) -> bool {
-    !(0..LAYOUT_WIDTH as i16).contains(&x) || !(0..LAYOUT_HEIGHT as i16).contains(&y)
-}
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) enum Tool {
     #[default]
@@ -111,6 +107,8 @@ pub(super) struct Workspace {
     pub layout: LevelLayout,
     pub used: Vec<u8>,
     pub count: usize,
+    /// Scene targets protect their native 10×9 cells from authoring.
+    pub scene_border: bool,
     undo: Vec<Edit>,
     redo: Vec<Edit>,
     pub gesture: Option<Gesture>,
@@ -140,6 +138,7 @@ impl Workspace {
             layout,
             used,
             count,
+            scene_border: false,
             undo: Vec::new(),
             redo: Vec::new(),
             gesture: None,
@@ -158,6 +157,15 @@ impl Workspace {
 
     pub fn paint(&self, cell: Cell) -> Option<u8> {
         self.scenery.get(i32::from(cell.0), i32::from(cell.1))
+    }
+
+    pub fn dimensions(&self) -> (usize, usize) {
+        if self.scene_border { (10, 9) } else { (LAYOUT_WIDTH, LAYOUT_HEIGHT) }
+    }
+
+    pub fn outside(&self, (x, y): Cell) -> bool {
+        let (width, height) = self.dimensions();
+        !(0..width as i16).contains(&x) || !(0..height as i16).contains(&y)
     }
 
     pub fn sample(&self, cell: Cell) -> Option<u8> {
@@ -232,6 +240,7 @@ impl Workspace {
             } => {
                 if let Some(cell) = cell {
                     for at in line(last.unwrap_or(cell), cell) {
+                        if self.scene_border && !self.outside(at) { continue; }
                         let before = self.paint(at);
                         if before == *value {
                             continue;
@@ -267,6 +276,7 @@ impl Workspace {
                 for y in start.1.min(end.1)..=start.1.max(end.1) {
                     for x in start.0.min(end.0)..=start.0.max(end.0) {
                         let cell = (x, y);
+                        if self.scene_border && !self.outside(cell) { continue; }
                         let before = self.paint(cell);
                         if before == Some(value) {
                             continue;

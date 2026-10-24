@@ -1,6 +1,6 @@
 use eframe::egui::ColorImage;
 
-pub(super) fn save(path: &std::path::Path, image: &ColorImage) -> Result<(), String> {
+pub fn save(path: &std::path::Path, image: &ColorImage) -> Result<(), String> {
     let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
     let mut encoder = png::Encoder::new(file, image.size[0] as u32, image.size[1] as u32);
     encoder.set_color(png::ColorType::Rgba);
@@ -13,7 +13,7 @@ pub(super) fn save(path: &std::path::Path, image: &ColorImage) -> Result<(), Str
 /// Compare the actual GPU screenshot with the CPU frame submitted on that render.
 /// GPU presentation may round a grey level by one (sRGB conversion on Windows),
 /// so each channel is allowed a single level of error.
-pub(super) fn verify(image: &ColorImage, frame: &ColorImage, rect: [u32; 4]) -> Result<(), String> {
+pub fn verify(image: &ColorImage, frame: &ColorImage, rect: [u32; 4]) -> Result<(), String> {
     let [x, y, w, h] = rect.map(|n| n as usize);
     let [fw, fh] = frame.size;
     if frame.pixels.len() != fw * fh

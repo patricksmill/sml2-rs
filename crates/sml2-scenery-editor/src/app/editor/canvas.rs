@@ -1,10 +1,10 @@
 //! Signed world-space canvas; gameplay zoom and camera never participate.
 
-use super::state::{outside_map, Cell, Gesture, Tool};
+use super::state::{Cell, Gesture, Tool};
 use super::Editor;
 use crate::app::theme;
 use eframe::egui::{self, Color32, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind, Ui};
-use sml2_core::level::{LAYOUT_HEIGHT, LAYOUT_WIDTH};
+use sml2_core::level::LAYOUT_WIDTH;
 use std::{collections::HashMap, sync::Arc};
 
 #[derive(Default)]
@@ -98,7 +98,7 @@ impl Editor {
         // Pick what is actually shown, including DX's collision-compatible decoration.
         let picked = if work.tool == Tool::Eyedropper {
             self.hover.and_then(|cell| {
-                if work.paint(cell).is_some() || outside_map(cell) {
+                if work.paint(cell).is_some() || work.outside(cell) {
                     work.sample(cell)
                 } else {
                     self.atlas
@@ -196,7 +196,7 @@ impl Editor {
                                 let (x, y) = (cx * 16 + dx, cy * 16 + dy);
                                 let cell = (x as i16, y as i16);
                                 let id = work.paint(cell).or_else(|| {
-                                    if outside_map(cell) {
+                                    if work.outside(cell) {
                                         None
                                     } else {
                                         atlas
@@ -233,11 +233,12 @@ impl Editor {
                 }
             }
         }
+        let (width, height) = work.dimensions();
         let level_rect = Rect::from_min_max(
             view.screen(rect, Pos2::ZERO),
             view.screen(
                 rect,
-                egui::pos2((LAYOUT_WIDTH * 16) as f32, (LAYOUT_HEIGHT * 16) as f32),
+                egui::pos2((width * 16) as f32, (height * 16) as f32),
             ),
         );
         painter.rect_filled(
@@ -280,7 +281,9 @@ impl Editor {
         if let Some(Gesture::Rectangle { start, end, value }) = &work.gesture {
             for y in start.1.min(end.1)..=start.1.max(end.1) {
                 for x in start.0.min(end.0)..=start.0.max(end.0) {
-                    draw_tile(*value, cell_rect((x, y)), Color32::from_white_alpha(140));
+                    if !work.scene_border || work.outside((x, y)) {
+                        draw_tile(*value, cell_rect((x, y)), Color32::from_white_alpha(140));
+                    }
                 }
             }
             let outline = cell_rect((start.0.min(end.0), start.1.min(end.1)))
@@ -301,7 +304,7 @@ impl Editor {
                 } else {
                     theme::HIGHLIGHT
                 };
-                if !erasing && work.tool != Tool::Eyedropper {
+                if !erasing && work.tool != Tool::Eyedropper && (!work.scene_border || work.outside(cell)) {
                     draw_tile(work.metatile, at, Color32::from_white_alpha(140));
                 }
                 if erasing {

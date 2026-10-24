@@ -124,6 +124,17 @@ impl Session {
         output: OutputMode,
         smooth: Smooth,
     ) -> (Vec<u8>, usize) {
+        let (mut frame, scale) = self.render_output_base(view, output, smooth);
+        self.decorate_scene_native(&mut frame, view, scale, output);
+        (frame, scale)
+    }
+
+    fn render_output_base(
+        &self,
+        view: (usize, usize),
+        output: OutputMode,
+        smooth: Smooth,
+    ) -> (Vec<u8>, usize) {
         let (vw, vh) = view;
         let fill = output.blank(3);
         if self

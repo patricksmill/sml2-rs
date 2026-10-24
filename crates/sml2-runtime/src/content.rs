@@ -15,6 +15,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod bundled_scenery;
+
 /// Relative asset reads, implemented by extracted directories or in-memory bundles.
 /// No source is retained by a session after loading.
 pub trait ContentSource {
@@ -56,7 +58,7 @@ pub struct LevelContent {
     pub objblock: Vec<u8>,
     pub edge_map: Option<[u8; 48]>,
     pub scene_map: Option<Vec<u8>>,
-    /// Paints drawn outside the original level picture. Empty for ROM levels.
+    /// Approved visual scenery, independent of the simulated layout.
     pub scenery: SceneryOverlay,
 }
 
@@ -124,6 +126,8 @@ pub struct SessionAssets {
     pub object_tables: ObjectTables,
     /// Title-screen and file-select VRAM/tilemaps (`frontend/*.bin`).
     pub front_end: sml2_core::front_end::FrontEndAssets,
+    /// Approved surroundings for fixed screens, maps, rooms, and boss arenas.
+    pub scene_scenery: crate::scene_scenery::SceneScenery,
     levels: std::collections::BTreeMap<u8, Result<LevelContent, String>>,
 }
 
@@ -133,6 +137,13 @@ impl SessionAssets {
     }
 
     pub fn load_from(source: &dyn ContentSource) -> Result<Self, Box<dyn Error>> {
+        Self::load_from_with_scenery(source, bundled_scenery::LEVELS)
+    }
+
+    fn load_from_with_scenery(
+        source: &dyn ContentSource,
+        scenery: &[(u8, &str)],
+    ) -> Result<Self, Box<dyn Error>> {
         let cartridge_header = load_cartridge_header(source)?;
         let music_bank = source.read("audio/music_bank04.bin")?;
         if music_bank.len() != 0x4000 {
@@ -197,7 +208,7 @@ impl SessionAssets {
                 )
             })
             .collect();
-        Ok(Self {
+        let mut assets = Self {
             cartridge_header,
             music_bank,
             nodes,
@@ -221,8 +232,13 @@ impl SessionAssets {
             arena_layout,
             object_tables,
             front_end,
+            scene_scenery: crate::scene_scenery::SceneScenery::bundled()
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
             levels,
-        })
+        };
+        bundled_scenery::apply(&mut assets, scenery)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+        Ok(assets)
     }
     /// Immutable content prepared before simulation starts.
     pub fn level(&self, id: u8) -> Result<&LevelContent, String> {

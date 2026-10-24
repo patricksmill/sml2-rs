@@ -83,7 +83,7 @@ impl DesktopApp {
                 if self.screen == Screen::Home {
                     self.library_panel(ctx, ui);
                 } else {
-                    for label in ["Play", "Scenery Editor", "Settings", "Quit"] {
+                    for label in ["Play", "Settings", "Quit"] {
                         ui.add_enabled(false, egui::Button::new(label));
                     }
                 }
@@ -259,7 +259,7 @@ mod tests {
                     .collect();
                 assert_eq!(
                     actions.iter().map(|(text, _)| *text).collect::<Vec<_>>(),
-                    ["Play", "Scenery Editor", "Settings", "Quit"]
+                    ["Play", "Settings", "Quit"]
                 );
                 let view = launcher.texture.as_ref().unwrap().0.view;
                 let native_y = sml2_runtime::render::view::margin(view).1 as f32;
@@ -287,7 +287,7 @@ mod tests {
                 "idle launcher frames never start attract mode"
             );
         }
-        for (key, expected) in [("ArrowRight", 1), ("ArrowLeft", 0), ("ArrowLeft", 3)] {
+        for (key, expected) in [("ArrowRight", 1), ("ArrowLeft", 0), ("ArrowLeft", 2)] {
             app.input.event(Button::key(key), true);
             crate::app::tests::frame(&mut app, &ctx, vec![]);
             assert_eq!(app.menu.selected, expected);

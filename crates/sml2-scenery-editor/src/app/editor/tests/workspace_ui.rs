@@ -1,9 +1,9 @@
 use crate::app::editor::state::Tool;
-use crate::app::{tests::app, DesktopApp, Screen};
+use crate::app::{tests::app, EditorApp, Screen};
 use eframe::egui::{self, Context, Event, Key, Modifiers, PointerButton, Pos2, Rect};
 
-pub(super) fn frame(
-    app: &mut DesktopApp,
+pub(in crate::app) fn frame(
+    app: &mut EditorApp,
     ctx: &Context,
     size: (f32, f32),
     events: Vec<Event>,
@@ -30,6 +30,18 @@ pub(super) fn frame(
         .inner_rect = raw.screen_rect;
     app.receive_input(&raw);
     ctx.run(raw, |ctx| app.ui(ctx))
+}
+
+fn draws_texture(shape: &egui::Shape, texture: egui::TextureId) -> bool {
+    match shape {
+        egui::Shape::Mesh(mesh) => mesh.texture_id == texture,
+        egui::Shape::Rect(rect) => rect
+            .brush
+            .as_ref()
+            .is_some_and(|brush| brush.fill_texture_id == texture),
+        egui::Shape::Vec(shapes) => shapes.iter().any(|shape| draws_texture(shape, texture)),
+        _ => false,
+    }
 }
 
 fn pointer(pos: Pos2, button: PointerButton, pressed: bool) -> Event {
@@ -307,8 +319,6 @@ fn wheel_and_space_pan_do_not_paint_or_change_gameplay_zoom() {
 #[test]
 fn playtest_restarts_with_scenery_and_escape_restores_the_workspace() {
     let (mut app, ctx, path) = app();
-    app.options.launch_library = true;
-    app.load_launcher();
     app.open_editor(&ctx);
     let work = app.editor.work.as_mut().unwrap();
     work.viewport.center = egui::pos2(-200.0, 800.0);
@@ -318,13 +328,16 @@ fn playtest_restarts_with_scenery_and_escape_restores_the_workspace() {
     work.begin((-1, 48), false);
     work.finish();
     let size = (800.0, 720.0);
-    let output = frame(&mut app, &ctx, size, vec![key(Key::Enter, Modifiers::NONE)]);
+    frame(&mut app, &ctx, size, vec![key(Key::Enter, Modifiers::NONE)]);
+    let output = frame(&mut app, &ctx, size, vec![]);
     assert!(app.screen == Screen::Game);
     assert!(app.editor.playtesting);
+    let playtest = app.texture.id();
     assert!(
-        output.shapes.iter().any(|shape| matches!(
-            &shape.shape, egui::Shape::Mesh(mesh) if mesh.texture_id == app.texture.id()
-        )),
+        output
+            .shapes
+            .iter()
+            .any(|shape| draws_texture(&shape.shape, playtest)),
         "playtesting from the launcher draws the game"
     );
     let sml2_runtime::session::SessionState::InLevel(level) =

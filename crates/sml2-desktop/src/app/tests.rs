@@ -2,8 +2,9 @@ use super::debug::DebugAction;
 use super::*;
 use crate::{
     input::{Button, PadButton},
-    settings::AppPaths,
+    settings::{AppPaths, Filter},
 };
+use sml2_core::video::PalettePixel;
 use sml2_runtime::session::SessionState;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -788,15 +789,32 @@ fn home_pipes_show_the_saved_stage_tally_across_a_restart() {
 }
 
 #[test]
-fn the_scenery_editor_opens_without_changing_the_game_view() {
-    let (mut app, ctx, path) = app();
-    frame(&mut app, &ctx, vec![]);
-    app.open_editor(&ctx);
-    assert!(app.screen == Screen::Editor);
-    let view = app.settings.view();
-    frame(&mut app, &ctx, vec![]);
-    assert_eq!(app.settings.view(), view);
-    let _ = std::fs::remove_dir_all(path);
+fn normal_play_ignores_local_editor_drafts() {
+    let (app, ctx, path) = app();
+    let bundled = app
+        .game
+        .as_ref()
+        .unwrap()
+        .session
+        .assets
+        .level(0)
+        .unwrap()
+        .scenery
+        .clone();
+    std::fs::create_dir_all(&path).unwrap();
+    let draft = path.join("scenery-00.json");
+    let text = r#"{"paints":[{"x":-2,"y":48,"metatile":1}]}"#;
+    std::fs::write(&draft, text).unwrap();
+    let mut restarted = DesktopApp::new(&ctx, app.options, Settings::default(), None);
+    let session = &mut restarted.game.as_mut().unwrap().session;
+    assert_eq!(session.assets.level(0).unwrap().scenery, bundled);
+    session.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(level) = &session.state else {
+        panic!("expected level 0");
+    };
+    assert_eq!(level.scenery, bundled);
+    assert_eq!(std::fs::read_to_string(draft).unwrap(), text);
+    std::fs::remove_dir_all(path).ok();
 }
 
 #[test]

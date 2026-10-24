@@ -37,6 +37,16 @@ See [DX Mode setup and limits](docs/desktop.md#sml2dx-mode).
 See [Desktop shell](docs/desktop.md) for Linux build dependencies, controls,
 storage paths and validation commands. Original CLI commands remain available.
 
+Approved scenery extensions ship with the port. Authoring is available in the
+separate, optional [Scenery Editor](docs/scenery-editor.md):
+
+```sh
+cargo run -p sml2-scenery-editor
+```
+
+Local drafts stay in the editor; explicitly exported and approved scenery is
+included in future game releases.
+
 GitHub Actions builds downloadable Windows x64 executables on pushes and pull
 requests. See [Windows builds](docs/windows-builds.md) for download and setup
 instructions. Game data is supplied separately.

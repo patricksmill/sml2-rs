@@ -100,15 +100,6 @@ impl DesktopApp {
                 self.navigate(ctx, Screen::Settings);
             }
         }
-        if self.menu.compact_button(ui, "Scenery Editor") {
-            if self.library.play_enabled() {
-                self.open_editor(ctx);
-            } else {
-                self.return_screen = Screen::Home;
-                self.page = Page::Game;
-                self.navigate(ctx, Screen::Settings);
-            }
-        }
         if self.menu.compact_button(ui, "Settings") {
             self.return_screen = Screen::Home;
             self.navigate(ctx, Screen::Settings);

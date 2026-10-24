@@ -5,7 +5,7 @@ use sml2_core::level::{LevelLayout, LAYOUT_SIZE};
 mod persistence;
 mod preview;
 mod rendering;
-mod workspace_ui;
+pub(in crate::app) mod workspace_ui;
 
 fn workspace() -> Workspace {
     let mut work = Workspace::new(

@@ -20,15 +20,22 @@ default branch. Builds use stable Rust and the committed Cargo.lock.
    ```
 
 You can also point `--assets` at an existing extracted directory elsewhere.
+The optional **sml2-scenery-editor-windows-x64** artifact contains the separate
+editor executable and instructions; the game download excludes it.
 Run `.\sml2-desktop.exe --help` to see startup options. The included `Desktop.md`
 (or `docs/desktop.md` in the source repository) lists controls and settings.
 
 ## Game data and current limitations
 
-The archive contains no ROM or extracted game assets. Direct ROM import is
-planned; this version requires data produced by `sml2-extract` from your local
-byte-identical `sml2decomp` checkout and base ROM. The extractor expects that
-checkout at `../sml2decomp`, or at the path set by `SML2_DECOMP_ROOT`:
+Neither archive contains ROMs or extracted game assets. The game and editor
+share the verified original-ROM importer and optional DX graphics cache.
+Open Settings → Game in the game, or Game data in the editor, to import your
+supported original ROM. Authored scenery data approved for release is embedded
+in the executables.
+
+As an alternative, `sml2-extract` can produce data from a local byte-identical
+`\sml2decomp` checkout and base ROM. It expects that checkout at
+`../sml2decomp`, or at the path set by `SML2_DECOMP_ROOT`:
 
 ```powershell
 $env:SML2_DECOMP_ROOT = "C:\path\to\sml2decomp"
@@ -43,8 +50,8 @@ The live audio backend currently targets PulseAudio/PipeWire; native Windows
 audio is pending. Use `--no-audio` for Windows testing. GPU presentation,
 controller hotplug, and gameplay still need hands-on Windows validation.
 
-CI runs the desktop policy tests that do not need game data, builds all three
-executables, and checks the desktop CLI's `--help` startup path. It does not
+CI runs the desktop policy tests that do not need game data, builds the game, runtime, extractor, and optional editor, and checks both
+desktop and editor `--help` startup paths. It does not
 exercise a graphical window or the ROM-dependent replay/parity suite.
 The music bank is loaded from `extracted/audio/music_bank04.bin` at runtime;
 production executables do not embed it or require it during compilation.
@@ -56,7 +63,7 @@ Build Tools C++ workload and Windows SDK. From the repository root:
 
 ```powershell
 cargo test --locked -p sml2-desktop --no-default-features --lib
-cargo build --locked --release --target x86_64-pc-windows-msvc -p sml2-desktop -p sml2-runtime -p sml2-extract
+cargo build --locked --release --target x86_64-pc-windows-msvc -p sml2-desktop -p sml2-runtime -p sml2-extract -p sml2-scenery-editor
 ```
 
 Executables are in `target\x86_64-pc-windows-msvc\release`.

@@ -15,6 +15,25 @@ fn temp_save(name: &str) -> PathBuf {
 }
 
 #[test]
+fn authoring_preview_has_no_save_destination_and_save_actions_do_nothing() {
+    let mut game = Game::preview(SessionAssets::load().unwrap(), false);
+    assert!(game.save.is_none());
+    assert_eq!(game.session.active_slot, None);
+    let initial = game.session.slots.image();
+
+    // Even if a file-select action activates a slot during a playtest, host
+    // save actions must not turn it into a persistent game or alter that slot.
+    game.session.active_slot = Some(2);
+    game.session.level_tally = 0x45;
+    game.save_now().unwrap();
+    game.persist_slots().unwrap();
+    assert_eq!(game.session.slots.image(), initial);
+    game.session.begin_level(0, 0).unwrap();
+    game.tick(PlayerKeys::default(), 0.0);
+    assert!(game.save.is_none());
+}
+
+#[test]
 fn catch_up_ticks_each_render_audio_at_the_live_game_rate() {
     let save = std::env::temp_dir().join(format!("sml2-audio-ticks-{}.sav", std::process::id()));
     let mut game = Game::new(SessionAssets::load().unwrap(), save, false);

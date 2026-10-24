@@ -10,6 +10,7 @@ pub mod host;
 pub mod play_tape;
 pub mod present;
 pub mod render;
+pub mod scene_scenery;
 pub mod session;
 
 mod cli;

@@ -12,7 +12,7 @@ use std::{fs, path::PathBuf};
 
 pub struct Game {
     pub session: Session,
-    save: PathBuf,
+    save: Option<PathBuf>,
     apu: Apu,
     buffer: Vec<f32>,
     output: Option<AudioOutput>,
@@ -60,16 +60,7 @@ impl Game {
         }
         session.slots = slots;
 
-        let mut game = Self {
-            session,
-            save,
-            apu: Apu::new(),
-            buffer: Vec::new(),
-            output: None,
-            audio_enabled,
-            div_clock: VirtualDividerClock::seeded_from_time(),
-            diagnostics,
-        };
+        let mut game = Self::with_session(session, Some(save), audio_enabled, diagnostics);
         // Rewrite a migrated legacy save in the slot image immediately, so the
         // next launch and the file select see the same three pipes.
         if migrated {
@@ -80,15 +71,44 @@ impl Game {
         game
     }
 
+    /// An isolated authoring session with no save location or progress IO.
+    pub fn preview(assets: SessionAssets, audio_enabled: bool) -> Self {
+        Self::with_session(Session::new(assets), None, audio_enabled, Vec::new())
+    }
+
+    fn with_session(
+        session: Session,
+        save: Option<PathBuf>,
+        audio_enabled: bool,
+        diagnostics: Vec<String>,
+    ) -> Self {
+        Self {
+            session,
+            save,
+            apu: Apu::new(),
+            buffer: Vec::new(),
+            output: None,
+            audio_enabled,
+            div_clock: VirtualDividerClock::seeded_from_time(),
+            diagnostics,
+        }
+    }
+
     /// Write the three-slot image (`$F0` bytes) atomically.
     fn persist_slots(&self) -> Result<(), std::io::Error> {
-        atomic_write(&self.save, &self.session.slots.image())
+        match &self.save {
+            Some(save) => atomic_write(save, &self.session.slots.image()),
+            None => Ok(()),
+        }
     }
 
     /// Write the live progress record into the active pipe and persist the
     /// slot image. The debug panel's Save button uses this; edits are not
     /// written until it is pressed.
     pub fn save_now(&mut self) -> std::io::Result<()> {
+        if self.save.is_none() {
+            return Ok(());
+        }
         if let Some(slot) = self.session.active_slot {
             let record = self.session.save_record();
             self.session.slots.write_slot(slot as usize, &record);

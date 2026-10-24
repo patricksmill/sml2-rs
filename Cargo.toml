@@ -6,5 +6,6 @@ members = [
     "crates/sml2-core",
     "crates/sml2-runtime",
     "crates/sml2-desktop",
+    "crates/sml2-scenery-editor",
 ]
 default-members = ["crates/sml2-extract", "crates/sml2-core", "crates/sml2-runtime"]

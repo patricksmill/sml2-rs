@@ -3,7 +3,6 @@ pub enum Row {
     Rom,
     Dx,
     Packs,
-    Editor,
     Play,
     Exit,
 }
@@ -37,7 +36,7 @@ impl Library {
         match row {
             Row::Rom => !self.importing,
             Row::Dx => self.vanilla_ready && !self.checking && !self.importing,
-            Row::Packs | Row::Editor => false,
+            Row::Packs => false,
             Row::Play => self.play_enabled(),
             Row::Exit => !self.importing,
         }
@@ -54,7 +53,7 @@ impl Library {
             Row::Dx if !self.dx_installed => "not installed".into(),
             Row::Dx if self.dx_mode => "On".into(),
             Row::Dx => "Off".into(),
-            Row::Packs | Row::Editor => "Not in this version".into(),
+            Row::Packs => "Not in this version".into(),
             Row::Play => self.play_label().into(),
             Row::Exit => "Quit".into(),
         }
@@ -74,7 +73,6 @@ mod tests {
         assert_eq!(library.row_status(Row::Dx), "Add a ROM first");
         assert_eq!(library.row_status(Row::Packs), "Not in this version");
         assert!(!library.row_enabled(Row::Packs));
-        assert_eq!(library.row_status(Row::Editor), "Not in this version");
         library.checking = true;
         assert_eq!(library.row_status(Row::Rom), "Checking install…");
         assert!(!library.play_enabled());

@@ -1,6 +1,6 @@
 //! Scenery authoring workspace. The live game is used only for playtesting.
 
-use super::{theme, DesktopApp, Screen};
+use super::{theme, EditorApp, Screen};
 use eframe::egui::{self, Context, PointerButton, Rect, Ui};
 use state::{Cell, Tool, Workspace};
 use std::collections::BTreeMap;
@@ -9,12 +9,17 @@ mod canvas;
 mod palette;
 mod persistence;
 mod state;
+mod export;
+mod targets;
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;
 
 #[derive(Default)]
 pub(super) struct Editor {
     pub level: u8,
+    scene: Option<sml2_runtime::scene_scenery::SceneTarget>,
+    scenes: BTreeMap<sml2_runtime::scene_scenery::SceneTarget, Workspace>,
+    export: Option<export::ExportDialog>,
     work: Option<Workspace>,
     levels: BTreeMap<u8, Workspace>,
     atlas: Option<palette::Atlas>,
@@ -27,17 +32,9 @@ pub(super) struct Editor {
     pan_button: Option<PointerButton>,
 }
 
-impl DesktopApp {
+impl EditorApp {
     pub(super) fn open_editor(&mut self, ctx: &Context) {
-        if self.game.is_none() {
-            if self.options.launch_library {
-                if !self.load_library_game() {
-                    return;
-                }
-            } else {
-                self.load_game();
-            }
-        }
+        if self.game.is_none() { self.load_game(); }
         if self.game.is_none() {
             return;
         }
@@ -45,7 +42,7 @@ impl DesktopApp {
             self.restore_dx();
         }
         if self.editor.work.is_none() {
-            self.load_editor_level();
+            if self.editor.scene.is_some() { self.load_editor_scene(); } else { self.load_editor_level(); }
         }
         self.editor.playtesting = false;
         self.navigate(ctx, Screen::Editor);
@@ -58,6 +55,7 @@ impl DesktopApp {
         let Ok(content) = game.session.assets.level(self.editor.level) else {
             return;
         };
+        let initial_scenery = content.scenery.clone();
         let mut work = Workspace::new(
             content.layout.clone(),
             content.manifest.metatiles.metatiles.len(),
@@ -66,6 +64,7 @@ impl DesktopApp {
                 f32::from(content.manifest.header.camera_start_y),
             ),
         );
+        work.scenery = initial_scenery;
         match self.read_scenery(self.editor.level, work.count) {
             Ok(scenery) => work.scenery = scenery,
             Err(error) => work.load_error = Some(error),
@@ -74,13 +73,15 @@ impl DesktopApp {
     }
 
     fn select_editor_level(&mut self, id: u8) {
-        if id == self.editor.level {
+        if id == self.editor.level && self.editor.scene.is_none() {
             return;
         }
         self.finish_editor_gesture();
         if let Some(work) = self.editor.work.take() {
-            self.editor.levels.insert(self.editor.level, work);
+            if let Some(scene) = self.editor.scene { self.editor.scenes.insert(scene, work); }
+            else { self.editor.levels.insert(self.editor.level, work); }
         }
+        self.editor.scene = None;
         self.editor.level = id;
         self.editor.work = self.editor.levels.remove(&id);
         if self.editor.work.is_none() {
@@ -118,6 +119,15 @@ impl DesktopApp {
         let Some(game) = &mut self.game else {
             return;
         };
+        if let Some(scene) = self.editor.scene {
+            if let Err(error) = game.session.set_scene_scenery(scene, work.scenery.clone()).and_then(|()| game.session.stage_scenery_scene(scene)) {
+                self.status = Some(error); return;
+            }
+            self.paused = false;
+            self.editor.playtesting = true;
+            self.navigate(ctx, Screen::Game);
+            return;
+        }
         let id = self.editor.level;
         let Ok(mut content) = game.session.assets.level(id).cloned() else {
             return;
@@ -166,31 +176,17 @@ impl DesktopApp {
     }
 
     fn editor_tools(&mut self, ctx: &Context, ui: &mut Ui) {
-        let mut level = self.editor.level;
         ui.horizontal_wrapped(|ui| {
             ui.strong("SCENERY MAKER");
-            egui::ComboBox::from_id_salt("scenery-level")
-                .width(170.0)
-                .selected_text(
-                    self.levels
-                        .iter()
-                        .find(|(id, _)| *id == level)
-                        .map(|(_, label)| label.as_str())
-                        .unwrap_or("Level"),
-                )
-                .show_ui(ui, |ui| {
-                    for (id, label) in &self.levels {
-                        ui.selectable_value(&mut level, *id, label);
-                    }
-                });
+            self.target_picker(ui);
             if ui.button("Play · Enter").clicked() {
                 self.play_editor(ctx);
             }
+            if ui.button("Export level…").clicked() { self.begin_export(); }
             if ui.button("Back").clicked() {
                 self.navigate(ctx, Screen::Home);
             }
         });
-        self.select_editor_level(level);
         let Some(work) = &mut self.editor.work else {
             return;
         };
@@ -280,7 +276,7 @@ impl DesktopApp {
                     "· {}, {} · {}",
                     cell.0,
                     cell.1,
-                    if state::outside_map(cell) {
+                    if work.outside(cell) {
                         "Scenery"
                     } else {
                         "Map scenery"
@@ -300,7 +296,7 @@ impl DesktopApp {
     pub(super) fn editor_shortcuts(&mut self, ctx: &Context) {
         // Ordinary tool buttons retain egui focus too. Only popups and debug
         // text entry should take these shortcuts away from the workspace.
-        if egui::Popup::is_any_open(ctx) || self.debug && ctx.wants_keyboard_input() {
+        if self.editor.export.is_some() || egui::Popup::is_any_open(ctx) || self.debug && ctx.wants_keyboard_input() {
             return;
         }
         let Some(work) = &mut self.editor.work else {
@@ -340,7 +336,7 @@ impl DesktopApp {
             )
         });
         if undo || redo || tool.is_some() || grid || play || zoom_delta != 0 {
-            crate::menu::release_focus(ctx);
+            sml2_desktop::ui::release_focus(ctx);
         }
         if undo || redo || tool.is_some() {
             work.finish();

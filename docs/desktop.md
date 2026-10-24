@@ -246,71 +246,17 @@ cargo run -p sml2-desktop -- --save ./sml2.sav
 currently uses the runtime's existing PulseAudio/PipeWire backend; `--no-audio`
 disables it. Portable in-process audio remains separate follow-up work.
 
-## Scenery Maker
+## Scenery
 
-Choose **Scenery editor** from the desktop menu. The canvas shows the level
-with a magenta boundary; paint scenery anywhere using the level's existing
-tiles, including beneath the ground inside the 256×48 map. Scenery changes
-appearance only, never collision. The editor has its own pan and 1×–8× zoom, so it works with the default gameplay view too.
+Approved scenery extensions are embedded in port releases and shared by all
+three save pipes. The desktop game and CLI use the same bundled content.
+Scenery changes rendering only; collision, actors, and routes are unchanged.
 
-| Action | Control |
-|---|---|
-| Brush / Eraser / Eyedropper / Rectangle | B / E / I / R, or the tool buttons |
-| Paint | Left-drag; rectangles apply on release |
-| Temporary eraser | Right-drag |
-| Pan | Middle-drag or Space + left-drag |
-| Scroll | Mouse wheel / trackpad; Shift-wheel scrolls horizontally |
-| Zoom | Ctrl/Cmd-wheel around pointer; + / − around canvas center |
-| Grid | G |
-| Undo / Redo | Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z |
-| Playtest / Return to editor | Enter / Escape |
-| Cancel an unfinished gesture | Escape |
-
-The collapsible tile tray shows **Used in level** by default; **All tiles**
-includes every metatile in the tileset. The canvas and thumbnails follow the
-selected display filter or installed DX graphics. Eyedropper can sample both
-terrain and scenery. Blank scenery leaves the selected tile unchanged.
-
-During play, live changes from hitting blocks or collecting coins take
-precedence over painted scenery at that cell. The saved scenery stays intact
-for editing and restarting the level.
-
-Each stroke or rectangle is one undo step, with the latest 100 steps retained
-per level. Level switching and returning from playtest preserve the viewport,
-selected tile, tool, and history for this app session. Playtest restarts the
-selected level using its normal entry and gameplay display settings. Scenery
-inside the map appears at native gameplay size too; enlarge the gameplay view in **Settings → Mods → View** to see farther beyond the map.
-
-Completed gestures and undo/redo autosave atomically to `scenery-NN.json`
-beside `settings.json` (`NN` is the zero-based level ID). The status strip
-shows saving and failure states. Saved scenery loads automatically on game
-startup and is shared by all three save pipes. Edits saved during a session
-apply the next time you enter or restart that level, without needing Playtest.
-Invalid scenery files are reported in the debug diagnostics and left intact;
-the affected level uses its original scenery until the file is repaired.
-A failed save retains the edits in memory;
-use **Retry** after fixing the storage problem. Unreadable or invalid files
-lock editing instead of being replaced; repair the file and choose **Reload
-file**. The existing scenery JSON format remains compatible. History and
-viewport settings are kept only until the app exits.
-
-Scenery uses a lazily allocated 24 KiB grid for map cells and sparse 16×16
-chunks outside the map. JSON files retain the same `paints` list. The Rust
-overlay keeps its index private; use `set`, `erase`, `get`, `len`, and
-`is_empty`, or `paints()` to materialize a snapshot for IO. Rendering resolves
-scenery once per visible metatile. The editor caches visible chunk meshes,
-invalidates edited chunks, and skips hidden gameplay rendering. Idle editor
-repaints are driven by input, save status changes, and active import jobs.
-
-To measure CPU rendering with 0, 256, 2,048, and 8,192 painted cells using
-the existing extracted assets:
-
-```sh
-cargo run --release -p sml2-runtime --example scenery_bench
-```
-
-This reports the median of seven renders at native and enlarged sizes. It
-excludes simulation, audio, and GPU presentation; it is not a hardware FPS test.
+Authoring is available in the separate, optional
+[Scenery Editor](scenery-editor.md). The normal game has no editor menus and
+ignores local `scenery-NN.json` drafts beside the settings file. Existing drafts
+remain editable in the companion app. Only exported, reviewed files registered
+in the repository ship with a release.
 
 ## Validation
 
@@ -327,7 +273,7 @@ native and DX scenery renderers. Optional headless UI review PNGs can be
 exported into the system temporary directory with:
 
 ```sh
-cargo test -p sml2-desktop export_workspace_previews --lib -- --ignored --nocapture
+cargo test -p sml2-scenery-editor export_workspace_previews --lib -- --ignored --nocapture
 ```
 
 A bounded native-window smoke run can capture a screenshot without changing

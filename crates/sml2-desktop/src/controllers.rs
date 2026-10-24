@@ -31,7 +31,7 @@ fn identity(gamepad: &gilrs::Gamepad<'_>) -> String {
 }
 
 impl Controllers {
-    #[cfg(test)]
+    /// Construct a host without opening controller devices.
     pub fn disconnected() -> Self {
         Self {
             gilrs: None,

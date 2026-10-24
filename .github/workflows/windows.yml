@@ -43,10 +43,14 @@ jobs:
         run: cargo test --locked -p sml2-desktop --no-default-features --lib
 
       - name: Build release executables
-        run: cargo build --locked --release -p sml2-desktop -p sml2-runtime -p sml2-extract
+        run: cargo build --locked --release -p sml2-desktop -p sml2-runtime -p sml2-extract -p sml2-scenery-editor
 
       - name: Smoke test executable startup
-        run: ./target/x86_64-pc-windows-msvc/release/sml2-desktop.exe --help
+        run: |
+          ./target/x86_64-pc-windows-msvc/release/sml2-desktop.exe --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./target/x86_64-pc-windows-msvc/release/sml2-scenery-editor.exe --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Stage download
         run: |
@@ -57,11 +61,23 @@ jobs:
           }
           Copy-Item "docs/windows-builds.md" "$destination/README-Windows.md"
           Copy-Item "docs/desktop.md" "$destination/Desktop.md"
+          $editorDestination = "target/windows-editor-package"
+          New-Item -ItemType Directory -Force -Path $editorDestination | Out-Null
+          Copy-Item "target/x86_64-pc-windows-msvc/release/sml2-scenery-editor.exe" $editorDestination
+          Copy-Item "docs/scenery-editor.md" "$editorDestination/README-Scenery-Editor.md"
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v7
         with:
           name: sml2-windows-x64
           path: target/windows-package/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload optional Scenery Editor
+        uses: actions/upload-artifact@v7
+        with:
+          name: sml2-scenery-editor-windows-x64
+          path: target/windows-editor-package/
           if-no-files-found: error
           retention-days: 14

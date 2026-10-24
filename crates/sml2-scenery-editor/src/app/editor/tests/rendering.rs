@@ -1,5 +1,5 @@
 use crate::app::editor::palette::{dx_tile, native_tile};
-use crate::app::{colorized, dx_tests::red_bundle, tests::app};
+use crate::app::{colorized, tests::red_bundle, tests::app};
 use crate::settings::Filter;
 use eframe::egui::Color32;
 use sml2_core::scenery::{SceneryOverlay, SceneryPaint};
@@ -13,8 +13,6 @@ fn enabling_dx_after_opening_the_editor_restores_and_refreshes_its_graphics() {
     use std::sync::{atomic::AtomicBool, mpsc, Arc};
 
     let (mut app, ctx, path) = app();
-    app.options.launch_library = true;
-    app.library.vanilla_ready = true;
     app.settings.filter = Filter::Gray;
     app.open_editor(&ctx);
     frame(&mut app, &ctx, vec![]);

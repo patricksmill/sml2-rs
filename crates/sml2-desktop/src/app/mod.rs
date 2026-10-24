@@ -4,7 +4,7 @@ use crate::{
     input::{Action, Button, InputState},
     library::{Library, Row},
     menu::{pressed, release_focus, Menu},
-    settings::{Filter, Settings, VanillaInstall, Zoom},
+    settings::{Settings, VanillaInstall, Zoom},
     timing::{game_rectangle, TickBudget},
     vanilla_import,
 };
@@ -12,7 +12,6 @@ use eframe::egui::{
     self, Color32, ColorImage, Context, RawInput, TextureHandle, TextureOptions, ViewportCommand,
 };
 use sml2_core::player_sim::PlayerKeys;
-use sml2_core::video::PalettePixel;
 use sml2_runtime::content::{ExtractedContent, SessionAssets};
 use sml2_runtime::render::motion::{pick_scale, Smooth};
 #[cfg(test)]
@@ -23,7 +22,6 @@ mod castle_backdrop;
 mod controls;
 mod debug;
 mod dx;
-mod editor;
 mod file_picker;
 mod filter_preview;
 mod installation;
@@ -32,13 +30,13 @@ mod panels;
 mod pause_backdrop;
 mod pointer;
 mod startup;
-pub(crate) mod theme;
+pub(crate) use crate::ui::{colorized, theme};
 pub use startup::{run, Options};
 #[cfg(test)]
 mod dx_tests;
 #[cfg(test)]
 mod library_tests;
-mod screenshot;
+pub(crate) use crate::ui::screenshot;
 #[cfg(test)]
 mod tests;
 
@@ -47,7 +45,6 @@ enum Screen {
     Home,
     Game,
     Settings,
-    Editor,
 }
 
 use panels::Page;
@@ -96,7 +93,6 @@ pub struct DesktopApp {
     show_native_border: bool,
     /// Level picker entries, cached when the assets load.
     levels: Vec<(u8, String)>,
-    editor: editor::Editor,
     focused: bool,
     last_update: Instant,
     last_save: Instant,
@@ -168,7 +164,6 @@ impl DesktopApp {
             show_hitboxes: false,
             show_native_border: false,
             levels: Vec::new(),
-            editor: editor::Editor::default(),
             focused: false,
             last_update: Instant::now(),
             last_save: Instant::now(),
@@ -228,8 +223,7 @@ impl DesktopApp {
 
     fn load_game(&mut self) {
         match SessionAssets::load_from(&ExtractedContent::new(&self.options.assets)) {
-            Ok(mut assets) => {
-                let diagnostics = self.load_saved_scenery(&mut assets);
+            Ok(assets) => {
                 let (assets, preview) = filter_preview::FilterPreview::new(assets);
                 match preview {
                     Ok(preview) => self.filter_preview = Some(preview),
@@ -240,7 +234,6 @@ impl DesktopApp {
                     self.options.paths.save.clone(),
                     self.options.audio,
                 ));
-                self.game.as_mut().unwrap().diagnostics.extend(diagnostics);
                 self.level_choices();
             }
             Err(e) => self.status = Some(format!("Game data could not be loaded: {e}")),
@@ -503,7 +496,6 @@ impl DesktopApp {
             return;
         }
         self.options.launch_library = false;
-        self.editor.playtesting = false;
         if let Some(game) = self.game.as_mut() {
             game.session.enter_title();
         }
@@ -607,11 +599,8 @@ impl DesktopApp {
     fn navigate(&mut self, ctx: &Context, screen: Screen) {
         if self.screen == Screen::Game && matches!(screen, Screen::Home | Screen::Settings) {
             self.menu_from_game = true;
-        } else if matches!(screen, Screen::Game | Screen::Editor) {
+        } else if screen == Screen::Game {
             self.menu_from_game = false;
-        }
-        if self.screen == Screen::Editor && screen != Screen::Editor {
-            self.finish_editor_gesture();
         }
         self.screen = screen;
         self.capture = None;
@@ -691,20 +680,14 @@ impl DesktopApp {
 
         if self.settings.show_toolbar
             && self.game.is_some()
-            && (!self.options.launch_library
-                || self.menu_from_game
-                || matches!(self.screen, Screen::Editor | Screen::Game))
+            && (!self.options.launch_library || self.menu_from_game || self.screen == Screen::Game)
         {
             self.toolbar(ctx);
         }
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(Color32::BLACK))
             .show(ctx, |ui| {
-                if self.screen == Screen::Editor {
-                    self.editor_view(ctx, ui);
-                } else if self.menu_from_game
-                    && matches!(self.screen, Screen::Home | Screen::Settings)
-                {
+                if self.menu_from_game && matches!(self.screen, Screen::Home | Screen::Settings) {
                     self.paused_game_view(ui);
                 } else if self.options.launch_library
                     && matches!(self.screen, Screen::Home | Screen::Settings)
@@ -841,9 +824,7 @@ impl DesktopApp {
         }
         if self.settings.motion_smoothing && running {
             ctx.request_repaint();
-        } else if self.screen == Screen::Editor && self.dx_worker.is_some() {
-            ctx.request_repaint_after(Duration::from_millis(50));
-        } else if self.screen != Screen::Editor {
+        } else {
             ctx.request_repaint_after(Duration::from_millis(8));
         }
     }
@@ -896,12 +877,6 @@ impl DesktopApp {
                 ui.strong("SML2");
                 if ui.button("Menu · Esc").clicked() {
                     self.navigate(ctx, Screen::Home);
-                }
-                if self.screen == Screen::Game
-                    && self.editor.playtesting
-                    && ui.button("Return to editor · Esc").clicked()
-                {
-                    self.open_editor(ctx);
                 }
                 for page in Page::ALL {
                     let active = self.screen == Screen::Settings && self.page == page;
@@ -1061,24 +1036,6 @@ fn overlay_rect(
     )
 }
 
-/// Keep the winning BG/OBJ source until its mapped shade reaches presentation.
-fn colorized(
-    frame: &[PalettePixel],
-    filter: Filter,
-    header: &[u8; 0x18],
-    view: (usize, usize),
-) -> ColorImage {
-    let palette = filter.palette(header);
-    let pixels = frame
-        .iter()
-        .map(|&pixel| {
-            let [r, g, b] = palette.rgb(pixel);
-            Color32::from_rgb(r, g, b)
-        })
-        .collect();
-    ColorImage::new([view.0, view.1], pixels)
-}
-
 impl eframe::App for DesktopApp {
     fn update(&mut self, ctx: &Context, _: &mut eframe::Frame) {
         self.ui(ctx);
@@ -1087,7 +1044,6 @@ impl eframe::App for DesktopApp {
         self.receive_input(input);
     }
     fn on_exit(&mut self) {
-        self.finish_editor_gesture();
         self.persist();
     }
 }

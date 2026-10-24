@@ -18,6 +18,30 @@ use sml2_core::{
 use sml2_dx::{LevelGraphics, Presentation, Screen};
 
 impl Session {
+    /// The fixed scene's 160×144 background, without actor sprites or borders.
+    pub fn scene_palette_dx(
+        &self,
+        dx: &Presentation,
+        character: Character,
+    ) -> Result<Vec<[u8; 3]>, String> {
+        use crate::scene_scenery::SceneTarget;
+        let target = self.scene_scenery_target().ok_or("no fixed scenery scene is showing")?;
+        let size = super::view::NATIVE;
+        match target {
+            SceneTarget::Title => screen(&dx.title, &[], None, size, title_backdrop, 0),
+            SceneTarget::FileSelect => screen(&dx.file_select, &[], None, size, file_select_backdrop, 0),
+            SceneTarget::Castle | SceneTarget::GameOver => self.render_dx_castle_scene(dx, character, size, true),
+            SceneTarget::Map(_) => {
+                let SessionState::Overworld(map) = &self.state else {unreachable!()};
+                self.render_dx_map(map, dx, character, size, true)
+            }
+            SceneTarget::Arena {..} => render(self.level_ctx().ok_or("arena scene required")?, dx, character,
+                size, &super::motion::Offsets::none(), true),
+            SceneTarget::Ending => super::dx_ending::render_background(self,
+                self.level_ctx().ok_or("ending scene required")?, dx, character),
+        }
+    }
+
     /// The level a DX frame would draw: live play or an attract demo,
     /// arenas and boss fights included.
     fn dx_level(&self) -> Option<&LevelContext> {
@@ -62,6 +86,18 @@ impl Session {
         view: (usize, usize),
         smooth: super::motion::Smooth,
     ) -> Result<(Vec<[u8; 3]>, usize), String> {
+        let (mut frame, scale) = self.render_dx_frame_smooth_base(dx, character, view, smooth)?;
+        self.decorate_scene_dx(&mut frame, view, scale, dx, character)?;
+        Ok((frame, scale))
+    }
+
+    fn render_dx_frame_smooth_base(
+        &self,
+        dx: &Presentation,
+        character: Character,
+        view: (usize, usize),
+        smooth: super::motion::Smooth,
+    ) -> Result<(Vec<[u8; 3]>, usize), String> {
         if let Some(ctx) = self.level_ctx().filter(|ctx| {
             ctx.ending_entry.state() == sml2_core::ending_entry::EndingEntryState::Sequence
         }) {
@@ -84,11 +120,11 @@ impl Session {
             }
             SessionState::GameOver(_) | SessionState::Castle(_) => {
                 return self
-                    .render_dx_castle_scene(dx, character, view)
+                    .render_dx_castle_scene(dx, character, view, false)
                     .map(|p| (p, 1));
             }
             SessionState::Overworld(map_sim) => {
-                return Ok((self.render_dx_map(map_sim, dx, character, view)?, 1))
+                return Ok((self.render_dx_map(map_sim, dx, character, view, false)?, 1))
             }
             _ => {}
         }
@@ -96,7 +132,7 @@ impl Session {
             .dx_level()
             .ok_or("DX presentation requires the title, file select or a level")?;
         let offsets = self.motion_offsets(smooth);
-        Ok((render(ctx, dx, character, view, &offsets)?, offsets.scale))
+        Ok((render(ctx, dx, character, view, &offsets, false)?, offsets.scale))
     }
 
     fn render_dx_castle_scene(
@@ -104,6 +140,7 @@ impl Session {
         dx: &Presentation,
         character: Character,
         view: (usize, usize),
+        background_only: bool,
     ) -> Result<Vec<[u8; 3]>, String> {
         let bank = |id: u8, address: usize, len: usize| -> Result<Vec<u8>, String> {
             dx.banks
@@ -179,7 +216,7 @@ impl Session {
         let mut tables = self.assets.object_tables.clone();
         tables.player_mappings = dx.player(character, 0).mappings.clone();
         let mut cells = Vec::new();
-        for (x, y, frame) in sprites {
+        for (x, y, frame) in sprites.into_iter().filter(|_| !background_only) {
             player::append_cells(
                 &tables,
                 frame,
@@ -286,6 +323,7 @@ impl Session {
         dx: &Presentation,
         character: Character,
         view: (usize, usize),
+        background_only: bool,
     ) -> Result<Vec<[u8; 3]>, String> {
         let map_sim = self.shown_map(map_sim);
         let colors = dx
@@ -357,7 +395,8 @@ impl Session {
                 room_tiles: Some(&dx.map.room_tiles),
                 player_mappings: Some(mario),
             };
-            let frame = self.overworld_frame(sim, assets, size);
+            let mut frame = self.overworld_frame(sim, assets, size);
+            if background_only { frame.composition.oam.clear(); }
             dx_map_pixels(
                 &frame,
                 &vram1,
@@ -796,6 +835,7 @@ fn render(
     character: Character,
     view: (usize, usize),
     offsets: &super::motion::Offsets,
+    background_only: bool,
 ) -> Result<Vec<[u8; 3]>, String> {
     let (vw, vh) = view;
     let (mx, _) = super::view::margin(view);
@@ -1021,7 +1061,7 @@ fn render(
             timer_low: ctx.sim.level_timer.low,
         },
     );
-    for dy in 0..8 {
+    for dy in 0..if background_only {0} else {8} {
         let py = ctx.hud_y as i32 + vh as i32 - 144 + dy;
         if !(0..vh as i32).contains(&py) {
             continue;
@@ -1047,7 +1087,7 @@ fn render(
             }
         }
     }
-    if let Some(s) = &ctx.spr {
+    if let Some(s) = ctx.spr.as_ref().filter(|_| !background_only) {
         let mut tables = s.tables.clone();
         tables.player_mappings = mappings.clone();
         // `mapping_for` picks mode A or B by level; both hold this level's table.

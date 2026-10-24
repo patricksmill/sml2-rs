@@ -1,0 +1,27 @@
+# Approved scenery
+
+This directory contains scenery selected for inclusion in port releases.
+It starts empty. Local editor drafts are never bundled automatically.
+
+1. In the companion Scenery Editor, select a level and choose **Export level…**.
+2. Export into this directory as `scenery-NN.json`, where `NN` is the zero-based
+   level ID (`00` through `31`). The existing `{"paints":[...]}` format is retained.
+3. Add the matching entry to `LEVELS` in
+   `crates/sml2-runtime/src/content/bundled_scenery.rs`:
+
+   ```rust
+   (0, include_str!("../../../../assets/scenery/scenery-00.json")),
+   ```
+
+4. Review the exported scenery in native and DX play, then run the runtime,
+   desktop, editor, and core tests and the frozen replay gate.
+5. Commit the export and registry entry together. The next game release embeds
+   the approved scenery; players receive it by updating the port.
+
+Only authored coordinates and metatile references belong here. Do not add ROMs,
+extracted graphics, player saves, or personal settings. Scenery changes rendering
+only; collision, actors, and level layouts remain the original simulation.
+
+Both the desktop game and CLI load this registry through `SessionAssets`.
+Malformed files, repeated level registrations, and invalid metatile references
+are startup errors. Gameplay never reopens scenery files.

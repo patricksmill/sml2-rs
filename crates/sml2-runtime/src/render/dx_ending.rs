@@ -18,7 +18,17 @@ pub(super) fn render(
         &dx.banks,
         &dx.player(character, 0).mappings,
         view,
+        false,
     )
+}
+
+pub(super) fn render_background(
+    session: &Session,
+    ctx: &LevelContext,
+    dx: &sml2_dx::Presentation,
+    character: Character,
+) -> Result<Vec<[u8; 3]>, String> {
+    render_scene(session, ctx, &dx.banks, &dx.player(character, 0).mappings, (160, 144), true)
 }
 
 fn render_scene(
@@ -27,6 +37,7 @@ fn render_scene(
     banks: &std::collections::BTreeMap<u8, Vec<u8>>,
     mappings: &[Vec<sml2_core::object::MappingEntry>],
     view: (usize, usize),
+    background_only: bool,
 ) -> Result<Vec<[u8; 3]>, String> {
     let bank = |id: u8, address: usize, len: usize| -> Result<&[u8], String> {
         banks
@@ -112,7 +123,7 @@ fn render_scene(
     tables.player_mappings = mappings.to_vec();
     let cells = sequence.projected_cells(&tables);
     let mut objects = vec![None; 160 * 144];
-    if scene.display.objects_enabled {
+    if scene.display.objects_enabled && !background_only {
         for y in 0..144i32 {
             let mut on_line: Vec<_> = cells
                 .iter()
@@ -189,7 +200,7 @@ mod tests {
                 palette[0x2769..0x27a9].copy_from_slice(&[0x1f, 0].repeat(32));
                 let ctx = game.level_ctx().unwrap();
                 let pixels =
-                    render_scene(&game, ctx, &banks, &tables.player_mappings, (384, 216)).unwrap();
+                    render_scene(&game, ctx, &banks, &tables.player_mappings, (384, 216), false).unwrap();
                 assert_eq!(pixels.len(), 384 * 216);
                 if ctx.ending_sequence.substate >= 5 && ctx.ending_scene.display.display_enabled {
                     assert_eq!(pixels[36 * 384 + 112], [255, 0, 0]);

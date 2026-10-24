@@ -22,6 +22,7 @@ pub struct SpriteInst {
 }
 
 mod dx;
+mod scene_scenery;
 mod layers;
 mod margin;
 pub use margin::paintable_cell;

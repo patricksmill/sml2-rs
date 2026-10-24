@@ -1,0 +1,25 @@
+[package]
+name = "sml2-scenery-editor"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["native"]
+native = ["sml2-desktop/native", "dep:eframe", "dep:rfd"]
+
+[[bin]]
+name = "sml2-scenery-editor"
+path = "src/main.rs"
+required-features = ["native"]
+
+[dependencies]
+sml2-core = { path = "../sml2-core" }
+sml2-dx = { path = "../sml2-dx" }
+sml2-runtime = { path = "../sml2-runtime" }
+sml2-desktop = { path = "../sml2-desktop", default-features = false }
+serde_json = "1"
+eframe = { version = "0.33", default-features = false, features = ["default_fonts", "wgpu", "wayland", "x11"], optional = true }
+rfd = { version = "0.15", optional = true }
+
+[dev-dependencies]
+tempfile = "3"
