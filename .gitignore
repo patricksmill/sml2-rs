@@ -15,3 +15,6 @@ __pycache__/
 
 # Local manual input recordings (kept outside cargo clean output)
 /recordings/
+
+# Linked worktrees for isolated agent work
+/.worktrees/
