@@ -31,6 +31,7 @@ pub(super) fn app() -> (DesktopApp, Context, PathBuf) {
         fullscreen: false,
         smoke_frames: None,
         screenshot: None,
+        launch_library: false,
     };
     let ctx = Context::default();
     let mut app = DesktopApp::new(&ctx, options, Settings::default(), None);
@@ -102,6 +103,7 @@ fn play_flag_skips_the_title_for_the_overworld() {
         fullscreen: false,
         smoke_frames: None,
         screenshot: None,
+        launch_library: false,
     };
     let restarted = DesktopApp::new(&Context::default(), options, Settings::default(), None);
     assert_eq!(restarted.screen, Screen::Game);
@@ -188,6 +190,7 @@ fn quit_to_title_from_the_map_opens_the_in_game_title() {
         fullscreen: false,
         smoke_frames: None,
         screenshot: None,
+        launch_library: false,
     };
     let mut app = DesktopApp::new(&Context::default(), options, Settings::default(), None);
     app.controllers = Controllers::disconnected();
@@ -687,6 +690,7 @@ fn home_pipes_show_the_saved_stage_tally_across_a_restart() {
         fullscreen: false,
         smoke_frames: None,
         screenshot: None,
+        launch_library: false,
     };
     let restarted = DesktopApp::new(&Context::default(), options, Settings::default(), None);
     assert_eq!(tally(&restarted), Some(0x31));

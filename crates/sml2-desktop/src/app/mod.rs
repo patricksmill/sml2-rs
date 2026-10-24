@@ -167,8 +167,10 @@ impl DesktopApp {
             validation_error: Default::default(),
             settings_open: false,
         };
-        app.load_game();
-        app.restore_dx();
+        if !app.options.launch_library {
+            app.load_game();
+            app.restore_dx();
+        }
         if app.game.is_some() {
             app.screen = Screen::Game;
             if app.options.boot_select {

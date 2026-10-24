@@ -20,6 +20,7 @@ pub struct Options {
     pub fullscreen: bool,
     pub smoke_frames: Option<u64>,
     pub screenshot: Option<PathBuf>,
+    pub launch_library: bool,
 }
 impl Options {
     pub fn defaults() -> Result<Self, String> {
@@ -37,7 +38,17 @@ impl Options {
             fullscreen: false,
             smoke_frames: None,
             screenshot: None,
+            launch_library: true,
         })
+    }
+
+    pub fn finish_launch(&mut self, explicit_assets: bool) {
+        self.launch_library = !(self.play
+            || self.boot_select
+            || self.room.is_some()
+            || self.reveal
+            || self.smoke_frames.is_some()
+            || explicit_assets);
     }
 }
 
@@ -76,4 +87,30 @@ pub fn run(options: Options) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let error = result.lock().map_err(|e| e.to_string())?.take();
     error.map_or(Ok(()), Err)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Options;
+
+    #[test]
+    fn title_opens_the_library_and_play_does_not() {
+        let mut options = Options::defaults().unwrap();
+        options.finish_launch(false);
+        assert!(options.launch_library);
+        options.play = true;
+        options.finish_launch(false);
+        assert!(!options.launch_library);
+        options.play = false;
+        options.boot_select = true;
+        options.finish_launch(false);
+        assert!(!options.launch_library);
+        options.boot_select = false;
+        options.smoke_frames = Some(1);
+        options.finish_launch(false);
+        assert!(!options.launch_library);
+        options.smoke_frames = None;
+        options.finish_launch(true);
+        assert!(!options.launch_library);
+    }
 }
