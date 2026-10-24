@@ -54,6 +54,24 @@ On WSL systems with unreliable graphics-driver startup or resize behavior,
 adapter when available. Native previews were checked with both automatic and
 software-adapter selection.
 
+If startup prints `libEGL`, `dzn`, `ZINK`, or
+`ID3D12DeviceFactory::CreateDevice failed` messages, Mesa may be probing a
+driver that cannot initialize. These messages can appear even when the app
+successfully renders through another adapter. Selecting `llvmpipe` alone
+still lets the Vulkan loader probe the failing drivers. To bypass those
+probes on Fedora WSL, restrict the loader to Mesa's software Vulkan driver:
+
+```sh
+VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
+WGPU_BACKEND=vulkan WGPU_ADAPTER_NAME=llvmpipe \
+cargo run --release -p sml2-desktop
+```
+
+The `lvp_icd` filename/location varies by distribution; use the installed JSON
+under `/usr/share/vulkan/icd.d/`. This renders on the CPU and applies only to
+that launch. A bounded WSLg smoke run with this driver completed without the
+Mesa messages and matched the submitted CPU frame pixel for pixel.
+
 The original three crates remain the workspace's default build targets.
 Select `-p sml2-desktop` to build the desktop app; `cargo test --workspace`
 includes it. Its settings/input/timing policies can also be tested without the

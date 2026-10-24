@@ -1,10 +1,8 @@
 //! Mouse picks on the title and the file select. The ROM step still owns the motion.
 
 use eframe::egui::{self, Rect};
-use sml2_core::front_end::keys::{DOWN, LEFT, RIGHT};
-use sml2_core::front_end::{FileSelect, SaveSlots};
 use sml2_core::player_sim::PlayerKeys;
-use sml2_runtime::render::view::{margin, NATIVE};
+use sml2_runtime::render::view::margin;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Aim {
@@ -227,17 +225,20 @@ pub(super) fn merge_pointer(
     }
 }
 
-fn drop_in(file_select: &mut FileSelect, slots: &mut SaveSlots) {
-    for _ in 0..45 {
-        file_select.step(slots, 0, 0);
-    }
-    assert_eq!(file_select.menu_state(), 1);
-    assert_eq!(file_select.cursor(), (0x28, 0x7C));
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sml2_core::front_end::keys::{DOWN, LEFT, RIGHT};
+    use sml2_core::front_end::{FileSelect, SaveSlots};
+    use sml2_runtime::render::view::NATIVE;
+
+    fn drop_in(file_select: &mut FileSelect, slots: &mut SaveSlots) {
+        for _ in 0..45 {
+            file_select.step(slots, 0, 0);
+        }
+        assert_eq!(file_select.menu_state(), 1);
+        assert_eq!(file_select.cursor(), (0x28, 0x7C));
+    }
 
     #[test]
     fn columns_follow_the_rom_cursor_stops() {
