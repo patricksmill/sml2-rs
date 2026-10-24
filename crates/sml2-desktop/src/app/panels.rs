@@ -197,19 +197,19 @@ impl DesktopApp {
         if self.menu.row(ui, "Fit to window", Value::Toggle(fit)) {
             self.fit_to_window(!fit);
         }
-        if self.menu.row(
-            ui,
-            "Integer scaling",
-            Value::Toggle(self.settings.integer_scaling),
-        ) {
-            self.settings.integer_scaling = !self.settings.integer_scaling;
-        }
         if let Zoom::Integer(scale) = self.settings.zoom {
             let adjust = self.menu.choice(ui, "Window scale", format!("{scale}×"));
             if adjust != 0 {
                 let next = (i32::from(scale) - 1 + adjust).rem_euclid(8) + 1;
                 self.zoom(ctx, Some(next as u8));
             }
+        }
+        if self.menu.row(
+            ui,
+            "Integer scaling",
+            Value::Toggle(self.settings.integer_scaling),
+        ) {
+            self.settings.integer_scaling = !self.settings.integer_scaling;
         }
         if self
             .menu
