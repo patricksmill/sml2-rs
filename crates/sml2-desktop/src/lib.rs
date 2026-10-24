@@ -2,6 +2,7 @@
 
 pub mod dx_import;
 pub mod input;
+pub mod library;
 pub mod settings;
 pub mod timing;
 
