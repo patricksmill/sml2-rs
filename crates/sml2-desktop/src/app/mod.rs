@@ -372,16 +372,20 @@ impl DesktopApp {
         let previous_settings = self.settings.clone();
         let previous_bundle = self.dx_bundle.clone();
         let previous_dx_error = self.library.dx_error.clone();
+        let previous_dx_message = self.dx_message.clone();
         self.settings.vanilla = Some(VanillaInstall {
             revision: revision.id.to_string(),
             sha256: sml2_extract::vanilla::sha256(rom),
         });
-        self.retire_mismatched_dx(&dest);
+        let remove_dx_after_save = self.mark_dx_for_vanilla(&dest);
         match self.settings.save(&self.options.paths.settings) {
             Ok(()) => {
                 sml2_extract::vanilla::discard_backup(&commit);
                 self.saved_settings = self.settings.clone();
                 self.allow_save = true;
+                if remove_dx_after_save {
+                    self.delete_retired_dx();
+                }
                 self.library.importing = false;
                 self.library.checking = false;
                 self.library.vanilla_ready = true;
@@ -401,6 +405,7 @@ impl DesktopApp {
                 self.settings = previous_settings;
                 self.dx_bundle = previous_bundle;
                 self.library.dx_error = previous_dx_error;
+                self.dx_message = previous_dx_message;
                 self.library.dx_installed = self.settings.dx_installation.is_some();
                 self.library.dx_mode = self.settings.dx_mode;
                 self.library.importing = false;
@@ -410,18 +415,42 @@ impl DesktopApp {
         }
     }
 
-    fn retire_mismatched_dx(&mut self, dest: &std::path::Path) {
-        let Some(key) = self.settings.dx_installation.clone() else {
-            return;
+    /// Record how the published vanilla tree relates to the installed DX key.
+    ///
+    /// Returns whether that DX directory should be deleted after settings save.
+    /// This never deletes files: a failed save must still be able to roll vanilla back.
+    fn mark_dx_for_vanilla(&mut self, dest: &std::path::Path) -> bool {
+        let Some(base_sha256) = self
+            .settings
+            .dx_installation
+            .as_ref()
+            .map(|key| key.base_sha256.clone())
+        else {
+            return false;
         };
-        let Ok(fingerprint) = sml2_dx::base_fingerprint(dest) else {
-            return;
+        let fingerprint = match sml2_dx::base_fingerprint(dest) {
+            Ok(fingerprint) => fingerprint,
+            Err(error) => {
+                self.settings.dx_mode = false;
+                self.library.dx_mode = false;
+                let message = error.to_string();
+                self.library.dx_error = message.clone();
+                self.dx_message = message;
+                return false;
+            }
         };
-        if fingerprint == key.base_sha256 {
-            return;
+        if fingerprint == base_sha256 {
+            return false;
         }
         self.settings.dx_mode = false;
         self.library.dx_mode = false;
+        true
+    }
+
+    fn delete_retired_dx(&mut self) {
+        let Some(key) = self.settings.dx_installation.clone() else {
+            return;
+        };
         match crate::dx_import::cache_root().and_then(|root| {
             let dir = root.join(key.directory_name());
             match std::fs::remove_dir_all(&dir) {
@@ -432,8 +461,13 @@ impl DesktopApp {
         }) {
             Ok(()) => {
                 self.settings.dx_installation = None;
-                self.library.dx_installed = false;
                 self.dx_bundle = None;
+                match self.settings.save(&self.options.paths.settings) {
+                    Ok(()) => self.saved_settings = self.settings.clone(),
+                    Err(error) => {
+                        self.status = Some(format!("Settings could not be saved: {error}"));
+                    }
+                }
             }
             Err(error) => {
                 let message = format!("The old DX install could not be removed: {error}");
