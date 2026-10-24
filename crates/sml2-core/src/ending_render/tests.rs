@@ -241,3 +241,27 @@ fn ending_sprites_respect_background_priority() {
     }
     assert!(sprite_pixels(&back) < front, "colours 1-3 hide it");
 }
+
+#[test]
+fn alternate_ending_projection_keeps_the_last_native_sprite_batch() {
+    let mut ending = Ending::new();
+    for _ in 0..20000 {
+        ending.step();
+        let cells = ending.sequence.projected_cells(&ending.tables);
+        assert_eq!(
+            cells.as_slice(),
+            &ending.scene.objects.cells()[..ending.scene.objects.previous_used()],
+            "substate {}",
+            ending.sequence.substate
+        );
+    }
+}
+
+#[test]
+fn terminal_credits_do_not_keep_the_last_streaming_wobble() {
+    let mut ending = Ending::new();
+    ending.run_until(|s| s.substate == 19);
+    // $68267 never calls the raster loop, regardless of the saved extent.
+    ending.sequence.raster_y = 139;
+    ending.assert_background(&ending.frame(), |_| 0, |y| y >= 111);
+}

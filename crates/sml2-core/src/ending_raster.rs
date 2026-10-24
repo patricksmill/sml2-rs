@@ -108,6 +108,22 @@ impl ScanlineProjection {
     }
 }
 
+/// The terminal credits handler ($68267) performs the addressing split but
+/// never enters the wobble loop, even if the last streaming frame left it active.
+pub fn ending_projection(
+    frame: u8,
+    scanline: u8,
+    raster_y: u8,
+    substate: u8,
+) -> ScanlineProjection {
+    ScanlineProjection::compute(
+        frame,
+        scanline,
+        if substate == 19 { 13 } else { raster_y },
+        substate >= 18,
+    )
+}
+
 /// Project all 144 Game Boy scanlines (0..=143) for a given frame.
 pub fn project_frame(
     frame: u8,

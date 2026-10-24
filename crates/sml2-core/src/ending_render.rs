@@ -8,7 +8,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::ending_raster::{background_tile_offset, ScanlineProjection};
+use crate::ending_raster::{background_tile_offset, ending_projection};
 use crate::ending_scene::EndingScene;
 use crate::ending_sequence::EndingSequenceController;
 use crate::sprite_batch::MAX_SPRITE_CELLS;
@@ -43,11 +43,15 @@ pub fn render_ending_output(
         output.palette(palettes.object0, PaletteSource::Obj0),
         output.palette(palettes.object1, PaletteSource::Obj1),
     ];
-    let split = sequence.substate >= 18;
     let cells = scene.objects.cells();
     let mut img = vec![bg[0]; vw * vh];
     for y in 0..vh.min(SCREEN.1) {
-        let line = ScanlineProjection::compute(sequence.frame, y as u8, sequence.raster_y, split);
+        let line = ending_projection(
+            sequence.frame,
+            y as u8,
+            sequence.raster_y,
+            sequence.substate,
+        );
         let unsigned = scene.display.background_unsigned_tiles || line.unsigned_bg_tiles;
         let scx = scene.scroll_x.wrapping_add(line.scroll_x as u8);
         let by = (y as u8).wrapping_add(scene.scroll_y);

@@ -30,7 +30,9 @@ impl Session {
         match &self.state {
             SessionState::Title(_)
             | SessionState::FileSelectLoading(_)
-            | SessionState::FileSelect(_) => true,
+            | SessionState::FileSelect(_)
+            | SessionState::GameOver(_)
+            | SessionState::Castle(_) => true,
             // The hub, the eight zones, and both minigames (screens 9–14).
             SessionState::Overworld(map_sim) => self.shown_map(map_sim).screen_id <= 14,
             _ => self.dx_level().is_some(),
@@ -58,6 +60,11 @@ impl Session {
         view: (usize, usize),
         smooth: super::motion::Smooth,
     ) -> Result<(Vec<[u8; 3]>, usize), String> {
+        if let Some(ctx) = self.level_ctx().filter(|ctx| {
+            ctx.ending_entry.state() == sml2_core::ending_entry::EndingEntryState::Sequence
+        }) {
+            return super::dx_ending::render(self, ctx, dx, character, view).map(|p| (p, 1));
+        }
         match &self.state {
             SessionState::Title(_) => {
                 return Ok((screen(&dx.title, &[], None, view, title_backdrop, 0)?, 1));
@@ -73,6 +80,11 @@ impl Session {
                 let frame = self.render_dx_file_select(file_select, dx, character, view)?;
                 return Ok((frame, 1));
             }
+            SessionState::GameOver(_) | SessionState::Castle(_) => {
+                return self
+                    .render_dx_castle_scene(dx, character, view)
+                    .map(|p| (p, 1));
+            }
             SessionState::Overworld(map_sim) => {
                 return Ok((self.render_dx_map(map_sim, dx, character, view)?, 1))
             }
@@ -83,6 +95,111 @@ impl Session {
             .ok_or("DX presentation requires the title, file select or a level")?;
         let offsets = self.motion_offsets(smooth);
         Ok((render(ctx, dx, character, view, &offsets)?, offsets.scale))
+    }
+
+    fn render_dx_castle_scene(
+        &self,
+        dx: &Presentation,
+        character: Character,
+        view: (usize, usize),
+    ) -> Result<Vec<[u8; 3]>, String> {
+        let bank = |id: u8, address: usize, len: usize| -> Result<Vec<u8>, String> {
+            dx.banks
+                .get(&id)
+                .and_then(|b| b.get(address - 0x4000..address - 0x4000 + len))
+                .map(|b| b.to_vec())
+                .ok_or_else(|| "DX castle assets require re-import".into())
+        };
+        let mut vram = bank(0x0c, 0x4c92, 0x1800)?;
+        let mut tilemap = bank(0x0c, 0x6492, 0x300)?;
+        let (sprites, attr_addr, bg_addr, obj_addr) = match &self.state {
+            SessionState::GameOver(over) => (
+                sml2_core::map::game_over_sprites(sml2_core::map::GameOverView {
+                    fade_timer: over.sim.fade_timer,
+                    frame_counter: over.sim.frame_counter,
+                    golden_coin_flags: over.sim.golden_coin_flags,
+                    obp: over.obp,
+                }),
+                0x4000,
+                0x7c39,
+                0x7c51,
+            ),
+            SessionState::Castle(seq) => {
+                let reveal = sml2_core::map::CastleRevealTiles::from_bytes(&vram, &tilemap)
+                    .ok_or("invalid DX castle tiles")?;
+                let mut scripts = self.assets.castle_scripts.clone();
+                for name in [
+                    "castle_row_windows",
+                    "castle_congrats_tilemap",
+                    "castle_congrats_tiles",
+                ] {
+                    let meta = scripts.meta(name).ok_or("missing castle metadata")?.clone();
+                    let address = u16::from_str_radix(meta.addr.trim_start_matches('$'), 16)
+                        .map_err(|e| e.to_string())?;
+                    scripts.replace_blob(name, &bank(meta.bank, usize::from(address), meta.len)?)?;
+                }
+                let (tiles, map, sprites) =
+                    sml2_core::map::castle_sequence_projection(&reveal, &scripts, seq);
+                for (tile, pixels) in vram.chunks_exact_mut(16).zip(tiles) {
+                    for y in 0..8 {
+                        for x in 0..8 {
+                            tile[y * 2] = (tile[y * 2] << 1) | (pixels[y * 8 + x] & 1);
+                            tile[y * 2 + 1] = (tile[y * 2 + 1] << 1) | ((pixels[y * 8 + x] >> 1) & 1);
+                        }
+                    }
+                }
+                tilemap = map;
+                (
+                    sprites,
+                    0x4240,
+                    0x7042,
+                    if character == Character::Luigi {
+                        0x709a
+                    } else {
+                        0x705a
+                    },
+                )
+            }
+            _ => return Err("castle scene required".into()),
+        };
+        let mut attributes = bank(0x27, attr_addr, 0x240)?;
+        attributes.resize(0x400, 0);
+        let mut bg_palettes = bank(0x26, bg_addr, 24)?;
+        bg_palettes.resize(64, 0);
+        tilemap.resize(0x400, 0);
+        let scene = Screen {
+            vram: [vram, vec![0; 0x1800]],
+            tilemap,
+            attributes,
+            bg_palettes,
+            obj_palettes: bank(0x26, obj_addr, 64)?,
+        };
+        let mut tables = self.assets.object_tables.clone();
+        tables.player_mappings = dx.player(character, 0).mappings.clone();
+        let mut cells = Vec::new();
+        for (x, y, frame) in sprites {
+            player::append_cells(
+                &tables,
+                frame,
+                ScreenPosition { x, y },
+                CellStyle::default(),
+                &mut cells,
+            );
+        }
+        let pixels = screen(
+            &scene,
+            &cells,
+            None,
+            super::view::NATIVE,
+            file_select_backdrop,
+            0,
+        )?;
+        Ok(super::view::letterbox(
+            &pixels,
+            super::view::NATIVE,
+            view,
+            [0; 3],
+        ))
     }
 
     pub fn render_dx_hall(

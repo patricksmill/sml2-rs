@@ -360,3 +360,25 @@ Known gaps, verified against the ROM and left native or approximate:
 - `$D300` is the blank palette buffer `$25AF`'s hook and the fades upload; DX
   palette fades are not reproduced.
 
+## Castle, Game Over, and ending screens
+
+Importer schema 8 adds banks `$1A` and `$27`. Castle reveal `$27:$4480`
+uses bank `$26` BG `$7042` (three palettes), Mario OBJ `$705A` / Luigi `$709A`, and
+bank `$27` attributes `$4240`. Game Over `$27:$4505` uses bank `$26` BG `$7C39` (three palettes),
+OBJ `$7C51`, and attributes `$4000`. Both retain bank `$0C:$4C92` VRAM and
+`$6492` map, with the native live door windows, coin poses, and Mario animation.
+The congratulations card swaps bank `$05:$41E5` tiles and `$0C:$688A` map.
+
+Ending loader `$29:$6718` supplies BG `$6769`, OBJ `$67A9`, and attributes
+`$5200`. VRAM starts at `$11:$5800`; `$1A:$4656` replaces the first `$800`
+bytes during the font transfer, and `$1A:$5096` replaces the map. The CGB
+renderer follows the live transfer bytes, credits rows, scanline wobble and
+signed/unsigned addressing split. Submitted sprite poses are retained for
+projection through DX mappings without advancing sequence state. The credits
+text at `$1A:$56CE` is byte-identical in the audited base and DX ROMs.
+The terminal handler `$68267` retains the tile-address split without wobble;
+both renderers now discard the last streaming frame’s saved wobble extent.
+
+These fixed scenes retain their authored 160×144 frame inside enlarged views.
+Palette fades and level-region palette switching remain separate presentation
+work; scene support does not claim those effects are complete.

@@ -88,18 +88,15 @@ native rules. The space levels use DX's alternate (space) Mario and Luigi.
 On the DX file-select screen, walk right past Clear to use the character door.
 The returning character becomes the saved **Character** choice in Settings.
 
-The title, file select, overworld map (hub, zones and both minigames) use DX's
-own screens and colors. Other non-level screens keep the display filter for
-now. So do boss
-arenas and boss fights: DX gives each arena its own palettes, VRAM1 graphics and
-attribute map and draws bosses through a separate path, which are not imported
-yet. Eight levels (`$03`, `$07`, `$0C`, `$0D`, `$15`, `$16`, `$18`, `$19`) also
+The title, file select, overworld map (hub, zones and both minigames), Game Over,
+castle reveal, ending and credits use DX graphics and colors. Boss arenas and
+fights use their own DX tiles, palettes and sprite lists too. Eight levels (`$03`, `$07`, `$0C`, `$0D`, `$15`, `$16`, `$18`, `$19`) also
 switch palette sets as Mario crosses regions; they currently keep their starting
 DX palette throughout. DX's palette fades are not reproduced. A DX rendering
 failure falls back to the filter with the error shown on the Mods page.
 
 Installations from earlier versions, including ones from before the minigames
-were colored, must be re-imported (**Re-import SML2DX ROM…**). DX physics and importing without
+and scene screens were colored, must be re-imported (**Re-import SML2DX ROM…**). DX physics and importing without
 extracted base assets remain future work. No ROM or imported graphics are
 distributed with the application.
 

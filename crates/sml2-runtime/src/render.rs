@@ -764,3 +764,5 @@ mod tests {
 
 #[cfg(test)]
 mod palette_tests;
+
+mod dx_ending;

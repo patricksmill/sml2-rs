@@ -64,6 +64,19 @@ impl CastleScripts {
         self.bytes.get(meta.offset..meta.offset + meta.len)
     }
 
+    /// Replace a presentation blob while retaining its script metadata.
+    pub fn replace_blob(&mut self, name: &str, bytes: &[u8]) -> Result<(), String> {
+        let meta = self
+            .meta(name)
+            .ok_or_else(|| format!("missing castle blob {name}"))?
+            .clone();
+        if bytes.len() != meta.len {
+            return Err(format!("castle blob {name} has wrong length"));
+        }
+        self.bytes[meta.offset..meta.offset + meta.len].copy_from_slice(bytes);
+        Ok(())
+    }
+
     pub fn meta(&self, name: &str) -> Option<&ScriptBlobMeta> {
         self.blobs.iter().find(|b| b.name == name)
     }

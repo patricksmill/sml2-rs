@@ -43,6 +43,25 @@ pub fn render_castle_sequence_output(
     view: (usize, usize),
     output: crate::video::OutputMode,
 ) -> Vec<u8> {
+    let (vram, map, sprites) = castle_sequence_projection(reveal, scripts, seq);
+    draw(
+        &vram,
+        &map,
+        seq.bgp,
+        [seq.obp1, seq.obp2],
+        &sprites,
+        metas,
+        view,
+        output,
+    )
+}
+
+/// Shared live castle map and sprite poses, independent of color rendering.
+pub fn castle_sequence_projection(
+    reveal: &CastleRevealTiles,
+    scripts: &CastleScripts,
+    seq: &CastleSequence,
+) -> (Vec<[u8; 64]>, Vec<u8>, Vec<(u8, u8, u8)>) {
     let mut vram = reveal.vram_tiles();
     let congrats = matches!(seq.state, STATE_CONGRATS | STATE_WAIT_START);
     let map = if congrats {
@@ -87,16 +106,7 @@ pub fn render_castle_sequence_output(
             }
         }
     }
-    draw(
-        &vram,
-        &map,
-        seq.bgp,
-        [seq.obp1, seq.obp2],
-        &sprites,
-        metas,
-        view,
-        output,
-    )
+    (vram, map, sprites)
 }
 
 /// What the GAME OVER screen (state `$07`) draws from.

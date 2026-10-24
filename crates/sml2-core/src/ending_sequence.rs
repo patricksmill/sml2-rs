@@ -72,6 +72,11 @@ pub struct EndingSequenceController {
     pub substate: u8,
     pub frame: u8,
     pub walk_timer: u8,
+    /// Last submitted sprite composition, retained for alternate renderers.
+    pub sprite_mode: EndingSpriteMode,
+    pub sprite_frame: u8,
+    pub sprite_timer: u8,
+    pub sprite_y: u8,
     pub scroll_y: u8,
     pub raster_y: u8,
     pub fade_timer: u16,
@@ -89,6 +94,10 @@ impl Default for EndingSequenceController {
             substate: 0,
             frame: 0,
             walk_timer: 0,
+            sprite_mode: EndingSpriteMode::None,
+            sprite_frame: 0,
+            sprite_timer: 0,
+            sprite_y: 0,
             scroll_y: 0,
             raster_y: 13,
             fade_timer: 0,
@@ -178,6 +187,29 @@ impl EndingSequenceController {
         self.ending_tile_flag = 0;
     }
 
+    /// Reproject the last submitted pose with another revision's mappings.
+    pub fn projected_cells(&self, tables: &ObjectTables) -> Vec<crate::player::Cell> {
+        let mut cells = Vec::new();
+        let mut timer = self.sprite_timer;
+        let y = self.sprite_y;
+        match self.sprite_mode {
+            EndingSpriteMode::None => {}
+            EndingSpriteMode::Walk => {
+                let _ = append_walk(tables, &mut timer, y, &mut cells);
+            }
+            EndingSpriteMode::Pair => {
+                let _ = append_pair(tables, &mut timer, y, &mut cells);
+            }
+            EndingSpriteMode::Secondary => {
+                let _ = append_secondary(tables, y, false, &mut cells);
+            }
+            EndingSpriteMode::Burst => {
+                let _ = append_burst(tables, FrameTick(self.sprite_frame as u64), &mut cells);
+            }
+        }
+        cells
+    }
+
     /// Renders sprites into the scene's SpriteBatch.
     fn draw_sprites(
         &mut self,
@@ -185,6 +217,10 @@ impl EndingSequenceController {
         tables: Option<&ObjectTables>,
         scene: &mut EndingScene,
     ) {
+        self.sprite_mode = mode;
+        self.sprite_frame = self.frame;
+        self.sprite_timer = self.walk_timer;
+        self.sprite_y = scene.credits_sprite_y;
         let mut cells = Vec::new();
         if let Some(t) = tables {
             match mode {
@@ -242,6 +278,7 @@ impl EndingSequenceController {
             0..=3 => {
                 // Substates 0..3: advance once per frame
                 self.substate += 1;
+                self.sprite_mode = EndingSpriteMode::None;
                 let _ = context.scene.objects.write_frame(&[]);
             }
             4 => {
@@ -253,6 +290,7 @@ impl EndingSequenceController {
                     context.scene.credits_sprite_y = 44;
                     self.substate = 5;
                 }
+                self.sprite_mode = EndingSpriteMode::None;
                 let _ = context.scene.objects.write_frame(&[]);
             }
             5 => {
@@ -290,6 +328,7 @@ impl EndingSequenceController {
                     self.vram_transfer = Some(VramTransfer::ending_request_2());
                     self.substate = 8;
                 }
+                self.sprite_mode = EndingSpriteMode::None;
                 let _ = context.scene.objects.write_frame(&[]);
             }
             8 => {
@@ -299,6 +338,7 @@ impl EndingSequenceController {
                 if self.vram_transfer.as_ref().is_none_or(|t| !t.active) {
                     self.substate = 9;
                 }
+                self.sprite_mode = EndingSpriteMode::None;
                 let _ = context.scene.objects.write_frame(&[]);
             }
             9 => {
@@ -308,6 +348,7 @@ impl EndingSequenceController {
                 if self.fade_timer == 0 {
                     self.substate = 10;
                 }
+                self.sprite_mode = EndingSpriteMode::None;
                 let _ = context.scene.objects.write_frame(&[]);
             }
             10 => {
@@ -321,6 +362,7 @@ impl EndingSequenceController {
                     self.fade_timer = 0x00C0;
                     self.substate = 11;
                 }
+                self.sprite_mode = EndingSpriteMode::None;
                 let _ = context.scene.objects.write_frame(&[]);
             }
             11 => {
@@ -332,6 +374,7 @@ impl EndingSequenceController {
                     self.ending_tile_flag = 0xFF;
                     self.substate = 12;
                 }
+                self.sprite_mode = EndingSpriteMode::None;
                 let _ = context.scene.objects.write_frame(&[]);
             }
             12 => {

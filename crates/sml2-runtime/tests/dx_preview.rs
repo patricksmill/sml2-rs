@@ -781,3 +781,25 @@ fn minigame_surrounds_use_room_color_instead_of_unused_map_columns() {
         }
     }
 }
+
+#[test]
+fn castle_reveal_and_game_over_use_their_own_dx_palettes() {
+    let mut bundle = synthetic_bundle();
+    for bank in [0x05, 0x0c, 0x26, 0x27] { bundle.banks.insert(bank, vec![0; 0x4000]); }
+    let palette = bundle.banks.get_mut(&0x26).unwrap();
+    palette[0x3c39..0x3c3b].copy_from_slice(&[0x1f, 0]);
+    palette[0x3042..0x3044].copy_from_slice(&[0xe0, 3]);
+    let mut game = session();
+    game.state = SessionState::GameOver(Box::new(sml2_runtime::session::GameOverScreen {
+        sim: Default::default(), obp: [0xd0, 0x38],
+    }));
+    assert!(game.dx_supported());
+    assert_eq!(game.render_dx_frame(&bundle, Mario, (160,144)).unwrap(), vec![RED;160*144]);
+    game.state = SessionState::Castle(Default::default());
+    assert!(game.dx_supported());
+    assert_eq!(game.render_dx_frame(&bundle, Mario, (160,144)).unwrap(), vec![[0,255,0];160*144]);
+    let large = game.render_dx_frame(&bundle, Luigi, (384,216)).unwrap();
+    assert_eq!(large.len(),384*216);
+    assert_eq!(large[36*384+112], [0,255,0]);
+    assert_eq!(large[0], [0;3]);
+}
