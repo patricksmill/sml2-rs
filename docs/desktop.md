@@ -40,7 +40,10 @@ F10 shows or hides the toolbar. Its **Display**, **Audio**, **Controls**,
 **Mods**, **Game**, and **Debug** tabs open the matching settings page.
 Esc, or the toolbar Menu button, opens the
 compact pause menu over the current game frame, with Resume,
-Settings and Quit. Quit to title is on
+Settings and Quit. In-game menus and settings darken the exact last displayed
+frame, preserving its scale, colors, overlays, and surroundings until you resume.
+They keep the game view behind them even when opened during an editor playtest.
+Quit to title is on
 that menu only after you have left the title. `--play` skips the library and
 the title and opens the overworld. `--title` opens the library, the same as a
 normal launch; it can also be combined with `--smoke-frames` and `--screenshot`

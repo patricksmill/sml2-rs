@@ -31,6 +31,7 @@ mod hall;
 mod installation;
 mod launcher;
 mod panels;
+mod pause_backdrop;
 mod pointer;
 mod startup;
 pub(crate) mod theme;
@@ -66,6 +67,8 @@ pub struct DesktopApp {
     dx_picker: Option<file_picker::FilePicker>,
     dx_message: String,
     texture: TextureHandle,
+    last_game_view: Option<pause_backdrop::GameView>,
+    menu_from_game: bool,
     castle_backdrop: Option<castle_backdrop::CastleBackdrop>,
     screen: Screen,
     return_screen: Screen,
@@ -147,6 +150,8 @@ impl DesktopApp {
             dx_picker: None,
             dx_message: String::new(),
             texture,
+            last_game_view: None,
+            menu_from_game: false,
             castle_backdrop: None,
             screen: Screen::Home,
             return_screen: Screen::Home,
@@ -540,7 +545,7 @@ impl DesktopApp {
     }
 
     fn quit_library_on_escape(&mut self, ctx: &Context) {
-        if self.dx_picker.is_some() || self.capture.is_some() {
+        if self.dx_picker.is_some() || self.capture.is_some() || self.menu_from_game {
             return;
         }
         if self.screen != Screen::Home || !self.options.launch_library {
@@ -606,6 +611,11 @@ impl DesktopApp {
     }
 
     fn navigate(&mut self, ctx: &Context, screen: Screen) {
+        if self.screen == Screen::Game && matches!(screen, Screen::Home | Screen::Settings) {
+            self.menu_from_game = true;
+        } else if matches!(screen, Screen::Game | Screen::Editor) {
+            self.menu_from_game = false;
+        }
         if self.screen == Screen::Editor && screen != Screen::Editor {
             self.finish_editor_gesture();
         }
@@ -685,7 +695,10 @@ impl DesktopApp {
         if self.screen != Screen::Game {
             if self.capture.is_some() || self.dx_picker.is_some() {
                 self.menu.freeze();
-            } else if self.options.launch_library && self.screen == Screen::Home {
+            } else if self.options.launch_library
+                && !self.menu_from_game
+                && self.screen == Screen::Home
+            {
                 self.menu.start_horizontal(&mut self.input);
             } else {
                 self.menu.start(&mut self.input);
@@ -695,6 +708,7 @@ impl DesktopApp {
         if self.settings.show_toolbar
             && self.game.is_some()
             && (!self.options.launch_library
+                || self.menu_from_game
                 || matches!(self.screen, Screen::Editor | Screen::Game))
         {
             self.toolbar(ctx);
@@ -704,16 +718,28 @@ impl DesktopApp {
             .show(ctx, |ui| {
                 if self.screen == Screen::Editor {
                     self.editor_view(ctx, ui);
+                } else if self.menu_from_game
+                    && matches!(self.screen, Screen::Home | Screen::Settings)
+                {
+                    self.paused_game_view(ui);
                 } else if self.options.launch_library
                     && matches!(self.screen, Screen::Home | Screen::Settings)
                 {
                     self.launcher_view(ui);
+                    if self.screen == Screen::Settings {
+                        ui.painter()
+                            .rect_filled(ui.max_rect(), 0, Color32::from_black_alpha(150));
+                    }
                 } else if self.game.is_some() {
-                    self.game_view(ui);
+                    if self.screen == Screen::Game {
+                        self.remember_game_view(ui);
+                    } else {
+                        self.paused_game_view(ui);
+                    }
                 }
             });
         if self.screen == Screen::Settings
-            || self.screen == Screen::Home && !self.options.launch_library
+            || self.screen == Screen::Home && (!self.options.launch_library || self.menu_from_game)
         {
             self.pause_menu(ctx);
         }
@@ -844,7 +870,7 @@ impl DesktopApp {
         } else {
             Smooth::OFF
         };
-        if self.screen != Screen::Editor {
+        if self.screen == Screen::Game {
             if let Some(image) = self.frame_image(smooth) {
                 self.texture.set(image.clone(), TextureOptions::NEAREST);
                 submitted_frame = Some(image);

@@ -135,7 +135,12 @@ impl DesktopApp {
         {
             let target = match self.screen {
                 Screen::Settings => self.return_screen,
-                Screen::Home if self.game.is_some() && !self.options.launch_library => Screen::Game,
+                Screen::Home
+                    if self.game.is_some()
+                        && (!self.options.launch_library || self.menu_from_game) =>
+                {
+                    Screen::Game
+                }
                 _ => Screen::Home,
             };
             self.navigate(ctx, target);
