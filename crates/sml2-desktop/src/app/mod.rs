@@ -228,7 +228,8 @@ impl DesktopApp {
 
     fn load_game(&mut self) {
         match SessionAssets::load_from(&ExtractedContent::new(&self.options.assets)) {
-            Ok(assets) => {
+            Ok(mut assets) => {
+                let diagnostics = self.load_saved_scenery(&mut assets);
                 let (assets, preview) = filter_preview::FilterPreview::new(assets);
                 match preview {
                     Ok(preview) => self.filter_preview = Some(preview),
@@ -239,6 +240,7 @@ impl DesktopApp {
                     self.options.paths.save.clone(),
                     self.options.audio,
                 ));
+                self.game.as_mut().unwrap().diagnostics.extend(diagnostics);
                 self.level_choices();
             }
             Err(e) => self.status = Some(format!("Game data could not be loaded: {e}")),

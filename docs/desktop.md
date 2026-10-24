@@ -283,7 +283,12 @@ inside the map appears at native gameplay size too; enlarge the gameplay view in
 
 Completed gestures and undo/redo autosave atomically to `scenery-NN.json`
 beside `settings.json` (`NN` is the zero-based level ID). The status strip
-shows saving and failure states. A failed save retains the edits in memory;
+shows saving and failure states. Saved scenery loads automatically on game
+startup and is shared by all three save pipes. Edits saved during a session
+apply the next time you enter or restart that level, without needing Playtest.
+Invalid scenery files are reported in the debug diagnostics and left intact;
+the affected level uses its original scenery until the file is repaired.
+A failed save retains the edits in memory;
 use **Retry** after fixing the storage problem. Unreadable or invalid files
 lock editing instead of being replaced; repair the file and choose **Reload
 file**. The existing scenery JSON format remains compatible. History and
