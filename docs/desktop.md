@@ -140,7 +140,7 @@ suspends play. Confirmation/binding-capture buttons wait for release before
 they can affect gameplay. Buttons tapped between ticks survive until the next
 tick; opposite directions cancel consistently across devices.
 
-Settings include **Fit to window**, 1x–8x output scale, fullscreen, volume/mute,
+Settings include **Fit to window**, **Integer scaling**, 1x–8x output scale, fullscreen, volume/mute,
 controller selection, stick dead zone, and gameplay rebinding. Selecting a
 choice with the left or right key (or controller direction) moves backward or
 forward. The visible arrow controls do the same when clicked. Enter or clicking
@@ -167,15 +167,16 @@ inside a solid fill matched to the room color, keeping unused tilemap data hidde
 Enlarged level views
 spawn and update objects across the wider window, so gameplay differs from the
 original (attract demos keep native spawning); the status bar sits bottom
-centre, and other fixed screens are letterboxed. Output scaling uses integer **physical** pixels,
-with nearest sampling and centered letterboxing, independent of UI DPI.
+centre, and other fixed screens are letterboxed. Output scaling uses **physical** pixels, with nearest sampling and centered
+letterboxing, independent of UI DPI.
 **Fit to window** is available in the toolbar's Settings popup and under
 **Settings → Display**. It automatically adjusts the output scale as you resize
-the window, keeping the same game resolution and visible area. Scaling changes
-in whole-number steps; borders preserve the aspect ratio. Turning it off selects
-a fixed scale without resizing the window and reveals the **Window scale**
+the window, keeping the same game resolution and visible area. **Integer scaling**
+is on by default and restricts scaling to whole-number steps. Turn it off to
+use fractional scaling and fill more of the window while preserving the aspect ratio.
+Turning **Fit to window** off selects a fixed scale without resizing the window and reveals the **Window scale**
 presets. Manual presets resize the window when windowed and fit within the
-current window if the platform limits its size. The fit preference is saved.
+current window if the platform limits its size. Both scaling preferences are saved.
 The castle entrance and Game Over screen continue their brick wall and ground
 into unused window space at that same scale, keeping the castle centered at its
 original size. These surroundings follow the display filter or DX colors and

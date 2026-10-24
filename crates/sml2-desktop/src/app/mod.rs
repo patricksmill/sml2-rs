@@ -1083,6 +1083,7 @@ impl DesktopApp {
             ],
             self.settings.zoom,
             self.settings.view(),
+            self.settings.integer_scaling,
         );
         self.effective_scale = size[0] / self.settings.view().0 as u32;
         let origin = egui::pos2(

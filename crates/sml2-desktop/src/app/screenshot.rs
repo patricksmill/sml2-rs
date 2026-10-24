@@ -16,19 +16,23 @@ pub(super) fn save(path: &std::path::Path, image: &ColorImage) -> Result<(), Str
 pub(super) fn verify(image: &ColorImage, frame: &ColorImage, rect: [u32; 4]) -> Result<(), String> {
     let [x, y, w, h] = rect.map(|n| n as usize);
     let [fw, fh] = frame.size;
-    let scale = w / fw.max(1);
     if frame.pixels.len() != fw * fh
-        || scale == 0
-        || w != scale * fw
-        || h != scale * fh
+        || fw == 0
+        || fh == 0
+        || w == 0
+        || h == 0
+        || ((w as f64 * fh as f64 / fw.max(1) as f64).round() as usize).abs_diff(h) > 1
         || x + w > image.size[0]
         || y + h > image.size[1]
     {
-        return Err("Game rectangle is not an integer-scaled game view".into());
+        return Err("Game rectangle does not match the submitted game view".into());
     }
     for py in 0..h {
         for px in 0..w {
-            let expected = frame.pixels[(py / scale) * fw + px / scale].to_array();
+            // Nearest sampling chooses the texel under each destination pixel's center.
+            let sx = ((px * 2 + 1) * fw / (w * 2)).min(fw - 1);
+            let sy = ((py * 2 + 1) * fh / (h * 2)).min(fh - 1);
+            let expected = frame.pixels[sy * fw + sx].to_array();
             let [er, eg, eb, _] = expected;
             let actual = image.pixels[(y + py) * image.size[0] + x + px].to_array();
             let close = actual[3] == 255
@@ -85,5 +89,23 @@ mod tests {
         let shown = ColorImage::new([512, 288], vec![Color32::from_gray(85); 512 * 288]);
         assert!(verify(&shown, &frame, [0, 0, 512, 288]).is_ok());
         assert!(verify(&shown, &frame, [0, 0, 512, 280]).is_err());
+    }
+
+    #[test]
+    fn verify_accepts_fractional_nearest_scaling_and_still_detects_wrong_pixels() {
+        let frame = ColorImage::new(
+            [2, 2],
+            vec![Color32::RED, Color32::GREEN, Color32::BLUE, Color32::WHITE],
+        );
+        let mut shown = ColorImage::new([5, 5], vec![Color32::BLACK; 25]);
+        let source = [0, 0, 1, 1, 1];
+        for y in 0..5 {
+            for x in 0..5 {
+                shown.pixels[y * 5 + x] = frame.pixels[source[y] * 2 + source[x]];
+            }
+        }
+        assert!(verify(&shown, &frame, [0, 0, 5, 5]).is_ok());
+        shown.pixels[12] = Color32::BLACK;
+        assert!(verify(&shown, &frame, [0, 0, 5, 5]).is_err());
     }
 }

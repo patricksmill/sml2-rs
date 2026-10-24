@@ -21,15 +21,24 @@ fn castle_scenery_fills_the_window_without_resizing_the_scene() {
     app.settings.show_toolbar = false;
     let view = app.settings.view();
     let native = app.frame_image(Smooth::OFF).unwrap();
-    for (size, dpi) in [
-        (egui::vec2(1051.0, 961.0), 1.0),
-        (egui::vec2(1051.0, 961.0), 2.0),
+    for (size, dpi, integer_scaling) in [
+        (egui::vec2(1051.0, 961.0), 1.0, true),
+        (egui::vec2(1051.0, 961.0), 2.0, true),
+        (egui::vec2(1051.0, 961.0), 1.0, false),
+        (egui::vec2(1051.0, 961.0), 2.0, false),
     ] {
+        app.settings.integer_scaling = integer_scaling;
+        app.castle_backdrop = None;
         let output = frame(&mut app, &ctx, size, dpi);
         assert_eq!(app.settings.view(), view);
         assert_eq!(app.texture.size(), native.size);
-        assert_eq!(app.game_rect[2], view.0 as u32 * app.effective_scale);
-        assert_eq!(app.game_rect[3], view.1 as u32 * app.effective_scale);
+        if integer_scaling {
+            assert_eq!(app.game_rect[2], view.0 as u32 * app.effective_scale);
+            assert_eq!(app.game_rect[3], view.1 as u32 * app.effective_scale);
+        } else {
+            assert_eq!(app.game_rect[2], (size.x * dpi) as u32);
+            assert_ne!(app.game_rect[2] % view.0 as u32, 0);
+        }
         let backdrop = app.castle_backdrop.as_ref().unwrap();
         let id = backdrop.texture.id();
         let expanded = backdrop.key.view;

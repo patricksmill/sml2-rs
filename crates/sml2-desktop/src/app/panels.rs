@@ -192,6 +192,13 @@ impl DesktopApp {
         if self.menu.row(ui, "Fit to window", Value::Toggle(fit)) {
             self.fit_to_window(!fit);
         }
+        if self.menu.row(
+            ui,
+            "Integer scaling",
+            Value::Toggle(self.settings.integer_scaling),
+        ) {
+            self.settings.integer_scaling = !self.settings.integer_scaling;
+        }
         if let Zoom::Integer(scale) = self.settings.zoom {
             let adjust = self.menu.choice(ui, "Window scale", format!("{scale}×"));
             if adjust != 0 {
@@ -199,14 +206,6 @@ impl DesktopApp {
                 self.zoom(ctx, Some(next as u8));
             }
         }
-        theme::note(
-            ui,
-            "Fit scales the same game view as you resize the window.",
-        );
-        theme::note(
-            ui,
-            "Whole-number scaling keeps pixels crisp; borders preserve the aspect ratio.",
-        );
         if self
             .menu
             .row(ui, "Fullscreen", Value::Toggle(self.settings.fullscreen))
@@ -399,10 +398,14 @@ impl DesktopApp {
                 ui.visuals_mut().override_text_color = Some(theme::INK);
                 let mut fit = self.settings.zoom == Zoom::Auto;
                 if ui.checkbox(&mut fit, "Fit to window")
-                    .on_hover_text("Scale the same game view to fit the window, preserving crisp pixels and aspect ratio.")
+                    .on_hover_text("Scale the game view to fit the window while preserving its aspect ratio.")
                     .changed()
                 {
                     self.fit_to_window(fit);
+                    self.persist();
+                    release_focus(ctx);
+                }
+                if ui.checkbox(&mut self.settings.integer_scaling, "Integer scaling").changed() {
                     self.persist();
                     release_focus(ctx);
                 }

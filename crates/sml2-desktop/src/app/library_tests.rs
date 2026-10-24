@@ -148,3 +148,24 @@ fn settings_game_has_dx_import_and_persists_the_mode_choice() {
     }
     let _ = std::fs::remove_dir_all(path);
 }
+
+#[test]
+fn display_replaces_scaling_explanations_with_a_saved_integer_scaling_toggle() {
+    let (mut app, ctx, path) = launcher();
+    confirm(&mut app, &ctx, 1);
+    let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
+    assert!(text.contains("Integer scaling"));
+    assert!(!text.contains("Fit scales the same game view"));
+    assert!(!text.contains("Whole-number scaling keeps pixels crisp"));
+    assert!(app.settings.integer_scaling);
+    confirm(&mut app, &ctx, 2); // Integer scaling, after tabs and Fit to window.
+    assert!(!app.settings.integer_scaling);
+    assert_eq!(app.settings.zoom, Zoom::Auto);
+    app.persist();
+    assert!(
+        !Settings::load(&app.options.paths.settings)
+            .unwrap()
+            .integer_scaling
+    );
+    let _ = std::fs::remove_dir_all(path);
+}

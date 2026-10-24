@@ -42,23 +42,19 @@ impl DesktopApp {
             self.castle_backdrop = None;
             return;
         };
-        let scale = self.effective_scale;
-        if scale == 0 {
+        let view = self.settings.view();
+        let scale = picture.size() / egui::vec2(view.0 as f32, view.1 as f32);
+        if scale.x <= 0.0 || scale.y <= 0.0 {
             return;
         }
-        let ppp = ui.ctx().pixels_per_point();
-        let view = self.settings.view();
         // Symmetric margins preserve the native anchor. Round outward to cover
         // odd window sizes too; the painter clips the surplus at the edges.
-        let extra = |axis: f32, length: usize| {
-            ((axis * ppp).ceil() as u32)
-                .saturating_sub(length as u32 * scale)
-                .div_ceil(2)
-                .div_ceil(scale) as usize
+        let extra = |axis: f32, length: usize, scale: f32| {
+            ((axis / scale - length as f32).max(0.0) / 2.0).ceil() as usize
         };
         let (extra_x, extra_y) = (
-            extra(available.width(), view.0),
-            extra(available.height(), view.1),
+            extra(available.width(), view.0, scale.x),
+            extra(available.height(), view.1, scale.y),
         );
         if extra_x == 0 && extra_y == 0 {
             self.castle_backdrop = None;
@@ -97,8 +93,8 @@ impl DesktopApp {
         }
         let backdrop = self.castle_backdrop.as_ref().unwrap();
         let destination = Rect::from_min_size(
-            picture.min - egui::vec2(extra_x as f32, extra_y as f32) * scale as f32 / ppp,
-            egui::vec2(expanded.0 as f32, expanded.1 as f32) * scale as f32 / ppp,
+            picture.min - egui::vec2(extra_x as f32, extra_y as f32) * scale,
+            egui::vec2(expanded.0 as f32, expanded.1 as f32) * scale,
         );
         ui.painter().with_clip_rect(available).image(
             backdrop.texture.id(),

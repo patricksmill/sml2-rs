@@ -34,6 +34,8 @@ pub struct Settings {
     pub window_size: [f32; 2],
     pub fullscreen: bool,
     pub zoom: Zoom,
+    /// Restrict output scaling to whole physical pixels per game pixel.
+    pub integer_scaling: bool,
     pub filter: Filter,
     pub volume: f32,
     pub muted: bool,
@@ -68,6 +70,7 @@ impl Default for Settings {
             window_size: [800.0, 720.0],
             fullscreen: false,
             zoom: Zoom::Auto,
+            integer_scaling: true,
             filter: Filter::Gray,
             volume: 0.7,
             muted: false,
@@ -191,6 +194,7 @@ mod tests {
         let path = std::env::temp_dir().join(format!("sml2_settings_{}.json", std::process::id()));
         let mut settings = Settings {
             zoom: Zoom::Integer(3),
+            integer_scaling: false,
             filter: Filter::Sgb(0),
             ..Default::default()
         };
@@ -282,18 +286,18 @@ mod tests {
 
     #[test]
     fn a_version_three_file_without_vanilla_still_loads() {
-        let path = std::env::temp_dir().join(format!(
-            "sml2_vanilla_settings_{}.json",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("sml2_vanilla_settings_{}.json", std::process::id()));
         let settings = Settings::default();
         settings.save(&path).unwrap();
         let mut value: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
         value.as_object_mut().unwrap().remove("vanilla");
+        value.as_object_mut().unwrap().remove("integer_scaling");
         std::fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
         let loaded = Settings::load(&path).unwrap();
         assert!(loaded.vanilla.is_none());
+        assert!(loaded.integer_scaling);
         assert_eq!(loaded.version, 3);
         std::fs::remove_file(path).unwrap();
     }

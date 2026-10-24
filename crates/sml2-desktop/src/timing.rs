@@ -31,17 +31,25 @@ pub fn game_rectangle(
     available: [u32; 2],
     zoom: crate::settings::Zoom,
     view: (usize, usize),
+    integer_scaling: bool,
 ) -> ([u32; 2], [u32; 2]) {
     let (w, h) = (view.0 as u32, view.1 as u32);
-    let fit = (available[0] / w).min(available[1] / h);
-    if fit == 0 {
+    if w == 0 || h == 0 || available.contains(&0) {
+        return ([0, 0], [0, 0]);
+    }
+    let fit = (f64::from(available[0]) / f64::from(w)).min(f64::from(available[1]) / f64::from(h));
+    let fit = if integer_scaling { fit.floor() } else { fit };
+    if fit == 0.0 {
         return ([0, 0], [0, 0]);
     }
     let scale = match zoom {
         crate::settings::Zoom::Auto => fit,
-        crate::settings::Zoom::Integer(n) => u32::from(n).min(fit).max(1),
+        crate::settings::Zoom::Integer(n) => f64::from(n.max(1)).min(fit),
     };
-    let size = [w * scale, h * scale];
+    let size = [
+        (f64::from(w) * scale).round() as u32,
+        (f64::from(h) * scale).round() as u32,
+    ];
     (
         [(available[0] - size[0]) / 2, (available[1] - size[1]) / 2],
         size,
@@ -51,6 +59,31 @@ pub fn game_rectangle(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::Zoom;
+
+    #[test]
+    fn fractional_fit_fills_the_limiting_axis_and_manual_zoom_stays_capped() {
+        assert_eq!(
+            game_rectangle([1000, 700], Zoom::Auto, (160, 144), false),
+            ([111, 0], [778, 700])
+        );
+        assert_eq!(
+            game_rectangle([1000, 700], Zoom::Integer(2), (160, 144), false),
+            ([340, 206], [320, 288])
+        );
+        assert_eq!(
+            game_rectangle([1000, 700], Zoom::Integer(8), (160, 144), false),
+            ([111, 0], [778, 700])
+        );
+        assert_eq!(
+            game_rectangle([80, 72], Zoom::Auto, (160, 144), false),
+            ([0, 0], [80, 72])
+        );
+        assert_eq!(
+            game_rectangle([80, 72], Zoom::Auto, (160, 144), true),
+            ([0, 0], [0, 0])
+        );
+    }
     #[test]
     fn refresh_rate_does_not_change_ticks_and_pause_cannot_build_up_debt() {
         for refresh in [60u64, 90, 120, 144] {
@@ -79,15 +112,20 @@ mod tests {
     #[test]
     fn zoom_is_integer_centered_and_constrained_by_physical_window_pixels() {
         assert_eq!(
-            game_rectangle([1000, 700], crate::settings::Zoom::Auto, (160, 144)),
+            game_rectangle([1000, 700], crate::settings::Zoom::Auto, (160, 144), true),
             ([180, 62], [640, 576])
         );
         assert_eq!(
-            game_rectangle([1000, 700], crate::settings::Zoom::Integer(2), (160, 144)),
+            game_rectangle(
+                [1000, 700],
+                crate::settings::Zoom::Integer(2),
+                (160, 144),
+                true
+            ),
             ([340, 206], [320, 288])
         );
         assert_eq!(
-            game_rectangle([0, 0], crate::settings::Zoom::Auto, (160, 144)),
+            game_rectangle([0, 0], crate::settings::Zoom::Auto, (160, 144), true),
             ([0, 0], [0, 0])
         );
     }
@@ -95,11 +133,11 @@ mod tests {
     fn game_rectangle_scales_the_view_by_whole_steps() {
         let view = (384, 216);
         assert_eq!(
-            game_rectangle([1920, 1080], crate::settings::Zoom::Auto, view),
+            game_rectangle([1920, 1080], crate::settings::Zoom::Auto, view, true),
             ([0, 0], [1920, 1080])
         );
         assert_eq!(
-            game_rectangle([800, 720], crate::settings::Zoom::Auto, (160, 144)),
+            game_rectangle([800, 720], crate::settings::Zoom::Auto, (160, 144), true),
             ([0, 0], [800, 720])
         );
     }
