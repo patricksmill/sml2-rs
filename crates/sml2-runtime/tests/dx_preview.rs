@@ -638,6 +638,7 @@ fn audited_rom_draws_the_hub_and_zone_screens() {
         (4, 0x3C),
         (5, 0x4B),
         (6, 0x50),
+        (7, 0x5A),
         (8, 0x72),
     ] {
         let mut game = session();
@@ -651,8 +652,144 @@ fn audited_rom_draws_the_hub_and_zone_screens() {
                 .unwrap();
             let colors: std::collections::BTreeSet<_> = frame.iter().collect();
             assert!(colors.len() > 8, "screen {screen} has its palettes");
+            if screen != 0 {
+                for view in ZONE_VIEWS {
+                    let wide = game.render_dx_frame(&bundle, character, view).unwrap();
+                    assert_zone_picture(&wide, &frame, view, screen);
+                }
+            }
         }
     }
+}
+
+const ZONE_VIEWS: [(usize, usize); 6] = [
+    (200, 180),
+    (240, 216),
+    (256, 144),
+    (320, 288),
+    (384, 216),
+    (512, 288),
+];
+
+fn assert_zone_picture(frame: &[[u8; 3]], native: &[[u8; 3]], view: (usize, usize), screen: u8) {
+    let (mx, my) = ((view.0 - 160) / 2, (view.1 - 144) / 2);
+    assert_eq!(frame.len(), view.0 * view.1);
+    for y in 0..view.1 {
+        let row = &frame[y * view.0..(y + 1) * view.0];
+        if (my..my + 144).contains(&y) {
+            assert_eq!(
+                &row[mx..mx + 160],
+                &native[(y - my) * 160..(y - my + 1) * 160],
+                "screen {screen}, view {view:?}, row {y}"
+            );
+            assert!(
+                row[..mx]
+                    .iter()
+                    .chain(&row[mx + 160..])
+                    .all(|pixel| *pixel == [0; 3]),
+                "unused map columns on screen {screen}, view {view:?}, row {y}"
+            );
+        } else {
+            assert!(
+                row.iter().all(|pixel| *pixel == [0; 3]),
+                "unused map rows on screen {screen}, view {view:?}, row {y}"
+            );
+        }
+    }
+}
+
+#[test]
+fn every_dx_zone_hides_unused_columns_at_all_view_sizes() {
+    let bundle = synthetic_bundle();
+    let mut game = session();
+    for cleared in [false, true] {
+        if cleared {
+            game.debug_clear_all_levels();
+        }
+        for (screen, node) in [
+            (1, 0x28),
+            (2, 0x23),
+            (3, 0x32),
+            (4, 0x3C),
+            (5, 0x4B),
+            (6, 0x50),
+            (7, 0x5A),
+            (8, 0x72),
+        ] {
+            game.debug_warp_map(screen, node).unwrap();
+            for _ in 0..3 {
+                for character in [Mario, Luigi] {
+                    let native = game
+                        .render_dx_frame(&bundle, character, (160, 144))
+                        .unwrap();
+                    assert!(
+                        native.iter().any(|pixel| *pixel != [0; 3]),
+                        "the fixture must expose incorrectly sampled columns"
+                    );
+                    for view in ZONE_VIEWS {
+                        assert_zone_picture(
+                            &game.render_dx_frame(&bundle, character, view).unwrap(),
+                            &native,
+                            view,
+                            screen,
+                        );
+                    }
+                }
+                game.advance(FrameInput::default());
+                assert!(
+                    matches!(&game.state, SessionState::Overworld(map) if map.screen_id == screen)
+                );
+            }
+        }
+    }
+}
+
+#[test]
+#[ignore = "exports every zone in normal and DX rendering; requires SML2_DX_ROM"]
+fn export_all_zone_previews() {
+    let bundle = audited();
+    let mut game = session();
+    game.debug_clear_all_levels();
+    let view = (256, 144);
+    let size = (512, 8 * 144);
+    let mut pixels = vec![[0u8; 3]; size.0 * size.1];
+    for (index, (screen, node)) in [
+        (1, 0x28),
+        (2, 0x23),
+        (3, 0x32),
+        (4, 0x3C),
+        (5, 0x4B),
+        (6, 0x50),
+        (7, 0x5A),
+        (8, 0x72),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        game.debug_warp_map(screen, node).unwrap();
+        let native = game.render_frame(view);
+        let dx = game.render_dx_frame(&bundle, Mario, view).unwrap();
+        for y in 0..144 {
+            let row = (index * 144 + y) * size.0;
+            for x in 0..256 {
+                pixels[row + x] = [native[y * 256 + x]; 3];
+            }
+            pixels[row + 256..row + 512].copy_from_slice(&dx[y * 256..(y + 1) * 256]);
+        }
+    }
+    let path = std::env::temp_dir().join("sml2-zone-previews.png");
+    let mut encoder = png::Encoder::new(
+        std::fs::File::create(&path).unwrap(),
+        size.0 as u32,
+        size.1 as u32,
+    );
+    encoder.set_color(png::ColorType::Rgb);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder
+        .write_header()
+        .unwrap()
+        .write_image_data(&pixels.into_iter().flatten().collect::<Vec<_>>())
+        .unwrap();
 }
 
 #[test]

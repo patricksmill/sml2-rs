@@ -163,7 +163,8 @@ windows share the upward view bias. Native zoom and overworld/menu framing keep
 their existing positions. On the overworld hub, navigation and camera-pan mode
 both show the expanded map, clamped to its 512x512 bounds; pan arrows stay at
 the view edges. Views larger than the hub show the whole map with bars. Zone
-screens retain their 256x144 map. Each minigame's original picture stays centered
+screens keep their original 160x144 picture centered in larger views; unused
+tilemap columns stay hidden. Each minigame's original picture stays centered
 inside a solid fill matched to the room color, keeping unused tilemap data hidden.
 Enlarged level views
 spawn and update objects across the wider window, so gameplay differs from the

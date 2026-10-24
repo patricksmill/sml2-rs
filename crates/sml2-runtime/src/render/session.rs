@@ -351,7 +351,7 @@ impl Session {
     /// The overworld in any view. The hub is stitched from native frames
     /// (its sprites are 8-bit OAM positions relative to each frame's camera)
     /// during navigation and panning. Oversized views show the whole hub.
-    /// Zones show their authored map. Minigames keep their 160-wide picture
+    /// Zones and minigames keep their native 160-wide picture
     /// centered in a solid room-color surround; unused tilemap columns are
     /// not scenery. Screen 8, the minigame doors, also stays native.
     pub(crate) fn overworld_view<P: Copy>(
@@ -372,10 +372,6 @@ impl Session {
                 Ok(letterbox(&pixels, size, view, fill))
             }
             9..=14 => Ok(letterbox(&render(map_sim, NATIVE)?, NATIVE, view, fill)),
-            1..=7 => {
-                let size = (view.0.min(256), 144);
-                Ok(letterbox(&render(map_sim, size)?, size, view, fill))
-            }
             _ => Ok(letterbox(&render(map_sim, NATIVE)?, NATIVE, view, fill)),
         }
     }

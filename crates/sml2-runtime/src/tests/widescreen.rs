@@ -342,16 +342,56 @@ fn a_hub_view_wider_than_the_map_is_letterboxed() {
 }
 
 #[test]
-fn a_zone_screen_is_drawn_whole_and_centred() {
+fn every_zone_keeps_its_native_picture_and_hides_unused_tilemap_columns() {
     let mut session = Session::new(SessionAssets::load().unwrap());
-    let SessionState::Overworld(map) = &mut session.state else {
-        panic!("boots to map")
-    };
-    map.load_screen(1, 0, &session.assets.node_records);
-    let full = session.render_frame((256, 144));
-    let view = (384, 216);
-    let wide = session.render_frame(view);
-    assert_eq!(crop(&wide, view, (64, 36, 256, 144)), full);
+    for cleared in [false, true] {
+        if cleared {
+            session.debug_clear_all_levels();
+        }
+        for (screen, node) in [
+            (1, 0x28),
+            (2, 0x23),
+            (3, 0x32),
+            (4, 0x3C),
+            (5, 0x4B),
+            (6, 0x50),
+            (7, 0x5A),
+            (8, 0x72),
+        ] {
+            session.debug_warp_map(screen, node).unwrap();
+            for frame in 0..3 {
+                let native = session.render_frame(NATIVE);
+                for view in [
+                    (200, 180),
+                    (240, 216),
+                    (256, 144),
+                    (320, 288),
+                    (384, 216),
+                    (512, 288),
+                ] {
+                    let wide = session.render_frame(view);
+                    let (mx, my) = ((view.0 - 160) / 2, (view.1 - 144) / 2);
+                    assert_eq!(
+                        crop(&wide, view, (mx, my, 160, 144)),
+                        native,
+                        "screen {screen}, cleared {cleared}, frame {frame}, view {view:?}"
+                    );
+                    for y in 0..view.1 {
+                        for x in 0..view.0 {
+                            if !(mx..mx + 160).contains(&x) || !(my..my + 144).contains(&y) {
+                                assert_eq!(wide[y * view.0 + x], 0,
+                                    "unused map data on screen {screen}, cleared {cleared}, frame {frame}, view {view:?}, pixel {x},{y}");
+                            }
+                        }
+                    }
+                }
+                session.advance(FrameInput::default());
+                assert!(
+                    matches!(&session.state, SessionState::Overworld(map) if map.screen_id == screen)
+                );
+            }
+        }
+    }
 }
 
 #[test]
