@@ -109,7 +109,7 @@ impl DesktopApp {
             self.start_library_import(LibraryPick::Rom);
         }
         let dx_status = self.library.row_status(Row::Dx);
-        let show_switch = self.library.dx_installed && (dx_status == "On" || dx_status == "Off");
+        let show_switch = self.library.dx_installed;
         if show_switch
             && self
                 .menu
@@ -161,6 +161,10 @@ impl DesktopApp {
         if !self.dx_message.is_empty() {
             ui.add_space(6.0);
             theme::note(ui, &self.dx_message);
+        }
+        if !self.library.dx_error.is_empty() {
+            ui.add_space(6.0);
+            theme::note(ui, &self.library.dx_error);
         }
         if let Some(message) = &self.status {
             ui.add_space(6.0);
