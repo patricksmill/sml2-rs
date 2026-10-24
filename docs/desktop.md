@@ -30,7 +30,9 @@ Play opens the game's own
 title screen. START, or a click on the
 picture, opens the file select: Mario walks to a pipe and ducks into it, and
 he jumps on Clear. Walk left from the first pipe to open the settings hall.
-F10 shows or hides the toolbar. Esc, or the toolbar Menu button, opens the
+F10 shows or hides the toolbar. Its **Display**, **Audio**, **Controls**,
+**Mods**, **Game**, and **Debug** tabs open the matching settings page.
+Esc, or the toolbar Menu button, opens the
 compact translucent pause menu over the current game frame, with Resume,
 Settings, the scenery editor, and Quit. Quit to title is on
 that menu only after you have left the title. `--play` skips the library and
@@ -187,8 +189,8 @@ spawn and update objects across the wider window, so gameplay differs from the
 original (attract demos keep native spawning); the status bar sits bottom
 centre, and other fixed screens are letterboxed. Output scaling uses **physical** pixels, with nearest sampling and centered
 letterboxing, independent of UI DPI.
-**Fit to window** is available in the toolbar's Settings popup and under
-**Settings → Display**. It automatically adjusts the output scale as you resize
+**Fit to window** is available under **Settings → Display**, including through
+the toolbar's **Display** tab. It automatically adjusts the output scale as you resize
 the window, keeping the same game resolution and visible area. **Integer scaling**
 is on by default and restricts scaling to whole-number steps. Turn it off to
 use fractional scaling and fill more of the window while preserving the aspect ratio.

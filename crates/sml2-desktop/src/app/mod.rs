@@ -109,7 +109,6 @@ pub struct DesktopApp {
     prev_hall_a: bool,
     prev_hall_left: bool,
     validation_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
-    settings_open: bool,
     library: Library,
     vanilla_check: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
     library_dx_import: bool,
@@ -185,7 +184,6 @@ impl DesktopApp {
             prev_hall_a: false,
             prev_hall_left: false,
             validation_error: Default::default(),
-            settings_open: false,
             library: Library::default(),
             vanilla_check: None,
             library_dx_import: false,
@@ -533,7 +531,7 @@ impl DesktopApp {
     }
 
     fn quit_library_on_escape(&mut self, ctx: &Context) {
-        if self.dx_picker.is_some() || self.capture.is_some() || self.settings_open {
+        if self.dx_picker.is_some() || self.capture.is_some() {
             return;
         }
         if self.screen != Screen::Home || !self.options.launch_library {
@@ -705,7 +703,6 @@ impl DesktopApp {
         if self.debug {
             self.debug_panel(ctx);
         }
-        self.settings_window(ctx);
 
         let now = Instant::now();
         let elapsed = now.duration_since(self.last_update);
@@ -713,12 +710,11 @@ impl DesktopApp {
         let running = focused
             && self.screen == Screen::Game
             && !self.paused
-            && !self.settings_open
             && self.capture.is_none()
             && self.dx_picker.is_none()
             && !self.screenshot_pending;
         let mut ticks = self.budget.advance(elapsed, running);
-        let stepped = self.step && focused && self.screen == Screen::Game && !self.settings_open;
+        let stepped = self.step && focused && self.screen == Screen::Game;
         if stepped {
             ticks = 1;
         }
@@ -851,11 +847,7 @@ impl DesktopApp {
             if self.redraws >= frames && !self.screenshot_pending {
                 if self.options.screenshot.is_some() && self.redraws == frames {
                     self.screenshot_pending = true;
-                    if self.screen == Screen::Game
-                        && !self.debug
-                        && !self.paused
-                        && !self.settings_open
-                    {
+                    if self.screen == Screen::Game && !self.debug && !self.paused {
                         self.screenshot_check =
                             submitted_frame.map(|frame| (frame, self.game_rect));
                     }
@@ -1003,7 +995,7 @@ impl DesktopApp {
 
     fn toolbar(&mut self, ctx: &Context) {
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.strong("SML2");
                 if ui.button("Menu · Esc").clicked() {
                     self.navigate(ctx, Screen::Home);
@@ -1014,27 +1006,16 @@ impl DesktopApp {
                 {
                     self.open_editor(ctx);
                 }
-                if ui.button("Settings").clicked() {
-                    self.settings_open = true;
-                    release_focus(ctx);
-                }
-                if ui.button("Debug · F1").clicked() {
-                    self.debug = !self.debug;
-                    release_focus(ctx);
-                }
-                if ui
-                    .button(format!("Filter: {}", self.settings.filter.label()))
-                    .clicked()
-                {
-                    self.cycle_filter(1);
-                    release_focus(ctx);
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Fullscreen · F11").clicked() {
-                        self.fullscreen(ctx);
-                        release_focus(ctx);
+                for page in Page::ALL {
+                    let active = self.screen == Screen::Settings && self.page == page;
+                    if ui.selectable_label(active, page.label()).clicked() {
+                        if self.screen != Screen::Settings {
+                            self.return_screen = self.screen;
+                        }
+                        self.page = page;
+                        self.navigate(ctx, Screen::Settings);
                     }
-                });
+                }
             });
         });
     }
@@ -1119,11 +1100,7 @@ impl DesktopApp {
         );
         self.paint_overlays(ui, rect);
         let picture = ui.interact(rect, egui::Id::new("game-picture"), egui::Sense::click());
-        if self.screen == Screen::Game
-            && !self.settings_open
-            && self.dx_picker.is_none()
-            && picture.clicked()
-        {
+        if self.screen == Screen::Game && self.dx_picker.is_none() && picture.clicked() {
             if let Some(pos) = picture.interact_pointer_pos() {
                 if let Some(hall) = &mut self.hall {
                     let view = self.settings.view();

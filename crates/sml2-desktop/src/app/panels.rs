@@ -1,4 +1,3 @@
-use super::catalog;
 use super::theme::{self, Value};
 use super::{DesktopApp, Screen};
 use crate::library::Row;
@@ -30,7 +29,7 @@ impl Page {
         Page::Game,
         Page::Debug,
     ];
-    fn label(self) -> &'static str {
+    pub(super) fn label(self) -> &'static str {
         match self {
             Page::Display => "DISPLAY",
             Page::Audio => "AUDIO",
@@ -386,75 +385,6 @@ impl DesktopApp {
             }
         }
         theme::note(ui, &format!("{}", self.options.paths.settings.display()));
-    }
-
-    pub(super) fn settings_window(&mut self, ctx: &Context) {
-        if !self.settings_open {
-            return;
-        }
-        let mut open = self.settings_open;
-        let mut close_for_full_settings = false;
-        egui::Window::new(egui::RichText::new("Settings").color(theme::INK))
-            .open(&mut open)
-            .default_width(280.0)
-            .collapsible(false)
-            .resizable(false)
-            .frame(theme::popup_frame())
-            .show(ctx, |ui| {
-                ui.visuals_mut().override_text_color = Some(theme::INK);
-                let mut fit = self.settings.zoom == Zoom::Auto;
-                if ui.checkbox(&mut fit, "Fit to window")
-                    .on_hover_text("Scale the game view to fit the window while preserving its aspect ratio.")
-                    .changed()
-                {
-                    self.fit_to_window(fit);
-                    self.persist();
-                    release_focus(ctx);
-                }
-                if ui.checkbox(&mut self.settings.integer_scaling, "Integer scaling").changed() {
-                    self.persist();
-                    release_focus(ctx);
-                }
-                for pedestal in catalog::PEDESTALS {
-                    if pedestal == catalog::Pedestal::Zoom && self.settings.zoom == Zoom::Auto {
-                        continue;
-                    }
-                    let text = catalog::label(pedestal, &self.settings, self.debug);
-                    if ui.button(text).clicked() {
-                        match pedestal {
-                            catalog::Pedestal::Fullscreen => self.fullscreen(ctx),
-                            catalog::Pedestal::Zoom => {
-                                let current = match self.settings.zoom {
-                                    Zoom::Auto => 0,
-                                    Zoom::Integer(n) => n as i32,
-                                };
-                                let next = (current + 1).rem_euclid(9);
-                                self.zoom(
-                                    ctx,
-                                    if next == 0 { None } else { Some(next as u8) },
-                                );
-                            }
-                            _ => catalog::cycle(pedestal, &mut self.settings, &mut self.debug),
-                        }
-                        self.persist();
-                        release_focus(ctx);
-                    }
-                }
-                ui.separator();
-                ui.label("F10 hides this bar. Bindings, ROM import, and reset stay on the full settings page.");
-                if ui.button("All settings").clicked() {
-                    self.return_screen = self.screen;
-                    self.navigate(ctx, Screen::Settings);
-                    close_for_full_settings = true;
-                    release_focus(ctx);
-                }
-            });
-        self.settings_open = open && !close_for_full_settings;
-        if !self.settings_open {
-            self.input.suppress_until_release();
-            self.budget.reset();
-            release_focus(ctx);
-        }
     }
 
     pub(super) fn debug_panel(&mut self, ctx: &Context) {

@@ -800,7 +800,7 @@ fn the_scenery_editor_opens_without_changing_the_game_view() {
 }
 
 #[test]
-fn f10_hides_the_toolbar_and_the_settings_button_opens_a_window() {
+fn f10_hides_the_toolbar_and_its_tabs_open_the_matching_settings_pages() {
     let (mut app, ctx, path) = app();
     app.screen = Screen::Game;
     app.settings.show_toolbar = true;
@@ -810,10 +810,76 @@ fn f10_hides_the_toolbar_and_the_settings_button_opens_a_window() {
     app.settings.show_toolbar = true;
     app.input.event(Button::key("F10"), false);
     frame(&mut app, &ctx, vec![]);
-    app.settings_open = true;
-    frame(&mut app, &ctx, vec![]);
-    assert!(app.settings_open);
-    assert_ne!(app.screen, Screen::Settings);
+    for page in Page::ALL {
+        // Let the panel settle after narrowing the viewport and wrapping its tabs.
+        let _ = ctx.run(
+            RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(480.0, 720.0),
+                )),
+                ..Default::default()
+            },
+            |ctx| app.toolbar(ctx),
+        );
+        let output = ctx.run(
+            RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(480.0, 720.0),
+                )),
+                ..Default::default()
+            },
+            |ctx| app.toolbar(ctx),
+        );
+        let tabs: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text)
+                    if Page::ALL.iter().any(|p| p.label() == text.galley.text()) =>
+                {
+                    Some((text.galley.text(), text.visual_bounding_rect().center()))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            tabs.iter().map(|(label, _)| *label).collect::<Vec<_>>(),
+            ["DISPLAY", "AUDIO", "CONTROLS", "MODS", "GAME", "DEBUG"]
+        );
+        let pos = tabs
+            .iter()
+            .find(|(label, _)| *label == page.label())
+            .unwrap()
+            .1;
+        assert!(
+            pos.x < 480.0,
+            "every tab remains reachable in a narrow window"
+        );
+        for pressed in [true, false] {
+            let _ = ctx.run(
+                RawInput {
+                    events: vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: Default::default(),
+                        },
+                    ],
+                    ..Default::default()
+                },
+                |ctx| app.toolbar(ctx),
+            );
+        }
+        assert_eq!(app.screen, Screen::Settings);
+        assert_eq!(app.page, page);
+        assert_eq!(app.return_screen, Screen::Game);
+    }
+    frame(&mut app, &ctx, vec![key(egui::Key::Escape, true)]);
+    assert_eq!(app.screen, Screen::Game);
     let _ = std::fs::remove_dir_all(path);
 }
 
@@ -881,16 +947,16 @@ fn opening_the_pause_menu_preserves_the_walk_through_settings_hall() {
 }
 
 #[test]
-fn quick_settings_pause_gameplay_and_escape_closes_only_the_popup() {
+fn settings_pause_gameplay_and_escape_returns_to_the_game() {
     let (mut app, ctx, path) = app();
     app.apply_debug(DebugAction::WarpLevel(4));
     frame(&mut app, &ctx, vec![]);
-    app.settings_open = true;
+    app.return_screen = Screen::Game;
+    app.navigate(&ctx, Screen::Settings);
     let tick = app.game.as_ref().unwrap().session.frame_n;
     frame(&mut app, &ctx, vec![key(egui::Key::Z, true)]);
     assert_eq!(app.game.as_ref().unwrap().session.frame_n, tick);
     frame(&mut app, &ctx, vec![key(egui::Key::Escape, true)]);
-    assert!(!app.settings_open);
     assert_eq!(app.screen, Screen::Game);
     assert!(!app.input.sample_player(&app.settings.bindings).a);
     let _ = std::fs::remove_dir_all(path);
