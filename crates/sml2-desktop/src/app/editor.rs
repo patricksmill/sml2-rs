@@ -41,6 +41,9 @@ impl DesktopApp {
         if self.game.is_none() {
             return;
         }
+        if self.settings.dx_mode && self.dx_bundle.is_none() && self.dx_worker.is_none() {
+            self.restore_dx();
+        }
         if self.editor.work.is_none() {
             self.load_editor_level();
         }

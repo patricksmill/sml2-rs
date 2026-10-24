@@ -6,6 +6,78 @@ use sml2_core::scenery::{SceneryOverlay, SceneryPaint};
 use sml2_runtime::render::{motion::Smooth, view};
 
 #[test]
+fn enabling_dx_after_opening_the_editor_restores_and_refreshes_its_graphics() {
+    use crate::app::{tests::frame, Screen};
+    use crate::dx_import::{Event, Worker};
+    use sml2_dx::cache::CacheKey;
+    use std::sync::{atomic::AtomicBool, mpsc, Arc};
+
+    let (mut app, ctx, path) = app();
+    app.options.launch_library = true;
+    app.library.vanilla_ready = true;
+    app.settings.filter = Filter::Gray;
+    app.open_editor(&ctx);
+    frame(&mut app, &ctx, vec![]);
+    let native_atlas = app.editor.atlas.as_ref().unwrap().texture.id();
+    app.navigate(&ctx, Screen::Home);
+
+    let key = CacheKey::new("1".repeat(64));
+    app.settings.dx_installation = Some(key.clone());
+    app.settings.dx_mode = true;
+    app.open_editor(&ctx);
+    assert!(app.dx_restore, "reopening must restore enabled DX graphics");
+    assert!(app.dx_worker.is_some());
+    assert_eq!(app.screen, Screen::Editor);
+
+    // Complete the restore deterministically with synthetic colored graphics.
+    let (sender, events) = mpsc::channel();
+    app.dx_worker = Some(Worker {
+        events,
+        cancelled: Arc::new(AtomicBool::new(false)),
+    });
+    sender
+        .send(Event::Finished(Ok((key, red_bundle()))))
+        .unwrap();
+    let output = frame(&mut app, &ctx, vec![]);
+    assert!(app.settings.dx_mode);
+    assert!(app.dx_worker.is_none());
+    let dx_atlas = app.editor.atlas.as_ref().unwrap().texture.id();
+    assert_ne!(dx_atlas, native_atlas);
+    let (_, delta) = output
+        .textures_delta
+        .set
+        .iter()
+        .find(|(id, _)| *id == dx_atlas)
+        .expect("the editor must upload its refreshed DX atlas");
+    let eframe::egui::ImageData::Color(image) = &delta.image;
+    assert!(image.pixels.iter().all(|pixel| *pixel == Color32::RED));
+    assert!(ctx
+        .tessellate(output.shapes, output.pixels_per_point)
+        .iter()
+        .any(|shape| matches!(
+            &shape.primitive,
+            eframe::egui::epaint::Primitive::Mesh(mesh) if mesh.texture_id == dx_atlas
+        )));
+
+    app.settings.dx_mode = false;
+    let output = frame(&mut app, &ctx, vec![]);
+    let native_atlas = app.editor.atlas.as_ref().unwrap().texture.id();
+    assert_ne!(native_atlas, dx_atlas);
+    let (_, delta) = output
+        .textures_delta
+        .set
+        .iter()
+        .find(|(id, _)| *id == native_atlas)
+        .unwrap();
+    let eframe::egui::ImageData::Color(image) = &delta.image;
+    assert!(image
+        .pixels
+        .iter()
+        .all(|pixel| pixel.r() == pixel.g() && pixel.g() == pixel.b()));
+    std::fs::remove_dir_all(path).ok();
+}
+
+#[test]
 fn live_block_changes_override_paints_in_native_and_dx_at_both_view_sizes() {
     let (mut app, _, path) = app();
     let session = &mut app.game.as_mut().unwrap().session;
