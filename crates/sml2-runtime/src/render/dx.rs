@@ -271,7 +271,21 @@ impl Session {
         // DX's eye whites on color 0 belong to the map cursor; the rooms'
         // Mario has none.
         let cursor = map_sim.screen_id < 9;
-        self.overworld_view(map_sim, view, [0, 0, 0], |sim, size| {
+        // The room's unused map columns contain unrelated graphics. Extend
+        // its clear background color instead, using the interior cell's palette.
+        let surround = if (9..=14).contains(&map_sim.screen_id) {
+            let palette = attributes
+                .and_then(|a| a.get(8 * 32 + 10))
+                .copied()
+                .unwrap_or(0) & 7;
+            let offset = usize::from(palette) * 8;
+            sml2_core::hardware_palettes::rgb555(u16::from_le_bytes([
+                bg_palettes[offset], bg_palettes[offset + 1],
+            ]))
+        } else {
+            [0, 0, 0]
+        };
+        self.overworld_view(map_sim, view, surround, |sim, size| {
             let wave = self
                 .map_wave
                 .as_ref()

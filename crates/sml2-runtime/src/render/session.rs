@@ -159,7 +159,12 @@ impl Session {
             }
             SessionState::Overworld(map_sim) => {
                 let map_sim = self.shown_map(map_sim);
-                self.overworld_view(map_sim, view, fill, |sim, (w, h)| {
+                let surround = if (9..=14).contains(&map_sim.screen_id) {
+                    output.blank(0)
+                } else {
+                    fill
+                };
+                self.overworld_view(map_sim, view, surround, |sim, (w, h)| {
                     let assets = MapAssets {
                         tilemaps: &self.assets.overworld_tilemaps,
                         manifest: &self.assets.overworld_manifest,
@@ -337,9 +342,9 @@ impl Session {
     /// The overworld in any view. The hub is stitched from native frames
     /// (its sprites are 8-bit OAM positions relative to each frame's camera)
     /// during navigation and panning. Oversized views show the whole hub.
-    /// Zone screens and both minigames show their 32-tile-wide map, with a
-    /// minigame's 160-wide picture kept centred. Screen 8, the minigame
-    /// doors, stays native: its columns past the picture are filler.
+    /// Zones show their authored map. Minigames keep their 160-wide picture
+    /// centered in a solid room-color surround; unused tilemap columns are
+    /// not scenery. Screen 8, the minigame doors, also stays native.
     pub(crate) fn overworld_view<P: Copy>(
         &self,
         map_sim: &sml2_core::map_sim::MapSim,
@@ -357,7 +362,8 @@ impl Session {
                 let pixels = self.stitched_hub(map_sim, size, fill, render)?;
                 Ok(letterbox(&pixels, size, view, fill))
             }
-            1..=7 | 9..=14 => {
+            9..=14 => Ok(letterbox(&render(map_sim, NATIVE)?, NATIVE, view, fill)),
+            1..=7 => {
                 let size = (view.0.min(256), 144);
                 Ok(letterbox(&render(map_sim, size)?, size, view, fill))
             }

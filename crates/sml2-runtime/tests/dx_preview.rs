@@ -761,3 +761,23 @@ fn dx_settings_room_fills_the_view_and_projects_sprites_beyond_oam_width() {
     );
     assert_eq!(files[0], RED);
 }
+
+#[test]
+fn minigame_surrounds_use_room_color_instead_of_unused_map_columns() {
+    let mut bundle = synthetic_bundle();
+    for screen in 9..=14 {
+        let colors = &mut bundle.map.screens[screen];
+        colors.bg_palettes = [0xe0, 3].repeat(32);
+        colors.bg_palettes[8..10].copy_from_slice(&[0, 0x7c]);
+        let mut attrs = vec![0; 32 * 18];
+        for y in 0..18 { attrs[y*32+20..y*32+32].fill(1); }
+        colors.attributes = Some(attrs);
+        let mut game = session();
+        if screen < 13 { game.begin_coin_room(screen as u8); }
+        else { game.begin_bell_room(screen as u8, 0, 0); }
+        for view in [(256,144), (384,216), (512,288)] {
+            let frame = game.render_dx_frame(&bundle, Mario, view).unwrap();
+            assert_eq!(frame, vec![[0,255,0]; view.0*view.1], "screen {screen} at {view:?}");
+        }
+    }
+}
