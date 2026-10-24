@@ -120,6 +120,16 @@ pub fn title_backdrop(_map: &[u8], tx: i32, ty: i32, line: usize) -> ((usize, us
     }
 }
 
+/// The castle entrance/Game Over picture has a two-tile brick checker above
+/// row 14's wall base and a solid floor from row 15 downward.
+pub fn castle_backdrop(_map: &[u8], tx: i32, ty: i32, line: usize) -> ((usize, usize), usize) {
+    match ty {
+        ..14 => (((tx + ty).rem_euclid(2) as usize, 0), line),
+        14 => ((tx.rem_euclid(2) as usize, 14), line),
+        _ => ((0, 15), line),
+    }
+}
+
 /// The file select is framed by a 2×2 block checker (map rows 0-1, columns
 /// 0-1); a column whose top or bottom tile breaks it — a pipe — runs on.
 pub fn file_select_backdrop(map: &[u8], tx: i32, ty: i32, line: usize) -> ((usize, usize), usize) {

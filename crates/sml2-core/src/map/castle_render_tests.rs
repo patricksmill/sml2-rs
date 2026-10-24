@@ -16,6 +16,60 @@ fn assets() -> (CastleRevealTiles, CastleScripts, SpriteMetas) {
 }
 
 #[test]
+fn enlarged_castle_continues_rom_bricks_and_floor_and_preserves_every_native_pixel() {
+    let (reveal, scripts, metas) = assets();
+    assert_eq!(&reveal.tilemap[..2], &[0x70, 0x71]);
+    assert_eq!(&reveal.tilemap[14 * 32..14 * 32 + 2], &[0x72, 0x73]);
+    assert_eq!(reveal.tilemap[15 * 32], 0x66);
+    let seq = CastleSequence {
+        coins: [0x80; 6],
+        ..Default::default()
+    };
+    let snapshot = seq.clone();
+    for output in [
+        crate::video::OutputMode::Grayscale,
+        crate::video::OutputMode::PaletteIndices,
+    ] {
+        let native =
+            render_castle_sequence_output(&reveal, &scripts, &metas, &seq, (160, 144), output);
+        for (w, h) in [(256, 144), (384, 216), (385, 217)] {
+            let wide =
+                render_castle_sequence_output(&reveal, &scripts, &metas, &seq, (w, h), output);
+            let (mx, my) = ((w - 160) / 2, (h - 144) / 2);
+            for y in 0..144 {
+                assert_eq!(
+                    &wide[(y + my) * w + mx..(y + my) * w + mx + 160],
+                    &native[y * 160..(y + 1) * 160]
+                );
+            }
+            assert_eq!(
+                wide[my * w + mx - 1],
+                native[15],
+                "wall checker continues left"
+            );
+            assert_eq!(
+                wide[(my + 112) * w + mx - 1],
+                native[112 * 160 + 15],
+                "wall base continues left"
+            );
+            if my > 0 {
+                assert_eq!(
+                    wide[(my - 1) * w + mx],
+                    native[7 * 160 + 8],
+                    "wall continues above"
+                );
+                assert_eq!(
+                    wide[(my + 144) * w],
+                    native[120 * 160],
+                    "ground continues below"
+                );
+            }
+        }
+    }
+    assert_eq!(seq, snapshot);
+}
+
+#[test]
 fn all_five_door_windows_match_the_rom_and_leave_other_tiles_alone() {
     let (reveal, scripts, _) = assets();
     let windows = scripts.blob("castle_row_windows").unwrap();

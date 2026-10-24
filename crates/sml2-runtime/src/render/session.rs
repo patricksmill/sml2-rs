@@ -201,30 +201,39 @@ impl Session {
                     .render_output(vw, vh, output, &self.motion_offsets(smooth))
                     .unwrap_or_else(|_| (vec![output.blank(3); vw * vh], 1));
             }
-            SessionState::Castle(seq) => view::fixed_screen(view, fill, |size| {
-                sml2_core::map::render_castle_sequence_output(
-                    &self.assets.castle_reveal,
-                    &self.assets.castle_scripts,
-                    &self.assets.sprite_metas,
-                    seq,
-                    size,
-                    output,
-                )
-            }),
-            SessionState::GameOver(screen) => view::fixed_screen(view, fill, |size| {
-                sml2_core::map::render_game_over_output(
-                    &self.assets.castle_reveal,
-                    &self.assets.sprite_metas,
-                    sml2_core::map::GameOverView {
-                        fade_timer: screen.sim.fade_timer,
-                        frame_counter: screen.sim.frame_counter,
-                        golden_coin_flags: screen.sim.golden_coin_flags,
-                        obp: screen.obp,
-                    },
-                    size,
-                    output,
-                )
-            }),
+            SessionState::Castle(seq) => {
+                let render = |size| {
+                    sml2_core::map::render_castle_sequence_output(
+                        &self.assets.castle_reveal,
+                        &self.assets.castle_scripts,
+                        &self.assets.sprite_metas,
+                        seq,
+                        size,
+                        output,
+                    )
+                };
+                if matches!(
+                    seq.state,
+                    sml2_core::castle_sequence::STATE_CONGRATS
+                        | sml2_core::castle_sequence::STATE_WAIT_START
+                ) {
+                    view::fixed_screen(view, fill, render)
+                } else {
+                    render(view)
+                }
+            }
+            SessionState::GameOver(screen) => sml2_core::map::render_game_over_output(
+                &self.assets.castle_reveal,
+                &self.assets.sprite_metas,
+                sml2_core::map::GameOverView {
+                    fade_timer: screen.sim.fade_timer,
+                    frame_counter: screen.sim.frame_counter,
+                    golden_coin_flags: screen.sim.golden_coin_flags,
+                    obp: screen.obp,
+                },
+                view,
+                output,
+            ),
         };
         (frame, 1)
     }

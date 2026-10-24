@@ -19,6 +19,7 @@ use sml2_runtime::render::motion::{pick_scale, Smooth};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+mod castle_backdrop;
 mod catalog;
 mod controls;
 mod debug;
@@ -62,6 +63,7 @@ pub struct DesktopApp {
     dx_picker: Option<file_picker::FilePicker>,
     dx_message: String,
     texture: TextureHandle,
+    castle_backdrop: Option<castle_backdrop::CastleBackdrop>,
     screen: Screen,
     return_screen: Screen,
     /// The settings tab last shown.
@@ -145,6 +147,7 @@ impl DesktopApp {
             dx_picker: None,
             dx_message: String::new(),
             texture,
+            castle_backdrop: None,
             screen: Screen::Home,
             return_screen: Screen::Home,
             page: Page::Display,
@@ -861,8 +864,15 @@ impl DesktopApp {
     /// The current game frame: DX Mode's colors on screens the installed DX
     /// data covers, the display filter everywhere else and on any DX failure.
     fn frame_image(&mut self, smooth: Smooth) -> Option<ColorImage> {
+        self.frame_image_with_view(self.settings.view(), smooth)
+    }
+
+    fn frame_image_with_view(
+        &mut self,
+        view: (usize, usize),
+        smooth: Smooth,
+    ) -> Option<ColorImage> {
         let game = self.game.as_ref()?;
-        let view = self.settings.view();
         if let sml2_runtime::session::SessionState::FileSelect(file_select) = &game.session.state {
             let mut doorway = hall::Hall::enter();
             doorway.camera = i32::from(file_select.cursor().0.saturating_sub(152));
@@ -1096,6 +1106,7 @@ impl DesktopApp {
             size[0],
             size[1],
         ];
+        self.paint_castle_backdrop(ui, rect, available);
         ui.painter().image(
             self.texture.id(),
             rect,

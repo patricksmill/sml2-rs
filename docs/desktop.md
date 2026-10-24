@@ -147,9 +147,8 @@ controller selection, stick dead zone, and gameplay rebinding. Selecting a
 choice with the left or right key (or controller direction) moves backward or
 forward. The visible arrow controls do the same when clicked. Enter or clicking
 the row advances one choice; plain On/Off rows and the controller selector are
-buttons.
-Selecting a
-binding row captures a single keyboard key or controller button. Esc cancels;
+buttons. Selecting a binding row captures a single keyboard key or controller
+button. Esc cancels;
 conflicts and reserved desktop shortcuts are reported. Rebinding one device
 keeps the other device's bindings; Reset controls restores the defaults.
 Keyboard bindings use physical key positions, matching ordinary game controls.
@@ -169,7 +168,7 @@ inside a solid fill matched to the room color, keeping unused tilemap data hidde
 Enlarged level views
 spawn and update objects across the wider window, so gameplay differs from the
 original (attract demos keep native spawning); the status bar sits bottom
-centre, and fixed screens are letterboxed. Output scaling uses integer **physical** pixels,
+centre, and other fixed screens are letterboxed. Output scaling uses integer **physical** pixels,
 with nearest sampling and centered letterboxing, independent of UI DPI.
 **Fit to window** is available in the toolbar's Settings popup and under
 **Settings → Display**. It automatically adjusts the output scale as you resize
@@ -178,6 +177,10 @@ in whole-number steps; borders preserve the aspect ratio. Turning it off selects
 a fixed scale without resizing the window and reveals the **Window scale**
 presets. Manual presets resize the window when windowed and fit within the
 current window if the platform limits its size. The fit preference is saved.
+The castle entrance and Game Over screen continue their brick wall and ground
+into unused window space at that same scale, keeping the castle centered at its
+original size. These surroundings follow the display filter or DX colors and
+do not enlarge gameplay.
 Debug inspection shows map/player/camera/scene state, object slots, sound-driver
 state and diagnostics. Debug stepping advances exactly one outer session tick.
 

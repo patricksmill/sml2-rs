@@ -229,6 +229,32 @@ fn draw(
     output: crate::video::OutputMode,
 ) -> Vec<u8> {
     let shades = output.palette(bgp, crate::video::PaletteSource::Bg);
+    if vw >= 160 && vh >= 144 && (vw, vh) != (160, 144) {
+        let native = draw(vram, map, bgp, obp, sprites, metas, (160, 144), output);
+        let (mx, my) = ((vw as i32 - 160) / 2, (vh as i32 - 144) / 2);
+        let mut image = Vec::with_capacity(vw * vh);
+        for y in 0..vh as i32 {
+            for x in 0..vw as i32 {
+                let (nx, ny) = (x - mx, y - my);
+                if (0..160).contains(&nx) && (0..144).contains(&ny) {
+                    image.push(native[ny as usize * 160 + nx as usize]);
+                    continue;
+                }
+                let ((col, row), line) = crate::front_end::screen::castle_backdrop(
+                    map,
+                    nx.div_euclid(8),
+                    ny.div_euclid(8),
+                    ny.rem_euclid(8) as usize,
+                );
+                let color = map
+                    .get(row * 32 + col)
+                    .and_then(|&id| vram.get(signed_bg_tile_index(id)))
+                    .map_or(0, |tile| tile[line * 8 + nx.rem_euclid(8) as usize]);
+                image.push(shades[color as usize]);
+            }
+        }
+        return image;
+    }
     let mut img = vec![shades[0]; vw * vh];
     for y in 0..vh.min(144) {
         for x in 0..vw.min(256) {

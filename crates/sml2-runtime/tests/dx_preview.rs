@@ -801,13 +801,14 @@ fn castle_reveal_and_game_over_use_their_own_dx_palettes() {
     }));
     assert!(game.dx_supported());
     assert_eq!(game.render_dx_frame(&bundle, Mario, (160,144)).unwrap(), vec![RED;160*144]);
+    assert_eq!(game.render_dx_frame(&bundle, Mario, (384,216)).unwrap(), vec![RED;384*216], "Game Over extends its own palette");
     game.state = SessionState::Castle(Default::default());
     assert!(game.dx_supported());
     assert_eq!(game.render_dx_frame(&bundle, Mario, (160,144)).unwrap(), vec![[0,255,0];160*144]);
     let large = game.render_dx_frame(&bundle, Luigi, (384,216)).unwrap();
     assert_eq!(large.len(),384*216);
     assert_eq!(large[36*384+112], [0,255,0]);
-    assert_eq!(large[0], [0;3]);
+    assert_eq!(large[0], [0,255,0], "the castle scenery continues into the enlarged view");
 }
 
 #[test]

@@ -266,6 +266,37 @@ fn front_end_screens_keep_their_centre_and_continue_their_backdrops() {
 }
 
 #[test]
+fn castle_entrance_and_game_over_extend_the_wall_instead_of_letterboxing() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    let view = (384, 216);
+    for state in [
+        SessionState::Castle(Default::default()),
+        SessionState::GameOver(Box::new(crate::session::GameOverScreen {
+            sim: Default::default(),
+            obp: [0xD0, 0x38],
+        })),
+    ] {
+        session.state = state;
+        let native = session.render_frame(NATIVE);
+        let wide = session.render_frame(view);
+        assert_eq!(crop(&wide, view, (112, 36, 160, 144)), native);
+        assert_eq!(
+            crop(&wide, view, (96, 36, 16, 8)),
+            crop(&native, NATIVE, (0, 0, 16, 8))
+        );
+        assert_eq!(
+            wide[215 * 384],
+            native[143 * 160],
+            "floor reaches the bottom corner"
+        );
+        assert_eq!(
+            session.render_frame((80, 72)),
+            crop(&native, NATIVE, (0, 0, 80, 72))
+        );
+    }
+}
+
+#[test]
 fn the_hub_view_stays_inside_the_map_and_keeps_the_native_centre() {
     let mut session = Session::new(SessionAssets::load().unwrap());
     let SessionState::Overworld(map) = &mut session.state else {

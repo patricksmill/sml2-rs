@@ -2,7 +2,9 @@
 use super::{hud_row_status, window_coord, window_origin, HudDigits};
 use crate::session::{LevelContext, Session, SessionState};
 use sml2_core::actor::ScreenPosition;
-use sml2_core::front_end::screen::{file_select_backdrop, title_backdrop, Backdrop};
+use sml2_core::front_end::screen::{
+    castle_backdrop, file_select_backdrop, title_backdrop, Backdrop,
+};
 use sml2_core::{
     character::Character,
     level::{HudStrip, TileAnim, LAYOUT_HEIGHT, LAYOUT_WIDTH},
@@ -194,12 +196,27 @@ impl Session {
             file_select_backdrop,
             0,
         )?;
-        Ok(super::view::letterbox(
-            &pixels,
-            super::view::NATIVE,
+        if matches!(&self.state, SessionState::Castle(seq) if matches!(seq.state,
+            sml2_core::castle_sequence::STATE_CONGRATS | sml2_core::castle_sequence::STATE_WAIT_START))
+            || !super::view::enlarged(view)
+        {
+            return Ok(super::view::letterbox(
+                &pixels,
+                super::view::NATIVE,
+                view,
+                [0; 3],
+            ));
+        }
+        let mut extended = screen(&scene, &[], None, view, castle_backdrop, 0)?;
+        super::view::copy_rect(
+            &mut extended,
             view,
-            [0; 3],
-        ))
+            &pixels,
+            160,
+            (0, 0, 160, 144),
+            super::view::margin(view),
+        );
+        Ok(extended)
     }
 
     pub fn render_dx_hall(
