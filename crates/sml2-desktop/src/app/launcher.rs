@@ -197,6 +197,10 @@ impl DesktopApp {
 }
 
 #[cfg(test)]
+#[path = "launcher_navigation_tests.rs"]
+mod navigation_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::input::Button;
