@@ -77,6 +77,7 @@ pub fn run(options: Options) -> Result<(), String> {
         eframe::NativeOptions {
             viewport,
             renderer: eframe::Renderer::Wgpu,
+            wgpu_options: crate::ui::graphics::configuration(),
             ..Default::default()
         },
         Box::new(move |cc| {

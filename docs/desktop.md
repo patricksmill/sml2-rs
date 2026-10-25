@@ -60,10 +60,16 @@ For Debian/Ubuntu, install `build-essential`, `pkg-config`, `libudev-dev`, and
 presenter. Both Wayland and X11 support are enabled; wgpu's Vulkan, GLES, DX12
 and Metal backends are selected by target platform.
 
-On WSL systems with unreliable graphics-driver startup or resize behavior,
-`WGPU_BACKEND=vulkan WGPU_ADAPTER_NAME=llvmpipe` selects Mesa's software Vulkan
-adapter when available. Native previews were checked with both automatic and
-software-adapter selection.
+On WSL, the game and scenery editor default to OpenGL presentation. This avoids
+the Vulkan surface path that can panic inside egui-wgpu during resize or
+fullscreen transitions (`The surface isn't supported by this adapter`). Other
+platforms retain the normal backend selection. `WGPU_BACKEND` or
+`WGPU_ADAPTER_NAME` explicitly overrides the WSL default.
+
+To select Mesa's software Vulkan adapter instead, use
+`WGPU_BACKEND=vulkan WGPU_ADAPTER_NAME=llvmpipe`. A requested adapter must
+support the window surface; an unavailable or incompatible name produces an
+error instead of selecting a different adapter.
 
 If startup prints `libEGL`, `dzn`, `ZINK`, or
 `ID3D12DeviceFactory::CreateDevice failed` messages, Mesa may be probing a
@@ -269,6 +275,16 @@ rebinding, short taps, dead-zone hysteresis, focus loss, menu confirmation,
 fullscreen requests, exact debug stepping, tick budgets at 60/90/120/144 Hz,
 and physical-pixel viewport geometry. The existing core/runtime suite and
 frozen replay gate remain the parity checks.
+
+To exercise native graphics resizing and fullscreen without loading game data,
+opening audio, or changing saved preferences:
+
+```sh
+cargo run -p sml2-desktop --example graphics_resize_smoke
+```
+
+The test reports the selected adapter, performs three resize/fullscreen cycles,
+and exits with an error if the window closes before all transitions complete.
 
 Editor tests also cover signed coordinate picking, pan/zoom, gesture-level
 autosave and undo, unchanged collision layout, file errors, playtest return,

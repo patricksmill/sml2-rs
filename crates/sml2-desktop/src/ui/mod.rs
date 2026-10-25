@@ -4,6 +4,7 @@ use crate::settings::Filter;
 use eframe::egui::{self, Color32, ColorImage};
 use sml2_core::video::PalettePixel;
 
+pub mod graphics;
 pub mod screenshot;
 pub mod theme;
 
