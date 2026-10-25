@@ -1,7 +1,22 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use sml2_scenery_editor::app::{run, Options};
 use std::path::PathBuf;
 
 fn main() -> Result<(), String> {
+    let result = launch();
+    #[cfg(windows)]
+    if let Err(error) = &result {
+        rfd::MessageDialog::new()
+            .set_title("SML2 Scenery Editor")
+            .set_description(error)
+            .set_level(rfd::MessageLevel::Error)
+            .show();
+    }
+    result
+}
+
+fn launch() -> Result<(), String> {
     let mut options = Options::defaults()?;
     let mut args = std::env::args().skip(1);
     while let Some(argument) = args.next() {

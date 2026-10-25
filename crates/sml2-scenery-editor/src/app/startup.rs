@@ -33,7 +33,12 @@ pub fn run(options: Options) -> Result<(), String> {
         eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
                 .with_inner_size([1000.0, 760.0])
-                .with_min_inner_size([480.0, 400.0]),
+                .with_min_inner_size([480.0, 400.0])
+                .with_icon(egui::IconData {
+                    rgba: include_bytes!("../../../../assets/icon.rgba").to_vec(),
+                    width: 32,
+                    height: 32,
+                }),
             renderer: eframe::Renderer::Wgpu,
             ..Default::default()
         },

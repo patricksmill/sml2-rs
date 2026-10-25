@@ -1,7 +1,22 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use sml2_desktop::app::{self, Options};
 use std::path::PathBuf;
 
 fn main() -> Result<(), String> {
+    let result = run();
+    #[cfg(windows)]
+    if let Err(error) = &result {
+        rfd::MessageDialog::new()
+            .set_title("Super Mario Land 2")
+            .set_description(error)
+            .set_level(rfd::MessageLevel::Error)
+            .show();
+    }
+    result
+}
+
+fn run() -> Result<(), String> {
     let mut options = Options::defaults()?;
     let mut explicit_assets = false;
     let mut args = std::env::args().skip(1);

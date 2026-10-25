@@ -10,20 +10,23 @@ default branch. Builds use stable Rust and the committed Cargo.lock.
 1. Open the repository's **Actions → Windows build** page.
 2. Select a successful run and download **sml2-windows-x64** under **Artifacts**
    (GitHub sign-in is required). Downloads expire after 14 days.
-3. Unzip the archive. It contains `sml2-desktop.exe`, `sml2-runtime.exe`,
+3. Unzip the archive. It contains `sml2.exe`, `sml2-runtime.exe`,
    `sml2-extract.exe`, and documentation.
 4. Copy your existing `extracted` game-data directory beside the executables.
 5. Open PowerShell in that directory and run:
 
    ```powershell
-   .\sml2-desktop.exe --assets .\extracted --no-audio
+   .\sml2.exe --assets .\extracted --no-audio
    ```
 
 You can also point `--assets` at an existing extracted directory elsewhere.
 The optional **sml2-scenery-editor-windows-x64** artifact contains the separate
 editor executable and instructions; the game download excludes it.
-Run `.\sml2-desktop.exe --help` to see startup options. The included `Desktop.md`
-(or `docs/desktop.md` in the source repository) lists controls and settings.
+The game and scenery editor open without a console window and include the
+application icon in the executable for Explorer, shortcuts, and the taskbar.
+Startup failures appear in an error dialog. The included `Desktop.md`
+(or `docs/desktop.md` in the source repository) lists startup options, controls,
+and settings. The runtime and extractor remain command-line tools.
 
 ## Game data and current limitations
 
@@ -50,9 +53,10 @@ The live audio backend currently targets PulseAudio/PipeWire; native Windows
 audio is pending. Use `--no-audio` for Windows testing. GPU presentation,
 controller hotplug, and gameplay still need hands-on Windows validation.
 
-CI runs the desktop policy tests that do not need game data, builds the game, runtime, extractor, and optional editor, and checks both
-desktop and editor `--help` startup paths. It does not
-exercise a graphical window or the ROM-dependent replay/parity suite.
+CI runs the desktop policy tests that do not need game data, builds the game,
+runtime, extractor, and optional editor, verifies the GUI subsystem and all
+embedded icon sizes, and checks both desktop and editor `--help` startup paths.
+It does not exercise a graphical window or the ROM-dependent replay/parity suite.
 The music bank is loaded from `extracted/audio/music_bank04.bin` at runtime;
 production executables do not embed it or require it during compilation.
 
