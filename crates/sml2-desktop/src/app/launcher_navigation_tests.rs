@@ -61,6 +61,11 @@ fn title_actions_support_keyboard_dpad_and_stick_navigation() {
             Button::Pad(PadButton::StickUp),
             Button::Pad(PadButton::South),
         ),
+        (
+            Button::Pad(PadButton::Right),
+            Button::Pad(PadButton::Left),
+            Button::Pad(PadButton::Start),
+        ),
     ] {
         let (mut app, ctx, path) = app();
         frame(&mut app, &ctx, vec![]);
@@ -98,4 +103,110 @@ fn title_actions_support_keyboard_dpad_and_stick_navigation() {
         ));
         let _ = std::fs::remove_dir_all(path);
     }
+}
+
+#[test]
+fn title_background_clicks_do_nothing_and_only_play_opens_file_select() {
+    for target in ["title", "grass", "Settings", "Play"] {
+        let (mut app, ctx, path) = app();
+        if let SessionState::Title(title) = &mut app.game.as_mut().unwrap().session.state {
+            while !super::super::pointer::title_accepts_start(title.timer()) {
+                title.step(0, 0);
+            }
+        }
+        frame(&mut app, &ctx, vec![]);
+        let output = frame(&mut app, &ctx, vec![]);
+        let [x, y, w, h] = app.game_rect;
+        let pos = match target {
+            "title" => egui::pos2((x + w / 2) as f32, (y + h / 2) as f32),
+            "grass" => egui::pos2(30.0, 690.0),
+            label => output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if text.galley.text() == label => {
+                        Some(text.visual_bounding_rect().center())
+                    }
+                    _ => None,
+                })
+                .expect("launcher action"),
+        };
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                &ctx,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Default::default(),
+                    },
+                ],
+            );
+        }
+        assert!(
+            !app.start_click,
+            "no pending background start after clicking {target}"
+        );
+        match target {
+            "Play" => assert!(!matches!(
+                app.game.as_ref().unwrap().session.state,
+                SessionState::Title(_)
+            )),
+            _ => assert!(
+                matches!(
+                    app.game.as_ref().unwrap().session.state,
+                    SessionState::Title(_)
+                ),
+                "clicking {target} must not start the game"
+            ),
+        }
+        assert_eq!(
+            app.screen,
+            if target == "Settings" {
+                Screen::Settings
+            } else {
+                Screen::Game
+            }
+        );
+        if matches!(target, "title" | "grass") {
+            button_frame(&mut app, &ctx, &Button::key("ArrowRight"), true);
+            button_frame(&mut app, &ctx, &Button::key("ArrowRight"), false);
+            assert_eq!(app.menu.selected, 1);
+            button_frame(&mut app, &ctx, &Button::key("Enter"), true);
+            assert_eq!(app.screen, Screen::Settings);
+            assert!(matches!(
+                app.game.as_ref().unwrap().session.state,
+                SessionState::Title(_)
+            ));
+        }
+        let _ = std::fs::remove_dir_all(path);
+    }
+}
+
+#[test]
+fn play_confirmation_survives_the_opening_hold_and_held_direction() {
+    let (mut app, ctx, path) = app();
+    frame(&mut app, &ctx, vec![]);
+    frame(&mut app, &ctx, vec![]);
+    // Wrap from Play to Quit and back, keeping Right held while confirming Play.
+    button_frame(&mut app, &ctx, &Button::key("ArrowLeft"), true);
+    button_frame(&mut app, &ctx, &Button::key("ArrowLeft"), false);
+    button_frame(&mut app, &ctx, &Button::key("ArrowRight"), true);
+    assert_eq!(app.menu.selected, 0);
+    button_frame(&mut app, &ctx, &Button::key("Enter"), true);
+    button_frame(&mut app, &ctx, &Button::key("Enter"), false);
+    for _ in 0..80 {
+        frame(&mut app, &ctx, vec![]);
+    }
+    assert!(
+        matches!(
+            app.game.as_ref().unwrap().session.state,
+            SessionState::FileSelect(_) | SessionState::FileSelectLoading(_)
+        ),
+        "Play must reach file select even during the initial title hold"
+    );
+    let _ = std::fs::remove_dir_all(path);
 }

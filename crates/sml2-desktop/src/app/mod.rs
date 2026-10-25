@@ -796,7 +796,9 @@ impl DesktopApp {
                     PlayerKeys::default()
                 };
                 if on_title {
-                    keys.start = false;
+                    // The launcher owns title input. Held gameplay bindings
+                    // must neither bypass Play nor cancel its queued start.
+                    keys = PlayerKeys::default();
                 }
                 let merged = pointer::merge_pointer(&snap, &keys, self.aim, self.start_click);
                 let keys = merged.keys;
@@ -1009,22 +1011,27 @@ impl DesktopApp {
                 sml2_runtime::session::SessionState::Title(_)
             )
         });
-        let mut grass_top = rect.bottom();
         if on_title {
             let view = self.settings.view();
             let scale = rect.height() / view.1 as f32;
             let native_y = sml2_runtime::render::view::margin(view).1 as f32;
-            grass_top = rect.top() + (native_y + 144.0) * scale;
+            let grass_top = rect.top() + (native_y + 144.0) * scale;
             let grass =
                 egui::Rect::from_min_max(egui::pos2(available.left(), grass_top), available.max);
             self.launcher_bar(ui.ctx(), grass);
         }
-        let picture = ui.interact(rect, egui::Id::new("game-picture"), egui::Sense::click());
+        let picture = ui.interact(
+            rect,
+            egui::Id::new("game-picture"),
+            if on_title {
+                egui::Sense::hover()
+            } else {
+                egui::Sense::click()
+            },
+        );
         if self.screen == Screen::Game && self.dx_picker.is_none() && picture.clicked() {
             if let Some(pos) = picture.interact_pointer_pos() {
-                if !on_title || pos.y < grass_top {
-                    self.on_picture_click(pos, rect);
-                }
+                self.on_picture_click(pos, rect);
             }
         }
         if self.paused {

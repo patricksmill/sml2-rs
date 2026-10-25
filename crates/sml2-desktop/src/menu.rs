@@ -90,6 +90,8 @@ impl Menu {
     }
     pub fn start_horizontal(&mut self, input: &mut InputState) {
         self.start(input);
+        // Start confirms the highlighted launcher action, like the south button.
+        self.confirm |= pressed(input, &[Button::Pad(PadButton::Start)]);
         self.selected =
             (self.selected as i32 + self.adjustment).rem_euclid(self.count.max(1) as i32) as usize;
         self.moved |= self.adjustment != 0;

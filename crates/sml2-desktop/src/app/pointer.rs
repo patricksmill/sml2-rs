@@ -1,4 +1,4 @@
-//! Mouse picks on the title and the file select. The ROM step still owns the motion.
+//! File-select mouse picks and queued Play confirmation. The ROM owns the motion.
 
 use eframe::egui::{self, Rect};
 use sml2_core::player_sim::PlayerKeys;
@@ -90,6 +90,7 @@ pub(super) fn aim_keys(aim: Aim, menu_state: u8, cursor_x: u8) -> Option<AimPres
 #[derive(Clone, Copy)]
 pub(super) struct FrontSnap {
     kind: FrontKind,
+    title_ready: bool,
     menu_state: u8,
     cursor_x: u8,
 }
@@ -113,23 +114,27 @@ impl super::DesktopApp {
         let Some(game) = &self.game else {
             return FrontSnap {
                 kind: FrontKind::Other,
+                title_ready: false,
                 menu_state: 0,
                 cursor_x: 0,
             };
         };
         match &game.session.state {
-            SessionState::Title(_) => FrontSnap {
+            SessionState::Title(title) => FrontSnap {
                 kind: FrontKind::Title,
+                title_ready: title_accepts_start(title.timer()),
                 menu_state: 0,
                 cursor_x: 0,
             },
             SessionState::FileSelect(file_select) => FrontSnap {
                 kind: FrontKind::FileSelect,
+                title_ready: false,
                 menu_state: file_select.menu_state(),
                 cursor_x: file_select.cursor().0,
             },
             _ => FrontSnap {
                 kind: FrontKind::Other,
+                title_ready: false,
                 menu_state: 0,
                 cursor_x: 0,
             },
@@ -149,10 +154,6 @@ impl super::DesktopApp {
         };
         use sml2_runtime::session::SessionState;
         match &game.session.state {
-            SessionState::Title(title) if title_accepts_start(title.timer()) => {
-                self.start_click = true;
-                self.aim = None;
-            }
             SessionState::FileSelect(file_select) => {
                 let door = self.settings.dx_mode && self.dx_bundle.is_some();
                 let scroll = if door {
@@ -185,7 +186,7 @@ pub(super) fn merge_pointer(
         || keys.b
         || keys.start
         || keys.select;
-    if snap.kind == FrontKind::Title && start_click {
+    if snap.kind == FrontKind::Title && snap.title_ready && start_click {
         if !pad {
             keys.start = true;
         }

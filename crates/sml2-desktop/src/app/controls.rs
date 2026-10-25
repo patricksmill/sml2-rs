@@ -71,9 +71,6 @@ impl DesktopApp {
             &[Button::key("Escape"), Button::Pad(PadButton::Start)]
         };
         let back = pressed(&mut self.input, back_buttons);
-        if on_title && pressed(&mut self.input, &[Button::Pad(PadButton::Start)]) {
-            self.start_click = true;
-        }
         if self.dx_picker.is_some() {
             if back || self.input.take_press(&Button::Pad(PadButton::East)) {
                 self.dx_picker = None;
