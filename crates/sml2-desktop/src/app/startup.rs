@@ -66,10 +66,16 @@ pub fn run(options: Options) -> Result<(), String> {
     if let Some(filter) = options.filter {
         settings.filter = filter;
     }
+    let icon = egui::IconData {
+        rgba: include_bytes!("../../../../assets/icon.rgba").to_vec(),
+        width: 32,
+        height: 32,
+    };
     let viewport = egui::ViewportBuilder::default()
         .with_inner_size(settings.window_size)
         .with_min_inner_size([480.0, 400.0])
-        .with_fullscreen(settings.fullscreen);
+        .with_fullscreen(settings.fullscreen)
+        .with_icon(icon);
     let validation = std::sync::Arc::new(std::sync::Mutex::new(None));
     let result = validation.clone();
     eframe::run_native(

@@ -47,7 +47,7 @@ jobs:
 
       - name: Smoke test executable startup
         run: |
-          ./target/x86_64-pc-windows-msvc/release/sml2-desktop.exe --help
+          ./target/x86_64-pc-windows-msvc/release/sml2.exe --help
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./target/x86_64-pc-windows-msvc/release/sml2-scenery-editor.exe --help
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -56,7 +56,7 @@ jobs:
         run: |
           $destination = "target/windows-package"
           New-Item -ItemType Directory -Force -Path $destination | Out-Null
-          foreach ($binary in @("sml2-desktop", "sml2-runtime", "sml2-extract")) {
+          foreach ($binary in @("sml2", "sml2-runtime", "sml2-extract")) {
             Copy-Item "target/x86_64-pc-windows-msvc/release/$binary.exe" $destination
           }
           Copy-Item "docs/windows-builds.md" "$destination/README-Windows.md"
