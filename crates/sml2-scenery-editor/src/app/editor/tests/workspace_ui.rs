@@ -64,6 +64,28 @@ fn key(key: Key, modifiers: Modifiers) -> Event {
 }
 
 #[test]
+fn playtest_window_aspect_follows_resizing_without_changing_saved_preferences() {
+    let (mut app, ctx, path) = app();
+    app.settings.widescreen = crate::settings::Widescreen::WindowSize;
+    let preferences = app.settings.clone();
+    app.open_editor(&ctx);
+    app.play_editor(&ctx);
+    app.paused = true;
+    let mut widths = Vec::new();
+    for size in [(800.0, 720.0), (1600.0, 720.0)] {
+        frame(&mut app, &ctx, size, vec![]);
+        assert_eq!(app.screen, Screen::Game);
+        let [width, height] = app.texture.size();
+        assert!(width >= 160);
+        assert_eq!(height, 144);
+        assert_eq!(app.settings, preferences);
+        widths.push(width);
+    }
+    assert!(widths[1] > widths[0]);
+    std::fs::remove_dir_all(path).ok();
+}
+
+#[test]
 fn layout_fits_small_normal_and_large_windows_and_reuses_the_atlas() {
     let (mut app, ctx, path) = app();
     app.open_editor(&ctx);

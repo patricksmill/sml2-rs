@@ -239,8 +239,14 @@ impl EditorApp {
         let elapsed = self.last_update.elapsed();
         self.last_update = Instant::now();
         let running = self.screen == Screen::Game && focused && !self.paused;
+        let available = (ctx.available_rect().size()
+            - egui::Frame::central_panel(&ctx.style()).inner_margin.sum())
+            * ctx.pixels_per_point();
+        let view = self
+            .settings
+            .view_for_window([available.x.max(0.0) as u32, available.y.max(0.0) as u32]);
         if let Some(game) = &mut self.game {
-            game.session.set_view(self.settings.view());
+            game.session.set_view(view);
             game.audio_running(running && !self.settings.muted);
             for _ in 0..self.budget.advance(elapsed, running) {
                 game.session.character = self.settings.character;
@@ -259,7 +265,7 @@ impl EditorApp {
             Screen::Editor => self.editor_view(ctx, ui),
             Screen::Home => self.data_view(ctx, ui),
             Screen::Game => {
-                if let Some(image) = self.frame_image(Smooth::OFF) {
+                if let Some(image) = self.frame_image(view, Smooth::OFF) {
                     let size = egui::vec2(image.size[0] as f32, image.size[1] as f32);
                     self.texture.set(image, TextureOptions::NEAREST);
                     let scale = (ui.available_width() / size.x)
@@ -292,9 +298,8 @@ impl EditorApp {
         }
     }
 
-    fn frame_image(&mut self, smooth: Smooth) -> Option<ColorImage> {
+    fn frame_image(&mut self, view: (usize, usize), smooth: Smooth) -> Option<ColorImage> {
         let game = self.game.as_ref()?;
-        let view = self.settings.view();
         if let Some(bundle) = self.dx_bundle.as_ref().filter(|_| self.settings.dx_mode) {
             match game
                 .session

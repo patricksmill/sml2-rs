@@ -42,7 +42,7 @@ impl DesktopApp {
             self.castle_backdrop = None;
             return;
         };
-        let view = self.settings.view();
+        let view = self.view();
         let scale = picture.size() / egui::vec2(view.0 as f32, view.1 as f32);
         if scale.x <= 0.0 || scale.y <= 0.0 {
             return;

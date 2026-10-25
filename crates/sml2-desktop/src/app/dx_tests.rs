@@ -458,6 +458,7 @@ fn file_select_expands_with_widescreen_and_camera_zoom() {
     use crate::settings::{CameraZoom, Widescreen};
     let (mut app, _, path) = super::tests::app();
     app.dx_bundle = Some(red_bundle());
+    app.settings.window_size = [1920.0, 1080.0];
     app.game.as_mut().unwrap().session.enter_file_select();
     for _ in 0..64 {
         app.game
@@ -476,6 +477,9 @@ fn file_select_expands_with_widescreen_and_camera_zoom() {
             (Widescreen::Off, CameraZoom::Zoom125),
             (Widescreen::Wide16x9, CameraZoom::Zoom150),
             (Widescreen::Wide16x9, CameraZoom::Zoom200),
+            (Widescreen::Wide21x9, CameraZoom::Native),
+            (Widescreen::Wide21x9, CameraZoom::Zoom200),
+            (Widescreen::WindowSize, CameraZoom::Zoom200),
         ] {
             app.settings.widescreen = wide;
             app.settings.camera_zoom = zoom;

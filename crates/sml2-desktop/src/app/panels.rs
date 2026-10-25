@@ -247,12 +247,11 @@ impl DesktopApp {
     fn view_controls(&mut self, ui: &mut Ui) {
         theme::section(ui, "VIEW");
         let widescreen = self.settings.widescreen;
-        if self
+        let adjust = self
             .menu
-            .choice(ui, "Widescreen", widescreen.label().into())
-            != 0
-        {
-            self.settings.widescreen = widescreen.next();
+            .choice(ui, "Widescreen", widescreen.label().into());
+        if adjust != 0 {
+            self.settings.widescreen = widescreen.cycle(adjust);
         }
         let zoom = self.settings.camera_zoom;
         let adjust = self.menu.choice(ui, "Camera zoom", zoom.label().into());

@@ -91,7 +91,13 @@ impl Default for Settings {
 
 impl Settings {
     pub fn view(&self) -> (usize, usize) {
-        view::view_size(self.widescreen, self.camera_zoom)
+        self.view_for_window(self.window_size.map(|size| size as u32))
+    }
+
+    /// Resolve the game view against the live drawable area, in physical pixels.
+    /// Fixed aspect ratios do not depend on the window dimensions.
+    pub fn view_for_window(&self, window: [u32; 2]) -> (usize, usize) {
+        view::view_size(self.widescreen, self.camera_zoom, window)
     }
 
     pub fn validate(&mut self) -> Result<(), String> {
@@ -189,6 +195,27 @@ impl AppPaths {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn widescreen_modes_round_trip_without_changing_existing_settings() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.json");
+        for widescreen in [
+            Widescreen::Off,
+            Widescreen::Wide16x9,
+            Widescreen::Wide21x9,
+            Widescreen::WindowSize,
+        ] {
+            let settings = Settings {
+                widescreen,
+                camera_zoom: CameraZoom::Zoom150,
+                window_size: [1280.0, 1024.0],
+                ..Default::default()
+            };
+            settings.save(&path).unwrap();
+            assert_eq!(Settings::load(&path).unwrap(), settings);
+        }
+    }
+
     #[test]
     fn settings_round_trip_and_reject_future_versions_without_replacing_them() {
         let path = std::env::temp_dir().join(format!("sml2_settings_{}.json", std::process::id()));

@@ -43,6 +43,8 @@ pub(crate) use crate::ui::screenshot;
 mod settings_layout_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod widescreen_tests;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Screen {
@@ -106,6 +108,8 @@ pub struct DesktopApp {
     screenshot_pending: bool,
     screenshot_check: Option<(ColorImage, [u32; 4])>,
     game_rect: [u32; 4],
+    /// Live drawable game area; fullscreen and the toolbar can change its aspect.
+    viewport_size: Option<[u32; 2]>,
     aim: Option<pointer::Aim>,
     start_click: bool,
     validation_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
@@ -177,6 +181,7 @@ impl DesktopApp {
             screenshot_pending: false,
             screenshot_check: None,
             game_rect: [0; 4],
+            viewport_size: None,
             aim: None,
             start_click: false,
             validation_error: Default::default(),
@@ -643,7 +648,7 @@ impl DesktopApp {
         if let Some(scale) = scale {
             if !self.settings.fullscreen {
                 let pixels_per_point = ctx.pixels_per_point();
-                let (w, h) = self.settings.view();
+                let (w, h) = self.view();
                 ctx.send_viewport_cmd(ViewportCommand::InnerSize(egui::vec2(
                     (w as f32 * f32::from(scale) / pixels_per_point).max(480.0),
                     (h as f32 * f32::from(scale) / pixels_per_point + 48.0).max(400.0),
@@ -725,6 +730,11 @@ impl DesktopApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(Color32::BLACK))
             .show(ctx, |ui| {
+                let available = ui.available_size() * ctx.pixels_per_point();
+                let size = [available.x.floor() as u32, available.y.floor() as u32];
+                if !size.contains(&0) {
+                    self.viewport_size = Some(size);
+                }
                 if self.menu_from_game && matches!(self.screen, Screen::Home | Screen::Settings) {
                     self.paused_game_view(ui);
                 } else if self.options.launch_library
@@ -775,8 +785,9 @@ impl DesktopApp {
             self.input.suppress_until_release();
         }
         let mut submitted_frame = None;
+        let view = self.view();
         if let Some(game) = &mut self.game {
-            game.session.set_view(self.settings.view());
+            game.session.set_view(view);
             game.audio_running(running && !self.settings.muted);
         }
         let volume = if self.settings.muted {
@@ -826,7 +837,7 @@ impl DesktopApp {
         {
             Smooth {
                 alpha: self.budget.fraction(),
-                scale: pick_scale(self.settings.view(), self.effective_scale),
+                scale: pick_scale(view, self.effective_scale),
             }
         } else {
             Smooth::OFF
@@ -875,7 +886,14 @@ impl DesktopApp {
     /// The current game frame: DX Mode's colors on screens the installed DX
     /// data covers, the display filter everywhere else and on any DX failure.
     fn frame_image(&mut self, smooth: Smooth) -> Option<ColorImage> {
-        self.frame_image_with_view(self.settings.view(), smooth)
+        self.frame_image_with_view(self.view(), smooth)
+    }
+
+    fn view(&self) -> (usize, usize) {
+        self.viewport_size.map_or_else(
+            || self.settings.view(),
+            |size| self.settings.view_for_window(size),
+        )
     }
 
     fn frame_image_with_view(
@@ -975,16 +993,17 @@ impl DesktopApp {
     fn game_view(&mut self, ui: &mut egui::Ui) {
         let available = ui.available_rect_before_wrap();
         let ppp = ui.ctx().pixels_per_point();
+        let view = self.view();
         let (offset, size) = game_rectangle(
             [
                 (available.width() * ppp).floor() as u32,
                 (available.height() * ppp).floor() as u32,
             ],
             self.settings.zoom,
-            self.settings.view(),
+            view,
             self.settings.integer_scaling,
         );
-        self.effective_scale = size[0] / self.settings.view().0 as u32;
+        self.effective_scale = size[0] / view.0 as u32;
         let origin = egui::pos2(
             (available.min.x * ppp).round() / ppp + offset[0] as f32 / ppp,
             (available.min.y * ppp).round() / ppp + offset[1] as f32 / ppp,
@@ -1014,7 +1033,6 @@ impl DesktopApp {
             )
         });
         if on_title {
-            let view = self.settings.view();
             let scale = rect.height() / view.1 as f32;
             let native_y = sml2_runtime::render::view::margin(view).1 as f32;
             let grass_top = rect.top() + (native_y + 144.0) * scale;
@@ -1052,7 +1070,7 @@ impl DesktopApp {
         let Some(game) = &self.game else {
             return;
         };
-        let view = self.settings.view();
+        let view = self.view();
         let painter = ui.painter().with_clip_rect(rect);
         let outline = |r: (i32, i32, i32, i32), color| {
             painter.rect_stroke(

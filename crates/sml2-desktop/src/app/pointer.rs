@@ -145,7 +145,7 @@ impl super::DesktopApp {
         let Some(game) = &self.game else {
             return;
         };
-        let view = self.settings.view();
+        let view = self.view();
         let Some(pixel) = view_pixel(rect, view, pos) else {
             return;
         };
@@ -266,17 +266,26 @@ mod tests {
         }
         assert_eq!(file_select.cursor().0, 200);
 
-        let view = app.settings.view();
-        let (mx, my) = margin(view);
-        let rect = Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(view.0 as f32, view.1 as f32));
-        for (screen_x, aim) in [
-            (24, Aim::Pipe(72)),
-            (56, Aim::Pipe(104)),
-            (88, Aim::Clear),
-            (152, Aim::Door),
+        use crate::settings::Widescreen;
+        app.viewport_size = Some([1920, 1080]);
+        for (wide, view) in [
+            (Widescreen::Off, (160, 144)),
+            (Widescreen::Wide21x9, (336, 144)),
+            (Widescreen::WindowSize, (256, 144)),
         ] {
-            app.on_picture_click(egui::pos2((mx + screen_x) as f32, (my + 70) as f32), rect);
-            assert_eq!(app.aim, Some(aim));
+            app.settings.widescreen = wide;
+            let (mx, my) = margin(view);
+            let rect =
+                Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(view.0 as f32, view.1 as f32));
+            for (screen_x, aim) in [
+                (24, Aim::Pipe(72)),
+                (56, Aim::Pipe(104)),
+                (88, Aim::Clear),
+                (152, Aim::Door),
+            ] {
+                app.on_picture_click(egui::pos2((mx + screen_x) as f32, (my + 70) as f32), rect);
+                assert_eq!(app.aim, Some(aim), "click mapping at {wide:?}");
+            }
         }
         let _ = std::fs::remove_dir_all(path);
     }

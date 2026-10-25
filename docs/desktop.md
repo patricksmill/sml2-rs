@@ -181,8 +181,13 @@ keeps the other device's bindings; Reset controls restores the defaults.
 Keyboard bindings use physical key positions, matching ordinary game controls.
 
 The game view is 160x144 unless **Settings → Mods → View** enlarges it:
-**Widescreen** (Off / 16:9) and **Camera zoom** (100% / 125% / 150% / 200%) give
-160x144 through 320x288, or 256x144 through 512x288 at 16:9.
+**Widescreen** (Off / 16:9 / 21:9 / Window size) and **Camera zoom**
+(100% / 125% / 150% / 200%) give 160x144 through 320x288,
+256x144 through 512x288 at 16:9, or 336x144 through 672x288 at 21:9.
+**Window size** follows the live game area's aspect ratio, excluding the toolbar,
+and updates on resize or fullscreen changes. Tall windows reveal more vertically
+to preserve the native playfield. Output scaling still applies; integer scaling
+can leave margins when the window does not fit a whole-number scale.
 Zoomed-out levels place three quarters of the additional height above the original
 view and one quarter below it, reducing the space shown beneath the level.
 The gameplay camera is unchanged; terrain, sprites, overlays and object visibility
