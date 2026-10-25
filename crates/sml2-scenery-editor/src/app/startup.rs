@@ -35,7 +35,6 @@ pub fn run(options: Options) -> Result<(), String> {
                 .with_inner_size([1000.0, 760.0])
                 .with_min_inner_size([480.0, 400.0]),
             renderer: eframe::Renderer::Wgpu,
-            wgpu_options: sml2_desktop::ui::graphics::configuration(),
             ..Default::default()
         },
         Box::new(move |cc| {

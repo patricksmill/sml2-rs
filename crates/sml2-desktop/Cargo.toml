@@ -12,10 +12,6 @@ name = "sml2"
 path = "src/main.rs"
 required-features = ["native"]
 
-[[example]]
-name = "graphics_resize_smoke"
-required-features = ["native"]
-
 [dependencies]
 sml2-dx = { path = "../sml2-dx" }
 rfd = { version = "0.15", optional = true }
