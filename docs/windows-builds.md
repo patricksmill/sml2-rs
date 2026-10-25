@@ -54,8 +54,8 @@ audio is pending. Use `--no-audio` for Windows testing. GPU presentation,
 controller hotplug, and gameplay still need hands-on Windows validation.
 
 CI runs the desktop policy tests that do not need game data, builds the game,
-runtime, extractor, and optional editor, verifies the GUI subsystem and all
-embedded icon sizes, and checks both desktop and editor `--help` startup paths.
+runtime, extractor, and optional editor, and checks both desktop and editor
+`--help` startup paths.
 It does not exercise a graphical window or the ROM-dependent replay/parity suite.
 The music bank is loaded from `extracted/audio/music_bank04.bin` at runtime;
 production executables do not embed it or require it during compilation.

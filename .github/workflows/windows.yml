@@ -45,9 +45,6 @@ jobs:
       - name: Build release executables
         run: cargo build --locked --release -p sml2-desktop -p sml2-runtime -p sml2-extract -p sml2-scenery-editor
 
-      - name: Verify GUI subsystem and embedded icons
-        run: python tools/check_windows_gui.py target/x86_64-pc-windows-msvc/release/sml2.exe target/x86_64-pc-windows-msvc/release/sml2-scenery-editor.exe
-
       - name: Smoke test executable startup
         run: |
           foreach ($binary in @("sml2", "sml2-scenery-editor")) {

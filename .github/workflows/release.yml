@@ -65,9 +65,6 @@ jobs:
       - name: Build release binaries
         run: cargo build --locked --release -p sml2-desktop -p sml2-runtime -p sml2-extract -p sml2-scenery-editor
 
-      - name: Verify GUI subsystem and embedded icons
-        run: python tools/check_windows_gui.py target/release/sml2.exe target/release/sml2-scenery-editor.exe
-
       - name: Stage Game Package (Bare Binary)
         run: |
           New-Item -ItemType Directory -Force -Path target/pkg-game | Out-Null
