@@ -58,7 +58,6 @@ pub(super) fn frame(
         .get_mut(&egui::ViewportId::ROOT)
         .unwrap()
         .inner_rect = raw.screen_rect;
-    app.receive_input(&raw);
     app.last_update = Instant::now() - Duration::from_millis(17);
     ctx.run(raw, |ctx| app.ui(ctx))
 }

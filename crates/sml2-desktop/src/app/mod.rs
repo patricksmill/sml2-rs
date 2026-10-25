@@ -9,8 +9,10 @@ use crate::{
     vanilla_import,
 };
 use eframe::egui::{
-    self, Color32, ColorImage, Context, RawInput, TextureHandle, TextureOptions, ViewportCommand,
+    self, Color32, ColorImage, Context, TextureHandle, TextureOptions, ViewportCommand,
 };
+#[cfg(test)]
+use eframe::egui::RawInput;
 use sml2_core::player_sim::PlayerKeys;
 use sml2_runtime::content::{ExtractedContent, SessionAssets};
 use sml2_runtime::render::motion::{pick_scale, Smooth};
@@ -643,6 +645,11 @@ impl DesktopApp {
     }
 
     fn ui(&mut self, ctx: &Context) {
+        // Collect the events from the frame that owns the menu. A discarded
+        // layout pass must not feed the same keyboard press into it again.
+        if ctx.current_pass_index() == 0 {
+            self.receive_input(&ctx.input(|input| input.raw.clone()));
+        }
         let focused = ctx.input(|i| i.focused && i.viewport().minimized != Some(true));
         let disconnected = self.controllers.poll(
             &mut self.input,
@@ -1039,9 +1046,6 @@ fn overlay_rect(
 impl eframe::App for DesktopApp {
     fn update(&mut self, ctx: &Context, _: &mut eframe::Frame) {
         self.ui(ctx);
-    }
-    fn raw_input_hook(&mut self, _: &Context, input: &mut RawInput) {
-        self.receive_input(input);
     }
     fn on_exit(&mut self) {
         self.persist();

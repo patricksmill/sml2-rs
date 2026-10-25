@@ -3,6 +3,31 @@ use crate::app::tests::{app, frame};
 use crate::input::{Button, PadButton};
 use sml2_runtime::session::SessionState;
 
+fn button_frame(
+    app: &mut DesktopApp,
+    ctx: &egui::Context,
+    button: &Button,
+    pressed: bool,
+) -> egui::FullOutput {
+    let events = match button {
+        Button::Key(name) => {
+            let key = egui::Key::from_name(name).unwrap();
+            vec![egui::Event::Key {
+                key,
+                physical_key: Some(key),
+                pressed,
+                repeat: false,
+                modifiers: Default::default(),
+            }]
+        }
+        Button::Pad(_) => {
+            app.input.event(button.clone(), pressed);
+            vec![]
+        }
+    };
+    frame(app, ctx, events)
+}
+
 #[test]
 fn title_actions_support_keyboard_dpad_and_stick_navigation() {
     for (next, previous, confirm) in [
@@ -41,31 +66,31 @@ fn title_actions_support_keyboard_dpad_and_stick_navigation() {
         frame(&mut app, &ctx, vec![]);
         frame(&mut app, &ctx, vec![]);
         for (button, expected) in [(&previous, 2), (&next, 0), (&next, 1)] {
-            match button {
-                Button::Key(name) => {
-                    let key = egui::Key::from_name(name).unwrap();
-                    frame(
-                        &mut app,
-                        &ctx,
-                        vec![egui::Event::Key {
-                            key,
-                            physical_key: Some(key),
-                            pressed: true,
-                            repeat: false,
-                            modifiers: Default::default(),
-                        }],
-                    );
-                }
-                Button::Pad(_) => {
-                    app.input.event(button.clone(), true);
-                    frame(&mut app, &ctx, vec![]);
-                }
-            }
+            let output = button_frame(&mut app, &ctx, button, true);
             assert_eq!(app.menu.selected, expected, "navigation with {button:?}");
-            app.input.event(button.clone(), false);
+            let label = ["Play", "Settings", "Quit"][expected];
+            let text_rect = output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if text.galley.text() == label => {
+                        Some(text.visual_bounding_rect())
+                    }
+                    _ => None,
+                })
+                .expect("the selected action is visible");
+            assert!(
+                output.shapes.iter().any(|shape| matches!(&shape.shape,
+                    egui::Shape::Rect(rect) if rect.fill == Color32::from_black_alpha(90)
+                        && rect.rect.contains_rect(text_rect)
+                )),
+                "{label} must visibly highlight after {button:?}"
+            );
+            frame(&mut app, &ctx, vec![]);
+            assert_eq!(app.menu.selected, expected, "holding {button:?}");
+            button_frame(&mut app, &ctx, button, false);
         }
-        app.input.event(confirm, true);
-        frame(&mut app, &ctx, vec![]);
+        button_frame(&mut app, &ctx, &confirm, true);
         assert_eq!(app.screen, Screen::Settings);
         assert!(matches!(
             app.game.as_ref().unwrap().session.state,
