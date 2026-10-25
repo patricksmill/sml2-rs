@@ -7,6 +7,7 @@
 pub mod audio_output;
 pub mod content;
 pub mod host;
+pub mod persistence;
 pub mod play_tape;
 pub mod present;
 pub mod render;

@@ -1,8 +1,8 @@
 use crate::input::Bindings;
 use serde::{Deserialize, Serialize};
+pub use sml2_runtime::persistence::atomic_write;
 use std::{
     fs, io,
-    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -156,24 +156,6 @@ impl Settings {
         let bytes = serde_json::to_vec_pretty(&settings).map_err(|e| e.to_string())?;
         atomic_write(path, &bytes).map_err(|e| e.to_string())
     }
-}
-
-/// Same-directory replacement keeps a partial write from replacing a valid file.
-pub fn atomic_write(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        fs::create_dir_all(parent)?;
-    }
-    let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
-    let result = (|| {
-        let mut file = fs::File::create(&temporary)?;
-        file.write_all(bytes)?;
-        file.sync_all()?;
-        fs::rename(&temporary, path)
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temporary);
-    }
-    result
 }
 
 pub struct AppPaths {

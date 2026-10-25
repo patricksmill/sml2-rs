@@ -2,6 +2,7 @@
 //! New frontends can instead drive `Session::advance` and consume its effects.
 
 use crate::divider_clock::VirtualDividerClock;
+use crate::persistence::atomic_write;
 use crate::play_tape::PlayTape;
 use crate::session::{Boot, FrameInput, Session, SessionAssets, StepOutcome};
 use minifb::{Key, Window, WindowOptions};
@@ -45,6 +46,7 @@ pub struct SessionRunner {
     pub audio_out_path: Option<PathBuf>,
     pub recorded_audio: Vec<f32>,
     pub live_audio: Option<crate::audio_output::AudioOutput>,
+    save_error: Option<std::io::Error>,
 }
 
 impl Deref for SessionRunner {
@@ -100,6 +102,7 @@ impl SessionRunner {
             } else {
                 crate::audio_output::AudioOutput::open()
             },
+            save_error: None,
         };
         runner.load_from_disk();
         if boot == Boot::Title {
@@ -129,7 +132,7 @@ impl SessionRunner {
         if !self.session.saveable() {
             return Ok(());
         }
-        fs::write(&self.save_path, self.session.save_record())
+        atomic_write(&self.save_path, &self.session.save_record())
     }
 
     pub fn render_frame(&self) -> Vec<u8> {
@@ -142,7 +145,14 @@ impl SessionRunner {
         let div = self.virtual_clock.sample();
         let effects = self.session.advance(FrameInput { keys, div });
         for record in effects.saves {
-            let _ = fs::write(&self.save_path, record);
+            if let Err(error) = atomic_write(&self.save_path, &record) {
+                let error = std::io::Error::new(
+                    error.kind(),
+                    format!("Save {}: {error}", self.save_path.display()),
+                );
+                eprintln!("{error}");
+                self.save_error = Some(error);
+            }
         }
         for diagnostic in effects.diagnostics {
             eprintln!("{diagnostic}");
@@ -219,6 +229,9 @@ impl SessionRunner {
             }
 
             self.step_frame(keys);
+            if let Some(error) = self.save_error.take() {
+                return Err(error.into());
+            }
 
             let frame = self.render_frame();
             let (win_w, win_h) = window.get_size();
@@ -254,8 +267,14 @@ impl SessionRunner {
                 }
             }
             self.step_frame(keys);
+            if let Some(error) = self.save_error.take() {
+                return Err(error.into());
+            }
         }
         self.save_recorded_audio()?;
         Ok(self.frame_n)
     }
 }
+
+#[cfg(test)]
+mod tests;
