@@ -124,6 +124,34 @@ fn saving_persists_all_three_pipes_as_one_image() {
     let _ = std::fs::remove_file(path);
 }
 
+#[test]
+fn desktop_and_cli_round_trip_all_three_pipes() {
+    let path = temp_save("cli_round_trip");
+    let mut game = Game::new(SessionAssets::load().unwrap(), path.clone(), false);
+    for slot in 0..3 {
+        game.session
+            .slots
+            .write_slot(slot, &MapSim::new().save_record(5, slot as u8 + 1, 0));
+    }
+    game.persist_slots().unwrap();
+    let mut cli = sml2_runtime::host::SessionRunner::new(
+        SessionAssets::load().unwrap(),
+        path.clone(),
+        1,
+        (160, 144),
+        true,
+    );
+    assert_eq!(cli.slots.image(), game.session.slots.image());
+    cli.session.active_slot = Some(1);
+    cli.session.level_tally = 9;
+    cli.save_to_disk().unwrap();
+    let restored = Game::new(SessionAssets::load().unwrap(), path.clone(), false);
+    assert_eq!(restored.session.slots.slot(0), game.session.slots.slot(0));
+    assert_eq!(restored.session.slots.slot(2), game.session.slots.slot(2));
+    assert_eq!(restored.session.slots.slot(1).unwrap()[0x42], 9);
+    std::fs::remove_file(path).unwrap();
+}
+
 /// Run with SML2_DX_ROM=/path/to/audited.gbc cargo test -p sml2-desktop
 /// real_rom_import_restart -- --ignored
 #[test]

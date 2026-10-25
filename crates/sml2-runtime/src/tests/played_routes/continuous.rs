@@ -326,7 +326,9 @@ pub(super) fn verify_map_entry_completion_and_reload(
     let boss_return = saved_node != map.node;
     let mut at_saved_node = map.clone();
     at_saved_node.node = saved_node;
-    let saved = fs::read(&path).expect("the actual host must have written a save");
+    let image = fs::read(&path).expect("the actual host must have written a save");
+    assert_eq!(image, runner.session.slots.image());
+    let saved = &image[0x50..0xA0];
     assert_eq!(
         saved,
         at_saved_node.save_record(

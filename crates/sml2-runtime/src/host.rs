@@ -6,7 +6,11 @@ use crate::persistence::atomic_write;
 use crate::play_tape::PlayTape;
 use crate::session::{Boot, FrameInput, Session, SessionAssets, StepOutcome};
 use minifb::{Key, Window, WindowOptions};
-use sml2_core::{audio::apu::Apu, player_sim::PlayerKeys};
+use sml2_core::{
+    audio::apu::Apu,
+    front_end::{SaveSlots, SAVE_IMAGE_LEN, SLOT_LEN},
+    player_sim::PlayerKeys,
+};
 use std::{
     error::Error,
     fs,
@@ -107,6 +111,8 @@ impl SessionRunner {
         runner.load_from_disk();
         if boot == Boot::Title {
             runner.session.enter_title();
+        } else {
+            runner.session.active_slot.get_or_insert(0);
         }
         if let Some(out) = &runner.live_audio {
             runner.audio_sync = Some(AudioClock::new(out.sample_rate()));
@@ -115,24 +121,62 @@ impl SessionRunner {
     }
 
     pub fn load_from_disk(&mut self) -> bool {
-        let read = fs::read(&self.save_path);
-        read.is_ok_and(|data| {
-            let applied = self.session.apply_save_record(&data);
-            if applied {
-                // The legacy single-record file becomes slot 0 so a
-                // `--boot title` run shows the existing progress.
-                self.session.slots.write_slot(0, &data);
-                self.session.active_slot = Some(0);
+        let data = match fs::read(&self.save_path) {
+            Ok(data) if matches!(data.len(), SLOT_LEN | SAVE_IMAGE_LEN) => data,
+            Ok(data) => {
+                eprintln!(
+                    "Save {}: unsupported length {}",
+                    self.save_path.display(),
+                    data.len()
+                );
+                return false;
             }
-            applied
-        })
+            Err(error) => {
+                if error.kind() != std::io::ErrorKind::NotFound {
+                    eprintln!("Save {}: {error}", self.save_path.display());
+                }
+                return false;
+            }
+        };
+        let mut slots = SaveSlots::from_image(&data);
+        let valid = slots.validate_and_init();
+        let Some(slot) = valid.iter().position(|&valid| valid) else {
+            self.session.slots = slots;
+            return false;
+        };
+        let record = slots.load_slot(slot).unwrap();
+        if !self.session.apply_save_record(&record) {
+            return false;
+        }
+        self.session.slots = slots;
+        self.session.active_slot = Some(slot as u8);
+        if data.len() == SLOT_LEN {
+            if let Err(error) = atomic_write(&self.save_path, &self.session.slots.image()) {
+                self.report_save_error(error);
+            }
+        }
+        true
     }
 
     pub fn save_to_disk(&self) -> Result<(), std::io::Error> {
         if !self.session.saveable() {
             return Ok(());
         }
-        atomic_write(&self.save_path, &self.session.save_record())
+        let mut slots = self.session.slots.clone();
+        slots.write_slot(
+            self.session.active_slot.unwrap_or(0) as usize,
+            &self.session.save_record(),
+        );
+        atomic_write(&self.save_path, &slots.image())
+    }
+
+    fn report_save_error(&mut self, error: std::io::Error) {
+        let error = std::io::Error::new(
+            error.kind(),
+            format!("Save {}: {error}", self.save_path.display()),
+        );
+        eprintln!("{error}");
+        self.save_error = Some(error);
     }
 
     pub fn render_frame(&self) -> Vec<u8> {
@@ -144,14 +188,12 @@ impl SessionRunner {
         self.virtual_clock.advance_tick();
         let div = self.virtual_clock.sample();
         let effects = self.session.advance(FrameInput { keys, div });
-        for record in effects.saves {
-            if let Err(error) = atomic_write(&self.save_path, &record) {
-                let error = std::io::Error::new(
-                    error.kind(),
-                    format!("Save {}: {error}", self.save_path.display()),
-                );
-                eprintln!("{error}");
-                self.save_error = Some(error);
+        if let Some(record) = effects.saves.last() {
+            self.session
+                .slots
+                .write_slot(self.session.active_slot.unwrap_or(0) as usize, record);
+            if let Err(error) = atomic_write(&self.save_path, &self.session.slots.image()) {
+                self.report_save_error(error);
             }
         }
         for diagnostic in effects.diagnostics {

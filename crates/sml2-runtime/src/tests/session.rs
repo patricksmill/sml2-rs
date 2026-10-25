@@ -332,7 +332,8 @@ fn a_death_at_zero_lives_runs_game_over_to_the_title() {
         "$27AF requests music 7"
     );
     let saved = fs::read(&tmp_save).expect("$2934 writes the save");
-    assert_eq!(saved.as_slice(), runner.save_record().as_slice());
+    assert_eq!(saved, runner.session.slots.image());
+    assert_eq!(&saved[..0x50], runner.save_record().as_slice());
     assert_eq!(saved[0x43], 5, "sLives in the save");
     assert_eq!((saved[8 + 5], saved[8 + 9]), (0, 0), "golden coins wiped");
 
