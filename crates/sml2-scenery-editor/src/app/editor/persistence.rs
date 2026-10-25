@@ -32,7 +32,10 @@ impl EditorApp {
             .settings
             .parent()
             .unwrap_or(std::path::Path::new("."))
-            .join(self.editor.scene.map_or_else(|| format!("scenery-{level:02}.json"), |scene| format!("scenery-{}.json", scene.file_stem())))
+            .join(self.editor.scene.map_or_else(
+                || format!("scenery-{level:02}.json"),
+                |scene| format!("scenery-{}.json", scene.file_stem()),
+            ))
     }
 
     pub(super) fn read_scenery(&self, level: u8, count: usize) -> Result<SceneryOverlay, String> {
@@ -40,10 +43,21 @@ impl EditorApp {
         let text = match fs::read_to_string(&path) {
             Ok(text) => text,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(self.game.as_ref().map(|game| {
-                    if let Some(scene) = self.editor.scene { game.session.scene_scenery(scene).clone() }
-                    else { game.session.assets.level(level).map(|content| content.scenery.clone()).unwrap_or_default() }
-                }).unwrap_or_default())
+                return Ok(self
+                    .game
+                    .as_ref()
+                    .map(|game| {
+                        if let Some(scene) = self.editor.scene {
+                            game.session.scene_scenery(scene).clone()
+                        } else {
+                            game.session
+                                .assets
+                                .level(level)
+                                .map(|content| content.scenery.clone())
+                                .unwrap_or_default()
+                        }
+                    })
+                    .unwrap_or_default())
             }
             Err(error) => return Err(format!("{}: {error}", path.display())),
         };

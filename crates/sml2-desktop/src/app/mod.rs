@@ -8,11 +8,11 @@ use crate::{
     timing::{game_rectangle, TickBudget},
     vanilla_import,
 };
+#[cfg(test)]
+use eframe::egui::RawInput;
 use eframe::egui::{
     self, Color32, ColorImage, Context, TextureHandle, TextureOptions, ViewportCommand,
 };
-#[cfg(test)]
-use eframe::egui::RawInput;
 use sml2_core::player_sim::PlayerKeys;
 use sml2_runtime::content::{ExtractedContent, SessionAssets};
 use sml2_runtime::render::motion::{pick_scale, Smooth};
@@ -187,6 +187,16 @@ impl DesktopApp {
         app.library.dx_installed = app.settings.dx_installation.is_some();
         app.library.dx_mode = app.settings.dx_mode;
         if !app.options.launch_library {
+            if app.settings.vanilla.is_some() {
+                if let Ok(dir) = vanilla_import::vanilla_cache() {
+                    if let Some(expected) = &app.settings.vanilla {
+                        if vanilla_import::check_install(&dir, expected).is_ok() {
+                            app.options.assets = dir;
+                            app.library.vanilla_ready = true;
+                        }
+                    }
+                }
+            }
             app.load_game();
             app.restore_dx();
         } else if app.settings.vanilla.is_some() {
@@ -216,6 +226,9 @@ impl DesktopApp {
                     game.session.begin_castle_sequence(seq, 8, 0, 0);
                 }
             }
+        } else if !app.options.launch_library {
+            app.screen = Screen::Settings;
+            app.page = Page::Game;
         }
         if let Some(scale) = app.options.scale {
             app.zoom(ctx, Some(scale));
@@ -408,6 +421,14 @@ impl DesktopApp {
                 self.library.dx_mode = self.settings.dx_mode;
                 if self.options.launch_library {
                     self.load_launcher();
+                } else if self.game.is_none() {
+                    self.options.assets = dest;
+                    self.load_game();
+                    self.restore_dx();
+                    if let Some(game) = self.game.as_mut() {
+                        game.session.enter_title();
+                    }
+                    self.screen = Screen::Game;
                 }
             }
             Err(error) => {
@@ -672,12 +693,20 @@ impl DesktopApp {
         self.quit_library_on_escape(ctx);
         self.shortcuts(ctx);
         self.poll_imports();
-        if self.screen != Screen::Game {
+        let on_title = self.screen == Screen::Game
+            && self.game.as_ref().is_some_and(|g| {
+                matches!(
+                    g.session.state,
+                    sml2_runtime::session::SessionState::Title(_)
+                )
+            });
+        if self.screen != Screen::Game || on_title {
             if self.capture.is_some() || self.dx_picker.is_some() {
                 self.menu.freeze();
-            } else if self.options.launch_library
-                && !self.menu_from_game
-                && self.screen == Screen::Home
+            } else if on_title
+                || (self.options.launch_library
+                    && !self.menu_from_game
+                    && self.screen == Screen::Home)
             {
                 self.menu.start_horizontal(&mut self.input);
             } else {
@@ -718,7 +747,7 @@ impl DesktopApp {
             self.pause_menu(ctx);
         }
         self.dx_picker_window(ctx);
-        if self.screen != Screen::Game {
+        if self.screen != Screen::Game || on_title {
             self.menu.finish();
         }
         if self.debug {
@@ -761,11 +790,14 @@ impl DesktopApp {
                 if let Some(game) = self.game.as_mut() {
                     dx::prepare_tick(&mut game.session, &self.settings, self.dx_bundle.is_some());
                 }
-                let keys = if running {
+                let mut keys = if running {
                     self.input.sample_player(&self.settings.bindings)
                 } else {
                     PlayerKeys::default()
                 };
+                if on_title {
+                    keys.start = false;
+                }
                 let merged = pointer::merge_pointer(&snap, &keys, self.aim, self.start_click);
                 let keys = merged.keys;
                 clear_aim = merged.clear_aim;
@@ -971,10 +1003,28 @@ impl DesktopApp {
             Color32::WHITE,
         );
         self.paint_overlays(ui, rect);
+        let on_title = self.game.as_ref().is_some_and(|g| {
+            matches!(
+                g.session.state,
+                sml2_runtime::session::SessionState::Title(_)
+            )
+        });
+        let mut grass_top = rect.bottom();
+        if on_title {
+            let view = self.settings.view();
+            let scale = rect.height() / view.1 as f32;
+            let native_y = sml2_runtime::render::view::margin(view).1 as f32;
+            grass_top = rect.top() + (native_y + 144.0) * scale;
+            let grass =
+                egui::Rect::from_min_max(egui::pos2(available.left(), grass_top), available.max);
+            self.launcher_bar(ui.ctx(), grass);
+        }
         let picture = ui.interact(rect, egui::Id::new("game-picture"), egui::Sense::click());
         if self.screen == Screen::Game && self.dx_picker.is_none() && picture.clicked() {
             if let Some(pos) = picture.interact_pointer_pos() {
-                self.on_picture_click(pos, rect);
+                if !on_title || pos.y < grass_top {
+                    self.on_picture_click(pos, rect);
+                }
             }
         }
         if self.paused {

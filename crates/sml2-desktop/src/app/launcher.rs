@@ -2,7 +2,9 @@
 //! or audio output and never advances the title's attract-mode countdown.
 use super::{colorized, filter_preview::FilterPreview, DesktopApp, Screen};
 use crate::settings::{Filter, Zoom};
-use eframe::egui::{self, Color32, ColorImage, Context, Rect, TextureHandle, TextureOptions, Ui};
+use eframe::egui::{
+    self, Color32, ColorImage, Context, Rect, TextureHandle, TextureOptions, Ui, ViewportCommand,
+};
 use sml2_runtime::{
     content::{ExtractedContent, SessionAssets},
     Session,
@@ -49,7 +51,7 @@ impl DesktopApp {
         }
     }
 
-    fn launcher_bar(&mut self, ctx: &Context, grass: Rect) {
+    pub(super) fn launcher_bar(&mut self, ctx: &Context, grass: Rect) {
         let ink = self
             .launcher
             .as_ref()
@@ -80,7 +82,18 @@ impl DesktopApp {
                     Color32::from_black_alpha(90)
                 };
                 visuals.selection.stroke = egui::Stroke::new(1.0_f32, ink);
-                if self.screen == Screen::Home {
+                if self.screen == Screen::Game {
+                    if self.menu.compact_button(ui, "Play") {
+                        self.start_click = true;
+                    }
+                    if self.menu.compact_button(ui, "Settings") {
+                        self.return_screen = Screen::Game;
+                        self.navigate(ctx, Screen::Settings);
+                    }
+                    if self.menu.compact_button(ui, "Quit") {
+                        ctx.send_viewport_cmd(ViewportCommand::Close);
+                    }
+                } else if self.screen == Screen::Home {
                     self.library_panel(ctx, ui);
                 } else {
                     for label in ["Play", "Settings", "Quit"] {

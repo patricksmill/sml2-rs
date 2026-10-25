@@ -38,18 +38,12 @@ impl Options {
             fullscreen: false,
             smoke_frames: None,
             screenshot: None,
-            launch_library: true,
+            launch_library: false,
         })
     }
 
-    pub fn finish_launch(&mut self, explicit_assets: bool) {
-        self.launch_library = self.boot_title
-            || !(self.play
-                || self.boot_select
-                || self.room.is_some()
-                || self.reveal
-                || self.smoke_frames.is_some()
-                || explicit_assets);
+    pub fn finish_launch(&mut self, _explicit_assets: bool) {
+        self.launch_library = false;
     }
 }
 
@@ -101,10 +95,10 @@ mod tests {
     use super::Options;
 
     #[test]
-    fn title_opens_the_library_and_play_does_not() {
+    fn launch_opens_the_in_game_title_directly() {
         let mut options = Options::defaults().unwrap();
         options.finish_launch(false);
-        assert!(options.launch_library);
+        assert!(!options.launch_library);
         options.play = true;
         options.finish_launch(false);
         assert!(!options.launch_library);
@@ -113,18 +107,8 @@ mod tests {
         options.finish_launch(false);
         assert!(!options.launch_library);
         options.boot_select = false;
-        options.smoke_frames = Some(1);
-        options.finish_launch(false);
-        assert!(!options.launch_library);
-        options.smoke_frames = None;
-        options.finish_launch(true);
-        assert!(!options.launch_library);
         options.boot_title = true;
-        options.smoke_frames = Some(20);
         options.finish_launch(true);
-        assert!(
-            options.launch_library,
-            "an explicit title launch also supports previews"
-        );
+        assert!(!options.launch_library);
     }
 }

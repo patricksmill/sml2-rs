@@ -37,7 +37,14 @@ pub fn run(options: Options) -> Result<(), String> {
             renderer: eframe::Renderer::Wgpu,
             ..Default::default()
         },
-        Box::new(move |cc| Ok(Box::new(EditorApp::new(&cc.egui_ctx, options, settings, error)))),
+        Box::new(move |cc| {
+            Ok(Box::new(EditorApp::new(
+                &cc.egui_ctx,
+                options,
+                settings,
+                error,
+            )))
+        }),
     )
     .map_err(|e| e.to_string())
 }

@@ -724,10 +724,7 @@ pub fn extract(rom: &[u8], dest: &Path) -> Result<&'static Revision, String> {
     if rom.len() < 0x14000 {
         return Err("ROM is shorter than $14000".into());
     }
-    write_out(
-        &dest.join("audio/music_bank04.bin"),
-        &rom[0x10000..0x14000],
-    )?;
+    write_out(&dest.join("audio/music_bank04.bin"), &rom[0x10000..0x14000])?;
     remove_pngs(dest)?;
     Ok(revision)
 }

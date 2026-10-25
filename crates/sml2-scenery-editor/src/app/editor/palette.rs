@@ -1,6 +1,6 @@
 //! One cached atlas serves the tile tray, canvas, and gesture previews.
 
-use super::{EditorApp, Editor};
+use super::{Editor, EditorApp};
 use crate::settings::Filter;
 use eframe::egui::{self, Color32, ColorImage, Context, Rect, TextureHandle, TextureOptions, Ui};
 use sml2_core::level::Metatile;
@@ -102,32 +102,66 @@ pub(super) fn dx_tile(level: &LevelGraphics, id: u8) -> Result<Vec<Color32>, Str
 
 impl EditorApp {
     fn editor_scene_atlas(&mut self, ctx: &Context, key: String) {
-        let Some(game) = &self.game else { return; };
-        let native = || game.session.scene_palette_frame().map(|frame| {
-            super::super::colorized(&frame, self.settings.filter, &game.session.assets.cartridge_header, (160,144)).pixels
-        });
+        let Some(game) = &self.game else {
+            return;
+        };
+        let native = || {
+            game.session.scene_palette_frame().map(|frame| {
+                super::super::colorized(
+                    &frame,
+                    self.settings.filter,
+                    &game.session.assets.cartridge_header,
+                    (160, 144),
+                )
+                .pixels
+            })
+        };
         let mut warning = None;
         let pixels = match self.dx_bundle.as_ref().filter(|_| self.settings.dx_mode) {
             Some(dx) => match game.session.scene_palette_dx(dx, self.settings.character) {
-                Ok(pixels) => Ok(pixels.into_iter().map(|[r,g,b]| Color32::from_rgb(r,g,b)).collect()),
-                Err(error) => { warning = Some(format!("DX preview unavailable: {error}")); native() }
+                Ok(pixels) => Ok(pixels
+                    .into_iter()
+                    .map(|[r, g, b]| Color32::from_rgb(r, g, b))
+                    .collect()),
+                Err(error) => {
+                    warning = Some(format!("DX preview unavailable: {error}"));
+                    native()
+                }
             },
             None => native(),
         };
-        let pixels = match pixels { Ok(pixels) => pixels, Err(error) => { self.status = Some(error); return; } };
+        let pixels = match pixels {
+            Ok(pixels) => pixels,
+            Err(error) => {
+                self.status = Some(error);
+                return;
+            }
+        };
         let rows = 6;
-        let mut atlas = vec![Color32::TRANSPARENT; 256*rows*16];
+        let mut atlas = vec![Color32::TRANSPARENT; 256 * rows * 16];
         for id in 0..90 {
             for y in 0..16 {
-                let from = (id/10*16+y)*160+id%10*16;
-                let to = (id/16*16+y)*256+id%16*16;
-                atlas[to..to+16].copy_from_slice(&pixels[from..from+16]);
+                let from = (id / 10 * 16 + y) * 160 + id % 10 * 16;
+                let to = (id / 16 * 16 + y) * 256 + id % 16 * 16;
+                atlas[to..to + 16].copy_from_slice(&pixels[from..from + 16]);
             }
         }
-        let layout = self.editor.work.as_ref().map(|work| work.layout.cells.clone()).unwrap_or_default();
+        let layout = self
+            .editor
+            .work
+            .as_ref()
+            .map(|work| work.layout.cells.clone())
+            .unwrap_or_default();
         self.editor.atlas = Some(Atlas {
-            texture: ctx.load_texture("scene-scenery-atlas", ColorImage::new([256,rows*16],atlas), TextureOptions::NEAREST),
-            rows, layout, key, warning,
+            texture: ctx.load_texture(
+                "scene-scenery-atlas",
+                ColorImage::new([256, rows * 16], atlas),
+                TextureOptions::NEAREST,
+            ),
+            rows,
+            layout,
+            key,
+            warning,
         });
     }
 
@@ -149,7 +183,10 @@ impl EditorApp {
         {
             return;
         }
-        if self.editor.scene.is_some() { self.editor_scene_atlas(ctx, key); return; }
+        if self.editor.scene.is_some() {
+            self.editor_scene_atlas(ctx, key);
+            return;
+        }
         let Some(game) = &self.game else {
             return;
         };

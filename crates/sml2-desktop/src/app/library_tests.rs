@@ -1,4 +1,5 @@
 use super::*;
+use sml2_runtime::session::SessionState;
 
 fn visible_text(output: egui::FullOutput) -> String {
     fn collect(shape: &egui::Shape, text: &mut String) {
@@ -35,6 +36,77 @@ fn confirm(app: &mut DesktopApp, ctx: &egui::Context, row: usize) -> egui::FullO
     app.input.event(Button::key("Enter"), false);
     super::tests::frame(app, ctx, vec![]);
     output
+}
+
+#[test]
+fn title_screen_action_bar_play_starts_mario_settings_opens_menu_and_quit_closes() {
+    let (mut app, ctx, path) = super::tests::app();
+    assert_eq!(app.screen, Screen::Game);
+    assert!(matches!(
+        app.game.as_ref().unwrap().session.state,
+        SessionState::Title(_)
+    ));
+
+    super::tests::frame(&mut app, &ctx, vec![]);
+    let output = super::tests::frame(&mut app, &ctx, vec![]);
+    let text = visible_text(output);
+    assert!(text.contains("Play"));
+    assert!(text.contains("Settings"));
+    assert!(text.contains("Quit"));
+
+    // Navigating to Settings and hitting Enter opens Settings without advancing Mario.
+    app.menu.selected = 1;
+    app.input.event(Button::key("Enter"), true);
+    super::tests::frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::key("Enter"), false);
+    super::tests::frame(&mut app, &ctx, vec![]);
+    assert_eq!(app.screen, Screen::Settings);
+    assert!(matches!(
+        app.game.as_ref().unwrap().session.state,
+        SessionState::Title(_)
+    ));
+
+    // Return to title screen.
+    app.navigate(&ctx, Screen::Game);
+    super::tests::frame(&mut app, &ctx, vec![]);
+    assert_eq!(app.screen, Screen::Game);
+    assert!(matches!(
+        app.game.as_ref().unwrap().session.state,
+        SessionState::Title(_)
+    ));
+
+    // Navigating to Quit and hitting Enter sends Close command.
+    app.menu.selected = 2;
+    app.input.event(Button::key("Enter"), true);
+    let output = super::tests::frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::key("Enter"), false);
+    assert!(output.viewport_output[&egui::ViewportId::ROOT]
+        .commands
+        .iter()
+        .any(|command| matches!(command, ViewportCommand::Close)));
+
+    // Advance past the initial opening hold (64 frames) where the ROM title ignores Start.
+    if let SessionState::Title(title) = &mut app.game.as_mut().unwrap().session.state {
+        while !super::pointer::title_accepts_start(title.timer()) {
+            title.step(0, 0);
+        }
+    }
+
+    // Hitting Play proceeds Mario toward file select.
+    app.menu.selected = 0;
+    app.input.event(Button::key("Enter"), true);
+    super::tests::frame(&mut app, &ctx, vec![]);
+    app.input.event(Button::key("Enter"), false);
+    super::tests::frame(&mut app, &ctx, vec![]);
+    assert!(
+        !matches!(
+            app.game.as_ref().unwrap().session.state,
+            SessionState::Title(_)
+        ),
+        "Mario must proceed to file select loading after Play is hit"
+    );
+
+    let _ = std::fs::remove_dir_all(path);
 }
 
 #[test]

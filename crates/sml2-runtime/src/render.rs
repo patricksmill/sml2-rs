@@ -22,9 +22,9 @@ pub struct SpriteInst {
 }
 
 mod dx;
-mod scene_scenery;
 mod layers;
 mod margin;
+mod scene_scenery;
 pub use margin::paintable_cell;
 pub mod motion;
 pub mod overlay;

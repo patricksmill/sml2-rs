@@ -6,10 +6,10 @@ use state::{Cell, Tool, Workspace};
 use std::collections::BTreeMap;
 
 mod canvas;
+mod export;
 mod palette;
 mod persistence;
 mod state;
-mod export;
 mod targets;
 #[cfg(test)]
 pub(super) mod tests;
@@ -34,7 +34,9 @@ pub(super) struct Editor {
 
 impl EditorApp {
     pub(super) fn open_editor(&mut self, ctx: &Context) {
-        if self.game.is_none() { self.load_game(); }
+        if self.game.is_none() {
+            self.load_game();
+        }
         if self.game.is_none() {
             return;
         }
@@ -42,7 +44,11 @@ impl EditorApp {
             self.restore_dx();
         }
         if self.editor.work.is_none() {
-            if self.editor.scene.is_some() { self.load_editor_scene(); } else { self.load_editor_level(); }
+            if self.editor.scene.is_some() {
+                self.load_editor_scene();
+            } else {
+                self.load_editor_level();
+            }
         }
         self.editor.playtesting = false;
         self.navigate(ctx, Screen::Editor);
@@ -78,8 +84,11 @@ impl EditorApp {
         }
         self.finish_editor_gesture();
         if let Some(work) = self.editor.work.take() {
-            if let Some(scene) = self.editor.scene { self.editor.scenes.insert(scene, work); }
-            else { self.editor.levels.insert(self.editor.level, work); }
+            if let Some(scene) = self.editor.scene {
+                self.editor.scenes.insert(scene, work);
+            } else {
+                self.editor.levels.insert(self.editor.level, work);
+            }
         }
         self.editor.scene = None;
         self.editor.level = id;
@@ -120,8 +129,13 @@ impl EditorApp {
             return;
         };
         if let Some(scene) = self.editor.scene {
-            if let Err(error) = game.session.set_scene_scenery(scene, work.scenery.clone()).and_then(|()| game.session.stage_scenery_scene(scene)) {
-                self.status = Some(error); return;
+            if let Err(error) = game
+                .session
+                .set_scene_scenery(scene, work.scenery.clone())
+                .and_then(|()| game.session.stage_scenery_scene(scene))
+            {
+                self.status = Some(error);
+                return;
             }
             self.paused = false;
             self.editor.playtesting = true;
@@ -182,7 +196,9 @@ impl EditorApp {
             if ui.button("Play · Enter").clicked() {
                 self.play_editor(ctx);
             }
-            if ui.button("Export level…").clicked() { self.begin_export(); }
+            if ui.button("Export level…").clicked() {
+                self.begin_export();
+            }
             if ui.button("Back").clicked() {
                 self.navigate(ctx, Screen::Home);
             }
@@ -296,7 +312,10 @@ impl EditorApp {
     pub(super) fn editor_shortcuts(&mut self, ctx: &Context) {
         // Ordinary tool buttons retain egui focus too. Only popups and debug
         // text entry should take these shortcuts away from the workspace.
-        if self.editor.export.is_some() || egui::Popup::is_any_open(ctx) || self.debug && ctx.wants_keyboard_input() {
+        if self.editor.export.is_some()
+            || egui::Popup::is_any_open(ctx)
+            || self.debug && ctx.wants_keyboard_input()
+        {
             return;
         }
         let Some(work) = &mut self.editor.work else {

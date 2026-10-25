@@ -58,10 +58,22 @@ impl DesktopApp {
     }
 
     pub(super) fn shortcuts(&mut self, ctx: &Context) {
-        let back = pressed(
-            &mut self.input,
-            &[Button::key("Escape"), Button::Pad(PadButton::Start)],
-        );
+        let on_title = self.screen == Screen::Game
+            && self.game.as_ref().is_some_and(|game| {
+                matches!(
+                    game.session.state,
+                    sml2_runtime::session::SessionState::Title(_)
+                )
+            });
+        let back_buttons: &[Button] = if on_title {
+            &[Button::key("Escape")]
+        } else {
+            &[Button::key("Escape"), Button::Pad(PadButton::Start)]
+        };
+        let back = pressed(&mut self.input, back_buttons);
+        if on_title && pressed(&mut self.input, &[Button::Pad(PadButton::Start)]) {
+            self.start_click = true;
+        }
         if self.dx_picker.is_some() {
             if back || self.input.take_press(&Button::Pad(PadButton::East)) {
                 self.dx_picker = None;

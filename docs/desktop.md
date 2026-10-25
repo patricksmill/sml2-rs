@@ -19,35 +19,31 @@ Or launch the built executable:
 ./target/debug/sml2-desktop --play
 ```
 
-A normal launch shows the game's title sign, with its wall and grass filling
-the window, and a transparent floating bar in the grass below the sign:
-**Play**, **Scenery Editor**, **Settings**, **Quit**.
-The title preview uses the selected filter or installed DX graphics and stays
-still while you browse. Left/right or the controller D-pad selects an
-action; Enter, Space, or the controller's South button activates it.
-Desktop controls, settings, and the editor use standard, minimal egui styling.
+A normal launch opens the in-game title screen, with its wall and grass
+filling the window, and a floating bar in the grass below the title sign:
+**Play**, **Settings**, **Quit**.
+Left/right or the controller D-pad selects an action. Hitting **Play** (or pressing
+Enter, Space, or controller South / Start while Play is selected) triggers Start
+so Mario walks to a pipe and ducks into file select. **Settings** opens the
+settings screen without advancing Mario, and **Quit** exits the app.
+Clicking the picture above the grass also starts the game.
 **Settings → Game** contains the original ROM importer, ROM replacement,
-and optional DX setup. On first use, Play opens that page so you can add the
-original **Super Mario Land 2 UE v1.0** ROM (`.gb` or `.gbc`). Play also opens
-that page if the installed game needs repair. Once the ROM is verified,
-Play starts the game with the selected DX Mode setting.
+and optional DX setup. If game data is not yet installed on first launch,
+Settings → Game opens so you can add the original **Super Mario Land 2 UE v1.0**
+ROM (`.gb` or `.gbc`). Once the ROM is verified, the in-game title starts
+with the selected DX Mode setting.
 
-Play opens the game's own
-title screen. START, or a click on the
-picture, opens the file select: Mario walks to a pipe and ducks into it, and
-he jumps on Clear. Settings are available from the launcher and desktop menus.
 F10 shows or hides the toolbar. Its **Display**, **Audio**, **Controls**,
 **Mods**, **Game**, and **Debug** tabs open the matching settings page.
 Esc, or the toolbar Menu button, opens the
 compact pause menu over the current game frame, with Resume,
 Settings and Quit. In-game menus and settings darken the exact last displayed
 frame, preserving its scale, colors, overlays, and surroundings until you resume.
-They keep the game view behind them even when opened during an editor playtest.
 Quit to title is on
-that menu only after you have left the title. `--play` skips the library and
-the title and opens the overworld. `--title` opens the library, the same as a
+that menu only after you have left the title. `--play` skips the
+title and opens the overworld. `--title` opens the title directly, the same as a
 normal launch; it can also be combined with `--smoke-frames` and `--screenshot`
-to preview the launcher. `--file-select` skips the library and opens the pipes directly.
+to validate startup rendering. `--file-select` opens the pipes directly.
 
 Linux builds require a C toolchain, pkg-config, and libudev development files
 for gilrs. X11 sessions also need libxkbcommon-x11 at runtime. For Fedora:

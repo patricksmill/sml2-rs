@@ -1,5 +1,5 @@
 use crate::app::editor::palette::{dx_tile, native_tile};
-use crate::app::{colorized, tests::red_bundle, tests::app};
+use crate::app::{colorized, tests::app, tests::red_bundle};
 use crate::settings::Filter;
 use eframe::egui::Color32;
 use sml2_core::scenery::{SceneryOverlay, SceneryPaint};

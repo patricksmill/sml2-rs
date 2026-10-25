@@ -160,7 +160,11 @@ impl Workspace {
     }
 
     pub fn dimensions(&self) -> (usize, usize) {
-        if self.scene_border { (10, 9) } else { (LAYOUT_WIDTH, LAYOUT_HEIGHT) }
+        if self.scene_border {
+            (10, 9)
+        } else {
+            (LAYOUT_WIDTH, LAYOUT_HEIGHT)
+        }
     }
 
     pub fn outside(&self, (x, y): Cell) -> bool {
@@ -240,7 +244,9 @@ impl Workspace {
             } => {
                 if let Some(cell) = cell {
                     for at in line(last.unwrap_or(cell), cell) {
-                        if self.scene_border && !self.outside(at) { continue; }
+                        if self.scene_border && !self.outside(at) {
+                            continue;
+                        }
                         let before = self.paint(at);
                         if before == *value {
                             continue;
@@ -276,7 +282,9 @@ impl Workspace {
                 for y in start.1.min(end.1)..=start.1.max(end.1) {
                     for x in start.0.min(end.0)..=start.0.max(end.0) {
                         let cell = (x, y);
-                        if self.scene_border && !self.outside(cell) { continue; }
+                        if self.scene_border && !self.outside(cell) {
+                            continue;
+                        }
                         let before = self.paint(cell);
                         if before == Some(value) {
                             continue;

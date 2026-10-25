@@ -25,20 +25,38 @@ impl Session {
         character: Character,
     ) -> Result<Vec<[u8; 3]>, String> {
         use crate::scene_scenery::SceneTarget;
-        let target = self.scene_scenery_target().ok_or("no fixed scenery scene is showing")?;
+        let target = self
+            .scene_scenery_target()
+            .ok_or("no fixed scenery scene is showing")?;
         let size = super::view::NATIVE;
         match target {
             SceneTarget::Title => screen(&dx.title, &[], None, size, title_backdrop, 0),
-            SceneTarget::FileSelect => screen(&dx.file_select, &[], None, size, file_select_backdrop, 0),
-            SceneTarget::Castle | SceneTarget::GameOver => self.render_dx_castle_scene(dx, character, size, true),
+            SceneTarget::FileSelect => {
+                screen(&dx.file_select, &[], None, size, file_select_backdrop, 0)
+            }
+            SceneTarget::Castle | SceneTarget::GameOver => {
+                self.render_dx_castle_scene(dx, character, size, true)
+            }
             SceneTarget::Map(_) => {
-                let SessionState::Overworld(map) = &self.state else {unreachable!()};
+                let SessionState::Overworld(map) = &self.state else {
+                    unreachable!()
+                };
                 self.render_dx_map(map, dx, character, size, true)
             }
-            SceneTarget::Arena {..} => render(self.level_ctx().ok_or("arena scene required")?, dx, character,
-                size, &super::motion::Offsets::none(), true),
-            SceneTarget::Ending => super::dx_ending::render_background(self,
-                self.level_ctx().ok_or("ending scene required")?, dx, character),
+            SceneTarget::Arena { .. } => render(
+                self.level_ctx().ok_or("arena scene required")?,
+                dx,
+                character,
+                size,
+                &super::motion::Offsets::none(),
+                true,
+            ),
+            SceneTarget::Ending => super::dx_ending::render_background(
+                self,
+                self.level_ctx().ok_or("ending scene required")?,
+                dx,
+                character,
+            ),
         }
     }
 
@@ -132,7 +150,10 @@ impl Session {
             .dx_level()
             .ok_or("DX presentation requires the title, file select or a level")?;
         let offsets = self.motion_offsets(smooth);
-        Ok((render(ctx, dx, character, view, &offsets, false)?, offsets.scale))
+        Ok((
+            render(ctx, dx, character, view, &offsets, false)?,
+            offsets.scale,
+        ))
     }
 
     fn render_dx_castle_scene(
@@ -175,7 +196,8 @@ impl Session {
                     let meta = scripts.meta(name).ok_or("missing castle metadata")?.clone();
                     let address = u16::from_str_radix(meta.addr.trim_start_matches('$'), 16)
                         .map_err(|e| e.to_string())?;
-                    scripts.replace_blob(name, &bank(meta.bank, usize::from(address), meta.len)?)?;
+                    scripts
+                        .replace_blob(name, &bank(meta.bank, usize::from(address), meta.len)?)?;
                 }
                 let (tiles, map, sprites) =
                     sml2_core::map::castle_sequence_projection(&reveal, &scripts, seq);
@@ -183,7 +205,8 @@ impl Session {
                     for y in 0..8 {
                         for x in 0..8 {
                             tile[y * 2] = (tile[y * 2] << 1) | (pixels[y * 8 + x] & 1);
-                            tile[y * 2 + 1] = (tile[y * 2 + 1] << 1) | ((pixels[y * 8 + x] >> 1) & 1);
+                            tile[y * 2 + 1] =
+                                (tile[y * 2 + 1] << 1) | ((pixels[y * 8 + x] >> 1) & 1);
                         }
                     }
                 }
@@ -371,10 +394,12 @@ impl Session {
             let palette = attributes
                 .and_then(|a| a.get(8 * 32 + 10))
                 .copied()
-                .unwrap_or(0) & 7;
+                .unwrap_or(0)
+                & 7;
             let offset = usize::from(palette) * 8;
             sml2_core::hardware_palettes::rgb555(u16::from_le_bytes([
-                bg_palettes[offset], bg_palettes[offset + 1],
+                bg_palettes[offset],
+                bg_palettes[offset + 1],
             ]))
         } else {
             [0, 0, 0]
@@ -396,7 +421,9 @@ impl Session {
                 player_mappings: Some(mario),
             };
             let mut frame = self.overworld_frame(sim, assets, size);
-            if background_only { frame.composition.oam.clear(); }
+            if background_only {
+                frame.composition.oam.clear();
+            }
             dx_map_pixels(
                 &frame,
                 &vram1,
@@ -1061,7 +1088,7 @@ fn render(
             timer_low: ctx.sim.level_timer.low,
         },
     );
-    for dy in 0..if background_only {0} else {8} {
+    for dy in 0..if background_only { 0 } else { 8 } {
         let py = ctx.hud_y as i32 + vh as i32 - 144 + dy;
         if !(0..vh as i32).contains(&py) {
             continue;

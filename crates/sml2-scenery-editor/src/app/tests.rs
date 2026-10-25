@@ -1,14 +1,24 @@
 use super::*;
 use crate::settings::AppPaths;
-use std::{path::PathBuf, sync::atomic::{AtomicUsize,Ordering}};
+use std::{
+    path::PathBuf,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 pub(super) fn app() -> (EditorApp, Context, PathBuf) {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
-    let path = std::env::temp_dir().join(format!("sml2_scenery_editor_{}_{}",std::process::id(),COUNTER.fetch_add(1,Ordering::Relaxed)));
+    let path = std::env::temp_dir().join(format!(
+        "sml2_scenery_editor_{}_{}",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
     let options = Options {
         assets: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../extracted"),
         explicit_assets: true,
-        paths: AppPaths { settings: path.join("settings.json"), save: path.join("save.sav") },
+        paths: AppPaths {
+            settings: path.join("settings.json"),
+            save: path.join("save.sav"),
+        },
         audio: false,
         smoke_frames: None,
     };
@@ -20,8 +30,12 @@ pub(super) fn app() -> (EditorApp, Context, PathBuf) {
     (app, ctx, path)
 }
 
-pub(super) fn frame(app: &mut EditorApp, ctx: &Context, events: Vec<egui::Event>) -> egui::FullOutput {
-    super::editor::tests::workspace_ui::frame(app,ctx,(800.0,720.0),events)
+pub(super) fn frame(
+    app: &mut EditorApp,
+    ctx: &Context,
+    events: Vec<egui::Event>,
+) -> egui::FullOutput {
+    super::editor::tests::workspace_ui::frame(app, ctx, (800.0, 720.0), events)
 }
 
 pub(super) fn red_bundle() -> sml2_dx::Presentation {
@@ -95,18 +109,21 @@ fn screen() -> sml2_dx::Screen {
 
 #[test]
 fn authoring_and_playtests_leave_game_settings_and_progress_untouched() {
-    let (mut app,ctx,path) = app();
+    let (mut app, ctx, path) = app();
     std::fs::create_dir_all(&path).unwrap();
     let progress = b"player save must survive";
-    std::fs::write(&app.options.paths.save,progress).unwrap();
+    std::fs::write(&app.options.paths.save, progress).unwrap();
     let settings = b"existing settings must survive";
-    std::fs::write(&app.options.paths.settings,settings).unwrap();
+    std::fs::write(&app.options.paths.settings, settings).unwrap();
     app.open_editor(&ctx);
     app.play_editor(&ctx);
     app.game.as_mut().unwrap().session.active_slot = Some(2);
     app.game.as_mut().unwrap().save_now().unwrap();
-    app.game.as_mut().unwrap().tick(Default::default(),0.0);
-    assert_eq!(std::fs::read(&app.options.paths.save).unwrap(),progress);
-    assert_eq!(std::fs::read(&app.options.paths.settings).unwrap(),settings);
+    app.game.as_mut().unwrap().tick(Default::default(), 0.0);
+    assert_eq!(std::fs::read(&app.options.paths.save).unwrap(), progress);
+    assert_eq!(
+        std::fs::read(&app.options.paths.settings).unwrap(),
+        settings
+    );
     std::fs::remove_dir_all(path).ok();
 }

@@ -5,7 +5,10 @@ fn main() -> Result<(), String> {
     let mut options = Options::defaults()?;
     let mut args = std::env::args().skip(1);
     while let Some(argument) = args.next() {
-        let mut value = || args.next().ok_or_else(|| format!("{argument} needs a value"));
+        let mut value = || {
+            args.next()
+                .ok_or_else(|| format!("{argument} needs a value"))
+        };
         match argument.as_str() {
             "--assets" => {
                 options.assets = PathBuf::from(value()?);
@@ -14,8 +17,12 @@ fn main() -> Result<(), String> {
             "--config" => options.paths.settings = PathBuf::from(value()?),
             "--no-audio" => options.audio = false,
             "--smoke-frames" => {
-                let count = value()?.parse::<u64>().map_err(|_| "--smoke-frames needs a positive count")?;
-                if count == 0 { return Err("--smoke-frames needs a positive count".into()); }
+                let count = value()?
+                    .parse::<u64>()
+                    .map_err(|_| "--smoke-frames needs a positive count")?;
+                if count == 0 {
+                    return Err("--smoke-frames needs a positive count".into());
+                }
                 options.smoke_frames = Some(count);
             }
             "--help" | "-h" => {

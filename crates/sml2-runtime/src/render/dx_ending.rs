@@ -28,7 +28,14 @@ pub(super) fn render_background(
     dx: &sml2_dx::Presentation,
     character: Character,
 ) -> Result<Vec<[u8; 3]>, String> {
-    render_scene(session, ctx, &dx.banks, &dx.player(character, 0).mappings, (160, 144), true)
+    render_scene(
+        session,
+        ctx,
+        &dx.banks,
+        &dx.player(character, 0).mappings,
+        (160, 144),
+        true,
+    )
 }
 
 fn render_scene(
@@ -199,8 +206,15 @@ mod tests {
                 let palette = banks.get_mut(&0x29).unwrap();
                 palette[0x2769..0x27a9].copy_from_slice(&[0x1f, 0].repeat(32));
                 let ctx = game.level_ctx().unwrap();
-                let pixels =
-                    render_scene(&game, ctx, &banks, &tables.player_mappings, (384, 216), false).unwrap();
+                let pixels = render_scene(
+                    &game,
+                    ctx,
+                    &banks,
+                    &tables.player_mappings,
+                    (384, 216),
+                    false,
+                )
+                .unwrap();
                 assert_eq!(pixels.len(), 384 * 216);
                 if ctx.ending_sequence.substate >= 5 && ctx.ending_scene.display.display_enabled {
                     assert_eq!(pixels[36 * 384 + 112], [255, 0, 0]);

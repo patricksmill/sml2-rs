@@ -236,10 +236,7 @@ impl Editor {
         let (width, height) = work.dimensions();
         let level_rect = Rect::from_min_max(
             view.screen(rect, Pos2::ZERO),
-            view.screen(
-                rect,
-                egui::pos2((width * 16) as f32, (height * 16) as f32),
-            ),
+            view.screen(rect, egui::pos2((width * 16) as f32, (height * 16) as f32)),
         );
         painter.rect_filled(
             level_rect,
@@ -304,7 +301,10 @@ impl Editor {
                 } else {
                     theme::HIGHLIGHT
                 };
-                if !erasing && work.tool != Tool::Eyedropper && (!work.scene_border || work.outside(cell)) {
+                if !erasing
+                    && work.tool != Tool::Eyedropper
+                    && (!work.scene_border || work.outside(cell))
+                {
                     draw_tile(work.metatile, at, Color32::from_white_alpha(140));
                 }
                 if erasing {

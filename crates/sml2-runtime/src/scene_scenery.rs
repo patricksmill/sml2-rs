@@ -127,17 +127,25 @@ pub(crate) fn arena_gfx(script: &[u8]) -> Option<u8> {
 impl crate::Session {
     /// Scene targets available from the currently loaded original content.
     pub fn scenery_scenes(&self) -> Vec<SceneTarget> {
-        let mut targets = vec![SceneTarget::Title, SceneTarget::FileSelect,
-            SceneTarget::GameOver, SceneTarget::Castle];
+        let mut targets = vec![
+            SceneTarget::Title,
+            SceneTarget::FileSelect,
+            SceneTarget::GameOver,
+            SceneTarget::Castle,
+        ];
         targets.extend((0..=14).map(SceneTarget::Map));
         let scripts = self.assets.scripts.scripts();
         for level in 0..32 {
-            let Ok(content) = self.assets.level(level) else {continue};
-            let Some(map) = &content.scene_map else {continue};
+            let Ok(content) = self.assets.level(level) else {
+                continue;
+            };
+            let Some(map) = &content.scene_map else {
+                continue;
+            };
             for &(id, ref bytes) in &scripts {
                 if map.contains(&id) {
                     if let Some(gfx) = arena_gfx(bytes) {
-                        targets.push(SceneTarget::Arena {level, gfx});
+                        targets.push(SceneTarget::Arena { level, gfx });
                     }
                 }
             }
@@ -161,28 +169,49 @@ impl crate::Session {
             SceneTarget::FileSelect => {
                 self.enter_file_select();
                 if let SessionState::FileSelect(select) = &mut self.state {
-                    for _ in 0..45 {select.step(&mut self.slots, 0, 0);}
+                    for _ in 0..45 {
+                        select.step(&mut self.slots, 0, 0);
+                    }
                 }
             }
-            SceneTarget::GameOver => self.state = SessionState::GameOver(Box::new(GameOverScreen {
-                sim: PlayerSim::new(), obp: [0xd0, 0x38],
-            })),
+            SceneTarget::GameOver => {
+                self.state = SessionState::GameOver(Box::new(GameOverScreen {
+                    sim: PlayerSim::new(),
+                    obp: [0xd0, 0x38],
+                }))
+            }
             SceneTarget::Castle => self.begin_castle_sequence(CastleSequence::default(), 8, 0, 0),
             SceneTarget::Map(id @ 0..=8) => self.debug_warp_map(id, 0)?,
             SceneTarget::Map(id @ 9..=12) => self.begin_coin_room(id),
             SceneTarget::Map(id) => self.begin_bell_room(id, 0, 0),
             SceneTarget::Arena { level, gfx } => self.stage_scenery_arena(level, gfx)?,
             SceneTarget::Ending => {
-                let assets = self.assets.ending_scene.clone().ok_or("ending assets are missing")?;
+                let assets = self
+                    .assets
+                    .ending_scene
+                    .clone()
+                    .ok_or("ending assets are missing")?;
                 self.begin_level(24, 0)?;
-                let SessionState::InLevel(ctx) = &mut self.state else {unreachable!()};
+                let SessionState::InLevel(ctx) = &mut self.state else {
+                    unreachable!()
+                };
                 let mut phase = 3;
                 let mut fade = 0;
                 for _ in 0..3 {
-                    ctx.ending_entry.frame_head(&mut phase, 0xa2, 0xe0, &mut fade, Default::default());
+                    ctx.ending_entry.frame_head(
+                        &mut phase,
+                        0xa2,
+                        0xe0,
+                        &mut fade,
+                        Default::default(),
+                    );
                     fade = 0;
                 }
-                ctx.ending_scene.load(assets, &mut ctx.ending_sequence.substate, &mut ctx.ending_sequence.fade_timer);
+                ctx.ending_scene.load(
+                    assets,
+                    &mut ctx.ending_sequence.substate,
+                    &mut ctx.ending_sequence.fade_timer,
+                );
                 ctx.ending_sequence.substate = 5;
             }
         }
@@ -195,12 +224,22 @@ impl crate::Session {
         use sml2_core::scene::{boss_def_index, boss_def_portable, SceneStep};
         let content = self.assets.level(level)?;
         let scripts = self.assets.scripts.scripts();
-        let map = content.scene_map.as_ref().ok_or("arena scene map is missing")?;
-        let (scene, cell) = scripts.iter().find_map(|(id, bytes)| {
-            (arena_gfx(bytes) == Some(gfx)).then(|| map.iter().position(|p| p == id).map(|cell| (*id, cell))).flatten()
-        }).ok_or_else(|| format!("level {level} has no arena graphics {gfx}"))?;
+        let map = content
+            .scene_map
+            .as_ref()
+            .ok_or("arena scene map is missing")?;
+        let (scene, cell) = scripts
+            .iter()
+            .find_map(|(id, bytes)| {
+                (arena_gfx(bytes) == Some(gfx))
+                    .then(|| map.iter().position(|p| p == id).map(|cell| (*id, cell)))
+                    .flatten()
+            })
+            .ok_or_else(|| format!("level {level} has no arena graphics {gfx}"))?;
         self.begin_level(level, 0)?;
-        let SessionState::InLevel(ctx) = &mut self.state else {unreachable!()};
+        let SessionState::InLevel(ctx) = &mut self.state else {
+            unreachable!()
+        };
         ctx.cam.x = (cell % 16) as u16 * 256 + 80;
         ctx.cam.y = (cell / 16) as u16 * 256 + 72;
         ctx.sim.x = ctx.cam.x;
@@ -213,25 +252,37 @@ impl crate::Session {
             match step {
                 SceneStep::Ran(op) if op >> 4 == 6 => {
                     let sprite = ctx.spr.as_mut().ok_or("arena sprite assets missing")?;
-                    if !ctx.tilesets.apply(gfx, &mut ctx.bg_live, &mut sprite.objblock, &mut ctx.manifest.metatiles) {
+                    if !ctx.tilesets.apply(
+                        gfx,
+                        &mut ctx.bg_live,
+                        &mut sprite.objblock,
+                        &mut ctx.manifest.metatiles,
+                    ) {
                         return Err(format!("arena graphics {gfx} cannot load"));
                     }
                     ctx.arena_loaded = true;
                     ctx.layout_live = ctx.arena_layout.clone().ok_or("arena layout is missing")?;
                     ctx.sim.layout_writes.clear();
                 }
-                SceneStep::End => { ended = true; break; }
+                SceneStep::End => {
+                    ended = true;
+                    break;
+                }
                 SceneStep::BadCursor | SceneStep::Stalled(_) | SceneStep::Unported(_) => {
                     return Err(format!("arena scene {scene} cannot be staged: {step:?}"));
                 }
                 _ => {}
             }
         }
-        if !ended {return Err(format!("arena scene {scene} did not finish"))}
+        if !ended {
+            return Err(format!("arena scene {scene} did not finish"));
+        }
         // The script arms $0EB0; run the same boss-load primitives as its
         // runtime consumer, without advancing an authoring preview frame.
         let definition = boss_def_index(level, ctx.cam.boss_fight_phase);
-        if !boss_def_portable(definition) {return Err(format!("arena boss {definition} is unavailable"))}
+        if !boss_def_portable(definition) {
+            return Err(format!("arena boss {definition} is unavailable"));
+        }
         ctx.cam.scene_load_pending = true;
         if let Some((music, song)) = ctx.cam.begin_scene_load(level) {
             ctx.sim.music_request = music;
