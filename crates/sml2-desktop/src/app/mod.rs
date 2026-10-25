@@ -40,6 +40,8 @@ mod dx_tests;
 mod library_tests;
 pub(crate) use crate::ui::screenshot;
 #[cfg(test)]
+mod settings_layout_tests;
+#[cfg(test)]
 mod tests;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -919,14 +921,13 @@ impl DesktopApp {
                 if ui.button("Menu · Esc").clicked() {
                     self.navigate(ctx, Screen::Home);
                 }
-                for page in Page::ALL {
-                    let active = self.screen == Screen::Settings && self.page == page;
-                    if ui.selectable_label(active, page.label()).clicked() {
-                        if self.screen != Screen::Settings {
+                if self.screen != Screen::Settings {
+                    for page in Page::ALL {
+                        if ui.selectable_label(false, page.label()).clicked() {
                             self.return_screen = self.screen;
+                            self.page = page;
+                            self.navigate(ctx, Screen::Settings);
                         }
-                        self.page = page;
-                        self.navigate(ctx, Screen::Settings);
                     }
                 }
             });
@@ -937,7 +938,7 @@ impl DesktopApp {
     fn pause_menu(&mut self, ctx: &Context) {
         let settings = self.screen == Screen::Settings;
         let title = if settings { "Settings" } else { "Menu" };
-        egui::Window::new(title)
+        let window = egui::Window::new(title)
             .id(egui::Id::new(if settings {
                 "settings-popup"
             } else {
@@ -947,27 +948,28 @@ impl DesktopApp {
             .default_width(if settings { theme::ROW_SIZE.x } else { 260.0 })
             .collapsible(false)
             .resizable(false)
-            .movable(false)
-            .show(ctx, |ui| {
+            .movable(false);
+        let window = if settings {
+            // Leave room for the title bar and margins even at 480×400.
+            let available = ctx.available_rect();
+            window.constrain_to(available).fixed_size(egui::vec2(
+                theme::ROW_SIZE.x,
+                (available.height() - 72.0).clamp(160.0, 600.0),
+            ))
+        } else {
+            window
+        };
+        window.show(ctx, |ui| {
+            if settings {
+                self.settings_panel(ctx, ui);
+            } else {
                 egui::ScrollArea::vertical()
                     .max_height((ctx.content_rect().height() - 100.0).max(160.0))
-                    .show(ui, |ui| {
-                        if settings {
-                            self.settings_panel(ctx, ui);
-                        } else {
-                            self.home_panel(ctx, ui);
-                        }
-                    });
+                    .show(ui, |ui| self.home_panel(ctx, ui));
                 ui.add_space(6.0);
-                theme::note(
-                    ui,
-                    if settings {
-                        "Esc: back · L / R: page"
-                    } else {
-                        "Esc / Start: resume"
-                    },
-                );
-            });
+                theme::note(ui, "Esc / Start: resume");
+            }
+        });
     }
 
     fn game_view(&mut self, ui: &mut egui::Ui) {

@@ -35,6 +35,9 @@ with the selected DX Mode setting.
 
 F10 shows or hides the toolbar. Its **Display**, **Audio**, **Controls**,
 **Mods**, **Game**, and **Debug** tabs open the matching settings page.
+While settings are open, the tabs appear only in the dialog. The dialog keeps
+its size across pages, with fixed tabs and a Back button around the scrolling
+page content. PgUp/PgDn or controller LB/RB switches pages.
 Esc, or the toolbar Menu button, opens the
 compact pause menu over the current game frame, with Resume,
 Settings and Quit. In-game menus and settings darken the exact last displayed

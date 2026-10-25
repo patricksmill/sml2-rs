@@ -10,7 +10,7 @@ use eframe::egui::{self, Context, Ui, ViewportCommand};
 use sml2_runtime::session::SessionState;
 
 /// Settings pages, in tab order.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub(super) enum Page {
     Display,
     Audio,
@@ -127,6 +127,7 @@ impl DesktopApp {
     }
 
     pub(super) fn settings_panel(&mut self, ctx: &Context, ui: &mut Ui) {
+        let previous_page = self.page;
         if self.capture.is_none() && self.dx_picker.is_none() {
             let back = pressed(
                 &mut self.input,
@@ -159,25 +160,42 @@ impl DesktopApp {
             }
         });
         ui.add_space(4.0);
-        match self.page {
-            Page::Display => self.display_page(ctx, ui),
-            Page::Audio => self.audio_page(ui),
-            Page::Controls => self.controls_page(ui),
-            Page::Mods => {
-                self.view_controls(ui);
-                self.dx_controls(ui);
-            }
-            Page::Game => self.installation_page(ui),
-            Page::Debug => self.debug_page(ui),
+
+        // Reserve the footer before allocating the page, including its two gaps.
+        // Short pages fill the same space; long pages scroll below the fixed tabs.
+        let footer_height = theme::ROW_SIZE.y
+            + ui.text_style_height(&egui::TextStyle::Body)
+            + 2.0 * ui.spacing().item_spacing.y;
+        let mut page = egui::ScrollArea::vertical()
+            .id_salt(("settings-page", self.page))
+            .auto_shrink([false, false])
+            .min_scrolled_height(0.0)
+            .max_height((ui.available_height() - footer_height).max(0.0));
+        if self.page != previous_page {
+            page = page.vertical_scroll_offset(0.0);
         }
-        ui.add_space(6.0);
+        page.show(ui, |ui| {
+            match self.page {
+                Page::Display => self.display_page(ctx, ui),
+                Page::Audio => self.audio_page(ui),
+                Page::Controls => self.controls_page(ui),
+                Page::Mods => {
+                    self.view_controls(ui);
+                    self.dx_controls(ui);
+                }
+                Page::Game => self.installation_page(ui),
+                Page::Debug => self.debug_page(ui),
+            }
+            if let Some(message) = &self.status {
+                theme::error(ui, message);
+            }
+        });
+
         if self.menu.row(ui, "Back", Value::None) && self.capture.is_none() {
             self.persist();
             self.navigate(ctx, self.return_screen);
         }
-        if let Some(message) = &self.status {
-            theme::error(ui, message);
-        }
+        theme::note(ui, "Esc: back · PgUp/PgDn or LB/RB: page");
     }
 
     fn display_page(&mut self, ctx: &Context, ui: &mut Ui) {

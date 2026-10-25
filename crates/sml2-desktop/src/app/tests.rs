@@ -828,6 +828,7 @@ fn f10_hides_the_toolbar_and_its_tabs_open_the_matching_settings_pages() {
     app.input.event(Button::key("F10"), false);
     frame(&mut app, &ctx, vec![]);
     for page in Page::ALL {
+        app.navigate(&ctx, Screen::Game);
         // Let the panel settle after narrowing the viewport and wrapping its tabs.
         let _ = ctx.run(
             RawInput {
