@@ -1,6 +1,6 @@
 # Share gameplay frame orchestration
 
-Plan only, 2026-10-26. Scope: finding 1 from the maintainability audit.
+Implemented and verified, 2026-10-26. Scope: finding 1 from the maintainability audit.
 
 ## Outcome
 
@@ -187,11 +187,42 @@ unchanged public callers and route outcomes, passing applicable checks, and
 focused commits containing only this package's files. No LOC target or
 full-game completion claim is attached to this work.
 
+## Implementation and verification
+
+All five steps are complete. The shared phases live in
+`crates/sml2-runtime/src/game/level_frame.rs`; the borrowed native state view
+and driver live in its `live.rs` submodule. Diagnostic play and live sessions
+use that driver. Replay calls the same player, camera, object, ending-sequence
+and scene phases around its capture checkpoints.
+
+The player and camera phases remain separate because replay installs the
+current captured edge between them: crouch-look must still read the preceding
+edge latch. Its pose checkpoint also retains the contact snapshot taken before
+pose selection mutates invincibility. Both boundaries have direct tests.
+Native frozen departure policy and session presentation latches remain in
+their existing hosts; public callers and state ownership are unchanged.
+
+Validation passed:
+
+- `cargo test -p sml2-core`: 1,687 tests.
+- `cargo test -p sml2-runtime`: 263 tests, including 11 new frame-boundary tests.
+  The existing four route-authoring tools and five audited DX ROM/export cases
+  remain ignored; none is counted as passing validation.
+- Ordering mutations fail the relevant tests: events after camera movement,
+  contact rebuilt after pose selection, and captured edges installed before
+  crouch-look. All mutations were restored before the final checks.
+- `cargo fmt -p sml2-runtime -- --check` and scoped Git whitespace checks.
+- Frozen replay sweep: `gate done`, with the exact existing `traj4_ff0`
+  exception and no new notes. No captures or gate expectations changed.
+
+These checks establish the refactor's tested state/timing contracts, not full
+pixel or audio parity. The unrelated local `README.md` edit was preserved.
+
 ## Planning validation
 
-This plan was checked against current runtime source, callers, test inventory,
-and `tools/replay_gate.py`. No implementation tests or replay sweep were run
-for this documentation-only step. The older completion-workflow and port-reset
+At planning time this document was checked against runtime source, callers,
+test inventory, and `tools/replay_gate.py`; that documentation-only step ran
+no implementation tests or replay sweep. The older completion-workflow and port-reset
 plan paths linked by `AGENTS.md`/`PORTING.md` are absent in this checkout; the
 current porting policy and existing modularity plan remain the available
 workflow references.

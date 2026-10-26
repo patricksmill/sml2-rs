@@ -2,6 +2,10 @@
 
 use crate::content::{load_map_nodes, load_scene_scripts};
 use crate::divider_clock::VirtualDividerClock;
+use crate::game::level_frame::{
+    prepare_object_step, step_camera, step_ending_sequence, step_level_scene, step_objects,
+    step_player,
+};
 use crate::game::{
     apply_level_entry, build_contact, note_handoff_screen, scene_frame_head, seed_level_timer,
 };
@@ -15,6 +19,56 @@ use sml2_core::player_sim::{PlayerKeys, PlayerSim};
 use sml2_core::scene::SceneVm;
 use std::fs;
 use std::path::Path;
+
+/// Crouch-look reads the previous edge latch; only `$0B2A` sees this
+/// record's override. Native play derives both from its level edge table.
+pub(crate) fn step_replay_player_camera(
+    sim: &mut PlayerSim,
+    cam: &mut sml2_core::camera::CameraSim,
+    obj: &mut sml2_core::objects::ObjectSim,
+    layout: &LevelLayout,
+    input: EndingInput,
+    captured_edge: Option<u8>,
+) {
+    step_player(sim, cam, obj, layout, input);
+    cam.edge_now = captured_edge;
+    step_camera(sim, cam);
+}
+
+pub(crate) struct ReplayPose {
+    pub contact: sml2_core::objects::MarioContact,
+    pub frame: u8,
+    pub frame_check: u8,
+}
+
+/// Captures observe `$2D0A`/`$2C82` before object interaction. Contact must
+/// retain pre-pose invincibility, and fades skip blocks but still select pose.
+pub(crate) fn observe_player_pose(
+    sim: &mut PlayerSim,
+    cam: &sml2_core::camera::CameraSim,
+    keys: &PlayerKeys,
+    was_dead: bool,
+    fade_at_entry: bool,
+) -> ReplayPose {
+    let contact = build_contact(sim, keys, cam.scroll_pan, cam.scene_state);
+    // Unlike the native draw tail, this checkpoint does not restore SFX.
+    let frame = if was_dead {
+        107
+    } else {
+        sim.frame_index(sim.walk_timer)
+    };
+    let frame_check = if was_dead || fade_at_entry {
+        frame
+    } else {
+        sim.block_update();
+        sim.block_frame.unwrap_or(frame)
+    };
+    ReplayPose {
+        contact,
+        frame,
+        frame_check,
+    }
+}
 
 /// One captured live frame (`trajectory_capture*.py`) for sim replays.
 #[derive(Deserialize)]
@@ -456,20 +510,13 @@ pub(crate) fn run_replay(
         if !gameplay {
             // The shared frame head dispatched this ending-entry frame.
             if let Some(EndingFrame::SequencePending) = ending_frame {
-                let res =
-                    ending_sequence.step(&mut sml2_core::ending_sequence::EndingStepContext {
-                        scene: &mut ending_scene,
-                        rom: None,
-                        credits_text: None,
-                        object_tables: Some(&tables),
-                        decrement_fade: true,
-                    });
-                if res.sfx_request_0 != 0 {
-                    sim.sfx0 = res.sfx_request_0;
-                }
-                if res.sfx_request_1 != 0 {
-                    sim.sfx1 = res.sfx_request_1;
-                }
+                step_ending_sequence(
+                    &mut sim,
+                    &mut ending_sequence,
+                    &mut ending_scene,
+                    None,
+                    Some(&tables),
+                );
             }
         } else if sim.dead_fade || sim.exit_phase {
             if sim.exit_phase {
@@ -483,9 +530,13 @@ pub(crate) fn run_replay(
             sim.death_arc(cam.y);
         } else {
             // Captures without the edge table supply `$FF98` to the camera.
-            cam.edge_now = if own_edges { None } else { Some(f.edge) };
-            crate::game::level_frame::step_player_camera(
-                &mut sim, &mut cam, &mut obj, layout, input,
+            step_replay_player_camera(
+                &mut sim,
+                &mut cam,
+                &mut obj,
+                layout,
+                input,
+                if own_edges { None } else { Some(f.edge) },
             );
         }
         // $FF98 for this frame. `own_edges` makes it the port's own derivation
@@ -494,52 +545,36 @@ pub(crate) fn run_replay(
         // tautology — the missing-table note above is what fails the gate.
         let edge_derived = if own_edges { cam_edge_before } else { f.edge };
         cam.update_player_pan(sim.y, was_dead, !fade_at_entry);
-        let mario = build_contact(&sim, &keys, cam.scroll_pan, cam.scene_state);
-        // $2D0A: the frame selection runs *before* the interaction pass, so
-        // on the contact frame the sprite still shows the grounded pose.
-        let frame_idx = if was_dead {
-            107
-        } else {
-            sim.frame_index(sim.walk_timer)
-        };
-        // $2C82 (`$5997`): the brick-bump update sits between the frame
-        // selection (`$2D0A`) and the object engine, so when a bump draws, its
-        // frame is what `$FFC6` — and the capture's `frame` check — ends the
-        // frame with. The dead branch skips it (no `$2C82` there), and so does
-        // the level-leaving freeze.
-        let frame_check = if was_dead || fade_at_entry {
-            frame_idx
-        } else {
-            sim.block_update();
-            sim.block_frame.unwrap_or(frame_idx)
-        };
+        // Capture pose/block observations precede objects; native drawing follows them.
+        let observation = observe_player_pose(&mut sim, &cam, &keys, was_dead, fade_at_entry);
+        let mario = observation.contact;
+        let frame_idx = observation.frame;
+        let frame_check = observation.frame_check;
         if !fade_at_entry {
             // Capture timing has no native boss-load VBlank compensation.
-            crate::game::level_frame::prepare_object_step(
+            prepare_object_step(
                 &mut sim,
                 &mut cam,
                 &mut obj,
                 manifest.level_id,
                 divider_clock.sample(),
             );
-            crate::game::level_frame::step_objects(
+            step_objects(
                 &mut sim, &mut cam, &mut obj, layout, &tables, &mario, keys.a,
             );
         }
         // $20A4 owns the CPU across its HALT waits; the shared frame head
         // parks gameplay until its END returns to the main loop.
         if gameplay || ending_frame.is_none() {
-            let scene_camera = (cam.x, cam.y);
-            let stepped = scene_vm.step(&mut sim, &mut cam, &scripts);
-            crate::game::apply_scene_transfer(&mut scene_vm, &mut scene_bg, spr.as_mut());
-            if let Some(s) = spr.as_mut() {
-                crate::render::PipeBackground::update(
-                    &mut s.pipe_background,
-                    scene_camera,
-                    &cam,
-                    stepped,
-                );
-            }
+            step_level_scene(
+                &mut sim,
+                &mut cam,
+                &mut scene_vm,
+                &scripts,
+                ending_frame,
+                &mut scene_bg,
+                spr.as_mut(),
+            );
         }
         // The full-death-cycle gap: after the fade-trigger frame the game
         // leaves the level (fade 192 frames → `$14` lives/save/map setup →

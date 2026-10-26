@@ -5,12 +5,14 @@ pub(crate) use live::{begin_live_level_frame, step_live_level_frame, LiveLevelFr
 
 use sml2_core::{
     camera::CameraSim,
-    ending_entry::EndingInput,
+    ending_entry::{EndingFrame, EndingInput},
+    ending_scene::EndingScene,
+    ending_sequence::{EndingSequenceController, EndingStepContext},
     level::LevelLayout,
     object::ObjectTables,
     objects::{FireHit, MarioContact, ObjectSim, SlotState},
     player_sim::PlayerSim,
-    scene::{boss_def_index, boss_def_portable},
+    scene::{boss_def_index, boss_def_portable, SceneScripts, SceneStep, SceneVm},
 };
 
 pub(crate) struct FloatStep {
@@ -18,11 +20,6 @@ pub(crate) struct FloatStep {
     pub timer_after: u8,
     pub vvel_before: u8,
     pub vvel_after: u8,
-}
-
-pub(crate) struct PlayerStep {
-    pub float_use: Option<FloatStep>,
-    pub transition_finished: bool,
 }
 
 /// `$0F71`'s cross-engine tail precedes camera scrolling and the object pass.
@@ -50,14 +47,14 @@ pub(crate) fn resolve_player_events(sim: &mut PlayerSim, cam: &CameraSim, obj: &
     }
 }
 
-/// Alive, unfrozen `$0F71` -> `$0B2A`. Hosts own death/fade dispatch.
-pub(crate) fn step_player_camera(
+/// Alive, unfrozen `$0F71`. Hosts own death/fade dispatch.
+pub(crate) fn step_player(
     sim: &mut PlayerSim,
     cam: &mut CameraSim,
     obj: &mut ObjectSim,
     layout: &LevelLayout,
     input: EndingInput,
-) -> PlayerStep {
+) -> Option<FloatStep> {
     let mut float_use = None;
     if cam.transition == 0 {
         // Crouch-look reads ground flags from the preceding frame.
@@ -80,13 +77,15 @@ pub(crate) fn step_player_camera(
         sim.tick_fade_timer();
     }
     resolve_player_events(sim, cam, obj);
+    float_use
+}
+
+/// `$0B2A` follows player events; replay installs its captured edge in between.
+pub(crate) fn step_camera(sim: &mut PlayerSim, cam: &mut CameraSim) -> bool {
     let transition_before = cam.transition;
     cam.step(sim);
     cam.update_enables(sim.x);
-    PlayerStep {
-        float_use,
-        transition_finished: transition_before != 0 && cam.transition == 0,
-    }
+    transition_before != 0 && cam.transition == 0
 }
 
 /// Sample the player after the host's observation checkpoint, then load a boss.
@@ -138,4 +137,56 @@ pub(crate) fn step_objects(
     sim.apply_object_result(obj, a_held);
     cam.apply_object_result(obj);
     active
+}
+
+pub(crate) fn step_ending_sequence(
+    sim: &mut PlayerSim,
+    sequence: &mut EndingSequenceController,
+    scene: &mut EndingScene,
+    credits_text: Option<&[u8]>,
+    object_tables: Option<&ObjectTables>,
+) {
+    let result = sequence.step(&mut EndingStepContext {
+        scene,
+        rom: None,
+        credits_text,
+        object_tables,
+        decrement_fade: true,
+    });
+    if result.sfx_request_0 != 0 {
+        sim.sfx0 = result.sfx_request_0;
+    }
+    if result.sfx_request_1 != 0 {
+        sim.sfx1 = result.sfx_request_1;
+    }
+}
+
+/// Resume `$20A4` and publish its DMA and pipe background in the same phase.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn step_level_scene(
+    sim: &mut PlayerSim,
+    cam: &mut CameraSim,
+    scene: &mut SceneVm,
+    scripts: &SceneScripts,
+    ending_frame: Option<EndingFrame>,
+    bg: &mut [u8],
+    mut sprites: Option<&mut crate::render::SpriteCtx>,
+) -> SceneStep {
+    let scene_camera = (cam.x, cam.y);
+    let stepped =
+        if matches!(ending_frame, Some(EndingFrame::Gameplay(_))) || ending_frame.is_none() {
+            scene.step(sim, cam, scripts)
+        } else {
+            SceneStep::Idle
+        };
+    super::apply_scene_transfer(scene, bg, sprites.as_deref_mut());
+    if let Some(sprites) = sprites {
+        crate::render::PipeBackground::update(
+            &mut sprites.pipe_background,
+            scene_camera,
+            cam,
+            stepped,
+        );
+    }
+    stepped
 }

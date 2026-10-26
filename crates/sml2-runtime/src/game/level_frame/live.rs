@@ -1,5 +1,8 @@
 //! The native frame driver; hosts retain departure and presentation ownership.
-use super::{prepare_object_step, step_objects, step_player_camera, FloatStep};
+use super::{
+    prepare_object_step, step_camera, step_ending_sequence, step_level_scene, step_objects,
+    step_player, FloatStep,
+};
 use crate::render::{SpriteCtx, SpriteInst};
 use crate::session::BOSS_LOAD_VBLANKS;
 use sml2_core::{
@@ -146,28 +149,16 @@ pub(crate) fn step_live_level_frame(
 
     if !gameplay {
         if let Some(EndingFrame::SequencePending) = ending_frame {
-            let res = ending_sequence.step(&mut sml2_core::ending_sequence::EndingStepContext {
-                scene: ending_scene,
-                rom: None,
-                credits_text,
-                object_tables: obj_tables,
-                decrement_fade: true,
-            });
-            if res.sfx_request_0 != 0 {
-                sim.sfx0 = res.sfx_request_0;
-            }
-            if res.sfx_request_1 != 0 {
-                sim.sfx1 = res.sfx_request_1;
-            }
+            step_ending_sequence(sim, ending_sequence, ending_scene, credits_text, obj_tables);
         }
-    } else if frozen {
-        // The host already handled its frozen-frame departure policy.
-    } else if was_dead {
-        sim.death_arc(cam.y);
-    } else {
-        let player = step_player_camera(sim, cam, obj, layout_live, input);
-        result.transition_finished = player.transition_finished;
-        result.float_use = player.float_use;
+    } else if !frozen {
+        // The host has already handled its frozen-frame departure policy.
+        if was_dead {
+            sim.death_arc(cam.y);
+        } else {
+            result.float_use = step_player(sim, cam, obj, layout_live, input);
+            result.transition_finished = step_camera(sim, cam);
+        }
     }
     cam.update_player_pan(sim.y, was_dead, !frozen);
 
@@ -185,16 +176,15 @@ pub(crate) fn step_live_level_frame(
         }
     }
 
-    let scene_camera = (cam.x, cam.y);
-    let stepped = if gameplay || ending_frame.is_none() {
-        scene_vm.step(sim, cam, scripts)
-    } else {
-        SceneStep::Idle
-    };
-    crate::game::apply_scene_transfer(scene_vm, bg_live, spr.as_mut());
-    if let Some(s) = spr.as_mut() {
-        crate::render::PipeBackground::update(&mut s.pipe_background, scene_camera, cam, stepped);
-    }
+    let stepped = step_level_scene(
+        sim,
+        cam,
+        scene_vm,
+        scripts,
+        ending_frame,
+        bg_live,
+        spr.as_mut(),
+    );
     if let SceneStep::Ran(op) = stepped {
         if op >> 4 == 0x6 {
             let index = sim.level_gfx_index;

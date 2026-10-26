@@ -235,9 +235,14 @@ fn replay_contact_survives_the_mutating_pose_checkpoint() {
         slot[B_TYPE] = 0x40;
         slot[B_SCRX] = 18;
         slot[B_SCRY] = 144;
-        let contact = build_contact(&ctx.sim, &PlayerKeys::default(), 0, 0);
-        ctx.sim.frame_index(ctx.sim.walk_timer);
-        ctx.sim.block_update();
+        let observation = crate::replay::observe_player_pose(
+            &mut ctx.sim,
+            &ctx.cam,
+            &PlayerKeys::default(),
+            false,
+            false,
+        );
+        let contact = observation.contact;
         assert_eq!(ctx.sim.invincibility, 0);
         prepare_object_step(&mut ctx.sim, &mut ctx.cam, &mut ctx.obj, 0, 0x3d);
         step_objects(
@@ -284,4 +289,94 @@ fn replay_boss_preparation_leaves_fade_compensation_to_the_host() {
     );
     assert!(!ctx.cam.scene_load_pending);
     assert!(ctx.obj.unported.contains(&0x0EB0));
+}
+
+#[test]
+fn replay_pose_checkpoint_keeps_its_fade_block_and_sound_contract() {
+    for (was_dead, fade, frame, frame_check, block_tick, invincibility, sfx) in [
+        (false, false, 13, 102, 1, 0, 4),
+        (false, true, 13, 13, 0, 0, 4),
+        (true, false, 107, 107, 0, 1, 0),
+    ] {
+        let mut ctx = level();
+        ctx.sim.on_ground = true;
+        ctx.sim.hvel = 0x7f;
+        ctx.sim.invincibility = 1;
+        ctx.sim.block_slots[0][0] = 1;
+        let observation = crate::replay::observe_player_pose(
+            &mut ctx.sim,
+            &ctx.cam,
+            &PlayerKeys::default(),
+            was_dead,
+            fade,
+        );
+        assert_eq!(
+            (observation.frame, observation.frame_check),
+            (frame, frame_check)
+        );
+        assert_eq!(observation.contact.invincibility, 1);
+        assert_eq!(ctx.sim.block_slots[0][1], block_tick);
+        assert_eq!(ctx.sim.invincibility, invincibility);
+        assert_eq!(ctx.sim.sfx0, sfx);
+    }
+}
+
+#[test]
+fn native_death_trigger_runs_objects_before_the_following_frame_freezes() {
+    for session in [true, false] {
+        let mut ctx = level();
+        ctx.sim.dead = 0xff;
+        ctx.sim.vvel = 1;
+        ctx.sim.y = (ctx.cam.y & 0xff00) | u16::from((ctx.cam.y as u8).wrapping_add(77));
+        let (sim, obj, death_frames) = if session {
+            live_tick(&mut ctx, false);
+            assert!(ctx.sim.dead_fade);
+            assert_eq!(ctx.sim.fade_timer, 192);
+            assert!(!ctx.obj.phase, "trigger frame runs objects");
+            live_tick(&mut ctx, false);
+            (ctx.sim, ctx.obj, ctx.gameplay_death_frames as u64)
+        } else {
+            let out = diagnostic(ctx, 2);
+            (out.sim, out.obj, out.gameplay_death_frames)
+        };
+        assert!(sim.dead_fade);
+        assert_eq!(sim.fade_timer, if session { 191 } else { 192 });
+        assert!(!obj.phase, "second frame leaves the object clock frozen");
+        assert_eq!((obj.fff0, obj.update_phase), (0, 0));
+        assert_eq!(death_frames, 1);
+        assert_eq!(sim.music_request, 2);
+    }
+}
+
+#[test]
+fn replay_installs_the_current_edge_after_crouch_look() {
+    use sml2_core::{camera::CameraSim, level::LAYOUT_SIZE};
+    let layout = LevelLayout::from_bytes(&[0x60; LAYOUT_SIZE]).unwrap();
+    for (previous_edge, captured_edge, expected_y) in [(8, 0, 0x1c1), (0, 8, 0x1c0)] {
+        let mut sim = PlayerSim::new();
+        sim.x = 80;
+        sim.y = 0x1c0;
+        sim.on_ground = true;
+        let mut cam = CameraSim::new(80, 0x1c0);
+        cam.prev_mario_y_lo = 0xc0;
+        cam.edge_now = Some(previous_edge);
+        let mut obj = ObjectSim::new(vec![], 80);
+        crate::replay::step_replay_player_camera(
+            &mut sim,
+            &mut cam,
+            &mut obj,
+            &layout,
+            EndingInput {
+                held: PlayerKeys {
+                    b: true,
+                    down: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            Some(captured_edge),
+        );
+        assert_eq!(cam.y.to_le_bytes(), (expected_y as u16).to_le_bytes());
+        assert_eq!(cam.edge_now, Some(captured_edge));
+    }
 }
