@@ -2848,25 +2848,22 @@ impl PlayerSim {
     /// golden-coin flags at +$0D/+$11/+$16/+$19/+$1F/+$25) stay 0, which for the
     /// golden coins is also what the ROM produces: nothing in it ever sets their
     /// bit 7. Then `sCoinLow`, `sCoinHigh`, `sLevelTally`, `sLives`,
-    /// `sMoneyBagCount`, and the running sum of all 69 as the checksum. The five
+    /// `sMoneyBagCount`, and the running sum of all 69 as the checksum. The four
     /// signature bytes are the fresh-file init's, not `$2934`'s, but a record
     /// without them fails `$28EC`, so they are written here.
     ///
     /// `money_bag` is `sMoneyBagCount` (`$A28D`), which this port keeps on the
     /// object engine (`ObjectSim::money_bag`), so the caller supplies it.
     pub fn save_record(&self, money_bag: u8) -> [u8; 0x50] {
-        let mut rec = [0u8; 0x50];
-        rec[0] = self.map_node;
-        let n = self.level_progress.len().min(0x40 - 0x08);
-        rec[0x08..0x08 + n].copy_from_slice(&self.level_progress[..n]);
-        rec[0x40] = self.coins_low;
-        rec[0x41] = self.coins_high;
-        rec[0x42] = self.level_tally;
-        rec[0x43] = self.lives;
-        rec[0x44] = money_bag;
-        rec[0x45] = rec[..0x45].iter().fold(0u8, |c, b| c.wrapping_add(*b));
-        rec[0x46..0x4A].copy_from_slice(&crate::map::SAVE_SIGNATURE);
-        rec
+        crate::map::encode_save_record(
+            self.map_node,
+            &self.level_progress,
+            self.coins_low,
+            self.coins_high,
+            self.level_tally,
+            self.lives,
+            money_bag,
+        )
     }
 
     /// Restore player and overworld state from a validated 0x50-byte save record.

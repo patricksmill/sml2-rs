@@ -856,18 +856,15 @@ impl MapSim {
 
     /// Build a 0x50-byte save record from current map progress and given player stats.
     pub fn save_record(&self, lives: u8, level_tally: u8, money_bag: u8) -> [u8; 0x50] {
-        let mut rec = [0u8; 0x50];
-        rec[0] = self.node;
-        let n = self.level_progress.len().min(0x40 - 0x08);
-        rec[0x08..0x08 + n].copy_from_slice(&self.level_progress[..n]);
-        rec[0x40] = self.coins_low;
-        rec[0x41] = self.coins_high;
-        rec[0x42] = level_tally;
-        rec[0x43] = lives;
-        rec[0x44] = money_bag;
-        rec[0x45] = rec[..0x45].iter().fold(0u8, |c, b| c.wrapping_add(*b));
-        rec[0x46..0x4A].copy_from_slice(&crate::map::SAVE_SIGNATURE);
-        rec
+        crate::map::encode_save_record(
+            self.node,
+            &self.level_progress,
+            self.coins_low,
+            self.coins_high,
+            level_tally,
+            lives,
+            money_bag,
+        )
     }
 
     /// `$3EEA4`: adopt a node's record — the map camera it centres on and where the
@@ -2845,6 +2842,47 @@ mod tests {
         map.to_player(&mut sim);
         assert_eq!(sim.map_node, 7);
         assert_eq!(sim.level_progress[3], 0x08);
+    }
+
+    #[test]
+    fn shared_save_encoding_preserves_caller_state_and_restore_rules() {
+        let mut player = crate::player_sim::PlayerSim::new();
+        player.map_node = 0x14;
+        player.level_progress[0] = 0x80;
+        player.level_progress[41] = 8;
+        player.coins_low = 0x23;
+        player.coins_high = 1;
+        player.level_tally = 7;
+        player.lives = 4;
+        let mut map = MapSim::from_player(&player);
+        map.lives = 99;
+        let rec = map.save_record(4, 7, 2);
+        assert_eq!(rec, player.save_record(2), "map stats come from the caller");
+        assert_eq!(&rec[0x40..0x45], &[0x23, 1, 7, 4, 2]);
+        assert_eq!(rec[8 + 41], 8);
+
+        let mut restored_player = crate::player_sim::PlayerSim::new();
+        assert!(restored_player.apply_save_record(&rec));
+        assert_eq!(restored_player.save_record(2), rec);
+
+        let mut restored_map = MapSim::new();
+        restored_map.lives = 33;
+        assert!(restored_map.apply_save_record(&rec, &recs()));
+        assert_eq!(restored_map.save_record(4, 7, 2), rec);
+        assert_eq!(
+            restored_map.lives, 33,
+            "map restore leaves lives to its caller"
+        );
+        assert_eq!(
+            (
+                restored_map.cam_x,
+                restored_map.cam_y,
+                restored_map.cursor_x,
+                restored_map.cursor_y
+            ),
+            (0x81, 0x142, 0x4B, 0x4C),
+            "map restore loads the node's camera and cursor"
+        );
     }
 
     /// `$3C60B`: a hub node with a door loads its zone screen. Node `$02` is also in

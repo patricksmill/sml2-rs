@@ -35,10 +35,10 @@
 //! the 64-byte image at `$A840` (`sMapNode`, the cursor, `sLevelProgress`, the
 //! golden-coin flags, the map's gates), then `sCoinLow`, `sCoinHigh`,
 //! `sLevelTally`, `sLives`, `sMoneyBagCount`, and finally the running sum of all
-//! 69 bytes as a one-byte checksum. The five signature bytes at +$46 are *not*
+//! 69 bytes as a one-byte checksum. The four signature bytes at +$46 are *not*
 //! written by it — they persist from the fresh-file init, and `$28EC` validates
-//! a slot by checking that sum and then those bytes (`$12 $34 $56 $78 $78`).
-//! [`PlayerSim::save_record`] builds the image; [`save_record_valid`] checks it.
+//! a slot by checking that sum and then those bytes (`$12 $34 $56 $78`).
+//! The player and map simulations share its encoder; [`save_record_valid`] checks it.
 
 /// `$3EEA4`: the per-node camera/cursor record — the map camera a node centres on
 /// and where the cursor sits on it.
@@ -322,6 +322,31 @@ pub fn map_enterable(
 /// after them either, so a validator that also required `+$4A` would be stricter
 /// than the ROM.
 pub const SAVE_SIGNATURE: [u8; 4] = [0x12, 0x34, 0x56, 0x78];
+
+/// Encode the modeled `$2934` save image, leaving unmodeled bytes zero.
+/// Callers select their own map state and player counters.
+pub(crate) fn encode_save_record(
+    node: u8,
+    level_progress: &[u8],
+    coins_low: u8,
+    coins_high: u8,
+    level_tally: u8,
+    lives: u8,
+    money_bag: u8,
+) -> [u8; 0x50] {
+    let mut rec = [0u8; 0x50];
+    rec[0] = node;
+    let n = level_progress.len().min(0x40 - 0x08);
+    rec[0x08..0x08 + n].copy_from_slice(&level_progress[..n]);
+    rec[0x40] = coins_low;
+    rec[0x41] = coins_high;
+    rec[0x42] = level_tally;
+    rec[0x43] = lives;
+    rec[0x44] = money_bag;
+    rec[0x45] = rec[..0x45].iter().fold(0u8, |c, b| c.wrapping_add(*b));
+    rec[0x46..0x4A].copy_from_slice(&SAVE_SIGNATURE);
+    rec
+}
 
 /// `$28EC`'s validation of one 0x50-byte save record: the checksum at +$45 must
 /// be the sum of the 69 bytes before it, and the four signature bytes at +$46
@@ -1877,6 +1902,26 @@ mod tests {
         assert!(empty.is_empty());
         assert_eq!(empty.level_for(0), None);
         assert_eq!(empty.progress_slot(0), None);
+    }
+
+    #[test]
+    fn save_encoder_bounds_progress_and_wraps_checksum() {
+        let rec = encode_save_record(1, &[0xFF; 60], 2, 3, 4, 5, 6);
+        let mut expected = [0u8; 0x50];
+        expected[0] = 1;
+        expected[8..64].fill(0xFF);
+        expected[64..74].copy_from_slice(&[2, 3, 4, 5, 6, 0xDD, 0x12, 0x34, 0x56, 0x78]);
+        assert_eq!(rec, expected);
+        assert!(save_record_valid(&rec));
+
+        let rec = encode_save_record(0x14, &[0x80, 8], 0x23, 1, 7, 4, 2);
+        assert_eq!(&rec[..10], &[0x14, 0, 0, 0, 0, 0, 0, 0, 0x80, 8]);
+        assert_eq!(&rec[10..64], &[0; 54]);
+        assert_eq!(
+            &rec[64..74],
+            &[0x23, 1, 7, 4, 2, 0xCD, 0x12, 0x34, 0x56, 0x78]
+        );
+        assert_eq!(&rec[74..], &[0; 6]);
     }
 
     /// `$28EC`: the checksum is the sum of the 69 bytes before it, and the four
