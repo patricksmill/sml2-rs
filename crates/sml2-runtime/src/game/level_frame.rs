@@ -4,8 +4,10 @@ use sml2_core::{
     camera::CameraSim,
     ending_entry::EndingInput,
     level::LevelLayout,
-    objects::{FireHit, ObjectSim},
+    object::ObjectTables,
+    objects::{FireHit, MarioContact, ObjectSim, SlotState},
     player_sim::PlayerSim,
+    scene::{boss_def_index, boss_def_portable},
 };
 
 pub(crate) struct FloatStep {
@@ -82,4 +84,55 @@ pub(crate) fn step_player_camera(
         float_use,
         transition_finished: transition_before != 0 && cam.transition == 0,
     }
+}
+
+/// Sample the player after the host's observation checkpoint, then load a boss.
+/// Hosts apply their load-duration compensation before the object pass.
+pub(crate) fn prepare_object_step(
+    sim: &mut PlayerSim,
+    cam: &mut CameraSim,
+    obj: &mut ObjectSim,
+    level_id: u8,
+    div: u8,
+) -> Option<u8> {
+    super::sample_level_player_inputs(obj, sim);
+    obj.div = div;
+    if !cam.scene_load_pending {
+        return None;
+    }
+    let definition = boss_def_index(level_id, cam.boss_fight_phase);
+    if boss_def_portable(definition) {
+        if let Some((music, level_song)) = cam.begin_scene_load(level_id) {
+            sim.music_request = music;
+            sim.level_song = level_song;
+            obj.spawn_boss(definition);
+            return Some(definition);
+        }
+    } else if cam.take_blocked_scene_load() {
+        obj.note_blocked_scene_load();
+    }
+    None
+}
+
+/// `$0652`: use the contact captured before boss loading (and replay's pose
+/// checkpoint), then write the object engine's results to both state owners.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn step_objects(
+    sim: &mut PlayerSim,
+    cam: &mut CameraSim,
+    obj: &mut ObjectSim,
+    layout: &LevelLayout,
+    tables: &ObjectTables,
+    contact: &MarioContact,
+    a_held: bool,
+) -> bool {
+    obj.sample_camera_inputs(cam);
+    obj.step(cam.x, cam.y, layout, tables, contact, cam.boss_mode());
+    let active = obj
+        .slots
+        .iter()
+        .any(|slot| slot.state() == SlotState::Active);
+    sim.apply_object_result(obj, a_held);
+    cam.apply_object_result(obj);
+    active
 }

@@ -3,8 +3,8 @@
 use crate::content::{load_arena_layout, load_map_nodes, load_scene_scripts, load_tilesets};
 use crate::divider_clock::VirtualDividerClock;
 use crate::game::{
-    build_contact, note_handoff_screen, sample_level_player_inputs, scene_frame_head,
-    update_tile_animation, BellArm, TimedFloatUse,
+    build_contact, note_handoff_screen, scene_frame_head, update_tile_animation, BellArm,
+    TimedFloatUse,
 };
 use crate::play_tape::PlayTape;
 use crate::present::letterbox_gray;
@@ -12,7 +12,7 @@ use crate::render::{hud_row_status, render_view, HudDigits, SpriteCtx, SpriteIns
 use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest};
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
-use sml2_core::scene::{boss_def_index, boss_def_portable, SceneStep, SceneVm};
+use sml2_core::scene::{SceneStep, SceneVm};
 
 /// Where a `--keys` run got to: enough to tell "never reached the pipe" from
 /// "reached it and nothing happened".
@@ -326,47 +326,31 @@ pub(crate) fn run_play(
         if let Some(tables) = &obj_tables {
             if !frozen {
                 let mario = build_contact(&sim, &keys, cam.scroll_pan, cam.scene_state);
-                sample_level_player_inputs(&mut obj, &sim);
-                obj.div = virtual_clock.sample();
-                // `$0EB0`'s scene branch; see the replay loop.
-                if cam.scene_load_pending {
-                    let def_index = boss_def_index(manifest.level_id, cam.boss_fight_phase);
-                    if boss_def_portable(def_index) {
-                        if let Some((music, level_song)) = cam.begin_scene_load(manifest.level_id) {
-                            // `$0ECA`: the boss song goes to BOTH bytes.
-                            sim.music_request = music;
-                            sim.level_song = level_song;
-                            obj.spawn_boss(def_index);
-                            // `$3C94` outlasts its frame; see the session.
-                            sim.fade_timer = sim
-                                .fade_timer
-                                .saturating_sub(crate::session::BOSS_LOAD_VBLANKS);
-                        }
-                    } else if cam.take_blocked_scene_load() {
-                        obj.note_blocked_scene_load();
-                    }
+                if crate::game::level_frame::prepare_object_step(
+                    &mut sim,
+                    &mut cam,
+                    &mut obj,
+                    manifest.level_id,
+                    virtual_clock.sample(),
+                )
+                .is_some()
+                {
+                    // `$3C94` outlasts its frame; replay owns different capture timing.
+                    sim.fade_timer = sim
+                        .fade_timer
+                        .saturating_sub(crate::session::BOSS_LOAD_VBLANKS);
                 }
-                obj.sample_camera_inputs(&cam);
-                obj.step(
-                    cam.x,
-                    cam.y,
+                if crate::game::level_frame::step_objects(
+                    &mut sim,
+                    &mut cam,
+                    &mut obj,
                     &layout_live,
                     tables,
                     &mario,
-                    cam.boss_mode(), // `$0652`
-                );
-                if obj
-                    .slots
-                    .iter()
-                    .any(|slot| slot.state() == sml2_core::objects::SlotState::Active)
-                {
+                    keys.a,
+                ) {
                     active_object_frames += 1;
                 }
-                // Same call the replay loop makes. The copy that used to live
-                // here was missing `on_ground_cleared` and `on_ground_obj`, so
-                // play mode disagreed with every capture on both.
-                sim.apply_object_result(&mut obj, keys.a);
-                cam.apply_object_result(&mut obj);
             }
         }
         // Resume the blocking $20A4 call after gameplay, or its previous wait.

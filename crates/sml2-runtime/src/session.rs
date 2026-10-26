@@ -31,13 +31,13 @@ use sml2_core::map_sim::MapSim;
 use sml2_core::object::ObjectTables;
 use sml2_core::objects::ObjectSim;
 use sml2_core::player_sim::{MapHandoffOutcome, PlayerKeys, PlayerSim};
-use sml2_core::scene::{boss_def_index, boss_def_portable, SceneScripts, SceneStep, SceneVm};
+use sml2_core::scene::{SceneScripts, SceneStep, SceneVm};
 use sml2_core::tile_animation::TileAnimationClock;
 use sml2_core::tileset::Tilesets;
 
 use crate::game::{
-    apply_level_entry, build_contact, note_handoff_screen, sample_level_player_inputs,
-    scene_frame_head, seed_level_timer, update_tile_animation, BellArm,
+    apply_level_entry, build_contact, note_handoff_screen, scene_frame_head, seed_level_timer,
+    update_tile_animation, BellArm,
 };
 use crate::render::{SpriteCtx, SpriteInst};
 

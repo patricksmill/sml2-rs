@@ -76,11 +76,19 @@ fn boss_stomp_preserves_the_high_jump_after_releasing_a() {
             0,
             scene_state,
         );
-        objects.step(336, 88, &layout, &tables, &contact, false);
+        let mut camera = sml2_core::camera::CameraSim::new(336, 88);
+        crate::game::level_frame::step_objects(
+            &mut player,
+            &mut camera,
+            &mut objects,
+            &layout,
+            &tables,
+            &contact,
+            a_held,
+        );
         assert!(objects.stomp_jump);
         assert_eq!(objects.stomp_bounce, scene_state != 0);
         assert_eq!(objects.slots[0].b[B_FLAGS], 1);
-        player.apply_object_result(&mut objects, a_held);
         assert_eq!(player.y.to_le_bytes(), [108, 0]);
         assert_eq!(player.vvel, initial_index);
         assert_eq!(player.no_jump_cut, scene_state != 0);

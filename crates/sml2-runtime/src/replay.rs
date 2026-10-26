@@ -3,8 +3,7 @@
 use crate::content::{load_map_nodes, load_scene_scripts};
 use crate::divider_clock::VirtualDividerClock;
 use crate::game::{
-    apply_level_entry, build_contact, note_handoff_screen, sample_level_player_inputs,
-    scene_frame_head, seed_level_timer,
+    apply_level_entry, build_contact, note_handoff_screen, scene_frame_head, seed_level_timer,
 };
 use crate::image_output::write_png_scaled;
 use crate::render::{apply_tile_anim, hud_row_status, render_view, HudDigits, SpriteCtx};
@@ -13,7 +12,7 @@ use serde::Deserialize;
 use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest};
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
-use sml2_core::scene::{boss_def_index, boss_def_portable, SceneVm};
+use sml2_core::scene::SceneVm;
 use std::fs;
 use std::path::Path;
 
@@ -515,41 +514,17 @@ pub(crate) fn run_replay(
             sim.block_frame.unwrap_or(frame_idx)
         };
         if !fade_at_entry {
-            // $8000's dispatcher gate reads sMarioDead; the interaction pass
-            // then writes it back.
-            sample_level_player_inputs(&mut obj, &sim);
-            obj.div = divider_clock.sample();
-            // `$0EB0`'s scene branch: taken only for a def whose handlers are
-            // all ported (the fight then ends in the level clear, which reseeds
-            // `sSceneState` and so clears the park); every other def is
-            // reported, because parking with nothing to end the fight would
-            // freeze the camera for good.
-            if cam.scene_load_pending {
-                let def_index = boss_def_index(manifest.level_id, cam.boss_fight_phase);
-                if boss_def_portable(def_index) {
-                    if let Some((music, level_song)) = cam.begin_scene_load(manifest.level_id) {
-                        // `$0ECA`: the boss song goes to BOTH bytes.
-                        sim.music_request = music;
-                        sim.level_song = level_song;
-                        obj.spawn_boss(def_index);
-                    }
-                } else if cam.take_blocked_scene_load() {
-                    obj.note_blocked_scene_load();
-                }
-            }
-            obj.sample_camera_inputs(&cam);
-            obj.step(
-                cam.x,
-                cam.y,
-                layout,
-                &tables,
-                &mario,
-                cam.boss_mode(), // `$0652`
+            // Capture timing has no native boss-load VBlank compensation.
+            crate::game::level_frame::prepare_object_step(
+                &mut sim,
+                &mut cam,
+                &mut obj,
+                manifest.level_id,
+                divider_clock.sample(),
             );
-            // The write-back list lives in the sim so this loop and the play
-            // loop cannot drift apart again (`infra_play_parity_harness`).
-            sim.apply_object_result(&mut obj, keys.a);
-            cam.apply_object_result(&mut obj);
+            crate::game::level_frame::step_objects(
+                &mut sim, &mut cam, &mut obj, layout, &tables, &mario, keys.a,
+            );
         }
         // $20A4 owns the CPU across its HALT waits; the shared frame head
         // parks gameplay until its END returns to the main loop.

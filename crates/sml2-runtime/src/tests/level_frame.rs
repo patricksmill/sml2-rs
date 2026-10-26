@@ -219,3 +219,69 @@ fn player_events_consume_both_bumps_without_crediting_the_fireball() {
     assert_eq!(ctx.sim.coins_low, 1);
     assert_eq!(ctx.sim.block_slots.iter().filter(|s| s[0] != 0).count(), 1);
 }
+
+#[test]
+fn replay_contact_survives_the_mutating_pose_checkpoint() {
+    use crate::game::level_frame::{prepare_object_step, step_objects};
+    for invincibility in [0, 1] {
+        let mut ctx = level();
+        ctx.cam = sml2_core::camera::CameraSim::new(336, 88);
+        ctx.sim.x = 258;
+        ctx.sim.y = 120;
+        ctx.sim.vvel = 24;
+        ctx.sim.on_ground = false;
+        ctx.sim.invincibility = invincibility;
+        let slot = &mut ctx.obj.slots[0].b;
+        slot[B_TYPE] = 0x40;
+        slot[B_SCRX] = 18;
+        slot[B_SCRY] = 144;
+        let contact = build_contact(&ctx.sim, &PlayerKeys::default(), 0, 0);
+        ctx.sim.frame_index(ctx.sim.walk_timer);
+        ctx.sim.block_update();
+        assert_eq!(ctx.sim.invincibility, 0);
+        prepare_object_step(&mut ctx.sim, &mut ctx.cam, &mut ctx.obj, 0, 0x3d);
+        step_objects(
+            &mut ctx.sim,
+            &mut ctx.cam,
+            &mut ctx.obj,
+            &ctx.layout_live,
+            &ctx.spr.as_ref().unwrap().tables,
+            &contact,
+            false,
+        );
+        assert_eq!(ctx.obj.slots[0].b[B_FLAGS], 0x10);
+        assert_eq!(ctx.sim.dead, if invincibility == 0 { 15 } else { 0 });
+        assert_eq!(ctx.sim.sfx0, if invincibility == 0 { 15 } else { 0 });
+        assert!(!ctx.sim.on_ground);
+        assert!(!ctx.sim.on_ground_obj);
+        assert_eq!(ctx.obj.div, 0x3d);
+    }
+}
+
+#[test]
+fn replay_boss_preparation_leaves_fade_compensation_to_the_host() {
+    use crate::game::level_frame::prepare_object_step;
+    let mut ctx = level();
+    ctx.cam.scene_load_pending = true;
+    ctx.sim.fade_timer = 9;
+    assert_eq!(
+        prepare_object_step(&mut ctx.sim, &mut ctx.cam, &mut ctx.obj, 5, 0x78),
+        Some(0)
+    );
+    assert_eq!(ctx.sim.fade_timer, 9);
+    assert_eq!((ctx.sim.music_request, ctx.sim.level_song), (32, 32));
+    assert_eq!(ctx.cam.scene_state, 0xf0);
+    assert_eq!(
+        prepare_object_step(&mut ctx.sim, &mut ctx.cam, &mut ctx.obj, 5, 0x79),
+        None
+    );
+    assert_eq!(ctx.obj.div, 0x79);
+    ctx.cam.scene_load_pending = true;
+    ctx.cam.boss_fight_phase = 9;
+    assert_eq!(
+        prepare_object_step(&mut ctx.sim, &mut ctx.cam, &mut ctx.obj, 5, 0),
+        None
+    );
+    assert!(!ctx.cam.scene_load_pending);
+    assert!(ctx.obj.unported.contains(&0x0EB0));
+}

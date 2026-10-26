@@ -1,12 +1,12 @@
 //! Live level state and its ordered simulation tick.
 
 use super::{
-    apply_level_entry, boss_def_index, boss_def_portable, build_contact, note_handoff_screen,
-    player_behind_bg, sample_level_player_inputs, scene_frame_head, seed_level_timer,
-    update_tile_animation, BellArm, CameraSim, EndingEntry, EndingFrame, EndingInput, EndingScene,
-    EndingSequenceController, HudStrip, LevelLayout, LevelManifest, MapHandoffOutcome, MapNodes,
-    ObjectClock, ObjectSim, ObjectTables, PlayerKeys, PlayerSim, SceneScripts, SceneStep, SceneVm,
-    SpriteCtx, SpriteInst, TileAnimationClock, Tilesets, BOSS_LOAD_VBLANKS,
+    apply_level_entry, build_contact, note_handoff_screen, player_behind_bg, scene_frame_head,
+    seed_level_timer, update_tile_animation, BellArm, CameraSim, EndingEntry, EndingFrame,
+    EndingInput, EndingScene, EndingSequenceController, HudStrip, LevelLayout, LevelManifest,
+    MapHandoffOutcome, MapNodes, ObjectClock, ObjectSim, ObjectTables, PlayerKeys, PlayerSim,
+    SceneScripts, SceneStep, SceneVm, SpriteCtx, SpriteInst, TileAnimationClock, Tilesets,
+    BOSS_LOAD_VBLANKS,
 };
 
 /// In-level simulation state and working buffers for a live level play.
@@ -290,48 +290,28 @@ impl LevelContext {
             if !frozen {
                 let mario =
                     build_contact(&self.sim, &keys, self.cam.scroll_pan, self.cam.scene_state);
-                sample_level_player_inputs(&mut self.obj, &self.sim);
-                self.obj.div = div;
-                if self.cam.scene_load_pending {
-                    let def_index =
-                        boss_def_index(self.manifest.level_id, self.cam.boss_fight_phase);
-                    if boss_def_portable(def_index) {
-                        if let Some((music, level_song)) =
-                            self.cam.begin_scene_load(self.manifest.level_id)
-                        {
-                            self.sim.music_request = music;
-                            self.sim.level_song = level_song;
-                            self.obj.spawn_boss(def_index);
-                            self.boss_definition = Some(def_index);
-                            // `$3C94` runs inside this update and outlasts its
-                            // frame: a VBlank lands before it returns and
-                            // decrements `sFadeTimer` with no update of its own.
-                            self.sim.fade_timer =
-                                self.sim.fade_timer.saturating_sub(BOSS_LOAD_VBLANKS);
-                        }
-                    } else if self.cam.take_blocked_scene_load() {
-                        self.obj.note_blocked_scene_load();
-                    }
+                if let Some(definition) = crate::game::level_frame::prepare_object_step(
+                    &mut self.sim,
+                    &mut self.cam,
+                    &mut self.obj,
+                    self.manifest.level_id,
+                    div,
+                ) {
+                    self.boss_definition = Some(definition);
+                    // `$3C94` runs across an extra VBlank before returning.
+                    self.sim.fade_timer = self.sim.fade_timer.saturating_sub(BOSS_LOAD_VBLANKS);
                 }
-                self.obj.sample_camera_inputs(&self.cam);
-                self.obj.step(
-                    self.cam.x,
-                    self.cam.y,
+                if crate::game::level_frame::step_objects(
+                    &mut self.sim,
+                    &mut self.cam,
+                    &mut self.obj,
                     &self.layout_live,
                     tables,
                     &mario,
-                    self.cam.boss_mode(),
-                );
-                if self
-                    .obj
-                    .slots
-                    .iter()
-                    .any(|slot| slot.state() == sml2_core::objects::SlotState::Active)
-                {
+                    keys.a,
+                ) {
                     self.active_object_frames += 1;
                 }
-                self.sim.apply_object_result(&mut self.obj, keys.a);
-                self.cam.apply_object_result(&mut self.obj);
             }
         }
 
