@@ -103,39 +103,7 @@ impl ObjectSim {
             mario_ref_x: self.mario_ref_x,
             contact_kind,
         };
-        struct FallWalkerSimWorld<'a> {
-            sim: &'a mut ObjectSim,
-            st: &'a mut Staging,
-            layout: &'a LevelLayout,
-        }
-        impl<'a> fallwalker::FallWalkerWorld for FallWalkerSimWorld<'a> {
-            fn probe_left_wall(&mut self, actor: &crate::actor::Actor) -> bool {
-                set_x(&mut self.st.b, actor.position.x);
-                set_y(&mut self.st.b, actor.position.y);
-                self.sim.m_left_wall(self.st, self.layout);
-                self.sim.move_flags & 0x02 != 0
-            }
-            fn probe_right_wall(&mut self, actor: &crate::actor::Actor) -> bool {
-                set_x(&mut self.st.b, actor.position.x);
-                set_y(&mut self.st.b, actor.position.y);
-                self.sim.m_right_wall(self.st, self.layout);
-                self.sim.move_flags & 0x01 != 0
-            }
-            fn probe_ground(&mut self, actor: &crate::actor::Actor) -> bool {
-                set_x(&mut self.st.b, actor.position.x);
-                set_y(&mut self.st.b, actor.position.y);
-                self.sim.m_ground_own(self.st, self.layout);
-                self.sim.move_flags & 0x08 != 0
-            }
-            fn step_fall(&mut self, actor: &mut crate::actor::Actor) -> u8 {
-                falling_dropper::step_fall_speed(actor)
-            }
-        }
-        let mut world = FallWalkerSimWorld {
-            sim: self,
-            st,
-            layout,
-        };
+        let mut world = super::terrain_adapter::TerrainWorld::new(self, st, layout);
         let effect = fallwalker::update(&mut actor, context, &mut world);
         if let fallwalker::FallWalkerEffect::Initialized { facing } = effect {
             self.facing = facing;

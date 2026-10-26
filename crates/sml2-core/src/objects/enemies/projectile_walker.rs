@@ -7,7 +7,7 @@
 //! run the shared `$582FB`/`$5831A` patrol. States 3/4 wait out a 16-frame
 //! timer, hop three pixels with the facing, reload span 88, and return to the
 //! patrol pair.
-use super::fallwalker::{self, FallWalkerWorld};
+use super::fallwalker::{self, PatrolWorld};
 use crate::actor::{Actor, ContactKind, FrameTick, SpriteFlipFlags};
 use std::cmp::Ordering;
 
@@ -41,7 +41,7 @@ pub(super) fn update(
     actor: &mut Actor,
     frame: FrameTick,
     player_x: u16,
-    world: &mut impl FallWalkerWorld,
+    world: &mut impl PatrolWorld,
 ) -> Result<Effect, Error> {
     if actor.state == 0 {
         actor.contact_kind = ContactKind::from_raw(77);

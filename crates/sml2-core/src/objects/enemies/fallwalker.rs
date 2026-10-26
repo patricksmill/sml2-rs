@@ -43,10 +43,13 @@ pub enum FallWalkerEffect {
     LedgeReversed { state: FallWalkerState },
 }
 
-pub trait FallWalkerWorld {
+pub trait PatrolWorld {
     fn probe_left_wall(&mut self, actor: &Actor) -> bool;
     fn probe_right_wall(&mut self, actor: &Actor) -> bool;
     fn probe_ground(&mut self, actor: &Actor) -> bool;
+}
+
+pub trait FallWalkerWorld: PatrolWorld {
     fn step_fall(&mut self, actor: &mut Actor) -> u8;
 }
 
@@ -97,7 +100,7 @@ pub(super) fn patrol<W>(
     world: &mut W,
 ) -> Option<FallWalkerEffect>
 where
-    W: FallWalkerWorld,
+    W: PatrolWorld,
 {
     match FallWalkerState::from_raw(actor.state) {
         FallWalkerState::WalkLeft => Some(if frame.every(2) {
@@ -178,7 +181,7 @@ mod tests {
         }
     }
 
-    impl FallWalkerWorld for MockWorld {
+    impl PatrolWorld for MockWorld {
         fn probe_left_wall(&mut self, _actor: &Actor) -> bool {
             self.left_wall
         }
@@ -188,6 +191,9 @@ mod tests {
         fn probe_ground(&mut self, _actor: &Actor) -> bool {
             self.ground
         }
+    }
+
+    impl FallWalkerWorld for MockWorld {
         fn step_fall(&mut self, _actor: &mut Actor) -> u8 {
             self.stepped_fall = true;
             self.fall_dy

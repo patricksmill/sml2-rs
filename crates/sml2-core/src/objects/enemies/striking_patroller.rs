@@ -6,7 +6,7 @@
 //! the proximity check. State 3 lowers the sprite from 99 to 97 on every
 //! fourth frame. State 4 waits out its timer, raises the sprite back to 99,
 //! and faces Mario again with contact 77 and a 64-frame timer.
-use super::fallwalker::{self, FallWalkerWorld};
+use super::fallwalker::{self, PatrolWorld};
 use crate::actor::{Actor, ContactKind, FrameTick};
 use std::cmp::Ordering;
 
@@ -30,7 +30,7 @@ pub(super) enum Effect {
     Continue,
 }
 
-pub(super) trait World: FallWalkerWorld {
+pub(super) trait World: PatrolWorld {
     fn mario_distance_x(&self, actor_x: u16) -> u8;
 }
 

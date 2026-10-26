@@ -33,7 +33,7 @@ impl From<MotionProfileError> for Error {
     }
 }
 
-pub(super) trait World: fallwalker::FallWalkerWorld {
+pub(super) trait World: fallwalker::PatrolWorld {
     fn mario_ref_x(&self) -> u16;
     fn set_facing(&mut self, relation: Ordering);
 }

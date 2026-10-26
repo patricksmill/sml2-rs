@@ -1,4 +1,5 @@
 //! Slot conversion for ROM `$59431` (anim 65) and `$5945A` (anim 66).
+use super::terrain_adapter::TerrainWorld;
 use super::{
     handler_0x59431::{self, Kind},
     *,
@@ -6,37 +7,7 @@ use super::{
 use crate::actor::{Actor, FrameTick};
 use std::cmp::Ordering;
 
-struct Inputs<'a> {
-    sim: &'a mut ObjectSim,
-    st: &'a mut Staging,
-    layout: &'a LevelLayout,
-}
-
-impl fallwalker::FallWalkerWorld for Inputs<'_> {
-    fn probe_left_wall(&mut self, actor: &Actor) -> bool {
-        set_x(&mut self.st.b, actor.position.x);
-        set_y(&mut self.st.b, actor.position.y);
-        self.sim.m_left_wall(self.st, self.layout);
-        self.sim.move_flags & 0x02 != 0
-    }
-    fn probe_right_wall(&mut self, actor: &Actor) -> bool {
-        set_x(&mut self.st.b, actor.position.x);
-        set_y(&mut self.st.b, actor.position.y);
-        self.sim.m_right_wall(self.st, self.layout);
-        self.sim.move_flags & 0x01 != 0
-    }
-    fn probe_ground(&mut self, actor: &Actor) -> bool {
-        set_x(&mut self.st.b, actor.position.x);
-        set_y(&mut self.st.b, actor.position.y);
-        self.sim.m_ground_own(self.st, self.layout);
-        self.sim.move_flags & 0x08 != 0
-    }
-    fn step_fall(&mut self, actor: &mut Actor) -> u8 {
-        falling_dropper::step_fall_speed(actor)
-    }
-}
-
-impl handler_0x59431::World for Inputs<'_> {
+impl handler_0x59431::World for TerrainWorld<'_> {
     fn mario_ref_x(&self) -> u16 {
         self.sim.mario_ref_x
     }
@@ -63,11 +34,7 @@ impl ObjectSim {
         let mut actor = Actor::from_raw_slot(&st.b);
         let frame = FrameTick(u64::from(self.fff0));
         let result = {
-            let mut world = Inputs {
-                sim: self,
-                st,
-                layout,
-            };
+            let mut world = TerrainWorld::new(self, st, layout);
             handler_0x59431::update(&mut actor, frame, &mut world, kind)
         };
         st.b = actor.to_raw_slot();

@@ -1,37 +1,8 @@
 //! Slot conversion, terrain probes, and dynamic spawn for ROM `$5A0AA` (mode B anim 37).
+use super::terrain_adapter::TerrainWorld;
 use super::{handler_0x5a0aa, *};
 use crate::actor::{Actor, FrameTick};
 use std::cmp::Ordering;
-
-struct Inputs<'a> {
-    sim: &'a mut ObjectSim,
-    st: &'a mut Staging,
-    layout: &'a LevelLayout,
-}
-
-impl fallwalker::FallWalkerWorld for Inputs<'_> {
-    fn probe_left_wall(&mut self, actor: &Actor) -> bool {
-        set_x(&mut self.st.b, actor.position.x);
-        set_y(&mut self.st.b, actor.position.y);
-        self.sim.m_left_wall(self.st, self.layout);
-        self.sim.move_flags & 0x02 != 0
-    }
-    fn probe_right_wall(&mut self, actor: &Actor) -> bool {
-        set_x(&mut self.st.b, actor.position.x);
-        set_y(&mut self.st.b, actor.position.y);
-        self.sim.m_right_wall(self.st, self.layout);
-        self.sim.move_flags & 0x01 != 0
-    }
-    fn probe_ground(&mut self, actor: &Actor) -> bool {
-        set_x(&mut self.st.b, actor.position.x);
-        set_y(&mut self.st.b, actor.position.y);
-        self.sim.m_ground_own(self.st, self.layout);
-        self.sim.move_flags & 0x08 != 0
-    }
-    fn step_fall(&mut self, _actor: &mut Actor) -> u8 {
-        0
-    }
-}
 
 impl ObjectSim {
     pub(super) fn handler_0x5a0aa(&mut self, st: &mut Staging, layout: &LevelLayout) {
@@ -39,11 +10,7 @@ impl ObjectSim {
         let frame = FrameTick(u64::from(self.fff0));
         let player_x = self.mario_ref_x;
         let result = {
-            let mut world = Inputs {
-                sim: self,
-                st,
-                layout,
-            };
+            let mut world = TerrainWorld::new(self, st, layout);
             handler_0x5a0aa::update(&mut actor, frame, player_x, &mut world)
         };
         st.b = actor.to_raw_slot();

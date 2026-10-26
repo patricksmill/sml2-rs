@@ -1,9 +1,8 @@
 # Share platform patrol movement and enemy terrain adapters
 
-Planned, 2026-10-26. Two bounded, behavior-preserving refactors, implemented
-and committed separately. Complete the platform extraction first; the terrain
-work has more compatibility state to preserve. This document does not claim
-implementation or verification is complete.
+Implemented and verified, 2026-10-26, in two focused steps. The platform
+extraction preceded the terrain adapter extraction. The design and acceptance
+contracts below describe the completed work.
 
 ## 1. Shared horizontal platform patrol
 
@@ -153,5 +152,20 @@ than expanding either refactor to fix them.
 Planning limitation: the two 2026-10-15 workflow plans linked from `AGENTS.md`
 are absent in this checkout. This plan uses the available canonical
 `PORTING.md`, orchestration rules, native porting guide, source briefs, and
-current code. No implementation tests or replay sweep were run for this
-planning-only change.
+current code.
+
+## Verification results
+
+- Platform characterization tests passed before and after extraction; all
+  1,689 core tests passed at that step. A deliberate `>=` reversal mutation
+  failed the wrapping/reversal regression test.
+- Terrain characterization tests passed against the original adapters and
+  the shared adapter. The patrol-only test world compiles without a fall
+  operation. All 1,694 core tests passed after both refactors.
+- Deliberate missing-X-staging, wrong-ground-mask, and discarded-probe-Y
+  mutations each failed the targeted terrain regressions; all mutations
+  were restored before the final core run.
+- Formatting and diff whitespace checks passed. The frozen replay gate ran
+  once after both steps and passed, retaining only its documented
+  `traj4_ff0` legacy mismatch allowance. No capture files changed.
+- The unrelated local `README.md` edit remains outside these commits.

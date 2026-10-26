@@ -217,8 +217,6 @@ mod handler_0x58bba_adapter;
 mod handler_0x58bcb;
 #[path = "compat/platforms/short_vertical.rs"]
 mod handler_0x58bcb_adapter;
-#[path = "platforms/patrol_motion.rs"]
-mod patrol_motion;
 #[path = "platforms/long_horizontal.rs"]
 mod handler_0x58c41;
 #[path = "compat/platforms/long_horizontal.rs"]
@@ -531,6 +529,8 @@ mod hopping;
 #[path = "platforms/horizontal.rs"]
 mod horizontal_platform;
 mod interaction;
+#[path = "platforms/patrol_motion.rs"]
+mod patrol_motion;
 mod visibility;
 pub use interaction::ContactBox;
 #[cfg(test)]
@@ -615,6 +615,11 @@ mod sweep_child_adapter;
 mod sweep_drop_child;
 #[path = "bosses/sweep/drop_child/adapter.rs"]
 mod sweep_drop_child_adapter;
+#[path = "compat/terrain.rs"]
+mod terrain_adapter;
+#[cfg(test)]
+#[path = "enemies/tests/terrain_adapter.rs"]
+mod terrain_adapter_tests;
 mod terrain_probes;
 #[cfg(test)]
 #[path = "tests/engine.rs"]
