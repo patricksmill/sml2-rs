@@ -135,3 +135,35 @@ fn headless_recording_retains_console_cadence_at_44100_hz() {
     assert_eq!(bytes.len(), 44 + frames as usize * 4);
     fs::remove_file(wav).unwrap();
 }
+
+#[test]
+fn host_view_updates_spawn_and_autoscroll_margins_before_each_tick() {
+    for level in [0, 19] {
+        let mut host = SessionRunner::new(
+            SessionAssets::load().unwrap(),
+            save_path("view"),
+            1,
+            (320, 224),
+            true,
+        );
+        host.begin_level(level, 0).unwrap();
+        for (view, margin, bias) in [
+            ((320, 224), (80, 40), 20),
+            ((160, 144), (0, 0), 0),
+            ((480, 144), (160, 0), 0),
+        ] {
+            (host.vw, host.vh) = view;
+            host.step_frame(PlayerKeys::default());
+            let SessionState::InLevel(ctx) = &host.state else {
+                panic!("level")
+            };
+            assert_eq!(ctx.obj.view_margin, margin);
+            assert_eq!(ctx.obj.view_bias_y, bias);
+            assert_eq!(
+                ctx.sim.screen_margin,
+                if level == 19 { margin.0 } else { 0 }
+            );
+            assert_eq!(host.render_frame().len(), view.0 * view.1);
+        }
+    }
+}

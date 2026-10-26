@@ -185,6 +185,7 @@ impl SessionRunner {
 
     /// The CLI clock and device policy lives here, outside simulation.
     pub fn step_frame(&mut self, keys: PlayerKeys) -> StepOutcome {
+        self.session.set_view((self.vw, self.vh));
         self.virtual_clock.advance_tick();
         let div = self.virtual_clock.sample();
         let effects = self.session.advance(FrameInput { keys, div });
