@@ -14,6 +14,7 @@
 //! 3. Emit one structured manifest per level plus a usage index:
 //!    `extracted/levels/levelNN.manifest.json` and `index.json`.
 
+use sml2_extract::assets;
 use sml2_extract::cartridge;
 use sml2_extract::castle;
 use sml2_extract::ending;
@@ -33,10 +34,8 @@ use std::path::{Path, PathBuf};
 
 use sml2_core::collision;
 use sml2_core::level::{
-    GraphicsRef, HudStrip, IndexLevel, IndexTilesetMap, LayoutSummary, LevelHeader, LevelLayout,
-    LevelManifest, LevelProperties, LevelsIndex, MetatileTable, ObjectStream, TileAnim,
-    TilesetMapRef, INDEX_SCHEMA, LAYOUT_HEIGHT, LAYOUT_SIZE, LAYOUT_WIDTH, MANIFEST_SCHEMA,
-    METATILE_COUNT,
+    GraphicsRef, IndexLevel, LevelHeader, LevelLayout, LevelManifest, LevelProperties,
+    MetatileTable, TileAnim, TilesetMapRef, MANIFEST_SCHEMA, METATILE_COUNT,
 };
 use sml2_core::object;
 
@@ -315,24 +314,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         });
     }
     let extra_rom = 7 * 0x4000 + (0x7800 - 0x4000);
-    let gfx_tilesets = sml2_core::tileset::Tilesets {
-        schema: sml2_core::tileset::TILESET_SCHEMA.to_string(),
-        notes: vec![
-            "$25AF (the $6x scene opcode's handler) swaps the level's graphics and metatile \
-             definitions in place: bank 7 $7800 -> VRAM $8E80 (0x50, index-independent), \
-             bank $268B[i*2] $2699[i*4] -> $9200 (0x600), bank $268B[i*2+1] $2699[i*4+2] -> \
-             $8B00 (a literal 0x400, which overruns the 0x380-byte enemy region by 0x20 and \
-             lands on the first two tiles of the $8E80 block), and $26B5[i] -> sMetatileMap."
-                .to_string(),
-            "The copies land inside the $8800-$97FF tile block the port holds as \
-             levelNN.bgblock.bin ($8E80 = 0x680, $9200 = 0xA00, $8B00 = 0x300), and the OBJ \
-             space $8000-$8FFF shares that VRAM ($8800-$8FFF = objblock.bin's high half), so \
-             applying a swap repatches both."
-                .to_string(),
-        ],
-        extra_8e80: baserom[extra_rom..extra_rom + 0x50].to_vec(),
-        entries: tileset_entries,
-    };
+    let gfx_tilesets = assets::tilesets(tileset_entries, &baserom[extra_rom..extra_rom + 0x50]);
     fs::write(
         extracted.join("scenes/tilesets.json"),
         serde_json::to_string_pretty(&gfx_tilesets)?,
@@ -596,15 +578,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("wrote tileanim.bin: 16 rows x 4 phases x 64 bytes (bank $1D $6680)");
 
     // ---- HUD strip (window layer $9C00, template $07EA + digit columns) ----
-    let hud = HudStrip {
-        template: baserom
+    let hud = assets::hud(
+        baserom
             .get(0x07EA..0x07EA + 20)
-            .ok_or("HUD template out of bounds")?
-            .to_vec(),
-        window_x: 7,
-        window_y: 136,
-        digit_columns: vec![2, 3, 7, 8, 9, 13, 14, 17, 18, 19],
-    };
+            .ok_or("HUD template out of bounds")?,
+    );
     fs::write(
         extracted.join("hud.json"),
         serde_json::to_string_pretty(&hud)? + "\n",
@@ -913,39 +891,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             metatile_classes: (0..METATILE_COUNT as u8).map(collision::classify).collect(),
             sprite_map_index: object::sprite_map_index(level_id),
             tile_anim: TileAnim::from_table_value(anim_table[level_id as usize]),
-            layout: LayoutSummary {
-                file: layout_file.clone(),
-                width: LAYOUT_WIDTH as u16,
-                height: LAYOUT_HEIGHT as u16,
-                size: LAYOUT_SIZE as u32,
-                distinct_metatile_ids: layout.distinct_metatile_ids(),
-                most_common: layout.most_common_metatile(),
-            },
+            layout: assets::layout_summary(layout_file.clone(), &layout),
             properties: LevelProperties {
                 unknown: props_unk[i],
                 auto_scroll: props_scroll[i],
                 space_physics: props_space[i],
             },
-            spawns: ObjectStream {
-                table_label: "UnknownData_0xE037".to_string(),
-                table_bank: 0x03,
-                stream_rom,
-                packed_len: packed.len() as u32,
-                records,
-            },
+            spawns: assets::object_stream(stream_rom, packed.len(), records),
         };
 
         let out_path = out_dir.join(format!("level{nn:02}.manifest.json"));
         fs::write(&out_path, serde_json::to_string_pretty(&manifest)? + "\n")?;
 
-        index_levels.push(IndexLevel {
-            level_id,
-            header_label: raw.label.clone(),
-            tileset_map_index: map_nn,
-            graphics_file: gfx_file,
-            layout_file,
-            spawn_count,
-        });
+        index_levels.push(assets::index_level(&manifest));
         map_used_by[map_nn as usize].push(level_id);
 
         println!(
@@ -955,9 +913,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // ---- index: metatile table usage across the whole ROM ----
-    let mut tileset_maps = Vec::new();
     let mut verified_tables = 0;
-    for (n, used_by) in map_used_by.iter().enumerate().skip(1) {
+    for n in 1..map_used_by.len() {
         let file = format!("tilemaps/mappings/{n:02}.bin");
         let bytes = fs::read(decomp.join(&file))?;
         let label = format!("Level_TileMap_{n:02}");
@@ -970,96 +927,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Err(format!("{file} differs from baserom.gb at ${rom:05X}").into());
         }
         verified_tables += 1;
-        tileset_maps.push(IndexTilesetMap {
-            index: n as u8,
-            file,
-            used_by_levels: used_by.clone(),
-            boss_gfx_indices: boss_map_usage
-                .iter()
-                .filter(|(m, _)| *m as usize == n)
-                .map(|(_, g)| *g)
-                .collect(),
-        });
     }
 
-    let index = LevelsIndex {
-        schema: INDEX_SCHEMA.to_string(),
-        levels: index_levels,
-        tileset_maps,
-        notes: vec![
-            "tile animation: each level's manifest carries tile_anim {table_value, \
-             enabled, row, speed} from UnknownData_0x35EA ($35EA, 32 bytes; the \
-             engine stores value+1 in sTileAnimConfig, 0 = off). While enabled, \
-             the 4 VRAM tiles at $9200 are replaced by 64 bytes from \
-             extracted/tileanim.bin at row*$100 + phase*$40 (phases 0..3) every \
-             time sTileAnimTimer reaches speed*2. Phase 0 equals the static \
-             tileset art."
-                .to_string(),
-            "HUD: extracted/hud.json is the in-level status bar — a 20-tile row \
-             (template from ROM $07EA, copied to the window map $9C00 by $07DB) \
-             drawn by the window layer at rWY=136/rWX=7 (bottom 8px of screen). \
-             $076B patches digit tiles ($80 + value) each frame at columns \
-             2-3 (lives), 7-9 (coins), 13-14 (money bags), 17-19 (time)."
-                .to_string(),
-            "OBJ tiles: levelNN.objblock.bin is the $8000-$8FFF object tile \
-             space (4 KB) — low half $8000-$87FF = GFX_Mario / GFX_MarioDark / \
-             GFX_MarioMoon picked by the level gfx config's low nibble \
-             (LoadMarioGFX $0669: 0/1/else), high half $8800-$8FFF = the same \
-             bytes as bgblock.bin[0..$800]. OAM mapping tile ids index this \
-             block directly ($8000 + t*16)."
-                .to_string(),
-            "metatile = [top-left, top-right, bottom-left, bottom-right] tile numbers; \
-             a tile id < 128 reads VRAM $9000 + t*16, >= 128 reads $8800 + (t-128)*16 \
-             (LCDC bit 4 = 0). Proof: ScrollLevelMap ($0AFB) writes the staged tile \
-             bytes to dest, dest+1, dest+$20, dest+$21."
-                .to_string(),
-            "layout = 256x48 metatile ids, row-major, row stride 256 bytes; \
-             Read_Level_Data decompresses exactly $3000 bytes to $B000-$DFFF; \
-             block pipelines address it as $B000 + row*$100 + col. \
-             levelNN.decompressed.bin is relative to this index."
-                .to_string(),
-            "screen top-left = (camera_x - 80, camera_y - 72); live-verified against \
-             PyBoy screenshots at 94-97% exact pixels (remainder = sprites)."
-                .to_string(),
-            "tileset maps 25-28 are not referenced by level headers; the boss/special \
-             GFX path ($25AF, sLevelGfxIndex via the $26B5 pointer table) selects \
-             them (see boss_gfx_indices)."
-                .to_string(),
-            "spawns: packed bank-$03 streams (UnknownData_0xE037, indexed by sCurLevel) \
-             expanded by $EBBB into 6-byte records at $AB06: [0/1] world X (hi, 8-aligned \
-             lo), [2] mode flag (0 = spawns always, 1 = skipped in Easy Mode; the game \
-             writes 2 once spawned), [3/4] world Y (hi, 8-aligned lo), [5] object/anim \
-             index. Records are sorted by X; the scan ($8C31) matches them against the \
-             camera-driven cursor, and $EBB6 writes $FF $FF after the last record."
-                .to_string(),
-            "collision: each level's metatile_classes[128] gives every id's \
-             engine collision class (solid < $38 blocks+stands; slope $38-$47 \
-             stands, never blocks; coin $48/$49; exit $4A/$4B; water $4C-$4F; \
-             hazard $50/$51; moon $52-$57; decor $58+). The ranges are global, \
-             decoded from the home.asm probes and live-verified (see \
-             sml2-core/src/collision.rs)."
-                .to_string(),
-            "objects: each spawn record carries sprite_id (anim -> sprite table \
-             $8B61/$8BC1 by sprite_map_index) and its hitbox [x0,x1,y0,y1]; the \
-             full tables (anim maps, extent records, OAM sprite mappings) live in \
-             extracted/objects.json, and each level's whole sprite set is drawn to \
-             renders/levelNN.sprites.png (16 cells per row, one per sprite id; \
-             ids the level never spawns are omitted). objects.json also carries \
-             anim_profiles_a/b: per-anim behavior handler ROM offsets (bank $16) \
-             plus static scans of each handler's type byte(s) ($FFE2) and its \
-             rst-dispatch sub-state code addresses (live-verified: the level-0 \
-             walker's handler runs every other frame while active)."
-                .to_string(),
-            "renders: extracted/renders/levelNN.png is the full 4096x768 world render \
-             (16px per metatile, header BGP palette; animated tiles show their static \
-             base) and levelNN.metatiles.png the 128 definitions; raw per-file tile \
-             sheets live under extracted/gfx/."
-                .to_string(),
-            "generated by: cargo run -p sml2-extract (from the sml2-rs repo root; \
-             reads SML2_DECOMP_ROOT / ../sml2decomp)"
-                .to_string(),
-        ],
-    };
+    let index = assets::levels_index(index_levels, &map_used_by, &boss_map_usage);
     fs::write(
         out_dir.join("index.json"),
         serde_json::to_string_pretty(&index)? + "\n",
