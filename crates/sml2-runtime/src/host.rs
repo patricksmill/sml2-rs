@@ -204,12 +204,13 @@ impl SessionRunner {
         self.audio_buffer.clear();
         self.apu.ingest_driver(&self.session.sound_driver);
         // Match live PCM to the 60 Hz host; preserve console cadence for exports.
+        let rate = self.audio_sync.as_ref().map_or(44_100, |clock| clock.rate);
         let samples = match self.audio_sync.as_mut() {
             Some(clock) => clock.take(),
-            None => self.apu.frame_sample_count(44100),
+            None => self.apu.frame_sample_count(rate),
         };
         self.apu
-            .generate_samples(44100, samples, &mut self.audio_buffer);
+            .generate_samples(rate, samples, &mut self.audio_buffer);
         if let Some(audio) = &self.live_audio {
             audio.write_samples(&self.audio_buffer);
         }
@@ -229,7 +230,8 @@ impl SessionRunner {
     pub fn save_recorded_audio(&self) -> Result<(), Box<dyn Error>> {
         if let Some(path) = &self.audio_out_path {
             if !self.recorded_audio.is_empty() {
-                sml2_core::audio::write_wav_file(path, &self.recorded_audio, 44100)?;
+                let rate = self.audio_sync.as_ref().map_or(44_100, |clock| clock.rate);
+                sml2_core::audio::write_wav_file(path, &self.recorded_audio, rate)?;
             }
         }
         Ok(())

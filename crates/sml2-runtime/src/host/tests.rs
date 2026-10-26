@@ -90,3 +90,48 @@ fn loads_a_later_valid_pipe_and_leaves_malformed_files_untouched() {
     }
     fs::remove_file(path).unwrap();
 }
+
+#[test]
+fn device_rate_drives_synthesis_and_recorded_wav_timing() {
+    for rate in [44_100, 48_000] {
+        let mut host = runner(save_path("audio_save"));
+        let wav = save_path("audio_wav");
+        host.audio_sync = Some(AudioClock::new(rate));
+        host.audio_out_path = Some(wav.clone());
+        host.session.sound_driver.music_request = 1;
+        let mut expected_apu = host.apu.clone();
+        for _ in 0..60 {
+            host.step_frame(PlayerKeys::default());
+            expected_apu.ingest_driver(&host.session.sound_driver);
+            let mut expected_samples = Vec::new();
+            expected_apu.generate_samples(rate, rate as usize / 60, &mut expected_samples);
+            assert_eq!(host.audio_samples(), expected_samples);
+            assert_eq!(host.apu, expected_apu);
+        }
+        host.save_recorded_audio().unwrap();
+        let bytes = fs::read(&wav).unwrap();
+        assert_eq!(u32::from_le_bytes(bytes[24..28].try_into().unwrap()), rate);
+        assert_eq!(
+            u32::from_le_bytes(bytes[40..44].try_into().unwrap()),
+            rate * 4
+        );
+        assert_eq!(bytes.len(), 44 + rate as usize * 4);
+        fs::remove_file(wav).unwrap();
+    }
+}
+
+#[test]
+fn headless_recording_retains_console_cadence_at_44100_hz() {
+    let mut host = runner(save_path("headless_audio_save"));
+    let wav = save_path("headless_audio_wav");
+    host.audio_out_path = Some(wav.clone());
+    host.run_headless(60, None).unwrap();
+    let bytes = fs::read(&wav).unwrap();
+    let frames = 60u64 * 70_224 * 44_100 / 4_194_304;
+    assert_eq!(
+        u32::from_le_bytes(bytes[24..28].try_into().unwrap()),
+        44_100
+    );
+    assert_eq!(bytes.len(), 44 + frames as usize * 4);
+    fs::remove_file(wav).unwrap();
+}
