@@ -33,6 +33,7 @@ fn advance_emits_save_bytes_and_consumes_the_supplied_div_sample() {
     assert_eq!(effects.outcome, StepOutcome::Continue);
     assert!(effects.diagnostics.is_empty());
     assert_eq!(effects.saves.len(), 1);
+    assert!(effects.persist_slots);
     let record = &effects.saves[0];
     assert!(save_record_valid(record));
     assert_eq!(&record[0x40..0x45], &[0x23, 1, 2, 7, 9]);
@@ -42,7 +43,9 @@ fn advance_emits_save_bytes_and_consumes_the_supplied_div_sample() {
     };
     assert_eq!(map.rand_latch, 0x5A);
     assert!(!map.pending_save);
-    assert!(session.advance(FrameInput::default()).saves.is_empty());
+    let idle = session.advance(FrameInput::default());
+    assert!(idle.saves.is_empty());
+    assert!(!idle.persist_slots);
 
     // A different host may persist the effect or immediately restore it in memory.
     let mut restored = new_session();
@@ -72,6 +75,7 @@ fn gameplay_and_sound_sequencing_are_independent_of_render_frequency_and_size() 
         }
         assert_eq!(a.outcome, b.outcome);
         assert_eq!(a.saves, b.saves);
+        assert_eq!(a.persist_slots, b.persist_slots);
         assert_eq!(a.diagnostics, b.diagnostics);
         assert_eq!(plain.sound_driver, displayed.sound_driver);
         assert_eq!(plain.save_record(), displayed.save_record());

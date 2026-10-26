@@ -87,6 +87,7 @@ pub struct RomTiming {
 pub struct FrameEffects {
     pub outcome: StepOutcome,
     pub saves: Vec<[u8; 0x50]>,
+    pub persist_slots: bool,
     pub diagnostics: Vec<String>,
 }
 
@@ -874,6 +875,7 @@ impl Session {
         }
         self.frame_n += 1;
         let mut saves = Vec::new();
+        let mut persist_slots = false;
         let mut diagnostics = Vec::new();
 
         let a_pressed = keys.a && !self.prev_a;
@@ -1286,7 +1288,8 @@ impl Session {
                         }
                     }
                     FileSelectAction::SwitchCharacter => self.character = self.character.next(),
-                    FileSelectAction::Erased { .. } | FileSelectAction::None => {}
+                    FileSelectAction::Erased { .. } => persist_slots = true,
+                    FileSelectAction::None => {}
                 }
                 StepOutcome::Continue
             }
@@ -1660,6 +1663,7 @@ impl Session {
         }
         FrameEffects {
             outcome,
+            persist_slots: persist_slots || !saves.is_empty(),
             saves,
             diagnostics,
         }

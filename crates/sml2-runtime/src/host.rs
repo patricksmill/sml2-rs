@@ -192,6 +192,8 @@ impl SessionRunner {
             self.session
                 .slots
                 .write_slot(self.session.active_slot.unwrap_or(0) as usize, record);
+        }
+        if effects.persist_slots {
             if let Err(error) = atomic_write(&self.save_path, &self.session.slots.image()) {
                 self.report_save_error(error);
             }

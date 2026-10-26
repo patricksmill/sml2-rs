@@ -134,10 +134,7 @@ impl Game {
         self.div_clock.advance_tick();
         let div = self.div_clock.sample();
         let effects = self.session.advance(FrameInput { keys, div });
-        let saved = !effects.saves.is_empty();
-        if saved {
-            // The session already wrote the record into `active_slot`; persist
-            // the complete image so the other pipes survive.
+        if effects.persist_slots {
             if let Err(e) = self.persist_slots() {
                 self.diagnostics.push(format!("Save: {e}"));
             }

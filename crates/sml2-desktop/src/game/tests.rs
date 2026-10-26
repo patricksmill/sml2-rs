@@ -152,6 +152,77 @@ fn desktop_and_cli_round_trip_all_three_pipes() {
     std::fs::remove_file(path).unwrap();
 }
 
+#[test]
+fn file_select_erase_survives_restart_in_both_hosts_and_preserves_other_pipes() {
+    let paths = [temp_save("erase_desktop"), temp_save("erase_cli")];
+    let mut slots = SaveSlots::new();
+    for slot in 0..3 {
+        slots.write_slot(slot, &MapSim::new().save_record(5, slot as u8 + 1, 0));
+    }
+    for path in &paths {
+        std::fs::write(path, slots.image()).unwrap();
+    }
+    let mut game = Game::new(SessionAssets::load().unwrap(), paths[0].clone(), false);
+    let mut cli = sml2_runtime::host::SessionRunner::new(
+        SessionAssets::load().unwrap(),
+        paths[1].clone(),
+        1,
+        (160, 144),
+        true,
+    );
+    game.session.enter_file_select();
+    cli.session.enter_file_select();
+    let mut tick = |keys| {
+        game.tick(keys, 0.0);
+        cli.step_frame(keys);
+    };
+    for _ in 0..60 {
+        tick(PlayerKeys::default());
+    }
+    for _ in 0..3 {
+        tick(PlayerKeys {
+            right: true,
+            ..Default::default()
+        });
+        for _ in 0..32 {
+            tick(PlayerKeys::default());
+        }
+    }
+    tick(PlayerKeys {
+        a: true,
+        ..Default::default()
+    });
+    for _ in 0..55 {
+        tick(PlayerKeys::default());
+    }
+    for _ in 0..3 {
+        tick(PlayerKeys {
+            left: true,
+            ..Default::default()
+        });
+        for _ in 0..32 {
+            tick(PlayerKeys::default());
+        }
+    }
+    tick(PlayerKeys {
+        start: true,
+        ..Default::default()
+    });
+    for _ in 0..64 {
+        tick(PlayerKeys::default());
+    }
+    assert!(!game.session.slots.valid(0));
+    assert!(!cli.slots.valid(0));
+    for path in paths {
+        let restored = Game::new(SessionAssets::load().unwrap(), path.clone(), false);
+        assert!(!restored.session.slots.valid(0));
+        assert_eq!(restored.session.slots.slot(1), slots.slot(1));
+        assert_eq!(restored.session.slots.slot(2), slots.slot(2));
+        assert_eq!(std::fs::read(&path).unwrap(), game.session.slots.image());
+        std::fs::remove_file(path).unwrap();
+    }
+}
+
 /// Run with SML2_DX_ROM=/path/to/audited.gbc cargo test -p sml2-desktop
 /// real_rom_import_restart -- --ignored
 #[test]

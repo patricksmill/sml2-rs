@@ -14,6 +14,7 @@ fn tick(session: &mut Session, right: bool) {
         "the character door never saves a slot"
     );
     assert!(effects.diagnostics.is_empty());
+    assert!(!effects.persist_slots);
 }
 
 fn menu(session: &Session) -> &FileSelect {

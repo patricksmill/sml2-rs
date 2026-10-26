@@ -402,6 +402,7 @@ fn dx_render_frequency_preserves_native_frames_gameplay_and_save_bytes() {
         let b = displayed.advance(input);
         assert_eq!(a.outcome, b.outcome);
         assert_eq!(a.saves, b.saves);
+        assert_eq!(a.persist_slots, b.persist_slots);
         assert_eq!(plain.save_record(), displayed.save_record());
         assert_eq!(plain.sound_driver, displayed.sound_driver);
         let (SessionState::InLevel(a), SessionState::InLevel(b)) = (&plain.state, &displayed.state)
