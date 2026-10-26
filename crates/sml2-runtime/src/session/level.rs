@@ -4,9 +4,9 @@ use super::{
     apply_level_entry, boss_def_index, boss_def_portable, build_contact, note_handoff_screen,
     player_behind_bg, sample_level_player_inputs, scene_frame_head, seed_level_timer,
     update_tile_animation, BellArm, CameraSim, EndingEntry, EndingFrame, EndingInput, EndingScene,
-    EndingSequenceController, FireHit, HudStrip, LevelLayout, LevelManifest, MapHandoffOutcome,
-    MapNodes, ObjectClock, ObjectSim, ObjectTables, PlayerKeys, PlayerSim, SceneScripts, SceneStep,
-    SceneVm, SpriteCtx, SpriteInst, TileAnimationClock, Tilesets, BOSS_LOAD_VBLANKS,
+    EndingSequenceController, HudStrip, LevelLayout, LevelManifest, MapHandoffOutcome, MapNodes,
+    ObjectClock, ObjectSim, ObjectTables, PlayerKeys, PlayerSim, SceneScripts, SceneStep, SceneVm,
+    SpriteCtx, SpriteInst, TileAnimationClock, Tilesets, BOSS_LOAD_VBLANKS,
 };
 
 /// In-level simulation state and working buffers for a live level play.
@@ -220,7 +220,6 @@ impl LevelContext {
             _ => EndingInput::default(),
         };
         let keys = input.held;
-        let (a_pressed, b_pressed) = (input.pressed.a, input.pressed.b);
         let (start_pressed, select_pressed) = (input.pressed.start, input.pressed.select);
         let was_dead = self.sim.dead == 0xFF;
         let frozen = !gameplay || self.sim.paused || self.sim.dead_fade || self.sim.exit_phase;
@@ -274,42 +273,16 @@ impl LevelContext {
         } else if was_dead {
             self.sim.death_arc(self.cam.y);
         } else {
-            if self.cam.transition == 0 {
-                self.cam.crouch_pan(&self.sim, &keys);
-                self.sim
-                    .step(&keys, a_pressed, b_pressed, &self.layout_live);
-            } else {
-                self.sim.tick_fade_timer();
-            }
-            if self.sim.take_stomp_chain_reset() {
-                self.obj.stomp_chain = 0;
-            }
-            if let Some((by, bx)) = self.sim.below_bonk.take() {
-                let special = self
-                    .obj
-                    .below_bonk(by, bx, self.cam.scroll_y, self.cam.scroll_x);
-                self.sim.resolve_bump_coin(special);
-            }
-            if let Some((by, bx)) = self.sim.fire_below_bonk.take() {
-                self.obj
-                    .below_bonk(by, bx, self.cam.scroll_y, self.cam.scroll_x);
-            }
-            for i in 0..self.sim.fire_scan.len() {
-                let Some((sy, sx)) = self.sim.fire_scan[i].take() else {
-                    continue;
-                };
-                let hit = self.obj.fire_hit(sy, sx);
-                if hit == FireHit::Die {
-                    self.sim.sfx0 = 2;
-                }
-                self.sim.resolve_fire_hit(i, hit != FireHit::None);
-            }
-            let transition_before = self.cam.transition;
-            self.cam.step(&mut self.sim);
-            if transition_before != 0 && self.cam.transition == 0 {
+            let player = crate::game::level_frame::step_player_camera(
+                &mut self.sim,
+                &mut self.cam,
+                &mut self.obj,
+                &self.layout_live,
+                input,
+            );
+            if player.transition_finished {
                 self.scene_reload_blank = false;
             }
-            self.cam.update_enables(self.sim.x);
         }
         self.cam.update_player_pan(self.sim.y, was_dead, !frozen);
 

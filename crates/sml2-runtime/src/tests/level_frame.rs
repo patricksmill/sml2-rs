@@ -200,3 +200,22 @@ fn death_and_completed_exit_preserve_native_host_boundaries() {
         assert!(sim.map_handoff_done);
     }
 }
+
+#[test]
+fn player_events_consume_both_bumps_without_crediting_the_fireball() {
+    use crate::game::level_frame::resolve_player_events;
+    let mut ctx = level();
+    ctx.cam.scroll_y = 0x31;
+    ctx.cam.scroll_x = 0x70;
+    ctx.sim.below_bonk = Some((0xdf, 0x68));
+    ctx.sim.fire_below_bonk = Some((0xdf, 0x68));
+    ctx.sim.bump_coin_pending = true;
+    resolve_player_events(&mut ctx.sim, &ctx.cam, &mut ctx.obj);
+    assert_eq!(ctx.sim.coins_low, 1);
+    assert_eq!(ctx.sim.sfx0, 7);
+    assert_eq!(ctx.sim.block_slots[0][0], 4);
+    assert_eq!((ctx.sim.below_bonk, ctx.sim.fire_below_bonk), (None, None));
+    resolve_player_events(&mut ctx.sim, &ctx.cam, &mut ctx.obj);
+    assert_eq!(ctx.sim.coins_low, 1);
+    assert_eq!(ctx.sim.block_slots.iter().filter(|s| s[0] != 0).count(), 1);
+}

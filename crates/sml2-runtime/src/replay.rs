@@ -12,7 +12,6 @@ use crate::{SCREEN_H, SCREEN_W};
 use serde::Deserialize;
 use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest};
-use sml2_core::objects::FireHit;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
 use sml2_core::scene::{boss_def_index, boss_def_portable, SceneVm};
 use std::fs;
@@ -430,7 +429,6 @@ pub(crate) fn run_replay(
             _ => EndingInput::default(),
         };
         let keys = input.held;
-        let (a_pressed, b_pressed) = (input.pressed.a, input.pressed.b);
         let was_dead = sim.dead == 0xFF;
         // The fade-trigger frame is the last one to run the object engine
         // (the dead branch continues into `$0652`); the true fade frames do
@@ -485,65 +483,11 @@ pub(crate) fn run_replay(
         } else if was_dead {
             sim.death_arc(cam.y);
         } else {
-            // a screen transition skips the player update — the camera's
-            // `$0DED` handler moves Mario instead.
-            if cam.transition == 0 {
-                // $307D — `$0F71`'s FIRST call: the B+Down/B+Up crouch-look
-                // pan runs at the *top* of the player update, before the body,
-                // so its `sMarioOnGround`/`sMarioOnObject` gate reads the
-                // flags the previous frame settled (`PlayerSim::step` would
-                // overwrite them). Still before `cam.step` below, and skipped
-                // whenever `$0F71` is — see `CameraSim::crouch_pan`.
-                cam.crouch_pan(&sim, &keys);
-                sim.step(&keys, a_pressed, b_pressed, layout);
-            } else {
-                // home.asm ~115: VBlank decrements sFadeTimer unconditionally
-                // on every in-level frame, including during camera transitions.
-                sim.tick_fade_timer();
-            }
-            // `$3451` id 4's conditional `sStompChainCount` reset (star
-            // pickup on an expired timer). The counter lives in the object
-            // engine, so the consumer's one-shot flag is applied here —
-            // before this frame's object pass can bump it again.
-            if sim.take_stomp_chain_reset() {
-                obj.stomp_chain = 0;
-            }
-            // $2F72 — the block-bump alloc's tail. It runs inside the player
-            // update ($0F71), before $0B2A/$2062 recompute the scroll, so its
-            // screen math reads the *previous* frame's sScroll — the camera
-            // scroll_y/scroll_x latched by $2062 at the end of the previous frame.
-            // The object engine ($8000) reads the below-hit flag later this frame,
-            // so the pass has to land before `obj.step`; `resolve_bump_coin` is the
-            // `$19D2` coin half of the split.
-            if let Some((by, bx)) = sim.below_bonk.take() {
-                let scroll_y = cam.scroll_y;
-                let scroll_x = cam.scroll_x;
-                let special = obj.below_bonk(by, bx, scroll_y, scroll_x);
-                sim.resolve_bump_coin(special);
-            }
-            // A fireball's `$06` break reaches the same `$5960`/`$2F72` pair
-            // from `$0F71`'s tail: the ball's own cell bytes arm the pass, and
-            // only the player's `$19D2` bump owes the coin.
-            if let Some((by, bx)) = sim.fire_below_bonk.take() {
-                let scroll_y = cam.scroll_y;
-                let scroll_x = cam.scroll_x;
-                obj.below_bonk(by, bx, scroll_y, scroll_x);
-            }
-            // `$3261`'s `$2FED`: the ball's staged screen pair against the
-            // object slots, before the object engine reads the flags it sets.
-            for i in 0..sim.fire_scan.len() {
-                let Some((sy, sx)) = sim.fire_scan[i].take() else {
-                    continue;
-                };
-                let hit = obj.fire_hit(sy, sx);
-                if hit == FireHit::Die {
-                    sim.sfx0 = 2; // `$3007`'s sfx arm
-                }
-                sim.resolve_fire_hit(i, hit != FireHit::None);
-            }
+            // Captures without the edge table supply `$FF98` to the camera.
             cam.edge_now = if own_edges { None } else { Some(f.edge) };
-            cam.step(&mut sim);
-            cam.update_enables(sim.x);
+            crate::game::level_frame::step_player_camera(
+                &mut sim, &mut cam, &mut obj, layout, input,
+            );
         }
         // $FF98 for this frame. `own_edges` makes it the port's own derivation
         // from the level's 48-byte table (checked below); otherwise the

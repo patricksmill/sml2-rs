@@ -11,7 +11,6 @@ use crate::present::letterbox_gray;
 use crate::render::{hud_row_status, render_view, HudDigits, SpriteCtx, SpriteInst};
 use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest};
-use sml2_core::objects::FireHit;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
 use sml2_core::scene::{boss_def_index, boss_def_portable, SceneStep, SceneVm};
 
@@ -251,7 +250,6 @@ pub(crate) fn run_play(
             _ => EndingInput::default(),
         };
         let keys = input.held;
-        let (a_pressed, b_pressed) = (input.pressed.a, input.pressed.b);
         let (start_pressed, select_pressed) = (input.pressed.start, input.pressed.select);
         let was_dead = sim.dead == 0xFF;
         // The fade-trigger frame still runs the object engine ($0640
@@ -304,62 +302,25 @@ pub(crate) fn run_play(
         } else if was_dead {
             sim.death_arc(cam.y);
         } else {
-            if cam.transition == 0 {
-                // $307D — `$0F71`'s first call; see the replay loop above.
-                cam.crouch_pan(&sim, &keys);
-                let float_before =
-                    (!sim.on_ground && sim.moon & 0x08 != 0 && keys.a && sim.moon_float_timer != 0)
-                        .then_some((sim.moon_float_timer, sim.vvel));
-                sim.step(&keys, a_pressed, b_pressed, &layout_live);
-                if let Some((timer, vvel)) = float_before {
-                    if sim.moon_float_timer == timer - 1 {
-                        timed_float_frames += 1;
-                        if timed_float_use.is_none() {
-                            timed_float_use = Some(TimedFloatUse {
-                                frame: frame_n,
-                                timer_before: timer,
-                                timer_after: sim.moon_float_timer,
-                                vvel_before: vvel,
-                                vvel_after: sim.vvel,
-                            });
-                        }
-                    }
+            let player = crate::game::level_frame::step_player_camera(
+                &mut sim,
+                &mut cam,
+                &mut obj,
+                &layout_live,
+                input,
+            );
+            if let Some(sample) = player.float_use {
+                timed_float_frames += 1;
+                if timed_float_use.is_none() {
+                    timed_float_use = Some(TimedFloatUse {
+                        frame: frame_n,
+                        timer_before: sample.timer_before,
+                        timer_after: sample.timer_after,
+                        vvel_before: sample.vvel_before,
+                        vvel_after: sample.vvel_after,
+                    });
                 }
-            } else {
-                // home.asm ~115: VBlank decrements sFadeTimer unconditionally.
-                sim.tick_fade_timer();
             }
-            // `$3451` id 4's `sStompChainCount` reset — see the replay loop.
-            if sim.take_stomp_chain_reset() {
-                obj.stomp_chain = 0;
-            }
-            // $2F72 — the bump alloc's tail; see the replay loop. Use the camera's
-            // latched scroll_y and scroll_x.
-            if let Some((by, bx)) = sim.below_bonk.take() {
-                let scroll_y = cam.scroll_y;
-                let scroll_x = cam.scroll_x;
-                let special = obj.below_bonk(by, bx, scroll_y, scroll_x);
-                sim.resolve_bump_coin(special);
-            }
-            // A fireball's `$06` break; see the replay loop above.
-            if let Some((by, bx)) = sim.fire_below_bonk.take() {
-                let scroll_y = cam.scroll_y;
-                let scroll_x = cam.scroll_x;
-                obj.below_bonk(by, bx, scroll_y, scroll_x);
-            }
-            // `$3261`'s `$2FED`; see the replay loop above.
-            for i in 0..sim.fire_scan.len() {
-                let Some((sy, sx)) = sim.fire_scan[i].take() else {
-                    continue;
-                };
-                let hit = obj.fire_hit(sy, sx);
-                if hit == FireHit::Die {
-                    sim.sfx0 = 2;
-                }
-                sim.resolve_fire_hit(i, hit != FireHit::None);
-            }
-            cam.step(&mut sim);
-            cam.update_enables(sim.x);
         }
         cam.update_player_pan(sim.y, was_dead, !frozen);
         if let Some(tables) = &obj_tables {

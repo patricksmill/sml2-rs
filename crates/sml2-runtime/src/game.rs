@@ -8,6 +8,8 @@ use sml2_core::map::MapNodes;
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
 use sml2_core::scene::SceneVm;
 
+pub(crate) mod level_frame;
+
 /// `$EBBB` clears the level's slots and scratch; `$FFF0` survives the loader.
 /// Cold startup (`$022A`) supplies zero, while session re-entry supplies its
 /// persistent counter. Replay fixtures retain their own explicit seeds.
