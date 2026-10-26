@@ -10,10 +10,7 @@ use std::cmp::Ordering;
 /// ROM `$58C65`: `ld a,36`.
 pub(super) const SPAN: u8 = 36;
 
-#[derive(Debug, PartialEq, Eq)]
-pub(super) enum Error {
-    InvalidState(u8),
-}
+pub(super) use super::patrol_motion::Error;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Effect {
@@ -32,51 +29,6 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
             actor.motion_leg = SPAN;
             Ok(Effect::Initialized { facing: relation })
         }
-        // $58C85: short left leg, then the long right leg.
-        1 => {
-            let (carry, done) = step(actor, -1, actor.motion_leg);
-            if done {
-                actor.state = 4;
-            }
-            Ok(Effect::Moved { carry_dx: carry })
-        }
-        // $58C9F: short right leg, then the long left leg.
-        2 => {
-            let (carry, done) = step(actor, 1, actor.motion_leg);
-            if done {
-                actor.state = 3;
-            }
-            Ok(Effect::Moved { carry_dx: carry })
-        }
-        // $58CB9: long left leg; `state ^= 7` flips 3 <-> 4.
-        3 => {
-            let cap = actor.motion_leg.wrapping_mul(2);
-            let (carry, done) = step(actor, -1, cap);
-            if done {
-                actor.state ^= 7;
-            }
-            Ok(Effect::Moved { carry_dx: carry })
-        }
-        // $58CD6: long right leg, joining the same counter.
-        4 => {
-            let cap = actor.motion_leg.wrapping_mul(2);
-            let (carry, done) = step(actor, 1, cap);
-            if done {
-                actor.state ^= 7;
-            }
-            Ok(Effect::Moved { carry_dx: carry })
-        }
-        state => Err(Error::InvalidState(state)),
+        _ => super::patrol_motion::patrol(actor).map(|carry_dx| Effect::Moved { carry_dx }),
     }
-}
-
-fn step(actor: &mut Actor, dx: i16, cap: u8) -> (Option<i16>, bool) {
-    actor.position.move_x(dx);
-    let carry = actor.interactions.stood_on().then_some(dx);
-    actor.motion_phase = actor.motion_phase.wrapping_add(1);
-    let done = actor.motion_phase == cap;
-    if done {
-        actor.motion_phase = 0;
-    }
-    (carry, done)
 }

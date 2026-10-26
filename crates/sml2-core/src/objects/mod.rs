@@ -217,6 +217,8 @@ mod handler_0x58bba_adapter;
 mod handler_0x58bcb;
 #[path = "compat/platforms/short_vertical.rs"]
 mod handler_0x58bcb_adapter;
+#[path = "platforms/patrol_motion.rs"]
+mod patrol_motion;
 #[path = "platforms/long_horizontal.rs"]
 mod handler_0x58c41;
 #[path = "compat/platforms/long_horizontal.rs"]
@@ -1521,3 +1523,7 @@ impl ObjectSim {
 
     // ---------------------------------------------------------------------
 }
+
+#[cfg(test)]
+#[path = "platforms/tests/patrol_motion.rs"]
+mod patrol_motion_tests;
