@@ -1,6 +1,6 @@
 //! ROM `$5AFD7` (mode B anim 88): a hopping ant.
 //!
-//! State 0 arms contact 77, faces Mario, and sets a two-hop span. States 1 and
+//! State 0 arms contact 77, faces Mario, and sets a two-hop count. States 1 and
 //! 2 walk one pixel every frame. On even frames they rise on `$7488` or fall
 //! on `$74A4`. Reaching phase 15 reverses the vertical direction; the downward
 //! turn also flips the walk. After two downward turns the ant opens its mouth,
@@ -29,7 +29,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
             actor.contact_kind = ContactKind::from_raw(77);
             let facing = actor.face_toward(player_x);
             actor.motion_leg = 1;
-            actor.set_travel_span(2);
+            actor.set_motion_counter(2);
             Ok(Effect::Initialized { facing })
         }
         1 => Ok(hop(actor, frame, -1)),
@@ -66,9 +66,9 @@ fn hop(actor: &mut Actor, frame: FrameTick, dx: i16) -> Effect {
         actor.state ^= 3;
         return Effect::Continue;
     }
-    let span = actor.travel_span().wrapping_sub(1);
-    actor.set_travel_span(span);
-    if span != 0 {
+    let count = actor.motion_counter().wrapping_sub(1);
+    actor.set_motion_counter(count);
+    if count != 0 {
         return Effect::Continue;
     }
     actor.visibility_mask = actor.state;
@@ -107,5 +107,5 @@ fn recover(actor: &mut Actor) {
         return;
     }
     actor.state = actor.visibility_mask;
-    actor.set_travel_span(2);
+    actor.set_motion_counter(2);
 }

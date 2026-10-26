@@ -3,7 +3,7 @@
 //! Follows the idiomatic Rust porting guide: typed actor state, domain methods,
 //! zero raw hex offsets or register plumbing.
 
-use crate::actor::{Actor, ContactKind, Facing, FrameTick, SpriteFlipFlags, VerticalTrackingError};
+use crate::actor::{Actor, ContactKind, FrameTick, SpriteFlipFlags, VerticalTrackingError};
 
 /// Boo movement state ($59545).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,7 +92,7 @@ pub fn update(actor: &mut Actor, context: BooContext) -> Result<BooEffect, Verti
                 actor.state = BooState::ChasingLeft.to_raw();
             }
             actor.motion_leg = 8; // neutral Y speed index
-            actor.travel_direction = Facing::from_raw(8);
+            actor.set_motion_counter(8);
             actor.contact_kind = ContactKind::from_raw(0x48);
             BooEffect::Chasing
         }
@@ -101,9 +101,8 @@ pub fn update(actor: &mut Actor, context: BooContext) -> Result<BooEffect, Verti
             actor.track_player_y(context.mario_ref_y)?;
             // Step X right (+1).
             actor.position.move_x(1);
-            if actor.travel_direction.raw() != 16 {
-                actor.travel_direction =
-                    Facing::from_raw(actor.travel_direction.raw().wrapping_add(1));
+            if actor.motion_counter() != 16 {
+                actor.set_motion_counter(actor.motion_counter().wrapping_add(1));
             }
             BooEffect::Chasing
         }
@@ -112,9 +111,8 @@ pub fn update(actor: &mut Actor, context: BooContext) -> Result<BooEffect, Verti
             actor.track_player_y(context.mario_ref_y)?;
             // Step X left (-1).
             actor.position.move_x(-1);
-            if actor.travel_direction.raw() > 0 {
-                actor.travel_direction =
-                    Facing::from_raw(actor.travel_direction.raw().wrapping_sub(1));
+            if actor.motion_counter() > 0 {
+                actor.set_motion_counter(actor.motion_counter().wrapping_sub(1));
             }
             BooEffect::Chasing
         }
@@ -326,7 +324,7 @@ mod tests {
         assert_eq!(actor.sprite, 13);
         assert!(actor.sprite_flip.horizontal());
         assert_eq!(actor.motion_leg, 8);
-        assert_eq!(actor.travel_direction.raw(), 8);
+        assert_eq!(actor.motion_counter(), 8);
         assert_eq!(actor.contact_kind.raw(), 0x48);
 
         // Next 4th frame: advances right in X, keeps tracking Y
@@ -340,7 +338,7 @@ mod tests {
         assert_eq!(eff, Ok(BooEffect::Chasing));
         assert_eq!(actor.position.x, 101);
         assert_eq!(actor.motion_leg, 9);
-        assert_eq!(actor.travel_direction.raw(), 9);
+        assert_eq!(actor.motion_counter(), 9);
     }
 
     #[test]
@@ -373,6 +371,6 @@ mod tests {
         update(&mut actor, ctx).unwrap();
         assert_eq!(actor.position.x, 99);
         assert_eq!(actor.motion_leg, 7); // accelerated upward toward index 0
-        assert_eq!(actor.travel_direction.raw(), 7);
+        assert_eq!(actor.motion_counter(), 7);
     }
 }

@@ -57,6 +57,24 @@ fn every_byte_value_in_each_slot_position_survives_conversion() {
 }
 
 #[test]
+fn travel_spans_and_motion_counters_preserve_the_shared_slot_byte() {
+    for value in 0..=255 {
+        let mut slot = [0xA5; 32];
+        slot[25] = value;
+        let actor = Actor::from_raw_slot(&slot);
+        assert_eq!(actor.travel_span(), value);
+        assert_eq!(actor.motion_counter(), value);
+
+        let mut actor = Actor::from_raw_slot(&[0xA5; 32]);
+        actor.set_travel_span(value);
+        assert_eq!(actor.to_raw_slot(), slot);
+        let mut actor = Actor::from_raw_slot(&[0xA5; 32]);
+        actor.set_motion_counter(value);
+        assert_eq!(actor.to_raw_slot(), slot);
+    }
+}
+
+#[test]
 fn signed_world_and_screen_movement_have_separate_wraps() {
     let mut world = Position { x: 0, y: u16::MAX };
     world.move_x(-1);

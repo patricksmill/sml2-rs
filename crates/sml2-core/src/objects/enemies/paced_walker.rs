@@ -7,7 +7,7 @@
 //! Follows the idiomatic Rust porting guide: typed actor state, domain methods,
 //! zero raw hex offsets or register plumbing.
 
-use crate::actor::{Actor, ContactKind, Facing, FlashFlags, FrameTick};
+use crate::actor::{Actor, ContactKind, FlashFlags, FrameTick};
 
 pub const WALK_BUDGET_PX: u8 = 48; // ROM $59D18 / $59D55: ld a, 48
 pub const PAUSE_FRAMES: u8 = 16; // ROM $59CEF / $59D28: ld a, 16
@@ -108,7 +108,7 @@ fn pause_step(actor: &mut Actor, left: bool) -> PacedWalkerEffect {
         if actor.timer != 0 {
             return PacedWalkerEffect::None;
         }
-        actor.travel_direction = Facing::from_raw(WALK_BUDGET_PX);
+        actor.set_travel_span(WALK_BUDGET_PX);
         return PacedWalkerEffect::None;
     }
 
@@ -118,8 +118,8 @@ fn pause_step(actor: &mut Actor, left: bool) -> PacedWalkerEffect {
         actor.position.move_x(1);
     }
 
-    let budget = actor.travel_direction.raw().wrapping_sub(1);
-    actor.travel_direction = Facing::from_raw(budget);
+    let budget = actor.travel_span().wrapping_sub(1);
+    actor.set_travel_span(budget);
     if budget != 0 {
         return PacedWalkerEffect::Moved {
             state: if left {
@@ -303,7 +303,7 @@ mod tests {
         );
         assert_eq!(eff, PacedWalkerEffect::None);
         assert_eq!(actor.timer, 0);
-        assert_eq!(actor.travel_direction.raw(), 48);
+        assert_eq!(actor.travel_span(), 48);
         assert_eq!(actor.position.x, 200);
 
         // Next 47 steps: each decrements budget and moves X by -1
@@ -322,7 +322,7 @@ mod tests {
                     state: PacedWalkerState::WalkLeft
                 }
             );
-            assert_eq!(actor.travel_direction.raw(), 48 - i);
+            assert_eq!(actor.travel_span(), 48 - i);
             assert_eq!(actor.position.x, 200 - i as u16);
         }
 
@@ -336,7 +336,7 @@ mod tests {
             &mut world,
         );
         assert_eq!(eff, PacedWalkerEffect::Paused);
-        assert_eq!(actor.travel_direction.raw(), 0);
+        assert_eq!(actor.travel_span(), 0);
         assert_eq!(actor.position.x, 200 - 48);
         assert_eq!(actor.timer, 16);
 
@@ -366,7 +366,7 @@ mod tests {
         );
         assert_eq!(eff, PacedWalkerEffect::None);
         assert_eq!(actor.timer, 0);
-        assert_eq!(actor.travel_direction.raw(), 48);
+        assert_eq!(actor.travel_span(), 48);
         assert_eq!(actor.position.x, 200 - 48);
 
         // Next frame: begins walking again

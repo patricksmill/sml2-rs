@@ -12,7 +12,7 @@
 //! Follows the idiomatic Rust porting guide: typed actor state, domain methods,
 //! zero raw hex offsets or register plumbing.
 
-use crate::actor::{Actor, ContactKind, Facing, SpriteFlipFlags};
+use crate::actor::{Actor, ContactKind, SpriteFlipFlags};
 
 pub const DISTANCE_THRESHOLD_X: u8 = 40; // ROM $5AA0D: cp $28 (40)
 pub const INITIAL_CREEP_BUDGET: u8 = 24; // ROM $5A9FD: ld a, 24
@@ -77,7 +77,7 @@ pub fn update(actor: &mut Actor, context: ChargingEnemyContext) -> ChargingEnemy
             actor.defeat_mode = 0x80;
             actor.sprite_flip = SpriteFlipFlags::default();
             actor.contact_kind = ContactKind::from_raw(CONTACT_KIND);
-            actor.travel_direction = Facing::from_raw(INITIAL_CREEP_BUDGET);
+            actor.set_travel_span(INITIAL_CREEP_BUDGET);
             actor.timer = INITIAL_PAUSE_FRAMES;
             actor.state = ChargingEnemyState::Wait.to_raw();
             ChargingEnemyEffect::Initialized
@@ -116,8 +116,8 @@ pub fn update(actor: &mut Actor, context: ChargingEnemyContext) -> ChargingEnemy
                 ChargingEnemyEffect::None
             } else {
                 actor.position.move_x(-1);
-                let budget = actor.travel_direction.raw().wrapping_sub(1);
-                actor.travel_direction = Facing::from_raw(budget);
+                let budget = actor.travel_span().wrapping_sub(1);
+                actor.set_travel_span(budget);
                 if budget != 0 {
                     ChargingEnemyEffect::Creeping {
                         state: ChargingEnemyState::CreepLeft,
@@ -138,8 +138,8 @@ pub fn update(actor: &mut Actor, context: ChargingEnemyContext) -> ChargingEnemy
                 ChargingEnemyEffect::None
             } else {
                 actor.position.move_x(1);
-                let budget = actor.travel_direction.raw().wrapping_sub(1);
-                actor.travel_direction = Facing::from_raw(budget);
+                let budget = actor.travel_span().wrapping_sub(1);
+                actor.set_travel_span(budget);
                 if budget != 0 {
                     ChargingEnemyEffect::Creeping {
                         state: ChargingEnemyState::CreepRight,
@@ -197,7 +197,7 @@ mod tests {
         assert_eq!(actor.position.y, 102, "moves Y by +2");
         assert_eq!(actor.defeat_mode, 0x80, "defeat mode armored 0x80");
         assert_eq!(actor.contact_kind, ContactKind::from_raw(CONTACT_KIND));
-        assert_eq!(actor.travel_direction.raw(), 24);
+        assert_eq!(actor.travel_span(), 24);
         assert_eq!(actor.timer, 24);
         assert_eq!(actor.state, ChargingEnemyState::Wait.to_raw());
     }
@@ -245,7 +245,7 @@ mod tests {
         actor.position.x = 100;
         actor.state = ChargingEnemyState::CreepLeft.to_raw();
         actor.timer = 24;
-        actor.travel_direction = Facing::from_raw(24);
+        actor.set_travel_span(24);
         actor.defeat_mode = 0x80;
         actor.screen.x = 80;
 
@@ -279,7 +279,7 @@ mod tests {
                 }
             );
             assert_eq!(actor.position.x, 100 - step);
-            assert_eq!(actor.travel_direction.raw(), 24 - step as u8);
+            assert_eq!(actor.travel_span(), 24 - step as u8);
         }
 
         // 24th creep step triggers charge!

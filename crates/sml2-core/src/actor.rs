@@ -416,13 +416,22 @@ impl Actor {
         Ok(())
     }
 
-    /// Some platform routines use the travel parameter as a distance limit.
+    /// Distance limit or remaining movement budget in the shared travel parameter.
     pub fn travel_span(&self) -> u8 {
         self.travel_direction.raw()
     }
 
     pub fn set_travel_span(&mut self, distance: u8) {
         self.travel_direction = Facing::from_raw(distance);
+    }
+
+    /// Counts, motion-table cursors and charge phases in the shared travel parameter.
+    pub fn motion_counter(&self) -> u8 {
+        self.travel_direction.raw()
+    }
+
+    pub fn set_motion_counter(&mut self, count: u8) {
+        self.travel_direction = Facing::from_raw(count);
     }
 
     pub fn move_screen_horizontally(&mut self, distance: u8) {

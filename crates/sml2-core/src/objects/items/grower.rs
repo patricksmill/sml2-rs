@@ -1,7 +1,7 @@
 //! Native grower, anim 92 (`$5B1C8`): it bobs three 3-pixel segments while
 //! armed, then grows its sprite from 122 to 124, holds, and shrinks back to
 //! start over. Slot mapping lives in the `items` adapter.
-use crate::actor::{Actor, ContactKind, Facing, FrameTick};
+use crate::actor::{Actor, ContactKind, FrameTick};
 
 /// Contact kind while bobbing.
 const ARMED_CONTACT: u8 = 0x4C;
@@ -49,12 +49,12 @@ fn arm(actor: &mut Actor) {
     actor.contact_kind = ContactKind::from_raw(ARMED_CONTACT);
     actor.state = 1;
     actor.motion_leg = SEGMENT;
-    actor.travel_direction = Facing::from_raw(SEGMENT);
+    actor.set_travel_span(SEGMENT);
     actor.animation_frame = SEGMENT;
 }
 
 /// `$71E4`: one pixel up (phase 0) or down; `motion_leg` counts the segment's
-/// pixels, reloaded from `travel_direction`; `animation_frame` the segments.
+/// pixels, reloaded from `travel_span()`; `animation_frame` the segments.
 fn bob(actor: &mut Actor) {
     actor
         .position
@@ -70,7 +70,7 @@ fn bob(actor: &mut Actor) {
         actor.state = 2;
         return;
     }
-    actor.motion_leg = actor.travel_direction.raw();
+    actor.motion_leg = actor.travel_span();
     actor.motion_phase ^= 1;
 }
 

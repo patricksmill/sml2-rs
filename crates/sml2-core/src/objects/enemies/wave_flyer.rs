@@ -7,7 +7,7 @@
 //! Follows the idiomatic Rust porting guide: typed actor state, domain methods,
 //! zero raw hex offsets or register plumbing.
 
-use crate::actor::{Actor, ContactKind, Facing, FlashFlags, FrameTick};
+use crate::actor::{Actor, ContactKind, FlashFlags, FrameTick};
 
 pub const STEP_BUDGET: u8 = 48; // ROM $59F71 / $59F8F: ld a, 48
 pub const FLASH_FLAGS: u8 = 0x10; // ROM $59F66: ld a, 16
@@ -98,7 +98,7 @@ pub fn update(actor: &mut Actor, context: WaveFlyerContext) -> WaveFlyerEffect {
         };
         actor.state = next_state.to_raw();
         actor.sprite_flip.set_horizontal(flip);
-        actor.travel_direction = Facing::from_raw(STEP_BUDGET);
+        actor.set_travel_span(STEP_BUDGET);
         return WaveFlyerEffect::Initialized { facing };
     }
 
@@ -119,9 +119,9 @@ pub fn update(actor: &mut Actor, context: WaveFlyerContext) -> WaveFlyerEffect {
     }
 
     // ROM $59F88: ldh a, [$FFE9] ; sub b (b=2)
-    let remaining = actor.travel_direction.raw().wrapping_sub(2);
+    let remaining = actor.travel_span().wrapping_sub(2);
     if remaining != 0 {
-        actor.travel_direction = Facing::from_raw(remaining);
+        actor.set_travel_span(remaining);
         let vertical = VerticalDirection::from_raw(actor.motion_leg);
         match vertical {
             VerticalDirection::Climbing => {
@@ -138,7 +138,7 @@ pub fn update(actor: &mut Actor, context: WaveFlyerContext) -> WaveFlyerEffect {
         }
     } else {
         // Budget exhausted: reload 48
-        actor.travel_direction = Facing::from_raw(STEP_BUDGET);
+        actor.set_travel_span(STEP_BUDGET);
         let vertical = VerticalDirection::from_raw(actor.motion_leg);
         match vertical {
             VerticalDirection::Climbing => {
@@ -189,7 +189,7 @@ mod tests {
         assert!(!actor.sprite_flip.horizontal());
         assert_eq!(actor.flash.bits(), FLASH_FLAGS);
         assert_eq!(actor.contact_kind.raw(), CONTACT_KIND);
-        assert_eq!(actor.travel_direction.raw(), STEP_BUDGET);
+        assert_eq!(actor.travel_span(), STEP_BUDGET);
         assert_eq!(actor.motion_leg, VerticalDirection::Climbing.to_raw());
 
         // Mario to right
@@ -258,7 +258,7 @@ mod tests {
     fn test_cadence_skips_movement_on_non_multiples_of_4() {
         let mut actor = make_test_actor(100, 80);
         actor.state = WaveFlyerState::FlyRight.to_raw();
-        actor.travel_direction = Facing::from_raw(48);
+        actor.set_travel_span(48);
 
         for f in [1, 2, 3, 5, 6, 7, 9, 10, 11] {
             let effect = update(
@@ -271,7 +271,7 @@ mod tests {
             assert_eq!(effect, WaveFlyerEffect::CadenceSkipped);
             assert_eq!(actor.position.x, 100);
             assert_eq!(actor.position.y, 80);
-            assert_eq!(actor.travel_direction.raw(), 48);
+            assert_eq!(actor.travel_span(), 48);
         }
     }
 
@@ -280,7 +280,7 @@ mod tests {
         let mut actor = make_test_actor(100, 100);
         actor.state = WaveFlyerState::FlyRight.to_raw();
         actor.sprite_flip.set_horizontal(true);
-        actor.travel_direction = Facing::from_raw(48);
+        actor.set_travel_span(48);
         actor.motion_leg = VerticalDirection::Climbing.to_raw();
 
         // Step 1 (frame 4): X += 2, Y -= 1, budget = 46
@@ -316,7 +316,7 @@ mod tests {
         }
         assert_eq!(actor.position.x, 100 + 23 * 2); // 146
         assert_eq!(actor.position.y, 100 - 23); // 77
-        assert_eq!(actor.travel_direction.raw(), 2);
+        assert_eq!(actor.travel_span(), 2);
 
         // Step 24 (frame 96): Apex reached!
         // X moves +2 to 148, budget hits 0 and resets to 48, motion_leg becomes Diving.
@@ -331,7 +331,7 @@ mod tests {
         assert_eq!(eff, WaveFlyerEffect::ClimbCompleted);
         assert_eq!(actor.position.x, 148);
         assert_eq!(actor.position.y, 77);
-        assert_eq!(actor.travel_direction.raw(), 48);
+        assert_eq!(actor.travel_span(), 48);
         assert_eq!(actor.motion_leg, VerticalDirection::Diving.to_raw());
 
         // Step 25 (diving step 1, frame 100): X += 2 to 150, Y += 1 to 78, budget = 46
@@ -367,7 +367,7 @@ mod tests {
         }
         assert_eq!(actor.position.x, 148 + 23 * 2); // 194
         assert_eq!(actor.position.y, 77 + 23); // 100
-        assert_eq!(actor.travel_direction.raw(), 2);
+        assert_eq!(actor.travel_span(), 2);
 
         // Step 48 (frame 192): Trough reached & turnaround!
         // X moves +2 to 196 (total 96 px right!).
@@ -391,7 +391,7 @@ mod tests {
         );
         assert_eq!(actor.position.x, 196);
         assert_eq!(actor.position.y, 100);
-        assert_eq!(actor.travel_direction.raw(), 48);
+        assert_eq!(actor.travel_span(), 48);
         assert_eq!(actor.motion_leg, VerticalDirection::Climbing.to_raw());
         assert_eq!(actor.state, WaveFlyerState::FlyLeft.to_raw());
         assert!(!actor.sprite_flip.horizontal());

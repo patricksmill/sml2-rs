@@ -1,5 +1,5 @@
 //! Hopping enemy with a six-tick turning animation (ROM $58848).
-use crate::actor::{Actor, ContactKind, Facing, FrameTick, MotionProfileError, Position};
+use crate::actor::{Actor, ContactKind, FrameTick, MotionProfileError, Position};
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Error {
@@ -54,7 +54,7 @@ pub(super) trait World {
 }
 
 fn reverse(actor: &mut Actor) {
-    actor.travel_direction = Facing::from_raw(0);
+    actor.set_motion_counter(0);
     actor.sprite_flip.toggle_horizontal();
     actor.state ^= 3;
 }
@@ -111,8 +111,8 @@ fn hop(actor: &mut Actor, world: &mut impl World) -> Result<(), Error> {
     actor.timer = LANDING_PAUSE;
     let distance = (world.player_x() as u8).wrapping_sub(actor.position.x as u8) as i8;
     if distance.unsigned_abs() >= NEAR_PLAYER_DISTANCE {
-        actor.travel_direction = Facing::from_raw(actor.travel_direction.raw().wrapping_add(1));
-        if actor.travel_direction.raw() == 3 {
+        actor.set_motion_counter(actor.motion_counter().wrapping_add(1));
+        if actor.motion_counter() == 3 {
             reverse(actor);
         }
         return Ok(());
@@ -124,11 +124,11 @@ fn hop(actor: &mut Actor, world: &mut impl World) -> Result<(), Error> {
         HoppingState::HopRight as u8
     };
     if actor.state == desired_state {
-        actor.travel_direction = Facing::from_raw(actor.travel_direction.raw().wrapping_add(1));
+        actor.set_motion_counter(actor.motion_counter().wrapping_add(1));
         actor.state = actor.state.wrapping_add(2);
     } else {
         actor.state = desired_state + 2;
-        actor.travel_direction = Facing::from_raw(2u8.wrapping_sub(actor.travel_direction.raw()));
+        actor.set_motion_counter(2u8.wrapping_sub(actor.motion_counter()));
         actor.sprite_flip.toggle_horizontal();
     }
     Ok(())
@@ -146,7 +146,7 @@ fn turn(actor: &mut Actor, frame: FrameTick) {
         actor.animation_frame = 0;
         actor.timer = LANDING_PAUSE;
         actor.state = actor.state.wrapping_sub(2);
-        if actor.travel_direction.raw() == 3 {
+        if actor.motion_counter() == 3 {
             reverse(actor);
         }
         return;
@@ -242,30 +242,30 @@ mod tests {
         update(&mut actor, FrameTick(1), &mut world).unwrap();
         assert_eq!(actor.motion_phase, 1);
         world.wall = true;
-        actor.travel_direction = Facing::from_raw(2);
+        actor.set_motion_counter(2);
         let before = actor.position;
         update(&mut actor, FrameTick(2), &mut world).unwrap();
         assert_eq!(
-            (actor.position, actor.state, actor.travel_direction.raw()),
+            (actor.position, actor.state, actor.motion_counter()),
             (before, 2, 0)
         );
         world.wall = false;
         world.floor = true;
         actor.position.x = 152;
-        actor.travel_direction = Facing::from_raw(2);
+        actor.set_motion_counter(2);
         // Movement happens before distance: 200 - 153 = 47 selects turning.
         update(&mut actor, FrameTick(3), &mut world).unwrap();
         assert_eq!(
-            (actor.state, actor.travel_direction.raw(), actor.timer),
+            (actor.state, actor.motion_counter(), actor.timer),
             (4, 3, 8)
         );
         actor.state = 2;
         actor.position.x = 151;
         actor.motion_leg = 1;
         actor.timer = 0;
-        actor.travel_direction = Facing::from_raw(2);
+        actor.set_motion_counter(2);
         update(&mut actor, FrameTick(4), &mut world).unwrap();
-        assert_eq!((actor.state, actor.travel_direction.raw()), (1, 0));
+        assert_eq!((actor.state, actor.motion_counter()), (1, 0));
     }
 
     #[test]
@@ -296,14 +296,14 @@ mod tests {
                 assert_eq!(actor.sprite, 56 + delta as u8);
             }
             assert_eq!(actor.position.x, 0);
-            actor.travel_direction = Facing::from_raw(3);
+            actor.set_motion_counter(3);
             update(&mut actor, FrameTick(28), &mut world).unwrap();
             assert_eq!(
                 (
                     actor.state,
                     actor.timer,
                     actor.animation_frame,
-                    actor.travel_direction.raw()
+                    actor.motion_counter()
                 ),
                 ((state - 2) ^ 3, 8, 0, 0)
             );
@@ -316,14 +316,14 @@ mod tests {
         actor.state = 2;
         actor.motion_leg = 1;
         actor.position.x = 128;
-        actor.travel_direction = Facing::from_raw(1);
+        actor.set_motion_counter(1);
         let mut world = scene(129);
         world.floor = true;
         update(&mut actor, FrameTick(0), &mut world).unwrap();
         assert_eq!(
             (
                 actor.state,
-                actor.travel_direction.raw(),
+                actor.motion_counter(),
                 actor.sprite_flip.bits()
             ),
             (3, 1, 32)

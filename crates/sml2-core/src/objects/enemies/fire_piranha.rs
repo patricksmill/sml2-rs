@@ -4,7 +4,7 @@
 //! zero raw hex offsets or register plumbing.
 
 use super::pipe_bobber::dist_mario_x;
-use crate::actor::{Actor, ContactKind, Facing, FrameTick, SpriteFlipFlags};
+use crate::actor::{Actor, ContactKind, FrameTick, SpriteFlipFlags};
 
 /// Fire Piranha Plant state machine ($58541).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,7 +84,7 @@ pub fn update(actor: &mut Actor, context: FirePiranhaContext) -> FirePiranhaEffe
             }
             actor.state = FirePiranhaState::Emerging.to_raw();
             actor.motion_leg = 32;
-            actor.travel_direction = Facing::from_raw(32);
+            actor.set_travel_span(32);
             actor.contact_kind = ContactKind::from_raw(0x44);
             FirePiranhaEffect::Emerging
         }
@@ -115,7 +115,7 @@ pub fn update(actor: &mut Actor, context: FirePiranhaContext) -> FirePiranhaEffe
 
             // $585A8: timer reached zero. Close mouth and begin retracting.
             actor.state = FirePiranhaState::Retracting.to_raw();
-            actor.motion_leg = actor.travel_direction.raw(); // 32
+            actor.motion_leg = actor.travel_span(); // 32
             actor.sprite = actor.sprite.wrapping_sub(1); // 19 -> 18, 21 -> 20
             FirePiranhaEffect::Retracting
         }
@@ -194,7 +194,7 @@ mod tests {
         assert_eq!(eff, FirePiranhaEffect::Emerging);
         assert_eq!(actor.state, FirePiranhaState::Emerging.to_raw());
         assert_eq!(actor.motion_leg, 32);
-        assert_eq!(actor.travel_direction.raw(), 32);
+        assert_eq!(actor.travel_span(), 32);
         assert_eq!(actor.contact_kind.raw(), 0x44);
     }
 
@@ -205,7 +205,7 @@ mod tests {
         actor.position.y = 200;
         actor.state = FirePiranhaState::Emerging.to_raw();
         actor.motion_leg = 32;
-        actor.travel_direction = Facing::from_raw(32);
+        actor.set_travel_span(32);
         actor.sprite_flip.set_horizontal(true);
 
         // Mario above (mario_ref_y = 150 < actor.y)
@@ -249,7 +249,7 @@ mod tests {
         actor.position.y = 200;
         actor.state = FirePiranhaState::Emerging.to_raw();
         actor.motion_leg = 1; // 1 step left
-        actor.travel_direction = Facing::from_raw(32);
+        actor.set_travel_span(32);
 
         // Mario below (mario_ref_y = 250 > actor.y)
         let ctx = FirePiranhaContext {
@@ -280,7 +280,7 @@ mod tests {
         actor.state = FirePiranhaState::Shooting.to_raw();
         actor.timer = 48;
         actor.sprite = 19;
-        actor.travel_direction = Facing::from_raw(32);
+        actor.set_travel_span(32);
 
         // Pause for 47 frames
         for i in 1..=47 {

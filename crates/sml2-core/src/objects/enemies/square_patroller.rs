@@ -1,9 +1,9 @@
 //! ROM `$5B0D5` (mode B anim 90): a square patrol. State 0 arms contact `$4D`,
 //! faces Mario and latches that side in `motion_phase`; states 1/2 walk
 //! left/right and 3/4 move down/up one pixel per tick. Each side lasts
-//! `travel_direction` ticks, reloaded from `motion_leg`; a latched side of 1
+//! `travel_span()` ticks, reloaded from `motion_leg`; a latched side of 1
 //! loops `1 -> 3 -> 2 -> 4`, anything else `1 -> 4 -> 2 -> 3`.
-use crate::actor::{Actor, ContactKind, Facing, FrameTick, SpriteFlipFlags};
+use crate::actor::{Actor, ContactKind, FrameTick, SpriteFlipFlags};
 use std::cmp::Ordering;
 
 const CONTACT: u8 = 0x4D;
@@ -32,7 +32,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, mario_x: u16) -> Resul
     match actor.state {
         0 => {
             actor.contact_kind = ContactKind::from_raw(CONTACT);
-            actor.travel_direction = Facing::from_raw(FIRST_SIDE);
+            actor.set_travel_span(FIRST_SIDE);
             actor.motion_leg = SIDE;
             let side = actor.face_toward(mario_x);
             actor.motion_phase = actor.state;
@@ -88,12 +88,12 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, mario_x: u16) -> Resul
 
 /// `$5B0FD`: count the side down; on expiry reload it and report the turn.
 fn side_finished(actor: &mut Actor) -> bool {
-    let left = actor.travel_direction.raw().wrapping_sub(1);
+    let left = actor.travel_span().wrapping_sub(1);
     if left != 0 {
-        actor.travel_direction = Facing::from_raw(left);
+        actor.set_travel_span(left);
         return false;
     }
-    actor.travel_direction = Facing::from_raw(actor.motion_leg);
+    actor.set_travel_span(actor.motion_leg);
     true
 }
 

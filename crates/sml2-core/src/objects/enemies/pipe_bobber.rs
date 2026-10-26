@@ -3,7 +3,7 @@
 //! Follows the idiomatic Rust porting guide: typed actor state, domain methods,
 //! zero raw hex offsets or register plumbing.
 
-use crate::actor::{Actor, ContactKind, Facing, FrameTick};
+use crate::actor::{Actor, ContactKind, FrameTick};
 
 /// Direction in which the pipe bobber emerges from its pipe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,7 +86,7 @@ pub fn update(
             }
             actor.state = PipeBobberState::Emerging.to_raw();
             actor.motion_leg = 32;
-            actor.travel_direction = Facing::from_raw(32);
+            actor.set_travel_span(32);
             actor.contact_kind = ContactKind::from_raw(0x44);
             PipeBobberEffect::Emerging
         }
@@ -102,7 +102,7 @@ pub fn update(
                 return PipeBobberEffect::Emerging;
             }
             // $5852A: reload.
-            actor.motion_leg = actor.travel_direction.raw();
+            actor.motion_leg = actor.travel_span();
             actor.state = PipeBobberState::Retracting.to_raw();
             actor.timer = 24;
             PipeBobberEffect::Retracting
@@ -119,7 +119,7 @@ pub fn update(
                 return PipeBobberEffect::Retracting;
             }
             // $5852A: reload.
-            actor.motion_leg = actor.travel_direction.raw();
+            actor.motion_leg = actor.travel_span();
             actor.state = PipeBobberState::Resting.to_raw();
             actor.timer = 24;
             PipeBobberEffect::Resting
@@ -180,7 +180,7 @@ mod tests {
         assert_eq!(effect, PipeBobberEffect::Emerging);
         assert_eq!(actor.state, PipeBobberState::Emerging.to_raw());
         assert_eq!(actor.motion_leg, 32);
-        assert_eq!(actor.travel_direction.raw(), 32);
+        assert_eq!(actor.travel_span(), 32);
         assert_eq!(actor.contact_kind.raw(), 0x44);
         assert_eq!(actor.defeat_mode, 0x80);
     }
@@ -191,7 +191,7 @@ mod tests {
         actor.position.y = 200;
         actor.state = PipeBobberState::Emerging.to_raw();
         actor.motion_leg = 32;
-        actor.travel_direction = Facing::from_raw(32);
+        actor.set_travel_span(32);
         actor.sprite = 0x10;
 
         // Step 1 through 31: emerges upward (y decreases)
@@ -279,7 +279,7 @@ mod tests {
         actor.position.y = 100;
         actor.state = PipeBobberState::Emerging.to_raw();
         actor.motion_leg = 32;
-        actor.travel_direction = Facing::from_raw(32);
+        actor.set_travel_span(32);
 
         // Step 1: emerges downward (y increases)
         let ctx = PipeBobberContext {

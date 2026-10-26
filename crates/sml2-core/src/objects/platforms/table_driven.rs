@@ -66,7 +66,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
         actor.contact_kind = ContactKind::from_raw(CONTACT);
         actor.face_toward(player_x);
         actor.motion_leg = 1;
-        actor.set_travel_span(1);
+        actor.set_motion_counter(1);
         return Ok(Effect::Initialized);
     }
     actor
@@ -81,7 +81,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
             rise_outer(actor)?;
             move_x(actor, X_FIRST, actor.state == 2)?;
             if advance_x(actor) {
-                actor.set_travel_span(1);
+                actor.set_motion_counter(1);
                 actor.state += 2;
             }
         }
@@ -90,7 +90,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
             fall_outer(actor)?;
             move_x(actor, X_SECOND, actor.state == 4)?;
             if advance_x(actor) {
-                actor.set_travel_span(1);
+                actor.set_motion_counter(1);
                 if actor.state == 4 {
                     actor.motion_leg = 1;
                 }
@@ -104,7 +104,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
             fall_inner(actor)?;
             move_x(actor, X_INNER, actor.state == 5)?;
             if advance_x(actor) {
-                actor.set_travel_span(20);
+                actor.set_motion_counter(20);
                 actor.motion_leg = 20;
                 actor.state += 2;
             }
@@ -113,10 +113,10 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
         7 | 8 => {
             rise_inner(actor)?;
             move_x(actor, X_INNER, actor.state == 7)?;
-            let count = actor.travel_span().wrapping_sub(1);
-            actor.set_travel_span(count);
+            let count = actor.motion_counter().wrapping_sub(1);
+            actor.set_motion_counter(count);
             if count == 0 {
-                actor.set_travel_span(1);
+                actor.set_motion_counter(1);
                 actor.motion_leg = 1;
                 actor.state = if actor.state == 7 { 2 } else { 1 };
             }
@@ -135,7 +135,7 @@ fn sample(table: usize, index: u8) -> Result<u8, Error> {
 
 /// `$58EA` (`$3D32`) / `$590E` (`$3D22`): X by the `$FFE9` sample.
 fn move_x(actor: &mut Actor, table: usize, right: bool) -> Result<(), Error> {
-    let step = sample(table, actor.travel_span())?;
+    let step = sample(table, actor.motion_counter())?;
     actor.position.x = if right {
         actor.position.x.wrapping_add(u16::from(step))
     } else {
@@ -146,8 +146,8 @@ fn move_x(actor: &mut Actor, table: usize, right: bool) -> Result<(), Error> {
 
 /// `inc [$FFE9]; cp 21`: true when the X leg completes.
 fn advance_x(actor: &mut Actor) -> bool {
-    let count = actor.travel_span().wrapping_add(1);
-    actor.set_travel_span(count);
+    let count = actor.motion_counter().wrapping_add(1);
+    actor.set_motion_counter(count);
     count == LEG_END
 }
 

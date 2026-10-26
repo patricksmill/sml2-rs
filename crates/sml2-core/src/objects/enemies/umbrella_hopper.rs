@@ -96,19 +96,19 @@ pub(super) fn update(
         // $59A0F / $59A5D / $59A6D / $59A7D
         state @ 1..=4 => {
             let step = *SWAY_X
-                .get(usize::from(actor.travel_span()))
-                .ok_or(Error::CursorOutOfRange(actor.travel_span()))?;
+                .get(usize::from(actor.motion_counter()))
+                .ok_or(Error::CursorOutOfRange(actor.motion_counter()))?;
             actor.position.x = if matches!(state, 2 | 3) {
                 actor.position.x.wrapping_add(u16::from(step))
             } else {
                 actor.position.x.wrapping_sub(u16::from(step))
             };
             let cursor = if state <= 2 {
-                actor.travel_span().wrapping_add(1)
+                actor.motion_counter().wrapping_add(1)
             } else {
-                actor.travel_span().wrapping_sub(1)
+                actor.motion_counter().wrapping_sub(1)
             };
-            actor.set_travel_span(cursor);
+            actor.set_motion_counter(cursor);
             glide(actor, world)
         }
         state => Err(Error::InvalidState(state)),
@@ -120,7 +120,7 @@ fn glide(actor: &mut Actor, world: &mut impl World) -> Result<Effect, Error> {
     if world.grounded(actor) {
         // $599FF
         actor.motion_leg = 0;
-        actor.set_travel_span(0);
+        actor.set_motion_counter(0);
         actor.motion_phase = 0;
         actor.state = 5;
         actor.sprite = LAUNCH_SPRITE;
@@ -135,19 +135,19 @@ fn glide(actor: &mut Actor, world: &mut impl World) -> Result<Effect, Error> {
         return Ok(Effect::Moved);
     }
     actor.motion_leg = 0;
-    let cursor = actor.travel_span();
+    let cursor = actor.motion_counter();
     match actor.state {
         1 | 2 => {
             actor.state += 2;
-            actor.set_travel_span(cursor.wrapping_sub(1));
+            actor.set_motion_counter(cursor.wrapping_sub(1));
         }
         3 => {
             actor.state = 2;
-            actor.set_travel_span(cursor.wrapping_add(1));
+            actor.set_motion_counter(cursor.wrapping_add(1));
         }
         _ => {
             actor.state = 1;
-            actor.set_travel_span(cursor.wrapping_add(1));
+            actor.set_motion_counter(cursor.wrapping_add(1));
         }
     }
     Ok(Effect::Moved)

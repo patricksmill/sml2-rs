@@ -5,7 +5,7 @@
 
 use super::pipe_bobber::dist_mario_x;
 use super::staging::{BOUNCE_SPEED, FALL_SPEED};
-use crate::actor::{Actor, ContactKind, Facing, FlashFlags, FrameTick};
+use crate::actor::{Actor, ContactKind, FlashFlags, FrameTick};
 
 /// Dashing Walker state machine (ROM $59D5A).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,7 +119,7 @@ pub fn update<W: DashingWalkerWorld>(
                 // $59DA1: trigger ChargeLeft (3)
                 actor.state = DashingWalkerState::ChargeLeft.to_raw();
                 actor.motion_phase = 0;
-                actor.travel_direction = Facing::from_raw(0);
+                actor.set_motion_counter(0);
             }
             DashingWalkerEffect::Patrolling
         }
@@ -140,7 +140,7 @@ pub fn update<W: DashingWalkerWorld>(
                 // $59DA1: trigger ChargeRight (4)
                 actor.state = DashingWalkerState::ChargeRight.to_raw();
                 actor.motion_phase = 0;
-                actor.travel_direction = Facing::from_raw(0);
+                actor.set_motion_counter(0);
             }
             DashingWalkerEffect::Patrolling
         }
@@ -153,14 +153,14 @@ pub fn update<W: DashingWalkerWorld>(
                 return DashingWalkerEffect::Turnaround;
             }
 
-            let is_decel = actor.travel_direction.raw() != 0;
+            let is_decel = actor.motion_counter() != 0;
             let (speed, at_cap) = charge_speed_step(actor, is_decel);
             actor.position.move_x(-(speed as i16));
 
             if at_cap {
                 actor.motion_phase = 0;
-                actor.travel_direction.reverse();
-                if actor.travel_direction.raw() == 0 {
+                actor.set_motion_counter(actor.motion_counter() ^ 1);
+                if actor.motion_counter() == 0 {
                     // Both accel and decel legs finished: resume PatrolLeft (1)
                     actor.state = DashingWalkerState::PatrolLeft.to_raw();
                 }
@@ -176,14 +176,14 @@ pub fn update<W: DashingWalkerWorld>(
                 return DashingWalkerEffect::Turnaround;
             }
 
-            let is_decel = actor.travel_direction.raw() != 0;
+            let is_decel = actor.motion_counter() != 0;
             let (speed, at_cap) = charge_speed_step(actor, is_decel);
             actor.position.move_x(speed as i16);
 
             if at_cap {
                 actor.motion_phase = 0;
-                actor.travel_direction.reverse();
-                if actor.travel_direction.raw() == 0 {
+                actor.set_motion_counter(actor.motion_counter() ^ 1);
+                if actor.motion_counter() == 0 {
                     // Both accel and decel legs finished: resume PatrolRight (2)
                     actor.state = DashingWalkerState::PatrolRight.to_raw();
                 }
@@ -333,7 +333,7 @@ mod tests {
         assert_eq!(actor.position.x, 99);
         assert_eq!(actor.state, DashingWalkerState::ChargeLeft.to_raw());
         assert_eq!(actor.motion_phase, 0);
-        assert_eq!(actor.travel_direction.raw(), 0);
+        assert_eq!(actor.motion_counter(), 0);
     }
 
     #[test]
@@ -343,14 +343,14 @@ mod tests {
         actor.position.y = 80;
         actor.state = DashingWalkerState::ChargeLeft.to_raw();
         actor.motion_phase = 0;
-        actor.travel_direction = Facing::from_raw(0);
+        actor.set_motion_counter(0);
 
         let mut world = MockWorld {
             hit_left: false,
             hit_right: false,
         };
 
-        // Leg 1 (Accel): 15 steps (phases 0..14; at step 15 phase reaches 15, resets to 0, flips direction)
+        // Leg 1 (Accel): 15 steps (phases 0..14; at step 15 phase reaches 15, resets to 0, switches to deceleration)
         for phase in 0..15 {
             let eff = update(
                 &mut actor,
@@ -366,7 +366,7 @@ mod tests {
             actor.motion_phase, 0,
             "resets phase to 0 on finishing accel leg"
         );
-        assert_eq!(actor.travel_direction.raw(), 1, "flips direction to decel");
+        assert_eq!(actor.motion_counter(), 1, "switches to deceleration");
         assert_eq!(actor.state, DashingWalkerState::ChargeLeft.to_raw());
 
         // Leg 2 (Decel): 15 steps
@@ -385,12 +385,41 @@ mod tests {
             actor.motion_phase, 0,
             "resets phase to 0 on finishing decel leg"
         );
-        assert_eq!(actor.travel_direction.raw(), 0, "flips direction back to 0");
+        assert_eq!(actor.motion_counter(), 0, "switches back to acceleration");
         assert_eq!(
             actor.state,
             DashingWalkerState::PatrolLeft.to_raw(),
             "resumed patrol after full charge cycle"
         );
+    }
+
+    #[test]
+    fn charge_phase_toggle_preserves_unknown_counter_bits() {
+        for state in [3, 4] {
+            for count in 0..=255 {
+                let mut slot = [0; 32];
+                slot[15] = state;
+                slot[16] = 14;
+                slot[25] = count;
+                let mut actor = Actor::from_raw_slot(&slot);
+                let mut world = MockWorld {
+                    hit_left: false,
+                    hit_right: false,
+                };
+                update(
+                    &mut actor,
+                    DashingWalkerContext {
+                        frame: FrameTick(1),
+                        mario_ref_x: 0,
+                    },
+                    &mut world,
+                );
+                let result = actor.to_raw_slot();
+                assert_eq!(result[25], count ^ 1);
+                assert_eq!(result[16], 0);
+                assert_eq!(result[15], if count == 1 { state - 2 } else { state });
+            }
+        }
     }
 
     #[test]

@@ -3,7 +3,7 @@
 //! Follows the idiomatic Rust porting guide: typed actor state, domain methods,
 //! zero raw hex offsets or register plumbing.
 
-use crate::actor::{Actor, ContactKind, Facing, FlashFlags, FrameTick};
+use crate::actor::{Actor, ContactKind, FlashFlags, FrameTick};
 
 /// Groundwalker movement state ($5BD1 / $5D05 / $5D41: states 0..=2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,7 +104,7 @@ fn pause_step(actor: &mut Actor, left: bool) -> GroundWalkerEffect {
         if actor.timer != 0 {
             return GroundWalkerEffect::None;
         }
-        actor.travel_direction = Facing::from_raw(0x30);
+        actor.set_travel_span(0x30);
         return GroundWalkerEffect::None;
     }
 
@@ -114,8 +114,8 @@ fn pause_step(actor: &mut Actor, left: bool) -> GroundWalkerEffect {
         actor.position.move_x(1);
     }
 
-    let budget = actor.travel_direction.raw().wrapping_sub(1);
-    actor.travel_direction = Facing::from_raw(budget);
+    let budget = actor.travel_span().wrapping_sub(1);
+    actor.set_travel_span(budget);
     if budget != 0 {
         return GroundWalkerEffect::Moved {
             state: if left {
@@ -216,7 +216,7 @@ mod tests {
         assert_eq!(eff, GroundWalkerEffect::None);
         assert_eq!(actor.position.x, 100);
         assert_eq!(actor.timer, 0);
-        assert_eq!(actor.travel_direction.raw(), 0x30);
+        assert_eq!(actor.travel_span(), 0x30);
 
         // 47 steps: each moves X - 1
         for _ in 0..47 {
@@ -236,7 +236,7 @@ mod tests {
             );
         }
         assert_eq!(actor.position.x, 53);
-        assert_eq!(actor.travel_direction.raw(), 1);
+        assert_eq!(actor.travel_span(), 1);
 
         // 48th step: reaches 0 budget, sets timer to 0x10
         let eff = update(
@@ -250,7 +250,7 @@ mod tests {
         assert_eq!(eff, GroundWalkerEffect::Paused);
         assert_eq!(actor.position.x, 52);
         assert_eq!(actor.timer, 0x10);
-        assert_eq!(actor.travel_direction.raw(), 0);
+        assert_eq!(actor.travel_span(), 0);
     }
 
     #[test]
@@ -264,7 +264,7 @@ mod tests {
         actor.state = 1;
         actor.position.x = 100;
         actor.timer = 5;
-        actor.travel_direction = Facing::from_raw(0x30);
+        actor.set_travel_span(0x30);
 
         let eff = update(
             &mut actor,
@@ -284,7 +284,7 @@ mod tests {
         assert!(actor.sprite_flip.horizontal());
         assert_eq!(actor.position.x, 100);
         assert_eq!(actor.timer, 5);
-        assert_eq!(actor.travel_direction.raw(), 0x30);
+        assert_eq!(actor.travel_span(), 0x30);
 
         // Right wall hit in state 2 -> turns to state 1, unflipped
         let mut world = MockWorld {

@@ -1,5 +1,5 @@
 use super::*;
-use crate::actor::{Facing, InteractionFlags};
+use crate::actor::InteractionFlags;
 
 #[test]
 fn test_init_and_waiting() {
@@ -23,7 +23,7 @@ fn test_init_and_waiting() {
     assert_eq!(eff3, RisingPlatformEffect::Activated);
     assert_eq!(actor.state, RisingPlatformState::Rising.to_raw());
     assert_eq!(actor.motion_leg, 64);
-    assert_eq!(actor.travel_direction.raw(), 64);
+    assert_eq!(actor.travel_span(), 64);
 }
 
 #[test]
@@ -32,7 +32,7 @@ fn test_rising_to_apex() {
     actor.position.y = 200;
     actor.state = RisingPlatformState::Rising.to_raw();
     actor.motion_leg = 64;
-    actor.travel_direction = Facing::from_raw(64);
+    actor.set_travel_span(64);
     actor.interactions = InteractionFlags::from_bits(0x08); // stood on
 
     // Rises for 64 steps
@@ -59,7 +59,7 @@ fn test_stepping_off_delay_and_descent() {
     actor.position.y = 190; // rose 10 px
     actor.state = RisingPlatformState::Rising.to_raw();
     actor.motion_leg = 54; // 64 - 10
-    actor.travel_direction = Facing::from_raw(64);
+    actor.set_travel_span(64);
     actor.interactions = InteractionFlags::from_bits(0x08);
 
     // Mario steps off
@@ -106,7 +106,7 @@ fn test_re_step_on_during_falling() {
     actor.position.y = 195;
     actor.state = RisingPlatformState::Falling.to_raw();
     actor.motion_leg = 59;
-    actor.travel_direction = Facing::from_raw(64);
+    actor.set_travel_span(64);
     actor.timer = 10;
     actor.interactions = InteractionFlags::from_bits(0x00);
 

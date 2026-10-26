@@ -21,7 +21,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, player_x: u16) -> Resu
         // $59670
         0 => {
             actor.contact_kind = ContactKind::from_raw(CONTACT);
-            actor.travel_direction = crate::actor::Facing::from_raw(LEG);
+            actor.set_travel_span(LEG);
             actor.face_toward(player_x);
             actor.flash = FlashFlags::from_bits(16);
             actor.position.move_y(-4);
@@ -59,12 +59,11 @@ fn pause_flash(actor: &mut Actor, frame: FrameTick) {
 
 /// `$596A0`: count the 48-frame leg; at zero reload and swap direction.
 fn leg_tick(actor: &mut Actor) {
-    actor.travel_direction =
-        crate::actor::Facing::from_raw(actor.travel_direction.raw().wrapping_sub(1));
-    if actor.travel_direction.raw() != 0 {
+    actor.set_travel_span(actor.travel_span().wrapping_sub(1));
+    if actor.travel_span() != 0 {
         return;
     }
-    actor.travel_direction = crate::actor::Facing::from_raw(RELOAD);
+    actor.set_travel_span(RELOAD);
     actor.timer = FLASH_TIME;
     actor.state ^= 3;
 }

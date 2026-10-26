@@ -8,7 +8,7 @@ use std::cmp::Ordering;
 use super::falling_dropper::step_fall_speed;
 use super::walker::WalkerWorld;
 use super::HOVER_SPEED;
-use crate::actor::{Actor, ContactKind, Facing, FlashFlags, FrameTick};
+use crate::actor::{Actor, ContactKind, FlashFlags, FrameTick};
 
 /// The hover rises along this curve, then falls.
 const HOVER_CAP: u8 = 21;
@@ -103,13 +103,12 @@ fn hop<W: CrawlerWorld>(actor: &mut Actor, mario_ref_x: u16, world: &mut W) -> O
         return None;
     }
     actor.motion_leg = 0;
-    // The hop count shares the travel-direction byte.
-    let hops = actor.travel_direction.raw().wrapping_add(1);
-    actor.travel_direction = Facing::from_raw(hops);
+    let hops = actor.motion_counter().wrapping_add(1);
+    actor.set_motion_counter(hops);
     if hops == HOPS_PER_CYCLE {
         // `$586D6`: restart the cycle facing Mario.
         actor.motion_phase = 0;
-        actor.travel_direction = Facing::from_raw(0);
+        actor.set_motion_counter(0);
         return Some(actor.face_toward(mario_ref_x));
     }
     actor.motion_phase = LANDED_HOVER_PHASE;
@@ -209,11 +208,7 @@ mod tests {
             actor.motion_leg = FALLING;
             assert_eq!(crawl(&mut actor, FrameTick(1), 0x10, &mut world), None);
             assert_eq!(
-                (
-                    actor.travel_direction.raw(),
-                    actor.motion_phase,
-                    actor.state
-                ),
+                (actor.motion_counter(), actor.motion_phase, actor.state),
                 (hop, 10, 3)
             );
         }
@@ -223,11 +218,7 @@ mod tests {
             Some(Ordering::Less)
         );
         assert_eq!(
-            (
-                actor.travel_direction.raw(),
-                actor.motion_phase,
-                actor.state
-            ),
+            (actor.motion_counter(), actor.motion_phase, actor.state),
             (0, 0, 1)
         );
     }

@@ -63,10 +63,9 @@ pub(super) fn update(
         3 | 4 => {
             actor.animate_two_frame_toggle(frame, 2);
             if frame.every(2) {
-                actor.travel_direction =
-                    crate::actor::Facing::from_raw(actor.travel_direction.raw().wrapping_add(1));
-                if actor.travel_direction.raw() == 40 {
-                    actor.travel_direction = crate::actor::Facing::from_raw(0);
+                actor.set_motion_counter(actor.motion_counter().wrapping_add(1));
+                if actor.motion_counter() == 40 {
+                    actor.set_motion_counter(0);
                     actor.animation_frame = 0;
                     actor.state -= 2;
                     actor.timer = 36;

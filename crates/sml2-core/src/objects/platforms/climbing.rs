@@ -6,7 +6,7 @@
 //! Both legs move the platform one pixel on each axis and carry Mario with it
 //! (`$3D22`/`$3D2D`/`$3D3D` and the `$3CC0`/`$3CF1` carry pair). State 4 flashes
 //! the palette on even frames for 64 frames, then takes the `$5B2BF` reset.
-use crate::actor::{Actor, ContactKind, Facing, FrameTick};
+use crate::actor::{Actor, ContactKind, FrameTick};
 
 const CONTACT: u8 = 32;
 const UP_LEG: u8 = 0x30;
@@ -45,9 +45,9 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick) -> Result<Effect, Erro
             }
             actor.position.move_y(-1);
             actor.position.move_x(-1);
-            actor.travel_direction = Facing::from_raw(actor.travel_direction.raw().wrapping_add(1));
-            if actor.travel_direction.raw() == UP_LEG {
-                actor.travel_direction = Facing::from_raw(0);
+            actor.set_travel_span(actor.travel_span().wrapping_add(1));
+            if actor.travel_span() == UP_LEG {
+                actor.set_travel_span(0);
                 actor.state = actor.state.wrapping_add(1);
             }
             Ok(Effect::Ride { dy: -1 })
@@ -59,9 +59,9 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick) -> Result<Effect, Erro
             }
             actor.position.move_y(1);
             actor.position.move_x(-1);
-            actor.travel_direction = Facing::from_raw(actor.travel_direction.raw().wrapping_add(1));
-            if actor.travel_direction.raw() == DOWN_LEG {
-                actor.travel_direction = Facing::from_raw(0);
+            actor.set_travel_span(actor.travel_span().wrapping_add(1));
+            if actor.travel_span() == DOWN_LEG {
+                actor.set_travel_span(0);
                 actor.state = 3;
                 actor.timer = FLASH_WAIT;
             }

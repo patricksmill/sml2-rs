@@ -87,15 +87,15 @@ pub(super) fn update(
 }
 
 fn leg(actor: &mut Actor, horizontal: &[u8], vertical: &[u8], x_sign: i16, y_sign: i16, next: u8) {
-    let index = usize::from(actor.travel_span());
+    let index = usize::from(actor.motion_counter());
     let step = horizontal.get(index).copied().unwrap_or(0x80);
     if step == 0x80 {
         actor.state = next;
-        actor.set_travel_span(0);
+        actor.set_motion_counter(0);
         return;
     }
     actor.position.move_x(x_sign * i16::from(step));
     let rise = vertical.get(index).copied().unwrap_or(0);
     actor.position.move_y(y_sign * i16::from(rise));
-    actor.set_travel_span(actor.travel_span().wrapping_add(1));
+    actor.set_motion_counter(actor.motion_counter().wrapping_add(1));
 }

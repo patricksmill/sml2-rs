@@ -9,7 +9,7 @@
 //! Follows the idiomatic Rust porting guide: typed actor state, domain methods,
 //! zero raw hex offsets or register plumbing.
 
-use crate::actor::{Actor, ContactKind, Facing, FrameTick};
+use crate::actor::{Actor, ContactKind, FrameTick};
 
 pub const INITIAL_WALK_BUDGET: u8 = 24; // ROM $5A77F: ld a, 24
 pub const FULL_WALK_BUDGET: u8 = 48; // ROM $5A783: add a (48)
@@ -93,15 +93,15 @@ pub fn update(actor: &mut Actor, context: CannonAntContext) -> CannonAntEffect {
             };
             actor.state = next_state;
             actor.sprite_flip.set_horizontal(flip);
-            actor.travel_direction = Facing::from_raw(INITIAL_WALK_BUDGET);
+            actor.set_travel_span(INITIAL_WALK_BUDGET);
             actor.motion_leg = FULL_WALK_BUDGET;
             CannonAntEffect::Initialized { facing }
         }
         CannonAntState::WalkLeft => {
             actor.animate_two_frame_toggle(context.frame, 4);
             actor.position.move_x(-1);
-            let budget = actor.travel_direction.raw().wrapping_sub(1);
-            actor.travel_direction = Facing::from_raw(budget);
+            let budget = actor.travel_span().wrapping_sub(1);
+            actor.set_travel_span(budget);
             if budget != 0 {
                 CannonAntEffect::Walking {
                     state: CannonAntState::WalkLeft,
@@ -114,8 +114,8 @@ pub fn update(actor: &mut Actor, context: CannonAntContext) -> CannonAntEffect {
         CannonAntState::WalkRight => {
             actor.animate_two_frame_toggle(context.frame, 4);
             actor.position.move_x(1);
-            let budget = actor.travel_direction.raw().wrapping_sub(1);
-            actor.travel_direction = Facing::from_raw(budget);
+            let budget = actor.travel_span().wrapping_sub(1);
+            actor.set_travel_span(budget);
             if budget != 0 {
                 CannonAntEffect::Walking {
                     state: CannonAntState::WalkRight,
@@ -153,7 +153,7 @@ pub fn update(actor: &mut Actor, context: CannonAntContext) -> CannonAntEffect {
                 let saved_walk_state = actor.visibility_mask;
                 actor.state = saved_walk_state ^ 3;
                 actor.sprite_flip.toggle_horizontal();
-                actor.travel_direction = Facing::from_raw(actor.motion_leg);
+                actor.set_travel_span(actor.motion_leg);
                 CannonAntEffect::Turned {
                     state: CannonAntState::from_raw(actor.state),
                 }
@@ -197,7 +197,7 @@ mod tests {
         assert_eq!(actor.state, CannonAntState::WalkRight.to_raw());
         assert!(actor.sprite_flip.horizontal());
         assert_eq!(actor.contact_kind, ContactKind::from_raw(CONTACT_KIND));
-        assert_eq!(actor.travel_direction.raw(), 24);
+        assert_eq!(actor.travel_span(), 24);
         assert_eq!(actor.motion_leg, 48);
     }
 
@@ -236,7 +236,7 @@ mod tests {
                 }
             );
             assert_eq!(actor.position.x, 100 - step);
-            assert_eq!(actor.travel_direction.raw(), 24 - step as u8);
+            assert_eq!(actor.travel_span(), 24 - step as u8);
         }
 
         // 24th step reaches 0: transitions to Aim, aims up at Mario (sprite 148)
@@ -266,7 +266,7 @@ mod tests {
         actor.position.x = 100;
         actor.position.y = 80;
         actor.state = CannonAntState::WalkLeft.to_raw();
-        actor.travel_direction = Facing::from_raw(1);
+        actor.set_travel_span(1);
 
         // Step 1: budget reaches 0, Mario below at Y = 100
         let eff = update(
@@ -366,6 +366,6 @@ mod tests {
         assert_eq!(actor.state, CannonAntState::WalkRight.to_raw());
         assert_eq!(actor.sprite, SPRITE_WALK);
         assert!(actor.sprite_flip.horizontal());
-        assert_eq!(actor.travel_direction.raw(), 48);
+        assert_eq!(actor.travel_span(), 48);
     }
 }
