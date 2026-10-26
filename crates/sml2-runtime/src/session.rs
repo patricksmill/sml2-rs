@@ -19,7 +19,7 @@ pub use map_transition::MapScreenTransition;
 use sml2_core::audio::driver::SoundDriver;
 use sml2_core::camera::CameraSim;
 use sml2_core::character::Character;
-use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
+use sml2_core::ending_entry::{EndingEntry, EndingInput};
 use sml2_core::ending_scene::EndingScene;
 use sml2_core::ending_sequence::EndingSequenceController;
 use sml2_core::front_end::{
@@ -31,15 +31,12 @@ use sml2_core::map_sim::MapSim;
 use sml2_core::object::ObjectTables;
 use sml2_core::objects::ObjectSim;
 use sml2_core::player_sim::{MapHandoffOutcome, PlayerKeys, PlayerSim};
-use sml2_core::scene::{SceneScripts, SceneStep, SceneVm};
+use sml2_core::scene::{SceneScripts, SceneVm};
 use sml2_core::tile_animation::TileAnimationClock;
 use sml2_core::tileset::Tilesets;
 
-use crate::game::{
-    apply_level_entry, build_contact, note_handoff_screen, scene_frame_head, seed_level_timer,
-    update_tile_animation, BellArm,
-};
-use crate::render::{SpriteCtx, SpriteInst};
+use crate::game::{apply_level_entry, note_handoff_screen, seed_level_timer, BellArm};
+use crate::render::SpriteCtx;
 
 /// Pack boolean keyboard inputs into the Game Boy hardware joypad register format
 /// consumed by `sml2_core::map_sim::MapInput`.

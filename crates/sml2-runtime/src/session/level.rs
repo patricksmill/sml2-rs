@@ -1,13 +1,13 @@
 //! Live level state and its ordered simulation tick.
 
 use super::{
-    apply_level_entry, build_contact, note_handoff_screen, player_behind_bg, scene_frame_head,
-    seed_level_timer, update_tile_animation, BellArm, CameraSim, EndingEntry, EndingFrame,
-    EndingInput, EndingScene, EndingSequenceController, HudStrip, LevelLayout, LevelManifest,
-    MapHandoffOutcome, MapNodes, ObjectClock, ObjectSim, ObjectTables, PlayerKeys, PlayerSim,
-    SceneScripts, SceneStep, SceneVm, SpriteCtx, SpriteInst, TileAnimationClock, Tilesets,
-    BOSS_LOAD_VBLANKS,
+    apply_level_entry, note_handoff_screen, player_behind_bg, seed_level_timer, BellArm, CameraSim,
+    EndingEntry, EndingInput, EndingScene, EndingSequenceController, HudStrip, LevelLayout,
+    LevelManifest, MapHandoffOutcome, MapNodes, ObjectClock, ObjectSim, ObjectTables, PlayerKeys,
+    PlayerSim, SceneScripts, SceneVm, SpriteCtx, TileAnimationClock, Tilesets,
 };
+
+use crate::game::level_frame::{begin_live_level_frame, step_live_level_frame, LiveLevelFrame};
 
 /// In-level simulation state and working buffers for a live level play.
 pub struct LevelContext {
@@ -181,20 +181,11 @@ impl LevelContext {
         nodes: &MapNodes,
     ) {
         self.frame_n += 1;
-        self.sim.camx = self.cam.x;
-        self.sim.camy = self.cam.y;
-        self.sim.pan_timer = self.cam.pan_timer;
-        self.sim.phase = (self.sim.phase + 1) & 7;
-        self.sim.frame_counter = self.sim.frame_counter.wrapping_add(1);
-        // `$05D5` runs after this frame's VBlank decrement and before `$20A4`'s
-        // scene, and clears `hKeysHeld`/`hKeysPressed` while `sFadeTimer` is
-        // nonzero, so the arena intro holds Mario still.
-        let fade_locks_input = self.sim.fade_timer > 1;
-        // `$5E12` (inside `$2C61`) writes its scripted keys after that clear,
-        // so the lock masks only the joypad the ending head may replace.
-        let joypad = if fade_locks_input {
-            EndingInput::default()
-        } else {
+        let head = begin_live_level_frame(
+            &mut self.sim,
+            &mut self.cam,
+            &mut self.scene_vm,
+            &mut self.ending_entry,
             EndingInput {
                 held: keys,
                 pressed: PlayerKeys {
@@ -202,51 +193,12 @@ impl LevelContext {
                     b: b_pressed,
                     start: start_pressed,
                     select: select_pressed,
-                    ..PlayerKeys::default()
+                    ..Default::default()
                 },
-            }
-        };
-
-        let ending_frame = scene_frame_head(
-            &mut self.scene_vm,
-            &mut self.ending_entry,
-            &mut self.sim,
-            &mut self.cam,
-            joypad,
+            },
         );
-        let gameplay = matches!(ending_frame, Some(EndingFrame::Gameplay(_)));
-        let input = match ending_frame {
-            Some(EndingFrame::Gameplay(input)) => input,
-            _ => EndingInput::default(),
-        };
-        let keys = input.held;
-        let (start_pressed, select_pressed) = (input.pressed.start, input.pressed.select);
-        let was_dead = self.sim.dead == 0xFF;
-        let frozen = !gameplay || self.sim.paused || self.sim.dead_fade || self.sim.exit_phase;
-        let exit_done_at_entry = self.sim.exit_completed;
-
-        let obj_tables = self.spr.as_ref().map(|s| s.tables.clone());
-
-        if !gameplay {
-            if let Some(EndingFrame::SequencePending) = ending_frame {
-                let res =
-                    self.ending_sequence
-                        .step(&mut sml2_core::ending_sequence::EndingStepContext {
-                            scene: &mut self.ending_scene,
-                            rom: None,
-                            credits_text: (!self.credits_text.is_empty())
-                                .then_some(self.credits_text.as_slice()),
-                            object_tables: obj_tables.as_ref(),
-                            decrement_fade: true,
-                        });
-                if res.sfx_request_0 != 0 {
-                    self.sim.sfx0 = res.sfx_request_0;
-                }
-                if res.sfx_request_1 != 0 {
-                    self.sim.sfx1 = res.sfx_request_1;
-                }
-            }
-        } else if frozen {
+        // Sessions progress death fades and depart; diagnostic play holds them.
+        if head.gameplay && head.frozen {
             if self.sim.exit_phase {
                 self.sim.exit_fade_step();
             } else if self.sim.dead_fade {
@@ -263,185 +215,60 @@ impl LevelContext {
                     }
                 }
             }
-            if exit_done_at_entry {
+            if head.exit_done_at_entry {
                 let handoff = self.sim.map_handoff(nodes);
                 note_handoff_screen(&handoff);
                 if self.map_handoff.is_none() {
                     self.map_handoff = Some(handoff);
                 }
             }
-        } else if was_dead {
-            self.sim.death_arc(self.cam.y);
-        } else {
-            let player = crate::game::level_frame::step_player_camera(
-                &mut self.sim,
-                &mut self.cam,
-                &mut self.obj,
-                &self.layout_live,
-                input,
-            );
-            if player.transition_finished {
-                self.scene_reload_blank = false;
-            }
         }
-        self.cam.update_player_pan(self.sim.y, was_dead, !frozen);
-
-        if let Some(tables) = &obj_tables {
-            if !frozen {
-                let mario =
-                    build_contact(&self.sim, &keys, self.cam.scroll_pan, self.cam.scene_state);
-                if let Some(definition) = crate::game::level_frame::prepare_object_step(
-                    &mut self.sim,
-                    &mut self.cam,
-                    &mut self.obj,
-                    self.manifest.level_id,
-                    div,
-                ) {
-                    self.boss_definition = Some(definition);
-                    // `$3C94` runs across an extra VBlank before returning.
-                    self.sim.fade_timer = self.sim.fade_timer.saturating_sub(BOSS_LOAD_VBLANKS);
-                }
-                if crate::game::level_frame::step_objects(
-                    &mut self.sim,
-                    &mut self.cam,
-                    &mut self.obj,
-                    &self.layout_live,
-                    tables,
-                    &mario,
-                    keys.a,
-                ) {
-                    self.active_object_frames += 1;
-                }
-            }
+        let result = step_live_level_frame(
+            LiveLevelFrame {
+                sim: &mut self.sim,
+                cam: &mut self.cam,
+                obj: &mut self.obj,
+                scene_vm: &mut self.scene_vm,
+                ending_sequence: &mut self.ending_sequence,
+                ending_scene: &mut self.ending_scene,
+                credits_text: (!self.credits_text.is_empty())
+                    .then_some(self.credits_text.as_slice()),
+                manifest: &mut self.manifest,
+                layout_live: &mut self.layout_live,
+                bg_live: &mut self.bg_live,
+                spr: &mut self.spr,
+                scripts: &self.scripts,
+                tilesets: &self.tilesets,
+                arena_layout: self.arena_layout.as_ref(),
+                anim_rows: &self.anim_rows,
+                tile_animation: &mut self.tile_animation,
+            },
+            head,
+            div,
+        );
+        if result.transition_finished {
+            self.scene_reload_blank = false;
         }
-
-        let scene_camera = (self.cam.x, self.cam.y);
-        let stepped = if gameplay || ending_frame.is_none() {
-            self.scene_vm
-                .step(&mut self.sim, &mut self.cam, &self.scripts)
-        } else {
-            SceneStep::Idle
-        };
-        crate::game::apply_scene_transfer(&mut self.scene_vm, &mut self.bg_live, self.spr.as_mut());
+        if let Some(definition) = result.boss_definition {
+            self.boss_definition = Some(definition);
+        }
+        if result.active_objects {
+            self.active_object_frames += 1;
+        }
+        if let Some(reload) = result.arena_reload {
+            self.scene_reload_blank = true;
+            self.arena_loaded |= reload.applied;
+        }
+        // These presentation latches belong to the session; diagnostic play
+        // historically leaves the pipe attribute and expanded boss draws alone.
         if let Some(s) = self.spr.as_mut() {
-            crate::render::PipeBackground::update(
-                &mut s.pipe_background,
-                scene_camera,
-                &self.cam,
-                stepped,
-            );
-        }
-        if let SceneStep::Ran(op) = stepped {
-            if op >> 4 == 0x6 {
-                // `$266D` clears BGP, OBP0 and OBP1 before re-enabling LCD.
-                self.scene_reload_blank = true;
-                let index = self.sim.level_gfx_index;
-                let obj_tiles = self.spr.as_mut().map(|s| &mut s.objblock);
-                self.arena_loaded |= match obj_tiles {
-                    Some(o) => self.tilesets.apply(
-                        index,
-                        &mut self.bg_live,
-                        o,
-                        &mut self.manifest.metatiles,
-                    ),
-                    None => false,
-                };
-                if let Some(a) = self.arena_layout.as_ref() {
-                    self.layout_live = a.clone();
-                    // `$25AF` calls `$0361`, replacing the decompressed map.
-                    self.sim.layout_writes.clear();
-                }
-            }
-        }
-
-        let f = if was_dead {
-            107
-        } else {
-            // `$530D` only runs on simulated frames. Its walk request must not
-            // leak out of a paused, dead-fade or exit-fade frame — the tone
-            // would sustain for as long as Mario's last speed byte survives.
-            let held_sfx0 = self.sim.sfx0;
-            let f = self.sim.frame_index(self.sim.walk_timer);
-            if frozen || held_sfx0 != 0 {
-                self.sim.sfx0 = held_sfx0;
-            }
-            f
-        };
-        if gameplay && !was_dead {
-            self.sim.block_update();
-        }
-        let streak = if gameplay && !was_dead {
-            self.obj.tick_stomp_bounce_timer()
-        } else {
-            None
-        };
-
-        if let Some(s) = self.spr.as_mut() {
-            s.player = Some((self.sim.x, self.sim.y, f));
-            s.streak_counter = streak;
-            // `$530D`: pipe travel ($A221 >= $10) clears `$FFBB`, so the
-            // `$5297` expander sets attr bit 7 and the pipe's BG tiles cover
-            // Mario instead of him being drawn over them.
             s.player_behind_bg = player_behind_bg(self.sim.pipe_dir);
-            // `$54C8`: `$FFC7` from the star countdown; the dead draw (`$5550`)
-            // does not go through it.
-            s.player_star_flash = !was_dead && self.sim.star_flash();
-            s.player_shield = if was_dead {
-                None
-            } else {
-                self.sim
-                    .moon_shield_frame()
-                    .map(|sf| (self.sim.x, self.sim.y, sf))
-            };
-            s.player_pan = self.cam.player_pan;
-            s.scroll_pan = self.cam.scroll_pan;
-            if was_dead {
-                s.bumpers.clear();
-            } else {
-                s.bumpers = self.sim.block_draw.clone();
-            }
-            s.fireballs = self.sim.fire_draw.clone();
             if self.cam.boss_mode() {
-                s.insts.clear();
-                s.boss_oam = self.obj.boss_oam.clone();
-                s.boss_draws = self.obj.boss_draws.clone();
+                s.boss_draws.clone_from(&self.obj.boss_draws);
             } else {
-                s.boss_oam.clear();
                 s.boss_draws.clear();
-                s.insts = self
-                    .obj
-                    .slots
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, o)| {
-                        o.state() == sml2_core::objects::SlotState::Active
-                            && !self.obj.slot_done[*i]
-                    })
-                    .map(|(i, o)| SpriteInst {
-                        sprite: o.sprite(),
-                        x: o.x(),
-                        y: o.y(),
-                        flip: o.b[sml2_core::objects::B_DEFEAT]
-                            ^ o.b[sml2_core::objects::B_FLIP]
-                            ^ o.b[sml2_core::objects::B_FLASH],
-                        slot: i as u8,
-                    })
-                    .collect();
             }
         }
-
-        if gameplay && self.sim.fade_timer == 0 && self.cam.transition == 0 {
-            if start_pressed {
-                if self.sim.paused {
-                    self.sim.pause_exit();
-                } else {
-                    self.sim.pause_enter();
-                }
-            } else if self.sim.paused && select_pressed {
-                self.sim.pause_select_exit();
-            }
-        }
-
         if self.sim.exit_phase && self.bell_arm.is_none() {
             self.bell_arm = Some(BellArm {
                 frame: self.frame_n,
@@ -452,7 +279,7 @@ impl LevelContext {
                 dead: self.sim.dead,
             });
         }
-        if gameplay && !frozen && self.sim.dead == 0xFF {
+        if head.gameplay && !head.frozen && self.sim.dead == 0xFF {
             self.gameplay_death_frames += 1;
         }
         if self.sim.exit_completed && self.exit_completed_frame.is_none() {
@@ -480,13 +307,7 @@ impl LevelContext {
         if self.manifest.level_id == 0x0c {
             self.dx_conveyor_palette = conveyor_palette(self.dx_conveyor_palette, self.sim.x);
         }
-        self.tile_animation_copied |= update_tile_animation(
-            &self.sim,
-            self.cam.scene_id != 0,
-            &mut self.bg_live,
-            &self.anim_rows,
-            &mut self.tile_animation,
-        );
+        self.tile_animation_copied |= result.tile_animation_copied;
     }
 
     /// True if the level has completed fade-out and finished the handoff.

@@ -2,17 +2,15 @@
 
 use crate::content::{load_arena_layout, load_map_nodes, load_scene_scripts, load_tilesets};
 use crate::divider_clock::VirtualDividerClock;
-use crate::game::{
-    build_contact, note_handoff_screen, scene_frame_head, update_tile_animation, BellArm,
-    TimedFloatUse,
-};
+use crate::game::level_frame::{begin_live_level_frame, step_live_level_frame, LiveLevelFrame};
+use crate::game::{note_handoff_screen, BellArm, TimedFloatUse};
 use crate::play_tape::PlayTape;
 use crate::present::letterbox_gray;
-use crate::render::{hud_row_status, render_view, HudDigits, SpriteCtx, SpriteInst};
-use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
+use crate::render::{hud_row_status, render_view, HudDigits, SpriteCtx};
+use sml2_core::ending_entry::{EndingEntry, EndingInput};
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest};
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};
-use sml2_core::scene::{SceneStep, SceneVm};
+use sml2_core::scene::SceneVm;
 
 /// Where a `--keys` run got to: enough to tell "never reached the pipe" from
 /// "reached it and nothing happened".
@@ -163,7 +161,6 @@ pub(crate) fn run_play(
     let mut timed_float_frames = 0;
     let mut gameplay_death_frames = 0;
     obj.configure(manifest.level_id);
-    let obj_tables = spr.as_ref().map(|s| s.tables.clone());
     loop {
         if let Some(w) = window.as_ref() {
             if !w.is_open() || w.is_key_down(Key::Escape) || w.is_key_down(Key::Q) {
@@ -214,22 +211,11 @@ pub(crate) fn run_play(
         prev_start = start_down;
         let select_pressed = select_down && !prev_select;
         prev_select = select_down;
-        sim.camx = cam.x;
-        sim.camy = cam.y;
-        sim.pan_timer = cam.pan_timer;
-        // $FF97: the engine's frame counter ticks once per game frame. The
-        // full byte is kept because the pause flash reads bit 4 of it; `phase`
-        // is its low three bits.
-        sim.phase = (sim.phase + 1) & 7;
-        sim.frame_counter = sim.frame_counter.wrapping_add(1);
-        // `$05D5` clears the held and pressed keys while `sFadeTimer` is
-        // nonzero, so the arena intro holds Mario still; see the session.
-        let fade_locks_input = sim.fade_timer > 1;
-        // `$5E12` (inside `$2C61`) writes its scripted keys after that clear,
-        // so the lock masks only the joypad the ending head may replace.
-        let joypad = if fade_locks_input {
-            EndingInput::default()
-        } else {
+        let head = begin_live_level_frame(
+            &mut sim,
+            &mut cam,
+            &mut scene_vm,
+            &mut ending_entry,
             EndingInput {
                 held: keys,
                 pressed: PlayerKeys {
@@ -237,262 +223,79 @@ pub(crate) fn run_play(
                     b: b_pressed,
                     start: start_pressed,
                     select: select_pressed,
-                    ..PlayerKeys::default()
+                    ..Default::default()
                 },
-            }
-        };
-        // $05E4/$0640: dead → the arc only; the death fade freezes everything.
-        let ending_frame =
-            scene_frame_head(&mut scene_vm, &mut ending_entry, &mut sim, &mut cam, joypad);
-        let gameplay = matches!(ending_frame, Some(EndingFrame::Gameplay(_)));
-        let input = match ending_frame {
-            Some(EndingFrame::Gameplay(input)) => input,
-            _ => EndingInput::default(),
-        };
-        let keys = input.held;
-        let (start_pressed, select_pressed) = (input.pressed.start, input.pressed.select);
-        let was_dead = sim.dead == 0xFF;
-        // The fade-trigger frame still runs the object engine ($0640
-        // continues into $0652); the true fade frames do not. `$FF9B`: 9 =
-        // the death fade, 24 = the exit fade ($1CBA's bell arm) — both leave
-        // the in-level loop, so everything freezes while either is set.
-        // VBlank still ticks `sFadeTimer`; the exit fade's last step is
-        // `$3547`'s BCD tally + the `$14` hand-off.
-        //
-        // `$2756` (the pause) replaces the whole state-`$04` body, so a paused
-        // frame freezes exactly like a fade — and like the fades the flag is
-        // read at entry, so the frame START lands on still runs its object
-        // pass (the ROM's `$273E` sits at the frame tail) before the freeze
-        // takes effect on the next one.
-        let frozen = !gameplay || sim.paused || sim.dead_fade || sim.exit_phase;
-        let exit_done_at_entry = sim.exit_completed;
-        if !gameplay {
-            // The shared frame head dispatched this ending-entry frame.
-            if let Some(EndingFrame::SequencePending) = ending_frame {
-                let res =
-                    ending_sequence.step(&mut sml2_core::ending_sequence::EndingStepContext {
-                        scene: &mut ending_scene,
-                        rom: None,
-                        credits_text: None,
-                        object_tables: obj_tables.as_ref(),
-                        decrement_fade: true,
-                    });
-                if res.sfx_request_0 != 0 {
-                    sim.sfx0 = res.sfx_request_0;
-                }
-                if res.sfx_request_1 != 0 {
-                    sim.sfx1 = res.sfx_request_1;
-                }
-            }
-        } else if frozen {
+            },
+        );
+        if head.gameplay && head.frozen {
             // The session leaves the level the frame after the exit completes,
             // so a boss clear's leftover fade (and its tally) never runs.
-            if sim.exit_phase && !exit_done_at_entry {
+            if sim.exit_phase && !head.exit_done_at_entry {
                 sim.exit_fade_step();
             }
             // See the replay loop: `$FF9B = $14` comes from the fade's last
             // frame, so the hand-off body runs one frame later.
-            if exit_done_at_entry {
+            if head.exit_done_at_entry {
                 let handoff = sim.map_handoff(&nodes);
                 note_handoff_screen(&handoff);
                 if map_handoff.is_none() {
                     map_handoff = Some(handoff);
                 }
             }
-        } else if was_dead {
-            sim.death_arc(cam.y);
-        } else {
-            let player = crate::game::level_frame::step_player_camera(
-                &mut sim,
-                &mut cam,
-                &mut obj,
-                &layout_live,
-                input,
-            );
-            if let Some(sample) = player.float_use {
-                timed_float_frames += 1;
-                if timed_float_use.is_none() {
-                    timed_float_use = Some(TimedFloatUse {
-                        frame: frame_n,
-                        timer_before: sample.timer_before,
-                        timer_after: sample.timer_after,
-                        vvel_before: sample.vvel_before,
-                        vvel_after: sample.vvel_after,
-                    });
-                }
+        }
+        let result = step_live_level_frame(
+            LiveLevelFrame {
+                sim: &mut sim,
+                cam: &mut cam,
+                obj: &mut obj,
+                scene_vm: &mut scene_vm,
+                ending_sequence: &mut ending_sequence,
+                ending_scene: &mut ending_scene,
+                credits_text: None,
+                manifest: &mut manifest,
+                layout_live: &mut layout_live,
+                bg_live: &mut bg_live,
+                spr: &mut spr,
+                scripts: &scripts,
+                tilesets: &tilesets,
+                arena_layout: arena_layout.as_ref(),
+                anim_rows,
+                tile_animation: &mut tile_animation,
+            },
+            head,
+            virtual_clock.sample(),
+        );
+        if result.active_objects {
+            active_object_frames += 1;
+        }
+        if let Some(sample) = result.float_use {
+            timed_float_frames += 1;
+            if timed_float_use.is_none() {
+                timed_float_use = Some(TimedFloatUse {
+                    frame: frame_n,
+                    timer_before: sample.timer_before,
+                    timer_after: sample.timer_after,
+                    vvel_before: sample.vvel_before,
+                    vvel_after: sample.vvel_after,
+                });
             }
         }
-        cam.update_player_pan(sim.y, was_dead, !frozen);
-        if let Some(tables) = &obj_tables {
-            if !frozen {
-                let mario = build_contact(&sim, &keys, cam.scroll_pan, cam.scene_state);
-                if crate::game::level_frame::prepare_object_step(
-                    &mut sim,
-                    &mut cam,
-                    &mut obj,
-                    manifest.level_id,
-                    virtual_clock.sample(),
-                )
-                .is_some()
-                {
-                    // `$3C94` outlasts its frame; replay owns different capture timing.
-                    sim.fade_timer = sim
-                        .fade_timer
-                        .saturating_sub(crate::session::BOSS_LOAD_VBLANKS);
-                }
-                if crate::game::level_frame::step_objects(
-                    &mut sim,
-                    &mut cam,
-                    &mut obj,
-                    &layout_live,
-                    tables,
-                    &mario,
-                    keys.a,
-                ) {
-                    active_object_frames += 1;
-                }
-            }
-        }
-        // Resume the blocking $20A4 call after gameplay, or its previous wait.
-        let scene_camera = (cam.x, cam.y);
-        let stepped = if gameplay || ending_frame.is_none() {
-            scene_vm.step(&mut sim, &mut cam, &scripts)
-        } else {
-            SceneStep::Idle
-        };
-        crate::game::apply_scene_transfer(&mut scene_vm, &mut bg_live, spr.as_mut());
-        if let Some(s) = spr.as_mut() {
-            crate::render::PipeBackground::update(
-                &mut s.pipe_background,
-                scene_camera,
-                &cam,
-                stepped,
-            );
-        }
-        // `$6x` (`$25AF`): the scene's tileset swap. It is a *graphics* change —
-        // VRAM tiles plus the metatile definitions — so it has to reach the
-        // renderer's inputs, not just the sim's `sLevelGfxIndex`. This is what
-        // makes a boss arena look like an arena instead of like the level that
-        // contains it.
-        if let SceneStep::Ran(op) = stepped {
-            if op >> 4 == 0x6 {
-                let index = sim.level_gfx_index;
-                let obj = spr.as_mut().map(|s| &mut s.objblock);
-                let applied = match obj {
-                    Some(o) => tilesets.apply(index, &mut bg_live, o, &mut manifest.metatiles),
-                    None => false,
-                };
-                // The reload's other half: the room itself comes from bank 19
-                // `$42F0[3]`, not from the level the arena sits in.
-                let room = match arena_layout.as_ref() {
-                    Some(a) => {
-                        layout_live = a.clone();
-                        sim.layout_writes.clear();
-                        true
-                    }
-                    None => false,
-                };
-                println!(
-                    "$6x: tileset swap {index:#04X} (map {}) — {}; arena room {}",
-                    tilesets.entry(index).map(|e| e.map_index).unwrap_or(0),
-                    if applied { "applied" } else { "NOT APPLIED" },
-                    if room { "reloaded" } else { "NOT RELOADED" }
-                );
-            }
-        }
-        let f = if was_dead {
-            107
-        } else {
-            let held_sfx0 = sim.sfx0;
-            let f = sim.frame_index(sim.walk_timer);
-            if frozen || held_sfx0 != 0 {
-                sim.sfx0 = held_sfx0;
-            }
-            f
-        };
-        // $2C82: tick the bump slots. The bump stages its own sprite at the
-        // block's screen coords (`block_draw`), which the renderer draws as an
-        // extra OAM sprite while the player sprite keeps Mario's frame.
-        if gameplay && !was_dead {
-            sim.block_update();
-        }
-        let streak = if gameplay && !was_dead {
-            obj.tick_stomp_bounce_timer()
-        } else {
-            None
-        };
-        if let Some(s) = spr.as_mut() {
-            s.player = Some((sim.x, sim.y, f));
-            s.streak_counter = streak;
-            // `$54C8`: `$FFC7` from the star countdown; the dead draw (`$5550`)
-            // does not go through it.
-            s.player_star_flash = !was_dead && sim.star_flash();
-            s.player_shield = if was_dead {
-                None
-            } else {
-                sim.moon_shield_frame().map(|sf| (sim.x, sim.y, sf))
-            };
-            s.player_pan = cam.player_pan;
-            s.scroll_pan = cam.scroll_pan;
-            // $2C82 is skipped while dead, and the dead path's own draw ($5550,
-            // frame 107) overwrites the staging pair — so a bump sprite never
-            // survives into the arc.
-            if was_dead {
-                s.bumpers.clear();
-            } else {
-                s.bumpers = sim.block_draw.clone();
-            }
-            s.fireballs = sim.fire_draw.clone();
-            // The boss path draws itself: while `$0652` selects `$8DA9`, the
-            // level's `$8000` engine does not run, so the slots are the fight's
-            // parts — and their state byte is HP (the def image seeds it with
-            // 6), never a slot state, so the level draw's `state == 2` filter
-            // would both miss them and, at 2 HP, double-draw one. So: boss
-            // frames take `$66000`'s own output and no instances at all.
-            if cam.boss_mode() {
-                s.insts.clear();
-                s.boss_oam = obj.boss_oam.clone();
-            } else {
-                s.boss_oam.clear();
-                // Draw ACTIVE objects: positions/flip from the engine's staging.
-                s.insts = obj
-                    .slots
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, o)| {
-                        // `$C000`/`$C014`: only state 2 slots draw, and never one
-                        // whose handler set `sObjectDone` this frame (a defeat)
-                        // or whose type is `$80` (an item inside its block).
-                        o.state() == sml2_core::objects::SlotState::Active && !obj.slot_done[*i]
-                    })
-                    .map(|(i, o)| SpriteInst {
-                        sprite: o.sprite(),
-                        x: o.x(),
-                        y: o.y(),
-                        flip: o.b[sml2_core::objects::B_DEFEAT]
-                            ^ o.b[sml2_core::objects::B_FLIP]
-                            ^ o.b[sml2_core::objects::B_FLASH],
-                        slot: i as u8,
-                    })
-                    .collect();
-            }
-        }
-        // $273E: the START check at the tail of the in-level frame — the ROM
-        // calls it from the alive and the dead branch alike. START toggles the
-        // pause; the ROM requires `sScreenTransition == 0` and blanks both key
-        // bytes while `sFadeTimer != 0`, so those two gates are applied here.
-        // While paused, SELECT abandons the level instead when
-        // `sLevelProgressFlags` bit 7 says it was already cleared.
-        if gameplay && sim.fade_timer == 0 && cam.transition == 0 {
-            if start_pressed {
-                if sim.paused {
-                    sim.pause_exit();
+        if let Some(reload) = result.arena_reload {
+            let index = reload.index;
+            println!(
+                "$6x: tileset swap {index:#04X} (map {}) — {}; arena room {}",
+                tilesets.entry(index).map(|e| e.map_index).unwrap_or(0),
+                if reload.applied {
+                    "applied"
                 } else {
-                    sim.pause_enter();
+                    "NOT APPLIED"
+                },
+                if reload.room_reloaded {
+                    "reloaded"
+                } else {
+                    "NOT RELOADED"
                 }
-            } else if sim.paused && select_pressed {
-                sim.pause_select_exit();
-            }
+            );
         }
         if sim.exit_phase && bell_arm.is_none() {
             bell_arm = Some(BellArm {
@@ -504,7 +307,7 @@ pub(crate) fn run_play(
                 dead: sim.dead,
             });
         }
-        if gameplay && !frozen && sim.dead == 0xFF {
+        if head.gameplay && !head.frozen && sim.dead == 0xFF {
             gameplay_death_frames += 1;
         }
         if sim.exit_completed && exit_completed_frame.is_none() {
@@ -513,25 +316,7 @@ pub(crate) fn run_play(
         if sim.map_handoff_done && map_handoff_frame.is_none() {
             map_handoff_frame = Some(frame_n);
         }
-        // $2756: a paused frame writes the flash byte to `sBGPalette` *and*
-        // `sOAMPalette1`, so BG and OBJ0 flash together; `sOAMPalette2` (OBP1)
-        // is never touched. Unpaused frames restore the level's OBJ0 value, so
-        // this stays idempotent per frame.
-        let flash = if sim.paused {
-            Some(sim.pause_flash())
-        } else {
-            None
-        };
-        if let Some(s) = spr.as_mut() {
-            s.obp0 = flash.unwrap_or(manifest.header.palettes[1]);
-        }
-        update_tile_animation(
-            &sim,
-            cam.scene_id != 0,
-            &mut bg_live,
-            anim_rows,
-            &mut tile_animation,
-        );
+        let flash = result.flash;
         // Headless runs skip the whole render path: the frame loop's job in a
         // smoke run is the simulation, and rendering a 160x144 frame per level
         // would dominate the runtime.
