@@ -178,6 +178,8 @@ mod fallwalker;
 mod fire_piranha;
 #[path = "enemies/groundwalker.rs"]
 mod groundwalker;
+#[path = "compat/enemies/groundwalker.rs"]
+mod groundwalker_adapter;
 #[path = "items/contact_marker.rs"]
 mod handler_0x586e6;
 #[path = "compat/items/contact_marker.rs"]

@@ -130,43 +130,6 @@ impl ObjectSim {
         }
     }
 
-    pub(super) fn handler_groundwalker88(&mut self, st: &mut Staging, layout: &LevelLayout) {
-        let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
-        let context = groundwalker::GroundWalkerContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
-            mario_ref_x: self.mario_ref_x,
-        };
-        struct GroundWalkerSimWorld<'a> {
-            sim: &'a mut ObjectSim,
-            st: &'a mut Staging,
-            layout: &'a LevelLayout,
-        }
-        impl<'a> groundwalker::GroundWalkerWorld for GroundWalkerSimWorld<'a> {
-            fn probe_left_wall(&mut self, actor: &crate::actor::Actor) -> bool {
-                set_x(&mut self.st.b, actor.position.x);
-                set_y(&mut self.st.b, actor.position.y);
-                self.sim.m_left_wall(self.st, self.layout);
-                self.sim.move_flags & 0x02 != 0
-            }
-            fn probe_right_wall(&mut self, actor: &crate::actor::Actor) -> bool {
-                set_x(&mut self.st.b, actor.position.x);
-                set_y(&mut self.st.b, actor.position.y);
-                self.sim.m_right_wall(self.st, self.layout);
-                self.sim.move_flags & 0x01 != 0
-            }
-        }
-        let mut world = GroundWalkerSimWorld {
-            sim: self,
-            st,
-            layout,
-        };
-        let effect = groundwalker::update(&mut actor, context, &mut world);
-        if let groundwalker::GroundWalkerEffect::Initialized { facing } = effect {
-            self.facing = facing;
-        }
-        st.b = actor.to_raw_slot();
-    }
-
     pub(super) fn handler_paced_walker(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = paced_walker::PacedWalkerContext {

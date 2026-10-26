@@ -35,6 +35,20 @@ Native world positions use `u16`. Screen projection and other observable byte
 wraps still follow the source; represent that distinction with explicit types
 and movement helpers instead of instruction-level arithmetic in handlers.
 
+Groundwalker is the pilot for behavior-owned actor types. Its native
+`GroundWalker` owns a state enum, `remaining_pixels`, `pause_ticks`, and the
+position and presentation fields it uses. Its world interface accepts only a
+position for wall probes. The compatibility adapter decodes through `Actor`,
+maps the named fields into the native type, then writes them back to the
+original `Actor`; unrelated and stale bytes never enter the native behavior.
+Unknown state values survive conversion and retain the existing initialization
+fallback on update. Shared sprite bobbing operates on its sprite and
+animation fields without requiring a generic actor.
+
+This pilot preserves existing behavior: initialization changes only the
+horizontal flip bit. The source `$5B3C6` overwrites all flip bits; reconciling
+that inherited difference requires a separate behavior correction.
+
 ## Verification and migration
 
 Follow the source briefs, bounded tickets, ownership and verification gates in

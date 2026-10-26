@@ -398,22 +398,7 @@ impl Actor {
         frame: FrameTick,
         period: u64,
     ) -> Result<(), AnimationFrameError> {
-        if !frame.every(period) {
-            return Ok(());
-        }
-        self.animation_frame = self.animation_frame.wrapping_add(1);
-        if self.animation_frame == 4 {
-            self.animation_frame = 0;
-        }
-        // ROM `$B356..$B359`: FE 01 FF 02.
-        const DELTAS: [i8; 4] = [-2, 1, -1, 2];
-        let delta = DELTAS
-            .get(usize::from(self.animation_frame))
-            .ok_or(AnimationFrameError {
-                frame: self.animation_frame,
-            })?;
-        self.sprite = self.sprite.wrapping_add_signed(*delta);
-        Ok(())
+        animate_four_step_bob(&mut self.sprite, &mut self.animation_frame, frame, period)
     }
 
     /// Distance limit or remaining movement budget in the shared travel parameter.
@@ -438,6 +423,31 @@ impl Actor {
         self.screen
             .move_x(self.travel_direction.displacement(distance));
     }
+}
+
+/// Advance a sprite bob without requiring a behavior's whole actor state.
+pub(crate) fn animate_four_step_bob(
+    sprite: &mut u8,
+    animation_frame: &mut u8,
+    frame: FrameTick,
+    period: u64,
+) -> Result<(), AnimationFrameError> {
+    if !frame.every(period) {
+        return Ok(());
+    }
+    *animation_frame = animation_frame.wrapping_add(1);
+    if *animation_frame == 4 {
+        *animation_frame = 0;
+    }
+    // ROM `$B356..$B359`: FE 01 FF 02.
+    const DELTAS: [i8; 4] = [-2, 1, -1, 2];
+    let delta = DELTAS
+        .get(usize::from(*animation_frame))
+        .ok_or(AnimationFrameError {
+            frame: *animation_frame,
+        })?;
+    *sprite = sprite.wrapping_add_signed(*delta);
+    Ok(())
 }
 
 #[cfg(test)]
