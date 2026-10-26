@@ -32,6 +32,7 @@ mod death_audio;
 mod debug;
 mod front_end;
 mod game;
+mod level_frame;
 mod pause_audio;
 mod played_routes;
 mod scene_pipe;
