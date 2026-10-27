@@ -25,17 +25,11 @@
 
 ## Features
 
-- Native Rust port, not an emulator, verified against the original game code.
 - Widescreen: 16:9, 21:9, or your window's aspect ratio.
 - Camera zoom-out presets up to 200%.
 - Optional frame interpolation for high refresh rate displays.
 - SML2DX graphics and colors, with Mario or Luigi.
-- Game Boy, Pocket, Game Boy Color, and Super Game Boy display palettes.
-- Rebindable keyboard and controller inputs, fullscreen, and saved settings.
-
-View options are in **Settings → Mods**; palettes and scaling are in
-**Settings → Display**. Expanded views activate enemies earlier. Frame
-interpolation adds one frame of display latency.
+- Game Boy, Pocket, Game Boy Color, and Super Game Boy display palettes when not in DX mode.
 
 ## Accuracy
 
@@ -65,7 +59,7 @@ ROMs and imported game graphics are not included.
 
 Import an **SML2DX v1.8.1** ROM or IPS patch through
 **Settings → Game → Add DX ROM / IPS…**, then enable **DX Mode**.
-Choose Mario or Luigi in **Settings → Mods**. Saves work in either mode.
+Choose Mario or Luigi in **Settings → Mods**.
 
 Both characters use the port's native physics. Some DX palette transitions and
 fades are still missing. See [DX compatibility](docs/desktop.md#sml2dx-mode).
