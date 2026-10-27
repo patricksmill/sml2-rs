@@ -571,3 +571,34 @@ fn output_gain_scales_the_mix() {
         assert!((u * OUTPUT_GAIN - d).abs() < 1e-6);
     }
 }
+
+#[test]
+fn channel_weights_scale_one_channel_and_leave_unity_exact() {
+    let run = |weights: [u16; 4]| {
+        let mut apu = Apu::new();
+        apu.channel_weights = weights;
+        apu.apply_pulse_write(PulseWrite::DutyLength(0x80));
+        apu.apply_pulse_write(PulseWrite::Envelope(0xF0));
+        apu.apply_pulse_write(PulseWrite::FrequencyControl(0x86));
+        apu.apply_noise_write(NoiseWrite::Envelope(0xF0));
+        apu.apply_noise_write(NoiseWrite::Polynomial(0x30));
+        apu.apply_noise_write(NoiseWrite::Control(0x80));
+        let mut samples = Vec::new();
+        apu.generate_samples(44_100, 735, &mut samples);
+        samples
+    };
+    let unit = CHANNEL_WEIGHT_UNIT;
+    let both = run([unit; 4]);
+    let pulse_only = run([unit, unit, unit, 0]);
+    let noise_only = run([0, unit, unit, unit]);
+    assert_ne!(both, pulse_only);
+    assert!(pulse_only.iter().any(|s| s.abs() > 0.0));
+    assert!(noise_only.iter().any(|s| s.abs() > 0.0));
+    // Below the soft-clip knee the mix is linear: the halves sum to the whole.
+    for ((&b, &p), &n) in both.iter().zip(&pulse_only).zip(&noise_only) {
+        if b.abs() < 0.5 {
+            assert!((b - (p + n)).abs() < 1e-4, "{b} vs {p} + {n}");
+        }
+    }
+    assert!(run([0; 4]).iter().all(|&s| s == 0.0));
+}

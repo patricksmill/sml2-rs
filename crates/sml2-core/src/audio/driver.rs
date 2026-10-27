@@ -146,6 +146,10 @@ pub struct SoundDriver {
     /// sequencer, which `$11936` ticks while `sSoundPaused` is set.
     pub pause_beep_timer: u8,
     pub pause_beep_index: u8,
+    /// The noise slot's effect was started by a music drum note (`$11788`),
+    /// not a game request. Not ROM state: the host mixer reads it to tell
+    /// music from sound effects.
+    pub noise_from_music: bool,
     pub pulse_writes: Vec<PulseWrite>,
     pub wave_writes: Vec<WaveWrite>,
     pub noise_writes: Vec<NoiseWrite>,
@@ -179,6 +183,7 @@ impl Default for SoundDriver {
             music_sequencer: MusicSequencer::default(),
             pause_beep_timer: 0,
             pause_beep_index: 0,
+            noise_from_music: false,
             pulse_writes: Vec::new(),
             wave_writes: Vec::new(),
             noise_writes: Vec::new(),
@@ -275,6 +280,7 @@ impl SoundDriver {
             self.noise_slot.request = req;
             self.noise_slot
                 .start(req, &mut self.noise_music, &mut self.noise_writes);
+            self.noise_from_music = false;
         } else if self.noise_slot.active_effect != 0 {
             self.noise_slot
                 .tick(&mut self.noise_music, &mut self.noise_writes);
@@ -329,6 +335,7 @@ impl SoundDriver {
         if has_drum_trigger && self.noise_slot.active_effect == 0 {
             self.noise_slot
                 .start(3, &mut self.noise_music, &mut self.noise_writes);
+            self.noise_from_music = true;
         }
     }
 
@@ -411,6 +418,18 @@ impl SoundDriver {
             return;
         }
         self.start_pause_beep(self.pause_beep_index);
+    }
+
+    /// Which APU channels (1-4) a sound effect holds this frame: the three
+    /// SFX slots on pulse 1, wave and noise (except a music drum on noise),
+    /// and the pause beep on pulse 2. The rest carry music.
+    pub fn effect_channels(&self) -> [bool; 4] {
+        [
+            self.pulse_effect.active_effect != 0,
+            self.sound_paused,
+            self.wave_slot.active_effect != 0,
+            self.noise_slot.active_effect != 0 && !self.noise_from_music,
+        ]
     }
 
     /// Complete per-frame sound update driver (_UpdateSound $10030).

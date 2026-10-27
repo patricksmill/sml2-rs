@@ -41,6 +41,10 @@ pub struct Settings {
     /// Where levels draw the status bar.
     pub hud_style: HudStyle,
     pub volume: f32,
+    #[serde(default = "full_volume")]
+    pub music_volume: f32,
+    #[serde(default = "full_volume")]
+    pub effects_volume: f32,
     pub muted: bool,
     pub dead_zone: f32,
     pub preferred_controller: Option<String>,
@@ -66,6 +70,10 @@ fn toolbar_shown() -> bool {
     true
 }
 
+fn full_volume() -> f32 {
+    1.0
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -77,6 +85,8 @@ impl Default for Settings {
             filter: Filter::Gray,
             hud_style: HudStyle::Classic,
             volume: 0.7,
+            music_volume: 1.0,
+            effects_volume: 1.0,
             muted: false,
             dead_zone: 0.3,
             preferred_controller: None,
@@ -104,6 +114,15 @@ impl Settings {
         view::view_size(self.widescreen, self.camera_zoom, window)
     }
 
+    /// The levels the game mixes audio at; silent while muted.
+    pub fn audio_volume(&self) -> crate::game::Volume {
+        crate::game::Volume {
+            master: if self.muted { 0.0 } else { self.volume },
+            music: self.music_volume,
+            effects: self.effects_volume,
+        }
+    }
+
     pub fn validate(&mut self) -> Result<(), String> {
         if self.version != SETTINGS_VERSION {
             return Err(format!("Settings version {} is unsupported", self.version));
@@ -120,10 +139,17 @@ impl Settings {
         if let Zoom::Integer(scale) = &mut self.zoom {
             *scale = (*scale).clamp(1, 8);
         }
-        if !self.volume.is_finite() || !self.dead_zone.is_finite() {
+        let levels = [self.volume, self.music_volume, self.effects_volume];
+        if !levels.iter().all(|v| v.is_finite()) || !self.dead_zone.is_finite() {
             return Err("Invalid audio or controller setting".into());
         }
-        self.volume = self.volume.clamp(0.0, 1.0);
+        for level in [
+            &mut self.volume,
+            &mut self.music_volume,
+            &mut self.effects_volume,
+        ] {
+            *level = level.clamp(0.0, 1.0);
+        }
         self.dead_zone = self.dead_zone.clamp(0.1, 0.8);
         self.bindings.validate()?;
         Ok(())

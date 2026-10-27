@@ -286,20 +286,24 @@ impl DesktopApp {
 
     fn audio_page(&mut self, ui: &mut Ui) {
         theme::section(ui, "SOUND");
-        let adjust = self.menu.row_adjustment();
-        if self.menu.row(
-            ui,
-            "Volume",
-            Value::Meter(
-                self.settings.volume,
-                format!("{:.0}%", self.settings.volume * 100.0),
-            ),
-        ) || adjust != 0
-        {
-            self.settings.volume = ((self.settings.volume * 10.0).round()
-                + if adjust != 0 { adjust as f32 } else { 1.0 })
-            .clamp(0.0, 10.0)
-                / 10.0;
+        let levels = [
+            ("Volume", &mut self.settings.volume),
+            ("Music", &mut self.settings.music_volume),
+            ("Sound effects", &mut self.settings.effects_volume),
+        ];
+        for (label, level) in levels {
+            let adjust = self.menu.row_adjustment();
+            if self.menu.row(
+                ui,
+                label,
+                Value::Meter(*level, format!("{:.0}%", *level * 100.0)),
+            ) || adjust != 0
+            {
+                *level = ((*level * 10.0).round()
+                    + if adjust != 0 { adjust as f32 } else { 1.0 })
+                .clamp(0.0, 10.0)
+                    / 10.0;
+            }
         }
         if self
             .menu
@@ -307,7 +311,11 @@ impl DesktopApp {
         {
             self.settings.muted = !self.settings.muted;
         }
-        theme::note(ui, "Left / right adjust the volume in 10% steps.");
+        theme::note(
+            ui,
+            "Left / right adjust a level in 10% steps. Music and sound effects scale \
+             within the overall volume.",
+        );
     }
 
     fn controls_page(&mut self, ui: &mut Ui) {

@@ -790,11 +790,7 @@ impl DesktopApp {
             game.session.set_view(view);
             game.audio_running(running && !self.settings.muted);
         }
-        let volume = if self.settings.muted {
-            0.0
-        } else {
-            self.settings.volume
-        };
+        let volume = self.settings.audio_volume();
         for _ in 0..ticks {
             let snap = self.front_snap();
             let mut clear_aim = false;

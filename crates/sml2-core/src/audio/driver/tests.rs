@@ -491,3 +491,39 @@ fn resume_mode_unpauses_and_runs_the_same_frame() {
         "$11926 falls into $10044: the resume frame runs the music"
     );
 }
+
+#[test]
+fn effect_channels_name_the_slots_a_sound_effect_holds() {
+    let mut driver = SoundDriver::new();
+    assert_eq!(driver.effect_channels(), [false; 4]);
+
+    driver.sfx_request_0 = 1;
+    driver.sfx_request_1 = 1;
+    driver.sfx_request_2 = 1;
+    driver.update_sound();
+    assert_eq!(driver.effect_channels(), [true, false, true, true]);
+
+    driver.sound_mode = 1;
+    driver.update_sound();
+    assert_eq!(
+        driver.effect_channels(),
+        [false, true, false, false],
+        "the pause beep holds pulse 2; $118F7 drops the slots"
+    );
+}
+
+#[test]
+fn a_music_drum_on_the_noise_slot_is_music() {
+    let mut driver = SoundDriver::new();
+    driver.music_writes.push(MusicWrite::DrumTrigger);
+    driver.start_music_drum();
+    assert_eq!(driver.noise_slot.active_effect, 3);
+    assert!(!driver.effect_channels()[3], "the drum belongs to the song");
+
+    driver.sfx_request_2 = 3;
+    driver.update_sound();
+    assert!(
+        driver.effect_channels()[3],
+        "the same effect requested by the game is a sound effect"
+    );
+}

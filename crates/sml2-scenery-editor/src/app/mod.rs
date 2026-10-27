@@ -251,14 +251,7 @@ impl EditorApp {
             for _ in 0..self.budget.advance(elapsed, running) {
                 game.session.character = self.settings.character;
                 let keys = self.input.sample_player(&self.settings.bindings);
-                game.tick(
-                    keys,
-                    if self.settings.muted {
-                        0.0
-                    } else {
-                        self.settings.volume
-                    },
-                );
+                game.tick(keys, self.settings.audio_volume());
             }
         }
         egui::CentralPanel::default().show(ctx, |ui| match self.screen {

@@ -32,6 +32,9 @@ pub const OUTPUT_GAIN: f32 = 1.5;
 /// clipping, for the rare SFX that land on top of a loud passage.
 const SOFT_CLIP_KNEE: f32 = 0.8;
 
+/// A channel weight of this value passes the channel at its console level.
+pub const CHANNEL_WEIGHT_UNIT: u16 = 256;
+
 /// Identity up to the knee, then a tanh curve that meets it with slope 1 and
 /// approaches 1.0.
 fn soft_clip(x: f32) -> f32 {
@@ -439,6 +442,9 @@ pub struct Apu {
     /// Gain applied after the high-pass filter, before the soft clip.
     /// [`OUTPUT_GAIN`] by default; 1.0 gives the unscaled mix.
     pub output_gain: f32,
+    /// Per-channel mix weights in [`CHANNEL_WEIGHT_UNIT`] units, applied
+    /// before the high-pass filter. Unity for all four reproduces the console.
+    pub channel_weights: [u16; 4],
 }
 
 impl Default for Apu {
@@ -462,6 +468,7 @@ impl Default for Apu {
             synth: StereoBlip::default(),
             mix: [[0; 2]; 4],
             output_gain: OUTPUT_GAIN,
+            channel_weights: [CHANNEL_WEIGHT_UNIT; 4],
         }
     }
 }
@@ -806,12 +813,17 @@ impl Apu {
         let rate = sample_rate.max(1);
 
         // NR51 routes a channel to a side; NR50 scales that side by (v+1)/8.
-        // A channel's contribution is level × gain, at most 15 × 8 per channel.
+        // A channel's contribution is level × gain × weight, at most
+        // 15 × 8 × CHANNEL_WEIGHT_UNIT per channel at unity weight.
         let side_gain = [self.left_volume as i32 + 1, self.right_volume as i32 + 1];
         let gains: [[i32; 2]; 4] = std::array::from_fn(|ch| {
             let left = (self.nr51 >> (ch + 4)) & 1;
             let right = (self.nr51 >> ch) & 1;
-            [left as i32 * side_gain[0], right as i32 * side_gain[1]]
+            let weight = self.channel_weights[ch] as i32;
+            [
+                left as i32 * side_gain[0] * weight,
+                right as i32 * side_gain[1] * weight,
+            ]
         });
 
         // Cycle `c` of this block lands at sample `(c * rate - acc0) / 4194304`:
@@ -856,8 +868,10 @@ impl Apu {
             elapsed += cycles as u64;
         }
 
-        // Full scale is all four channels at level 15 with NR50 at 7.
-        let scale = 1.0 / (blip::UNIT as f64 * (4 * 15 * 8) as f64);
+        // Full scale is all four channels at level 15 with NR50 at 7 and unity
+        // weight. The weight unit is a power of two, so unity output is exact.
+        let scale =
+            1.0 / (blip::UNIT as f64 * (4 * 15 * 8) as f64 * CHANNEL_WEIGHT_UNIT as f64);
         // AC-coupling capacitor: `out = in - cap; cap = in - out * charge`.
         // With every DAC off the amplifier is disconnected: the output is 0
         // and the capacitor holds its charge.

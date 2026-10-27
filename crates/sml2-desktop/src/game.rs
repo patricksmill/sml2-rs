@@ -1,6 +1,6 @@
 use crate::settings::atomic_write;
 use sml2_core::{
-    audio::Apu,
+    audio::{apu::CHANNEL_WEIGHT_UNIT, Apu},
     front_end::{SaveSlots, SAVE_IMAGE_LEN, SLOT_LEN},
     player_sim::PlayerKeys,
 };
@@ -9,6 +9,25 @@ use sml2_runtime::{
     FrameInput, Session,
 };
 use std::{fs, path::PathBuf};
+
+/// Output levels in `0.0..=1.0`. Music and effects weight the APU channels the
+/// driver gives each this frame; the master level scales the finished mix.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Volume {
+    pub master: f32,
+    pub music: f32,
+    pub effects: f32,
+}
+
+impl From<f32> for Volume {
+    fn from(master: f32) -> Self {
+        Self {
+            master,
+            music: 1.0,
+            effects: 1.0,
+        }
+    }
+}
 
 pub struct Game {
     pub session: Session,
@@ -130,7 +149,8 @@ impl Game {
         }
     }
 
-    pub fn tick(&mut self, keys: PlayerKeys, volume: f32) {
+    pub fn tick(&mut self, keys: PlayerKeys, volume: impl Into<Volume>) {
+        let volume = volume.into();
         self.div_clock.advance_tick();
         let div = self.div_clock.sample();
         let effects = self.session.advance(FrameInput { keys, div });
@@ -141,6 +161,11 @@ impl Game {
         }
         self.diagnostics.extend(effects.diagnostics);
         self.apu.ingest_driver(&self.session.sound_driver);
+        let effects = self.session.sound_driver.effect_channels();
+        self.apu.channel_weights = effects.map(|effect| {
+            let level = if effect { volume.effects } else { volume.music };
+            (level.clamp(0.0, 1.0) * CHANNEL_WEIGHT_UNIT as f32).round() as u16
+        });
         // Each catch-up tick advances its own PCM interval before the next
         // driver update, so short SFX cannot disappear into a zero-sample tick.
         // The sink's rate decides the tick's length: WASAPI shared mode often
@@ -150,7 +175,7 @@ impl Game {
         self.buffer.clear();
         self.apu.generate_samples(rate, samples, &mut self.buffer);
         for sample in &mut self.buffer {
-            *sample *= volume;
+            *sample *= volume.master;
         }
         if let Some(output) = &self.output {
             output.write_samples(&self.buffer);
