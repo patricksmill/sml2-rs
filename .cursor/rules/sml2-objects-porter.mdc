@@ -10,6 +10,6 @@ When editing under `objects/`, you are implementing **one** handler from `tasks/
 
 - Mirror ASM branch structure; use `helpers.rs` for shared `$5Bxxx` behavior.
 - Add `#[test]` with in-memory slot bytes; run `cargo test -p sml2-core`.
-- Do not refactor unrelated handlers or read the whole legacy `objects.rs` monolith unless splitting per `docs/plans/2026-10-15-port-finish-reset.md`.
+- Do not refactor unrelated handlers or read the whole legacy `objects.rs` monolith unless explicitly scoped to a bounded module extraction under `PORTING.md`.
 
 See `hermes/worker-handler.system.md` and `PORTING.md`.

@@ -1,34 +1,23 @@
-# Level route matrix
+# Completion and route evidence
 
-**Status: all 32 rows measured 2026-10-18; levels 1-5 and the first slice
-(12, 19, 28, 29) are reviewed, the boss levels 6, 10 and 14 are reviewed and
-played from header start to map return, every exit cell is test-pinned, levels 28/29 have played header
-approaches, and level 19 has played both its header and secret starts to
-both bells. The live session now checks all 64 header/secret-entry cases at
-32 ordinary map origins (31 level IDs), plus normal map entry through Wario's
-door into level 24. Six played approaches across levels 19/28/29 additionally
-run through map selection, completion, return, actual host save and reload.** Tool:
-[`tools/route_matrix.py`](../tools/route_matrix.py); acceptance:
-`crates/sml2-core/src/route_matrix_tests.rs`.
+Pending work is authoritative in `PORT_QUEUE.json`, not historical status tables:
 
-A row is source-derived, not transcribed: the tool reads the extracted manifest,
-the decompressed layout, the 48-byte scene map, the overworld node table, and
-the ROM's `$377B` secret-entry overlay. It answers the five questions the
-completion workflow asks of a level: **entry, exit, secret route, required
-mechanic, boss**.
+```sh
+python3 -c 'import json; print([(e["id"], e["title"]) for e in json.load(open("PORT_QUEUE.json"))["queue"]])'
+```
 
-## Full matrix
+Close shared subsystem dependencies before their handlers, then dynamic spawn
+closure, scene integration, played routes, visual/audio comparisons and final
+progression. Implementation, source verification and normal-play completion
+are independent claims. Follow [PORTING.md](../PORTING.md).
 
-Level numbers are manifest numbers (labels `Level_NN`); the runtime takes
-`--level <id>`, where id = NN−1. Zone is the header's tileset label with the
-`GFX_Tileset` prefix removed. Node is the overworld `$4218` index that stores
-this level; `—` means no map node (castle/arena entry). Exit cells are
-`(col,row)$tile` in the 256×48 layout; secret entry is the `$377B` overlay in
-pixels. Mechanics are the tool's flags: `float` = the level's `space_physics`
-float bit (bit 3 = timed float, bit 0 = hold-A float), `moonzones` = `$52..$57`
-tiles, `scroll` = scroll limit,
-`auto` = autoscroll, `water`, `hazard`, `pipe`, `sidepipe`, `alt-exit` = a
-`$4B` bell.
+## Source matrix
+
+Measured 2026-10-18. Regenerate using `python3 tools/route_matrix.py --table`;
+the tool reads manifests, layouts, scene maps, map nodes and the ROM's `$377B`
+secret-entry overlay. Level numbers below are 1-based; runtime `--level` IDs are
+zero-based. Coordinates are layout cells; secret entries are world pixels.
+Mechanic flags describe source data, not proof that a route has been played.
 
 | level | id | zone | node | exit cell(s) | secret entry | boss | mechanics |
 |---|---:|---|---:|---|---|---|---|
@@ -65,349 +54,40 @@ tiles, `scroll` = scroll limit,
 | 31 | 30 | TreeZone5 | 106 | (126,26)$4A (126,27)$4A | — | — | auto,hazard,pipe |
 | 32 | 31 | TreeZone2 | 122 | (174,9)$4A | — | — | scroll,hazard,pipe |
 
-## Anomalies and classification
+There are 35 bell cells across 25 levels (28 plain $4A, 7 alternate $4B), including
+stacked two-cell bells in levels 26/27/31. Boss levels 6/10/14/17/20/24 and Wario 25
+have no bell. Wario has no ordinary map node. Level 32's secret-entry record runs
+into padding/code and is not a usable start. Autoscroll: 20/26/31; timed float:
+19/29; hold-A float:20. Preserve all 32 indexed secret records at extraction,
+even zero/overlapping ones; do not infer valid starts from nonzero bytes alone.
 
-- **35 bells across 25 levels**: 28 plain `$4A` and 7 `$4B` twins (levels 3, 8,
-  9, 16, 18, 19, 21). Levels 6, 10, 14, 17, 20, 24 and 25 have no bell at all —
-  the six boss arenas and the castle end through a boss clear (`$8DFD` ladder:
-  defs 0–5) or the Wario phase exits (defs 6/7/8), not the `$4A` arm.
-- **Three levels have a two-cell bell** — 26, 27 and 31 each carry `$4A` at
-  (126,29)+(126,30) or (126,26)+(126,27), a vertically stacked bell graphic.
-  The 35-cell count includes both cells; each arms independently.
-- **Level 25 (`WarioCastle`, id 24) has no overworld node and no bell.** It is
-  entered from the castle node and ends through Wario's three forms, which is
-  why its `$377B` record is zero and the arena is scene-driven.
-- **Level 18 (id 17) has two bells 4 rows apart** — `$4A` at (190,11) and `$4B`
-  at (190,15), the tightest pair in the game. Level 19 (the reviewed slice
-  member) has the same column 288 px apart.
-- **Zone re-use in the last eight levels.** Levels 26–32 reuse the Level1, Tree
-  and Space tilesets rather than carrying their own; level 25 is the only
-  `WarioCastle` tileset. The zone column is the header's graphics label, so it
-  is evidence rather than a naming guess.
-- **Level 32's `$377B` slot is padding** — the record decodes past the 48-row
-  layout, so the tool reports no secret entry; meaningful records exist only
-  through level 31.
-- **Autoscroll levels**: 20, 26 and 31 (`auto_scroll = 1`); level 20 also sets
-  moon bit 0 (the hold-A float), making it the only autoscroll + float level.
-- **Float levels**: bit 3 (timed float) on 19 and 29; bit 0 (hold-A float)
-  on 20. Those are the only three levels with a non-zero `space_physics` byte.
+## What has been verified
 
-## Played boss levels (6, 10, 14)
+| Coverage | Evidence / limit |
+|---|---|
+| Declared handlers | Coverage tool inventories both level tables and boss table; declaration is not behavior parity |
+| Dynamic anim closure | 2026-10-18 audit: 477 level/anim pairs, 106 anim values, no out-of-range/unported targets. Includes spawns, morphs, record rewrites and boss writes; over-approximated reachability, not behavior |
+| Every exit cell | Core `route_matrix` tests activate all 35 source $4A/$4B cells and assert exit flag, music and 192-frame fade |
+| Map entry | Runtime session cases cover 64 header/secret-entry combinations at 32 ordinary origins plus Wario castle-door entry |
+| Reviewed ordinary rows | Levels 1–5,12,19,28,29; other mechanic/route narratives need review |
+| Played ordinary routes | Level 28 walk, 29 timed float, and 19 header/secret starts to both bells. Fixed inputs assert movement, float use, fade/handoff/tally/save bytes |
+| Continuous map/save routes | Six approaches across 19/28/29 run actual map selection, completion, return, host save and reload |
+| Boss routes | Levels 6/10/14 have played header approaches through defeat/reward/map return. All nine definitions accept scene-driven arena entry; direct placement is not a played approach |
+| Graphics | [Visual parity](visual-parity.md) records independent evidence and accepted differences; smoke rendering proves neither |
+| Remaining completion | Other normal/secret approaches, bosses 17/20/24, Wario's full route, continuous hub navigation, audio evidence and uninterrupted full-game save/reload remain queue work |
 
-Header starts played by live input from the source map node through arena
-entry, the defeat, the reward and the map return, with no boss-clear or
-phase writes. Tapes are in
-`crates/sml2-runtime/src/tests/played_routes/boss_routes.rs`, found by
-`search::search_route` with `ROUTE_BOSS=1`. Each also replays through the
-map-entered session, writes the save and reloads it. Secret starts are not
-yet played.
+`PlayTape::Buttons` supports simultaneous held buttons through the same live
+loop; CLI `--keys` keeps its ASCII grammar. Tests compare both representations.
+Neither a table count nor a headless smoke budget establishes level completion.
+Re-run current tools/tests before relying on historical counts:
 
-| level | id | entry | arena (scene block) | boss | map return |
-|---|---:|---|---|---|---|
-| 6 | 5 | node 32 (slot 5), (46,708), cam (80,704), time 5 | `$0B` at block 43 = (2816-3071, 512-767) | def 0, Tree Zone: 6 shared hits | node `$19`, hub; coin byte 5 |
-| 10 | 9 | node 43 (slot 9), (40,468), cam (80,448), time 5 | `$0C` at block 30 = (3584-3839, 256-511) | def 1, Pumpkin Zone: 4 shared hits | node `$1C`, hub; coin byte 9 |
-| 14 | 13 | node 83 (slot 29), (56,468), cam (80,448), time 3 | `$10` at block 14 = (3584-3839, 0-255) | def 2, Three Piggys: 6 shared hits on the controller, pigs 1 and 2 with 6 HP each (a stomp costs 2) | node `$1D`, hub; coin byte 29 |
-
-- **Arena entry** is an edge transition into the scene block (`$0F0B`). The
-  intro then holds input while `sFadeTimer > 1` (`$05D5`), about 300 frames.
-- **The clear.** The last hit sets the fade to `$0280` and `boss_clear`. The
-  reward (anims 4/5) rises, and its exit sets the handoff: music 15, the tally
-  plus one, the zone's golden-coin byte `|= $80`, then node and hub screen
-  from `$3F03D`.
-- **Three Piggys.** Pig 2 waits up high and is a platform until it is the
-  last part left. Pig 1 runs along the floor between `$10` and `$A0`.
-
-## Reviewed slice (levels 12, 19, 28, 29)
-
-The four levels the handler tail finished, reviewed line by line and pinned by
-named tests.
-
-| level | id | entry | exit(s) | secret entry | boss |
-|---|---:|---|---|---|---|
-| 12 | 11 | node 81, (56,452), cam (80,448), time 4 | `$4A` (238,29) = (3808,464) | (2097,404), lands row 27 | none |
-| 19 | 18 | node 60, (45,436), cam (80,432), time 7 | `$4A` (190,29) = (3040,464); `$4B` (190,11) = (3040,176) | (1905,436), lands row 29 | none |
-| 28 | 27 | node 120, (51,260), cam (80,246), time 4 | `$4A` (78,30) = (1248,480) | none | none |
-| 29 | 28 | node 68, (40,452), cam (80,438), time 4 | `$4A` (94,28) = (1504,448) | none | none |
-
-### Level 12 (id 11)
-
-- **Entry.** Node 81 (progress slot 27), header spawn (56, 452) on layout 1;
-  Mario Zone 2 tileset (`GFX_TilesetMarioZone2`).
-- **Exit.** Single `$4A` bell at cell (238, 29), just left of the `$1D` wall that
-  closes the level (`(3808, 464)` in pixels). The floor run into the bell is the
-  `$50/$51` hazard strip at row 29, columns 43–232 — the level's dominant
-  traversal hazard (44 cells).
-- **Secret route.** The ROM overlay drops Mario at (2097, 404) — pixel column
-  131, four rows above the row-27 landing (`$18`, a solid). The loader applies
-  this entry when the node progress byte has bit 3 set.
-- **Objects.** 31 records; anims 9/15/17/19/20/22/23/25/27/28/29/58/68/77.
-  Distinctive: cannon ant (anim 77, `$5A773`), `$5A545` (anim 68), `$591F9`
-  (anim 58). No boss arena scene.
-
-### Level 19 (id 18)
-
-- **Entry.** Node 60 (progress slot 16), header spawn (45, 436), time limit 7;
-  Space Zone tileset (`GFX_TilesetSpaceZone`). The source header at `$5773`
-  begins `B4 01 2D 00 B0 01 50 00`: camera (80,432), normal progress `$00`.
-- **Exit.** Two bells in the same column, 288 px apart:
-  - plain `$4A` on the floor at (190, 29) → (3040, 464);
-  - the alternate `$4B` at (190, 11) → (3040, 176), reached from the row-12 pipe
-    corridor that runs west to the vertical `$07` pipe shaft at column 191.
-  `$4B` is the "route already cleared" twin: it leaves `sExitTileFlag = $FF`,
-  which the `$3547` tally guard reads. The corridor is solid `$07` terrain:
-  this level has no `$05` or `$08..$0F` pipe-mouth cells and its scene map is
-  zero throughout. There is no scene-connected pipe warp to the upper bell.
-- **Secret route.** Overlay drops Mario at (1905, 436) — inside the level, one
-  cell above the row-29 floor. The loader applies it for progress bit 3.
-- **Mechanics.** `space_physics = $08` (moon bit 3, the timed float) and
-  `properties = $08` (scroll limit) — the same pair level 29 carries. Three
-  hidden `$7E` blocks at column 121, rows 23/19/15 form the upper-route ladder.
-  A native ceiling bonk reveals each as solid `$07`, giving Mario footholds
-  at Y 340/276/212 before the row-12 corridor at Y 164.
-- **Objects.** 25 records; cannon ant (77), `$5AFD7` (anim 88),
-  `$5B0D5` (anim 90). No boss arena scene.
-
-### Level 28 (id 27)
-
-- **Entry.** Node 120 (progress slot 38), header spawn (51, 260), layout 3;
-  Tree Zone 1 tileset (`GFX_TilesetTreeZone1`).
-- **Exit.** Single `$4A` bell at (78, 30) → (1248, 480), on the row-31 solid
-  floor, adjacent to a `$07` pipe tile at (79, 30).
-- **Secret route.** None: the `$377B` record is all zero, and the layout has no
-  `$4B` cell.
-- **Objects.** 14 records; anims 9/19/30/58. Distinctive: `$586EB` (anim 30)
-  and `$591F9` (anim 58). No boss arena scene.
-
-### Level 29 (id 28)
-
-- **Entry.** Node 68 (progress slot 41), header spawn (40, 452), layout 4;
-  Space Zone tileset (`GFX_TilesetSpaceZone`) — the same zone as level 19.
-- **Exit.** Single `$4A` bell at (94, 28) → (1504, 448), beside a `$07` pipe tile
-  at (95, 28).
-- **Secret route.** None.
-- **Mechanics.** `space_physics = $08` (moon bit 3, timed float) and
-  `properties = $08`.
-- **Objects.** 6 records; anims 15/21/90 — the smallest stream in the game;
-  `$5B0D5` (anim 90) is the only distinctive handler. No boss arena scene.
-
-## Reviewed slice (levels 1-5)
-
-Reviewed 2026-10-21 against the source layout, the `$377B` overlay and played
-routes (`crates/sml2-runtime/src/tests/played_routes/levels_1_to_5.rs`). Each
-route runs through live `run_play`, which continues the map entry's divider
-clock, and again through the map-entered session; both must arm the bell on
-the same frame with the same object-engine divider byte.
-Every start reaches every exit cell except level 3's header start to `$4B`;
-that bell is covered from the secret start (see below).
-
-| level | id | entry | exit(s) | secret entry | boss |
-|---|---:|---|---|---|---|
-| 1 | 0 | node 0, (34,468), cam (80,448), time 4 | `$4A` (254,30) | (2778,420), cam (2811,438) | none |
-| 2 | 1 | node 35, (34,468), cam (80,448), time 5 | `$4A` (253,30) | (2144,468), cam (2177,448) | none |
-| 3 | 2 | node 34, (46,164), cam (80,176), time 6 | `$4A` (238,30); `$4B` (238,10) | (1807,132), cam (1823,142) | none |
-| 4 | 3 | node 33, (49,468), cam (80,448), time 4 | `$4A` (222,30) | (2572,132), cam (2605,167) | none |
-| 5 | 4 | node 36, (61,676), cam (80,673), time 4 | `$4A` (78,14) | none | none |
-
-- **Level 1.** A run east to the floor bell. Clearing it from node 0 hands
-  off at node 20 with music 6 and no screen load.
-- **Level 2.** A ground route east past the row-28 ledges. Node 35, screen 2,
-  music 16.
-- **Level 3.** The `$4A` bell is on the lower floor. The `$4B` room at
-  (226..239, 7..10) is sealed: the route climbs to the row-3 corridor, enters
-  the side pipe at (221,2) and leaves its (226,2) mouth above the room's
-  shaft. `$4B` returns to node 37 with tally unchanged and slot 2 = `$01`.
-  The secret start's `$4B` route is pinned; no header-start `$4B` tape has
-  been found yet. The search stalls below the (218..220,4) pipe ledge, which
-  a small Mario must reach with a running jump from the (3392,100) foothold.
-- **Level 4.** Ground route east; the secret start lands on the upper ledge
-  near the bell and takes 812 frames.
-- **Level 5.** A vertical climb with no secret entry. The only way onto the
-  bell's row-15 platforms is the hidden `$7E` block at (62,19): bonk it from
-  the (62,23) block, stand on its `$07` overlay, then jump up through the
-  one-way row-15 slope tiles (`$38..$47` are not ceilings, `$1DFE`). Small
-  Mario needs Up+A or a running jump (69 px) for both 64 px climbs; a plain
-  standing jump rises 49 px.
-
-The tapes were found by the ignored `search::search_route` tool, which grows
-held-button tapes through both live paths and keeps the shortest surviving
-tape per 16-pixel cell. They are native fixtures, not recorded ROM input.
-`search::trace_route` prints a tape's per-frame position for reviewing one.
-
-## Acceptance evidence
-
-```bash
+```sh
 cargo test -p sml2-core route_matrix
-# 5 passed: the four named slice tests + every_source_exit_cell_arms_the_bell
+cargo test -p sml2-runtime played_routes
+python3 tools/handler_coverage.py
+python3 tools/anim_closure.py --self-test
 ```
 
-`every_source_exit_cell_arms_the_bell` loads all 32 extracted levels, finds
-every `$4A`/`$4B` cell (35 across 25 levels, count pinned), stands Mario where
-the `$1BFF` probe samples it, and requires `exit_phase`, the 192-frame fade, the
-level-clear music request, and the `$4B` flag. The four named tests additionally
-assert the slice's exact source cells.
-
-This establishes exit-cell activation for the whole game. The smoke harness
-alone does not require a bell or a completed approach.
-
-### Played route: level 28
-
-`cargo test -p sml2-runtime played_routes` runs the same `run_play` loop as
-interactive and headless play, with the original level28 header, layout, object
-stream, edge map and scene map. Its fixed tape holds right for 1,400 frames.
-Mario starts small at (51,260), camera (80,246), without invincibility or later
-position writes. The route descends from the upper ledge to the lower corridor;
-normal objects are active during the approach.
-
-The test pins native bell arming on frame 1,077 at (1242,468), sampling the
-source `$4A` cell (78,30), fade 192, music 3 and exit flag 0. Fade completion is
-frame 1,269 and handoff frame 1,270; tally is 1 and Mario remains alive. The
-source node is 120 (progress slot 38): `$3F104` rewrites it to 46, selects screen
-1/music 30, and makes two saves. Progress and its serialized save byte are
-`$80`. Disabling bell arming makes this acceptance test fail.
-
-The live loop returns typed observations for these assertions; gameplay is not
-reimplemented in the test. Direct level selection now derives an overworld
-origin when the source table has exactly one matching node. Level id 17 has
-two nodes (5 and 26), and castle id 24 has none; the CLI cannot yet infer their
-route context. Full overworld entry remains separate work.
-
-### Played route: level 29
-
-`level29_timed_float_header_spawn_to_bell_through_live_play` uses the same live
-loop and original level29 assets. Its 3,400-frame tape is 100 right-held frames,
-then 22 repetitions of 50 A-held frames and 100 right-held frames. Horizontal
-inertia persists during the A-only spans; there is no new input syntax or
-position/physics rewrite. Mario starts small at (40,452), camera (80,438), with
-the source `$08` moon property and node 68/progress slot 41.
-
-The first observed airborne float use is frame 102: the budget changes from
-50 to 49 while A is held. The run consumes 784 budget frames and processes
-active objects during the approach. It arms the source `$4A` cell (94,28) on
-frame 2,584 at (1507,436), alive, with fade 192/music 3/exit flag 0. Fade ends on
-2,776 and the map handoff runs on 2,777; tally and serialized progress are 1
-and `$80`. The return selects node 69, screen 4/music 28, and two saves.
-`$3D56B/$3D573` intentionally sets `sMarioDead = $FF` after rewriting node 68;
-the test separately requires zero gameplay death frames and `dead = 0` at the
-bell, so that post-clear map latch cannot conceal a failed approach. Removing
-only the timed-float velocity extension makes this tape stall before the bell
-and fails the test; the original behavior is restored afterward.
-
-### Played route: level 19 header start to the lower bell
-
-`level19_header_spawn_to_plain_bell_through_live_play` starts at the source
-header `$5773`, progress `$00`, route latch 0, Mario (45,436) and camera
-(80,432). It uses all 25 original object records and the source timed-float
-physics. Its fixed 4,838-frame tape crosses the first broad spike bed via the
-column-60 foothold, refreshes the grounded float budget on narrow platforms,
-and releases A early over the later thorn gap to avoid the enemy above it.
-There are no position, physics, object or invincibility overrides after entry.
-
-With zero gameplay death frames, `$4A` arms on frame 4,611 at (3043,452),
-fade 192, music 3, exit flag 0. Fade completes on 4,803 and map handoff runs
-on 4,804. The final tally is 1, node 60, screen 4, music 28, with two saves.
-Progress slot 16 and its save byte are `$80`; entry flags remain `$00`.
-Disabling the grounded float budget rejects both the existing core float
-contract test and this played approach.
-
-### Played route: level 19 header start to the alternate bell
-
-`level19_header_spawn_hidden_ladder_to_alternate_bell_through_live_play`
-starts from the original header with progress `$00` and runs continuously
-through the early thorn beds, the three hidden-block footholds, and the upper
-platforms. Its fixed 7,254-frame tape uses movement inputs to approach the
-ladder after crossing the first half of the level. Original camera, object,
-clock and physics state carry through the entire route.
-
-The test pins all three source `$7E` cells and their native `$07` overlays,
-zero gameplay death frames, and the `$4B` arm on frame 6,922 at (3033,164),
-fade 192, music 3, flag `$FF`. Fade completes on 7,114; handoff is 7,115.
-Tally stays 0, and node 67/screen 4/music 28 receive one save. Progress slot 16
-and its save byte are `$01`: starting from `$00`, the alternate path adds bit
-0 without setting the checkpoint bit. Entry progress flags remain `$00`.
-
-Removing the hidden-block bump rejects the core foothold test and this route.
-Removing the Space Zone path-bit write rejects the core map handoff test and
-this route's progress assertion. Both source starts now have native played
-approaches to both bells; the live overworld loop remains outside these tests.
-
-### Played route: level 19 secret entry to the lower bell
-
-`level19_secret_entry_to_plain_bell_through_live_play` starts from the genuine
-progress-bit-3 entry. The persistent node-60 progress byte (slot 16) is `$08`
-before `LevelHeader::entry` runs. The test pins the copied `$A800-$A807` block
-as `B4 01 71 07 BD 01 92 07`: Mario (1905,436), camera (1938,445), route latch
-`$FF`, and moon property `$08`. Original layout and all 25 object records run
-through the live loop; the test never rewrites position or physics afterward.
-
-Its 1,400-frame typed tape has 23 fixed spans of movement, A, Up+A and idle.
-These are native button holds, with ordinary press-edge handling. The source
-`$1675..$16AE` branch retains velocity 75 when Up is held with A; ordinary
-walking-band jumps select 48. `held_up_preserves_high_jump_across_the_walking_speed_band`
-pins both speed-band boundaries and the same-frame gravity outputs (74/47)
-in memory. Ignoring Up makes both that core test and this route fail.
-
-The route consumes the timed-float budget (first observed on frame 22, 50→49)
-and has zero gameplay death frames. It reaches the source `$4A` cell (190,29)
-on frame 1,173 at (3043,452), with fade 192, music 3 and exit flag 0. Fade
-completion is 1,365; handoff is 1,366. Tally is 1, node remains 60, screen is 4,
-music is 28, and the handoff makes two saves. The live route latch clears;
-persistent slot 16 and its serialized save byte become `$80`, clearing the
-entry checkpoint bit.
-
-
-### Played route: level 19 secret entry to the alternate bell
-
-`level19_secret_entry_hidden_ladder_to_alternate_bell_through_live_play` uses
-that same genuine `$08` entry and original object data. Its fixed 3,798-frame
-button tape reveals the three `$7E` blocks at (121,23), (121,19), (121,15),
-climbs their `$07` overlays, and crosses the original upper platforms. The
-source layout stays unchanged. Core test
-`hidden_block_bonk_produces_a_solid_foothold_for_the_floor_probe` separately
-checks that native ceiling contact produces `$07` and the floor probe can
-land on it; an unrevealed `$7E` cannot support that landing.
-
-With zero gameplay death frames, the route arms `$4B` at (190,11) on frame
-3,466, Mario (3033,164), fade 192, music 3, exit flag `$FF`. Fade completion
-is 3,658 and map handoff is 3,659. Tally stays 0. The source map path rewrites
-node 60 to slotless node 64 before progress marking, then selects node 67,
-screen 4 and music 28. Slot 16 and its save byte become `$09`: the checkpoint
-bit remains and the alternate path adds bit 0. The handoff makes one save.
-The route latch clears, while entry progress flags remain `$08`.
-
-Removing the hidden-block bump branch rejects both the core foothold test
-and this played route. Removing the alternate-exit tally guard rejects the
-played route's tally assertion.
-
-## Gaps
-
-1. **Secret-route entries are implemented; live overworld integration remains.**
-   Extraction preserves all 32 indexed `$377B` records in `secret_entry`.
-   `LevelHeader::entry` copies the eight Y/X/camera bytes when progress bit 3 is
-   set; `$5579` resets the route latch from that bit, so a previous item pickup
-   cannot choose the next entry. `secret_route_entry_overwrites_only_a800_a807_and_resets_from_progress`
-   pins the bytes, and runtime test
-   `secret_route_entry_consumes_map_progress_and_reloads_stored_start` connects
-   `MapSim` selection to Mario/camera initialization, object route state, and
-   reload. Run `sml2-runtime --level 11 --level-progress 8 --headless 1` for
-   level 12's alternate entry. The runtime still lacks a live overworld loop;
-   the CLI supplies its entry progress byte. Level 19 now has played
-   secret-entry approaches to both bells; other levels remain pending.
-2. **All nine boss definitions now accept arena entry.** Level 6 (TreeZone5,
-   scene `$0B`, definition 0) is covered by runtime
-   `tree_boss_real_level_scene_entry_selects_portable_definition`; its source
-   scene map and script drive `$0EB0` entry. Core
-   `tree_arena_all_divider_choices_defeat_reward_map_and_reentry` covers all
-   sweep states, collision-generated stomps, the appended reward, one golden
-   coin, save serialization, map node `$20`/screen 2, and clean re-entry. These
-   are direct-placement acceptance tests; played approaches remain pending.
-3. **Most approaches remain unplayed.** Levels 28/29 header starts and level
-   19's header and secret starts to both bells have native input tests. Other
-   ordinary/secret starts and the boss levels 17, 20 and 24 still need played
-   tests, including the castle/night levels. Boss levels 6, 10 and 14 have
-   played header routes.
-4. **The 28 unreviewed rows are tool-measured, not hand-checked.** Their zone,
-   node, exit and secret columns are trustworthy by construction; the
-   "required mechanic" summary and any route narrative still need a review pass.
-5. **Most time limits and music tracks are reported, not asserted.** The level
-   19 header route pins time 7, music 19, and their seeded runtime values. Other
-   per-level values still come from the header without explicit acceptance.
+Audio acceptance needs register-write/PCM evidence; final integration needs fresh
+extraction/build and a continuous new-game -> six coins -> Wario -> credits run
+with mid-game save/reload. The frozen sweep remains regression evidence only.

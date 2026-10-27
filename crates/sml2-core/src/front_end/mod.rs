@@ -2,7 +2,7 @@
 //!
 //! The simulation lives here so the runtime only glues inputs, sound requests
 //! and presentation; the ROM state handlers are the authority for every byte.
-//! See `docs/plans/2026-10-19-menus-save-flow.md`.
+//! Session and save ownership: `DESIGN.md`, progression ownership section.
 
 pub mod assets;
 pub mod demo;

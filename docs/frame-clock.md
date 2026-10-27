@@ -48,4 +48,4 @@ Because the clock's absolute value depends on those unmodelled loads and on
 lag since power-on, animated tiles in a level do not land on the console's
 exact frames. They keep the right period and order, but their phase differs.
 Matching it would mean emulating loader and game-loop CPU time, which is
-outside the native-port design (DESIGN.md, standing goal 2).
+outside the native-port design ([presentation contract](../DESIGN.md#simulation-and-presentation)).

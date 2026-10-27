@@ -12,7 +12,7 @@ bug.
 
 | Difference | Why | Reference |
 |---|---|---|
-| The port shows each tick one frame earlier | The console draws from the previous frame's VBlank shadows. The native renderer draws the tick that produced the frame. | DESIGN.md, standing goal 2 |
+| The port shows each tick one frame earlier | The console draws from the previous frame's VBlank shadows. The native renderer draws the tick that produced the frame. | [Presentation contract](../DESIGN.md#simulation-and-presentation) |
 | Animated tiles (water, sea, ground) run at a different point in their cycle | The tile clock's absolute value includes loads and console lag the port doesn't model. Each animation keeps the ROM's period, frames and order. | [frame-clock.md](frame-clock.md) |
 | Screens arrive a few frames sooner | The port skips the title, file select → hub, level → map and door loads (3–33 frames each). | [frame-clock.md](frame-clock.md) |
 | Map zone sprites show the previous frame's animation step | Pairing by `sMapFrameCounter`, Pumpkin Zone's witch and flames match the ROM image one counter value earlier. Mario Zone's background-tile patches match on the same value. The port draws everything from the current tick. | Pumpkin Zone: 86 of 87 frames exact in one visit, 81 of 141 in another, at that offset |

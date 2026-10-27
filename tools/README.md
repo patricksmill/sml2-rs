@@ -1,275 +1,110 @@
 # Porting tools
 
-Run from the repository root. These tools use the standard library and locally
-extracted assets; no emulator or network access is needed. Set
-`SML2_DECOMP_ROOT` to override the sibling disassembly/ROM directory.
+Run from the repository root with extracted assets and `../sml2decomp/` (or
+`SML2_DECOMP_ROOT`). [PORTING.md](../PORTING.md) defines acceptance;
+[ORCHESTRATION.md](../ORCHESTRATION.md) defines bounded worker dispatch.
 
-## Coverage
+## Inventories and gates
 
-```bash
-python3 tools/handler_coverage.py
-```
+| Command | Claim | Exit status |
+|---|---|---|
+| `python3 tools/handler_coverage.py` | Source/declared Rust dispatch, including both level tables and bosses | 0 all implemented/no-op; 1 pending; 2 invalid/missing input |
+| `python3 tools/anim_closure.py` | Per-level fixpoint over spawn/morph/rewritten anim IDs | 0 closed; nonzero failure; `--self-test` must detect range and missing-handler mutations |
+| `python3 tools/anim_inventory.py --frames` | Reachable player-frame bounds, extracted mappings and source citations | 0 checked; 1 failing/uncited frame; 2 invalid input or stale/unbounded declaration |
+| `python3 tools/smoke_levels.py` | 32 manifests/assets and idle/walk native execution | 0 runs; 1 failing level; 2 missing input/binary |
+| `python3 tools/route_matrix.py --table` | Source entries/exits/secret routes/mechanics/bosses | 0 generated; 2 missing inputs |
+| `bash captures/sweep.sh` | Frozen regression, with exactly the documented traj4_ff0 exception | Nonzero on unexpected mismatches; preserve pipeline exit status |
 
-Exit **0** means all declared level/boss targets have implementation arms,
-**1** means pending handlers, and **2** means invalid inputs. Do not mask all
-nonzero statuses with `|| true`. A failed input audit leaves the previous report
-untouched; stop before reading it as a fresh measurement.
+Coverage/closure are not behavior parity. Profile table A applies below level
+ID `$0A`, B from `$0A`. Dynamic closure includes level roots, dynamic/boss spawns,
+interactions and record rewrites; type-set edges over-approximate reachability.
+Smoke fails on panic/nonzero status, notes, unported IDs, unapplied reloads or
+invalid assets, but never proves an exit was reached. See the
+[route evidence](../docs/route-matrix.md) for played versus source-only coverage.
 
-The generated, ignored `handler_coverage.json` retains `by_level` and
-`unported_spawn_reachable` for existing consumers. It adds
-`ported_spawn_reachable`, `level_tables`, and `boss_table`, each separating bodies,
-ROM-verified bare-return no-ops, and pending targets. All 32 manifests are required;
-invalid anim indices, missing profiles/sources, and invalid no-op arms fail.
-
-Level IDs 0–9 use mode A; 10–31 use B, matching `$EC4B` and Rust. Dispatch arm
-counts are implementation inventory, not test coverage. Boss-table inventory is
-conservative: all declared boss entries are counted, without claiming every entry
-is reachable. Dynamic spawn/state closure remains a separate source audit.
-
-## Anim closure
-
-```bash
-python3 tools/anim_closure.py [--json out.json] [--self-test]
-```
-
-Exit **0** means every anim value the source can produce in every level
-(spawn records, `$5B36D`/`$B31D` dynamic spawns, boss spawns, the `$FFD5`
-morph arms, the `$86F9` record rewrite) lands on an implemented table entry or
-a verified no-op. **1** reports an out-of-range or unimplemented landing, or a
-`$FFD5` writer that is not in the declared set; **2** means missing inputs.
-`--self-test` mutates a copy (an out-of-range spawn anim and an unimplemented
-table handler) and fails unless both are detected; it never edits inputs.
-The reasoning and limits are in [`docs/dynamic-spawn-closure.md`](../docs/dynamic-spawn-closure.md).
-
-## Sprite-frame inventory
-
-```bash
-python3 tools/anim_inventory.py [--frames] [--json out.json] [--self-test]
-```
-
-Lists every entry of a sprite-frame table (so far the player's bank-1 `$4000`
-table, indexed by `$FFC6`), the ROM write sites that can select it, and whether
-native code cites each site's routine. Site values come from a small abstract
-interpreter over the disassembly (ROM table reads, reviewed `RAM_DOMAINS`,
-straight-line callees). Sites it cannot bound must be listed in `DECLARED` with
-a reviewed set and reason. `--frames` prints the per-frame checklist: `cited`,
-`uncited`, `data-mismatch` or `unreachable`, with aliases of shared mappings
-marked.
-
-Exit **0** means every reachable frame is inside the table, its extracted
-mapping matches the ROM, and every selecting site is cited. **1** names the
-failing frame or uncited site. **2** means missing inputs, an undeclared
-unbounded site, or a stale declaration. This is a citation audit like
-`handler_coverage.py`, not a parity proof. A cited routine can still be partly
-ported, and comment paragraphs that say "not modelled", "not ported",
-"unported" or "TODO" do not count as citations.
-
-## Level smoke gate
-
-```bash
-cargo build -p sml2-runtime
-python3 tools/smoke_levels.py [--levels 12,19,28,29] [--frames 600] [--json out.json]
-```
-
-Validates all 32 extracted manifests and assets, then runs the runtime's real
-play loop through `--headless` (no window, no rendering, virtual divider clock,
-one tick per frame) for a fixed budget: an idle pass and a walk pass that holds
-right and jumps every ninth frame. Exit **0** means every level booted and ran
-without an unported diagnostic; **1** names the failing level; **2** means an
-input or the binary is missing. The harness fails on a panic, a nonzero exit, a
-`note:` line, a non-empty `unported=[...]`, a `NOT APPLIED`/`NOT RELOADED`
-tileset swap, and missing or mismatched manifest records.
-
-## Route matrix
-
-```bash
-python3 tools/route_matrix.py --levels 12,19,28,29 --table
-python3 tools/route_matrix.py --table --json out.json
-```
-
-Derives the five route facts per level — entry (header spawn, camera, overworld
-node and progress slot), exits (every `$4A`/`$4B` cell with pixel coordinates),
-secret entry (the ROM `$377B` 8-byte overlay applied by `$55C0`), boss (arena
-scene plus the `$8DFD` ladder) and required mechanics (level properties, the
-player probe's tile classes, and the handler names behind the level's anims).
-It reads `baserom.gb` for the overlay, so `SML2_DECOMP_ROOT` must point at the
-disassembly. Exit **0** on success; **2** when an input is missing. A level's
-exit cell is accepted when `route_matrix_tests` arms its bell from the source
-cell (`cargo test -p sml2-core route_matrix`). Played approaches are a separate
-claim: `cargo test -p sml2-runtime played_routes` currently verifies the
-level28 walking and level29 timed-float header routes, plus both level19 starts
-to both bells, through the actual live play loop. These
-checks include source entry bytes, float-budget consumption, exit fades,
-tallies, source node handoffs and save bytes.
-
-Native route fixtures also accept `PlayTape::Buttons(Vec<PlayerKeys>)` through
-the same live loop, allowing simultaneous movement/jump/run holds. CLI
-`--keys` retains its ASCII byte grammar. The level28 acceptance runs both
-representations and requires identical source-route timing and outcome bytes;
-`play_tape` tests cover legacy decoding, all simultaneous button masks and tape
-termination.
+Useful options: anim closure/inventory accept `--self-test`; anim inventory accepts
+`--frames --json out.json`; smoke accepts `--levels 12,19 --frames 600 --json out.json`;
+route matrix accepts `--levels 1..32 --table --json out.json`. Build
+`sml2-runtime` before smoke. `--json` output is local diagnostics, not a new
+capture fixture.
 
 ## Handler briefs
 
-```bash
+```sh
 python3 tools/handler_task.py --addr 0x58201
 python3 tools/handler_task.py --anim 4 --mode boss
 python3 tools/handler_task.py --addr 0x58201 --max-states 800
 ```
 
-ROM `0x58201` is bank `$16` (22 decimal), CPU `$4201`. The slicer uses exact ROM
-instruction boundaries, direct branches/calls/returns, inline `rst $28` tables,
-known immediate bank writes, and known HL/stack transfers. Source lines come from
-`home.asm` and `main.asm`, anchored by address labels and optionally `sml2.sym`.
-An unlabeled entry does not fall back to a nearby label's routine.
+0x58201 is bank `$16` (22 decimal), CPU `$4201`. The slicer follows exact ROM
+instruction starts, direct control flow, inline RST tables, known bank writes
+and known HL/stack transfers. It resolves unlabeled entries exactly; it never
+substitutes the nearest routine. Mixed symbolic/numeric table declarations must
+match ROM words in full; unknown names/expressions or truncation invalidate them.
 
-State-table `dw` rows may mix numeric words with named labels resolved from
-explicit ROM-address labels or `sml2.sym`. Rows containing symbols must match
-the encoded ROM words before they supply table bounds or advance the source
-cursor. Unknown names, expressions and mismatched words invalidate the entire
-contiguous declaration, including any preceding numeric rows; a truncated
-prefix never becomes a ready dispatch table.
+COMPLETE/exit 0 means bounded traversal finished, not Rust parity. Review inferred
+state/table bounds and bank effects. Unknown computed transfers, stack returns,
+bank writes, missing source or resource limits produce INCOMPLETE/exit 2. Invalid
+inputs also exit 2, without a ready brief. Interrupts and arbitrary computed targets
+are not inferred. Regenerate source symbols using the decomp's build instructions
+if source locations cannot resolve; `--out-dir` writes scratch briefs.
 
-The status **COMPLETE** means traversal finished within this static model. It
-requires source review of inferred table bounds and bank effects, and says
-nothing about Rust parity. Unknown computed transfers, unknown bank writes,
-unknown stack returns, missing source locations, and resource limits produce an
-**INCOMPLETE** packet and exit **2**. Invalid inputs also exit 2 without a ready
-packet. The tool does not infer arbitrary data-dependent targets or interrupts.
-
-A reviewed, existing helper can bound a large slice:
-
-```bash
+```sh
 python3 tools/handler_task.py --addr 0x58201 \
   --dependency '0x5B51A=crates/sml2-core/src/objects/helpers.rs::sprite_toggle'
 ```
 
-The supervisor must confirm that ROM entry and Rust method have the same effects,
-including preserving the selected bank. The tool verifies the file/method exists
-and lists this assumption in the brief; it does not establish semantic equality.
-If the dependency is unported, create its own task first. `--bank 0x16` specifies
-the selected bank when slicing a home-bank entry. `--out-dir` allows scratch
-briefs without editing tracked tasks. Regenerate symbols with the decomp's
-established build instructions if source locations cannot be resolved.
+A dependency is a reviewed equality assumption about an existing native helper,
+including bank preservation. The tool checks existence, not semantic equality;
+port an absent helper first. `--bank` supplies the bank for a home entry.
 
-For ending routines with verified VBlank entry frames and interrupt terminals,
-`--entry-contract` scopes traversal to closed, byte-checked caller preconditions:
+Reviewed specialized entry contracts:
 
-```bash
+```sh
 python3 tools/handler_task.py --addr 0x68572 --entry-contract ending-text-vblank
 python3 tools/handler_task.py --addr 0x26D7 --entry-contract ending-transfer-vblank
-```
-
-These contracts check caller and body witnesses against ROM bytes and SourceIndex,
-preserve the VBlank saved-register frame, and close interrupt control flow at `reti`
-without following the opaque interrupted PC or inventing native helper bindings.
-Generic traversal without `--entry-contract` continues to report `INCOMPLETE` for these interrupt entries.
-
-For the reviewed mixed declaration used by anim A:53, opt in explicitly:
-
-```bash
 python3 tools/handler_task.py --addr 0x5902D --state-table-contract anim53-state0-4
-python3 tools/dispatch_prompt.py --addr 0x5902D --state-table-contract anim53-state0-4
 ```
 
-This contract scopes COMPLETE to entry FFDF in {0,1,2,3,4}, selected bank $16,
-stable ROM, ordinary calls/returns, and no external staging mutation. It overrides
-only dispatch 0x59079: four pointers occupy [0x5907A,0x59082); the remaining 16
-bytes are two eight-byte displacement arrays. SourceIndex retains the entire
-[0x5907A,0x59092) declaration. No first-invalid-pointer heuristic or Rust
-dependency binding supplies the bound.
+Use `--help`/contract modules for supported names and assumptions. Contract
+witnesses hash ROM bytes and exact SourceIndex instruction/data records. Wrong
+entry/bank/helper bindings, changed declarations/writers/control flow or stale
+source invalidate them and require renewed review. Resource limits still apply.
+A restricted caller/interrupt/state contract never proves excluded entry states,
+engine initialization, interaction behavior or native helper parity.
 
-### State-bounded `rst $28` tables
+The generic state-bounded walk is attempted only after plain traversal is
+incomplete and retained only when complete. Unbounded writers, unguarded indexes
+and out-of-declaration bounds cannot bless an RST table. Special contracts remain
+the stronger explicit byte/source-witnessed evidence.
 
-Without a contract, an `rst $28` whose index comes from the object state byte
-(`$FFDF`) is bounded by the state values that reach it, not by pointer shape.
-This applies when the table has no source declaration, or when its declaration
-holds a word that is not a valid in-bank pointer (a mixed pointer/data run).
-The slicer tracks A as a function of `$FFDF` (`ldh`, `inc`/`dec`, `add`/`sub`,
-`and`/`or`/`xor`/`cp`, `cpl`, rotates, `swap`, `set`/`res`), narrows the possible
-values at each conditional branch, and takes the entry set as a fixed point:
-spawn state 0 plus every value written anywhere in the closure, bound helpers
-included. Narrowing never drops code; it only bounds tables.
+## Worker prompts
 
-A dispatch stays INCOMPLETE when its index is not state-derived, when the
-closure writes a non-constant state (for example a saved-state restore), when
-state 0 can reach a `dec a` dispatch unguarded, or when the bound runs past a
-declaration. Writers outside the closure are not modelled; the brief lists the
-entry set so a reviewer can confirm none exist. The state-tracked walk only runs
-when the plain walk is INCOMPLETE and is kept only when COMPLETE, so it never
-changes an existing complete slice. Generic slicing now reaches the anim53
-contract's exact four pointers and 356-instruction closure; the contract remains
-the stronger, byte-witnessed form.
-
-`state_table_contracts.py` records immutable SHA256 witnesses for every byte in
-the audited handler/helper instruction closure (including conservative removal
-reward/spawn branches), home RST body, mixed declaration and movement data.
-Source witnesses hash each exact instruction start, or every data byte, with the
-complete SourceIndex file/line/instruction text; the module documents the stable
-record encoding. Byte/source changes require renewed source review. Validation
-rejects missing source, altered declaration extents, wrong entry/bank, helper
-bindings and changed writers/calls/stores; traversal also rejects transfers
-outside the checked closure. Resource budgets still apply. The packet prints
-witnesses, assumptions and excluded paths: arbitrary FFDF>=5, other entry offsets,
-global initialization, engine selection, interactions and saved-state restoration
-are outside the claim. Native helper parity remains separate work.
-
-## Dispatch prompts
-
-```bash
+```sh
 python3 tools/dispatch_prompt.py --addr 0x58848
 python3 tools/dispatch_prompt.py --addr 0xAD93 \
   --module crates/sml2-core/src/objects/bosses/wario/form3.rs
-python3 tools/dispatch_prompt.py --queue boss_arena_phase_cascade
+python3 tools/dispatch_prompt.py --queue QUEUE_ID
 ```
 
-Handler prompts regenerate the brief and stop if it is incomplete. Existing
-addressed dispatch entries resolve their registered named files automatically;
-new entries require `--module` with a descriptive filename such as
-`crates/sml2-core/src/objects/enemies/boo.rs`. Adapters mirror the native filename
-under `objects/compat/`; tests live in the native category's `tests/` directory.
-Prompts name those bounded files, one dispatch arm, and the module registrations.
+Successful stdout is the worker message; diagnostics go to stderr. Handler
+prompts regenerate the brief and reject incomplete slices. Existing dispatch
+entries resolve their named native module; new entries require `--module`.
+Adapters mirror native filenames under `compat/`; tests belong to the category.
+Prompts name bounded files, one dispatch arm and registrations. Dependencies and
+state budgets pass through. Queue prompts validate files before dispatch.
 
-Prompts require the native guide and `Actor` API; raw slot/register logic belongs
-in compatibility adapters. Resolve missing native helpers first. Choose new
-modules when a family or adapter is already too large. Boss family subfolders
-are supported: Wario files live in `objects/bosses/wario/`, with registrations in
-that directory's `mod.rs`. Coverage searches subfolders recursively.
-`--dependency` and `--max-states` pass through to slicing. Queue prompts validate
-the named current files and include existing object integration tests when
-appropriate. Successful stdout is the worker message; generator diagnostics are
-written to stderr.
+## Checks and playback
 
-## Regression gate
-
-```bash
+```sh
+python3 -m unittest discover -s tools/tests
+cargo test -p sml2-core
 set -o pipefail
 bash captures/sweep.sh 2>&1 | tail -n 25
 ```
 
-The wrapper locates the repo relative to itself, then runs `replay_gate.py`.
-It builds release successfully before replaying, checks runtime exit status,
-requires one well-formed summary with required fields, rejects unexpected notes,
-and checks every reported mismatch field. `traj4_ff0` must match the exact frozen
-field/count baseline; new fields, changed counts, and notes fail. The gate exits
-nonzero on any failure. `SML2_BIN` still overrides the replay binary; it does not
-skip the build. Do not change the legacy expectation to bless a failing package.
-
-## Tool checks
-
-```bash
-python3 -m unittest discover -s tools/tests -v
-```
-
-Fixtures cover mode boundaries, separate boss/no-op accounting, invalid and
-missing inputs, exact unlabeled entries, far state branches, bank trampolines,
-HL/stack transfers, incomplete slices, prompt rejection, and gate failure paths.
-Use `cargo test -p sml2-core`, then the frozen sweep once at the package boundary.
-
-## TAS input playback
-
-Import a BizHawk Game Boy movie with `tools/import_bk2.py` and watch the native
-session with the `tas_playback` runtime example. See
-[TAS playback](../docs/tas-playback.md) for downloads, ROM verification, window
-controls, video export, and the first attempt's actual result. This is literal
-input playback, not an emulator-sync or full-game acceptance gate.
+Tool tests cover status accounting, source/symbol/table validation, contract
+mutations, incomplete briefs, dispatch rejection and regression-gate failures.
+TAS import, comparison and manual recording usage is in
+[TAS playback](../docs/tas-playback.md). Literal inputs are not synchronization
+or full-game acceptance evidence. Do not create new trajectory captures.

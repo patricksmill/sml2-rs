@@ -9,11 +9,10 @@ Native Rust port of Super Mario Land 2, verified against `../sml2decomp/` and `b
 | [`ORCHESTRATION.md`](ORCHESTRATION.md) | **Supervisor loop**, worker prompts, model roles, accept/reject |
 | [`PORTING.md`](PORTING.md) | Verification, one-ticket rules, forbidden moves |
 | [`docs/idiomatic-rust-porting.md`](docs/idiomatic-rust-porting.md) | Typed native actors, shared domain behavior, slot conversion boundary |
-| [`docs/plans/2026-10-15-rust-completion-workflow.md`](docs/plans/2026-10-15-rust-completion-workflow.md) | Full-game completion order, tooling prerequisites, task loop, milestone gates |
+| [`docs/route-matrix.md`](docs/route-matrix.md) | Completion evidence and remaining route/integration work |
 | [`DESIGN.md`](DESIGN.md) | Architecture, renderer seams, standing goals |
 | [`PORT_QUEUE.json`](PORT_QUEUE.json) | **Pending items only** — `python3 -c 'import json;print(json.load(open("PORT_QUEUE.json"))["queue"])'` |
 | [`PORT_QUEUE.done.json`](PORT_QUEUE.done.json) | Archived completed items (ignore unless auditing history) |
-| [`docs/plans/2026-10-15-port-finish-reset.md`](docs/plans/2026-10-15-port-finish-reset.md) | Execution plan (split `objects`, handler factory, queue closeout) |
 | [`captures/README.md`](captures/README.md) | Frozen replay corpus (read-only) |
 | [`hermes/README.md`](hermes/README.md) | Copy-paste Hermes supervisor/Porter system prompts |
 

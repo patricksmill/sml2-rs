@@ -19,11 +19,11 @@ register plumbing stay out of game logic; slot conversion belongs to
 must migrate in bounded, behavior-preserving steps. ROM byte assertions remain
 the verification boundary, not the implementation style.
 
-Full-game sequencing and milestone acceptance:
-[`Systematic Rust port completion workflow`](docs/plans/2026-10-15-rust-completion-workflow.md).
-The mechanics queue is one milestone within that roadmap. The repaired tools and their exit-status contracts are documented in
-[`tools/README.md`](tools/README.md). Handler counts measure declared dispatch,
-not behavior verification or dynamic-spawn closure.
+Full-game evidence and sequencing: [route inventory](docs/route-matrix.md).
+Shared subsystem dependencies precede handlers; closure, played routes and
+visual/audio/final integration are separate acceptance steps. Tool commands and
+exit-status contracts are in [tools/README.md](tools/README.md).
+Handler counts measure dispatch, not behavior or dynamic-spawn closure.
 
 ---
 
@@ -139,11 +139,11 @@ Cheap / flash models are **not** allowed to own logic ports.
 
 ---
 
-## Remaining work (scope)
+## Remaining work
 
-Queue milestone **mechanics_all_levels**. Pending items: `remaining_handler_classes` (bulk), `moon_physics_remaining_arms`, `map_zone_screen_loaders`, `camera_pan_timer`, `boss_arena_phase_cascade`, `boss_clear_ending_handoff`, `boss_anim_4_5_chain`, `boss_wario_anim20`, `boss_wario_anim23`.
-
-Handler audit: run `python3 tools/handler_coverage.py` → `handler_coverage.json`. Orchestration (supervisor/worker prompts): [`ORCHESTRATION.md`](ORCHESTRATION.md).
+Query pending IDs from `PORT_QUEUE.json`; do not copy a stale backlog here.
+Refresh `handler_coverage.py` for declared dispatch and `anim_closure.py` for
+dynamic reachability. Follow [ORCHESTRATION.md](ORCHESTRATION.md) for dispatch.
 
 ---
 

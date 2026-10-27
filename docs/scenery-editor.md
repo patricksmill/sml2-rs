@@ -77,3 +77,10 @@ when updating the game; they do not need the editor or a scenery installer.
 The initial registries are empty. Existing drafts are never published
 automatically. Exports contain authored coordinates and tile references,
 without ROM graphics, saves, or settings.
+
+Developer contract: validated overlays reject duplicate/out-of-range cells and
+unknown metatiles. Both native and DX rendering preserve the original playfield,
+live tile mutations and status bar; surroundings sample authored tiles or edge
+pixels. Tests live in core scenery, runtime render and editor modules. The old
+centered-view draft spec is superseded by the current upward level-view bias
+in [DESIGN.md](../DESIGN.md#viewports-and-composition).
