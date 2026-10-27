@@ -11,8 +11,8 @@ pub const SETTINGS_VERSION: u32 = 3;
 mod filter;
 pub use filter::Filter;
 mod view;
-pub use view::{CameraZoom, Widescreen};
 pub use sml2_runtime::render::HudStyle;
+pub use view::{CameraZoom, Widescreen};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct VanillaInstall {
@@ -103,6 +103,25 @@ impl Default for Settings {
     }
 }
 
+/// Output levels in `0.0..=1.0`. Music and effects weight the APU channels the
+/// driver gives each this frame; the master level scales the finished mix.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Volume {
+    pub master: f32,
+    pub music: f32,
+    pub effects: f32,
+}
+
+impl From<f32> for Volume {
+    fn from(master: f32) -> Self {
+        Self {
+            master,
+            music: 1.0,
+            effects: 1.0,
+        }
+    }
+}
+
 impl Settings {
     pub fn view(&self) -> (usize, usize) {
         self.view_for_window(self.window_size.map(|size| size as u32))
@@ -115,8 +134,8 @@ impl Settings {
     }
 
     /// The levels the game mixes audio at; silent while muted.
-    pub fn audio_volume(&self) -> crate::game::Volume {
-        crate::game::Volume {
+    pub fn audio_volume(&self) -> Volume {
+        Volume {
             master: if self.muted { 0.0 } else { self.volume },
             music: self.music_volume,
             effects: self.effects_volume,
