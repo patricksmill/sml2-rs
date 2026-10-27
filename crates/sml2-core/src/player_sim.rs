@@ -2200,6 +2200,17 @@ impl PlayerSim {
         self.vvel -= 1;
     }
 
+    /// Mario's Y for drawing the death arc in world space. [`Self::death_arc`]
+    /// steps only `y`'s low byte, which the console draws through the 8-bit
+    /// OAM Y `(y - camY + 98)`, so the jump of 256 px when it wraps never
+    /// shows. A view taller than the screen would draw that jump, so this
+    /// rebuilds Y from the screen Y, with `$C0..$FF` above the screen.
+    pub fn death_draw_y(&self, cam_y: u16) -> u16 {
+        let sy = (self.y as u8).wrapping_sub(cam_y as u8).wrapping_add(98);
+        let above = if sy >= 0xC0 { 256 } else { 0 };
+        cam_y.wrapping_add(u16::from(sy)).wrapping_sub(98 + above)
+    }
+
     /// One frame of the death fade (`$FF9B = 9`, 192 frames). The call that
     /// reaches 0 is the level-end tail (`$311A`): `$FF9B` moves to `$14`, then
     /// `sLives` is decremented (`sub 1 / daa`) — a borrow means the game runs

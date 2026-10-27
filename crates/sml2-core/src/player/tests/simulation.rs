@@ -4206,3 +4206,18 @@ fn death_arc_requests_jingle_on_fade_entry() {
     assert_eq!(sim.fade_timer.to_le_bytes(), [0xC0, 0]);
     assert_eq!([sim.powerup, sim.invincibility], [0, 0]);
 }
+
+#[test]
+fn death_draw_y_unwraps_the_low_byte_arc() {
+    let mut sim = PlayerSim::new();
+    // Camera low byte $C0: screen Y $A0 is world $0200 even though the arc
+    // wrapped `y` to $0100.
+    sim.y = 0x0100;
+    assert_eq!(sim.death_draw_y(0x01C0), 0x0200);
+    // Rising above the screen (screen Y $F0) stays above the camera.
+    sim.y = 0x01F0 - 98 + 0x40;
+    assert_eq!(sim.death_draw_y(0x0140), 0x0140 - 98 - 0x10);
+    // Unwrapped positions are unchanged.
+    sim.y = 0x0150;
+    assert_eq!(sim.death_draw_y(0x0100), 0x0150);
+}

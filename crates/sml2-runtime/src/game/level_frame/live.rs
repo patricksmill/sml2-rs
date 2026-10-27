@@ -231,7 +231,8 @@ pub(crate) fn step_live_level_frame(
     };
 
     if let Some(s) = spr.as_mut() {
-        s.player = Some((sim.x, sim.y, f));
+        let y = if was_dead { sim.death_draw_y(cam.y) } else { sim.y };
+        s.player = Some((sim.x, y, f));
         s.streak_counter = streak;
         // `$54C8`: `$FFC7` from the star countdown; the dead draw (`$5550`)
         // does not go through it.
