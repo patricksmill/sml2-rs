@@ -219,6 +219,7 @@ impl Session {
                     160,
                     144,
                     None,
+                    super::HudStyle::Classic,
                     None,
                     None,
                     output,

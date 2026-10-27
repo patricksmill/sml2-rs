@@ -7,7 +7,7 @@ mod hub;
 use super::motion::{Offsets, Smooth};
 use super::render_view_output_smooth;
 use super::view;
-use super::{hud_row_status, HudDigits};
+use super::{hud_row_status, HudDigits, HudStyle};
 use crate::session::{LevelContext, Session, SessionState, MAP_FADE_STEP};
 use sml2_core::video::{OutputMode, PalettePixel};
 use std::error::Error;
@@ -27,7 +27,7 @@ impl LevelContext {
     /// Render one level view without advancing the session.
     pub fn render_frame(&self, vw: usize, vh: usize) -> Result<Vec<u8>, Box<dyn Error>> {
         Ok(self
-            .render_output(vw, vh, OutputMode::Grayscale, &Offsets::none())?
+            .render_output(vw, vh, OutputMode::Grayscale, &Offsets::none(), HudStyle::Classic)?
             .0)
     }
 
@@ -37,6 +37,7 @@ impl LevelContext {
         vh: usize,
         output: OutputMode,
         offsets: &Offsets,
+        hud_style: HudStyle,
     ) -> Result<(Vec<u8>, usize), Box<dyn Error>> {
         // State 19 draws the ending's own VRAM, not the level.
         if self.ending_entry.state() == sml2_core::ending_entry::EndingEntryState::Sequence {
@@ -78,6 +79,7 @@ impl LevelContext {
             vw,
             vh,
             Some((&hud_live, self.hud_y)),
+            hud_style,
             self.spr.as_ref(),
             flash,
             output,
@@ -204,12 +206,12 @@ impl Session {
             SessionState::Demo(demo) => {
                 return demo
                     .ctx
-                    .render_output(vw, vh, output, &self.motion_offsets(smooth))
+                    .render_output(vw, vh, output, &self.motion_offsets(smooth), self.hud_style)
                     .unwrap_or_else(|_| (vec![output.blank(3); vw * vh], 1));
             }
             SessionState::InLevel(ctx) => {
                 return ctx
-                    .render_output(vw, vh, output, &self.motion_offsets(smooth))
+                    .render_output(vw, vh, output, &self.motion_offsets(smooth), self.hud_style)
                     .unwrap_or_else(|_| (vec![output.blank(3); vw * vh], 1));
             }
             SessionState::Castle(seq) => {

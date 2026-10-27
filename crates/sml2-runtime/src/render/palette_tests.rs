@@ -280,3 +280,64 @@ fn smoothing_moves_mario_by_his_share_of_the_tick() {
     player.0 = player.0.wrapping_sub(1);
     assert_eq!(smoothed, session.render_palette_frame((160, 144)));
 }
+
+#[test]
+fn corner_hud_moves_the_status_bar_to_the_top_left_without_its_backing() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        unreachable!()
+    };
+    ctx.manifest.header.palettes[0] = 0xE4;
+    ctx.layout_live.cells.fill(0);
+    ctx.manifest.metatiles.metatiles[0].tiles = [0; 4];
+    ctx.sim.layout_writes.clear();
+    ctx.bg_live.fill(0);
+    for y in 0..8 {
+        ctx.bg_live[0x800 + y * 2] = 255; // BG tile 0 = colour 1
+        ctx.bg_live[0x810 + y * 2 + 1] = 0x18; // HUD tile 1: a colour-2 bar at x 3-4
+    }
+    ctx.hud.template = vec![1; 20];
+    ctx.hud.digit_columns.clear();
+    ctx.spr = None;
+    let shade = |frame: &[u8], x: usize, y: usize| frame[y * 160 + x];
+    let classic = session.render_frame((160, 144));
+    assert_eq!(shade(&classic, 3, 140), 170 - 85, "classic strip ink");
+    assert_eq!(shade(&classic, 0, 140), 255, "classic strip paper");
+    session.hud_style = crate::render::HudStyle::Corner;
+    let corner = session.render_frame((160, 144));
+    assert!(
+        (136..144).all(|y| (0..160).all(|x| shade(&corner, x, y) == 170)),
+        "the bottom strip shows the level"
+    );
+    // Column 0's tile sits at (8, 8): its ink, the paper ring beside it,
+    // and level background where colour 0 is not beside ink.
+    assert_eq!(shade(&corner, 8 + 3, 8), 85);
+    assert_eq!(shade(&corner, 8 + 2, 8), 255);
+    assert_eq!(shade(&corner, 8, 8), 170);
+    // The strip's spacer column 4 is not drawn: tile x 4 holds nothing.
+    assert!((8..16).all(|y| shade(&corner, 8 + 4 * 8 + 3, y) == 170));
+    // The timer's last tile ends 8 pixels from the right edge.
+    assert_eq!(shade(&corner, 160 - 16 + 3, 8), 85);
+    assert!((17..24).all(|y| shade(&corner, 160 - 16 + 3, y) == 170), "one row, under its ring");
+    let wide = session.render_frame((256, 144));
+    assert_eq!(wide[8 * 256 + 256 - 16 + 3], 85, "the timer follows a wider view's edge");
+    if let Ok(dir) = std::env::var("SML2_HUD_PNG") {
+        let mut real = Session::new(SessionAssets::load().unwrap());
+        real.begin_level(1, 0).unwrap();
+        for style in [crate::render::HudStyle::Classic, crate::render::HudStyle::Corner] {
+            real.hud_style = style;
+            for size in [(160, 144), (256, 144)] {
+                let frame = real.render_frame(size);
+                crate::image_output::write_png_scaled(
+                    &std::path::Path::new(&dir).join(format!("{style:?}_{}.png", size.0)),
+                    size.0,
+                    size.1,
+                    4,
+                    &frame,
+                )
+                .unwrap();
+            }
+        }
+    }
+}

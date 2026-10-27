@@ -164,6 +164,7 @@ pub fn render_view_output(
         vw,
         vh,
         hud,
+        HudStyle::Classic,
         spr,
         pal_override,
         output,
@@ -185,6 +186,7 @@ pub fn render_view_output_smooth(
     vw: usize,
     vh: usize,
     hud: Option<(&[u8], u8)>,
+    hud_style: HudStyle,
     spr: Option<&SpriteCtx>,
     pal_override: Option<u8>,
     output: video::OutputMode,
@@ -329,9 +331,30 @@ pub fn render_view_output_smooth(
             }
         }
     }
+    if let (Some((row, _)), HudStyle::Corner) = (hud, hud_style) {
+        draw_corner_hud(
+            row,
+            (vw, vh),
+            &mut layers.window,
+            |_, tile, x, y| {
+                let c = tiles[tile as usize][usize::from(y) * 8 + usize::from(x)];
+                Ok((
+                    c,
+                    NativeBg {
+                        shade: shades[c as usize],
+                        index: c,
+                    },
+                ))
+            },
+            |_| NativeBg {
+                shade: shades[0],
+                index: 0,
+            },
+        )?;
+    }
     // Window layer: the status-bar strip (no scroll; window at WX=7 -> px 0).
     // It stays horizontally centred and on the bottom rows of a larger viewport.
-    if let Some((row, wy)) = hud {
+    if let (Some((row, wy)), HudStyle::Classic) = (hud, hud_style) {
         let hx0 = (vw as i32 - SCREEN_W as i32) / 2;
         let hy0 = vh as i32 - SCREEN_H as i32 + wy as i32;
         for dy in 0..8usize {
@@ -663,6 +686,109 @@ pub(crate) fn hud_row_status(hud: &HudStrip, digits: HudDigits) -> Vec<u8> {
         }
     }
     row
+}
+
+/// Where levels draw the status bar. Presentation only: the counters and the
+/// simulation are the same for both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, Deserialize)]
+pub enum HudStyle {
+    /// The original window strip along the bottom of the screen.
+    #[default]
+    Classic,
+    /// The same tiles floating in the view's corners, without the strip's
+    /// backing: lives and coins over enemies at the top left, time at the
+    /// top right.
+    Corner,
+}
+
+/// [`HudStyle::Corner`]'s top-left group: `(template column, tile x, tile y)`.
+/// Each counter keeps its icon, `×` and digits; the strip's spacers are dropped.
+const CORNER_HUD_LEFT: [(usize, i32, i32); 13] = [
+    (0, 0, 0),
+    (1, 1, 0),
+    (2, 2, 0),
+    (3, 3, 0),
+    (5, 5, 0),
+    (6, 6, 0),
+    (7, 7, 0),
+    (8, 8, 0),
+    (9, 9, 0),
+    (11, 0, 1),
+    (12, 1, 1),
+    (13, 2, 1),
+    (14, 3, 1),
+];
+/// The timer, right-aligned in the top-right corner.
+const CORNER_HUD_RIGHT: [(usize, i32, i32); 4] = [(16, 0, 0), (17, 1, 0), (18, 2, 0), (19, 3, 0)];
+/// Game pixels between each group and the view's edges.
+const CORNER_HUD_INSET: i32 = 8;
+
+/// Draw `row` as [`HudStyle::Corner`] into a window layer of `view` pixels.
+/// `sample(column, tile, x, y)` returns a tile pixel's raw colour and its
+/// pixel; colour 0 is transparent, except for a one-pixel ring of
+/// `paper(ink)` around the glyphs that keeps them legible on any background.
+pub(crate) fn draw_corner_hud<B: Copy>(
+    row: &[u8],
+    view: (usize, usize),
+    window: &mut [Option<B>],
+    mut sample: impl FnMut(usize, u8, u8, u8) -> Result<(u8, B), String>,
+    paper: impl Fn(B) -> B,
+) -> Result<(), String> {
+    let right = view.0 as i32 - CORNER_HUD_INSET - CORNER_HUD_RIGHT.len() as i32 * 8;
+    for (cells, x0) in [
+        (&CORNER_HUD_LEFT[..], CORNER_HUD_INSET),
+        (&CORNER_HUD_RIGHT[..], right),
+    ] {
+        draw_hud_group(row, cells, (x0, CORNER_HUD_INSET), view, window, &mut sample, &paper)?;
+    }
+    Ok(())
+}
+
+/// One [`draw_corner_hud`] group with its top-left tile at `origin`.
+fn draw_hud_group<B: Copy>(
+    row: &[u8],
+    cells: &[(usize, i32, i32)],
+    origin: (i32, i32),
+    view: (usize, usize),
+    window: &mut [Option<B>],
+    sample: &mut impl FnMut(usize, u8, u8, u8) -> Result<(u8, B), String>,
+    paper: &impl Fn(B) -> B,
+) -> Result<(), String> {
+    // The glyphs with a one-pixel border, so the ring can leave the tiles.
+    let tiles_w = cells.iter().map(|c| c.1 + 1).max().unwrap_or(0);
+    let tiles_h = cells.iter().map(|c| c.2 + 1).max().unwrap_or(0);
+    let (w, h) = ((tiles_w * 8 + 2) as usize, (tiles_h * 8 + 2) as usize);
+    let mut ink: Vec<Option<B>> = vec![None; w * h];
+    for &(col, tx, ty) in cells {
+        let Some(&tile) = row.get(col) else { continue };
+        for y in 0..8u8 {
+            for x in 0..8u8 {
+                let (color, pixel) = sample(col, tile, x, y)?;
+                if color != 0 {
+                    let i = (ty * 8 + 1 + i32::from(y)) as usize * w
+                        + (tx * 8 + 1 + i32::from(x)) as usize;
+                    ink[i] = Some(pixel);
+                }
+            }
+        }
+    }
+    let (vw, vh) = (view.0 as i32, view.1 as i32);
+    for y in 0..h as i32 {
+        for x in 0..w as i32 {
+            let pixel = ink[y as usize * w + x as usize].or_else(|| {
+                (-1..=1)
+                    .flat_map(|dy| (-1..=1).map(move |dx| (x + dx, y + dy)))
+                    .filter(|&(nx, ny)| (0..w as i32).contains(&nx) && (0..h as i32).contains(&ny))
+                    .find_map(|(nx, ny)| ink[ny as usize * w + nx as usize])
+                    .map(paper)
+            });
+            let (px, py) = (origin.0 - 1 + x, origin.1 - 1 + y);
+            if let Some(pixel) = pixel.filter(|_| (0..vw).contains(&px) && (0..vh).contains(&py)) {
+                window[py as usize * view.0 + px as usize] = Some(pixel);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Overlay the level's animated tiles (VRAM `$9200`..`$923F`) at the given

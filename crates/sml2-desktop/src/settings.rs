@@ -12,6 +12,7 @@ mod filter;
 pub use filter::Filter;
 mod view;
 pub use view::{CameraZoom, Widescreen};
+pub use sml2_runtime::render::HudStyle;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct VanillaInstall {
@@ -37,6 +38,8 @@ pub struct Settings {
     /// Restrict output scaling to whole physical pixels per game pixel.
     pub integer_scaling: bool,
     pub filter: Filter,
+    /// Where levels draw the status bar.
+    pub hud_style: HudStyle,
     pub volume: f32,
     pub muted: bool,
     pub dead_zone: f32,
@@ -72,6 +75,7 @@ impl Default for Settings {
             zoom: Zoom::Auto,
             integer_scaling: true,
             filter: Filter::Gray,
+            hud_style: HudStyle::Classic,
             volume: 0.7,
             muted: false,
             dead_zone: 0.3,
@@ -205,6 +209,7 @@ mod tests {
             zoom: Zoom::Integer(3),
             integer_scaling: false,
             filter: Filter::Sgb(0),
+            hud_style: HudStyle::Corner,
             ..Default::default()
         };
         settings.bindings.0[4] = vec![crate::input::Button::key("K")];
@@ -259,6 +264,7 @@ mod tests {
             "widescreen",
             "camera_zoom",
             "motion_smoothing",
+            "hud_style",
         ] {
             value.as_object_mut().unwrap().remove(field);
         }

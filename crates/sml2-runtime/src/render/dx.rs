@@ -1,5 +1,5 @@
 //! DX presentation of any level. Rendering never advances native gameplay.
-use super::{hud_row_status, window_coord, window_origin, HudDigits};
+use super::{draw_corner_hud, hud_row_status, window_coord, window_origin, HudDigits, HudStyle};
 use crate::session::{LevelContext, Session, SessionState};
 use sml2_core::actor::ScreenPosition;
 use sml2_core::front_end::screen::{
@@ -50,6 +50,7 @@ impl Session {
                 size,
                 &super::motion::Offsets::none(),
                 true,
+                HudStyle::Classic,
             ),
             SceneTarget::Ending => super::dx_ending::render_background(
                 self,
@@ -153,7 +154,7 @@ impl Session {
             .ok_or("DX presentation requires the title, file select or a level")?;
         let offsets = self.motion_offsets(smooth);
         Ok((
-            render(ctx, dx, character, view, &offsets, false)?,
+            render(ctx, dx, character, view, &offsets, false, self.hud_style)?,
             offsets.scale,
         ))
     }
@@ -882,6 +883,7 @@ fn render(
     view: (usize, usize),
     offsets: &super::motion::Offsets,
     background_only: bool,
+    hud_style: HudStyle,
 ) -> Result<Vec<[u8; 3]>, String> {
     let (vw, vh) = view;
     let (mx, _) = super::view::margin(view);
@@ -1103,29 +1105,41 @@ fn render(
             timer_low: ctx.sim.level_timer.low,
         },
     );
-    for dy in 0..if background_only { 0 } else { 8 } {
+    let sample_hud = |col: usize, tile: u8, x: u8, y: u8| {
+        let attr = CgbAttributes::from_byte(level.hud_attributes[col]);
+        cgb::sample_tile(banks, 0x800 + video::bg_tile_offset(tile), attr, x, y)
+            .map(|index| BackgroundPixel {
+                index,
+                priority: attr.priority(),
+            })
+            .map_err(|e| e.to_string())
+    };
+    if hud_style == HudStyle::Corner && !background_only {
+        draw_corner_hud(
+            &row,
+            view,
+            &mut layers.window,
+            |col, tile, x, y| sample_hud(col, tile, x, y).map(|p| (p.index.color(), p)),
+            |ink| BackgroundPixel {
+                index: IndexedPixel::new(0, ink.index.palette()).expect("a sampled palette"),
+                ..ink
+            },
+        )?;
+    }
+    let classic_rows = if background_only || hud_style != HudStyle::Classic { 0 } else { 8 };
+    for dy in 0..classic_rows {
         let py = ctx.hud_y as i32 + vh as i32 - 144 + dy;
         if !(0..vh as i32).contains(&py) {
             continue;
         }
         for (col, &tile) in row.iter().take(20).enumerate() {
-            let attr = CgbAttributes::from_byte(level.hud_attributes[col]);
             for dx in 0..8 {
                 let x = mx + (col * 8 + dx) as i32;
                 if !(0..vw as i32).contains(&x) {
                     continue;
                 }
-                layers.window[py as usize * vw + x as usize] = Some(BackgroundPixel {
-                    index: cgb::sample_tile(
-                        banks,
-                        0x800 + video::bg_tile_offset(tile),
-                        attr,
-                        dx as u8,
-                        dy as u8,
-                    )
-                    .map_err(|e| e.to_string())?,
-                    priority: attr.priority(),
-                });
+                layers.window[py as usize * vw + x as usize] =
+                    Some(sample_hud(col, tile, dx as u8, dy as u8)?);
             }
         }
     }

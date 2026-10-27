@@ -902,6 +902,8 @@ impl DesktopApp {
         view: (usize, usize),
         smooth: Smooth,
     ) -> Option<ColorImage> {
+        // Applied at draw time so a change from the pause menu shows at once.
+        self.game.as_mut()?.session.hud_style = self.settings.hud_style;
         let game = self.game.as_ref()?;
         let dx = self
             .dx_bundle

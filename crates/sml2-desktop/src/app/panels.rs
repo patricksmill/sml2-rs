@@ -4,7 +4,7 @@ use crate::library::Row;
 use crate::{
     input::{Action, Bindings, Button, PadButton},
     menu::{pressed, release_focus},
-    settings::Zoom,
+    settings::{HudStyle, Zoom},
 };
 use eframe::egui::{self, Context, Ui, ViewportCommand};
 use sml2_runtime::session::SessionState;
@@ -223,6 +223,16 @@ impl DesktopApp {
             .row(ui, "Fullscreen", Value::Toggle(self.settings.fullscreen))
         {
             self.fullscreen(ctx);
+        }
+        theme::section(ui, "HUD");
+        let corner = self.settings.hud_style == HudStyle::Corner;
+        let label = if corner { "Corners" } else { "Bottom bar" };
+        if self.menu.choice(ui, "Status bar", label.into()) != 0 {
+            self.settings.hud_style = if corner {
+                HudStyle::Classic
+            } else {
+                HudStyle::Corner
+            };
         }
         theme::section(ui, "COLOR");
         let adjust = self

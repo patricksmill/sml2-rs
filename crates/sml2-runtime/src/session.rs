@@ -396,6 +396,8 @@ pub struct Session {
     pub active_slot: Option<u8>,
     /// Whether Easy mode is active for the current session.
     pub easy_mode: bool,
+    /// Where levels draw the status bar.
+    pub hud_style: crate::render::HudStyle,
     /// The presentation character selected through the DX file-select door.
     pub character: Character,
     dx: Option<std::sync::Arc<sml2_dx::Presentation>>,
@@ -689,6 +691,7 @@ impl Session {
             slots: SaveSlots::new(),
             active_slot: None,
             easy_mode: false,
+            hud_style: Default::default(),
             character: Character::Mario,
             dx: None,
             bell_return: None,
