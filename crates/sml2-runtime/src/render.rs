@@ -332,7 +332,7 @@ pub fn render_view_output_smooth(
             }
         }
     }
-    if let (Some((row, _)), HudStyle::Corner) = (hud, hud_style) {
+    if let (Some((row, _)), HudStyle::Modern) = (hud, hud_style) {
         draw_corner_hud(
             row,
             (vw, vh),
@@ -700,7 +700,8 @@ pub enum HudStyle {
     /// The same tiles floating in the view's corners, without the strip's
     /// backing: lives and coins over enemies at the top left, time at the
     /// top right.
-    Corner,
+    #[serde(alias = "Corner")]
+    Modern,
 }
 
 impl HudStyle {
@@ -710,12 +711,12 @@ impl HudStyle {
     pub fn lift(self) -> i32 {
         match self {
             Self::Classic => 0,
-            Self::Corner => 8,
+            Self::Modern => 8,
         }
     }
 }
 
-/// [`HudStyle::Corner`]'s top-left group: `(template column, tile x, tile y)`.
+/// [`HudStyle::Modern`]'s top-left group: `(template column, tile x, tile y)`.
 /// Each counter keeps its icon, `×` and digits; the strip's spacers are dropped.
 const CORNER_HUD_LEFT: [(usize, i32, i32); 13] = [
     (0, 0, 0),
@@ -747,7 +748,7 @@ pub(crate) fn corner_hud_rects(view: (usize, usize)) -> [(i32, i32, i32, i32); 2
     ]
 }
 
-/// Draw `row` as [`HudStyle::Corner`] into a window layer of `view` pixels.
+/// Draw `row` as [`HudStyle::Modern`] into a window layer of `view` pixels.
 /// `sample(column, tile, x, y)` returns a tile pixel's raw colour and its
 /// pixel; colour 0 is transparent, except for a one-pixel ring of
 /// `paper(ink)` around the glyphs that keeps them legible on any background.

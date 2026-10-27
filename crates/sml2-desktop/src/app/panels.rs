@@ -225,13 +225,13 @@ impl DesktopApp {
             self.fullscreen(ctx);
         }
         theme::section(ui, "HUD");
-        let corner = self.settings.hud_style == HudStyle::Corner;
-        let label = if corner { "Corners" } else { "Bottom bar" };
+        let modern = self.settings.hud_style == HudStyle::Modern;
+        let label = if modern { "Modern" } else { "Original" };
         if self.menu.choice(ui, "Status bar", label.into()) != 0 {
-            self.settings.hud_style = if corner {
+            self.settings.hud_style = if modern {
                 HudStyle::Classic
             } else {
-                HudStyle::Corner
+                HudStyle::Modern
             };
         }
         theme::section(ui, "COLOR");

@@ -209,7 +209,7 @@ mod tests {
             zoom: Zoom::Integer(3),
             integer_scaling: false,
             filter: Filter::Sgb(0),
-            hud_style: HudStyle::Corner,
+            hud_style: HudStyle::Modern,
             ..Default::default()
         };
         settings.bindings.0[4] = vec![crate::input::Button::key("K")];
@@ -288,6 +288,12 @@ mod tests {
         assert_eq!(settings.version, 3);
         assert!(settings.show_toolbar);
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn the_hud_style_saved_as_corner_loads_as_modern() {
+        let settings: Settings = serde_json::from_str(r#"{"hud_style":"Corner"}"#).unwrap();
+        assert_eq!(settings.hud_style, HudStyle::Modern);
     }
 
     #[test]

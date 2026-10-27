@@ -75,7 +75,7 @@ impl Session {
                         160,
                         8,
                     )),
-                    super::HudStyle::Corner => rectangles.extend(
+                    super::HudStyle::Modern => rectangles.extend(
                         super::corner_hud_rects(size)
                             .map(|(x, y, w, h)| (x - mx, y - my, w, h)),
                     ),

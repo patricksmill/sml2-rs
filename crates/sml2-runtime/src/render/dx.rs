@@ -1115,7 +1115,7 @@ fn render(
             })
             .map_err(|e| e.to_string())
     };
-    if hud_style == HudStyle::Corner && !background_only {
+    if hud_style == HudStyle::Modern && !background_only {
         // DX's own HUD tiles paint a dark backing into every cell, so the
         // corners draw the original glyphs in DX's HUD palettes instead.
         draw_corner_hud(

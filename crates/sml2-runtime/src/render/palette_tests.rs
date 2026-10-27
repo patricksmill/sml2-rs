@@ -304,7 +304,7 @@ fn corner_hud_moves_the_status_bar_to_the_top_left_without_its_backing() {
     let classic = session.render_frame((160, 144));
     assert_eq!(shade(&classic, 3, 140), 170 - 85, "classic strip ink");
     assert_eq!(shade(&classic, 0, 140), 255, "classic strip paper");
-    session.hud_style = crate::render::HudStyle::Corner;
+    session.hud_style = crate::render::HudStyle::Modern;
     let corner = session.render_frame((160, 144));
     assert!(
         (136..144).all(|y| (0..160).all(|x| shade(&corner, x, y) == 170)),
@@ -326,12 +326,12 @@ fn corner_hud_moves_the_status_bar_to_the_top_left_without_its_backing() {
     real.begin_level(1, 0).unwrap();
     real.hud_style = crate::render::HudStyle::Classic;
     let classic = real.render_frame((160, 144));
-    real.hud_style = crate::render::HudStyle::Corner;
+    real.hud_style = crate::render::HudStyle::Modern;
     let corner = real.render_frame((160, 144));
     // Terrain and sprites move down together, hiding the rows the strip covered.
     assert_eq!(corner[32 * 160..], classic[24 * 160..136 * 160]);
     if let Ok(dir) = std::env::var("SML2_HUD_PNG") {
-        for style in [crate::render::HudStyle::Classic, crate::render::HudStyle::Corner] {
+        for style in [crate::render::HudStyle::Classic, crate::render::HudStyle::Modern] {
             real.hud_style = style;
             for size in [(160, 144), (256, 144)] {
                 let frame = real.render_frame(size);
