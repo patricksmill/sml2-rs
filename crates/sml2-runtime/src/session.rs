@@ -410,6 +410,11 @@ impl Session {
 
     pub fn dx_enabled(&self) -> bool { self.dx.is_some() }
 
+    fn seed_character(&self, ctx: &mut LevelContext, character: Character) {
+        let curves = self.dx.as_ref().map(|dx| dx.movement[usize::from(character == Character::Luigi)].clone());
+        ctx.sim.set_dx_movement(character, curves);
+    }
+
     /// The session's `$FF97`, for the map and diagnostics.
     pub fn ff97(&self) -> u8 {
         self.ff97
@@ -419,8 +424,7 @@ impl Session {
     /// its own origin: the console's depends on every load's length and every
     /// lag frame since power-on, which a native port does not reproduce.
     fn seed_level_state(&self, ctx: &mut LevelContext) {
-        let curves = self.dx.as_ref().map(|dx| dx.movement[usize::from(self.character == Character::Luigi)].clone());
-        ctx.sim.set_dx_movement(self.character, curves);
+        self.seed_character(ctx, self.character);
         ctx.tile_animation = self.tile_animation;
         (ctx.cam.right_enabled, ctx.cam.left_enabled) = self.scroll_enables;
         // No level loader writes `$A24D`/`$A284`/`$A27C`, including the
@@ -702,6 +706,8 @@ impl Session {
         );
         self.object_clock.initialize_level(&mut ctx.obj);
         self.seed_level_state(&mut ctx);
+        // Attract tapes were recorded with Mario; the selection never drives them.
+        self.seed_character(&mut ctx, Character::Mario);
         self.map_ram = sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
         self.state = SessionState::Demo(Box::new(DemoContext {
             ctx: Box::new(ctx),

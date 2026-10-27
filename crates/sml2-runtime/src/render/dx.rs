@@ -104,6 +104,8 @@ impl Session {
         view: (usize, usize),
         smooth: super::motion::Smooth,
     ) -> Result<(Vec<[u8; 3]>, usize), String> {
+        // Attract demos always show Mario, whatever the file select chose.
+        let character = if matches!(self.state, SessionState::Demo(_)) { Character::Mario } else { character };
         let (mut frame, scale) = self.render_dx_frame_smooth_base(dx, character, view, smooth)?;
         self.decorate_scene_dx(&mut frame, view, scale, dx, character)?;
         Ok((frame, scale))

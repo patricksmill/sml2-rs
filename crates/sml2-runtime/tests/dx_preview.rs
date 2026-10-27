@@ -1024,3 +1024,14 @@ fn dx_character_selection_reaches_level_entry_and_falls_back_to_mario() {
     assert_eq!(ctx.sim.character, Mario);
     assert!(!ctx.sim.dx_enabled());
 }
+
+#[test]
+fn attract_demos_always_run_dx_mario() {
+    let mut session = session();
+    session.set_dx(Some(std::sync::Arc::new(synthetic_bundle())), Luigi);
+    assert!(session.start_demo(0));
+    let SessionState::Demo(demo) = &session.state else { panic!("demo is live") };
+    assert_eq!(demo.ctx.sim.character, Mario);
+    assert!(demo.ctx.sim.dx_enabled());
+    assert_eq!(session.character, Luigi, "the selection survives the demo");
+}
