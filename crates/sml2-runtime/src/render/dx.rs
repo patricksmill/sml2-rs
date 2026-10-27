@@ -389,6 +389,9 @@ impl Session {
             let waits = transition.fade_waits();
             bg_palettes = crate::session::dx_effects::map_return(&bg_palettes, waits);
             obj_palettes = crate::session::dx_effects::map_return(&obj_palettes, waits);
+        } else if self.coin_room_blank {
+            bg_palettes = crate::session::dx_effects::white(bg_palettes.len());
+            obj_palettes = crate::session::dx_effects::white(obj_palettes.len());
         }
         let palettes = CgbPalettes::from_bytes(&bg_palettes, &obj_palettes)
             .map_err(|e| e.to_string())?;
@@ -1277,6 +1280,8 @@ fn render(
             )?);
         }
     }
+    // `$25AF` uploads `$36:$7746`'s white; the door scroll shows it until
+    // `$0EC0` runs `$7306`, the same window native play blanks.
     if ctx.scene_reload_blank {
         return Ok(vec![[255; 3]; vw * vh * offsets.scale * offsets.scale]);
     }

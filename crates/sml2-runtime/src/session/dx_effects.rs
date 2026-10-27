@@ -27,6 +27,13 @@ pub(crate) fn castle_entry(bytes: &[u8], timer: u8) -> Vec<u8> {
     adjust(bytes, [-16 * steps, -4 * steps, -4 * steps])
 }
 
+/// `$20:$6A66`'s `$D300` buffer: 32 RGB555 `$7FFF` words. Coin rooms
+/// (`$26:$765A`) and map returns (`$0F:$78AD`) upload it to BG and OBJ
+/// before their loads; boss reloads (`$36:$7746`) blank the whole frame.
+pub(crate) fn white(len: usize) -> Vec<u8> {
+    [0xff, 0x7f].repeat(len / 2)
+}
+
 /// `$0C:$7118`: palette index `$9C`, four flashing frames in every 32.
 pub(crate) fn castle_coin(bytes: &mut [u8], frame: u8) {
     let colors = if frame & 31 < 4 {
@@ -58,7 +65,7 @@ pub(crate) fn map_return(bytes: &[u8], waits: u16) -> Vec<u8> {
         _ => 0,
     };
     if step == 0 {
-        vec![0xff, 0x7f].repeat(bytes.len() / 2)
+        white(bytes.len())
     } else {
         adjust(bytes, [increase; 3])
     }

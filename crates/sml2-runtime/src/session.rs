@@ -381,6 +381,9 @@ pub struct Session {
     bell_return_hold: u16,
     /// Hold frames already spent before the bell script's first step.
     bell_entry: Option<u16>,
+    /// DX: this frame entered a coin room, whose `$26:$765A` white upload
+    /// holds until job 4 follows the player-tile job 7.
+    pub(crate) coin_room_blank: bool,
     /// Where the castle reveal lands: `(screen, node, exit_tile_flag, move)`.
     castle_return: Option<(u8, u8, u8, Option<u8>)>,
     /// The node a boss clear's save keeps through the reveal: after it the ROM
@@ -662,6 +665,7 @@ impl Session {
             bell_fade: None,
             bell_return_hold: 0,
             bell_entry: None,
+            coin_room_blank: false,
             castle_return: None,
             castle_saved_node: None,
             castle_progress: [0; 42],
@@ -874,6 +878,7 @@ impl Session {
 
     pub fn advance(&mut self, input: FrameInput) -> FrameEffects {
         let dx_enabled = self.dx_enabled();
+        self.coin_room_blank = false;
         self.motion_prev = self
             .level_ctx()
             .and_then(crate::render::motion::MotionSnapshot::of);
@@ -1102,6 +1107,9 @@ impl Session {
                     &self.assets.node_records,
                 );
                 self.map_ram = map_sim.map_ram();
+                let coin_room = |screen: u8| (9..=12).contains(&screen);
+                self.coin_room_blank =
+                    !coin_room(source_map.screen_id) && coin_room(map_sim.screen_id) && map_sim.room.is_some();
 
                 if let Some(direction) = entry.transition {
                     let destination = map_sim.screen_id;

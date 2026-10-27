@@ -80,7 +80,7 @@ RGB555 arithmetic saturates each five-bit channel independently.
 
 | Effect / source | Required behavior |
 |---|---|
-| White blanking, `$20:$6A66..$6A7E` | `$D300` is 32 white `$7FFF` entries. Boss `$36:$7746`, map `$0F:$7873/$78AD` and minigame entry paths upload white before their loads |
+| White blanking, `$20:$6A66..$6A7E` | `$D300` holds 32 `$7FFF` words, uploaded to BG+OBJ by: boss reload `$25AF -> $36:$7746` (white until `$0EC0 -> $7306` at scroll end; native blank window); coin rooms `$3F307 -> $26:$765A` (job 7 then job 4: first room frame white); map return `$3C528 -> $0F:$78AD` (step 0 of `$77A1`); level->map `$3EF2B -> $0F:$7873` and bell B `$3F5A4 -> $26:$78F0` (overwritten before display). Bell A `$26:$7C91` uploads directly |
 | Castle entry, `$0C:$469F..$4700`, `$7000..$7118` | Subtract RGB 16/4/4 from BG+OBJ at timer low 3F/2F/1F/0F; zero forces black. Initializer `$27:$4480` supplies canonical buffers |
 | Map exit, `$0F:$69FB..$6A53`, `$7700..$77A1` | Four in-place saturating RGB+10 steps; 36 explicit VBlank waits vs native 48 |
 | Zone walkout, `$0F:$62F7..$6367` | 80 walking waits followed by 20 fade waits |

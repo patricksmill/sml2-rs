@@ -1046,3 +1046,58 @@ fn attract_demos_always_run_dx_mario() {
     assert!(demo.ctx.sim.dx_enabled());
     assert_eq!(session.character, Luigi, "the selection survives the demo");
 }
+
+/// `$25AF` uploads `$36:$7746`'s white; it lasts until the door scroll's end
+/// runs `$0EC0`/`$7306`, exactly the frames native play blanks.
+#[test]
+fn dx_boss_reload_shows_white_for_the_native_blank_window() {
+    let bundle = synthetic_bundle();
+    let mut game = session();
+    game.begin_level(13, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut game.state else { panic!("level") };
+    ctx.cam.scene_id = 14;
+    ctx.cam.transition = 1;
+    ctx.cam.x = 0x6B0;
+    ctx.scene_vm.start();
+    let mut white_frames = 0;
+    for _ in 0..80 {
+        game.advance(FrameInput::default());
+        let native_blank = game.render_frame((160, 144)).iter().all(|&p| p == 255);
+        let dx = game.render_dx_frame(&bundle, Luigi, (160, 144)).unwrap();
+        assert_eq!(dx.iter().all(|&p| p == [255; 3]), native_blank);
+        if native_blank {
+            white_frames += 1;
+        } else if white_frames != 0 {
+            assert_eq!(dx[0], RED, "the level's colors return with the arena");
+            break;
+        }
+    }
+    assert!(white_frames > 20, "reload and door scroll stay white");
+}
+
+/// `$3F307` -> `$26:$765A` uploads white, then queues job 7 before job 4, so
+/// the room's first frame keeps the white palettes.
+#[test]
+fn dx_coin_room_entry_shows_one_white_frame() {
+    let mut bundle = synthetic_bundle();
+    bundle.map.screens[9].bg_palettes = [0xe0, 3].repeat(32);
+    let mut game = session();
+    game.debug_warp_map(0, 0x71).unwrap();
+    let SessionState::Overworld(map) = &mut game.state else { panic!("map") };
+    (map.coins_low, map.coins_high) = (0x99, 0x09);
+    let press_a = FrameInput {
+        keys: sml2_core::player_sim::PlayerKeys { a: true, ..Default::default() },
+        div: 0,
+    };
+    game.advance(press_a);
+    let SessionState::Overworld(map) = &game.state else { panic!("map") };
+    assert_eq!(map.screen_id, 9, "the coin door opened");
+    let white = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
+    assert_eq!(white, vec![[255; 3]; 160 * 144]);
+    assert_eq!(game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(), white);
+    game.advance(FrameInput::default());
+    assert_eq!(
+        game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(),
+        vec![[0, 255, 0]; 160 * 144]
+    );
+}
