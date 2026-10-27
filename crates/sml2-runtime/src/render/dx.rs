@@ -965,7 +965,8 @@ fn render(
     let pan = ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
     let camera = (ctx.cam.x, ctx.cam.y);
     let viewport = super::view::LevelViewport::new(view, camera, pan, offsets.scale, offsets.bg);
-    let (sx, sy) = viewport.origin;
+    let lift = if background_only { 0 } else { hud_style.lift() };
+    let (sx, sy) = (viewport.origin.0, viewport.origin.1 - lift);
     let raw_origin = super::view::raw_level_origin(view, camera, pan);
     let world_w = (LAYOUT_WIDTH * 16) as i32;
     let world_h = (LAYOUT_HEIGHT * 16) as i32;
@@ -1027,7 +1028,7 @@ fn render(
     }
     let pan = ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
     let scenery_window =
-        super::margin::SceneryWindow::new(view, (ctx.cam.x, ctx.cam.y), pan, border, &ctx.scenery)
+        super::margin::SceneryWindow::new(view, (ctx.cam.x, ctx.cam.y), pan, border + lift, &ctx.scenery)
             .with_layout_writes(&ctx.sim.layout_writes);
     let past_level = ctx.spr.as_ref().and_then(|s| s.pipe_background).is_none();
     for py in -border..vh as i32 + border {
@@ -1035,7 +1036,7 @@ fn render(
             break;
         }
         for px in -border..vw as i32 + border {
-            match scenery_window.sample(px, py) {
+            match scenery_window.sample(px, py - lift) {
                 super::margin::MarginSample::Native => {}
                 super::margin::MarginSample::Blank => {
                     *layers.bg_mut(px, py) = blank;
@@ -1043,7 +1044,7 @@ fn render(
                 super::margin::MarginSample::Level { wx, wy } => {
                     let (cx, cy) = (wx as usize / 16, wy as usize / 16);
                     let (tx, ty) = (wx as usize & 15, wy as usize & 15);
-                    let rewritten = scenery_window.rewrite(px, py);
+                    let rewritten = scenery_window.rewrite(px, py - lift);
                     let Some(id) = rewritten.or_else(|| cell_at(cx, cy)) else {
                         *layers.bg_mut(px, py) = blank;
                         continue;
@@ -1115,11 +1116,29 @@ fn render(
             .map_err(|e| e.to_string())
     };
     if hud_style == HudStyle::Corner && !background_only {
+        // DX's own HUD tiles paint a dark backing into every cell, so the
+        // corners draw the original glyphs in DX's HUD palettes instead.
         draw_corner_hud(
             &row,
             view,
             &mut layers.window,
-            |col, tile, x, y| sample_hud(col, tile, x, y).map(|p| (p.index.color(), p)),
+            |col, tile, x, y| {
+                let off = video::bg_tile_offset(tile);
+                let bytes: &[u8; 16] = ctx.bg_live[off..off + 16]
+                    .try_into()
+                    .map_err(|_| format!("HUD tile {tile:#04X} out of range"))?;
+                let color = video::tile_colors(bytes)[usize::from(y) * 8 + usize::from(x)];
+                let attr = CgbAttributes::from_byte(level.hud_attributes[col]);
+                let index =
+                    IndexedPixel::new(color, attr.palette()).map_err(|e| e.to_string())?;
+                Ok((
+                    color,
+                    BackgroundPixel {
+                        index,
+                        priority: attr.priority(),
+                    },
+                ))
+            },
             |ink| BackgroundPixel {
                 index: IndexedPixel::new(0, ink.index.palette()).expect("a sampled palette"),
                 ..ink
@@ -1285,6 +1304,7 @@ fn render(
         return Ok(vec![[255; 3]; vw * vh * offsets.scale * offsets.scale]);
     }
     for cell in &mut layers.cells {
+        cell.y += lift;
         cell.shift.0 += viewport.sprite_shift.0;
         cell.shift.1 += viewport.sprite_shift.1;
     }

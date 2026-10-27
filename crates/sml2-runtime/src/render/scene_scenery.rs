@@ -51,7 +51,7 @@ pub(crate) fn paint_border<P: Copy>(
 impl Session {
     /// Protected pixels in scene-local coordinates, in addition to the
     /// original screen. Arena cameras retain the level renderer's framing
-    /// and bottom HUD, so those live pixels also remain untouched.
+    /// and HUD, so those live pixels also remain untouched.
     pub fn scene_border_protected_rects(&self, size: (usize, usize)) -> Vec<(i32, i32, i32, i32)> {
         let mut rectangles = vec![(0, 0, 160, 144)];
         if matches!(self.scene_scenery_target(), Some(SceneTarget::Arena { .. })) {
@@ -61,13 +61,25 @@ impl Session {
                 let native = view::level_origin(view::NATIVE, camera, pan);
                 let enlarged = view::level_origin(size, camera, pan);
                 let (mx, my) = view::margin(size);
+                let lift = self.hud_style.lift();
                 rectangles.push((
                     native.0 - enlarged.0 - mx,
-                    native.1 - enlarged.1 - my,
+                    native.1 - enlarged.1 - my + lift,
                     160,
                     144,
                 ));
-                rectangles.push((0, i32::from(ctx.hud_y) + size.1 as i32 - 144 - my, 160, 8));
+                match self.hud_style {
+                    super::HudStyle::Classic => rectangles.push((
+                        0,
+                        i32::from(ctx.hud_y) + size.1 as i32 - 144 - my,
+                        160,
+                        8,
+                    )),
+                    super::HudStyle::Corner => rectangles.extend(
+                        super::corner_hud_rects(size)
+                            .map(|(x, y, w, h)| (x - mx, y - my, w, h)),
+                    ),
+                }
             }
         }
         rectangles

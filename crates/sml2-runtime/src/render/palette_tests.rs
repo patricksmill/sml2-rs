@@ -322,9 +322,15 @@ fn corner_hud_moves_the_status_bar_to_the_top_left_without_its_backing() {
     assert!((17..24).all(|y| shade(&corner, 160 - 16 + 3, y) == 170), "one row, under its ring");
     let wide = session.render_frame((256, 144));
     assert_eq!(wide[8 * 256 + 256 - 16 + 3], 85, "the timer follows a wider view's edge");
+    let mut real = Session::new(SessionAssets::load().unwrap());
+    real.begin_level(1, 0).unwrap();
+    real.hud_style = crate::render::HudStyle::Classic;
+    let classic = real.render_frame((160, 144));
+    real.hud_style = crate::render::HudStyle::Corner;
+    let corner = real.render_frame((160, 144));
+    // Terrain and sprites move down together, hiding the rows the strip covered.
+    assert_eq!(corner[32 * 160..], classic[24 * 160..136 * 160]);
     if let Ok(dir) = std::env::var("SML2_HUD_PNG") {
-        let mut real = Session::new(SessionAssets::load().unwrap());
-        real.begin_level(1, 0).unwrap();
         for style in [crate::render::HudStyle::Classic, crate::render::HudStyle::Corner] {
             real.hud_style = style;
             for size in [(160, 144), (256, 144)] {

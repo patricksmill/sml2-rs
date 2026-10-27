@@ -214,7 +214,8 @@ pub fn render_view_output_smooth(
         offsets.scale,
         offsets.bg,
     );
-    let (sx, sy) = viewport.origin;
+    let lift = if hud.is_some() { hud_style.lift() } else { 0 };
+    let (sx, sy) = (viewport.origin.0, viewport.origin.1 - lift);
     let raw_origin = view::raw_level_origin(
         (vw, vh),
         (cam_x, cam_y),
@@ -282,11 +283,11 @@ pub fn render_view_output_smooth(
     if let Some(scenery) = scenery.filter(|_| spr.and_then(|s| s.pipe_background).is_none()) {
         let pan = spr.map_or(0, |s| s.scroll_pan as i32);
         let scenery_window =
-            margin::SceneryWindow::new((vw, vh), (cam_x, cam_y), pan, border, scenery)
+            margin::SceneryWindow::new((vw, vh), (cam_x, cam_y), pan, border + lift, scenery)
                 .with_layout_writes(overlay);
         for py in -border..vh as i32 + border {
             for px in -border..vw as i32 + border {
-                match scenery_window.sample(px, py) {
+                match scenery_window.sample(px, py - lift) {
                     margin::MarginSample::Native => {}
                     margin::MarginSample::Blank => {
                         *layers.bg_mut(px, py) = NativeBg {
@@ -297,7 +298,7 @@ pub fn render_view_output_smooth(
                     margin::MarginSample::Level { wx, wy } => {
                         let (cx, tx) = ((wx as usize) >> 4, (wx as usize) & 15);
                         let (cy, ty) = ((wy as usize) >> 4, (wy as usize) & 15);
-                        let rewritten = scenery_window.rewrite(px, py);
+                        let rewritten = scenery_window.rewrite(px, py - lift);
                         let Some(id) = rewritten.or_else(|| layout.get(cx, cy)) else {
                             continue;
                         };
@@ -551,6 +552,7 @@ pub fn render_view_output_smooth(
         }
     }
     for cell in &mut layers.cells {
+        cell.y += lift;
         cell.shift.0 += viewport.sprite_shift.0;
         cell.shift.1 += viewport.sprite_shift.1;
     }
@@ -701,6 +703,18 @@ pub enum HudStyle {
     Corner,
 }
 
+impl HudStyle {
+    /// Game pixels the level picture moves down. The strip hides the
+    /// camera's bottom eight rows; without it the view shows eight more rows
+    /// above instead, so those rows stay out of sight.
+    pub fn lift(self) -> i32 {
+        match self {
+            Self::Classic => 0,
+            Self::Corner => 8,
+        }
+    }
+}
+
 /// [`HudStyle::Corner`]'s top-left group: `(template column, tile x, tile y)`.
 /// Each counter keeps its icon, `×` and digits; the strip's spacers are dropped.
 const CORNER_HUD_LEFT: [(usize, i32, i32); 13] = [
@@ -722,6 +736,16 @@ const CORNER_HUD_LEFT: [(usize, i32, i32); 13] = [
 const CORNER_HUD_RIGHT: [(usize, i32, i32); 4] = [(16, 0, 0), (17, 1, 0), (18, 2, 0), (19, 3, 0)];
 /// Game pixels between each group and the view's edges.
 const CORNER_HUD_INSET: i32 = 8;
+
+/// Each corner group's `(x, y, w, h)` in view pixels, its ring included.
+pub(crate) fn corner_hud_rects(view: (usize, usize)) -> [(i32, i32, i32, i32); 2] {
+    let right = view.0 as i32 - CORNER_HUD_INSET - CORNER_HUD_RIGHT.len() as i32 * 8;
+    let y = CORNER_HUD_INSET - 1;
+    [
+        (CORNER_HUD_INSET - 1, y, 10 * 8 + 2, 2 * 8 + 2),
+        (right - 1, y, CORNER_HUD_RIGHT.len() as i32 * 8 + 2, 8 + 2),
+    ]
+}
 
 /// Draw `row` as [`HudStyle::Corner`] into a window layer of `view` pixels.
 /// `sample(column, tile, x, y)` returns a tile pixel's raw colour and its

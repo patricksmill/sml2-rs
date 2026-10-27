@@ -40,7 +40,8 @@ impl Session {
         let Some(ctx) = self.level_ctx() else {
             return Vec::new();
         };
-        let margin = view::level_margin(view);
+        let (mx, my) = view::level_margin(view);
+        let margin = (mx, my + self.hud_style.lift());
         let obj = &ctx.obj;
         let (cx, cy) = (obj.camera_position.x, obj.camera_position.y);
         let mut out = Vec::new();
