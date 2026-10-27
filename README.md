@@ -1,81 +1,77 @@
 # sml2-rs
 
-Rust port of Super Mario Land 2. Reads assets from the sibling byte-identical
-disassembly [`sml2decomp`](../sml2decomp); see [`DESIGN.md`](DESIGN.md).
+**Super Mario Land 2, with room to see more.**
 
-For a guided tour of the game logic and places to make changes, start with
-[Understanding and modifying the game](docs/game-code-guide.md).
-The [native modularity plan](docs/plans/2026-10-23-native-modularity.md) describes
-the next behavior-preserving architecture improvements.
+A native Rust port of **Super Mario Land 2: 6 Golden Coins** for desktop.
+Return to Mario Land, explore its six zones, find the hidden routes, and collect
+the golden coins to take back Mario's castle from Wario. Play with the classic
+Game Boy look, or add SML2DX colors and Luigi, with widescreen views and smoother
+motion for modern displays.
 
-## Setup
+## Make yourself at home
 
-```sh
-# default: ../sml2decomp next to this repo
-export SML2_DECOMP_ROOT=/path/to/sml2decomp   # optional override
+- **Widescreen views.** Choose 16:9, 21:9, or an aspect ratio that follows your
+  window. See more of the level around Mario.
+- **Zoom the camera out.** Reveal more above, below, and ahead of you, with view
+  presets up to 200%.
+- **Motion smoothing.** Optional frame interpolation makes scrolling and movement
+  smoother on high refresh rate displays while gameplay stays at 60 ticks per
+  second.
+- **SML2DX colors.** Bring color to levels, maps, menus, bosses, and the ending,
+  with a choice of Mario or Luigi graphics.
+- **Classic display palettes.** Pick grayscale, Game Boy green, Pocket, Game Boy
+  Color, Super Game Boy palettes, or amber.
+- **Keyboard or controller.** Rebind your controls, adjust the stick dead zone,
+  and play windowed or fullscreen. Saves and settings are kept between launches.
 
-cargo build --release
-cargo run -p sml2-extract                      # writes ./extracted/
-```
+Widescreen, camera zoom, and motion smoothing live in **Settings → Mods**.
+Display palettes, scaling, and fullscreen are in **Settings → Display**. Keep
+the original view for classic framing, or open things up to suit your screen.
+Larger views also activate enemies and items earlier. Motion smoothing adds one
+frame of display latency.
 
-## Desktop app
+## Start playing
 
-The desktop shell adds settings, rebinding, controllers, zoom/fullscreen and
-debug inspection/stepping around the native session:
+1. Get the desktop app. Windows players can follow the
+   [download instructions](docs/windows-builds.md#download-and-run); Linux players
+   can use the [build and launch guide](docs/desktop.md#build-and-run).
+2. Launch the game. On first launch, **Settings → Game** opens so you can choose
+   **Import ROM…** and select your original **Super Mario Land 2 UE v1.0** ROM
+   (`.gb` or `.gbc`).
+3. Choose **Play**, pick a save pipe, and head into Mario Land.
 
-```sh
-cargo run -p sml2-desktop
-```
+You supply the original game ROM; ROMs and imported game graphics are not
+included.
 
-Escape or controller Start opens a compact translucent menu over the paused
-game. Resume returns to the same spot, including inside the settings hall.
+## Play in color
 
-Settings → Game offers **DX Mode**, which draws every level with graphics and
-colors imported from your own SML2DX ROM, as Mario or Luigi.
-See [DX Mode setup and limits](docs/desktop.md#sml2dx-mode).
+Already have **SML2DX v1.8.1**? After importing the original game, open
+**Settings → Game → Add DX ROM / IPS…** and select your patched ROM or IPS patch.
+Enable **DX Mode**, then choose Mario or Luigi under **Settings → Mods**.
+Your save progress carries between the classic and DX looks.
 
-See [Desktop shell](docs/desktop.md) for Linux build dependencies, controls,
-storage paths and validation commands. Original CLI commands remain available.
+DX Mode uses SML2DX graphics and colors with the port's native gameplay physics
+for both characters. Some palette transitions and fades are still missing. See
+[DX setup and compatibility](docs/desktop.md#sml2dx-mode) for supported files and
+details.
 
-Approved scenery extensions ship with the port. Authoring is available in the
-separate, optional [Scenery Editor](docs/scenery-editor.md):
+## Controls
 
-```sh
-cargo run -p sml2-scenery-editor
-```
+| Action | Keyboard | Controller |
+| --- | --- | --- |
+| Move | Arrow keys | D-pad / left stick |
+| Jump | Z / Space | Bottom face button |
+| Run / fire | X / Shift | Left or right face button |
+| Start / confirm | Enter | Left stick click |
+| Select | Backspace | Select / Back |
+| Pause menu / resume | Escape | Start |
+| Fullscreen | F11 | Settings menu |
+| Cycle display palettes | F4 | Settings menu |
 
-Local drafts stay in the editor; explicitly exported and approved scenery is
-included in future game releases.
+Change bindings in **Settings → Controls**. Press Escape or controller Start
+during play to pause, adjust settings, or return to the title. The game also
+pauses when you switch away from the window or disconnect your selected
+controller.
 
-GitHub Actions builds downloadable Windows x64 executables on pushes and pull
-requests. See [Windows builds](docs/windows-builds.md) for download and setup
-instructions. Game data is supplied separately.
-
-## Replay gate
-
-From this repo root, after extract (`cargo run --release -p sml2-extract` — it
-also writes the per-level `levels/levelNN.edge.bin` camera edge maps, the
-parallel `levels/levelNN.scene.bin` scene maps, the ROM-wide
-`scenes/script_table.bin` scene scripts and the `map/nodes.bin` overworld node
-tables):
-
-```sh
-for f in traj4_ff0 traj5 traj6 traj7 traj8 traj9 traj10 traj11 traj12 traj13 \
-         traj14 traj15 traj16 death1 death2 death3 crouch_pan1 screen_transition1; do
-  ./target/release/sml2-runtime --level 0 --replay captures/$f.json | tail -1
-done
-```
-
-Every field on that line must read `0` (`traj4_ff0` keeps its documented legacy
-`$FFF0` divergence) and no `note:` line may appear. A `note: level edge table
-missing` means the extract step was skipped or stale — the replay then falls
-back to injecting the capture's `$FF98` and the run no longer proves the port's
-own edge map. The `edge` field is that proof: it derives `$FF98` from
-`levelNN.edge.bin` at the camera's cell and compares it with the captured byte.
-
-(`traj4.json` is legacy; prefer `traj4_ff0`. `traj13_full` is retired and not tracked.)
-
-## Captures
-
-PyBoy scripts under `captures/` use `SML2_DECOMP_ROOT` (same default). See
-`captures/README.md`.
+For more display options, save locations, and setup help, see the
+[desktop guide](docs/desktop.md).
