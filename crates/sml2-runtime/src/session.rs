@@ -100,7 +100,7 @@ pub enum SessionState {
     FileSelect(FileSelect),
     /// `$0B`: an attract demo level driven by a recorded tape.
     Demo(Box<DemoContext>),
-    Overworld(MapSim),
+    Overworld(Box<MapSim>),
     InLevel(Box<LevelContext>),
     /// `$1B`-`$21`: the golden-coin castle reveal.
     Castle(sml2_core::castle_sequence::CastleSequence),
@@ -613,7 +613,7 @@ impl Session {
         map.node = node;
         map.frame_counter = 0;
         self.bell_return = Some((node, exit_tile_flag));
-        self.state = SessionState::Overworld(map);
+        self.state = SessionState::Overworld(Box::new(map));
     }
 
     /// Stage a coin-door room the way `$3F3B9` does, for tapes and previews.
@@ -645,7 +645,7 @@ impl Session {
         ));
         map.screen_id = screen;
         map.frame_counter = 0;
-        self.state = SessionState::Overworld(map);
+        self.state = SessionState::Overworld(Box::new(map));
     }
 
     pub fn new(assets: SessionAssets) -> Self {
@@ -656,7 +656,7 @@ impl Session {
         map.set_map_ram(Default::default());
         let sound_driver = SoundDriver::with_music_bank(assets.music_bank.clone());
         Self {
-            state: SessionState::Overworld(map),
+            state: SessionState::Overworld(Box::new(map)),
             object_clock: ObjectClock::default(),
             tile_animation: TileAnimationClock::default(),
             rom_timing: None,
@@ -817,7 +817,7 @@ impl Session {
             self.flutter = 0;
             self.flutter_armed = false;
             self.flutter_charge = 0;
-            self.state = SessionState::Overworld(map);
+            self.state = SessionState::Overworld(Box::new(map));
             self.map_pan_return = None;
             true
         } else {
@@ -1149,7 +1149,7 @@ impl Session {
 
                 if let Some(direction) = entry.transition {
                     let destination = map_sim.screen_id;
-                    self.begin_door_transition(source_map, direction, destination);
+                    self.begin_door_transition(*source_map, direction, destination);
                     break 'map StepOutcome::Continue;
                 }
 
@@ -1470,7 +1470,7 @@ impl Session {
                             );
                             map_sim.node = target_node;
                             map_sim.load_node(target_node, &self.assets.node_records);
-                            self.state = SessionState::Overworld(map_sim);
+                            self.state = SessionState::Overworld(Box::new(map_sim));
                             if target_screen == 0 {
                                 self.map_pan_return = Some(MapPanReturn::fade_in());
                             }
@@ -1581,7 +1581,7 @@ impl Session {
                                     self.map_pan_return = Some(MapPanReturn::fade_in());
                                 }
                             }
-                            self.state = SessionState::Overworld(map_sim);
+                            self.state = SessionState::Overworld(Box::new(map_sim));
                         }
                         if handoff.saves > 0 {
                             let rec = self.handoff_save_record(&handoff);

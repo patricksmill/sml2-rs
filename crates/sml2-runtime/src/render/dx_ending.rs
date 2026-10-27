@@ -72,7 +72,7 @@ fn render_scene(
         .transfer_source(0x10, 0x6000, 0x1000)
         .ok_or("ending background source missing; re-extract assets")?;
     let dx_background = bank(0x10, 0x6000, 0x1000)?;
-    for (i, tile) in native.tiles().chunks_exact(16).enumerate() {
+    for (i, tile) in native.tiles().as_chunks::<16>().0.iter().enumerate() {
         if tile != &baseline.tiles()[i * 16..i * 16 + 16] {
             // The first transfer replaces $8000 in complete 64-byte bursts.
             if i < 128 && tile == &font[i * 16..i * 16 + 16] {

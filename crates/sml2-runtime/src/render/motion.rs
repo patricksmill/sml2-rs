@@ -32,7 +32,7 @@ pub fn pick_scale(view: (usize, usize), effective_scale: u32) -> usize {
     let n = effective_scale.max(1) as usize;
     (1..=n)
         .rev()
-        .find(|s| n % s == 0 && view.0 * s * view.1 * s <= MAX_PIXELS)
+        .find(|s| n.is_multiple_of(*s) && view.0 * s * view.1 * s <= MAX_PIXELS)
         .unwrap_or(1)
 }
 

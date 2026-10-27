@@ -1745,6 +1745,7 @@ fn draw_map_objects_with_palette(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_map_objects_output(
     img: &mut [u8],
     bg: &[u8],

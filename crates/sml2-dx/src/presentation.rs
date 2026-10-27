@@ -214,6 +214,9 @@ pub struct Presentation {
 /// One sprite or player mapping table: cells per sprite ID.
 type MappingTable = Vec<Vec<MappingEntry>>;
 
+/// `(dy, dx, tile, attr)` cells per metasprite.
+type Metasprites = Vec<Vec<(i8, i8, u8, u8)>>;
+
 const SHARED_BANK: u8 = 0x1B;
 const EXTRA_BANK: u8 = 0x07;
 const HUD_BANK: u8 = 0x20;
@@ -304,7 +307,9 @@ impl Presentation {
             arenas: arenas(bundle)?,
             arena_metatiles: bundle
                 .arena_maps
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|p| {
                     let address = u16::from_le_bytes([p[0], p[1]]);
                     MetatileTable::from_bytes(bundle.banked(METATILE_BANK, address, 0x200)?)
@@ -634,7 +639,7 @@ fn metasprites(
     bank: u8,
     table: u16,
     count: u16,
-) -> Result<Vec<Vec<(i8, i8, u8, u8)>>, ImportError> {
+) -> Result<Metasprites, ImportError> {
     (0..count)
         .map(|i| {
             let at = bundle.banked(bank, table + i * 2, 2)?;

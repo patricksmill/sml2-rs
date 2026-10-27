@@ -4,7 +4,9 @@
 /// Saturate each RGB555 channel separately; never carry into a neighbor.
 pub(crate) fn adjust(bytes: &[u8], delta: [i16; 3]) -> Vec<u8> {
     bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .flat_map(|pair| {
             let color = u16::from_le_bytes([pair[0], pair[1]]);
             let mut out = 0;
@@ -23,7 +25,7 @@ pub(crate) fn castle_entry(bytes: &[u8], timer: u8) -> Vec<u8> {
     if timer == 0 {
         return vec![0; bytes.len()];
     }
-    let steps = ((64u16.saturating_sub(u16::from(timer)) + 15) / 16) as i16;
+    let steps = 64u16.saturating_sub(u16::from(timer)).div_ceil(16) as i16;
     adjust(bytes, [-16 * steps, -4 * steps, -4 * steps])
 }
 

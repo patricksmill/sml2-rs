@@ -415,7 +415,7 @@ impl Session {
         };
         self.debug_release_pause_audio();
         self.sound_driver.music_request = music;
-        self.state = SessionState::Overworld(map);
+        self.state = SessionState::Overworld(Box::new(map));
         Ok(())
     }
 
@@ -448,7 +448,7 @@ impl Session {
         // The A press is consumed here; the host's held button must not read
         // as a fresh press once the walk-in ends.
         self.prev_keys_held = 0x01;
-        self.begin_door_transition(source, direction, destination);
+        self.begin_door_transition(*source, direction, destination);
         Ok(())
     }
 

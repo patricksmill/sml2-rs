@@ -204,7 +204,7 @@ impl Session {
                 }
                 let (tiles, map, sprites) =
                     sml2_core::map::castle_sequence_projection(&reveal, &scripts, seq);
-                for (tile, pixels) in vram.chunks_exact_mut(16).zip(tiles) {
+                for (tile, pixels) in vram.as_chunks_mut::<16>().0.iter_mut().zip(tiles) {
                     for y in 0..8 {
                         for x in 0..8 {
                             tile[y * 2] = (tile[y * 2] << 1) | (pixels[y * 8 + x] & 1);
@@ -865,7 +865,9 @@ fn live_background(ctx: &LevelContext, dx: &Presentation, level: &LevelGraphics)
 fn pause_palettes(bytes: &[u8], bright_phase: bool) -> Vec<u8> {
     let subtract = if bright_phase { [18, 8, 4] } else { [8, 4, 4] };
     bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .flat_map(|b| {
             let value = u16::from_le_bytes([b[0], b[1]]);
             let mut result = 0u16;

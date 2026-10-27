@@ -112,9 +112,9 @@ impl TileAnimation {
 fn write_pair(tiles: &mut [[u8; 64]], first: usize, bytes: &[u8]) {
     for (tile, encoded) in tiles[first..first + 2]
         .iter_mut()
-        .zip(bytes.chunks_exact(16))
+        .zip(bytes.as_chunks::<16>().0)
     {
-        for (row, planes) in encoded.chunks_exact(2).enumerate() {
+        for (row, planes) in encoded.as_chunks::<2>().0.iter().enumerate() {
             for x in 0..8 {
                 let shift = 7 - x;
                 tile[row * 8 + x] = ((planes[0] >> shift) & 1) | (((planes[1] >> shift) & 1) << 1);

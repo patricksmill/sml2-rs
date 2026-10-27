@@ -308,12 +308,10 @@ impl FileSelect {
                     self.sprite = ((self.walk_timer & 0x0C) >> 2).wrapping_add(1);
                 }
             }
-            LEFT => {
-                if self.cursor_x >= 0x30 {
-                    self.menu_state = 3;
-                    self.timer = 32;
-                    self.sprite = ((self.walk_timer & 0x0C) >> 2).wrapping_add(5);
-                }
+            LEFT if self.cursor_x >= 0x30 => {
+                self.menu_state = 3;
+                self.timer = 32;
+                self.sprite = ((self.walk_timer & 0x0C) >> 2).wrapping_add(5);
             }
             _ => {}
         }

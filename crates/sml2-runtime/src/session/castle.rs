@@ -88,7 +88,7 @@ impl Session {
                     if walked_out {
                         map.mario_dead = 1;
                     }
-                    self.state = SessionState::Overworld(map);
+                    self.state = SessionState::Overworld(Box::new(map));
                     // `$3EF2B` runs again after the reveal; a boss return's
                     // one save keeps the level's node.
                     let record = match (self.castle_saved_node.take(), &self.state) {

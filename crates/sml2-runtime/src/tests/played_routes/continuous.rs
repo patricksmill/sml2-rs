@@ -48,7 +48,7 @@ fn every_ordinary_source_map_origin_loads_both_header_and_secret_entries() {
             map.level_progress[sentinel] = 0x80;
             map.level_progress[slot] = progress;
             let expected_progress = map.level_progress;
-            session.state = SessionState::Overworld(map);
+            session.state = SessionState::Overworld(Box::new(map));
             session.level_tally = 0x12;
             let mut entered = false;
             for frame in 0..MAP_ENTRY_FRAMES + 8 {
@@ -154,7 +154,7 @@ pub(super) fn map_entry_runner(
     map.load_node(node, &assets.node_records);
     let initial_progress = map.level_progress;
     let mut runner = SessionRunner::new(assets, path.to_path_buf(), 1, (160, 144), true);
-    runner.session.state = SessionState::Overworld(map);
+    runner.session.state = SessionState::Overworld(Box::new(map));
     runner.session.lives = 7;
     runner.session.coins_low = 0x42;
     runner.session.level_tally = 0x12;

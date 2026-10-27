@@ -112,7 +112,7 @@ fn door_pan_and_bell_holds_block_the_frame_wait() {
     let SessionState::Overworld(map) = &session.state else {
         unreachable!()
     };
-    session.map_screen_transition = Some(MapScreenTransition::new(map.clone(), 0));
+    session.map_screen_transition = Some(MapScreenTransition::new(map.as_ref().clone(), 0));
     assert!(!session.main_loop_waits());
     session.map_screen_transition = None;
     session.map_pan_return = Some(MapPanReturn::default());

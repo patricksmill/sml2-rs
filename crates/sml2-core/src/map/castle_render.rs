@@ -56,12 +56,15 @@ pub fn render_castle_sequence_output(
     )
 }
 
+/// VRAM tiles, the tilemap, and `(x, y, sprite ID)` poses.
+type CastleProjection = (Vec<[u8; 64]>, Vec<u8>, Vec<(u8, u8, u8)>);
+
 /// Shared live castle map and sprite poses, independent of color rendering.
 pub fn castle_sequence_projection(
     reveal: &CastleRevealTiles,
     scripts: &CastleScripts,
     seq: &CastleSequence,
-) -> (Vec<[u8; 64]>, Vec<u8>, Vec<(u8, u8, u8)>) {
+) -> CastleProjection {
     let mut vram = reveal.vram_tiles();
     let congrats = matches!(seq.state, STATE_CONGRATS | STATE_WAIT_START);
     let map = if congrats {
@@ -190,6 +193,7 @@ pub fn game_over_sprites(view_state: GameOverView) -> Vec<(u8, u8, u8)> {
 }
 
 /// Compatibility static-frame renderer used by callers without sequence state.
+#[allow(clippy::too_many_arguments)]
 pub fn render_castle_reveal(
     reveal: &CastleRevealTiles,
     all_six_coins: bool,
@@ -218,6 +222,7 @@ pub fn render_castle_reveal(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw(
     vram: &[[u8; 64]],
     map: &[u8],

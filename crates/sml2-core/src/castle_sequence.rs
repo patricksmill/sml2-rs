@@ -195,12 +195,12 @@ impl CastleSequence {
                 self.fade_low = 0xFF;
                 self.state += 1;
             }
-            STATE_WAIT_START => {
-                // `$47A9`: fade 0 or START both fall into `$01E5`.
-                if (self.fade_high == 0 && self.fade_low == 0) || input.keys_pressed == 0x08 {
-                    out.done = true;
-                    out.transition = Some(CastleTransition::Reset);
-                }
+            // `$47A9`: fade 0 or START both fall into `$01E5`.
+            STATE_WAIT_START
+                if (self.fade_high == 0 && self.fade_low == 0) || input.keys_pressed == 0x08 =>
+            {
+                out.done = true;
+                out.transition = Some(CastleTransition::Reset);
             }
             _ => {}
         }

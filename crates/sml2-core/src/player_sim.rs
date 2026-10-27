@@ -1713,9 +1713,9 @@ impl PlayerSim {
         let Some(view) = self.view.filter(|_| self.view_clamp) else {
             let sx = self.x.wrapping_sub(self.camx).wrapping_add(96) & 0xFF;
             if sx < 0x10 {
-                self.x = self.x.wrapping_add(u16::from(0x10 - sx));
+                self.x = self.x.wrapping_add(0x10 - sx);
             } else if sx >= 0xA0 {
-                self.x = self.x.wrapping_sub(u16::from(sx - 0xA0));
+                self.x = self.x.wrapping_sub(sx - 0xA0);
             }
             return;
         };
@@ -1874,15 +1874,13 @@ impl PlayerSim {
                 self.flutter = 8;
                 self.vvel = 24;
                 self.sfx1 = 6;
-            } else if self.flutter_armed && !self.on_ground {
-                if keys.a {
-                    self.flutter_charge = self.flutter_charge.wrapping_add(1);
-                    if self.flutter_charge >= 12 {
-                        self.flutter_charge = 0;
-                        self.flutter = 8;
-                        self.vvel = 24;
-                        self.sfx1 = 6;
-                    }
+            } else if self.flutter_armed && !self.on_ground && keys.a {
+                self.flutter_charge = self.flutter_charge.wrapping_add(1);
+                if self.flutter_charge >= 12 {
+                    self.flutter_charge = 0;
+                    self.flutter = 8;
+                    self.vvel = 24;
+                    self.sfx1 = 6;
                 }
             }
         }
