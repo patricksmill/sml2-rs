@@ -11,6 +11,15 @@ fn audited_opening_tables_and_bundle_round_trip() {
     assert_eq!(identify(&bytes).unwrap(), REVISION);
     let bundle = extract(&bytes).unwrap();
     let presentation = Presentation::new(&bundle).unwrap();
+    for (i, (h, v)) in [(0x4000, 0x4200), (0x42E4, 0x44E4)].into_iter().enumerate() {
+        let curves = &presentation.movement[i];
+        assert_eq!(curves.horizontal.as_slice(), &bytes[h..h + 256]);
+        assert_eq!(curves.normal.as_slice(), &bytes[v..v + 76]);
+        assert_eq!(curves.swim.as_slice(), &bytes[v + 76..v + 152]);
+        assert_eq!(curves.moon.as_slice(), &bytes[v + 152..v + 228]);
+    }
+    assert_eq!(&presentation.movement[1].horizontal[0xF7..=0xF8], &[2, 3]);
+    assert_eq!(&presentation.movement[1].normal[59..=72], &[0xFC; 14]);
     let level = presentation.level(0).unwrap();
     let mario = presentation.player(Character::Mario, 0);
     let palettes = CgbPalettes::from_bytes(&level.bg_palettes, &level.obj_palettes).unwrap();

@@ -178,6 +178,8 @@ impl BossArena {
 
 #[derive(Clone, Debug)]
 pub struct Presentation {
+    /// Audited Mario and Luigi native displacement tables.
+    pub movement: [std::sync::Arc<sml2_core::character::MovementCurves>; 2],
     pub levels: Vec<LevelGraphics>,
     /// `[character][theme]`.
     pub players: [[PlayerGraphics; 2]; 2],
@@ -273,7 +275,17 @@ impl Presentation {
                 mappings: mappings(bundle, table, if theme == 0 { 0x4000 } else { 0x6000 }, 242)?,
             })
         };
+        let movement = std::array::from_fn(|i| {
+            let bytes = &bundle.movement[i * 484..(i + 1) * 484];
+            std::sync::Arc::new(sml2_core::character::MovementCurves {
+                horizontal: bytes[..256].try_into().unwrap(),
+                normal: bytes[256..332].try_into().unwrap(),
+                swim: bytes[332..408].try_into().unwrap(),
+                moon: bytes[408..484].try_into().unwrap(),
+            })
+        });
         Ok(Self {
+            movement,
             levels,
             players: [
                 [player(Character::Mario, 0)?, player(Character::Mario, 1)?],

@@ -23,3 +23,12 @@ impl Character {
         }
     }
 }
+
+/// Bank-1 displacement data imported from the supported DX ROM, without code.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MovementCurves {
+    pub horizontal: [u8; 256],
+    pub normal: [u8; 76],
+    pub swim: [u8; 76],
+    pub moon: [u8; 76],
+}

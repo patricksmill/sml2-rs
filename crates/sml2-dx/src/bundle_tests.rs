@@ -20,6 +20,7 @@ fn table(bundle: &mut Bundle, bank: u8, at: u16, count: u16, target: u16) {
 
 fn fixture() -> Bundle {
     let mut bundle = Bundle {
+        movement: vec![0; 968],
         schema: BUNDLE_SCHEMA,
         source_sha256: ROM_SHA256.into(),
         level_config: vec![0; LEVELS],
@@ -34,6 +35,7 @@ fn fixture() -> Bundle {
             .repeat(LEVELS),
         banks: BANKS.iter().map(|&b| (b, vec![0; BANK_LEN])).collect(),
     };
+    put(&mut bundle, 0x24, 0x7D00, &[&[0xFF; 64][..], &[1; 32]].concat());
     // `$42F0[0]` -> `$5000`: runs of metatile 0, 257 bytes each.
     put(&mut bundle, 0x09, 0x42F0, &0x5000u16.to_le_bytes());
     put(&mut bundle, 0x09, 0x5000, &[0x80, 0x00].repeat(48));
@@ -114,6 +116,7 @@ fn old_schemas_other_sources_and_unknown_fields_are_rejected() {
 #[test]
 fn tables_and_banks_must_have_their_exact_shape() {
     for (field, length) in [
+        ("movement", 968),
         ("level_headers", LEVELS * 20),
         ("level_config", LEVELS),
         ("enemy_sets", LEVELS * 4),
@@ -289,4 +292,21 @@ fn each_boss_arena_reads_its_loader_sources() {
     assert_eq!(p.boss_oam_lists.len(), 118);
     assert_eq!(p.arena_metatiles.len(), 7);
     assert_eq!(p.arena_metatiles[0].get(0).unwrap().tiles[0], 0x77);
+}
+
+#[test]
+fn movement_curves_are_narrow_and_configuration_is_validated() {
+    let mut bundle = fixture();
+    for (i, byte) in bundle.movement.iter_mut().enumerate() { *byte = (i / 76) as u8; }
+    let dx = Presentation::new(&bundle).unwrap();
+    assert_eq!(dx.movement[0].horizontal[255], 3);
+    assert_eq!(dx.movement[0].normal[0], 3);
+    assert_eq!(dx.movement[0].moon[75], 6);
+    assert_eq!(dx.movement[1].horizontal[0], 6);
+    assert_eq!(dx.movement[1].moon[75], 12);
+    for (address, value) in [(0x7D00, 0), (0x7D20, 3), (0x7D40, 0)] {
+        let mut bad = bundle.clone();
+        put(&mut bad, 0x24, address, &[value]);
+        assert!(bad.validate().is_err());
+    }
 }

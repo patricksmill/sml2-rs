@@ -61,6 +61,8 @@ pub struct Bundle {
     pub level_headers: Vec<u8>,
     #[serde(with = "hex_banks")]
     pub banks: BTreeMap<u8, Vec<u8>>,
+    /// Mario then Luigi: H256, normal V76, swim V76, moon V76.
+    pub movement: Vec<u8>,
 }
 
 impl Bundle {
@@ -80,6 +82,7 @@ impl Bundle {
             );
         }
         for (label, data, length) in [
+            ("movement curves", &self.movement, 2 * (256 + 76 * 3)),
             ("level config", &self.level_config, LEVELS),
             ("enemy sets", &self.enemy_sets, LEVELS * 4),
             ("tile sets", &self.tile_sets, LEVELS * 4),
@@ -96,6 +99,10 @@ impl Bundle {
         }
         if let Some((bank, _)) = self.banks.iter().find(|(_, b)| b.len() != BANK_LEN) {
             return bad(format!("bank ${bank:02X} needs {BANK_LEN} bytes"));
+        }
+        // These tables alter gameplay; unsupported configuration needs a new audit.
+        if self.banked(0x24, 0x7D00, 96)? != [&[0xFF; 64][..], &[1; 32]].concat() {
+            return bad("unsupported character/friction/autoscroll configuration".into());
         }
         Ok(())
     }
@@ -134,6 +141,10 @@ impl Bundle {
 pub fn extract(bytes: &[u8]) -> Result<Bundle, ImportError> {
     let rom = Rom::new(bytes)?;
     let bundle = Bundle {
+        movement: [(0x4000, 256), (0x4200, 76), (0x424C, 76), (0x4298, 76),
+                   (0x42E4, 256), (0x44E4, 76), (0x4530, 76), (0x457C, 76)]
+            .into_iter().map(|(at, len)| rom.banked(1, at, len))
+            .collect::<Result<Vec<_>, _>>()?.concat(),
         schema: BUNDLE_SCHEMA,
         source_sha256: ROM_SHA256.into(),
         level_config: rom.read(LEVEL_CONFIG, LEVELS)?.to_vec(),
