@@ -93,7 +93,7 @@ impl DesktopApp {
                         match result {
                             Ok((key, bundle)) => {
                                 self.settings.dx_installation = Some(key);
-                                self.dx_bundle = Some(bundle);
+                                self.dx_bundle = Some((bundle).into());
                                 self.dx_message = format!("Installed {}", sml2_dx::REVISION);
                             }
                             Err(error) if restore => self.fail_dx_restore(error),

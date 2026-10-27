@@ -358,6 +358,7 @@ pub struct Session {
     pub easy_mode: bool,
     /// The presentation character selected through the DX file-select door.
     pub character: Character,
+    dx: Option<std::sync::Arc<sml2_dx::Presentation>>,
     /// Deferred goal-bell handoff inputs: `(node, exit_tile_flag)`.
     bell_return: Option<(u8, u8)>,
     /// Hold frames already spent after the bell script reached state `$0A`.
@@ -400,6 +401,15 @@ impl Session {
         }
     }
 
+    /// Queue gameplay selection for the next level entry or reload. Active
+    /// levels retain their simulation even when presentation falls back.
+    pub fn set_dx(&mut self, dx: Option<std::sync::Arc<sml2_dx::Presentation>>, character: Character) {
+        self.dx = dx;
+        self.character = character;
+    }
+
+    pub fn dx_enabled(&self) -> bool { self.dx.is_some() }
+
     /// The session's `$FF97`, for the map and diagnostics.
     pub fn ff97(&self) -> u8 {
         self.ff97
@@ -409,6 +419,8 @@ impl Session {
     /// its own origin: the console's depends on every load's length and every
     /// lag frame since power-on, which a native port does not reproduce.
     fn seed_level_state(&self, ctx: &mut LevelContext) {
+        let curves = self.dx.as_ref().map(|dx| dx.movement[usize::from(self.character == Character::Luigi)].clone());
+        ctx.sim.set_dx_movement(self.character, curves);
         ctx.tile_animation = self.tile_animation;
         (ctx.cam.right_enabled, ctx.cam.left_enabled) = self.scroll_enables;
         // No level loader writes `$A24D`/`$A284`/`$A27C`, including the
@@ -627,6 +639,7 @@ impl Session {
             active_slot: None,
             easy_mode: false,
             character: Character::Mario,
+            dx: None,
             bell_return: None,
             bell_fade: None,
             bell_return_hold: 0,

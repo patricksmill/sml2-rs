@@ -63,7 +63,7 @@ pub struct DesktopApp {
     status: Option<String>,
     game: Option<Game>,
     launcher: Option<launcher::Launcher>,
-    dx_bundle: Option<sml2_dx::Presentation>,
+    dx_bundle: Option<std::sync::Arc<sml2_dx::Presentation>>,
     dx_worker: Option<crate::dx_import::Worker>,
     dx_picker: Option<file_picker::FilePicker>,
     dx_message: String,
@@ -801,6 +801,7 @@ impl DesktopApp {
             let mut clear_start = false;
             if self.game.is_some() {
                 if let Some(game) = self.game.as_mut() {
+                    game.session.set_dx(self.dx_bundle.clone().filter(|_| self.settings.dx_mode), self.settings.character);
                     dx::prepare_tick(&mut game.session, &self.settings, self.dx_bundle.is_some());
                 }
                 let mut keys = if running {

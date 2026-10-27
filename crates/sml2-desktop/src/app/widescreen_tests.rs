@@ -50,7 +50,7 @@ fn live_window_aspects_drive_native_and_dx_frames_and_spawn_margins() {
         app.settings.show_toolbar = false;
         app.settings.fullscreen = true;
         app.settings.dx_mode = dx;
-        app.dx_bundle = Some(super::dx_tests::red_bundle());
+        app.dx_bundle = Some((super::dx_tests::red_bundle()).into());
         let saved_window = app.settings.window_size;
         for (wide, size, dpi, expected) in [
             (Widescreen::Wide21x9, [800.0, 720.0], 1.0, (336, 144)),

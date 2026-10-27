@@ -242,7 +242,7 @@ mod tests {
         use sml2_runtime::session::SessionState;
 
         let (mut app, _, path) = super::super::tests::app();
-        app.dx_bundle = Some(super::super::dx_tests::red_bundle());
+        app.dx_bundle = Some((super::super::dx_tests::red_bundle()).into());
         app.settings.dx_mode = true;
         let session = &mut app.game.as_mut().unwrap().session;
         let mut file_select = FileSelect::new(&mut session.slots);

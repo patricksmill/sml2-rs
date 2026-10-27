@@ -33,6 +33,12 @@ fn synthetic_bundle() -> Presentation {
         mappings: vec![vec![]; 242],
     };
     Presentation {
+        movement: std::array::from_fn(|_| std::sync::Arc::new(sml2_core::character::MovementCurves {
+            horizontal: sml2_core::player_sim::SPEED_H,
+            normal: sml2_core::player_sim::SPEED_V[..76].try_into().unwrap(),
+            swim: sml2_core::player_sim::SPEED_V_GOO[..76].try_into().unwrap(),
+            moon: sml2_core::player_sim::SPEED_V_WATER[..76].try_into().unwrap(),
+        })),
         levels: vec![level; 32],
         players: [[player.clone(), player.clone()], [player.clone(), player]],
         object_tables: vec![vec![vec![]; 228]],

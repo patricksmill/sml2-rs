@@ -64,7 +64,7 @@ fn character_door_ticks_render_and_persist_the_new_character_without_a_save() {
         }
     }
     bundle.players[1][0].normal.fill(0xFF);
-    app.dx_bundle = Some(bundle);
+    app.dx_bundle = Some((bundle).into());
     app.settings.dx_mode = true;
     app.screen = Screen::Game;
     app.game.as_mut().unwrap().session.enter_file_select();
@@ -303,6 +303,12 @@ pub(super) fn red_bundle() -> sml2_dx::Presentation {
         mappings: vec![vec![]; 242],
     };
     sml2_dx::Presentation {
+        movement: std::array::from_fn(|_| std::sync::Arc::new(sml2_core::character::MovementCurves {
+            horizontal: sml2_core::player_sim::SPEED_H,
+            normal: sml2_core::player_sim::SPEED_V[..76].try_into().unwrap(),
+            swim: sml2_core::player_sim::SPEED_V_GOO[..76].try_into().unwrap(),
+            moon: sml2_core::player_sim::SPEED_V_WATER[..76].try_into().unwrap(),
+        })),
         levels: vec![level; 32],
         players: [[player.clone(), player.clone()], [player.clone(), player]],
         object_tables: vec![vec![vec![]; 228]],
@@ -363,7 +369,7 @@ fn is_red(image: &ColorImage) -> bool {
 #[test]
 fn dx_mode_frames_follow_the_view_settings() {
     let (mut app, _, path) = super::tests::app();
-    app.dx_bundle = Some(red_bundle());
+    app.dx_bundle = Some((red_bundle()).into());
     app.game.as_mut().unwrap().session.enter_title();
     app.settings.dx_mode = true;
     app.settings.widescreen = crate::settings::Widescreen::Wide16x9;
@@ -380,7 +386,7 @@ fn dx_mode_frames_follow_the_view_settings() {
 #[test]
 fn dx_mode_colors_every_level_of_the_normal_game() {
     let (mut app, _, path) = super::tests::app();
-    app.dx_bundle = Some(red_bundle());
+    app.dx_bundle = Some((red_bundle()).into());
     // The title has its own DX screen.
     app.game.as_mut().unwrap().session.enter_title();
     app.settings.dx_mode = true;
@@ -426,7 +432,7 @@ fn dx_mode_colors_every_level_of_the_normal_game() {
     assert!(app.dx_message.is_empty());
     let game = app.game.as_mut().unwrap();
     game.session.debug_warp_level(0).unwrap();
-    app.dx_bundle.as_mut().unwrap().levels[0]
+    std::sync::Arc::make_mut(app.dx_bundle.as_mut().unwrap()).levels[0]
         .bg_palettes
         .clear();
     assert!(!is_red(
@@ -457,7 +463,7 @@ fn mods_enter_on_the_old_dx_row_does_not_start_an_import() {
 fn file_select_expands_with_widescreen_and_camera_zoom() {
     use crate::settings::{CameraZoom, Widescreen};
     let (mut app, _, path) = super::tests::app();
-    app.dx_bundle = Some(red_bundle());
+    app.dx_bundle = Some((red_bundle()).into());
     app.settings.window_size = [1920.0, 1080.0];
     app.game.as_mut().unwrap().session.enter_file_select();
     for _ in 0..64 {

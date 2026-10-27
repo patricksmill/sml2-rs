@@ -35,6 +35,12 @@ fn synthetic_bundle() -> Presentation {
         mappings: vec![vec![]; 242],
     };
     Presentation {
+        movement: std::array::from_fn(|_| std::sync::Arc::new(sml2_core::character::MovementCurves {
+            horizontal: sml2_core::player_sim::SPEED_H,
+            normal: sml2_core::player_sim::SPEED_V[..76].try_into().unwrap(),
+            swim: sml2_core::player_sim::SPEED_V_GOO[..76].try_into().unwrap(),
+            moon: sml2_core::player_sim::SPEED_V_WATER[..76].try_into().unwrap(),
+        })),
         levels: vec![level; 32],
         players: [[player.clone(), player.clone()], [player.clone(), player]],
         object_tables: vec![vec![vec![]; 228]],
@@ -997,4 +1003,24 @@ fn audited_rom_regional_palettes_follow_mario() {
             );
         }
     }
+}
+
+#[test]
+fn dx_character_selection_reaches_level_entry_and_falls_back_to_mario() {
+    let dx = std::sync::Arc::new(synthetic_bundle());
+    let mut session = session();
+    session.set_dx(Some(dx.clone()), Luigi);
+    session.debug_warp_level(0).unwrap();
+    let SessionState::InLevel(ctx) = &session.state else { panic!("level is live") };
+    assert_eq!(ctx.sim.character, Luigi);
+    assert!(ctx.sim.dx_enabled());
+
+    // Disabling DX holds until the next entry, which runs vanilla Mario.
+    session.set_dx(None, Luigi);
+    let SessionState::InLevel(ctx) = &session.state else { panic!("level is live") };
+    assert!(ctx.sim.dx_enabled());
+    session.debug_warp_level(0).unwrap();
+    let SessionState::InLevel(ctx) = &session.state else { panic!("level is live") };
+    assert_eq!(ctx.sim.character, Mario);
+    assert!(!ctx.sim.dx_enabled());
 }

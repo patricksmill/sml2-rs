@@ -113,7 +113,7 @@ fn castle_surroundings_follow_filter_fade_and_dx_changes() {
         dx.banks.insert(bank, vec![0; 0x4000]);
     }
     dx.banks.get_mut(&0x26).unwrap()[0x3042..0x3044].copy_from_slice(&[0x1f, 0]);
-    app.dx_bundle = Some(dx);
+    app.dx_bundle = Some((dx).into());
     app.settings.dx_mode = true;
     let output = frame(&mut app, &ctx, size, 1.0);
     let backdrop = app.castle_backdrop.as_ref().unwrap();
@@ -142,7 +142,7 @@ fn export_extended_castle_preview() {
     app.settings.filter = Filter::Gbc;
     if let Some(rom) = std::env::var_os("SML2_DX_ROM") {
         let bundle = sml2_dx::extract(&std::fs::read(rom).unwrap()).unwrap();
-        app.dx_bundle = Some(sml2_dx::Presentation::new(&bundle).unwrap());
+        app.dx_bundle = Some((sml2_dx::Presentation::new(&bundle).unwrap()).into());
         app.settings.dx_mode = true;
     }
     let image = app.frame_image_with_view((256, 192), Smooth::OFF).unwrap();
