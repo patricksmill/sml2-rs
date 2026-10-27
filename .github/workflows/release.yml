@@ -39,9 +39,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Core unit tests
-        run: cargo test -p sml2-core
-
+      # Core and runtime tests read data extracted from the ROM, which a
+      # clean checkout lacks; run them locally before tagging.
       - name: Desktop policy tests
         run: cargo test --locked -p sml2-desktop --no-default-features --lib
 
