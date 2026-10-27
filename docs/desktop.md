@@ -59,11 +59,13 @@ installs may need **Replace ROM…** once to retain that source. Old DX caches
 require **Replace DX ROM / IPS…**. Unsupported digests/builds are rejected.
 
 Choose Mario/Luigi in **Settings -> Mods**, or walk right past Clear through the
-DX file-select character door; that choice is saved. Both use native physics.
-DX supplies every level/pipe room/demo, space character graphics, title, file
-select, maps/minigames, boss arenas, castle, Game Over, ending and credits.
-Eight levels have regional BG/OBJ changes. Star/pause colors and animation are
-supported; DX fades, physics and some presentation details remain unfinished.
+DX file-select character door; that choice is saved. Luigi uses DX's movement
+curves and friction. DX supplies every level/pipe room/demo, space character
+graphics, title, file select, maps/minigames, boss arenas, castle, Game Over,
+ending and credits. Eight levels have regional BG/OBJ changes. Star/pause
+colors, DX fades, white blanking, castle entry and coin flash, and the credit
+palettes are supported. Regional palette switches are not yet frame-exact, and
+boss palette load order is unverified.
 See the [DX audit](sml2dx-audit.md) for exact compatibility and evidence limits.
 
 DX ignores the selected display filter. A render failure falls back to the

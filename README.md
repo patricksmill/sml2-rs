@@ -5,7 +5,7 @@
 <h1 align="center">Six Golden Coins</h1>
 
 <p align="center">
-  An enhanced desktop edition of <b>Super Mario Land 2: 6 Golden Coins</b>.
+  An enhanced desktop edition of <b>Super Mario Land 2: 6 Golden Coins</b>, rewritten in Rust.
 </p>
 
 <p align="center">
@@ -61,8 +61,8 @@ Import an **SML2DX v1.8.1** ROM or IPS patch through
 **Settings → Game → Add DX ROM / IPS…**, then enable **DX Mode**.
 Choose Mario or Luigi in **Settings → Mods**.
 
-Both characters use the port's native physics. Some DX palette transitions and
-fades are still missing. See [DX compatibility](docs/desktop.md#sml2dx-mode).
+Some DX color changes may land a frame early or late. See
+[DX compatibility](docs/desktop.md#sml2dx-mode).
 
 ## Controls
 
