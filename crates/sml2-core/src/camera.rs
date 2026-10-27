@@ -77,6 +77,11 @@ pub struct CameraSim {
     /// `$A23C`: screen X published by the previous Mario draw (`$54A7`).
     /// Edge triggers consume this latch before the current frame draws.
     pub mario_screen_x: u8,
+    /// [`Self::mario_screen_x`] without the byte wrap, latched at the same
+    /// draw. An enlarged autoscroll view lets Mario stand more than 96 px
+    /// left of the camera, where the byte wraps past `$A1` and would read as
+    /// the right edge.
+    pub mario_screen_x_wide: i32,
     /// `sScreenEdgeMap[y_hi * 16 + x_hi]` — per-16-cell-sector scroll locks
     /// (bit0 left edge `$B0`, bit1 `$50`, bit2 up `$48`, bit3 down `$C0`);
     /// zero for free-scroll levels.
@@ -151,6 +156,7 @@ impl CameraSim {
             map_scroll_flags: 0,
             prev_mario_y_lo: y as u8, // caller seeds with the live value
             mario_screen_x: 0x40,     // `$0F2A` level reset
+            mario_screen_x_wide: 0x40,
             edge_map: [0; 48],
             edge_now: None,
             auto_scroll: 0,
@@ -185,6 +191,7 @@ impl CameraSim {
         self.y = y;
         self.prev_mario_y_lo = mario_y_lo;
         self.mario_screen_x = 0x40;
+        self.mario_screen_x_wide = 0x40;
         self.transition = 0;
         self.edge_now = None;
         self.map_scroll_flags = 0;
@@ -427,6 +434,7 @@ impl CameraSim {
     pub fn update_enables(&mut self, mario_x: u16) {
         let sx = ((mario_x as u8).wrapping_sub(self.x as u8)).wrapping_add(96);
         self.mario_screen_x = sx;
+        self.mario_screen_x_wide = i32::from(mario_x) - i32::from(self.x) + 96;
         if sx >= 0x60 {
             self.right_enabled = true;
         } else {
@@ -450,8 +458,15 @@ impl CameraSim {
         if self.edge_bits() & 1 != 0 && cam_lo >= 0xB0 {
             // The same shape as `$0B5E`, but `>=` where that one tests `==`,
             // and a Mario screen X below $A1 `ret`s outright — it does not
-            // fall through to the scroll the way $0B5E's tail does.
-            if self.mario_screen_x < 0xA1 {
+            // fall through to the scroll the way $0B5E's tail does. The
+            // native `$0FBF` clamp keeps the byte inside `$10..=$A0`; an
+            // enlarged view does not, so it reads the unwrapped position.
+            let screen_x = if sim.view_clamp {
+                self.mario_screen_x_wide
+            } else {
+                i32::from(self.mario_screen_x)
+            };
+            if screen_x < 0xA1 {
                 return;
             }
             self.transition = 1;
@@ -1379,6 +1394,28 @@ mod tests {
         under.step(&mut sim3);
         assert_eq!(under.transition, 0, "`>= $B0` is not $0B5E's `== $B0`");
         assert_eq!(under.x, 0x00B0, "so the autoscroll px is what happens");
+    }
+
+    /// An enlarged autoscroll view lets Mario stand more than 96 px left of
+    /// the camera, where the `$A23C` byte wraps past `$A1`. At the end lock
+    /// that read as the right edge and ran the 4 px transition scroll, pushing
+    /// Mario across the view. The wide check uses his unwrapped position; the
+    /// native view keeps the ROM byte.
+    #[test]
+    fn a_wide_autoscroll_view_does_not_wrap_mario_into_the_right_edge() {
+        let at_end_lock = |view_clamp: bool, mario_x: u16| {
+            let (mut c, mut sim) = auto_cam(0x00B0, 0x140);
+            c.edge_map[16] = 0x01;
+            sim.view_clamp = view_clamp;
+            sim.x = mario_x;
+            c.update_enables(sim.x);
+            c.step(&mut sim);
+            c.transition
+        };
+        // sx = 0 - $B0 + $60 = -$50, which wraps to the byte $B0.
+        assert_eq!(at_end_lock(true, 0x0000), 0, "left of the wide view");
+        assert_eq!(at_end_lock(true, 0x00F5), 1, "the real right edge still fires");
+        assert_eq!(at_end_lock(false, 0x0000), 1, "native reads the ROM byte");
     }
 
     /// `$0DAF` re-branches straight to `$0C7D`, so the left chain never runs:
