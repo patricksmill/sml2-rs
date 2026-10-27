@@ -31,6 +31,11 @@ sudo dnf install gcc gcc-c++ pkgconf-pkg-config systemd-devel libxkbcommon-x11
 sudo apt install build-essential pkg-config libudev-dev libxkbcommon-x11-0
 ```
 
+Wayland shows the coin icon only through a desktop entry for app ID `sml2`.
+Run `tools/install-desktop-entry.sh [BINARY] [PREFIX]` (default
+`target/release/sml2` into `~/.local`). WSLg reads only system folders, so use
+`sudo tools/install-desktop-entry.sh target/release/sml2 /usr/local`.
+
 Wayland/X11 are enabled; platform backends include Vulkan/GLES, DX12 and Metal.
 For WSL driver-probing failures, Mesa software Vulkan may help:
 

@@ -69,7 +69,9 @@ pub fn run(options: Options) -> Result<(), String> {
         .with_inner_size(settings.window_size)
         .with_min_inner_size([480.0, 400.0])
         .with_fullscreen(settings.fullscreen)
-        .with_icon(icon);
+        .with_icon(icon)
+        // Wayland ignores the icon above; shells match this ID to sml2.desktop.
+        .with_app_id("sml2");
     let validation = std::sync::Arc::new(std::sync::Mutex::new(None));
     let result = validation.clone();
     eframe::run_native(
