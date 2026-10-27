@@ -61,6 +61,7 @@ pub fn pack_joypad(
         | (if start { 0x08 } else { 0 })
 }
 
+pub(crate) mod dx_palette;
 mod level;
 pub use level::LevelContext;
 

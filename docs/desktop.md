@@ -135,9 +135,9 @@ The returning character becomes the saved **Character** choice in Settings.
 
 The title, file select, overworld map (hub, zones and both minigames), Game Over,
 castle reveal, ending and credits use DX graphics and colors. Boss arenas and
-fights use their own DX tiles, palettes and sprite lists too. Seven levels (`$03`, `$07`, `$0D`, `$15`, `$16`, `$18`, `$19`) also
-switch palette sets as Mario crosses regions; they currently keep their starting
-DX palette throughout. DX's palette fades are not reproduced. A DX rendering
+fights use their own DX tiles, palettes and sprite lists too. Eight levels (`$03`, `$07`, `$0C`, `$0D`, `$15`, `$16`, `$18`, `$19`) switch
+palette sets as Mario crosses regions, as DX does. DX's palette fades are not
+reproduced. A DX rendering
 failure falls back to the filter with the error shown in Settings → Game.
 
 Installations from earlier versions, including ones from before the minigames

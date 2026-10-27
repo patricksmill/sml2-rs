@@ -958,3 +958,43 @@ fn conveyor_section_colors_survive_corridors_and_widescreen() {
         assert_eq!(frame[0], expected, "Mario X {x:04x}");
     }
 }
+
+/// `$26:$6B0B`: past a trigger, the eight regional levels draw with the set
+/// it loads. BG swaps recolor the whole frame; OBJ-only levels keep drawing.
+#[test]
+#[ignore = "requires SML2_DX_ROM with the audited local ROM"]
+fn audited_rom_regional_palettes_follow_mario() {
+    let bundle = audited();
+    // (level, Mario X, Mario Y, whether the background set changes)
+    for (level, x, y, bg_changes) in [
+        (0x0Cu8, 0x0240u16 - 8, 0x0100u16, true),
+        (0x15, 0x0940 - 8, 0x0240 - 32, true),
+        (0x19, 0x0180 - 8, 0x0100, true),
+        (0x0D, 0x0840 - 8, 0x0100, true),
+        (0x03, 0x0640 - 8, 0x0100, false),
+        (0x07, 0x0840 - 8, 0x0100, false),
+        (0x16, 0x0940 - 8, 0x0100, false),
+        (0x18, 0x0840 - 8, 0x0240 - 32, false),
+    ] {
+        let mut game = session();
+        game.begin_level(level, 0).unwrap();
+        game.advance(FrameInput::default());
+        let before = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
+        let SessionState::InLevel(ctx) = &mut game.state else {
+            unreachable!()
+        };
+        ctx.sim.x = x;
+        ctx.sim.y = y;
+        game.advance(FrameInput::default());
+        let after = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
+        if bg_changes {
+            let colors =
+                |f: &[[u8; 3]]| f.iter().copied().collect::<std::collections::BTreeSet<_>>();
+            assert_ne!(
+                colors(&before),
+                colors(&after),
+                "level {level:02X} keeps its palette"
+            );
+        }
+    }
+}

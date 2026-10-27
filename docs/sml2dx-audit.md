@@ -353,14 +353,30 @@ Known gaps, verified against the ROM and left native or approximate:
   `$74A4` VRAM0 copies and palette-entry patches are applied over def 6's sets.
   The other boss levels went through `$36:$7306`'s table path, and only `$09`
   was compared with PyBoy.
-- `$26:$6B0B` switches palette sets from `$26:$6100 + n*$40` for levels `$19`,
-  `$03`, `$07`, `$0D`, `$15`, `$16`, `$0C`, `$18` by Mario's position (`$AF30`-
-  `$AF33` are Mario X+8 and Y+32 from `$02:$40FD`), remembering the current set
-  in `$FFAD`. Mario Zone 3 (`$0C`, `$26:$6B39`) now retains this selector
-  across corridors and switches BG sets `$6100` / `$6140` / `$6180`. It compares
-  the high byte of Mario X+8: sections 1/14 select 0, 2/4/10/13 select 1,
-  and 5/7/9 select 2. This supplies the conveyor blues without recoloring tiles
-  or OBJ palettes. The other seven levels keep their load-time palette.
+- `$26:$6B0B` (`session/dx_palette.rs`) runs every gameplay frame on Mario
+  X+8 and Y+32 (`$AF30`-`$AF33`, staged by `$02:$40FD`) and keeps the section
+  it last loaded in `$FFAD`, which level loads clear. A branch skips a section
+  already loaded; untriggered positions keep the last set. Per level, by page
+  (the X+8 high byte):
+  - `$0C` (`$6B39`): 1/14, 2/4/10/13, 5/7/9 load BG `$6100`/`$6140`/`$6180`.
+  - `$15` (`$6BC4`): page 9 loads BG `$60C0`; page `$0B` on Y+32 row 2 with a
+    low byte below `$15` loads `$6080`. On page 5 (row 2 only) the compared
+    byte becomes the Y+32 low byte: `$5D` and above, or exactly 9, load `$60C0`.
+  - `$19` (`$6C5B`): section = page swapped plus 8 for X+8 bit 7, loaded only
+    when it exceeds `$FFAD`; sections `$18`-`$70` load BG `$5A80` and OBJ
+    `$5D80` plus `$40` per step.
+  - `$03` (`$6D1A`): pages 0/1 load BG `$5A00`/`$5A40`; pages 5 and 6 write OBJ
+    palette 5 colors 1-2 (`95 09 9C 2E`, `FF 7F C8 11`); page `$0A` does both
+    `$5A40` and page 6's colors.
+  - `$07` (`$6DFD`): pages 7/8 write OBJ palette 5 colors 1-2 (`D9 7B 45 6B`,
+    `B5 56 4A 29`).
+  - `$16` (`$6E5E`): pages 8/`$0C` and 9/`$0B` write OBJ palette 5 color 2
+    (`7D 26`, `94 52`).
+  - `$0D` (`$6EB3`): with Y+32 above row 0, page 0 loads BG `$61C0`, pages 1/5
+    `$6200` (selector `$10`), page 6 `$6240`; pages 8/`$0B` load `$6280`.
+  - `$18` (`$6FBC`): OBJ `$62C0` on page 8 row 2, `$6300` on page 0 row 2,
+    `$6340` on page 5 row 1.
+  A boss fight's own palettes take precedence; pause dims the current BG set.
 - `$D300` is the blank palette buffer `$25AF`'s hook and the fades upload; DX
   palette fades are not reproduced.
 

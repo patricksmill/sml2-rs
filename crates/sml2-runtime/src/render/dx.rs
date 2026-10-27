@@ -880,23 +880,23 @@ fn render(
     let mappings = &dx
         .player(character, level.theme + arena.map_or(0, |a| a.theme))
         .mappings;
-    let (bg_source, obj_source) = fight.map_or((&level.bg_palettes, &level.obj_palettes), |f| {
-        (&f.bg_palettes, &f.obj_palettes)
-    });
-    // $26:$6B39 swaps only BG colors in Mario Zone 3. Other levels and
-    // boss scene loads continue to use their own palette sources.
-    let bg_source = if level_id == 0x0c && fight.is_none() {
-        dx.rom(0x26, 0x6100 + u16::from(ctx.dx_conveyor_palette) * 0x40, 64)
-            .ok_or("DX conveyor palette missing; re-import DX ROM")?
+    let level_source = (&level.bg_palettes[..], &level.obj_palettes[..]);
+    let (bg_source, obj_source) = fight.map_or(level_source, |f| (&f.bg_palettes, &f.obj_palettes));
+    // `$26:$6B0B`'s regional sets replace the level's own; a boss fight's
+    // scene load brings its own palettes instead.
+    let (bg_source, obj_source) = if fight.is_none() {
+        ctx.dx_regional
+            .resolve(level_source.0, level_source.1, |at| dx.rom(0x26, at, 64))?
     } else {
-        bg_source.as_slice()
+        (bg_source.to_vec(), obj_source.to_vec())
     };
+    // `$31:$4000`'s pause dims whatever `$D200` holds, regional sets included.
     let bg_palettes = if ctx.sim.paused {
-        pause_palettes(bg_source, ctx.sim.frame_counter & 16 != 0)
+        pause_palettes(&bg_source, ctx.sim.frame_counter & 16 != 0)
     } else {
-        bg_source.to_vec()
+        bg_source
     };
-    let palettes = CgbPalettes::from_bytes(&bg_palettes, obj_source).map_err(|e| e.to_string())?;
+    let palettes = CgbPalettes::from_bytes(&bg_palettes, &obj_source).map_err(|e| e.to_string())?;
     let background = [live_background(ctx, dx, level), level.background[1].clone()];
     // Each assembled bank starts at $8000. Signed BG tile addressing adds $800.
     let mut banks: [Vec<u8>; 2] = std::array::from_fn(|bank| {

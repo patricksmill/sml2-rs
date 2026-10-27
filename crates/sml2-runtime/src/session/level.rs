@@ -39,8 +39,8 @@ pub struct LevelContext {
     /// A phase has been copied to `$9200` since the level loaded. Presentation
     /// only: DX tells a phase from identical base tiles by it.
     pub tile_animation_copied: bool,
-    /// DX $FFAD: Mario Zone 3 keeps its last section palette between triggers.
-    pub(crate) dx_conveyor_palette: u8,
+    /// DX `$26:$6B0B`'s regional palette state (`$FFAD` and what it loaded).
+    pub(crate) dx_regional: super::dx_palette::RegionalPalettes,
     /// `$25AF` has swapped in a boss arena's tileset. Presentation only: DX
     /// adds the arena's VRAM1 tiles on that reload.
     pub arena_loaded: bool,
@@ -155,7 +155,7 @@ impl LevelContext {
             arena_layout,
             tile_animation: TileAnimationClock::default(),
             tile_animation_copied: false,
-            dx_conveyor_palette: 0,
+            dx_regional: Default::default(),
             arena_loaded: false,
             boss_definition: None,
             frame_n: 0,
@@ -304,49 +304,13 @@ impl LevelContext {
                 self.manifest.header.palettes[2]
             };
         }
-        if self.manifest.level_id == 0x0c {
-            self.dx_conveyor_palette = conveyor_palette(self.dx_conveyor_palette, self.sim.x);
-        }
+        self.dx_regional
+            .update(self.manifest.level_id, self.sim.x, self.sim.y);
         self.tile_animation_copied |= result.tile_animation_copied;
     }
 
     /// True if the level has completed fade-out and finished the handoff.
     pub fn is_finished(&self) -> bool {
         self.sim.map_handoff_done || (self.sim.game_over && self.sim.fade_timer == 0)
-    }
-}
-
-/// DX $26:$6B39 compares the high byte of Mario X+8, retaining $FFAD
-/// in corridors without a trigger. These are palette sections, not camera bounds.
-fn conveyor_palette(previous: u8, mario_x: u16) -> u8 {
-    match mario_x.wrapping_add(8) >> 8 {
-        1 | 14 => 0,
-        2 | 4 | 10 | 13 => 1,
-        5 | 7 | 9 => 2,
-        _ => previous,
-    }
-}
-
-#[cfg(test)]
-mod dx_palette_tests {
-    use super::conveyor_palette;
-
-    #[test]
-    fn conveyor_sections_follow_rom_triggers_and_keep_the_last_palette() {
-        let mut palette = 0;
-        for (x, expected) in [
-            (0x1f7, 0),
-            (0x1f8, 1),
-            (0x300, 1),
-            (0x4f8, 2),
-            (0x600, 2),
-            (0x9f8, 1),
-            (0xdf8, 0),
-        ] {
-            palette = conveyor_palette(palette, x);
-            assert_eq!(palette, expected, "Mario X {x:04x}");
-        }
-        assert_eq!(conveyor_palette(2, 0x100), 0);
-        assert_eq!(conveyor_palette(1, 0xfff8), 1);
     }
 }
