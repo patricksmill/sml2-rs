@@ -255,7 +255,7 @@ The character table `$24:$7D00` is all `$FF`: no level forces a character.
 or `$6000` under theme `$10`.
 
 DX also rewrote 21 levels' `Level_TileMap` metatile tables (bank 8, at the
-header's `+$0B` pointer) and 15 levels' compressed layouts (`$42F0[+$12]` in the
+header's `+$0B` pointer) and 14 levels' layouts (`$42F0[+$12]` in the
 header's `+$0D` bank). Schema 4 carries both. A PyBoy capture of level `$01`
 matched every streamed BG map cell against DX's layout and metatiles, against
 608 of 1,024 for the base layout. Most layout edits are decoration; levels `$01`,
@@ -353,8 +353,8 @@ Known gaps, verified against the ROM and left native or approximate:
   `$74A4` VRAM0 copies and palette-entry patches are applied over def 6's sets.
   The other boss levels went through `$36:$7306`'s table path, and only `$09`
   was compared with PyBoy.
-- `$26:$6B0B` (`session/dx_palette.rs`) runs every gameplay frame on Mario
-  X+8 and Y+32 (`$AF30`-`$AF33`, staged by `$02:$40FD`) and keeps the section
+- `$26:$6B0B` (`session/dx_palette.rs`) consumes staged Mario
+  X+8 and Y+32 (`$AF30`-`$AF33`, written by `$02:$4100..$4120`) and keeps the section
   it last loaded in `$FFAD`, which level loads clear. A branch skips a section
   already loaded; untriggered positions keep the last set. Per level, by page
   (the X+8 high byte):
@@ -376,7 +376,9 @@ Known gaps, verified against the ROM and left native or approximate:
     `$6200` (selector `$10`), page 6 `$6240`; pages 8/`$0B` load `$6280`.
   - `$18` (`$6FBC`): OBJ `$62C0` on page 8 row 2, `$6300` on page 0 row 2,
     `$6340` on page 5 row 1.
-  A boss fight's own palettes take precedence; pause dims the current BG set.
+  The current renderer gives boss palettes precedence; the source-order audit
+  below requires that policy to be checked against actual selector/load order.
+  Pause dims the current BG set.
 - `$D300` is the blank palette buffer `$25AF`'s hook and the fades upload; DX
   palette fades are not reproduced.
 
@@ -402,3 +404,134 @@ both renderers now discard the last streaming frame’s saved wobble extent.
 These fixed scenes retain their authored 160×144 frame inside enlarged views.
 Palette fades and level-region palette switching remain separate presentation
 work; scene support does not claim those effects are complete.
+
+## Phase-1 source and evidence inventory — 2026-10-27
+
+The local DX ROM matches the SHA-256 above. The base ROM matches SHA-256
+`5450dce1bd0c073964c374b5b5b5729dce8d00f2e807892c34af32b8bce1392e` and SHA-1
+`bba408539ecbf8d322324956d859bc86e2a9977b`. This pass used bounded static source
+and ROM comparisons, without emulator execution or new captures. Detailed
+[source contracts](sml2dx-contracts.md) record arithmetic, branch boundaries,
+reset/retention and frame ordering. The [verification matrix](sml2dx-verification.md)
+maps all 32 levels, room cases, maps/minigames, boss definitions/transitions and
+fixed scenes to existing evidence and bounded follow-up tickets.
+
+The regional implementation in separate commit `291981a` landed during this
+audit. It covers all eight selectors; source-order, special-call and independent
+pixel evidence remain open. The source findings below do not certify that change.
+
+| Area | Phase-1 classification |
+|---|---|
+| Regional BG/OBJ actions | Implemented in `291981a`; staged-coordinate timing, scene ordering and independent evidence still open |
+| Pause/star presentation | Implemented; interaction with source-owned palette state still needs verification |
+| Map/castle fades and white blanking | Missing CGB behavior; exact source contracts established |
+| Credits palette/attribute steps and castle coin flash | Missing; newly identified source contracts established |
+| Luigi movement and movement-data import | Missing; exact curve/friction differences established |
+| Default Mario movement, autoscroll and bounded jump/collision/script ranges | Unchanged source within the audited ranges; not a whole-ROM claim |
+| DX metatiles/layouts | Imported and partially drawn; collision geometry remains native |
+| Spawn `$0B` | Missing DX placement; other packed spawn streams unchanged |
+| Parked object priority and item/boss flash masks | Missing DX attribute differences; native draw flags differ |
+| Boss tables including Wario6/7/8 | Implemented; phase inheritance and independent comparisons incomplete |
+| Special pose timing / possible indirect latch resets | Not fully understood; explicit `dx-palette-order` prerequisite |
+| Full-game pictures/room routes/hardware | Unverified; matrix names required cases |
+
+### Regional branch contracts and ordering
+
+| Level | Source range, end exclusive | Contract |
+|---|---|---|
+| `$0C` | `$26:$6B39..$6BA7` | BG `$6100/$6140/$6180`, latch0/1/2 |
+| `$15` | `$26:$6BC4..$6C5B` | BG `$6080/$60C0`, Y-gated branches; page5 fallthrough compares YL, including YL9 and YL11 |
+| `$19` | `$26:$6C5B..$6D1A` | Forward-only byte progress latch; exact triggers `$18..$70` step8 load12 paired BG/OBJ sets; skipped triggers do not interpolate |
+| `$03` | `$26:$6D1A..$6DFD` | Shared latch for BG swaps and OBJ palette5 colors1/2; page10 does both |
+| `$07` | `$26:$6DFD..$6E5E` | Direct OBJ palette5 colors1/2; BG untouched |
+| `$16` | `$26:$6E5E..$6EB3` | Direct OBJ palette5 color2 only; BG untouched |
+| `$0D` | `$26:$6EB3..$6FBC` | Four Y-gated/ungated BG sets, latch0/**$10**/1/2 |
+| `$18` | `$26:$6FBC..$703A` | Three coordinate-pair triggers replace entire OBJ sets; BG untouched |
+
+The selector hook is bank1 `$54CF -> home $191A -> $26:$6B00`, falling through
+to `$6B0B`. Normal home `$0618` pose setup precedes object-engine call `$0636`;
+the latter stages `ref_x=(x+8) mod65536`, `ref_y=(y+32) mod65536` for the next
+pass. Therefore fresh end-of-frame coordinates are not source-equivalent.
+Unmatched branches retain state and colors; some direct OBJ writes do not update
+the original BG buffer or request any job. The full contracts give exact bytes.
+
+HUD initialization `$24:$793C..$793F` clears `$FFAD` on level load. Boot's HRAM
+clear and hub palette branches also write it. No unconditional reset on ordinary
+pipe/arena entry was established; follow actual initializer calls. Special pose
+calls at home `$22C4/$2304` and possible indirect reset paths need their own
+timing tests before closing that ticket.
+
+### Fades, palette jobs and newly identified scene effects
+
+Jobs `$24:$7800..$7912` service `$FFF8` once per eligible VBlank tail, then move
+queued `$FFF7` into the next job. Jobs1/2/3 upload pointer BG/OBJ/both;4 uploads
+canonical BG `$D200` plus OBJ;5 restores BG;6 uploads temporary BG `$D240`.
+Original palette buffers, live palette RAM, pointers and pending jobs are
+distinct state. Repeated rendering must not replay their mutations.
+
+| Source | Verified operation / remaining implementation |
+|---|---|
+| `$31:$4000..$40EB` | Pause only: derive BG subtract RGB `(8,4,4)` or `(18,8,4)` from original; already implemented |
+| `$20:$6A66..$6A7E` | `$D300` contains32 **white** `$7FFF` entries, not black |
+| `$0C:$469F..$4700`, `$7000..$7118` | Castle-door entry: subtract RGB `(16,4,4)` at timer low `$3F/$2F/$1F/$0F`, terminal zero uploads black to BG+OBJ |
+| `$0F:$69FB..$6A53`, `$7700..$77A1` | Map exit: four saturating RGB+10 steps,36 explicit VBlank waits; native transition currently assumes48 |
+| `$0F:$62F7..$6367` | Zone walkout:80 walking waits plus20 fade waits |
+| `$0F:$6A9A..$6AD7`, `$77A1..$78E5` | Return: save original BG+OBJ, restore before each derived +30/+20/+10/+0 step,3 waits per step |
+| `$36:$7746..$7786`; `$26:$765A/$78F0` | Boss/minigame white blank/load boundaries; distinguish entry variants |
+| `$1A:$43F8/$4187/$4145` to `$5E00/$5E10/$5E3E` | Credits7->8/8->9/9->10 have authored BG/OBJ changes;7->8 also copies `$2A0` attributes from `$5FC1` |
+| `$0C:$7118..$7158` | Castle coin/reveal OBJ palette flash,4 of32 frames; separate from fades |
+
+Ordinary bank1 `$6442` level fades, home `$03AF` ending-entry fade, map walk-in
+`$0F:$63BA` and legacy map fade-in `$6A68` retain DMG-only source writes.
+Do not add CGB interpolation solely because native DMG palettes change.
+Bank `$31` contains no extra fade engine; all the scene color/attribute data
+identified here already exists in schema8's imported banks.
+
+### Movement, content and importer contract
+
+Mario's displacement curves match base. Luigi uses friction3 instead of4,
+normal vertical indices59..72 `$FC` instead of `$FD`, and horizontal indices
+`$F7/$F8` values2/3 instead of1/2. Home `$16E9/$16F2` select friction through
+`$19FF`; `$156B/$1574/$157D/$1587` and `$1842/$1851` select bank1 curves.
+Swimming/moon vertical curves and audited jump/acceleration/death control paths
+match base. Vertical source tables are76 bytes, not the native arrays'82 bytes
+including adjacent overread data. The contracts list exact slices and boundaries.
+
+Bank `$24:$7D00..$7D60` supplies forced-character/friction/autoscroll tables:
+all `$FF`, all `$FF`, all1. The new `$0DD3 -> $1A2C` autoscroll hook therefore
+does not change behavior for the supported digest. Existing schema8 contains
+this configuration but omits bank1's movement curves. A future physics import
+needs narrow validated arrays and a schema/importer/cache identity bump; neither
+an entire code bank nor bank31 is needed for the audited effects.
+
+The new opt-in `sml2-dx/tests/contracts.rs` checks the inventory against both ROMs:
+21 changed metatile tables,14 changed layouts and six collision-changing levels
+`$01/$06/$0D/$0E/$11/$1B` (45/768/445/5/1/1 cells respectively). It corrects
+the earlier15-layout claim. Header `$1B` changes only its metatile-pointer high
+byte `$42->$78`; other header fields match. All edge/scene maps, level properties,
+secret entries, collision-consumer range `$1C82..$1F51`, and scene script blob
+`$14125..$141E5` match base. Packed spawns differ only at ROM `$E4F8`: level
+`$0B`'s last spawn moves Y392->400. The importer/runtime must share that placement.
+
+Bank16 has only three changed bytes: `$5872B/$5876A` change the parked-object
+`$FFDC`/slot12 value `$80->0`; `$5B693` changes the item flash XOR mask `$10->8`.
+The boss helper's matching mask changes at `$B416`. Native draw staging XORs
+these values into object attributes; DX CGB bit3 selects the tile bank. Verify
+the parked priority and item/boss bank-toggle paths separately, preserving
+vanilla slot semantics. These differences were absent from the original gap list.
+
+This inventory closes phase1's source-discovery deliverable, not the outstanding
+implementation, room-route or independent visual acceptance rows. Full-ROM
+equivalence and real-hardware timing remain unclaimed.
+
+Reproduce the new source-inventory checks with the audited DX ROM and sibling
+base ROM (`SML2_BASE_ROM` may override the latter):
+
+```sh
+SML2_DX_ROM=/path/to/audited-dx.gbc cargo test -p sml2-dx --test contracts -- --ignored
+```
+
+Phase-1 validation passed:1,708 core tests,22 DX unit tests,2 new source-inventory
+tests and3 existing opt-in revision tests. The frozen sweep exited successfully
+with its documented `traj4_ff0` exception. These checks establish the stated
+source inventory and regression results, not emulator or hardware parity.

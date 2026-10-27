@@ -1,7 +1,10 @@
 # Complete SML2DX compatibility
 
-Proposed implementation plan, 2026-10-26. This document does not claim that any
-of the work below has been implemented or verified.
+Implementation plan, 2026-10-26. Phase 1's static source audit and evidence
+inventory completed 2026-10-27; see the [contracts](../sml2dx-contracts.md) and
+[verification matrix](../sml2dx-verification.md). Regional implementation landed
+separately as `291981a`; its remaining source-order/evidence checks are in the
+matrix. Source verification does not establish native gameplay or pixel parity.
 
 ## Outcome and scope
 
@@ -27,7 +30,7 @@ milestones remain separate and must not be closed by DX evidence alone.
 
 | Area | Starting point | Remaining work |
 |---|---|---|
-| Regional palettes | `session/level.rs` retains a selector for `$0C`; `render/dx.rs` reads its BG set | Add `$03`, `$07`, `$0D`, `$15`, `$16`, `$18`, `$19`, preserving `$0C` |
+| Regional palettes | `session/dx_palette.rs` implements all eight selectors (`291981a`) | Verify staged-coordinate timing, scene/reset ordering and independent pictures |
 | Fades | DX uses CGB palettes; native fade timers and scene transitions already exist | Audit DX's palette jobs and reproduce their colors, order and cadence |
 | Physics | Character choice selects graphics; `PlayerSim` uses native rules | Audit and port every character-dependent movement difference |
 | Geometry | `sml2-dx::LevelGraphics` imports DX layouts and metatiles | Feed DX geometry into simulation and rendering together; remove the collision-class substitution |
@@ -35,9 +38,9 @@ milestones remain separate and must not be closed by DX evidence alone.
 | Pixel comparison | `tools/compare_tas.py::read_frame` reads one grayscale byte per pixel | Add a DX RGB path with explicit mode, character and state alignment |
 
 Runtime paths in this table are relative to `crates/sml2-runtime/src/`.
-The audit reports changed metatiles in 21 levels and layouts in 15; six levels
-also move solid cells: `$01`, `$06`, `$0D`, `$0E`, `$11`, `$1B`. Recompute these
-inventories against the supported ROM before using them as acceptance counts.
+The phase-1 audit confirms changed metatiles in 21 levels and layouts in 14;
+six levels also move solid cells: `$01`, `$06`, `$0D`, `$0E`, `$11`, `$1B`.
+The opt-in source-inventory test reproduces these acceptance counts.
 
 ## Work order
 
@@ -68,10 +71,21 @@ worker and acceptance loop in [ORCHESTRATION.md](../../ORCHESTRATION.md).
    needed. Include overworld water/decor animation timing already called out
    in the DX audit.
 4. Resolve the data requirements before changing the importer. Existing bundles
-   already contain bank `$26` and DX layouts. Fade code in bank `$31` and any
-   physics data require an explicit audit: extract only needed data, never
-   execute patched cartridge code. Bump importer/schema versions only when
-   the persisted contract changes, with cache invalidation and re-import tests.
+   already contain bank `$26` and DX layouts. Audit pause code in bank `$31`
+   separately from fades and identify required physics data: extract only
+   needed data, never execute patched cartridge code. Bump importer/schema
+   versions only when the persisted contract changes, with cache invalidation
+   and re-import tests.
+
+Phase-1 result: selectors include direct OBJ patches and paired BG/OBJ switches,
+and consume previously staged coordinates. Bank `$31` is pause-only; fade data
+already exists in schema 8. Missing physics tables require narrow bank-1 data
+extraction and a future schema bump. Newly identified work includes the `$0B`
+spawn adjustment, object priority/flash attributes, map-exit cadence, credits
+palette/attribute transfers and castle coin flash. Autoscroll configuration is
+all 1 in the supported ROM, so its new hook does not change movement behavior.
+The matrix gives each finding a bounded ticket and test requirement; unresolved
+special-scene timing and independent references remain explicitly pending.
 
 Acceptance: every known gap has source references and an independently testable
 ticket. Newly discovered behavior differences become prerequisites in this plan;
@@ -105,23 +119,27 @@ correct frame, and existing vanilla comparison callers still work.
 
 ### 3. Finish regional palettes
 
-Extract the existing `$0C` selector into a small native palette-state module,
-then implement one missing level per ticket: `$03`, `$07`, `$0D`, `$15`, `$16`,
-`$18`, `$19`. Use the audited `$26:$6B0B` dispatcher and each level's bounded
-branch. Preserve Mario X+8/Y+32 semantics and `$FFAD` retention. Update state once
-at the source-defined simulation point; repeated rendering must not advance it.
+The original selector extraction and seven additions landed in separate commit
+`291981a`. Audit those branch tests before assigning further changes. Close
+the remaining timing/ordering cases, then verify one level per ticket:
+`$03`, `$07`, `$0C`, `$0D`, `$15`, `$16`, `$18`, `$19`.
+Use the audited `$26:$6B0B` dispatcher and each level's bounded
+branch. Preserve staged Mario X+8/Y+32 references and `$FFAD` retention. Pin
+normal and special-call timing before updating state at the source-defined
+simulation point; repeated rendering must not advance it.
 
-Replace the conveyor-only render special case with the selected palette source.
-Preserve the source's BG/OBJ distinctions and boss-arena palette precedence.
+Retain the shared palette resolver introduced by the regional implementation.
+Preserve the source's BG/OBJ distinctions, partial OBJ writes and actual ordering
+between selectors and boss-arena loads; do not globally suppress arena selectors.
 Test entry, each threshold just below/at/above, movement in both directions,
 unmatched corridors, coordinate wrapping, pause/unpause, room changes, death and
 reload. Retain the existing `$0C` boundary regression. Renderer tests assert
 actual colors for both characters, plus unchanged sprite colors when only BG
 changes.
 
-Primary files: a new focused module beside `session/level.rs`, its tests,
+Primary files: `session/dx_palette.rs`, its tests,
 `render/dx.rs` wiring and `tests/dx_preview.rs`. Use existing imported palette
-bytes unless phase 1 proves more data is needed.
+bytes; phase 1 established that no new regional palette data is required.
 
 Acceptance: all eight selectors match source-derived state and palette-byte
 expectations; the seven missing levels no longer keep their starting colors.
@@ -140,6 +158,10 @@ level/pipe/arena loads and exits; death/Game Over; title/file select/map and
 minigames; castle reveal/ending/credits. Verify the source actually uses a fade
 at each entry before adding one. Specify regional palette, boss palette, pause,
 star and fade ordering from source, including interrupted/restarted transitions.
+Add separate tickets for the 36-wait DX map exit (vanilla remains 48), credits
+substate 7->8/8->9/9->10 palette and attribute transfers, and castle coin flash.
+Keep direct white blanking separate from interpolated effects and retain
+DMG-only source paths without adding CGB fades.
 
 Test exact palette bytes at the first, intermediate and terminal steps, cadence,
 saturation, restoration and interrupted fades. Cover both BG and OBJ behavior,
@@ -166,8 +188,10 @@ under a running player. Latch the active selection for that level; save/restart
 and death/room reloads must retain it consistently. A rendering fallback changes
 only presentation, retaining the active gameplay and collision geometry.
 
-Use the phase-1 audit to choose the smallest physics implementation: shared
-movement with audited character parameters where possible, explicit native
+Extract the missing bank-1 horizontal/vertical tables as narrow validated data;
+keep 76-byte vertical curves separate from adjacent instructions. Existing bank
+`$24` contains the per-level configuration. Use shared movement with audited
+character parameters where possible, explicit native
 branches only where control flow differs. Split tickets by the actual differing
 movement operation. Cover acceleration, braking/skidding, speed limits, jumping
 and early release, falling/landing, swimming, low gravity, Bunny/Fire forms,
@@ -192,6 +216,9 @@ the audited headers/collision data. Rendering, player probes, actor terrain
 queries, spawning, camera/scene boundaries and room/arena reloads must consume
 the same active content. Audit object placement, scripts and collision-class
 tables rather than assuming that changed graphics are the only changed data.
+Include the confirmed `$0B` spawn Y392->400 adjustment. Handle the two parked
+object priority patches and the shared item/boss flash mask changes as separate
+source-bounded presentation tickets, preserving vanilla slot-byte behavior.
 
 Start with one of the six levels with moved solid cells. Verify a complete
 vertical slice: load, collision probe, player and enemy contact, draw, block/coin
@@ -254,6 +281,7 @@ with `SML2_DX_ROM` pointing to the audited local ROM:
 
 ```sh
 cargo test -p sml2-dx --test revision -- --ignored
+cargo test -p sml2-dx --test contracts -- --ignored
 cargo test -p sml2-runtime --test dx_preview -- --ignored
 cargo test -p sml2-desktop real_rom_import_restart -- --ignored
 ```
