@@ -62,6 +62,7 @@ pub fn pack_joypad(
 }
 
 pub(crate) mod dx_palette;
+pub(crate) mod dx_effects;
 mod level;
 pub use level::LevelContext;
 
@@ -183,6 +184,19 @@ impl MapTransition {
         }
     }
 
+    pub(crate) fn from_map_dx(ctx: Box<LevelContext>, level_id: u8, easy: bool, dx: bool) -> Self {
+        let mut transition = Self::from_map(ctx, level_id, easy);
+        if dx {
+            transition.live_at -= 12;
+            transition.easy_card = transition.easy_card.map(|frame| frame - 12);
+        }
+        transition
+    }
+
+    pub(crate) fn fade_end(&self) -> u16 {
+        self.easy_card.unwrap_or_else(|| self.live_at.saturating_sub(MAP_ENTRY_FRAMES - MAP_EASY_CARD_START))
+    }
+
     /// Whether transition frame `frame` runs the `$0300` frame wait: not
     /// during `$3E9FB`'s fade and `$2934` save (`$3E9EC` waits), and not
     /// during the `$03` loader with VBlank off; the `$0B`/`$02` frames and
@@ -191,7 +205,7 @@ impl MapTransition {
         let card = self
             .easy_card
             .map_or(0, |_| sml2_core::easy_mode_card::EASY_CARD_FRAMES);
-        let fade_end = MAP_EASY_CARD_START;
+        let fade_end = self.fade_end();
         let loader_start = fade_end + card + MAP_ENTRY_TICKING_FRAMES;
         frame > fade_end && frame <= loader_start
     }
@@ -572,7 +586,7 @@ impl Session {
     /// `MapSim::tick`: `source` is the map as the frame began, `destination`
     /// the screen the door loaded.
     pub(crate) fn begin_door_transition(&mut self, source: MapSim, direction: u8, destination: u8) {
-        self.map_screen_transition = Some(MapScreenTransition::new(source, direction));
+        self.map_screen_transition = Some(MapScreenTransition::new_dx(source, direction, self.dx_enabled()));
         self.last_map_screen = Some(destination);
         self.map_wave = if destination == 0 {
             sml2_core::map::MapWave::seed(self.assets.overworld_tiles.screen_raw(0))
@@ -859,6 +873,7 @@ impl Session {
     }
 
     pub fn advance(&mut self, input: FrameInput) -> FrameEffects {
+        let dx_enabled = self.dx_enabled();
         self.motion_prev = self
             .level_ctx()
             .and_then(crate::render::motion::MotionSnapshot::of);
@@ -915,7 +930,7 @@ impl Session {
                     t.frame += 1;
                     // `$3EAFF` keeps the hub's wave and the castle's bands
                     // moving through the fade.
-                    if t.frame < MAP_EASY_CARD_START {
+                    if t.frame < t.fade_end() {
                         if map_sim.screen_id == 0 {
                             tick_hub_wave(&mut self.map_wave, map_sim, &self.assets, self.map_ram);
                         } else {
@@ -953,7 +968,7 @@ impl Session {
                             self.map_pan_return = Some(MapPanReturn::default());
                             self.sound_driver.music_request = 0xFF;
                         }
-                    } else if transition.entering && transition.frame == 48 {
+                    } else if transition.entering && transition.frame == transition.fade_frames {
                         self.sound_driver.music_request =
                             sml2_core::map_sim::screen_music(map_sim.screen_id);
                     }
@@ -1213,10 +1228,11 @@ impl Session {
                                 ctx.ending_scene.load(assets, &mut state, &mut fade);
                             }
                             self.sound_driver.music_request = 0xFF;
-                            self.pending_level = Some(Box::new(MapTransition::from_map(
+                            self.pending_level = Some(Box::new(MapTransition::from_map_dx(
                                 Box::new(ctx),
                                 level_id,
                                 self.easy_mode,
+                                dx_enabled,
                             )));
                             StepOutcome::Continue
                         }

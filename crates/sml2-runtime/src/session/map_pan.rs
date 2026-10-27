@@ -29,6 +29,10 @@ impl MapPanReturn {
         self.frame >= MAP_PAN_RETURN_FRAMES
     }
 
+    pub(crate) fn fade_waits(&self) -> u16 {
+        self.frame.saturating_sub(MAP_PAN_RELOAD_FRAMES)
+    }
+
     pub(crate) fn palettes(&self) -> (u8, u8) {
         let step = (self.frame.saturating_sub(MAP_PAN_RELOAD_FRAMES) / 3).min(4) as usize;
         // BGP shifts E4 into the blank palette two bits at a time. OBP1 comes

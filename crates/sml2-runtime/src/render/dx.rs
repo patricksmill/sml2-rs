@@ -231,12 +231,21 @@ impl Session {
         let mut bg_palettes = bank(0x26, bg_addr, 24)?;
         bg_palettes.resize(64, 0);
         tilemap.resize(0x400, 0);
+        let mut obj_palettes = bank(0x26, obj_addr, 64)?;
+        if let SessionState::Castle(seq) = &self.state {
+            if seq.state == sml2_core::castle_sequence::STATE_REVEAL_B && seq.menu == 3 {
+                bg_palettes = crate::session::dx_effects::castle_entry(&bg_palettes, seq.fade_low);
+                obj_palettes = crate::session::dx_effects::castle_entry(&obj_palettes, seq.fade_low);
+            } else if seq.state == sml2_core::castle_sequence::STATE_MENU && seq.menu == 1 {
+                crate::session::dx_effects::castle_coin(&mut obj_palettes, self.ff97());
+            }
+        }
         let scene = Screen {
             vram: [vram, vec![0; 0x1800]],
             tilemap,
             attributes,
             bg_palettes,
-            obj_palettes: bank(0x26, obj_addr, 64)?,
+            obj_palettes,
         };
         let mut tables = self.assets.object_tables.clone();
         tables.player_mappings = dx.player(character, 0).mappings.clone();
@@ -362,7 +371,26 @@ impl Session {
             _ => &colors.bg_palettes,
         };
         let player = usize::from(character == Character::Luigi);
-        let palettes = CgbPalettes::from_bytes(bg_palettes, &colors.obj_palettes[player])
+        let mut bg_palettes = bg_palettes.to_vec();
+        let mut obj_palettes = colors.obj_palettes[player].clone();
+        if let Some(transition) = &self.pending_level {
+            bg_palettes = crate::session::dx_effects::map_exit(&bg_palettes, transition.frame, 9);
+            obj_palettes = crate::session::dx_effects::map_exit(&obj_palettes, transition.frame, 9);
+        } else if let Some(transition) = &self.map_screen_transition {
+            if transition.entering && transition.shows_source() {
+                bg_palettes = crate::session::dx_effects::map_exit(&bg_palettes, transition.frame, 9);
+                obj_palettes = crate::session::dx_effects::map_exit(&obj_palettes, transition.frame, 9);
+            } else if !transition.entering {
+                let waits = transition.frame.saturating_sub(80);
+                bg_palettes = crate::session::dx_effects::map_exit(&bg_palettes, waits, 5);
+                obj_palettes = crate::session::dx_effects::map_exit(&obj_palettes, waits, 5);
+            }
+        } else if let Some(transition) = &self.map_pan_return {
+            let waits = transition.fade_waits();
+            bg_palettes = crate::session::dx_effects::map_return(&bg_palettes, waits);
+            obj_palettes = crate::session::dx_effects::map_return(&obj_palettes, waits);
+        }
+        let palettes = CgbPalettes::from_bytes(&bg_palettes, &obj_palettes)
             .map_err(|e| e.to_string())?;
         let space_path =
             map_sim.level_progress[sml2_core::map::progress_offset::SPACE_PATH_0] & 1 != 0;
