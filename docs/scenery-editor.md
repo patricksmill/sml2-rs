@@ -2,7 +2,7 @@
 
 The editor is a separate companion app. The normal game includes approved
 scenery automatically and has no editor menus. Download
-**sml2-scenery-editor-windows-x64** separately from a successful Windows build,
+**sml2-scenery-editor-windows-x64** from a manual run of the Windows build workflow,
 or run from source:
 
 ```sh

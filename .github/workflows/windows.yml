@@ -1,8 +1,8 @@
 name: Windows build
 
+# Manual only: releases come from release.yml. Run this for Windows builds
+# of the developer tools and the optional scenery editor.
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 permissions:

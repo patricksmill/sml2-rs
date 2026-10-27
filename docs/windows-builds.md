@@ -1,9 +1,9 @@
 # Windows builds
 
 Releases provide one executable, `six-golden-coins-windows-x64.exe`; no ROMs
-or extracted graphics are included. The Windows workflow under Actions also
-uploads the game with the developer tools, and the optional scenery editor as
-its own artifact.
+or extracted graphics are included. Running the manual **Windows build** workflow
+under Actions uploads the game with the developer tools, and the optional
+scenery editor as its own artifact.
 
 ## Run
 
