@@ -80,6 +80,8 @@ pub fn run(options: Options) -> Result<(), String> {
             ..Default::default()
         },
         Box::new(move |cc| {
+            #[cfg(windows)]
+            set_taskbar_icon(cc);
             let mut app = DesktopApp::new(&cc.egui_ctx, options, settings, error);
             app.validation_error = validation;
             Ok(Box::new(app))
@@ -88,6 +90,49 @@ pub fn run(options: Options) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let error = result.lock().map_err(|e| e.to_string())?.take();
     error.map_or(Ok(()), Err)
+}
+
+/// winit gives Windows eframe's icon as the small (title bar) icon only; the
+/// taskbar and Alt+Tab read the big one, so hand them the full `.ico` the build
+/// script embeds as resource 1.
+#[cfg(windows)]
+fn set_taskbar_icon(cc: &eframe::CreationContext<'_>) {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use windows_sys::Win32::{
+        System::LibraryLoader::GetModuleHandleW,
+        UI::WindowsAndMessaging::{
+            GetSystemMetrics, LoadImageW, SendMessageW, ICON_BIG, IMAGE_ICON, SM_CXICON,
+            WM_SETICON,
+        },
+    };
+
+    let Ok(handle) = cc.window_handle() else {
+        return;
+    };
+    let RawWindowHandle::Win32(handle) = handle.as_raw() else {
+        return;
+    };
+    // SAFETY: the handle is eframe's live window on this thread, and resource 1
+    // is a name-or-ordinal pointer (MAKEINTRESOURCEW) into this module.
+    unsafe {
+        let size = GetSystemMetrics(SM_CXICON);
+        let icon = LoadImageW(
+            GetModuleHandleW(std::ptr::null()),
+            std::ptr::without_provenance(1),
+            IMAGE_ICON,
+            size,
+            size,
+            0,
+        );
+        if !icon.is_null() {
+            SendMessageW(
+                handle.hwnd.get() as _,
+                WM_SETICON,
+                ICON_BIG as usize,
+                icon as isize,
+            );
+        }
+    }
 }
 
 #[cfg(test)]

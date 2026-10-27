@@ -3294,6 +3294,7 @@ dependencies = [
  "eframe",
  "gilrs",
  "png 0.17.16",
+ "raw-window-handle",
  "rfd",
  "serde",
  "serde_json",
@@ -3303,6 +3304,7 @@ dependencies = [
  "sml2-runtime",
  "tempfile",
  "wgpu",
+ "windows-sys 0.59.0",
  "winresource",
 ]
 
