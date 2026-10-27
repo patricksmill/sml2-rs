@@ -17,6 +17,5 @@ Use a Windows x64, Linux x86_64 or macOS Apple Silicon build and your own
 
 Rebind controls and configure display/DX under Settings. See the
 [desktop guide](desktop.md) for details.
-Run the game with `--help` for CLI options. Live audio uses WASAPI on Windows
-and PulseAudio/PipeWire on Linux. macOS plays sound only if PulseAudio's `pacat`
-is installed; otherwise the game runs silently.
+Run the game with `--help` for CLI options. Live audio uses WASAPI on Windows,
+CoreAudio on macOS and PulseAudio/PipeWire on Linux.

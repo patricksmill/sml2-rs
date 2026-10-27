@@ -1,4 +1,5 @@
-//! Windows live playback: a WASAPI shared-mode stream through `cpal`.
+//! Windows and macOS live playback: the default output device through `cpal`
+//! (WASAPI shared mode on Windows, CoreAudio on macOS).
 //!
 //! The device's default mix format decides the sample rate, so the APU is
 //! generated at that rate (see [`AudioOutput::sample_rate`]) instead of being
@@ -19,7 +20,7 @@ pub struct AudioOutput {
 }
 
 impl AudioOutput {
-    /// Opens the default output device in shared mode.
+    /// Opens the default output device (shared mode on Windows).
     /// Returns None when there is no device or its format is unsupported.
     pub fn open() -> Option<Self> {
         let host = cpal::default_host();
@@ -68,12 +69,15 @@ impl AudioOutput {
                     .ok()?
             }
             other => {
-                eprintln!("note: unsupported WASAPI sample format {other:?}");
+                eprintln!("note: unsupported {} sample format {other:?}", host.id().name());
                 return None;
             }
         };
         stream.play().ok()?;
-        println!("Live audio enabled via WASAPI ({rate} Hz, {channels} ch)");
+        println!(
+            "Live audio enabled via {} ({rate} Hz, {channels} ch)",
+            host.id().name()
+        );
         Some(Self {
             _stream: stream,
             pending,

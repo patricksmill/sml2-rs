@@ -150,8 +150,8 @@ impl Game {
         });
         // Each catch-up tick advances its own PCM interval before the next
         // driver update, so short SFX cannot disappear into a zero-sample tick.
-        // The sink's rate decides the tick's length: WASAPI shared mode often
-        // runs at 48 kHz while the pipe backends ask for 44.1 kHz.
+        // The sink's rate decides the tick's length: WASAPI and CoreAudio often
+        // run at 48 kHz while the pipe backends ask for 44.1 kHz.
         let rate = self.output.as_ref().map_or(44_100, |o| o.sample_rate());
         let samples = rate as usize / 60;
         self.buffer.clear();

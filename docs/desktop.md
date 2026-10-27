@@ -48,8 +48,9 @@ cargo run --release -p sml2-desktop
 Use your distribution's installed `lvp_icd` filename. This renders on the CPU
 for that launch. Mesa probing errors do not necessarily mean rendering failed.
 Windows packaging/build instructions: [Windows builds](windows-builds.md).
-Live audio uses WASAPI on Windows and PulseAudio (`pacat`) or PipeWire
-(`pw-play`) on Linux and macOS. Without either, the game runs silently.
+Live audio uses WASAPI on Windows, CoreAudio on macOS, and PulseAudio (`pacat`)
+or PipeWire (`pw-play`) on Linux. Without an output device, the game runs
+silently.
 
 ## SML2DX Mode
 
