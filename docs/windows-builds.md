@@ -1,17 +1,17 @@
 # Windows builds
 
-Releases/workflow artifacts provide the game and a separate tools bundle; no
-ROMs or extracted graphics are included. Download from GitHub Releases when
-published, or a successful Windows workflow run under Actions. Releases put the
-optional scenery editor in the tools bundle; the Windows workflow uploads it as
+Releases provide one executable, `six-golden-coins-windows-x64.exe`; no ROMs
+or extracted graphics are included. The Windows workflow under Actions also
+uploads the game with the developer tools, and the optional scenery editor as
 its own artifact.
 
 ## Run
 
-Extract the archive and open `sml2.exe`. Use Settings -> Game to import your own
-original UE v1.0 ROM and optionally DX. The game/editor share installed assets.
-Audio plays through WASAPI; `--no-audio` disables it. See the tools package's
-`Desktop.md` or the [desktop guide](desktop.md) for controls/settings.
+Run the release `.exe` (or `sml2.exe` from a workflow artifact). Use Settings ->
+Game to import your own original UE v1.0 ROM and optionally DX. The game/editor
+share installed assets.
+Audio plays through WASAPI; `--no-audio` disables it. See the
+[desktop guide](desktop.md) for controls/settings.
 
 Tools can use an existing extracted tree:
 

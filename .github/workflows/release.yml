@@ -1,5 +1,8 @@
 name: Release Build
 
+# A `v*` tag builds and publishes a release with one game executable per
+# platform. A manual run builds and uploads the same files as workflow
+# artifacts without publishing anything.
 on:
   push:
     tags:
@@ -42,190 +45,93 @@ jobs:
       - name: Desktop policy tests
         run: cargo test --locked -p sml2-desktop --no-default-features --lib
 
-  build-windows:
-    name: Build Windows x64
+  build:
+    name: Build ${{ matrix.asset }}
     needs: gate
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    defaults:
-      run:
-        shell: pwsh
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Install stable Rust
-        run: |
-          rustup toolchain install stable --profile minimal --target x86_64-pc-windows-msvc
-          rustup default stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Build release binaries
-        run: cargo build --locked --release -p sml2-desktop -p sml2-runtime -p sml2-extract -p sml2-scenery-editor
-
-      - name: Stage Game Package (Bare Binary)
-        run: |
-          New-Item -ItemType Directory -Force -Path target/pkg-game | Out-Null
-          Copy-Item target/release/sml2.exe target/pkg-game/sml2.exe
-          Compress-Archive -Path target/pkg-game/* -DestinationPath target/sml2-windows-x64.zip
-
-      - name: Stage Tools Package
-        run: |
-          $tools = "target/pkg-tools"
-          New-Item -ItemType Directory -Force -Path $tools | Out-Null
-          Copy-Item target/release/sml2-runtime.exe "$tools/sml2-runtime.exe"
-          Copy-Item target/release/sml2-extract.exe "$tools/sml2-extract.exe"
-          Copy-Item target/release/sml2-scenery-editor.exe "$tools/sml2-scenery-editor.exe"
-          Copy-Item docs/windows-builds.md "$tools/README-Windows.md"
-          Copy-Item docs/desktop.md "$tools/Desktop.md"
-          Copy-Item docs/Getting-Started.md "$tools/Getting-Started.md"
-          Compress-Archive -Path target/pkg-tools/* -DestinationPath target/sml2-tools-windows-x64.zip
-
-      - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: windows-binaries
-          path: |
-            target/sml2-windows-x64.zip
-            target/sml2-tools-windows-x64.zip
-          retention-days: 1
-
-  build-linux:
-    name: Build Linux x86_64
-    needs: gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-latest
+            binary: sml2.exe
+            asset: six-golden-coins-windows-x64.exe
+          # 22.04's older glibc keeps the binary running on older distros.
+          - os: ubuntu-22.04
+            binary: sml2
+            asset: six-golden-coins-linux-x86_64
+          - os: macos-14
+            binary: sml2
+            asset: six-golden-coins-macos-arm64
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libudev-dev libasound2-dev pkg-config zip
+          sudo apt-get install -y libudev-dev pkg-config
 
       - name: Install stable Rust
         run: rustup default stable
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build release binaries
-        run: cargo build --locked --release -p sml2-desktop -p sml2-runtime -p sml2-extract -p sml2-scenery-editor
+      - name: Build the game
+        run: cargo build --locked --release -p sml2-desktop --bin sml2
 
-      - name: Stage Game Package (Bare Binary)
+      - name: Check startup
+        shell: bash
+        run: target/release/${{ matrix.binary }} --help
+
+      - name: Stage executable
+        shell: bash
         run: |
-          mkdir -p target/pkg-game
-          cp target/release/sml2 target/pkg-game/sml2-linux-x86_64
-          chmod +x target/pkg-game/sml2-linux-x86_64
-          (cd target/pkg-game && zip ../sml2-linux-x86_64.zip sml2-linux-x86_64)
+          mkdir -p dist
+          cp "target/release/${{ matrix.binary }}" "dist/${{ matrix.asset }}"
+          chmod +x "dist/${{ matrix.asset }}"
 
-      - name: Stage Tools Package
-        run: |
-          mkdir -p target/pkg-tools
-          cp target/release/sml2-runtime target/pkg-tools/
-          cp target/release/sml2-extract target/pkg-tools/
-          cp target/release/sml2-scenery-editor target/pkg-tools/
-          cp docs/desktop.md target/pkg-tools/Desktop.md
-          cp docs/Getting-Started.md target/pkg-tools/Getting-Started.md
-          (cd target/pkg-tools && zip -r ../sml2-tools-linux-x86_64.zip *)
-
-      - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7
         with:
-          name: linux-binaries
-          path: |
-            target/sml2-linux-x86_64.zip
-            target/sml2-tools-linux-x86_64.zip
-          retention-days: 1
-
-  build-macos:
-    name: Build macOS Apple Silicon (arm64)
-    needs: gate
-    runs-on: macos-14
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Install stable Rust
-        run: rustup default stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Build release binaries
-        run: cargo build --locked --release -p sml2-desktop -p sml2-runtime -p sml2-extract -p sml2-scenery-editor
-
-      - name: Stage Game Package (Bare Binary)
-        run: |
-          mkdir -p target/pkg-game
-          cp target/release/sml2 target/pkg-game/sml2-macos-arm64
-          chmod +x target/pkg-game/sml2-macos-arm64
-          (cd target/pkg-game && zip ../sml2-macos-arm64.zip sml2-macos-arm64)
-
-      - name: Stage Tools Package
-        run: |
-          mkdir -p target/pkg-tools
-          cp target/release/sml2-runtime target/pkg-tools/
-          cp target/release/sml2-extract target/pkg-tools/
-          cp target/release/sml2-scenery-editor target/pkg-tools/
-          cp docs/desktop.md target/pkg-tools/Desktop.md
-          cp docs/Getting-Started.md target/pkg-tools/Getting-Started.md
-          (cd target/pkg-tools && zip -r ../sml2-tools-macos-arm64.zip *)
-
-      - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: macos-binaries
-          path: |
-            target/sml2-macos-arm64.zip
-            target/sml2-tools-macos-arm64.zip
-          retention-days: 1
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+          retention-days: 7
 
   publish:
     name: Publish GitHub Release
-    needs: [build-windows, build-linux, build-macos]
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - name: Download all staged packages
+      - name: Download executables
         uses: actions/download-artifact@v7
         with:
-          path: release-artifacts
+          path: dist
           merge-multiple: true
 
-      - name: Extract Release Notes from CHANGELOG.md
-        id: release_notes
+      - name: Extract release notes from CHANGELOG.md
         run: |
-          export TAG_NAME="${GITHUB_REF_NAME:-v0.1.0}"
-          python3 -c "
+          python3 - <<'EOF'
           import os, re
-          tag_env = os.environ.get('TAG_NAME', 'v0.1.0')
-          with open('CHANGELOG.md') as f:
-              content = f.read()
-          tag = tag_env.lstrip('v')
-          pattern = r'## \[[vV]?' + re.escape(tag) + r'\][^\n]*\n(.*?)(?=\n## \[|\Z)'
+          tag = os.environ['GITHUB_REF_NAME']
+          content = open('CHANGELOG.md').read()
+          pattern = r'## \[[vV]?' + re.escape(tag.lstrip('vV')) + r'\][^\n]*\n(.*?)(?=\n## \[|\Z)'
           match = re.search(pattern, content, re.DOTALL)
-          if match:
-              notes = match.group(1).strip()
-          else:
-              notes = 'Release ' + tag_env
-          with open('release_notes.md', 'w') as out:
-              out.write(notes + '\n')
-          "
-          echo "Notes extracted:"
+          notes = match.group(1).strip() if match else 'Release ' + tag
+          open('release_notes.md', 'w').write(notes + '\n')
+          EOF
           cat release_notes.md
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG_NAME="${GITHUB_REF_NAME:-v0.1.0}"
-          gh release create "$TAG_NAME" \
-            release-artifacts/*.zip \
-            --title "Six Golden Coins $TAG_NAME" \
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "Six Golden Coins $GITHUB_REF_NAME" \
             --notes-file release_notes.md
