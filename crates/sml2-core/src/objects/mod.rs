@@ -557,6 +557,8 @@ mod mario_zone;
 mod moneybag_reward;
 #[path = "enemies/paced_walker.rs"]
 mod paced_walker;
+#[path = "compat/enemies/paced_walker.rs"]
+mod paced_walker_adapter;
 #[path = "bosses/patrol/behavior.rs"]
 mod patrol_boss;
 #[path = "bosses/patrol/adapter.rs"]

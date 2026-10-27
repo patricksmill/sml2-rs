@@ -45,7 +45,11 @@ Unknown state values survive conversion and retain the existing initialization
 fallback on update. Shared sprite bobbing operates on its sprite and
 animation fields without requiring a generic actor.
 
-This pilot preserves existing behavior: initialization changes only the
+Paced Walker follows the same pattern with its own state, movement budget,
+pause timer, and presentation fields. Shared sprite blinking takes only the
+sprite and cadence inputs, leaving unrelated actor fields at the boundary.
+
+These migrations preserve existing behavior: initialization changes only the
 horizontal flip bit. The source `$5B3C6` overwrites all flip bits; reconciling
 that inherited difference requires a separate behavior correction.
 

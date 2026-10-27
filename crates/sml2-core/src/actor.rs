@@ -380,9 +380,7 @@ impl Actor {
 
     /// ROM `$B321` uses mask `$1F`; only the sprite changes on cadence ticks.
     pub fn animate_sprite_blink(&mut self, frame: FrameTick, period: u64, sprite_mask: u8) {
-        if frame.every(period) {
-            self.sprite ^= sprite_mask;
-        }
+        animate_sprite_blink(&mut self.sprite, frame, period, sprite_mask);
     }
 
     /// ROM `$B339`: advance before applying the four-step sprite bob.
@@ -422,6 +420,13 @@ impl Actor {
     pub fn move_screen_horizontally(&mut self, distance: u8) {
         self.screen
             .move_x(self.travel_direction.displacement(distance));
+    }
+}
+
+/// Toggle sprite bits without requiring a behavior's whole actor state.
+pub(crate) fn animate_sprite_blink(sprite: &mut u8, frame: FrameTick, period: u64, mask: u8) {
+    if frame.every(period) {
+        *sprite ^= mask;
     }
 }
 
