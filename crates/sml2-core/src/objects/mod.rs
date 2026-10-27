@@ -915,19 +915,25 @@ impl ObjectSim {
         v >= w.0 && v <= w.1
     }
 
-    /// In an enlarged view slots live past the native alive window, where
-    /// their 8-bit screen bytes wrap onto contacts 256 px away; those slots
-    /// take part in no contact. Native views never exclude a slot, and
-    /// neither does boss mode (`sSceneState & $F0 != 0`), whose screen bytes
-    /// are not derived from world positions.
+    /// [`Self::contact_excluded_near`] Mario.
     pub fn contact_excluded(&self, i: usize) -> bool {
+        self.contact_excluded_near(i, (self.mario.x, self.mario.y))
+    }
+
+    /// In an enlarged view slots live far enough apart that their 8-bit
+    /// screen bytes wrap onto contacts 256 px away. A slot farther than
+    /// [`CONTACT_REACH`] from the contact's world point `near` (Mario, a
+    /// fireball, a bonked block) therefore takes part in no contact with it;
+    /// within that reach the byte compares are exact. Native views never
+    /// exclude a slot, and neither does boss mode (`sSceneState & $F0 !=
+    /// 0`), whose screen bytes are not derived from world positions.
+    pub fn contact_excluded_near(&self, i: usize, near: (u16, u16)) -> bool {
         if self.view_margin == (0, 0) || self.mario.scene_state & 0xF0 != 0 {
             return false;
         }
-        let c = self.camera_position;
         let s = &self.slots[i];
-        !(Self::window_hit(s.x(), Self::window(c.x, 0xA0))
-            && Self::window_hit(s.y(), Self::window(c.y, 0xA0)))
+        let within = |a: u16, b: u16| (i32::from(a) - i32::from(b)).abs() < CONTACT_REACH;
+        !(within(s.x(), near.0) && within(s.y(), near.1))
     }
 
     /// Bank 2 `$8DFD`/`$8E6C`: stage boss slots and metadata from `lookup_boss_spawn_def`.

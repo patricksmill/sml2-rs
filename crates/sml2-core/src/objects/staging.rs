@@ -1,6 +1,10 @@
 //! Object slot and `$FFD0` staging byte layout.
 
 pub const SLOT_COUNT: usize = 16;
+/// How far, in world pixels per axis, a slot can sit from a contact's point
+/// and still take part in an enlarged view: every hitbox reaches well
+/// within it, and the 8-bit compares cannot alias until 128.
+pub const CONTACT_REACH: i32 = 0x60;
 pub const RECORD_LEN: usize = 6;
 pub const STREAM_BASE: u16 = 0xAB06;
 

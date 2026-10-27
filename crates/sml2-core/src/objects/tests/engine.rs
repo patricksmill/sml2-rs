@@ -899,7 +899,7 @@ fn below_bonk_marks_idle_objects_in_the_tile_window() {
     put(&mut obj, 3, 0x81, 0x10, 0x97, 0xF8); // touched: owns its arm
     put(&mut obj, 4, 0, 0, 0x97, 0xF8); // no type
     put(&mut obj, 5, 0x4E, 0, 0xA7, 0xF8); // 16 px off in Y
-    let special = obj.below_bonk(0xDF, 0x68, 0x31, 0x70);
+    let special = obj.below_bonk((0xDF, 0x68), 0x31, 0x70);
     assert!(special, "the $80 pose raises sObjectBumpSpecial");
     assert_eq!(obj.slots[0].b[B_FLAGS], 0x20);
     assert_eq!(obj.slots[1].b[B_FLAGS], 0x20);
@@ -911,7 +911,7 @@ fn below_bonk_marks_idle_objects_in_the_tile_window() {
     obj.slots[1].b[B_TYPE] = 0x86;
     obj.slots[1].b[B_FLAGS] = 0;
     obj.slots[0].b[B_FLAGS] = 0;
-    assert!(!obj.below_bonk(0xDF, 0x68, 0x31, 0x70));
+    assert!(!obj.below_bonk((0xDF, 0x68), 0x31, 0x70));
     assert_eq!(obj.slots[0].b[B_FLAGS], 0x20);
     assert_eq!(obj.slots[1].b[B_FLAGS], 0x20);
 }
@@ -955,7 +955,7 @@ fn stepped_below_hit_on_the_bell_re_derives_and_faces_mario() {
         y: 448,
         ..Default::default()
     };
-    let special = obj.below_bonk(0xDF, 0x68, 0x31, 0x70);
+    let special = obj.below_bonk((0xDF, 0x68), 0x31, 0x70);
     assert!(!special);
     assert_eq!(obj.slots[0].b[B_FLAGS], 0x20, "hit from below");
     obj.step(448, 377, &layout, &t, &mario, false);
@@ -1342,28 +1342,28 @@ fn fire_slot(obj: &mut ObjectSim, i: usize, ty: u8, flags: u8) {
 fn fire_hit_defeats_bit2_types_and_dies_on_the_rest() {
     let mut obj = ObjectSim::new(Vec::new(), 0);
     fire_slot(&mut obj, 0, 0x24, 0); // bit 2 set: fireball-defeatable
-    assert_eq!(obj.fire_hit(0x4A, 0x4A), FireHit::Defeat);
+    assert_eq!(obj.fire_hit(0x4A, 0x4A, (0, 0)), FireHit::Defeat);
     assert_eq!(obj.slots[0].b[B_FLAGS], 0x02);
     obj.slots[0].b[B_FLAGS] = 0;
     assert_eq!(
-        obj.fire_hit(0x4A, 0x66),
+        obj.fire_hit(0x4A, 0x66, (0, 0)),
         FireHit::None,
         "one past the right edge"
     );
     assert_eq!(
-        obj.fire_hit(0x66, 0x4A),
+        obj.fire_hit(0x66, 0x4A, (0, 0)),
         FireHit::None,
         "one past the bottom edge"
     );
     assert_eq!(
-        obj.fire_hit(0x49, 0x4A),
+        obj.fire_hit(0x49, 0x4A, (0, 0)),
         FireHit::None,
         "one short of the top"
     );
     assert_eq!(obj.slots[0].b[B_FLAGS], 0, "a miss writes nothing");
 
     fire_slot(&mut obj, 0, 0x20, 0); // bit 2 clear
-    assert_eq!(obj.fire_hit(0x4A, 0x4A), FireHit::Die);
+    assert_eq!(obj.fire_hit(0x4A, 0x4A, (0, 0)), FireHit::Die);
     assert_eq!(
         obj.slots[0].b[B_FLAGS], 0,
         "no defeat for a bit-2-clear type"
@@ -1380,7 +1380,7 @@ fn fire_hit_skips_flagged_slots_items_and_empty_slots() {
     fire_slot(&mut obj, 1, 0x82, 0x00); // the item pose
     fire_slot(&mut obj, 2, 0x00, 0x00); // empty
     fire_slot(&mut obj, 3, 0x80, 0x00); // the base item type
-    assert_eq!(obj.fire_hit(0x4A, 0x4A), FireHit::None);
+    assert_eq!(obj.fire_hit(0x4A, 0x4A, (0, 0)), FireHit::None);
     for (i, want) in [(0usize, 0x08u8), (1, 0), (2, 0), (3, 0)] {
         assert_eq!(obj.slots[i].b[B_FLAGS], want, "slot {i}");
     }
@@ -1394,7 +1394,7 @@ fn fire_hit_keeps_the_last_verdict_and_still_defeats() {
     let mut obj = ObjectSim::new(Vec::new(), 0);
     fire_slot(&mut obj, 0, 0x24, 0); // defeat
     fire_slot(&mut obj, 1, 0x20, 0); // die
-    assert_eq!(obj.fire_hit(0x4A, 0x4A), FireHit::Die, "the last hit wins");
+    assert_eq!(obj.fire_hit(0x4A, 0x4A, (0, 0)), FireHit::Die, "the last hit wins");
     assert_eq!(obj.slots[0].b[B_FLAGS], 0x02, "the earlier defeat stands");
 }
 
@@ -4346,19 +4346,28 @@ fn wide_fire_sim(margin: (u16, u16), dx: i32) -> ObjectSim {
 }
 
 #[test]
-fn an_enlarged_view_fire_hit_skips_slots_past_the_native_window() {
+fn an_enlarged_view_fire_hit_skips_slots_out_of_the_balls_reach() {
+    let ball = (0x0210, 0x0100);
     let mut obj = wide_fire_sim((112, 36), 0x100);
-    assert_eq!(obj.fire_hit(0x4A, 0x4A), FireHit::None);
+    assert_eq!(obj.fire_hit(0x4A, 0x4A, ball), FireHit::None);
     assert_eq!(obj.slots[0].b[B_FLAGS], 0, "no defeat through the wrap");
     let mut obj = wide_fire_sim((112, 36), 0x10);
-    assert_eq!(obj.fire_hit(0x4A, 0x4A), FireHit::Defeat);
+    assert_eq!(obj.fire_hit(0x4A, 0x4A, ball), FireHit::Defeat);
     assert_eq!(obj.slots[0].b[B_FLAGS], 0x02);
     let mut obj = wide_fire_sim((0, 0), 0x100);
     assert_eq!(
-        obj.fire_hit(0x4A, 0x4A),
+        obj.fire_hit(0x4A, 0x4A, ball),
         FireHit::Defeat,
         "native: ROM bytes"
     );
+}
+
+/// A ball out past the native window still hits the slot beside it: the
+/// reach follows the ball, not the camera.
+#[test]
+fn an_enlarged_view_fire_hit_reaches_slots_past_the_native_window() {
+    let mut obj = wide_fire_sim((112, 36), 0x100);
+    assert_eq!(obj.fire_hit(0x4A, 0x4A, (0x0300, 0x0100)), FireHit::Defeat);
 }
 
 /// A `$80` pose on the bonk tile of `below_bonk_marks_idle_objects_in_the_tile_window`
@@ -4380,15 +4389,16 @@ fn wide_bonk_sim(margin: (u16, u16), dx: i32) -> ObjectSim {
 }
 
 #[test]
-fn an_enlarged_view_below_bonk_skips_slots_past_the_native_window() {
+fn an_enlarged_view_below_bonk_skips_slots_out_of_the_blocks_reach() {
+    let block = (0x00DF, 0x0268);
     let mut obj = wide_bonk_sim((112, 36), -0x100);
-    assert!(!obj.below_bonk(0xDF, 0x68, 0x31, 0x70));
+    assert!(!obj.below_bonk(block, 0x31, 0x70));
     assert_eq!(obj.slots[0].b[B_FLAGS], 0, "no bonk through the wrap");
     let mut obj = wide_bonk_sim((112, 36), 0x10);
-    assert!(obj.below_bonk(0xDF, 0x68, 0x31, 0x70));
+    assert!(obj.below_bonk(block, 0x31, 0x70));
     assert_eq!(obj.slots[0].b[B_FLAGS], 0x20);
     let mut obj = wide_bonk_sim((0, 0), -0x100);
-    assert!(obj.below_bonk(0xDF, 0x68, 0x31, 0x70), "native: ROM bytes");
+    assert!(obj.below_bonk(block, 0x31, 0x70), "native: ROM bytes");
     assert_eq!(obj.slots[0].b[B_FLAGS], 0x20);
 }
 
@@ -4448,7 +4458,7 @@ fn an_enlarged_view_never_excludes_boss_contacts() {
     obj.mario.scene_state = 0;
     assert!(
         obj.contact_excluded(0),
-        "level mode: past the native window"
+        "level mode: out of Mario's reach"
     );
 }
 

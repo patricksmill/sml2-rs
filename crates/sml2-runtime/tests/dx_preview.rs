@@ -212,11 +212,14 @@ fn dx_bounded_view_draws_inside_scenery_and_hides_outside_scenery() {
     )
     .unwrap();
     let view = (384, 216);
+    let room = ctx.cam.room();
     let frame = game.render_dx_frame(&bundle, Mario, view).unwrap();
-    let (mx, my) = sml2_runtime::render::view::level_margin(view);
-    assert_eq!(frame[(my as usize + 40) * view.0 + mx as usize + 40], RED);
-    assert_eq!(frame[76 * view.0], [0, 255, 0]);
-    assert_eq!(frame[76 * view.0 + 16], RED);
+    let origin = sml2_runtime::render::view::level_origin(view, (80, 448), 0, room);
+    let at = |x: i32, y: i32| (y - origin.1) as usize * view.0 + (x - origin.0) as usize;
+    assert_eq!(frame[at(40, 448 - 72 + 40)], RED);
+    // World row 398 crosses the painted cell (column 0) and the next one.
+    assert_eq!(frame[at(0, 398)], [0, 255, 0]);
+    assert_eq!(frame[at(16, 398)], RED);
     // Moving the simulation camera inside the parked range keeps the same view.
     let SessionState::InLevel(ctx) = &mut game.state else {
         unreachable!()
@@ -251,11 +254,7 @@ fn dx_frames_take_the_view_size_and_keep_native_parity() {
     assert_eq!(wide[0], native[0], "the title backdrop fills the corner");
     game.begin_level(0, 0).unwrap();
     game.advance(FrameInput::default());
-    for (camera, crop_at) in [
-        ((80, 448), (0, 54)),
-        ((4016, 448), (224, 54)),
-        ((80, 704), (0, 80)),
-    ] {
+    for camera in [(80, 448), (4016, 448), (80, 704)] {
         let SessionState::InLevel(ctx) = &mut game.state else {
             unreachable!()
         };
@@ -264,6 +263,15 @@ fn dx_frames_take_the_view_size_and_keep_native_parity() {
         ctx.sim.x = camera.0 - 46;
         ctx.sim.y = camera.1 + 20;
         game.advance(FrameInput::default());
+        let SessionState::InLevel(ctx) = &game.state else {
+            unreachable!()
+        };
+        let camera = (ctx.cam.x, ctx.cam.y);
+        let origin = sml2_runtime::render::view::level_origin((384, 216), camera, 0, ctx.cam.room());
+        let crop_at = (
+            (camera.0 as i32 - 80 - origin.0) as usize,
+            (camera.1 as i32 - 72 - origin.1) as usize,
+        );
         game.preview_scenery(camera, sml2_core::scenery::SceneryOverlay::empty());
         let native = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
         assert!(native[..160 * 136].iter().any(|&p| p != RED), "Mario shows");

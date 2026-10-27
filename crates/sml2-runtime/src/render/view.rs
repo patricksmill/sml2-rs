@@ -1,5 +1,7 @@
 //! View-size arithmetic shared by the native and DX renderers.
 
+use sml2_core::camera::Room;
+
 pub const NATIVE: (usize, usize) = (160, 144);
 
 /// How far an enlarged view's native rect sits from its top-left corner.
@@ -31,23 +33,36 @@ pub(crate) fn raw_level_origin(view: (usize, usize), cam: (u16, u16), pan: i32) 
     )
 }
 
-fn max_level_origin(view: (usize, usize)) -> (i32, i32) {
-    use sml2_core::level::{LAYOUT_HEIGHT, LAYOUT_WIDTH};
+/// The span each axis of an enlarged view's origin may take: inside both
+/// `room` and the layout. A view longer than the room centres on it.
+fn origin_range(view: (usize, usize), room: Room) -> ((i32, i32), (i32, i32)) {
+    let axis = |lo: i32, hi: i32, world: i32, len: usize| {
+        let len = len as i32;
+        let (lo, hi) = (lo.max(0), hi.min(world));
+        if hi - lo >= len {
+            (lo, hi - len)
+        } else {
+            let at = ((lo + hi - len) / 2).clamp(0, (world - len).max(0));
+            (at, at)
+        }
+    };
+    let world = Room::WORLD;
     (
-        (LAYOUT_WIDTH as i32 * 16 - view.0 as i32).max(0),
-        (LAYOUT_HEIGHT as i32 * 16 - view.1 as i32).max(0),
+        axis(room.left, room.right, world.right, view.0),
+        axis(room.top, room.bottom, world.bottom, view.1),
     )
 }
 
-/// Enlarged gameplay views stop at the layout edges. Native views retain
-/// the hardware window coordinates, including their wrapping behavior.
-pub fn level_origin(view: (usize, usize), cam: (u16, u16), pan: i32) -> (i32, i32) {
+/// Enlarged gameplay views stop at the camera's room and the layout edges.
+/// Native views retain the hardware window coordinates, including their
+/// wrapping behavior.
+pub fn level_origin(view: (usize, usize), cam: (u16, u16), pan: i32, room: Room) -> (i32, i32) {
     let origin = raw_level_origin(view, cam, pan);
     if !enlarged(view) {
         return origin;
     }
-    let max = max_level_origin(view);
-    (origin.0.clamp(0, max.0), origin.1.clamp(0, max.1))
+    let (x, y) = origin_range(view, room);
+    (origin.0.clamp(x.0, x.1), origin.1.clamp(y.0, y.1))
 }
 
 /// One presentation camera shared by terrain, sprites and interpolation.
@@ -63,23 +78,24 @@ impl LevelViewport {
         view: (usize, usize),
         cam: (u16, u16),
         pan: i32,
+        room: Room,
         scale: usize,
         bg_shift: (i32, i32),
     ) -> Self {
         let raw = raw_level_origin(view, cam, pan);
-        let origin = level_origin(view, cam, pan);
-        let max = max_level_origin(view);
+        let origin = level_origin(view, cam, pan, room);
+        let range = origin_range(view, room);
         let s = scale as i32;
-        let clamp_shift = |shift: i32, raw: i32, at: i32, limit: i32| {
+        let clamp_shift = |shift: i32, raw: i32, at: i32, (lo, hi): (i32, i32)| {
             if enlarged(view) {
-                at * s - (raw * s - shift).clamp(0, limit * s)
+                at * s - (raw * s - shift).clamp(lo * s, hi * s)
             } else {
                 shift
             }
         };
         let clamped = (
-            clamp_shift(bg_shift.0, raw.0, origin.0, max.0),
-            clamp_shift(bg_shift.1, raw.1, origin.1, max.1),
+            clamp_shift(bg_shift.0, raw.0, origin.0, range.0),
+            clamp_shift(bg_shift.1, raw.1, origin.1, range.1),
         );
         Self {
             origin,
@@ -200,9 +216,34 @@ mod tests {
             ((1024, 448), (832, 322)),
             ((4016, 704), (3712, 552)),
         ] {
-            assert_eq!(level_origin(view, cam, 0), expected);
+            assert_eq!(level_origin(view, cam, 0, Room::WORLD), expected);
         }
-        assert_eq!(level_origin(NATIVE, (80, 704), 0), (0, 632));
+        assert_eq!(level_origin(NATIVE, (80, 704), 0, Room::WORLD), (0, 632));
+    }
+
+    #[test]
+    fn a_room_holds_the_view_inside_its_locks() {
+        let view = (384, 216);
+        let room = Room {
+            left: 0,
+            top: 0x100,
+            right: 0x800,
+            bottom: 0x208,
+        };
+        // At the $B0 lock the native view ends on the room's edge; the wide
+        // one stops there too instead of showing past it.
+        assert_eq!(level_origin(view, (0x7B0, 0x1C0), 0, room), (0x800 - 384, 0x208 - 216));
+        assert_eq!(level_origin(NATIVE, (0x7B0, 0x1C0), 0, room), (0x7B0 - 80, 0x1C0 - 72));
+        // Mid-room the view follows the camera.
+        let raw = raw_level_origin(view, (0x400, 0x180), 0);
+        assert_eq!(level_origin(view, (0x400, 0x180), 0, room), raw);
+        // A room narrower than the view centres it.
+        let cell = Room {
+            left: 0x800,
+            right: 0x900,
+            ..room
+        };
+        assert_eq!(level_origin(view, (0x850, 0x1C0), 0, cell).0, 0x880 - 192);
     }
 
     #[test]
@@ -216,7 +257,7 @@ mod tests {
             ((192, 126), (3, 2)),
             ((3904, 678), (-3, -2)),
         ] {
-            let v = LevelViewport::new(view, cam, 0, 2, motion);
+            let v = LevelViewport::new(view, cam, 0, Room::WORLD, 2, motion);
             assert_eq!(v.bg_shift, (0, 0));
             let raw = raw_level_origin(view, cam, 0);
             // A static world point has the same final position through both
@@ -229,7 +270,7 @@ mod tests {
                 (-v.origin.0 * 2, -v.origin.1 * 2),
             );
         }
-        let interior = LevelViewport::new(view, (1024, 448), 3, 2, (3, -2));
+        let interior = LevelViewport::new(view, (1024, 448), 3, Room::WORLD, 2, (3, -2));
         assert_eq!(interior.bg_shift, (3, -2));
         assert_eq!(interior.sprite_shift, (0, 0));
     }

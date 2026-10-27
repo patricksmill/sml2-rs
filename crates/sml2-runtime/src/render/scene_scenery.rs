@@ -58,8 +58,9 @@ impl Session {
             if let Some(ctx) = self.level_ctx() {
                 let camera = (ctx.cam.x, ctx.cam.y);
                 let pan = ctx.spr.as_ref().map_or(0, |s| i32::from(s.scroll_pan));
-                let native = view::level_origin(view::NATIVE, camera, pan);
-                let enlarged = view::level_origin(size, camera, pan);
+                let room = ctx.cam.room();
+                let native = view::level_origin(view::NATIVE, camera, pan, room);
+                let enlarged = view::level_origin(size, camera, pan, room);
                 let (mx, my) = view::margin(size);
                 let lift = self.hud_style.lift();
                 rectangles.push((
@@ -228,6 +229,7 @@ impl Session {
                     &ctx.bg_live,
                     ctx.cam.x,
                     ctx.cam.y,
+                    ctx.cam.room(),
                     160,
                     144,
                     None,

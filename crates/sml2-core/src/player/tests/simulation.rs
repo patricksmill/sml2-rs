@@ -2173,7 +2173,7 @@ fn the_01_bonk_defers_its_coin_to_the_below_hit_pass() {
     assert_eq!(sim.block_slots[0][0], 3, "the $5B06 bump slot");
     assert_eq!(sim.coins_low, 0x00, "the coin is deferred");
     assert!(sim.bump_coin_pending);
-    assert_eq!(sim.below_bonk, Some((0xDF, 0x68))); // 479, 360 low bytes
+    assert_eq!(sim.below_bonk, Some((479, 360))); // low bytes $DF, $68
     sim.resolve_bump_coin(false);
     assert_eq!(sim.coins_low, 0x01);
     assert_eq!(sim.sfx0, 7, "$591F's credit sfx");
@@ -2207,7 +2207,7 @@ fn other_bump_classes_owe_no_coin_and_a_full_table_arms_nothing() {
     let mut sim = PlayerSim::new();
     sim.probe_point = (360, 479);
     sim.block_bonk(0x7E); // type 3, no coin
-    assert_eq!(sim.below_bonk, Some((0xDF, 0x68)));
+    assert_eq!(sim.below_bonk, Some((479, 360)));
     assert!(!sim.bump_coin_pending);
     sim.resolve_bump_coin(false);
     assert_eq!(sim.coins_low, 0);
@@ -2595,17 +2595,24 @@ fn normal_landing_never_bonks_the_tile_below() {
     assert_eq!(sim.vvel, 10, "vvel is not a bounce's");
 }
 
-/// `$0FBF` with a widened window: Mario can stand `screen_margin` pixels
-/// past either native edge, and one step past that is pulled back onto it.
+/// `$0FBF` with a widened window: Mario can stand anywhere from the view's
+/// left edge to 16 px short of its right, and one step past that is pulled
+/// back onto it.
 #[test]
 fn a_wide_autoscroller_clamps_mario_to_the_view_edges() {
     let layout = blank_layout();
     let mut sim = PlayerSim::new();
-    sim.screen_margin = 48;
+    sim.view = Some(ViewRect {
+        x: 400 - 128,
+        y: 0,
+        w: 256,
+        h: 144,
+    });
+    sim.view_clamp = true;
     sim.camx = 400;
     sim.hvel = 0x80;
     sim.y = 80;
-    // sx = x - cam + 96. The wide edges are 16-48 and 160+48.
+    // sx = x - cam + 96. A centred 256-px view's edges are 16-48 and 160+48.
     sim.x = (400i32 + (16 - 48) - 96 - 5) as u16;
     sim.step(&PlayerKeys::default(), false, false, &layout);
     assert_eq!(sim.x as i32 - sim.camx as i32 + 96, 16 - 48);
@@ -2614,10 +2621,48 @@ fn a_wide_autoscroller_clamps_mario_to_the_view_edges() {
     sim.step(&PlayerKeys::default(), false, false, &layout);
     assert_eq!(sim.x as i32 - sim.camx as i32 + 96, 160 + 48);
 
-    sim.screen_margin = 0;
+    // A view held 40 px left of centre by a room edge moves both bounds.
+    sim.view = sim.view.map(|v| ViewRect { x: v.x - 40, ..v });
+    sim.x = (400i32 + (160 + 48) - 96) as u16;
+    sim.step(&PlayerKeys::default(), false, false, &layout);
+    assert_eq!(sim.x as i32 - sim.camx as i32 + 96, 160 + 8);
+
+    sim.view_clamp = false;
     sim.x = 400 + 160 - 96 + 4;
     sim.step(&PlayerKeys::default(), false, false, &layout);
     assert_eq!(sim.x.wrapping_sub(sim.camx).wrapping_add(96) & 0xFF, 0xA0);
+}
+
+/// `$3261` culls a ball at the enlarged view's edges, not 32 px past the
+/// native screen's.
+#[test]
+fn a_wide_view_keeps_fireballs_until_its_own_edges() {
+    let mut sim = PlayerSim::new();
+    sim.camx = 400;
+    sim.camy = 200;
+    let view = ViewRect {
+        x: 400 - 192,
+        y: 200 - 108,
+        w: 384,
+        h: 216,
+    };
+    let ball = |sim: &mut PlayerSim, x: u16| {
+        sim.fireballs[0] = [0; 16];
+        sim.fireballs[0][F_ACTIVE] = 1;
+        sim.fireballs[0][F_XLO] = x as u8;
+        sim.fireballs[0][F_XHI] = (x >> 8) as u8;
+        sim.fireballs[0][F_YLO] = 200;
+        sim.fire_pass();
+        sim.fireballs[0][F_ACTIVE] != 0
+    };
+    // Native: 32 px past the right edge (`$C0`).
+    assert!(!ball(&mut sim, 400 + 80 + 32));
+    sim.view = Some(view);
+    assert!(ball(&mut sim, 400 + 80 + 32));
+    assert!(ball(&mut sim, 400 + 192 + 31));
+    assert!(!ball(&mut sim, 400 + 192 + 32));
+    assert!(ball(&mut sim, 400 - 192 - 48));
+    assert!(!ball(&mut sim, 400 - 192 - 49));
 }
 
 /// The whole `$129F`→`$1327` path through `step`: a spinning big Mario
@@ -3222,7 +3267,7 @@ fn fire_move_breaks_the_06_cell() {
     );
     assert_eq!(
         sim.fire_below_bonk,
-        Some((0x40, 103)),
+        Some((0x140, 103)),
         "the $2F72 pass is armed"
     );
     assert_eq!(sim.fireballs[0][F_ACTIVE], 0, "the ball dies on the break");

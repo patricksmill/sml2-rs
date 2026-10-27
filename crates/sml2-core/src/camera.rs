@@ -30,7 +30,40 @@
 //! - All arithmetic on the low bytes like the engine; the hi byte is masked
 //!   to `$0F` (12-bit world).
 
+use crate::level::{LAYOUT_HEIGHT, LAYOUT_WIDTH};
 use crate::player_sim::{PlayerKeys, PlayerSim};
+
+/// The world-pixel span the scroll locks keep the native view inside: a
+/// locked edge is where the 160x144 view stops (`$50`/`$B0` columns put it
+/// on a cell edge, the `$48` row on the top of one and the `$C0` row 8 px
+/// into the next). An enlarged view clamps to it so it never shows what
+/// lies past a lock. Presentation only; the engine reads the edge bits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Room {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+}
+
+impl Room {
+    pub const WORLD: Room = Room {
+        left: 0,
+        top: 0,
+        right: (LAYOUT_WIDTH * 16) as i32,
+        bottom: (LAYOUT_HEIGHT * 16) as i32,
+    };
+
+    fn lerp(self, to: Room, num: i32, den: i32) -> Room {
+        let at = |a: i32, b: i32| a + (b - a) * num / den;
+        Room {
+            left: at(self.left, to.left),
+            top: at(self.top, to.top),
+            right: at(self.right, to.right),
+            bottom: at(self.bottom, to.bottom),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct CameraSim {
@@ -218,6 +251,59 @@ impl CameraSim {
         let xi = ((self.x >> 8) & 0x0F) as usize;
         let yi = ((self.y >> 8) & 0x0F) as usize;
         self.edge_map.get(yi * 16 + xi).copied().unwrap_or(0)
+    }
+
+    /// The [`Room`] the camera is in. A screen transition (`$0DED`) slides
+    /// it from the room the camera left to the one it is entering, in step
+    /// with the scroll, so an enlarged view pans across instead of jumping.
+    pub fn room(&self) -> Room {
+        let (x, y) = (self.x, self.y);
+        let along = |from: (u16, u16), to: (u16, u16), done: u8, span: i32| {
+            self.room_at(from).lerp(self.room_at(to), i32::from(done).min(span), span)
+        };
+        let t = self.transition;
+        if t & 1 != 0 {
+            let d = (x as u8).wrapping_sub(0xB0);
+            let from = x.wrapping_sub(u16::from(d)) & 0x0FFF;
+            along((from, y), (from.wrapping_add(0xA0) & 0x0FFF, y), d, 0xA0)
+        } else if t & 2 != 0 {
+            let d = 0x50u8.wrapping_sub(x as u8);
+            let from = x.wrapping_add(u16::from(d)) & 0x0FFF;
+            along((from, y), (from.wrapping_sub(0xA0) & 0x0FFF, y), d, 0xA0)
+        } else if t & 4 != 0 {
+            let d = 0x48u8.wrapping_sub(y as u8);
+            let from = y.wrapping_add(u16::from(d)) & 0x0FFF;
+            along((x, from), (x, from.wrapping_sub(0x90) & 0x0FFF), d, 0x90)
+        } else if t & 8 != 0 {
+            let d = (y as u8).wrapping_sub(0xC0);
+            let from = y.wrapping_sub(u16::from(d)) & 0x0FFF;
+            along((x, from), (x, from.wrapping_add(0x88) & 0x0FFF), d, 0x88)
+        } else {
+            self.room_at((x, y))
+        }
+    }
+
+    /// The nearest lock in each direction along the camera's row and column
+    /// of [`Self::edge_map`]: the camera cannot scroll past one, so the room
+    /// runs from the cell holding it. Unlocked directions reach the world.
+    fn room_at(&self, (x, y): (u16, u16)) -> Room {
+        let (xi, yi) = (usize::from((x >> 8) as u8 & 0x0F), usize::from((y >> 8) as u8 & 0x0F));
+        let rows = self.edge_map.len() / 16;
+        let cell = |cx: usize, cy: usize| self.edge_map.get(cy * 16 + cx).copied().unwrap_or(0);
+        let mut room = Room::WORLD;
+        if let Some(k) = (0..=xi).rev().find(|&k| cell(k, yi) & 2 != 0) {
+            room.left = k as i32 * 256;
+        }
+        if let Some(k) = (xi..16).find(|&k| cell(k, yi) & 1 != 0) {
+            room.right = (k as i32 + 1) * 256;
+        }
+        if let Some(k) = (0..=yi).rev().find(|&k| cell(xi, k) & 4 != 0) {
+            room.top = k as i32 * 256;
+        }
+        if let Some(k) = (yi..rows).find(|&k| cell(xi, k) & 8 != 0) {
+            room.bottom = k as i32 * 256 + 0xC0 + 72;
+        }
+        room
     }
 
     /// The `$FF98` this camera position derives — what the next camera update
@@ -1689,6 +1775,68 @@ mod tests {
             c.y, cam_y_at_end,
             "camera Y does not snap because prev_mario_y_lo was maintained"
         );
+    }
+
+    // ---- Room: the span an enlarged view stays inside --------------------
+
+    /// Level 26's middle row: locked left at cell 0, right at 7 and F, up
+    /// and down throughout; cell 8 also locks left, like a transition's
+    /// destination.
+    fn room_cam(x: u16, y: u16) -> CameraSim {
+        let mut c = CameraSim::new(x, y);
+        let mut row = [0x0C; 16];
+        row[0] = 0x0E;
+        row[7] = 0x0D;
+        row[8] = 0x0E;
+        row[15] = 0x0D;
+        c.edge_map[16..32].copy_from_slice(&row);
+        c
+    }
+
+    #[test]
+    fn a_room_runs_between_the_nearest_locks() {
+        let room = |x| room_cam(x, 0x1C0).room();
+        let first = Room {
+            left: 0,
+            top: 0x100,
+            right: 0x800,
+            bottom: 0x100 + 0xC0 + 72,
+        };
+        assert_eq!(room(0x350), first);
+        assert_eq!(room(0x7B0), first, "the lock cell ends the room");
+        assert_eq!(
+            room(0x850),
+            Room {
+                left: 0x800,
+                right: 0x1000,
+                ..first
+            }
+        );
+        // An unlocked table, or a row past it, leaves the world.
+        assert_eq!(CameraSim::new(0x350, 0x1C0).room(), Room::WORLD);
+        assert_eq!(room_cam(0x350, 0x3C0).room().right, Room::WORLD.right);
+    }
+
+    #[test]
+    fn a_transition_slides_the_room_with_the_scroll() {
+        let mut c = room_cam(0x7B0, 0x1C0);
+        c.transition = 1;
+        let start = c.room();
+        assert_eq!((start.left, start.right), (0, 0x800));
+        c.x = 0x800; // half of the $A0 scroll
+        assert_eq!((c.room().left, c.room().right), (0x400, 0xC00));
+        c.x = 0x84C; // the last step before $0EB0 ends it at $850
+        let last = c.room();
+        c.x = 0x850;
+        c.transition = 0;
+        assert!(c.room().left - last.left <= 0x800 * 4 / 0xA0 + 1);
+        assert_eq!((c.room().left, c.room().right), (0x800, 0x1000));
+
+        // Back the other way: $0BE5's left transition from $850 to $7B0.
+        c.transition = 2;
+        assert_eq!(c.room().left, 0x800);
+        c.x = 0x800;
+        assert_eq!((c.room().left, c.room().right), (0x400, 0xC00));
     }
 }
 

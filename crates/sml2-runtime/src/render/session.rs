@@ -76,6 +76,7 @@ impl LevelContext {
             &self.bg_live,
             self.cam.x,
             self.cam.y,
+            self.cam.room(),
             vw,
             vh,
             Some((&hud_live, self.hud_y)),

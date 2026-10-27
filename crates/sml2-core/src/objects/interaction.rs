@@ -258,7 +258,11 @@ impl ObjectSim {
         st.b[B_HITREACT] = 1;
     }
 
-    pub fn below_bonk(&mut self, bonk_y: u8, bonk_x: u8, scroll_y: u8, scroll_x: u8) -> bool {
+    /// `$2F72`'s below-hit pass at the bonk point `(y, x)`, whose low bytes
+    /// the pass compares.
+    pub fn below_bonk(&mut self, (bonk_y, bonk_x): (u16, u16), scroll_y: u8, scroll_x: u8) -> bool {
+        let near = (bonk_x, bonk_y);
+        let (bonk_y, bonk_x) = (bonk_y as u8, bonk_x as u8);
         let by = (bonk_y & 0xF0)
             .wrapping_add(8)
             .wrapping_sub(scroll_y)
@@ -274,7 +278,7 @@ impl ObjectSim {
             if ty == 0 {
                 continue;
             }
-            if self.contact_excluded(i) {
+            if self.contact_excluded_near(i, near) {
                 continue;
             }
             let s = &mut self.slots[i];
@@ -292,7 +296,8 @@ impl ObjectSim {
         special
     }
 
-    pub fn fire_hit(&mut self, sy: u8, sx: u8) -> FireHit {
+    /// `$2FED` for a ball staged at `(sy, sx)` whose world position is `near`.
+    pub fn fire_hit(&mut self, sy: u8, sx: u8, near: (u16, u16)) -> FireHit {
         let mut result = FireHit::None;
         for i in 0..SLOT_COUNT {
             if self.slots[i].b[B_FLAGS] != 0 {
@@ -302,7 +307,7 @@ impl ObjectSim {
             if ty == 0 || ty & 0x80 != 0 {
                 continue;
             }
-            if self.contact_excluded(i) {
+            if self.contact_excluded_near(i, near) {
                 continue;
             }
             let s = &mut self.slots[i];

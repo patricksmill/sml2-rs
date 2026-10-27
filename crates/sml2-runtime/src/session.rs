@@ -30,7 +30,7 @@ use sml2_core::map::MapNodes;
 use sml2_core::map_sim::MapSim;
 use sml2_core::object::ObjectTables;
 use sml2_core::objects::ObjectSim;
-use sml2_core::player_sim::{MapHandoffOutcome, PlayerKeys, PlayerSim};
+use sml2_core::player_sim::{MapHandoffOutcome, PlayerKeys, PlayerSim, ViewRect};
 use sml2_core::scene::{SceneScripts, SceneVm};
 use sml2_core::tile_animation::TileAnimationClock;
 use sml2_core::tileset::Tilesets;
@@ -920,19 +920,22 @@ impl Session {
         if let SessionState::InLevel(ctx) = &mut self.state {
             let (mx, my) = crate::render::view::margin(self.view);
             ctx.obj.view_margin = (mx.max(0) as u16, my.max(0) as u16);
-            // Autoscroll does not follow Mario, so the native `$0FBF` window
-            // would leave the extra view unreachable. Free-scroll levels keep
-            // the ROM window; the camera already tracks him.
-            ctx.sim.screen_margin = if ctx.cam.auto_scroll != 0 {
-                mx.max(0) as u16
-            } else {
-                0
-            };
             ctx.obj.view_bias_y = crate::render::view::level_bias(self.view) as u16;
             let camera = (ctx.cam.x, ctx.cam.y);
             let raw = crate::render::view::raw_level_origin(self.view, camera, 0);
-            let bounded = crate::render::view::level_origin(self.view, camera, 0);
+            let bounded =
+                crate::render::view::level_origin(self.view, camera, 0, ctx.cam.room());
             ctx.obj.view_offset = ((bounded.0 - raw.0) as i16, (bounded.1 - raw.1) as i16);
+            ctx.sim.view = crate::render::view::enlarged(self.view).then_some(ViewRect {
+                x: bounded.0,
+                y: bounded.1,
+                w: self.view.0 as i32,
+                h: self.view.1 as i32,
+            });
+            // Autoscroll does not follow Mario, so the native `$0FBF` window
+            // would leave the extra view unreachable. Free-scroll levels keep
+            // the ROM window; the camera already tracks him.
+            ctx.sim.view_clamp = ctx.cam.auto_scroll != 0;
         }
         let FrameInput { keys, div } = input;
         let rom_timing = self.rom_timing.take();

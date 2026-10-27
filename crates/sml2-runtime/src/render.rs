@@ -161,6 +161,7 @@ pub fn render_view_output(
         bg,
         cam_x,
         cam_y,
+        sml2_core::camera::Room::WORLD,
         vw,
         vh,
         hud,
@@ -174,7 +175,7 @@ pub fn render_view_output(
 }
 
 /// [`render_view_output`] at `offsets.scale` output pixels per game pixel,
-/// each layer shifted by `offsets`.
+/// each layer shifted by `offsets`, with an enlarged view held inside `room`.
 #[allow(clippy::too_many_arguments)]
 pub fn render_view_output_smooth(
     manifest: &LevelManifest,
@@ -183,6 +184,7 @@ pub fn render_view_output_smooth(
     bg: &[u8],
     cam_x: u16,
     cam_y: u16,
+    room: sml2_core::camera::Room,
     vw: usize,
     vh: usize,
     hud: Option<(&[u8], u8)>,
@@ -211,6 +213,7 @@ pub fn render_view_output_smooth(
         (vw, vh),
         (cam_x, cam_y),
         spr.map_or(0, |s| s.scroll_pan as i32),
+        room,
         offsets.scale,
         offsets.bg,
     );
@@ -283,7 +286,7 @@ pub fn render_view_output_smooth(
     if let Some(scenery) = scenery.filter(|_| spr.and_then(|s| s.pipe_background).is_none()) {
         let pan = spr.map_or(0, |s| s.scroll_pan as i32);
         let scenery_window =
-            margin::SceneryWindow::new((vw, vh), (cam_x, cam_y), pan, border + lift, scenery)
+            margin::SceneryWindow::new((vw, vh), (cam_x, cam_y), pan, room, border + lift, scenery)
                 .with_layout_writes(overlay);
         for py in -border..vh as i32 + border {
             for px in -border..vw as i32 + border {

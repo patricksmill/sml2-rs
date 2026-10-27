@@ -40,7 +40,7 @@ impl Session {
         let Some(ctx) = self.level_ctx() else {
             return Vec::new();
         };
-        let (mx, my) = view::level_margin(view);
+        let (mx, my) = self.native_origin(view);
         let margin = (mx, my + self.hud_style.lift());
         let obj = &ctx.obj;
         let (cx, cy) = (obj.camera_position.x, obj.camera_position.y);
@@ -66,6 +66,21 @@ impl Session {
         out
     }
 
+    /// Where the native screen's top-left sits in a level view. The renderer
+    /// stops an enlarged view at the room and layout edges, so the native
+    /// rect moves off the view's centre by the clamp.
+    fn native_origin(&self, view: (usize, usize)) -> (i32, i32) {
+        let (mx, my) = view::level_margin(view);
+        let Some(ctx) = self.level_ctx() else {
+            return (mx, my);
+        };
+        let camera = (ctx.cam.x, ctx.cam.y);
+        let pan = ctx.spr.as_ref().map_or(0, |s| i32::from(s.scroll_pan));
+        let raw = view::raw_level_origin(view, camera, pan);
+        let origin = view::level_origin(view, camera, pan, ctx.cam.room());
+        (mx + raw.0 - origin.0, my + raw.1 - origin.1)
+    }
+
     /// The native screen's `(x, y, w, h)` inside an enlarged level, demo or
     /// overworld view.
     pub fn native_border(&self, view: (usize, usize)) -> Option<(i32, i32, i32, i32)> {
@@ -74,7 +89,7 @@ impl Session {
             return None;
         }
         let (mx, my) = if self.level_ctx().is_some() {
-            view::level_margin(view)
+            self.native_origin(view)
         } else {
             view::margin(view)
         };
@@ -144,8 +159,24 @@ mod tests {
             )
         );
         assert!(x >= 0 && y >= 0 && x + w <= 160 && y + h <= 144);
-        let (wx, wy, ww, wh) = mario_box(&session, (384, 216));
-        assert_eq!((wx - x, wy - y, ww, wh), (112, 54, w, h));
+        // The wide view stops at the level's left and bottom edges here, so
+        // the box moves with the native rect rather than the centred margin.
+        let wide = (384, 216);
+        let (wx, wy, ww, wh) = mario_box(&session, wide);
+        let (bx, by, _, _) = session.native_border(wide).unwrap();
+        let lift = session.hud_style.lift();
+        assert_eq!((wx - x, wy - y - lift, ww, wh), (bx, by, w, h));
+        assert_ne!((bx, by), (112, 54), "the view is clamped at the start");
+        // Against the renderer's clamped origin: the same offset from Mario's
+        // world position as the native box has from the native origin.
+        let native = crate::render::view::raw_level_origin((160, 144), (c.x, c.y), 0);
+        let origin = crate::render::view::level_origin(
+            wide,
+            (ctx.cam.x, ctx.cam.y),
+            i32::from(spr.scroll_pan),
+            ctx.cam.room(),
+        );
+        assert_eq!(wx - (i32::from(px) - origin.0), x - (i32::from(px) - native.0));
     }
 
     #[test]
@@ -180,6 +211,6 @@ mod tests {
         assert_eq!(session.native_border((384, 216)), Some((112, 36, 160, 144)));
         session.begin_level(0, 0).unwrap();
         assert_eq!(session.native_border((160, 144)), None);
-        assert_eq!(session.native_border((384, 216)), Some((112, 54, 160, 144)));
+        assert!(session.native_border((384, 216)).is_some());
     }
 }

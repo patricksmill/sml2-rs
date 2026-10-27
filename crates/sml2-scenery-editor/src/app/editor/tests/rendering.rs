@@ -3,7 +3,17 @@ use crate::app::{colorized, tests::app, tests::red_bundle};
 use crate::settings::Filter;
 use eframe::egui::Color32;
 use sml2_core::scenery::{SceneryOverlay, SceneryPaint};
+use sml2_core::camera::Room;
 use sml2_runtime::render::{motion::Smooth, view};
+use sml2_runtime::session::{Session, SessionState};
+
+/// The previewed level camera's room, which holds an enlarged view.
+fn room(session: &Session) -> Room {
+    match &session.state {
+        SessionState::InLevel(ctx) => ctx.cam.room(),
+        _ => Room::WORLD,
+    }
+}
 
 #[test]
 fn enabling_dx_after_opening_the_editor_restores_and_refreshes_its_graphics() {
@@ -120,7 +130,7 @@ fn live_block_changes_override_paints_in_native_and_dx_at_both_view_sizes() {
     session.preview_scenery((80, 448), scenery.clone());
     let character = crate::settings::Settings::default().character;
     for size in [(160, 144), (384, 216)] {
-        let origin = view::level_origin(size, (80, 448), 0);
+        let origin = view::level_origin(size, (80, 448), 0, room(session));
         let cell_pixels = |frame: &[[u8; 3]], cell_x: i32| {
             let mut pixels = Vec::new();
             for y in 0..16 {
@@ -259,7 +269,7 @@ fn native_atlas_pixels_match_rendered_scenery_with_every_display_filter() {
     let content = session.assets.level(0).unwrap();
     let size = (384, 216);
     let frame = session.render_palette_frame_smooth(size, Smooth::OFF).0;
-    let origin = view::level_origin(size, (80, 448), 0);
+    let origin = view::level_origin(size, (80, 448), 0, room(session));
     for filter in Filter::ALL {
         let tile = native_tile(
             &content.bg_base,
@@ -316,7 +326,7 @@ fn dx_atlas_samples_banks_flips_and_palettes_like_the_scenery_renderer() {
     let frame = session
         .render_dx_frame(&dx, crate::settings::Settings::default().character, size)
         .unwrap();
-    let origin = view::level_origin(size, (80, 448), 0);
+    let origin = view::level_origin(size, (80, 448), 0, room(session));
     for y in 0..16 {
         for x in 0..16 {
             let (px, py) = (x as i32 - origin.0, 384 + y as i32 - origin.1);

@@ -965,7 +965,8 @@ fn render(
     let mut layers = super::layers::Layers::new(view, offsets.border(), blank);
     let pan = ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
     let camera = (ctx.cam.x, ctx.cam.y);
-    let viewport = super::view::LevelViewport::new(view, camera, pan, offsets.scale, offsets.bg);
+    let room = ctx.cam.room();
+    let viewport = super::view::LevelViewport::new(view, camera, pan, room, offsets.scale, offsets.bg);
     let lift = if background_only { 0 } else { hud_style.lift() };
     let (sx, sy) = (viewport.origin.0, viewport.origin.1 - lift);
     let raw_origin = super::view::raw_level_origin(view, camera, pan);
@@ -1029,7 +1030,7 @@ fn render(
     }
     let pan = ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
     let scenery_window =
-        super::margin::SceneryWindow::new(view, (ctx.cam.x, ctx.cam.y), pan, border + lift, &ctx.scenery)
+        super::margin::SceneryWindow::new(view, (ctx.cam.x, ctx.cam.y), pan, room, border + lift, &ctx.scenery)
             .with_layout_writes(&ctx.sim.layout_writes);
     let past_level = ctx.spr.as_ref().and_then(|s| s.pipe_background).is_none();
     for py in -border..vh as i32 + border {

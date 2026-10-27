@@ -1,6 +1,7 @@
 //! Authored scenery overlays native and enlarged views without changing physics.
 //! Enlarged views sample unpainted terrain through the bounded presentation camera.
 
+use sml2_core::camera::Room;
 use sml2_core::level::{LAYOUT_HEIGHT, LAYOUT_WIDTH};
 use sml2_core::scenery::SceneryOverlay;
 
@@ -33,10 +34,11 @@ impl SceneryWindow {
         view: (usize, usize),
         cam: (u16, u16),
         pan: i32,
+        room: Room,
         border: i32,
         overlay: &SceneryOverlay,
     ) -> Self {
-        let origin = view::level_origin(view, cam, pan);
+        let origin = view::level_origin(view, cam, pan, room);
         let first = (
             (origin.0 - border).div_euclid(16),
             (origin.1 - border).div_euclid(16),
@@ -123,7 +125,7 @@ fn margin_sample(
     pan: i32,
     overlay: &SceneryOverlay,
 ) -> MarginSample {
-    SceneryWindow::new(view, cam, pan, 0, overlay).sample(px, py)
+    SceneryWindow::new(view, cam, pan, Room::WORLD, 0, overlay).sample(px, py)
 }
 
 /// Signed layout cell under a view pixel. Scenery can cover cells both inside
@@ -135,7 +137,7 @@ pub fn paintable_cell(
     cam: (u16, u16),
     scroll_pan: i32,
 ) -> Option<(i16, i16)> {
-    let origin = view::level_origin(view, cam, scroll_pan);
+    let origin = view::level_origin(view, cam, scroll_pan, Room::WORLD);
     let world_x = origin.0 + px;
     let world_y = origin.1 + py;
     let (cx, cy) = (world_x.div_euclid(16), world_y.div_euclid(16));

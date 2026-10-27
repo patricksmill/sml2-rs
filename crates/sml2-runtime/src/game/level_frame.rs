@@ -28,18 +28,18 @@ pub(crate) fn resolve_player_events(sim: &mut PlayerSim, cam: &CameraSim, obj: &
         obj.stomp_chain = 0;
     }
     // `$2F72` uses the previous frame's latched `$2062` scroll bytes.
-    if let Some((by, bx)) = sim.below_bonk.take() {
-        let special = obj.below_bonk(by, bx, cam.scroll_y, cam.scroll_x);
+    if let Some(point) = sim.below_bonk.take() {
+        let special = obj.below_bonk(point, cam.scroll_y, cam.scroll_x);
         sim.resolve_bump_coin(special);
     }
-    if let Some((by, bx)) = sim.fire_below_bonk.take() {
-        obj.below_bonk(by, bx, cam.scroll_y, cam.scroll_x);
+    if let Some(point) = sim.fire_below_bonk.take() {
+        obj.below_bonk(point, cam.scroll_y, cam.scroll_x);
     }
     for i in 0..sim.fire_scan.len() {
         let Some((sy, sx)) = sim.fire_scan[i].take() else {
             continue;
         };
-        let hit = obj.fire_hit(sy, sx);
+        let hit = obj.fire_hit(sy, sx, sim.fire_position(i));
         if hit == FireHit::Die {
             sim.sfx0 = 2;
         }

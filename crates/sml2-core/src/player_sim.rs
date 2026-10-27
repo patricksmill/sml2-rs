@@ -215,6 +215,27 @@ pub struct PlayerState {
     pub swim: bool,
 }
 
+/// An enlarged view's world rect, in pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ViewRect {
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+}
+
+impl ViewRect {
+    /// `$3261`'s cull band moved to this view's edges. On the native screen
+    /// the staged pair `(X - camX + 80, Y - camY + 70)` culls at `$C0`-`$CF`:
+    /// 32 px past the right edge or 48-63 px before the left, 48 px below
+    /// the bottom or 48-63 px above the top. A ball only reaches the far
+    /// sides through the band, so the view tests the band's near edges.
+    pub fn fire_culls(&self, x: i32, y: i32) -> bool {
+        let (sx, sy) = (x - self.x, y - self.y - 2);
+        sx < -48 || sx >= self.w + 32 || sy < -48 || sy >= self.h + 48
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PlayerSim {
     /// Gameplay identity fixed at level entry; graphics fallbacks do not change it.
@@ -374,11 +395,14 @@ pub struct PlayerSim {
     /// frame ahead: on an autoscroll level it pushes Mario +1 early on every
     /// frame the camera steps (traj19, `autoscroll_clamp_x_divergence`).
     pub camx: u16,
-    /// Extra pixels added to each side of the `$0FBF` screen window. An
-    /// autoscroller keeps the camera on its own path, so this is what lets
-    /// Mario walk out to the edges of a view wider than 160. Zero is the
-    /// ROM window (`$10`..=`$A0`).
-    pub screen_margin: u16,
+    /// The enlarged view's world rect at the frame's start, `None` in the
+    /// native view. Fireballs cull at its edges instead of the native
+    /// screen's, and with [`Self::view_clamp`] `$0FBF` keeps Mario inside it.
+    pub view: Option<ViewRect>,
+    /// `$0FBF` clamps to [`Self::view`]. An autoscroller keeps the camera on
+    /// its own path, so this is what lets Mario walk out to the edges of a
+    /// view wider than 160; the free-scroll camera already tracks him.
+    pub view_clamp: bool,
     /// `sCameraY` low byte, same frame-start timing as [`Self::camx`] —
     /// `$1BFF`'s hazard arm reads `sMarioScreenY`, which the draw step
     /// computed from the previous frame's camera.
@@ -421,11 +445,11 @@ pub struct PlayerSim {
     /// (`ObjectSim::below_bonk`) and the frame loop hands it back through
     /// [`PlayerSim::resolve_bump_coin`], which is where the coin is decided.
     pub object_bump_special: u8,
-    /// `$2F72`'s bonk point — the ceiling probe's world low bytes
-    /// (`$FFB7`/`$FFB9`), armed by the bump alloc (`$5960`) and consumed by
-    /// the object side's below-hit pass before the same frame's object
-    /// engine. `Some` only between the alloc and that hand-off.
-    pub below_bonk: Option<(u8, u8)>,
+    /// `$2F72`'s bonk point `(y, x)` — the ceiling probe (`$FFB7`/`$FFB9`,
+    /// whose low bytes the pass reads), armed by the bump alloc (`$5960`) and
+    /// consumed by the object side's below-hit pass before the same frame's
+    /// object engine. `Some` only between the alloc and that hand-off.
+    pub below_bonk: Option<(u16, u16)>,
     /// `$19D2`'s deferred tail: the `$01` bonk's coin and its type-4 slot
     /// wait on `sObjectBumpSpecial`, which the object side's `$2F72` decides
     /// (a type-`$80` pose in the bonk window withholds them). The frame loop
@@ -473,8 +497,8 @@ pub struct PlayerSim {
     pub fire_scan: [Option<(u8, u8)>; FIRE_SLOTS],
     /// `$2F72` armed by a fireball's `$06` break instead of by the player's
     /// ceiling bonk — the frame loop runs the below-hit pass for it too, at
-    /// the ball's own cell bytes.
-    pub fire_below_bonk: Option<(u8, u8)>,
+    /// the ball's own cell, `(y, x)` like [`Self::below_bonk`].
+    pub fire_below_bonk: Option<(u16, u16)>,
     /// `$3261`'s own sprite staging, one entry per live ball: `$2CF4` expands
     /// the mapping `$B0`/`$B4` + `($FF97 & 6) >> 1` (four flicker frames each
     /// way, rDiv bits 1-2) at the ball's staged pair. `(x, y, mapping)` in the
@@ -587,7 +611,8 @@ impl PlayerSim {
             phase: 0,
             frame_counter: 0,
             camx: 0,
-            screen_margin: 0,
+            view: None,
+            view_clamp: false,
             camy: 0,
             collision_tile: 0,
             probe_point: (0, 0),
@@ -997,7 +1022,7 @@ impl PlayerSim {
             return;
         }
         let (px, py) = self.probe_point;
-        self.below_bonk = Some((py as u8, px as u8));
+        self.below_bonk = Some((py, px));
     }
 
     /// `$5960`'s slot store plus `$2F72`'s `sObjectBumpSpecial` clear — the
@@ -1328,7 +1353,7 @@ impl PlayerSim {
             // `$5960` runs on `$FFB7`/`$FFB9` — the ball's post-move Y/X — and
             // its `$2F72` tail brings the below-hit pass with it.
             if self.alloc_bump_slot_at(1, x, y) {
-                self.fire_below_bonk = Some((y as u8, x as u8));
+                self.fire_below_bonk = Some((y, x));
             }
             self.spin_jump_bounce = 0xFF;
         }
@@ -1359,7 +1384,14 @@ impl PlayerSim {
             }
             let sx = s[F_XLO].wrapping_sub(self.camx as u8).wrapping_add(80);
             let sy = s[F_YLO].wrapping_sub(self.camy as u8).wrapping_add(70);
-            if sx & 0xF0 == 0xC0 || sy & 0xF0 == 0xC0 {
+            let culled = match self.view {
+                None => sx & 0xF0 == 0xC0 || sy & 0xF0 == 0xC0,
+                Some(view) => {
+                    let (x, y) = self.fire_position(i);
+                    view.fire_culls(i32::from(x), i32::from(y))
+                }
+            };
+            if culled {
                 self.fireballs[i][F_ACTIVE] = 0;
                 continue;
             }
@@ -1377,6 +1409,15 @@ impl PlayerSim {
             self.fire_draw
                 .push((fx.wrapping_sub(16), fy.wrapping_sub(28), f));
         }
+    }
+
+    /// Slot `i`'s world position `(x, y)`.
+    pub fn fire_position(&self, i: usize) -> (u16, u16) {
+        let s = &self.fireballs[i];
+        (
+            u16::from(s[F_XHI]) << 8 | u16::from(s[F_XLO]),
+            u16::from(s[F_YHI]) << 8 | u16::from(s[F_YLO]),
+        )
     }
 
     /// `$3261`'s tail: a non-zero `sObjectHitResult` (raised by the object
@@ -1664,12 +1705,12 @@ impl PlayerSim {
     }
 
     /// `$0FBF`: keep Mario inside the screen. The ROM window is screen X
-    /// `$10`..=`$A0` against the frame-start camera. `screen_margin` grows
-    /// both edges, in real camera-relative pixels, so a wide autoscroller
-    /// does not wrap the check through a byte.
+    /// `$10`..=`$A0` against the frame-start camera, i.e. Mario's X from 0
+    /// to 144 px past the native view's left edge. With [`Self::view_clamp`]
+    /// the same span runs across [`Self::view`], in world pixels, so a wide
+    /// autoscroller does not wrap the check through a byte.
     fn clamp_screen_x(&mut self) {
-        let margin = i32::from(self.screen_margin);
-        if margin == 0 {
+        let Some(view) = self.view.filter(|_| self.view_clamp) else {
             let sx = self.x.wrapping_sub(self.camx).wrapping_add(96) & 0xFF;
             if sx < 0x10 {
                 self.x = self.x.wrapping_add(u16::from(0x10 - sx));
@@ -1677,14 +1718,13 @@ impl PlayerSim {
                 self.x = self.x.wrapping_sub(u16::from(sx - 0xA0));
             }
             return;
-        }
-        let sx = self.x as i32 - self.camx as i32 + 96;
-        let left = 0x10 - margin;
-        let right = 0xA0 + margin;
-        if sx < left {
-            self.x = self.x.wrapping_add((left - sx) as u16);
-        } else if sx > right {
-            self.x = self.x.wrapping_sub((sx - right) as u16);
+        };
+        let at = i32::from(self.x) - view.x;
+        let last = view.w - 16;
+        if at < 0 {
+            self.x = self.x.wrapping_add((-at) as u16);
+        } else if at > last {
+            self.x = self.x.wrapping_sub((at - last) as u16);
         }
     }
 

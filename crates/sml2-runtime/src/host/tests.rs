@@ -159,10 +159,8 @@ fn host_view_updates_spawn_and_autoscroll_margins_before_each_tick() {
             };
             assert_eq!(ctx.obj.view_margin, margin);
             assert_eq!(ctx.obj.view_bias_y, bias);
-            assert_eq!(
-                ctx.sim.screen_margin,
-                if level == 19 { margin.0 } else { 0 }
-            );
+            assert_eq!(ctx.sim.view_clamp, level == 19);
+            assert_eq!(ctx.sim.view.map(|v| (v.w, v.h)), (view != (160, 144)).then_some((view.0 as i32, view.1 as i32)));
             assert_eq!(host.render_frame().len(), view.0 * view.1);
         }
     }

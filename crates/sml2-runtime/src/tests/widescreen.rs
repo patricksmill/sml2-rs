@@ -47,6 +47,10 @@ fn enlarged_views_keep_terrain_and_sprites_aligned_at_every_level_edge() {
             }
         }
         let native = session.render_frame(NATIVE);
+        let SessionState::InLevel(ctx) = &session.state else {
+            unreachable!()
+        };
+        let room = ctx.cam.room();
         for view in [
             (256, 144),
             (320, 180),
@@ -57,9 +61,9 @@ fn enlarged_views_keep_terrain_and_sprites_aligned_at_every_level_edge() {
             (512, 288),
         ] {
             let wide = session.render_frame(view);
-            let left = (cam_x as i32 - view.0 as i32 / 2).clamp(0, 4096 - view.0 as i32);
-            let top = (cam_y as i32 - view.1 as i32 / 2 - crate::render::view::level_bias(view))
-                .clamp(0, 768 - view.1 as i32);
+            // The room's locks stop the view before the layout's edges do.
+            let (left, top) =
+                crate::render::view::level_origin(view, (cam_x, cam_y), 0, room);
             let (x, y) = (
                 (cam_x as i32 - 80 - left) as usize,
                 (cam_y as i32 - 72 - top) as usize,
@@ -118,6 +122,9 @@ fn insert_level_carries_scenery_and_an_arena_ignores_it() {
     if let Some(spr) = ctx.spr.as_mut() {
         spr.scroll_pan = 0;
     }
+    let origin = crate::render::view::level_origin((384, 216), (80, 448), 0, ctx.cam.room());
+    // World (0, 398): inside the painted cell (row 24, column 0).
+    let at = (398 - origin.1) as usize * 384 + (0 - origin.0) as usize;
     let painted = session.render_frame((384, 216));
     let SessionState::InLevel(ctx) = &mut session.state else {
         panic!("in level")
@@ -131,7 +138,7 @@ fn insert_level_carries_scenery_and_an_arena_ignores_it() {
     ctx.scenery = SceneryOverlay::empty();
     let _ = ctx;
     let bare = session.render_frame((384, 216));
-    assert_ne!(painted[76 * 384], arena[76 * 384]);
+    assert_ne!(painted[at], arena[at]);
     assert_eq!(arena, bare);
 }
 
@@ -168,14 +175,15 @@ fn an_autoscroller_opens_its_screen_edges_with_the_view() {
         panic!("in level")
     };
     assert_ne!(ctx.cam.auto_scroll, 0);
-    assert_eq!(ctx.sim.screen_margin, 48);
+    assert!(ctx.sim.view_clamp);
+    assert_eq!(ctx.sim.view.map(|v| (v.w, v.h)), Some((256, 144)));
 
     session.set_view(NATIVE);
     session.advance(FrameInput::default());
     let SessionState::InLevel(ctx) = &session.state else {
         panic!("in level")
     };
-    assert_eq!(ctx.sim.screen_margin, 0);
+    assert_eq!(ctx.sim.view, None);
 
     session.begin_level(0, 0).unwrap();
     session.set_view((384, 216));
@@ -184,7 +192,7 @@ fn an_autoscroller_opens_its_screen_edges_with_the_view() {
         panic!("in level")
     };
     assert_eq!(ctx.cam.auto_scroll, 0);
-    assert_eq!(ctx.sim.screen_margin, 0);
+    assert!(!ctx.sim.view_clamp);
 }
 
 #[test]
