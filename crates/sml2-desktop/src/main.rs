@@ -8,7 +8,7 @@ fn main() -> Result<(), String> {
     #[cfg(windows)]
     if let Err(error) = &result {
         rfd::MessageDialog::new()
-            .set_title("Super Mario Land 2 Plus")
+            .set_title("Six Golden Coins")
             .set_description(error)
             .set_level(rfd::MessageLevel::Error)
             .show();

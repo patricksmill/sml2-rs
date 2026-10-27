@@ -1,6 +1,24 @@
-# Super Mario Land 2 Plus
+<p align="center">
+  <img src="assets/icons/sml2-256.png" alt="Six Golden Coins icon" width="128">
+</p>
 
-An enhanced desktop edition of **Super Mario Land 2: 6 Golden Coins**.
+<h1 align="center">Six Golden Coins</h1>
+
+<p align="center">
+  An enhanced desktop edition of <b>Super Mario Land 2: 6 Golden Coins</b>.
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/level.png" alt="Widescreen level with DX colors" width="720">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/title.png" alt="Title screen" width="360">
+  <img src="docs/screenshots/world-map.png" alt="World map" width="360">
+  <br>
+  <img src="docs/screenshots/tree-zone.png" alt="Tree Zone intro" width="360">
+  <img src="docs/screenshots/bonus-room.png" alt="Bonus room" width="360">
+</p>
 
 ## Features
 
@@ -15,6 +33,17 @@ An enhanced desktop edition of **Super Mario Land 2: 6 Golden Coins**.
 View options are in **Settings → Mods**; palettes and scaling are in
 **Settings → Display**. Expanded views activate enemies earlier. Frame
 interpolation adds one frame of display latency.
+
+## Accuracy
+
+This is a native port, not an emulator, and it does not aim to be perfectly
+emulator accurate. Gameplay logic follows the original game's code, but expect
+small differences from real hardware in timing and edge cases.
+
+**Widescreen** and **Camera zoom** show more of each level than the Game Boy
+screen did. Enemies off the original screen edge become active sooner, so some
+enemy behavior and encounters will change. For the closest match to the
+original game, set **Widescreen** to **Off** and **Camera zoom** to **100%**.
 
 ## Getting started
 

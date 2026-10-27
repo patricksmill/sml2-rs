@@ -22,7 +22,7 @@ mkdir -p "$(dirname "$entry")"
 cat >"$entry" <<EOF
 [Desktop Entry]
 Type=Application
-Name=Super Mario Land 2 Plus
+Name=Six Golden Coins
 Comment=Enhanced native Rust port of Super Mario Land 2
 Exec=$binary
 Icon=$icon
