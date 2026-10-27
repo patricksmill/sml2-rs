@@ -17,8 +17,12 @@ interpolation adds one frame of display latency.
 
 ## Getting started
 
-1. [Download the Windows app](docs/windows-builds.md#download-and-run) or
-   [build on Linux](docs/desktop.md#build-and-run).
+Release builds target **Windows x64**, **Linux x86_64**, and **macOS Apple
+Silicon**. The first release is pending.
+
+1. Download your platform's package from
+   [Releases](https://github.com/patricksmill/sml2-rs/releases) when available,
+   or [build locally](docs/desktop.md#build-and-run).
 2. Launch it and use **Settings → Game → Import ROM…** to select your original
    **Super Mario Land 2 UE v1.0** ROM, then choose **Play**.
 
