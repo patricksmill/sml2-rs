@@ -23,7 +23,7 @@ fn paced_walker_init_faces_mario_right_and_sets_flash_and_type() {
         right_wall: false,
     };
     let context = PacedWalkerContext {
-        frame: FrameTick(1), // not multiple of 4, so sprite doesn't toggle
+        frame: FrameTick::new(1), // not multiple of 4, so sprite doesn't toggle
         mario_ref_x: 150,
     };
 
@@ -53,7 +53,7 @@ fn paced_walker_init_faces_mario_left_and_equal() {
 
     // Mario to the left
     let context_left = PacedWalkerContext {
-        frame: FrameTick(1),
+        frame: FrameTick::new(1),
         mario_ref_x: 50,
     };
     let effect_left = update(&mut actor, context_left, &mut world);
@@ -69,7 +69,7 @@ fn paced_walker_init_faces_mario_left_and_equal() {
     // Mario equal
     actor.state = PacedWalkerState::Init;
     let context_eq = PacedWalkerContext {
-        frame: FrameTick(1),
+        frame: FrameTick::new(1),
         mario_ref_x: 100,
     };
     let effect_eq = update(&mut actor, context_eq, &mut world);
@@ -96,7 +96,7 @@ fn paced_walker_two_frame_toggle_cadence() {
     update(
         &mut actor,
         PacedWalkerContext {
-            frame: FrameTick(0),
+            frame: FrameTick::new(0),
             mario_ref_x: 0,
         },
         &mut world,
@@ -107,7 +107,7 @@ fn paced_walker_two_frame_toggle_cadence() {
     update(
         &mut actor,
         PacedWalkerContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_ref_x: 0,
         },
         &mut world,
@@ -118,7 +118,7 @@ fn paced_walker_two_frame_toggle_cadence() {
     update(
         &mut actor,
         PacedWalkerContext {
-            frame: FrameTick(2),
+            frame: FrameTick::new(2),
             mario_ref_x: 0,
         },
         &mut world,
@@ -129,7 +129,7 @@ fn paced_walker_two_frame_toggle_cadence() {
     update(
         &mut actor,
         PacedWalkerContext {
-            frame: FrameTick(3),
+            frame: FrameTick::new(3),
             mario_ref_x: 0,
         },
         &mut world,
@@ -140,7 +140,7 @@ fn paced_walker_two_frame_toggle_cadence() {
     update(
         &mut actor,
         PacedWalkerContext {
-            frame: FrameTick(4),
+            frame: FrameTick::new(4),
             mario_ref_x: 0,
         },
         &mut world,
@@ -161,7 +161,7 @@ fn paced_walker_cadence_counts_down_then_steps_48_times() {
     update(
         &mut actor,
         PacedWalkerContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_ref_x: 50,
         },
         &mut world,
@@ -173,7 +173,7 @@ fn paced_walker_cadence_counts_down_then_steps_48_times() {
     let eff = update(
         &mut actor,
         PacedWalkerContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_ref_x: 50,
         },
         &mut world,
@@ -188,7 +188,7 @@ fn paced_walker_cadence_counts_down_then_steps_48_times() {
         let eff = update(
             &mut actor,
             PacedWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 50,
             },
             &mut world,
@@ -207,7 +207,7 @@ fn paced_walker_cadence_counts_down_then_steps_48_times() {
     let eff = update(
         &mut actor,
         PacedWalkerContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_ref_x: 50,
         },
         &mut world,
@@ -222,7 +222,7 @@ fn paced_walker_cadence_counts_down_then_steps_48_times() {
         let eff = update(
             &mut actor,
             PacedWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 50,
             },
             &mut world,
@@ -236,7 +236,7 @@ fn paced_walker_cadence_counts_down_then_steps_48_times() {
     let eff = update(
         &mut actor,
         PacedWalkerContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_ref_x: 50,
         },
         &mut world,
@@ -250,7 +250,7 @@ fn paced_walker_cadence_counts_down_then_steps_48_times() {
     let eff = update(
         &mut actor,
         PacedWalkerContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_ref_x: 50,
         },
         &mut world,
@@ -280,7 +280,7 @@ fn paced_walker_wall_flips_direction() {
     let eff = update(
         &mut actor,
         PacedWalkerContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_ref_x: 0,
         },
         &mut world,
@@ -301,7 +301,7 @@ fn paced_walker_wall_flips_direction() {
     let eff = update(
         &mut actor,
         PacedWalkerContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_ref_x: 0,
         },
         &mut world,

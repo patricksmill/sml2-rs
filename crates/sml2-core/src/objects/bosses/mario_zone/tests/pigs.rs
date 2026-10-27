@@ -8,7 +8,7 @@ use crate::objects::boss_stun::HitStunContext;
 
 fn context(frame: u64, fade_idle: bool, definitions_left: u8) -> Context {
     Context {
-        frame: FrameTick(frame),
+        frame: FrameTick::new(frame),
         hit_processed: false,
         stomp_latched: false,
         stun_reload: 0,

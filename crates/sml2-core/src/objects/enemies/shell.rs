@@ -308,19 +308,19 @@ mod tests {
             ..World::default()
         };
         assert_eq!(
-            update_kicked(&mut actor, FrameTick(1), 0x40, &mut world),
+            update_kicked(&mut actor, FrameTick::new(1), 0x40, &mut world),
             KickedEffect::Faced(Ordering::Less)
         );
         assert_eq!((actor.state, actor.contact_kind), (1, KICKED_CONTACT));
-        update_kicked(&mut actor, FrameTick(1), 0x40, &mut world);
+        update_kicked(&mut actor, FrameTick::new(1), 0x40, &mut world);
         assert_eq!((actor.position.x, world.scans), (0x83, 1));
         world.ground = false;
-        update_kicked(&mut actor, FrameTick(1), 0x40, &mut world);
+        update_kicked(&mut actor, FrameTick::new(1), 0x40, &mut world);
         assert_eq!(actor.state, 3);
-        update_kicked(&mut actor, FrameTick(1), 0x40, &mut world);
+        update_kicked(&mut actor, FrameTick::new(1), 0x40, &mut world);
         assert_eq!(actor.motion_phase, 1);
         world.ground = true;
-        update_kicked(&mut actor, FrameTick(1), 0x40, &mut world);
+        update_kicked(&mut actor, FrameTick::new(1), 0x40, &mut world);
         assert_eq!(
             (actor.state, actor.motion_phase, actor.position.y & 0x0F),
             (1, 0, 0)
@@ -342,7 +342,7 @@ mod tests {
                 ..World::default()
             };
             assert_eq!(
-                update_kicked(&mut actor, FrameTick(1), 0x40, &mut world),
+                update_kicked(&mut actor, FrameTick::new(1), 0x40, &mut world),
                 KickedEffect::Bumped
             );
             assert_eq!((actor.state, actor.position.x), (turned, 0x80));
@@ -354,13 +354,13 @@ mod tests {
         let mut actor = Actor::default();
         actor.sprite = 0x10;
         for _ in 0..3 {
-            animate_spin_wobble(&mut actor, FrameTick(0));
+            animate_spin_wobble(&mut actor, FrameTick::new(0));
         }
         assert_eq!(
             (actor.animation_frame, actor.sprite_flip.horizontal()),
             (3, true)
         );
-        animate_spin_wobble(&mut actor, FrameTick(0));
+        animate_spin_wobble(&mut actor, FrameTick::new(0));
         assert_eq!(
             (
                 actor.animation_frame,

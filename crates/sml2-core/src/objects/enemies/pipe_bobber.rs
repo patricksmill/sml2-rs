@@ -157,7 +157,7 @@ mod tests {
         let mut actor = Actor::default();
         actor.position.x = 100;
         let ctx = PipeBobberContext {
-            frame: FrameTick(0),
+            frame: FrameTick::new(0),
             mario_travelling: false,
             mario_ref_x: 110, // distance 10 < 24
         };
@@ -172,7 +172,7 @@ mod tests {
         let mut actor = Actor::default();
         actor.position.x = 100;
         let ctx = PipeBobberContext {
-            frame: FrameTick(0),
+            frame: FrameTick::new(0),
             mario_travelling: false,
             mario_ref_x: 124, // distance 24 >= 24
         };
@@ -197,7 +197,7 @@ mod tests {
         // Step 1 through 31: emerges upward (y decreases)
         for i in 1..=31 {
             let ctx = PipeBobberContext {
-                frame: FrameTick(i),
+                frame: FrameTick::new(i),
                 mario_travelling: false,
                 mario_ref_x: 500,
             };
@@ -213,7 +213,7 @@ mod tests {
 
         // Step 32: reaches top, reloads for retraction
         let ctx = PipeBobberContext {
-            frame: FrameTick(32),
+            frame: FrameTick::new(32),
             mario_travelling: false,
             mario_ref_x: 500,
         };
@@ -227,7 +227,7 @@ mod tests {
         // Retract 31 steps (y increases)
         for i in 1..=31 {
             let ctx = PipeBobberContext {
-                frame: FrameTick(32 + i),
+                frame: FrameTick::new(32 + i),
                 mario_travelling: false,
                 mario_ref_x: 500,
             };
@@ -239,7 +239,7 @@ mod tests {
 
         // Retraction step 32: reaches bottom, transitions to Resting
         let ctx = PipeBobberContext {
-            frame: FrameTick(64),
+            frame: FrameTick::new(64),
             mario_travelling: false,
             mario_ref_x: 500,
         };
@@ -253,7 +253,7 @@ mod tests {
         // Rest 23 frames
         for i in 1..=23 {
             let ctx = PipeBobberContext {
-                frame: FrameTick(64 + i),
+                frame: FrameTick::new(64 + i),
                 mario_travelling: false,
                 mario_ref_x: 500,
             };
@@ -264,7 +264,7 @@ mod tests {
 
         // Rest frame 24: transitions back to Waiting (state 0)
         let ctx = PipeBobberContext {
-            frame: FrameTick(88),
+            frame: FrameTick::new(88),
             mario_travelling: false,
             mario_ref_x: 500,
         };
@@ -283,7 +283,7 @@ mod tests {
 
         // Step 1: emerges downward (y increases)
         let ctx = PipeBobberContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_travelling: false,
             mario_ref_x: 500,
         };
@@ -294,7 +294,7 @@ mod tests {
         // Fast forward 31 remaining steps
         for i in 2..=32 {
             let ctx = PipeBobberContext {
-                frame: FrameTick(i),
+                frame: FrameTick::new(i),
                 mario_travelling: false,
                 mario_ref_x: 500,
             };
@@ -306,7 +306,7 @@ mod tests {
         // Retract 32 steps (y decreases back toward ceiling)
         for i in 1..=32 {
             let ctx = PipeBobberContext {
-                frame: FrameTick(32 + i),
+                frame: FrameTick::new(32 + i),
                 mario_travelling: false,
                 mario_ref_x: 500,
             };
@@ -321,7 +321,7 @@ mod tests {
         let mut actor = Actor::default();
         actor.state = PipeBobberState::Emerging.to_raw();
         let ctx = PipeBobberContext {
-            frame: FrameTick(5),
+            frame: FrameTick::new(5),
             mario_travelling: true,
             mario_ref_x: 500,
         };

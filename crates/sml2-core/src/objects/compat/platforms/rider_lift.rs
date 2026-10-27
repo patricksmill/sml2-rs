@@ -12,7 +12,7 @@ impl handler_0x591a3::World for Inputs<'_> {
 impl ObjectSim {
     pub(super) fn handler_0x591a3(&mut self, st: &mut Staging) {
         let mut actor = Actor::from_raw_slot(&st.b);
-        let frame = FrameTick(u64::from(self.fff0));
+        let frame = self.frame_tick();
         let result = handler_0x591a3::update(&mut actor, frame, &mut Inputs(self));
         st.b = actor.to_raw_slot();
         match result {

@@ -54,7 +54,7 @@ impl ObjectSim {
     pub(super) fn handler_walker(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = walker::WalkerContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             mario_ref_x: self.mario_ref_x,
         };
         let effect = walker::update(
@@ -99,7 +99,7 @@ impl ObjectSim {
     ) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = fallwalker::FallWalkerContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             mario_ref_x: self.mario_ref_x,
             contact_kind,
         };
@@ -118,7 +118,7 @@ impl ObjectSim {
         tables: &ObjectTables,
     ) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
-        let frame = crate::actor::FrameTick(u64::from(self.fff0));
+        let frame = self.frame_tick();
         let effect = reactions::update_stun(
             &mut actor,
             frame,
@@ -133,7 +133,7 @@ impl ObjectSim {
     pub(super) fn handler_vertical_pacer(&mut self, st: &mut Staging) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = vertical_pacer::VerticalPacerContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
         };
         let _ = vertical_pacer::update(&mut actor, context);
         st.b = actor.to_raw_slot();
@@ -142,7 +142,7 @@ impl ObjectSim {
     pub(super) fn handler_perched_flyer(&mut self, st: &mut Staging) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = perched_flyer::PerchedFlyerContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             mario_ref_x: self.mario_ref_x,
         };
         let effect = perched_flyer::update(&mut actor, context);
@@ -156,7 +156,7 @@ impl ObjectSim {
     pub(super) fn handler_cannon_ant(&mut self, st: &mut Staging) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = cannon_ant::CannonAntContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             mario_ref_x: self.mario_ref_x,
             mario_ref_y: self.mario_ref_y,
         };
@@ -191,7 +191,7 @@ impl ObjectSim {
     pub(super) fn handler_wave_flyer(&mut self, st: &mut Staging) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = wave_flyer::WaveFlyerContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             mario_ref_x: self.mario_ref_x,
         };
         let effect = wave_flyer::update(&mut actor, context);
@@ -281,7 +281,7 @@ impl ObjectSim {
     pub(super) fn handler_winged_walker(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = winged_walker::WingedWalkerContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             mario_ref_x: self.mario_ref_x,
         };
         struct WingedWalkerSimWorld<'a> {
@@ -340,7 +340,7 @@ impl ObjectSim {
     pub(super) fn handler_edge_walker(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = edge_walker::EdgeWalkerContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             mario_ref_x: self.mario_ref_x,
         };
         struct EdgeWalkerSimWorld<'a> {
@@ -383,7 +383,7 @@ impl ObjectSim {
     pub(super) fn handler_left_marcher(&mut self, st: &mut Staging) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = left_marcher::LeftMarcherContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
         };
         let _effect = left_marcher::update(&mut actor, context);
         st.b = actor.to_raw_slot();
@@ -404,7 +404,7 @@ impl ObjectSim {
     pub(super) fn handler_dashing_walker(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = dashing_walker::DashingWalkerContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             mario_ref_x: self.mario_ref_x,
         };
         struct DashingWalkerSimWorld<'a> {
@@ -447,7 +447,8 @@ impl ObjectSim {
     ) {
         let _ = tables;
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
-        let effect = hopper::update(&mut actor, &mut SimWalkerWorld::new(self, st, layout));
+        let revision = self.revision;
+        let effect = hopper::update(&mut actor, &mut SimWalkerWorld::new(self, st, layout), revision);
         st.b = actor.to_raw_slot();
         if effect == hopper::Effect::Parked {
             self.done = 1;
@@ -462,7 +463,7 @@ impl ObjectSim {
     ) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = pipe_bobber::PipeBobberContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             mario_travelling: self.mario.travelling,
             mario_ref_x: self.mario_ref_x,
         };
@@ -476,7 +477,7 @@ impl ObjectSim {
     pub(super) fn handler_fire_piranha(&mut self, st: &mut Staging, tables: &ObjectTables) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = fire_piranha::FirePiranhaContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             mario_travelling: self.mario.travelling,
             mario_ref_x: self.mario_ref_x,
             mario_ref_y: self.mario_ref_y,
@@ -500,7 +501,7 @@ impl ObjectSim {
     pub(super) fn handler_piranha_fireball(&mut self, st: &mut Staging) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = piranha_fireball::FireballContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
         };
         let _effect = piranha_fireball::update(&mut actor, context);
         st.b = actor.to_raw_slot();
@@ -509,7 +510,7 @@ impl ObjectSim {
     pub(super) fn handler_boo(&mut self, st: &mut Staging) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let context = boo::BooContext {
-            frame: crate::actor::FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             mario_dir_right: self.mario.dir_right,
             mario_ref_x: self.mario_ref_x,
             mario_ref_y: self.mario_ref_y,
@@ -543,7 +544,7 @@ impl ObjectSim {
     /// `entry` runs anim 8's own blink and facing before the crawl.
     fn run_crawler(&mut self, st: &mut Staging, layout: &LevelLayout, entry: bool) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
-        let frame = crate::actor::FrameTick(u64::from(self.fff0));
+        let frame = self.frame_tick();
         let mario_ref_x = self.mario_ref_x;
         let world = &mut SimWalkerWorld::new(self, st, layout);
         let faced = if entry {

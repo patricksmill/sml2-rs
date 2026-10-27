@@ -153,7 +153,7 @@ impl ObjectSim {
     /// `$5839B` (anim 3): the kicked shell.
     pub(super) fn handler_kicked(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = Actor::from_raw_slot(&st.b);
-        let frame = FrameTick(u64::from(self.fff0));
+        let frame = self.frame_tick();
         let mario_ref_x = self.mario_ref_x;
         let effect = behavior::update_kicked(
             &mut actor,

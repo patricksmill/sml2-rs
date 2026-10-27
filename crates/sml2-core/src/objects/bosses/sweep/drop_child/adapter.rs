@@ -15,7 +15,7 @@ impl ObjectSim {
         let result = sweep_drop_child::update(
             &mut actor,
             sweep_drop_child::Inputs {
-                frame: FrameTick(u64::from(self.fff0)),
+                frame: self.frame_tick(),
                 player_x: self.player_screen_x,
                 remove_mode: self.remove_mode,
                 drop_profile: &tables.boss_picker_profile,

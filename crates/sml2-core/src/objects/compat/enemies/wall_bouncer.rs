@@ -21,7 +21,7 @@ impl handler_0x59b1f::World for Walls<'_> {
 impl ObjectSim {
     pub(super) fn handler_0x59b1f(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = Actor::from_raw_slot(&st.b);
-        let frame = FrameTick(u64::from(self.fff0));
+        let frame = self.frame_tick();
         let mario_ref_x = self.mario_ref_x;
         let mut world = Walls {
             sim: self,

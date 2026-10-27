@@ -32,7 +32,7 @@ impl handler_0x593da::World for Inputs<'_> {
 impl ObjectSim {
     pub(super) fn handler_0x593da(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = Actor::from_raw_slot(&st.b);
-        let frame = FrameTick(u64::from(self.fff0));
+        let frame = self.frame_tick();
         let result = {
             let mut world = Inputs {
                 sim: self,

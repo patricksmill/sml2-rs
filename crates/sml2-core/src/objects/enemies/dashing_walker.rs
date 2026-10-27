@@ -227,7 +227,7 @@ mod tests {
         let eff = update(
             &mut actor,
             DashingWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 150,
             },
             &mut world,
@@ -243,7 +243,7 @@ mod tests {
         let eff_left = update(
             &mut actor,
             DashingWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 50,
             },
             &mut world,
@@ -257,7 +257,7 @@ mod tests {
         let eff_eq = update(
             &mut actor,
             DashingWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 100,
             },
             &mut world,
@@ -284,7 +284,7 @@ mod tests {
         let eff = update(
             &mut actor,
             DashingWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 200,
             },
             &mut world,
@@ -297,7 +297,7 @@ mod tests {
         let eff2 = update(
             &mut actor,
             DashingWalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 200,
             },
             &mut world,
@@ -324,7 +324,7 @@ mod tests {
         let eff = update(
             &mut actor,
             DashingWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 130,
             },
             &mut world,
@@ -355,7 +355,7 @@ mod tests {
             let eff = update(
                 &mut actor,
                 DashingWalkerContext {
-                    frame: FrameTick(phase as u64),
+                    frame: FrameTick::new(phase as u64),
                     mario_ref_x: 0,
                 },
                 &mut world,
@@ -374,7 +374,7 @@ mod tests {
             let eff = update(
                 &mut actor,
                 DashingWalkerContext {
-                    frame: FrameTick(15 + step),
+                    frame: FrameTick::new(15 + step),
                     mario_ref_x: 0,
                 },
                 &mut world,
@@ -409,7 +409,7 @@ mod tests {
                 update(
                     &mut actor,
                     DashingWalkerContext {
-                        frame: FrameTick(1),
+                        frame: FrameTick::new(1),
                         mario_ref_x: 0,
                     },
                     &mut world,
@@ -439,7 +439,7 @@ mod tests {
         let eff = update(
             &mut actor,
             DashingWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 0,
             },
             &mut world,

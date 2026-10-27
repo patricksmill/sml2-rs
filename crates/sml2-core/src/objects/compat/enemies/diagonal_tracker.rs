@@ -28,7 +28,7 @@ impl World for Inputs<'_> {
 impl ObjectSim {
     pub(super) fn handler_0x58b43(&mut self, st: &mut Staging) {
         let mut actor = Actor::from_raw_slot(&st.b);
-        let frame = FrameTick(u64::from(self.fff0));
+        let frame = self.frame_tick();
         let result = handler_0x58b43::update(&mut actor, frame, &mut Inputs(self));
         st.b = actor.to_raw_slot();
         if result.is_err() {

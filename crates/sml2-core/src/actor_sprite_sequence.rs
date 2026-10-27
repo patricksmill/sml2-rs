@@ -58,7 +58,7 @@ mod tests {
                 for (sprite, incremented, subtracted) in sprites {
                     let slot = dirty_slot(phase, sprite);
                     let mut actor = Actor::from_raw_slot(&slot);
-                    actor.animate_four_frame_cycle(FrameTick(256), period);
+                    actor.animate_four_frame_cycle(FrameTick::new(256), period);
                     let mut expected = slot;
                     expected[26] = next_phase;
                     expected[11] = if resets { subtracted } else { incremented };
@@ -92,7 +92,7 @@ mod tests {
                 for (phase, sprite, next_phase, next_sprite) in [(3, 0, 0, 253), (255, 255, 0, 0)] {
                     let slot = dirty_slot(phase, sprite);
                     let mut actor = Actor::from_raw_slot(&slot);
-                    actor.animate_four_frame_cycle(FrameTick(tick), period);
+                    actor.animate_four_frame_cycle(FrameTick::new(tick), period);
                     let mut expected = slot;
                     if advances {
                         expected[26] = next_phase;
@@ -114,7 +114,7 @@ mod tests {
             let slot = dirty_slot(0, 254);
             let mut actor = Actor::from_raw_slot(&slot);
             for (index, phase, sprite) in [(0, 1, 255), (1, 2, 0), (2, 3, 1), (3, 0, 254)] {
-                actor.animate_four_frame_cycle(FrameTick(index * period), period);
+                actor.animate_four_frame_cycle(FrameTick::new(index * period), period);
                 let mut expected = slot;
                 expected[26] = phase;
                 expected[11] = sprite;

@@ -2,12 +2,10 @@
 //! it rises eight pixels once released, then walks the `$5821E` legs from
 //! states 2..=5 (one above the walker's numbering).
 use super::walker::{step_walk, WalkLeg, WalkerWorld};
-use crate::actor::{Actor, ContactKind};
+use crate::actor::{Actor, ContactKind, ObjectRevision};
 
 /// The parked item pose, which the draw and the contact pass skip.
 const PARKED_CONTACT: u8 = 0x80;
-/// Defeat mode while it is still inside the block.
-const PARKED_DEFEAT_MODE: u8 = 0x80;
 /// Pixels it rises out of the block.
 const RISE: u8 = 8;
 
@@ -18,7 +16,7 @@ pub enum Effect {
     Parked,
 }
 
-pub fn update<W: WalkerWorld>(actor: &mut Actor, world: &mut W) -> Effect {
+pub fn update<W: WalkerWorld>(actor: &mut Actor, world: &mut W, revision: ObjectRevision) -> Effect {
     let leg = match actor.state {
         // `$58734`: rise one pixel per call, then walk right.
         1 => {
@@ -37,7 +35,8 @@ pub fn update<W: WalkerWorld>(actor: &mut Actor, world: &mut W) -> Effect {
         _ => {
             actor.contact_kind = ContactKind::from_raw(PARKED_CONTACT);
             actor.motion_leg = 0;
-            actor.defeat_mode = PARKED_DEFEAT_MODE;
+            // `$5872A`: the defeat-mode byte, still inside the block.
+            actor.defeat_mode = revision.parked_priority();
             return Effect::Parked;
         }
     };
@@ -67,20 +66,27 @@ mod tests {
     }
 
     #[test]
+    fn dx_hopper_parks_without_the_behind_background_bit() {
+        let mut actor = Actor::default();
+        assert_eq!(update(&mut actor, &mut Open, ObjectRevision::Dx), Effect::Parked);
+        assert_eq!((actor.contact_kind.raw(), actor.defeat_mode), (0x80, 0));
+    }
+
+    #[test]
     fn hopper_parks_rises_eight_pixels_then_walks_right() {
         let mut actor = Actor::default();
         actor.position.y = 0x100;
-        assert_eq!(update(&mut actor, &mut Open), Effect::Parked);
+        assert_eq!(update(&mut actor, &mut Open, ObjectRevision::Original), Effect::Parked);
         assert_eq!((actor.contact_kind.raw(), actor.defeat_mode), (0x80, 0x80));
         actor.state = 1;
         for _ in 0..8 {
-            update(&mut actor, &mut Open);
+            update(&mut actor, &mut Open, ObjectRevision::Original);
         }
         assert_eq!(
             (actor.state, actor.defeat_mode, actor.position.y),
             (3, 0, 0xF8)
         );
-        update(&mut actor, &mut Open);
+        update(&mut actor, &mut Open, ObjectRevision::Original);
         assert_eq!((actor.state, actor.position.x), (3, 1));
     }
 }

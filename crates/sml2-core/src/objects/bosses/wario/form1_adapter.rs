@@ -8,7 +8,7 @@ impl ObjectSim {
     pub(in crate::objects) fn handler_wario20(&mut self, st: &mut Staging, tables: &ObjectTables) {
         self.boss_damage_pass(st);
         let context = Context {
-            frame: FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             hit_processed: self.done != 0,
             stomp_latched: self.boss_hit_latch != 0,
             stun_reload: self.boss_timer_reload,

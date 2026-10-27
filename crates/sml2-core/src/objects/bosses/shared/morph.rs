@@ -27,7 +27,7 @@ mod tests {
                 let mut expected = [0xA5; 32];
                 expected[28] = timer;
                 let mut actor = Actor::from_raw_slot(&expected);
-                assert_eq!(update(&mut actor, FrameTick(frame)), timer == 1);
+                assert_eq!(update(&mut actor, FrameTick::new(frame)), timer == 1);
                 if frame % 4 == 0 {
                     expected[14] ^= 0x10;
                 }

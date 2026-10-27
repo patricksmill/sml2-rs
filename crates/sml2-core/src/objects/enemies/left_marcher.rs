@@ -95,7 +95,7 @@ mod tests {
         let effect = update(
             &mut actor,
             LeftMarcherContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
             },
         );
         assert_eq!(effect, LeftMarcherEffect::Initialized);
@@ -118,7 +118,7 @@ mod tests {
         let effect = update(
             &mut actor,
             LeftMarcherContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
             },
         );
         assert_eq!(effect, LeftMarcherEffect::Marching);
@@ -129,7 +129,7 @@ mod tests {
         let effect2 = update(
             &mut actor,
             LeftMarcherContext {
-                frame: FrameTick(3),
+                frame: FrameTick::new(3),
             },
         );
         assert_eq!(effect2, LeftMarcherEffect::Marching);
@@ -144,27 +144,27 @@ mod tests {
         actor.animation_frame = 0;
 
         // Step 1: even frame -> animation_frame 0 -> 1, delta = +1
-        advance_three_step_crawl(&mut actor, FrameTick(2));
+        advance_three_step_crawl(&mut actor, FrameTick::new(2));
         assert_eq!(actor.animation_frame, 1);
         assert_eq!(actor.sprite, 105);
 
         // Odd frame: no change
-        advance_three_step_crawl(&mut actor, FrameTick(3));
+        advance_three_step_crawl(&mut actor, FrameTick::new(3));
         assert_eq!(actor.animation_frame, 1);
         assert_eq!(actor.sprite, 105);
 
         // Step 2: even frame -> animation_frame 1 -> 2, delta = +1
-        advance_three_step_crawl(&mut actor, FrameTick(4));
+        advance_three_step_crawl(&mut actor, FrameTick::new(4));
         assert_eq!(actor.animation_frame, 2);
         assert_eq!(actor.sprite, 106);
 
         // Step 3: even frame -> animation_frame 2 -> 0 (mod 3), delta = -2
-        advance_three_step_crawl(&mut actor, FrameTick(6));
+        advance_three_step_crawl(&mut actor, FrameTick::new(6));
         assert_eq!(actor.animation_frame, 0);
         assert_eq!(actor.sprite, 104);
 
         // Step 4: even frame -> cycles back: animation_frame 0 -> 1, delta = +1
-        advance_three_step_crawl(&mut actor, FrameTick(8));
+        advance_three_step_crawl(&mut actor, FrameTick::new(8));
         assert_eq!(actor.animation_frame, 1);
         assert_eq!(actor.sprite, 105);
     }

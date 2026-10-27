@@ -44,7 +44,7 @@ impl ObjectSim {
         let mut actor = Actor::from_raw_slot(&st.b);
         let effects = update_exit(
             &mut actor,
-            FrameTick(u64::from(self.fff0)),
+            self.frame_tick(),
             u8::from(self.easy_mode),
         );
         st.b = actor.to_raw_slot();

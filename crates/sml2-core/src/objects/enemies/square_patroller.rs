@@ -124,12 +124,12 @@ mod tests {
         let mut actor = Actor::default();
         actor.position.x = 0x80;
         assert_eq!(
-            update(&mut actor, FrameTick(1), 0x10),
+            update(&mut actor, FrameTick::new(1), 0x10),
             Ok(Effect::Faced(Ordering::Less))
         );
         let mut order = vec![actor.state];
         for _ in 0..(0x18 + 3 * 0x30) {
-            update(&mut actor, FrameTick(1), 0x10).unwrap();
+            update(&mut actor, FrameTick::new(1), 0x10).unwrap();
             if order.last() != Some(&actor.state) {
                 order.push(actor.state);
             }

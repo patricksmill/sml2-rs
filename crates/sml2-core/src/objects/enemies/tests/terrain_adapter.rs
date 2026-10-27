@@ -230,11 +230,11 @@ fn terrain_adapter_patrol_contract_needs_no_fall_operation() {
     let mut actor = Actor::default();
     actor.state = 1;
     let mut world = PatrolOnly;
-    fallwalker::patrol(&mut actor, FrameTick(2), &mut world);
+    fallwalker::patrol(&mut actor, FrameTick::new(2), &mut world);
     assert_eq!(actor.state, 2);
-    fallwalker::patrol(&mut actor, FrameTick(4), &mut world);
+    fallwalker::patrol(&mut actor, FrameTick::new(4), &mut world);
     assert_eq!(actor.state, 1);
-    fallwalker::patrol(&mut actor, FrameTick(5), &mut world);
+    fallwalker::patrol(&mut actor, FrameTick::new(5), &mut world);
     assert_eq!(actor.state, 2);
     assert_eq!(actor.position.x, 0);
 }

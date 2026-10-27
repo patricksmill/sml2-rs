@@ -64,7 +64,7 @@ pub(super) fn update_legacy(
 ) {
     let mut child = Actor::from_raw_slot(&st.b);
     let primary = Actor::from_raw_slot(&sim.slots[0].b);
-    let effect = update_child(&mut child, sprite, FrameTick(u64::from(sim.fff0)), &primary);
+    let effect = update_child(&mut child, sprite, sim.frame_tick(), &primary);
     st.b = child.to_raw_slot();
     match effect {
         Ok(FallEffect::None) => {}
@@ -94,7 +94,7 @@ mod tests {
         for frame in [1, 255, 257, u64::MAX] {
             let mut child = seeded_actor(0x60);
             let expected = child.to_raw_slot();
-            assert_eq!(update(&mut child, FrameTick(frame), 0x8F), FallEffect::None);
+            assert_eq!(update(&mut child, FrameTick::new(frame), 0x8F), FallEffect::None);
             assert_eq!(child.to_raw_slot(), expected);
         }
     }
@@ -106,7 +106,7 @@ mod tests {
                 let mut child = seeded_actor(start_y);
                 let mut expected = child;
                 expected.screen.y = end_y;
-                assert_eq!(update(&mut child, FrameTick(frame), 0x80), FallEffect::None);
+                assert_eq!(update(&mut child, FrameTick::new(frame), 0x80), FallEffect::None);
                 assert_eq!(child.to_raw_slot(), expected.to_raw_slot());
             }
         }
@@ -123,7 +123,7 @@ mod tests {
         ] {
             let mut child = seeded_actor(start_y);
             assert_eq!(
-                update(&mut child, FrameTick(0), primary_y),
+                update(&mut child, FrameTick::new(0), primary_y),
                 FallEffect::CountedRemoval
             );
             assert_eq!(child, Actor::default());
@@ -136,7 +136,7 @@ mod tests {
         let mut child = seeded_actor(0x6F);
         let mut expected = child;
         expected.screen.y = 0x70;
-        assert_eq!(update(&mut child, FrameTick(0), 0x80), FallEffect::None);
+        assert_eq!(update(&mut child, FrameTick::new(0), 0x80), FallEffect::None);
         assert_eq!(child.to_raw_slot(), expected.to_raw_slot());
     }
 }

@@ -118,7 +118,7 @@ fn directions_preserve_unknown_values_and_reverse_only_low_bit() {
 fn palette_flash_preserves_other_bits_at_exact_cadence_then_clears_all() {
     for frame in 0..=255 {
         let mut actor = Actor::from_raw_slot(&[0xA5; 32]);
-        actor.flash.animate_palette(FrameTick(frame));
+        actor.flash.animate_palette(FrameTick::new(frame));
         assert_eq!(
             actor.to_raw_slot()[14],
             if frame & 3 == 0 { 0xB5 } else { 0xA5 }
@@ -128,18 +128,36 @@ fn palette_flash_preserves_other_bits_at_exact_cadence_then_clears_all() {
     }
 }
 
+/// DX's `$5B690`/`$B413` flip CGB's VRAM-bank bit; an initialized
+/// palette bit stays as the handler wrote it.
+#[test]
+fn dx_flash_toggles_the_vram_bank_bit_and_keeps_the_palette_bit() {
+    let dx = |frame| FrameTick::new(frame).with_revision(ObjectRevision::Dx);
+    let mut flash = FlashFlags::from_bits(0x10);
+    for frame in 0..8 {
+        flash.animate_palette(dx(frame));
+    }
+    assert_eq!(flash.bits(), 0x10, "two four-frame toggles cancel");
+    flash.animate_palette(dx(8));
+    assert_eq!(flash.bits(), 0x18);
+    flash.flash_palette_on_tick(dx(2), 2);
+    flash.toggle_palette(FrameTick::new(0));
+    assert_eq!(flash.bits(), 0x00, "the original revision flips bit 4");
+    assert_eq!(FrameTick::default().revision(), ObjectRevision::Original);
+}
+
 #[test]
 fn native_frame_cadence_continues_past_byte_wrap() {
-    assert!(FrameTick(256).every(4));
-    assert!(!FrameTick(257).every(4));
-    assert!(FrameTick(264).every(8));
-    assert!(FrameTick(u64::MAX).every(3));
+    assert!(FrameTick::new(256).every(4));
+    assert!(!FrameTick::new(257).every(4));
+    assert!(FrameTick::new(264).every(8));
+    assert!(FrameTick::new(u64::MAX).every(3));
 }
 
 #[test]
 #[should_panic(expected = "frame cadence period must be positive")]
 fn cadence_rejects_zero_period() {
-    FrameTick(0).every(0);
+    FrameTick::new(0).every(0);
 }
 
 #[test]
@@ -225,7 +243,7 @@ fn four_step_bob_gates_and_preserves_unrelated_slot_bytes() {
         let mut slot = [0xA5; 32];
         slot[26] = 0;
         let mut actor = Actor::from_raw_slot(&slot);
-        assert_eq!(actor.animate_four_step_bob(FrameTick(frame)), Ok(()));
+        assert_eq!(actor.animate_four_step_bob(FrameTick::new(frame)), Ok(()));
         if frame % 4 == 0 {
             slot[26] = 1;
             slot[11] = 0xA6;
@@ -248,7 +266,7 @@ fn four_step_bob_advances_before_indexing_and_wraps_sprite_both_ways() {
         slot[26] = phase;
         slot[11] = sprite;
         let mut actor = Actor::from_raw_slot(&slot);
-        assert_eq!(actor.animate_four_step_bob(FrameTick(256)), Ok(()));
+        assert_eq!(actor.animate_four_step_bob(FrameTick::new(256)), Ok(()));
         slot[26] = next_phase;
         slot[11] = next_sprite;
         assert_eq!(actor.to_raw_slot(), slot);
@@ -261,10 +279,10 @@ fn four_step_bob_reports_invalid_advanced_index_without_inventing_delta() {
         let mut slot = [0xA5; 32];
         slot[26] = phase;
         let mut actor = Actor::from_raw_slot(&slot);
-        assert_eq!(actor.animate_four_step_bob(FrameTick(1)), Ok(()));
+        assert_eq!(actor.animate_four_step_bob(FrameTick::new(1)), Ok(()));
         assert_eq!(actor.to_raw_slot(), slot);
         assert_eq!(
-            actor.animate_four_step_bob(FrameTick(4)),
+            actor.animate_four_step_bob(FrameTick::new(4)),
             Err(AnimationFrameError { frame: phase + 1 })
         );
         slot[26] = phase + 1;
@@ -289,7 +307,7 @@ fn sprite_alternation_matches_literal_rom_sprites_at_every_frame_byte() {
             slot[11] = sprite;
             let original = Actor::from_raw_slot(&slot);
             let mut toggle = original;
-            toggle.animate_two_frame_toggle(FrameTick(frame), 8);
+            toggle.animate_two_frame_toggle(FrameTick::new(frame), 8);
             let mut expected = slot;
             if frame & 7 == 0 {
                 expected[11] = toggle_sprite;
@@ -297,7 +315,7 @@ fn sprite_alternation_matches_literal_rom_sprites_at_every_frame_byte() {
             assert_eq!(toggle.to_raw_slot(), expected, "toggle frame {frame}");
 
             let mut blink = original;
-            blink.animate_sprite_blink(FrameTick(frame), 8, 31);
+            blink.animate_sprite_blink(FrameTick::new(frame), 8, 31);
             expected[11] = if frame & 7 == 0 { blink_sprite } else { sprite };
             assert_eq!(blink.to_raw_slot(), expected, "blink frame {frame}");
         }
@@ -315,7 +333,7 @@ fn sprite_alternation_updates_native_state_and_continues_across_frame_wrap() {
         ..Actor::default()
     };
     let mut actor = original;
-    actor.animate_two_frame_toggle(FrameTick(248), 8);
+    actor.animate_two_frame_toggle(FrameTick::new(248), 8);
     assert_eq!(
         actor,
         Actor {
@@ -323,7 +341,7 @@ fn sprite_alternation_updates_native_state_and_continues_across_frame_wrap() {
             ..original
         }
     );
-    actor.animate_two_frame_toggle(FrameTick(255), 8);
+    actor.animate_two_frame_toggle(FrameTick::new(255), 8);
     assert_eq!(
         actor,
         Actor {
@@ -331,9 +349,9 @@ fn sprite_alternation_updates_native_state_and_continues_across_frame_wrap() {
             ..original
         }
     );
-    actor.animate_two_frame_toggle(FrameTick(256), 8);
+    actor.animate_two_frame_toggle(FrameTick::new(256), 8);
     assert_eq!(actor, original);
-    actor.animate_sprite_blink(FrameTick(264), 8, 31);
+    actor.animate_sprite_blink(FrameTick::new(264), 8, 31);
     assert_eq!(
         actor,
         Actor {
@@ -341,17 +359,17 @@ fn sprite_alternation_updates_native_state_and_continues_across_frame_wrap() {
             ..original
         }
     );
-    actor.animate_sprite_blink(FrameTick(272), 8, 31);
+    actor.animate_sprite_blink(FrameTick::new(272), 8, 31);
     assert_eq!(actor, original);
 }
 
 #[test]
 fn sprite_alternation_accepts_native_period_and_mask() {
     let mut actor = Actor::default();
-    actor.animate_sprite_blink(FrameTick(257), 3, 0x80);
+    actor.animate_sprite_blink(FrameTick::new(257), 3, 0x80);
     assert_eq!(actor.sprite, 0);
-    actor.animate_sprite_blink(FrameTick(258), 3, 0x80);
+    actor.animate_sprite_blink(FrameTick::new(258), 3, 0x80);
     assert_eq!(actor.sprite, 0x80);
-    actor.animate_two_frame_toggle(FrameTick(261), 3);
+    actor.animate_two_frame_toggle(FrameTick::new(261), 3);
     assert_eq!(actor.sprite, 0x81);
 }

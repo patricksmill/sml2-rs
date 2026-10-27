@@ -1143,8 +1143,10 @@ fn dx_geometry_and_spawns_drive_simulation_from_entry() {
     let SessionState::InLevel(ctx) = &dx.state else { panic!("level") };
     assert!(ctx.layout_live.cells.iter().all(|&c| c == 0x7F));
     assert_eq!(ctx.obj.records[0].y, moved);
+    assert_eq!(ctx.obj.revision, sml2_core::actor::ObjectRevision::Dx);
     let SessionState::InLevel(native_ctx) = &native.state else { panic!("level") };
     assert_ne!(native_ctx.obj.records[0].y, moved);
+    assert_eq!(native_ctx.obj.revision, sml2_core::actor::ObjectRevision::Original);
     // The DX renderer draws the simulated cells; nothing substitutes native ones.
     assert!(dx.render_dx_frame(&bundle, Mario, (160, 144)).is_ok());
 

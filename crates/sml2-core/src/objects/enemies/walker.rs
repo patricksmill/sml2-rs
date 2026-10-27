@@ -205,7 +205,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 150,
             },
             &mut world,
@@ -222,7 +222,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 50,
             },
             &mut world,
@@ -239,7 +239,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 100,
             },
             &mut world,
@@ -260,7 +260,7 @@ mod tests {
         update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -271,7 +271,7 @@ mod tests {
         update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -282,7 +282,7 @@ mod tests {
         update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -293,7 +293,7 @@ mod tests {
         update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(3),
+                frame: FrameTick::new(3),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -304,7 +304,7 @@ mod tests {
         update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(4),
+                frame: FrameTick::new(4),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -323,7 +323,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -335,7 +335,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -363,7 +363,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -389,7 +389,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -419,7 +419,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -445,7 +445,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -473,7 +473,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -500,7 +500,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -528,7 +528,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -556,7 +556,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 0,
             },
             &mut world,

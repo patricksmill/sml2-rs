@@ -7,7 +7,7 @@ impl ObjectSim {
         self.apply_boss_damage(staging);
         let mut actor = Actor::from_raw_slot(&staging.b);
         let inputs = patrol_boss::Inputs {
-            frame: FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             div: self.div,
             fade_idle: self.fade_timer == 0,
             hit: if self.done != 0 {

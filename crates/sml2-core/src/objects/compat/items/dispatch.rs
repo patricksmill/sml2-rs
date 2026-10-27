@@ -8,7 +8,7 @@ use item_poses::PoseEffect;
 impl ObjectSim {
     fn run_item(&mut self, st: &mut Staging, update: impl FnOnce(&mut Actor, FrameTick)) {
         let mut actor = Actor::from_raw_slot(&st.b);
-        update(&mut actor, FrameTick(u64::from(self.fff0)));
+        update(&mut actor, self.frame_tick());
         st.b = actor.to_raw_slot();
     }
 

@@ -18,7 +18,7 @@ const SWEEP: [u8; 112] = {
 
 fn inputs(frame: u8) -> Inputs<'static> {
     Inputs {
-        frame: FrameTick(u64::from(frame)),
+        frame: FrameTick::new(u64::from(frame)),
         fade_idle: true,
         hit: None,
         primary: true,

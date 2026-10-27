@@ -8,7 +8,7 @@ impl ObjectSim {
         self.boss_damage_pass(st);
         let context = Context {
             spawn_flip: SpriteFlipFlags::from_bits(self.spawn_attr),
-            frame: FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             hit_processed: self.done != 0,
             stomp_latched: self.boss_hit_latch != 0,
             stun_reload: self.boss_timer_reload,

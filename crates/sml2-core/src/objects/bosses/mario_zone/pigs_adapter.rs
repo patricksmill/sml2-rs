@@ -9,7 +9,7 @@ use crate::objects::{ObjectSim, Staging};
 impl ObjectSim {
     fn pig_context(&self) -> Context {
         Context {
-            frame: FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             hit_processed: self.done != 0,
             stomp_latched: self.boss_hit_latch != 0,
             stun_reload: self.boss_timer_reload,

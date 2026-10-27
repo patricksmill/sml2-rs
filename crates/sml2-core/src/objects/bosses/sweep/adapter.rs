@@ -12,7 +12,7 @@ impl ObjectSim {
         let result = sweep_boss::update(
             &mut actor,
             sweep_boss::Inputs {
-                frame: FrameTick(u64::from(self.fff0)),
+                frame: self.frame_tick(),
                 div: self.div,
                 fade_idle: self.fade_timer == 0,
                 hit: if self.done != 0 {

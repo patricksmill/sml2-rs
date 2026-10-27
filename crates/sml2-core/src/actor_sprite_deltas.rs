@@ -39,11 +39,11 @@ mod tests {
                 slot[11] = 0;
                 let mut actor = Actor::from_raw_slot(&slot);
                 actor
-                    .animate_sprite_delta_cycle(FrameTick(1), period, &[-3, 1, 1, 1])
+                    .animate_sprite_delta_cycle(FrameTick::new(1), period, &[-3, 1, 1, 1])
                     .unwrap();
                 assert_eq!(actor.to_raw_slot(), slot);
                 actor
-                    .animate_sprite_delta_cycle(FrameTick(4), period, &[-3, 1, 1, 1])
+                    .animate_sprite_delta_cycle(FrameTick::new(4), period, &[-3, 1, 1, 1])
                     .unwrap();
                 slot[26] = next;
                 slot[11] = sprite;
@@ -53,19 +53,19 @@ mod tests {
         let mut actor = Actor::default();
         actor.animation_frame = 4;
         assert_eq!(
-            actor.animate_sprite_delta_cycle(FrameTick(0), 2, &[-3, 1, 1, 1]),
+            actor.animate_sprite_delta_cycle(FrameTick::new(0), 2, &[-3, 1, 1, 1]),
             Err(AnimationFrameError { frame: 5 })
         );
         assert_eq!((actor.animation_frame, actor.sprite), (5, 0));
         actor.animation_frame = 255;
         actor.sprite = 0;
         actor
-            .animate_sprite_delta_cycle(FrameTick(0), 1, &[-2, 1, 1])
+            .animate_sprite_delta_cycle(FrameTick::new(0), 1, &[-2, 1, 1])
             .unwrap();
         assert_eq!((actor.animation_frame, actor.sprite), (0, 254));
         actor.animation_frame = 255;
         assert_eq!(
-            actor.animate_sprite_delta_cycle(FrameTick(0), 2, &[]),
+            actor.animate_sprite_delta_cycle(FrameTick::new(0), 2, &[]),
             Err(AnimationFrameError { frame: 0 })
         );
     }

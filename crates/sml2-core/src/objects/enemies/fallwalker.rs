@@ -214,7 +214,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FallWalkerContext {
-                frame: FrameTick(1), // odd frame skips bob
+                frame: FrameTick::new(1), // odd frame skips bob
                 mario_ref_x: 150,
                 contact_kind: ContactKind::from_raw(0x56),
             },
@@ -242,7 +242,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FallWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 150,
                 contact_kind: ContactKind::from_raw(0x52),
             },
@@ -260,7 +260,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FallWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 50,
                 contact_kind: ContactKind::from_raw(0x56),
             },
@@ -276,7 +276,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FallWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 100,
                 contact_kind: ContactKind::from_raw(0x56),
             },
@@ -299,7 +299,7 @@ mod tests {
         update(
             &mut actor,
             FallWalkerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 0,
                 contact_kind: ContactKind::NONE,
             },
@@ -312,7 +312,7 @@ mod tests {
         update(
             &mut actor,
             FallWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 0,
                 contact_kind: ContactKind::NONE,
             },
@@ -325,7 +325,7 @@ mod tests {
         update(
             &mut actor,
             FallWalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 0,
                 contact_kind: ContactKind::NONE,
             },
@@ -349,7 +349,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FallWalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 0,
                 contact_kind: ContactKind::NONE,
             },
@@ -372,7 +372,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FallWalkerContext {
-                frame: FrameTick(4),
+                frame: FrameTick::new(4),
                 mario_ref_x: 0,
                 contact_kind: ContactKind::NONE,
             },
@@ -403,7 +403,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FallWalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 0,
                 contact_kind: ContactKind::NONE,
             },
@@ -426,7 +426,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FallWalkerContext {
-                frame: FrameTick(4),
+                frame: FrameTick::new(4),
                 mario_ref_x: 0,
                 contact_kind: ContactKind::NONE,
             },
@@ -455,7 +455,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FallWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 0,
                 contact_kind: ContactKind::NONE,
             },
@@ -479,7 +479,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FallWalkerContext {
-                frame: FrameTick(3),
+                frame: FrameTick::new(3),
                 mario_ref_x: 0,
                 contact_kind: ContactKind::NONE,
             },
@@ -505,7 +505,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FallWalkerContext {
-                frame: FrameTick(5),
+                frame: FrameTick::new(5),
                 mario_ref_x: 0,
                 contact_kind: ContactKind::NONE,
             },

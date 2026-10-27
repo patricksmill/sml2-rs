@@ -48,7 +48,7 @@ mod adapter {
                 saved_contact_kind: ContactKind::from_raw(self.saved_type),
             };
             let mut actor = Actor::from_raw_slot(&st.b);
-            update_hit_stun(&mut actor, FrameTick(u64::from(self.fff0)), context);
+            update_hit_stun(&mut actor, self.frame_tick(), context);
             st.b = actor.to_raw_slot();
         }
     }
@@ -117,7 +117,7 @@ mod tests {
             actor.timer = 1;
             update_hit_stun(
                 &mut actor,
-                FrameTick(256),
+                FrameTick::new(256),
                 HitStunContext {
                     removal_pending: false,
                     definition_sprite: 0,

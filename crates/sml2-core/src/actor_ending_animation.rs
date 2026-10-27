@@ -75,7 +75,7 @@ mod tests {
             for frame in 0..=260 {
                 let before = slot(phase, sprite, flags);
                 let mut actor = Actor::from_raw_slot(&before);
-                assert_eq!(actor.animate_ending_bob(FrameTick(frame)), Ok(()));
+                assert_eq!(actor.animate_ending_bob(FrameTick::new(frame)), Ok(()));
                 let mut expected = before;
                 if frame & 3 == 0 {
                     expected[26] = next_phase;
@@ -98,7 +98,7 @@ mod tests {
             for horizontal in [0, 0x20] {
                 let mut expected = slot(3, 100, index | horizontal);
                 let mut actor = Actor::from_raw_slot(&expected);
-                assert_eq!(actor.animate_ending_bob(FrameTick(4)), Ok(()));
+                assert_eq!(actor.animate_ending_bob(FrameTick::new(4)), Ok(()));
                 expected[26] = 0;
                 expected[13] = index;
                 expected[11] = expected_sprite;
@@ -112,10 +112,10 @@ mod tests {
         for phase in 4..=254 {
             let mut expected = slot(phase, 0xA5, 0xF7);
             let mut actor = Actor::from_raw_slot(&expected);
-            assert_eq!(actor.animate_ending_bob(FrameTick(1)), Ok(()));
+            assert_eq!(actor.animate_ending_bob(FrameTick::new(1)), Ok(()));
             assert_eq!(actor.to_raw_slot(), expected);
             assert_eq!(
-                actor.animate_ending_bob(FrameTick(4)),
+                actor.animate_ending_bob(FrameTick::new(4)),
                 Err(EndingBobError {
                     lookup_index: phase + 1
                 })
@@ -135,7 +135,7 @@ mod tests {
             let mut expected = slot(3, 0xA5, flags);
             let mut actor = Actor::from_raw_slot(&expected);
             assert_eq!(
-                actor.animate_ending_bob(FrameTick(4)),
+                actor.animate_ending_bob(FrameTick::new(4)),
                 Err(EndingBobError {
                     lookup_index: index
                 })

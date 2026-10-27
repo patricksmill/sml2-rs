@@ -5,7 +5,7 @@ use crate::actor::{Actor, FrameTick};
 impl ObjectSim {
     pub(super) fn handler_0x5ac7d(&mut self, st: &mut Staging, tables: &ObjectTables) {
         let mut actor = Actor::from_raw_slot(&st.b);
-        let frame = FrameTick(u64::from(self.fff0));
+        let frame = self.frame_tick();
         let result = handler_0x5ac7d::update(&mut actor, frame, self.easy_mode);
         st.b = actor.to_raw_slot();
         match result {

@@ -8,7 +8,7 @@ impl ObjectSim {
         let result = door_child::update(
             &mut actor,
             door_child::Inputs {
-                frame: FrameTick(u64::from(self.fff0)),
+                frame: self.frame_tick(),
                 door_phase: self.door_phase,
                 sequence_active: self.door_sequence_active != 0,
             },

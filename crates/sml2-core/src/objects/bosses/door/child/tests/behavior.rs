@@ -2,7 +2,7 @@ use super::*;
 
 fn input(phase: u8, frame: u64, active: bool) -> Inputs {
     Inputs {
-        frame: FrameTick(frame),
+        frame: FrameTick::new(frame),
         door_phase: phase,
         sequence_active: active,
     }

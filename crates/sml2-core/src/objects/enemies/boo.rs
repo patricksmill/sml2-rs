@@ -137,7 +137,7 @@ mod tests {
                     update(
                         &mut actor,
                         BooContext {
-                            frame: FrameTick(4),
+                            frame: FrameTick::new(4),
                             mario_dir_right: right,
                             mario_ref_x: if right { 150 } else { 50 },
                             mario_ref_y: 100,
@@ -178,7 +178,7 @@ mod tests {
                 update(
                     &mut actor,
                     BooContext {
-                        frame: FrameTick(4),
+                        frame: FrameTick::new(4),
                         mario_dir_right: right,
                         mario_ref_x: if right { 150 } else { 50 },
                         mario_ref_y: 100,
@@ -247,7 +247,7 @@ mod tests {
                 update(
                     &mut actor,
                     BooContext {
-                        frame: FrameTick(4),
+                        frame: FrameTick::new(4),
                         mario_dir_right: true,
                         mario_ref_x: 150,
                         mario_ref_y: 100,
@@ -276,7 +276,7 @@ mod tests {
     fn test_frame_cadence_every_4() {
         let mut actor = Actor::default();
         let ctx = BooContext {
-            frame: FrameTick(1), // not divisible by 4
+            frame: FrameTick::new(1), // not divisible by 4
             mario_dir_right: true,
             mario_ref_x: 200,
             mario_ref_y: 100,
@@ -293,7 +293,7 @@ mod tests {
         // Boo is at 100. Mario is at 150 (to the right) looking left (dir_right = false).
         // Mario is looking right at Boo!
         let ctx = BooContext {
-            frame: FrameTick(4),
+            frame: FrameTick::new(4),
             mario_dir_right: false,
             mario_ref_x: 150,
             mario_ref_y: 100,
@@ -313,7 +313,7 @@ mod tests {
 
         // Mario is at 150 (to the right) facing right (turned away!).
         let ctx = BooContext {
-            frame: FrameTick(4),
+            frame: FrameTick::new(4),
             mario_dir_right: true,
             mario_ref_x: 150,
             mario_ref_y: 100,
@@ -329,7 +329,7 @@ mod tests {
 
         // Next 4th frame: advances right in X, keeps tracking Y
         let ctx = BooContext {
-            frame: FrameTick(8),
+            frame: FrameTick::new(8),
             mario_dir_right: true,
             mario_ref_x: 150,
             mario_ref_y: 150, // Mario is below -> motion_leg accelerates to 9
@@ -350,7 +350,7 @@ mod tests {
 
         // Mario is at 50 (to the left) facing left (turned away!).
         let ctx = BooContext {
-            frame: FrameTick(4),
+            frame: FrameTick::new(4),
             mario_dir_right: false,
             mario_ref_x: 50,
             mario_ref_y: 50, // Mario is above
@@ -363,7 +363,7 @@ mod tests {
 
         // Next step: moves left
         let ctx = BooContext {
-            frame: FrameTick(8),
+            frame: FrameTick::new(8),
             mario_dir_right: false,
             mario_ref_x: 50,
             mario_ref_y: 50,

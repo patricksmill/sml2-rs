@@ -15,7 +15,7 @@ const DUMMY_PICKER_PROFILE: [u8; 38] = [
 
 fn default_context() -> Context {
     Context {
-        frame: FrameTick(0),
+        frame: FrameTick::new(0),
         spawn_flip: SpriteFlipFlags::from_bits(0),
         hit_processed: false,
         stomp_latched: false,
@@ -278,7 +278,7 @@ fn defeat_cascade_to_ending_exit() {
     actor.timer = 0;
     actor.screen.x = 191;
     let mut ctx_even = default_context();
-    ctx_even.frame = FrameTick(0); // even frame
+    ctx_even.frame = FrameTick::new(0); // even frame
     let effects = update(&mut actor, ctx_even, &DUMMY_PICKER_PROFILE).expect("run offscreen");
     assert_eq!(actor.to_raw_slot(), [0; 32]);
     assert!(effects.done, "slot done / blank");
@@ -292,7 +292,7 @@ fn source_regression_wrapped_proximity_24_to_255_enters_jump() {
     actor.state = 4;
     actor.screen.x = 26; // AF15 moves left two before B2DB: 24 -> 255 = -25.
     let mut ctx = default_context();
-    ctx.frame = FrameTick(1);
+    ctx.frame = FrameTick::new(1);
     ctx.player_screen_x = 255;
     update(&mut actor, ctx, &DUMMY_PICKER_PROFILE).unwrap();
     assert_eq!((actor.state, actor.screen.x, actor.sprite), (6, 24, 91));
@@ -349,7 +349,7 @@ fn source_regression_domain_ending_clears_every_slot_byte() {
     actor.timer = 0;
     actor.screen.x = 191;
     let mut ctx = default_context();
-    ctx.frame = FrameTick(2); // movement gate true; animation gate false.
+    ctx.frame = FrameTick::new(2); // movement gate true; animation gate false.
     let effects = update(&mut actor, ctx, &DUMMY_PICKER_PROFILE).unwrap();
     assert!(effects.done);
     assert_eq!(actor.to_raw_slot(), [0; 32]);

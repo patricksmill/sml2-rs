@@ -670,6 +670,8 @@ pub struct ObjectSim {
     pub standby: u8,
     pub active: u8,
     pub easy_mode: bool,
+    /// The object code the level runs: DX changes flash and parked bytes.
+    pub revision: crate::actor::ObjectRevision,
     pub sprite_map_index: u8,
     pub level_id: u8,
     pub done: u8,
@@ -779,6 +781,11 @@ pub struct ObjectSim {
 }
 
 impl ObjectSim {
+    /// This frame's `$FFF0` cadence under the level's object revision.
+    pub fn frame_tick(&self) -> crate::actor::FrameTick {
+        crate::actor::FrameTick::new(u64::from(self.fff0)).with_revision(self.revision)
+    }
+
     pub fn new(records: Vec<SpawnRecord>, cam_x: u16) -> Self {
         let n = records.len();
         Self {
@@ -801,6 +808,7 @@ impl ObjectSim {
             standby: 0,
             active: 0,
             easy_mode: false,
+            revision: Default::default(),
             sprite_map_index: 0,
             level_id: 0,
             done: 0,

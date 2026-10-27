@@ -27,7 +27,7 @@ impl handler_0x59774::World for Probes<'_> {
 impl ObjectSim {
     pub(super) fn handler_0x59774(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = Actor::from_raw_slot(&st.b);
-        let frame = FrameTick(u64::from(self.fff0));
+        let frame = self.frame_tick();
         let mario_ref_x = self.mario_ref_x;
         let dist = dist_mario_x(mario_ref_x, actor.position.x);
         let mut world = Probes {

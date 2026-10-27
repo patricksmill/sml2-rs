@@ -42,7 +42,7 @@ fn state0_initialization_direction_flip_and_unwritten_field_preservation() {
         let result = update_trajectory_child(
             &mut actor,
             TrajectoryChildContext {
-                frame: FrameTick(1), // odd tick: no 2-cadence advance
+                frame: FrameTick::new(1), // odd tick: no 2-cadence advance
             },
         );
 
@@ -75,7 +75,7 @@ fn every_trajectory_pair_and_restart_sentinel() {
             let result = update_trajectory_child(
                 &mut actor,
                 TrajectoryChildContext {
-                    frame: FrameTick(1),
+                    frame: FrameTick::new(1),
                 },
             );
 
@@ -107,7 +107,7 @@ fn every_trajectory_pair_and_restart_sentinel() {
         let result = update_trajectory_child(
             &mut actor,
             TrajectoryChildContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
             },
         );
 
@@ -132,7 +132,7 @@ fn offscreen_boundary_triggers_immediate_counted_removal_before_y_and_phase() {
         let result = update_trajectory_child(
             &mut actor,
             TrajectoryChildContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
             },
         );
 
@@ -183,7 +183,7 @@ fn frame_cadence_sequential_sprite_advance() {
     let _ = update_trajectory_child(
         &mut actor,
         TrajectoryChildContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
         },
     );
     assert_eq!(actor.animation_frame, 0);
@@ -193,7 +193,7 @@ fn frame_cadence_sequential_sprite_advance() {
     let _ = update_trajectory_child(
         &mut actor,
         TrajectoryChildContext {
-            frame: FrameTick(2),
+            frame: FrameTick::new(2),
         },
     );
     assert_eq!(actor.animation_frame, 1);

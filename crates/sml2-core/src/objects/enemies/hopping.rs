@@ -205,14 +205,14 @@ mod tests {
     fn handler_0x58848_init_timer_and_coordinate_boundaries() {
         let mut actor = Actor::default();
         let mut world = scene(1);
-        update(&mut actor, FrameTick(0), &mut world).unwrap();
+        update(&mut actor, FrameTick::new(0), &mut world).unwrap();
         assert_eq!(
             (actor.state, actor.contact_kind.raw(), actor.timer),
             (2, 77, 1)
         );
         actor.position.x = 0xffff;
         actor.position.y = 1;
-        update(&mut actor, FrameTick(1), &mut world).unwrap();
+        update(&mut actor, FrameTick::new(1), &mut world).unwrap();
         assert_eq!(
             (
                 actor.position.x,
@@ -224,7 +224,7 @@ mod tests {
         );
         actor.timer = 2;
         let before = actor.position;
-        update(&mut actor, FrameTick(2), &mut world).unwrap();
+        update(&mut actor, FrameTick::new(2), &mut world).unwrap();
         assert_eq!((actor.position, actor.timer), (before, 1));
     }
 
@@ -234,17 +234,17 @@ mod tests {
         actor.state = 1;
         actor.motion_phase = 11;
         let mut world = scene(200);
-        update(&mut actor, FrameTick(0), &mut world).unwrap();
+        update(&mut actor, FrameTick::new(0), &mut world).unwrap();
         assert_eq!(
             (actor.motion_phase, actor.motion_leg, actor.sprite),
             (0, 1, 52)
         );
-        update(&mut actor, FrameTick(1), &mut world).unwrap();
+        update(&mut actor, FrameTick::new(1), &mut world).unwrap();
         assert_eq!(actor.motion_phase, 1);
         world.wall = true;
         actor.set_motion_counter(2);
         let before = actor.position;
-        update(&mut actor, FrameTick(2), &mut world).unwrap();
+        update(&mut actor, FrameTick::new(2), &mut world).unwrap();
         assert_eq!(
             (actor.position, actor.state, actor.motion_counter()),
             (before, 2, 0)
@@ -254,7 +254,7 @@ mod tests {
         actor.position.x = 152;
         actor.set_motion_counter(2);
         // Movement happens before distance: 200 - 153 = 47 selects turning.
-        update(&mut actor, FrameTick(3), &mut world).unwrap();
+        update(&mut actor, FrameTick::new(3), &mut world).unwrap();
         assert_eq!(
             (actor.state, actor.motion_counter(), actor.timer),
             (4, 3, 8)
@@ -264,7 +264,7 @@ mod tests {
         actor.motion_leg = 1;
         actor.timer = 0;
         actor.set_motion_counter(2);
-        update(&mut actor, FrameTick(4), &mut world).unwrap();
+        update(&mut actor, FrameTick::new(4), &mut world).unwrap();
         assert_eq!((actor.state, actor.motion_counter()), (1, 0));
     }
 
@@ -276,12 +276,12 @@ mod tests {
             actor.sprite = 56;
             actor.timer = 1;
             let mut world = scene(0);
-            update(&mut actor, FrameTick(0), &mut world).unwrap();
+            update(&mut actor, FrameTick::new(0), &mut world).unwrap();
             assert_eq!((actor.timer, actor.animation_frame), (0, 0));
-            update(&mut actor, FrameTick(1), &mut world).unwrap();
+            update(&mut actor, FrameTick::new(1), &mut world).unwrap();
             assert_eq!(actor.animation_frame, 0);
             for step in 1..=6 {
-                update(&mut actor, FrameTick(step * 4), &mut world).unwrap();
+                update(&mut actor, FrameTick::new(step * 4), &mut world).unwrap();
                 assert_eq!(actor.animation_frame, step as u8);
                 let excursion = if step <= 3 { step * 4 } else { (6 - step) * 4 };
                 assert_eq!(
@@ -297,7 +297,7 @@ mod tests {
             }
             assert_eq!(actor.position.x, 0);
             actor.set_motion_counter(3);
-            update(&mut actor, FrameTick(28), &mut world).unwrap();
+            update(&mut actor, FrameTick::new(28), &mut world).unwrap();
             assert_eq!(
                 (
                     actor.state,
@@ -319,7 +319,7 @@ mod tests {
         actor.set_motion_counter(1);
         let mut world = scene(129);
         world.floor = true;
-        update(&mut actor, FrameTick(0), &mut world).unwrap();
+        update(&mut actor, FrameTick::new(0), &mut world).unwrap();
         assert_eq!(
             (
                 actor.state,

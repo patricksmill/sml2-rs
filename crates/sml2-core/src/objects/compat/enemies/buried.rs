@@ -41,7 +41,7 @@ impl World for Inputs<'_> {
 impl ObjectSim {
     pub(super) fn handler_0x589a6(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = Actor::from_raw_slot(&st.b);
-        let frame = FrameTick(u64::from(self.fff0));
+        let frame = self.frame_tick();
         let mut inputs = Inputs {
             sim: self,
             probes: TerrainProbes::new(layout, Position { x: st.px, y: st.py }),

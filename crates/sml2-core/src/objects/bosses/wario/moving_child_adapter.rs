@@ -7,7 +7,7 @@ use crate::objects::{ObjectSim, ObjectTables, Staging};
 impl ObjectSim {
     pub(in crate::objects) fn handler_wario21(&mut self, st: &mut Staging, tables: &ObjectTables) {
         let context = ChildContext {
-            frame: FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             transition_pending: self.boss_transition != 0,
             respawn_edge: if self.div & 1 == 0 {
                 RespawnEdge::Left

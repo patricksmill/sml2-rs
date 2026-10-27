@@ -16,7 +16,7 @@ fn handler_0xa27e_idle_and_command_initialization_preserve_whole_slot() {
             // Initialization must return even on a movement tick.
             for frame in [0, 1] {
                 let mut actor = Actor::from_raw_slot(&expected);
-                let sound = update(&mut actor, FrameTick(frame)).unwrap();
+                let sound = update(&mut actor, FrameTick::new(frame)).unwrap();
                 let mut after = expected;
                 if sprite != 14 {
                     after[18] = 64;
@@ -39,7 +39,7 @@ fn handler_0xa27e_flight_all_coordinates_cadences_and_directions() {
                 // Movement follows state even when the flip points elsewhere.
                 expected[13] = if state == 1 { 0xFF } else { 0xDF };
                 let mut actor = Actor::from_raw_slot(&expected);
-                assert_eq!(update(&mut actor, FrameTick(frame)), Ok(None));
+                assert_eq!(update(&mut actor, FrameTick::new(frame)), Ok(None));
                 if frame & 1 == 0 {
                     expected[10] = if state == 1 {
                         x.wrapping_sub(3)
@@ -66,7 +66,7 @@ fn handler_0xa27e_unsupported_states_preserve_bytes() {
     for state in 3u8..=255 {
         let raw = dirty(state);
         let mut actor = Actor::from_raw_slot(&raw);
-        assert_eq!(update(&mut actor, FrameTick(0)), Err(state));
+        assert_eq!(update(&mut actor, FrameTick::new(0)), Err(state));
         assert_eq!(actor.to_raw_slot(), raw);
     }
 }

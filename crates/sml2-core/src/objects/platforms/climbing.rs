@@ -70,7 +70,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick) -> Result<Effect, Erro
         // $5A8C6: blink (`$5B68B`), count down, then `$5A663` -> `$5B2BF`.
         4 => {
             if frame.every(2) {
-                actor.flash.toggle_palette();
+                actor.flash.toggle_palette(frame);
             }
             actor.timer = actor.timer.wrapping_sub(1);
             if actor.timer != 0 {

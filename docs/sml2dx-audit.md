@@ -133,10 +133,11 @@ enter each level on DX's layout and spawn positions, so simulation, actors,
 arena reloads (level 18's unchanged blob) and rendering share one geometry;
 a level entered before DX was enabled keeps native cells until re-entry.
 
-Additional object patches: ROM 5872B/5876A change parked FFDC/slot 12 value 80->00;
-5B693 and boss B416 change flash XOR 10->08. Native staging XORs these values
-into draw attributes, where CGB bit 3 selects VRAM bank. Verify these priority/
-bank-toggle paths separately while preserving vanilla slot behavior.
+Additional object patches: ROM 5872B/5876A change the parked pose's FFDC
+(slot 12) 80->00, and the only two flash routines, 5B690 and boss B413, change
+`xor $10` (DMG palette) to `xor $08` (CGB VRAM bank) on FFDE. `ObjectRevision`
+carries both through `ObjectSim` and `FrameTick`; DX level entry selects it, and
+the draw composes slot 12 ^ flip ^ flash into CGB attributes.
 
 ## Verification and limits
 

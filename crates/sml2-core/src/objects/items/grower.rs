@@ -82,10 +82,10 @@ mod tests {
     fn grower_bobs_three_segments_then_grows_holds_and_rearms() {
         let mut actor = Actor::default();
         actor.position.y = 0x80;
-        update(&mut actor, FrameTick(0));
+        update(&mut actor, FrameTick::new(0));
         assert_eq!((actor.state, actor.contact_kind.raw()), (1, 0x4C));
         for _ in 0..9 {
-            update(&mut actor, FrameTick(0));
+            update(&mut actor, FrameTick::new(0));
         }
         // Up 3, down 3, up 3.
         assert_eq!(
@@ -93,20 +93,20 @@ mod tests {
             (0x80 - 3, 2, ContactKind::NONE)
         );
         actor.sprite = SMALL_SPRITE;
-        update(&mut actor, FrameTick(1));
+        update(&mut actor, FrameTick::new(1));
         assert_eq!(actor.sprite, SMALL_SPRITE);
-        update(&mut actor, FrameTick(0));
-        update(&mut actor, FrameTick(4));
+        update(&mut actor, FrameTick::new(0));
+        update(&mut actor, FrameTick::new(4));
         assert_eq!(
             (actor.sprite, actor.state, actor.timer),
             (GROWN_SPRITE, 3, 0x20)
         );
         for _ in 0..0x20 {
-            update(&mut actor, FrameTick(0));
+            update(&mut actor, FrameTick::new(0));
         }
         assert_eq!(actor.sprite, GROWN_SPRITE);
-        update(&mut actor, FrameTick(0));
-        update(&mut actor, FrameTick(0));
+        update(&mut actor, FrameTick::new(0));
+        update(&mut actor, FrameTick::new(0));
         assert_eq!((actor.sprite, actor.state), (SMALL_SPRITE, 1));
     }
 }

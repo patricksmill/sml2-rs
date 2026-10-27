@@ -11,7 +11,7 @@ impl ObjectSim {
                 remove_mode: self.remove_mode,
                 sequence_active: self.door_sequence_active != 0,
                 door_phase: self.door_phase,
-                frame: FrameTick(u64::from(self.fff0)),
+                frame: self.frame_tick(),
                 fall_profile: &tables.boss_picker_profile,
             },
             self.door_parity,

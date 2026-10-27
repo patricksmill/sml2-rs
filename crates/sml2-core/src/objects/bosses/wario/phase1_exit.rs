@@ -33,7 +33,7 @@ impl ObjectSim {
         self.fade_timer = (self.fade_timer & 0xFF00) | u16::from(FADE_LOW);
         self.fade_timer_set = Some(self.fade_timer);
         let mut actor = Actor::from_raw_slot(&st.b);
-        let exited = update_exit(&mut actor, FrameTick(u64::from(self.fff0)));
+        let exited = update_exit(&mut actor, self.frame_tick());
         st.b = actor.to_raw_slot();
         if !exited.expect("boss sprite cycle index must address the four-entry ROM table") {
             return;

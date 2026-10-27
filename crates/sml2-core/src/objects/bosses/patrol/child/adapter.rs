@@ -13,7 +13,7 @@ impl ObjectSim {
         let result = patrol_child::update(
             &mut actor,
             patrol_child::Inputs {
-                frame: FrameTick(u64::from(self.fff0)),
+                frame: self.frame_tick(),
                 player: ScreenPosition {
                     x: self.player_screen_x,
                     y: self.player_screen_y,

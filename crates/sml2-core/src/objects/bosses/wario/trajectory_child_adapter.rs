@@ -9,7 +9,7 @@ use crate::objects::{ObjectSim, Staging};
 impl ObjectSim {
     pub(in crate::objects) fn handler_wario27(&mut self, st: &mut Staging) {
         let context = TrajectoryChildContext {
-            frame: FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
         };
         let mut actor = Actor::from_raw_slot(&st.b);
         let result = update_trajectory_child(&mut actor, context);

@@ -32,7 +32,7 @@ impl ObjectSim {
         layout: &LevelLayout,
     ) {
         let mut actor = Actor::from_raw_slot(&st.b);
-        let frame = FrameTick(u64::from(self.fff0));
+        let frame = self.frame_tick();
         let result = {
             let mut world = TerrainWorld::new(self, st, layout);
             handler_0x59431::update(&mut actor, frame, &mut world, kind)

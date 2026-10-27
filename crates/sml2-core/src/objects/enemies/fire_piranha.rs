@@ -161,7 +161,7 @@ mod tests {
 
         // Mario to left (x = 90), distance 10 < 24
         let ctx = FirePiranhaContext {
-            frame: FrameTick(0),
+            frame: FrameTick::new(0),
             mario_travelling: false,
             mario_ref_x: 90,
             mario_ref_y: 100,
@@ -174,7 +174,7 @@ mod tests {
 
         // Mario to right (x = 110), distance 10 < 24
         let ctx = FirePiranhaContext {
-            frame: FrameTick(0),
+            frame: FrameTick::new(0),
             mario_travelling: false,
             mario_ref_x: 110,
             mario_ref_y: 100,
@@ -185,7 +185,7 @@ mod tests {
 
         // Mario far enough (x = 124, distance 24 >= 24)
         let ctx = FirePiranhaContext {
-            frame: FrameTick(0),
+            frame: FrameTick::new(0),
             mario_travelling: false,
             mario_ref_x: 124,
             mario_ref_y: 100,
@@ -211,7 +211,7 @@ mod tests {
         // Mario above (mario_ref_y = 150 < actor.y)
         for i in 1..=31 {
             let ctx = FirePiranhaContext {
-                frame: FrameTick(i),
+                frame: FrameTick::new(i),
                 mario_travelling: false,
                 mario_ref_x: 150,
                 mario_ref_y: 150,
@@ -225,7 +225,7 @@ mod tests {
 
         // Step 32: finishes rising, opens mouth (sprite 19), spawns projectile
         let ctx = FirePiranhaContext {
-            frame: FrameTick(32),
+            frame: FrameTick::new(32),
             mario_travelling: false,
             mario_ref_x: 150,
             mario_ref_y: 150,
@@ -253,7 +253,7 @@ mod tests {
 
         // Mario below (mario_ref_y = 250 > actor.y)
         let ctx = FirePiranhaContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_travelling: false,
             mario_ref_x: 150,
             mario_ref_y: 250,
@@ -285,7 +285,7 @@ mod tests {
         // Pause for 47 frames
         for i in 1..=47 {
             let ctx = FirePiranhaContext {
-                frame: FrameTick(i),
+                frame: FrameTick::new(i),
                 mario_travelling: false,
                 mario_ref_x: 150,
                 mario_ref_y: 150,
@@ -298,7 +298,7 @@ mod tests {
 
         // Frame 48: closes mouth (sprite 18), transitions to Retracting
         let ctx = FirePiranhaContext {
-            frame: FrameTick(48),
+            frame: FrameTick::new(48),
             mario_travelling: false,
             mario_ref_x: 150,
             mario_ref_y: 150,
@@ -312,7 +312,7 @@ mod tests {
         // Retract 32 steps
         for i in 1..=32 {
             let ctx = FirePiranhaContext {
-                frame: FrameTick(48 + i),
+                frame: FrameTick::new(48 + i),
                 mario_travelling: false,
                 mario_ref_x: 150,
                 mario_ref_y: 150,
@@ -327,7 +327,7 @@ mod tests {
         // Frame 81..87: no tick
         for f in 81..=87 {
             let ctx = FirePiranhaContext {
-                frame: FrameTick(f),
+                frame: FrameTick::new(f),
                 mario_travelling: false,
                 mario_ref_x: 150,
                 mario_ref_y: 150,
@@ -338,7 +338,7 @@ mod tests {
         }
         // Frame 88 (88 % 8 == 0): timer becomes 3
         let ctx = FirePiranhaContext {
-            frame: FrameTick(88),
+            frame: FrameTick::new(88),
             mario_travelling: false,
             mario_ref_x: 150,
             mario_ref_y: 150,
@@ -350,7 +350,7 @@ mod tests {
         update(
             &mut actor,
             FirePiranhaContext {
-                frame: FrameTick(96),
+                frame: FrameTick::new(96),
                 mario_travelling: false,
                 mario_ref_x: 150,
                 mario_ref_y: 150,
@@ -360,7 +360,7 @@ mod tests {
         update(
             &mut actor,
             FirePiranhaContext {
-                frame: FrameTick(104),
+                frame: FrameTick::new(104),
                 mario_travelling: false,
                 mario_ref_x: 150,
                 mario_ref_y: 150,
@@ -370,7 +370,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FirePiranhaContext {
-                frame: FrameTick(112),
+                frame: FrameTick::new(112),
                 mario_travelling: false,
                 mario_ref_x: 150,
                 mario_ref_y: 150,
@@ -384,7 +384,7 @@ mod tests {
     fn test_pipe_travel_despawn() {
         let mut actor = Actor::default();
         let ctx = FirePiranhaContext {
-            frame: FrameTick(0),
+            frame: FrameTick::new(0),
             mario_travelling: true,
             mario_ref_x: 100,
             mario_ref_y: 100,

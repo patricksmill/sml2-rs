@@ -33,7 +33,7 @@ mod tests {
                 expected[15] = 5;
                 expected[11] = sprite;
                 let mut actor = Actor::from_raw_slot(&expected);
-                update(&mut actor, FrameTick(frame));
+                update(&mut actor, FrameTick::new(frame));
                 if frame % 4 == 0 {
                     expected[11] = sprite.wrapping_add(1);
                     if sprite == 24 {
@@ -54,7 +54,7 @@ mod tests {
             expected[15] = 6;
             expected[24] = distance;
             let mut actor = Actor::from_raw_slot(&expected);
-            update(&mut actor, FrameTick(1));
+            update(&mut actor, FrameTick::new(1));
             expected[24] = distance.wrapping_sub(2);
             if distance == 2 {
                 expected[15] = 7;

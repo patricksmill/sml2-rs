@@ -7,7 +7,7 @@ use crate::objects::{ObjectSim, ObjectTables, Staging};
 impl ObjectSim {
     pub(in crate::objects) fn handler_wario28(&mut self, st: &mut Staging, tables: &ObjectTables) {
         let context = DropChildContext {
-            frame: FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             player_screen_x: self.player_screen_x,
             picker_profile: &tables.boss_picker_profile,
         };

@@ -189,7 +189,7 @@ fn ending_sprites_burst_full_frame_cadence_and_sound_requests() {
         };
         for frame in [u64::from(frame_byte), 0x1234_5600 + u64::from(frame_byte)] {
             let mut cells = prefix();
-            let outcome = append_burst(&tables, FrameTick(frame), &mut cells);
+            let outcome = append_burst(&tables, FrameTick::new(frame), &mut cells);
             assert_eq!(outcome.sprites, Ok(()));
             assert_eq!(
                 outcome.sound_effect,
@@ -222,7 +222,7 @@ fn ending_sprites_missing_assets_preserve_source_timer_and_effect_order() {
     assert_eq!(bytes(&cells), expected);
     for frame in [0, 1] {
         cells = prefix();
-        let outcome = append_burst(&tables, FrameTick(frame), &mut cells);
+        let outcome = append_burst(&tables, FrameTick::new(frame), &mut cells);
         assert_eq!(outcome.sprites, Err(MissingEndingFrame(0xEB)));
         assert_eq!(
             outcome.sound_effect,
@@ -259,7 +259,7 @@ fn ending_sprites_missing_assets_preserve_source_timer_and_effect_order() {
 fn ending_sprites_native_pose_uses_shared_append_consumer() {
     let tables = tables();
     let mut cells = prefix();
-    let pose = burst_pose(FrameTick(16));
+    let pose = burst_pose(FrameTick::new(16));
     append_cells(&tables, pose.frame, pose.position, pose.style, &mut cells).unwrap();
     assert_eq!(
         bytes(&cells),

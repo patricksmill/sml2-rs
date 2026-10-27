@@ -126,7 +126,7 @@ mod tests {
         let eff = update(
             &mut actor,
             VerticalPacerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
             },
         );
         assert_eq!(eff, VerticalPacerEffect::Initialized);
@@ -144,7 +144,7 @@ mod tests {
         update(
             &mut actor,
             VerticalPacerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
             },
         );
 
@@ -152,7 +152,7 @@ mod tests {
         let eff = update(
             &mut actor,
             VerticalPacerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
             },
         );
         assert_eq!(eff, VerticalPacerEffect::None);
@@ -163,7 +163,7 @@ mod tests {
         let eff = update(
             &mut actor,
             VerticalPacerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
             },
         );
         assert_eq!(
@@ -185,7 +185,7 @@ mod tests {
         update(
             &mut actor,
             VerticalPacerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
             },
         );
         assert_eq!(actor.sprite, 21);
@@ -194,7 +194,7 @@ mod tests {
         update(
             &mut actor,
             VerticalPacerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
             },
         );
         assert_eq!(actor.sprite, 21);
@@ -203,7 +203,7 @@ mod tests {
         update(
             &mut actor,
             VerticalPacerContext {
-                frame: FrameTick(4),
+                frame: FrameTick::new(4),
             },
         );
         assert_eq!(actor.sprite, 20);
@@ -218,7 +218,7 @@ mod tests {
         update(
             &mut actor,
             VerticalPacerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
             },
         );
 
@@ -228,7 +228,7 @@ mod tests {
             let eff = update(
                 &mut actor,
                 VerticalPacerContext {
-                    frame: FrameTick(frame),
+                    frame: FrameTick::new(frame),
                 },
             );
             assert_eq!(
@@ -245,7 +245,7 @@ mod tests {
         let eff = update(
             &mut actor,
             VerticalPacerContext {
-                frame: FrameTick(96),
+                frame: FrameTick::new(96),
             },
         );
         assert_eq!(
@@ -265,7 +265,7 @@ mod tests {
             let eff = update(
                 &mut actor,
                 VerticalPacerContext {
-                    frame: FrameTick(frame),
+                    frame: FrameTick::new(frame),
                 },
             );
             assert_eq!(eff, VerticalPacerEffect::None);
@@ -277,7 +277,7 @@ mod tests {
         let eff = update(
             &mut actor,
             VerticalPacerContext {
-                frame: FrameTick(130),
+                frame: FrameTick::new(130),
             },
         );
         assert_eq!(

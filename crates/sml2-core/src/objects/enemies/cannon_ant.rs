@@ -188,7 +188,7 @@ mod tests {
         let eff = update(
             &mut actor,
             CannonAntContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 150,
                 mario_ref_y: 100,
             },
@@ -211,7 +211,7 @@ mod tests {
         update(
             &mut actor,
             CannonAntContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 50,
                 mario_ref_y: 40,
             },
@@ -224,7 +224,7 @@ mod tests {
             let eff = update(
                 &mut actor,
                 CannonAntContext {
-                    frame: FrameTick(1),
+                    frame: FrameTick::new(1),
                     mario_ref_x: 50,
                     mario_ref_y: 40,
                 },
@@ -243,7 +243,7 @@ mod tests {
         let eff = update(
             &mut actor,
             CannonAntContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 50,
                 mario_ref_y: 40,
             },
@@ -272,7 +272,7 @@ mod tests {
         let eff = update(
             &mut actor,
             CannonAntContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 50,
                 mario_ref_y: 100,
             },
@@ -303,7 +303,7 @@ mod tests {
             let eff = update(
                 &mut actor,
                 CannonAntContext {
-                    frame: FrameTick(1),
+                    frame: FrameTick::new(1),
                     mario_ref_x: 50,
                     mario_ref_y: 40,
                 },
@@ -316,7 +316,7 @@ mod tests {
         let eff = update(
             &mut actor,
             CannonAntContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 50,
                 mario_ref_y: 40,
             },
@@ -338,7 +338,7 @@ mod tests {
             let eff = update(
                 &mut actor,
                 CannonAntContext {
-                    frame: FrameTick(1),
+                    frame: FrameTick::new(1),
                     mario_ref_x: 50,
                     mario_ref_y: 40,
                 },
@@ -352,7 +352,7 @@ mod tests {
         let eff = update(
             &mut actor,
             CannonAntContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 50,
                 mario_ref_y: 40,
             },

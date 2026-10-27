@@ -1,7 +1,7 @@
 use super::*;
 fn input() -> Inputs {
     Inputs {
-        frame: FrameTick(0),
+        frame: FrameTick::new(0),
         div: 0,
         fade_idle: true,
         hit: None,
@@ -83,7 +83,7 @@ fn handler_0xa372_live_animation_and_sounds_use_old_defeat_byte_all_cadences() {
                 let effects = update(
                     &mut actor,
                     Inputs {
-                        frame: FrameTick(frame),
+                        frame: FrameTick::new(frame),
                         div,
                         ..input()
                     },
@@ -139,7 +139,7 @@ fn handler_0xa372_shared_stun_and_death_force_flash_after_terminal_morph() {
                 let effects = update(
                     &mut actor,
                     Inputs {
-                        frame: FrameTick(frame),
+                        frame: FrameTick::new(frame),
                         primary,
                         ..input()
                     },
@@ -176,7 +176,7 @@ fn handler_0xa372_invalid_animation_and_state_preserve_source_prefix() {
     assert!(update(
         &mut actor,
         Inputs {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             ..input()
         }
     )

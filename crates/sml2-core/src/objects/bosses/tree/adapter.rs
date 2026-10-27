@@ -10,7 +10,7 @@ impl ObjectSim {
         let result = tree_boss::update(
             &mut actor,
             tree_boss::Inputs {
-                frame: FrameTick(u64::from(self.fff0)),
+                frame: self.frame_tick(),
                 fade_idle: self.fade_timer == 0,
                 hit: if self.done != 0 {
                     Some(self.boss_hit_latch != 0)

@@ -17,7 +17,7 @@ fn drop_child_state0_selects_horizontal_direction_from_flip() {
     actor.sprite_flip = SpriteFlipFlags::from_bits(0);
 
     let ctx = DropChildContext {
-        frame: FrameTick(0),
+        frame: FrameTick::new(0),
         player_screen_x: 100,
         picker_profile: &DUMMY_PICKER_PROFILE,
     };
@@ -46,7 +46,7 @@ fn drop_child_state1_moves_left_and_state2_moves_right() {
     actor2.screen.y = 50;
 
     let ctx = DropChildContext {
-        frame: FrameTick(1), // frame & 3 != 0 -> no vertical / proximity branch
+        frame: FrameTick::new(1), // frame & 3 != 0 -> no vertical / proximity branch
         player_screen_x: 0,
         picker_profile: &DUMMY_PICKER_PROFILE,
     };
@@ -68,7 +68,7 @@ fn drop_child_proximity_triggers_state3_and_sfx0() {
     actor.motion_leg = 1;
 
     let ctx = DropChildContext {
-        frame: FrameTick(4), // frame & 3 == 0
+        frame: FrameTick::new(4), // frame & 3 == 0
         player_screen_x: 50, // abs_diff = 53 - 50 = 3 < 8 (after x -= 2: x = 53)
         picker_profile: &DUMMY_PICKER_PROFILE,
     };
@@ -92,7 +92,7 @@ fn drop_child_state1_vertical_bob_cycles_legs() {
     // Run 15 steps with player far away so dist_x >= 8
     for i in 0..15 {
         let ctx = DropChildContext {
-            frame: FrameTick((i as u64) * 4), // frame & 3 == 0
+            frame: FrameTick::new((i as u64) * 4), // frame & 3 == 0
             player_screen_x: 0,
             picker_profile: &DUMMY_PICKER_PROFILE,
         };
@@ -116,7 +116,7 @@ fn drop_child_state3_rise_then_fall_to_ground_state4() {
     // Leg 0: 12 steps of RiseProfile::Short
     for i in 0..12 {
         let ctx = DropChildContext {
-            frame: FrameTick(i),
+            frame: FrameTick::new(i),
             player_screen_x: 50,
             picker_profile: &DUMMY_PICKER_PROFILE,
         };
@@ -129,7 +129,7 @@ fn drop_child_state3_rise_then_fall_to_ground_state4() {
     // Leg 1: falls until screen.y >= 0x90 (144)
     actor.screen.y = 143;
     let ctx = DropChildContext {
-        frame: FrameTick(12),
+        frame: FrameTick::new(12),
         player_screen_x: 50,
         picker_profile: &DUMMY_PICKER_PROFILE,
     };
@@ -141,7 +141,7 @@ fn drop_child_state3_rise_then_fall_to_ground_state4() {
 
     actor.screen.y = 144;
     let ctx2 = DropChildContext {
-        frame: FrameTick(13),
+        frame: FrameTick::new(13),
         player_screen_x: 50,
         picker_profile: &DUMMY_PICKER_PROFILE,
     };
@@ -151,7 +151,7 @@ fn drop_child_state3_rise_then_fall_to_ground_state4() {
 
     // State 4 is inert
     let ctx3 = DropChildContext {
-        frame: FrameTick(14),
+        frame: FrameTick::new(14),
         player_screen_x: 50,
         picker_profile: &DUMMY_PICKER_PROFILE,
     };
@@ -166,7 +166,7 @@ fn drop_child_unsupported_state_errors() {
     let mut actor = Actor::default();
     actor.state = 5;
     let ctx = DropChildContext {
-        frame: FrameTick(0),
+        frame: FrameTick::new(0),
         player_screen_x: 0,
         picker_profile: &DUMMY_PICKER_PROFILE,
     };

@@ -101,7 +101,7 @@ mod tests {
         raw[15] = 0;
         let mut actor = Actor::from_raw_slot(&raw);
         assert_eq!(
-            update(&mut actor, Part::Main, FrameTick(0), &FALL),
+            update(&mut actor, Part::Main, FrameTick::new(0), &FALL),
             Ok(Effects {
                 spawn_child: true,
                 clear: false
@@ -118,7 +118,7 @@ mod tests {
             raw[15] = 0;
             raw[28] = timer;
             let mut actor = Actor::from_raw_slot(&raw);
-            update(&mut actor, Part::Child, FrameTick(0), &FALL).unwrap();
+            update(&mut actor, Part::Child, FrameTick::new(0), &FALL).unwrap();
             raw[28] = timer.wrapping_add(1);
             if timer == 7 {
                 raw[15] = 1;
@@ -145,9 +145,9 @@ mod tests {
             raw[11] = 0;
             raw[26] = previous;
             let mut actor = Actor::from_raw_slot(&raw);
-            update(&mut actor, Part::Main, FrameTick(1), &FALL).unwrap();
+            update(&mut actor, Part::Main, FrameTick::new(1), &FALL).unwrap();
             assert_eq!(actor.to_raw_slot(), raw);
-            update(&mut actor, Part::Main, FrameTick(2), &FALL).unwrap();
+            update(&mut actor, Part::Main, FrameTick::new(2), &FALL).unwrap();
             raw[9] = 96;
             raw[26] = next;
             raw[11] = delta as u8;
@@ -172,9 +172,9 @@ mod tests {
                 raw[16] = phase;
                 raw[9] = 100;
                 let mut actor = Actor::from_raw_slot(&raw);
-                update(&mut actor, part, FrameTick(1), &FALL).unwrap();
+                update(&mut actor, part, FrameTick::new(1), &FALL).unwrap();
                 assert_eq!(actor.to_raw_slot(), raw);
-                update(&mut actor, part, FrameTick(2), &FALL).unwrap();
+                update(&mut actor, part, FrameTick::new(2), &FALL).unwrap();
                 raw[9] = (100i16
                     + dy
                     + if matches!(part, Part::Child) {
@@ -209,10 +209,10 @@ mod tests {
             actor.state = 3;
             actor.screen.y = y;
             assert_eq!(
-                update(&mut actor, Part::Child, FrameTick(1), &FALL),
+                update(&mut actor, Part::Child, FrameTick::new(1), &FALL),
                 Ok(Effects::default())
             );
-            let effects = update(&mut actor, Part::Child, FrameTick(2), &FALL).unwrap();
+            let effects = update(&mut actor, Part::Child, FrameTick::new(2), &FALL).unwrap();
             assert_eq!(
                 (actor.screen.y, actor.state, effects.clear),
                 (expected, 3, clear)

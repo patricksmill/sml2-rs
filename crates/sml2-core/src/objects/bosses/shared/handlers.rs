@@ -74,7 +74,7 @@ impl ObjectSim {
 
     pub(super) fn boss_morph_to_anim3(&mut self, st: &mut Staging) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
-        let morphed = boss_morph::update(&mut actor, crate::actor::FrameTick(u64::from(self.fff0)));
+        let morphed = boss_morph::update(&mut actor, self.frame_tick());
         st.b = actor.to_raw_slot();
         if morphed && self.boss_slot_ptr_lo == 0 {
             self.music_request = Some(0xFF);

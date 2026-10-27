@@ -2,7 +2,7 @@ use super::*;
 
 fn input(frame: u64) -> Inputs {
     Inputs {
-        frame: FrameTick(frame),
+        frame: FrameTick::new(frame),
         div: 0,
         fade_idle: true,
         hit: None,

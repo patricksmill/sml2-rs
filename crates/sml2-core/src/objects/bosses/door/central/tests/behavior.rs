@@ -10,7 +10,7 @@ fn input(remove_mode: u8, active: bool, phase: u8, frame: u64) -> Inputs<'static
         remove_mode,
         sequence_active: active,
         door_phase: phase,
-        frame: FrameTick(frame),
+        frame: FrameTick::new(frame),
         fall_profile: &FALL,
     }
 }

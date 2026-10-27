@@ -5,7 +5,7 @@ const DROP: [u8; 22] = [
 ];
 fn input() -> Inputs<'static> {
     Inputs {
-        frame: FrameTick(0),
+        frame: FrameTick::new(0),
         player_x: 88,
         remove_mode: 0,
         drop_profile: &DROP,
@@ -71,7 +71,7 @@ fn handler_0xa2be_drop_profile_cap_wrapping_threshold_and_flip_bit() {
                         update(
                             &mut actor,
                             Inputs {
-                                frame: FrameTick(frame),
+                                frame: FrameTick::new(frame),
                                 ..input()
                             }
                         ),
@@ -103,7 +103,7 @@ fn handler_0xa2be_approach_uses_wrapped_distance_after_move_and_even_cadence() {
                             &mut actor,
                             Inputs {
                                 player_x,
-                                frame: FrameTick(frame),
+                                frame: FrameTick::new(frame),
                                 ..input()
                             }
                         ),
@@ -146,7 +146,7 @@ fn handler_0xa2be_sprite_increment_checks_new62_and_terminal_checks_old65() {
                         update(
                             &mut actor,
                             Inputs {
-                                frame: FrameTick(frame),
+                                frame: FrameTick::new(frame),
                                 ..input()
                             }
                         ),
@@ -188,7 +188,7 @@ fn handler_0xa2be_rise_moves_every_tick_blinks_every_four_and_subtracts_exactly_
             let sound = update(
                 &mut actor,
                 Inputs {
-                    frame: FrameTick(frame),
+                    frame: FrameTick::new(frame),
                     ..input()
                 },
             )

@@ -13,7 +13,7 @@ fn sweep() -> [u8; 112] {
 }
 fn input() -> Inputs<'static> {
     Inputs {
-        frame: FrameTick(0),
+        frame: FrameTick::new(0),
         div: 255,
         fade_idle: true,
         hit: None,
@@ -238,7 +238,7 @@ fn handler_0xa0b9_delayed_stomp_sound_and_shared_stun_and_morph_order() {
                     let effects = update(
                         &mut actor,
                         Inputs {
-                            frame: FrameTick(frame),
+                            frame: FrameTick::new(frame),
                             primary,
                             ..input()
                         },

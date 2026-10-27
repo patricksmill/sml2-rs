@@ -186,7 +186,7 @@ mod tests {
         let eff = update(
             &mut actor,
             EdgeWalkerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 60,
             },
             &mut world,
@@ -201,7 +201,7 @@ mod tests {
         let eff = update(
             &mut actor,
             EdgeWalkerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 140,
             },
             &mut world,
@@ -221,7 +221,7 @@ mod tests {
         let eff = update(
             &mut actor,
             EdgeWalkerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 60,
             },
             &mut world,
@@ -238,7 +238,7 @@ mod tests {
         let eff = update(
             &mut actor,
             EdgeWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 60,
             },
             &mut world,
@@ -251,7 +251,7 @@ mod tests {
         let eff = update(
             &mut actor,
             EdgeWalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 60,
             },
             &mut world,
@@ -277,7 +277,7 @@ mod tests {
         update(
             &mut actor,
             EdgeWalkerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 120,
             },
             &mut world,
@@ -289,7 +289,7 @@ mod tests {
         let eff = update(
             &mut actor,
             EdgeWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 120,
             },
             &mut world,
@@ -315,7 +315,7 @@ mod tests {
         update(
             &mut actor,
             EdgeWalkerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 100,
             },
             &mut world,
@@ -328,7 +328,7 @@ mod tests {
             update(
                 &mut actor,
                 EdgeWalkerContext {
-                    frame: FrameTick(f),
+                    frame: FrameTick::new(f),
                     mario_ref_x: 100,
                 },
                 &mut world,
@@ -340,7 +340,7 @@ mod tests {
         update(
             &mut actor,
             EdgeWalkerContext {
-                frame: FrameTick(4),
+                frame: FrameTick::new(4),
                 mario_ref_x: 100,
             },
             &mut world,

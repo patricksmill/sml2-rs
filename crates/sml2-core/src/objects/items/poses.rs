@@ -62,7 +62,8 @@ pub(super) fn update_block_item(actor: &mut Actor, frame: FrameTick) -> PoseEffe
                 return PoseEffect::None;
             }
             actor.contact_kind = ContactKind::from_raw(0x80);
-            actor.defeat_mode = 0x80;
+            // `$58769`
+            actor.defeat_mode = frame.revision().parked_priority();
             PoseEffect::Parked
         }
     }
@@ -133,11 +134,19 @@ mod tests {
     use crate::actor::InteractionFlags;
 
     #[test]
+    fn dx_block_item_parks_without_the_behind_background_bit() {
+        let mut actor = Actor::default();
+        let frame = FrameTick::new(0).with_revision(crate::actor::ObjectRevision::Dx);
+        assert_eq!(update_block_item(&mut actor, frame), PoseEffect::Parked);
+        assert_eq!((actor.contact_kind.raw(), actor.defeat_mode), (0x80, 0));
+    }
+
+    #[test]
     fn block_item_parks_then_rises_eight_pixels_on_even_frames() {
         let mut actor = Actor::default();
         actor.position.y = 0x100;
         assert_eq!(
-            update_block_item(&mut actor, FrameTick(0)),
+            update_block_item(&mut actor, FrameTick::new(0)),
             PoseEffect::Parked
         );
         assert_eq!(
@@ -145,10 +154,10 @@ mod tests {
             (2, 0x80, 0x80)
         );
         actor.state = 1;
-        update_block_item(&mut actor, FrameTick(1));
+        update_block_item(&mut actor, FrameTick::new(1));
         assert_eq!(actor.position.y, 0x100);
         for frame in 0..8 {
-            update_block_item(&mut actor, FrameTick(frame * 2));
+            update_block_item(&mut actor, FrameTick::new(frame * 2));
         }
         assert_eq!(
             (actor.position.y, actor.state, actor.defeat_mode),
@@ -162,7 +171,7 @@ mod tests {
         actor.marker = 0x10;
         actor.definition = 3;
         assert_eq!(
-            update_block_item(&mut actor, FrameTick(0)),
+            update_block_item(&mut actor, FrameTick::new(0)),
             PoseEffect::None
         );
         assert_eq!(
@@ -174,21 +183,21 @@ mod tests {
     #[test]
     fn poses_spin_once_touched_and_87_skips_the_secret_route() {
         let mut actor = Actor::default();
-        update_pose86(&mut actor, FrameTick(0));
+        update_pose86(&mut actor, FrameTick::new(0));
         assert_eq!((actor.state, actor.contact_kind.raw()), (0, 0x86));
         actor.interactions = InteractionFlags::from_bits(0x10);
-        update_pose86(&mut actor, FrameTick(0));
+        update_pose86(&mut actor, FrameTick::new(0));
         assert_eq!((actor.state, actor.contact_kind.raw()), (1, 0));
 
         let mut actor = Actor::default();
         assert_eq!(
-            update_pose87(&mut actor, FrameTick(0), true),
+            update_pose87(&mut actor, FrameTick::new(0), true),
             PoseEffect::Remove
         );
-        update_pose87(&mut actor, FrameTick(0), false);
+        update_pose87(&mut actor, FrameTick::new(0), false);
         assert_eq!((actor.state, actor.contact_kind.raw()), (2, 0x87));
         actor.interactions = InteractionFlags::from_bits(0x10);
-        update_pose87(&mut actor, FrameTick(0), false);
+        update_pose87(&mut actor, FrameTick::new(0), false);
         assert_eq!((actor.state, actor.contact_kind.raw()), (1, 0));
     }
 
@@ -197,9 +206,9 @@ mod tests {
         let mut actor = Actor::default();
         actor.position.y = 0x80;
         for _ in 0..15 {
-            assert_eq!(update_pickup(&mut actor, FrameTick(1)), PoseEffect::None);
+            assert_eq!(update_pickup(&mut actor, FrameTick::new(1)), PoseEffect::None);
         }
-        assert_eq!(update_pickup(&mut actor, FrameTick(1)), PoseEffect::Remove);
+        assert_eq!(update_pickup(&mut actor, FrameTick::new(1)), PoseEffect::Remove);
         assert_eq!(actor.position.y, 0x80 - 32);
     }
 }

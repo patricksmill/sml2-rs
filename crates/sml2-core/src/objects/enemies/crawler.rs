@@ -156,17 +156,17 @@ mod tests {
         actor.position.x = 0x80;
         let mut world = World::default();
         assert_eq!(
-            update(&mut actor, FrameTick(0), 0x90, &mut world),
+            update(&mut actor, FrameTick::new(0), 0x90, &mut world),
             Some(Ordering::Greater)
         );
         assert_eq!(
             (actor.state, actor.contact_kind.raw(), actor.flash.bits()),
             (2, 0x56, 16)
         );
-        update(&mut actor, FrameTick(2), 0x90, &mut world);
+        update(&mut actor, FrameTick::new(2), 0x90, &mut world);
         assert_eq!(actor.position.x, 0x81);
         world.wall = true;
-        update(&mut actor, FrameTick(4), 0x90, &mut world);
+        update(&mut actor, FrameTick::new(4), 0x90, &mut world);
         assert_eq!((actor.state, actor.sprite_flip.horizontal()), (1, false));
     }
 
@@ -177,7 +177,7 @@ mod tests {
         actor.position.y = 0x200;
         let mut world = World::default();
         for _ in 0..HOVER_CAP {
-            crawl(&mut actor, FrameTick(1), 0, &mut world);
+            crawl(&mut actor, FrameTick::new(1), 0, &mut world);
         }
         assert_eq!((actor.motion_leg, actor.motion_phase), (FALLING, 0));
         assert!(actor.position.y < 0x200);
@@ -191,7 +191,7 @@ mod tests {
             ceiling: true,
             ..World::default()
         };
-        crawl(&mut actor, FrameTick(1), 0, &mut world);
+        crawl(&mut actor, FrameTick::new(1), 0, &mut world);
         assert_eq!((actor.motion_leg, actor.motion_phase), (FALLING, 0));
     }
 
@@ -206,7 +206,7 @@ mod tests {
         };
         for hop in 1..4 {
             actor.motion_leg = FALLING;
-            assert_eq!(crawl(&mut actor, FrameTick(1), 0x10, &mut world), None);
+            assert_eq!(crawl(&mut actor, FrameTick::new(1), 0x10, &mut world), None);
             assert_eq!(
                 (actor.motion_counter(), actor.motion_phase, actor.state),
                 (hop, 10, 3)
@@ -214,7 +214,7 @@ mod tests {
         }
         actor.motion_leg = FALLING;
         assert_eq!(
-            crawl(&mut actor, FrameTick(1), 0x10, &mut world),
+            crawl(&mut actor, FrameTick::new(1), 0x10, &mut world),
             Some(Ordering::Less)
         );
         assert_eq!(

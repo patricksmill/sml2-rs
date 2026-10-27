@@ -454,6 +454,10 @@ impl Session {
     pub fn dx_enabled(&self) -> bool { self.dx.is_some() }
 
     fn seed_character(&self, ctx: &mut LevelContext, character: Character) {
+        ctx.obj.revision = match self.dx {
+            Some(_) => sml2_core::actor::ObjectRevision::Dx,
+            None => sml2_core::actor::ObjectRevision::Original,
+        };
         let curves = self.dx.as_ref().map(|dx| dx.movement[usize::from(character == Character::Luigi)].clone());
         ctx.sim.set_dx_movement(character, curves);
     }

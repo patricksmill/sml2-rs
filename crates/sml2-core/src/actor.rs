@@ -159,8 +159,9 @@ impl FlashFlags {
     pub fn clear(&mut self) {
         self.0 = 0;
     }
-    pub fn toggle_palette(&mut self) {
-        self.0 ^= 0x10;
+    /// `$5B690`/`$B413`: flip the revision's flash bit.
+    pub fn toggle_palette(&mut self, frame: FrameTick) {
+        self.0 ^= frame.revision().flash_toggle();
     }
 
     /// ROM `$B40E`: toggle the palette every fourth frame.
@@ -170,7 +171,7 @@ impl FlashFlags {
 
     pub fn flash_palette_on_tick(&mut self, frame: FrameTick, period: u64) {
         if frame.every(period) {
-            self.toggle_palette();
+            self.toggle_palette(frame);
         }
     }
 }
@@ -214,11 +215,51 @@ pub struct Hitbox {
     pub right: i8,
 }
 
-/// Native simulation frame counter used for cadence decisions.
+/// Object-engine bytes the SML2DX patch changes: the flash toggles
+/// (`$5B690`, `$B413`) and the parked item pose (`$5872A`, `$58769`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct FrameTick(pub u64);
+pub enum ObjectRevision {
+    #[default]
+    Original,
+    Dx,
+}
+
+impl ObjectRevision {
+    /// The `xor` operand on `$FFDE`: the DMG palette bit, or CGB's VRAM bank.
+    pub const fn flash_toggle(self) -> u8 {
+        match self {
+            Self::Original => 0x10,
+            Self::Dx => 0x08,
+        }
+    }
+
+    /// The parked pose's `$FFDC`, whose bit 7 hides the sprite behind the block.
+    pub const fn parked_priority(self) -> u8 {
+        match self {
+            Self::Original => 0x80,
+            Self::Dx => 0,
+        }
+    }
+}
+
+/// Native simulation frame counter used for cadence decisions, with the
+/// object revision its flash toggles follow.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct FrameTick(pub u64, ObjectRevision);
 
 impl FrameTick {
+    pub const fn new(frame: u64) -> Self {
+        Self(frame, ObjectRevision::Original)
+    }
+
+    pub const fn with_revision(self, revision: ObjectRevision) -> Self {
+        Self(self.0, revision)
+    }
+
+    pub const fn revision(self) -> ObjectRevision {
+        self.1
+    }
+
     pub const fn every(self, period: u64) -> bool {
         assert!(period > 0, "frame cadence period must be positive");
         self.0.is_multiple_of(period)

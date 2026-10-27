@@ -112,7 +112,7 @@ impl ObjectSim {
 
     fn advance_door_boss_mouth(&mut self, st: &mut Staging) {
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
-        door_boss_mouth::update(&mut actor, crate::actor::FrameTick(u64::from(self.fff0)));
+        door_boss_mouth::update(&mut actor, self.frame_tick());
         st.b = actor.to_raw_slot();
     }
 }

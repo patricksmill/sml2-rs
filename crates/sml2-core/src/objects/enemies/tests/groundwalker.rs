@@ -33,7 +33,7 @@ fn groundwalker_init_faces_mario_and_sets_flash_and_type() {
     let eff = update(
         &mut actor,
         GroundWalkerContext {
-            frame: FrameTick(1), // odd: no bob
+            frame: FrameTick::new(1), // odd: no bob
             mario_ref_x: 108,
         },
         &mut world,
@@ -56,7 +56,7 @@ fn groundwalker_init_faces_mario_and_sets_flash_and_type() {
     let eff = update(
         &mut actor,
         GroundWalkerContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_ref_x: 92,
         },
         &mut world,
@@ -84,7 +84,7 @@ fn groundwalker_cadence_counts_down_then_steps_48_times() {
     let eff = update(
         &mut actor,
         GroundWalkerContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_ref_x: 0,
         },
         &mut world,
@@ -99,7 +99,7 @@ fn groundwalker_cadence_counts_down_then_steps_48_times() {
         let eff = update(
             &mut actor,
             GroundWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 0,
             },
             &mut world,
@@ -118,7 +118,7 @@ fn groundwalker_cadence_counts_down_then_steps_48_times() {
     let eff = update(
         &mut actor,
         GroundWalkerContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_ref_x: 0,
         },
         &mut world,
@@ -145,7 +145,7 @@ fn groundwalker_wall_flips_direction() {
     let eff = update(
         &mut actor,
         GroundWalkerContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_ref_x: 0,
         },
         &mut world,
@@ -170,7 +170,7 @@ fn groundwalker_wall_flips_direction() {
     let eff = update(
         &mut actor,
         GroundWalkerContext {
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             mario_ref_x: 0,
         },
         &mut world,

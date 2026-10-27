@@ -2,7 +2,7 @@ use super::*;
 
 fn input(frame: u64) -> Inputs {
     Inputs {
-        frame: FrameTick(frame),
+        frame: FrameTick::new(frame),
         player: ScreenPosition { x: 88, y: 100 },
         remove_mode: 0,
         reward_slot: false,

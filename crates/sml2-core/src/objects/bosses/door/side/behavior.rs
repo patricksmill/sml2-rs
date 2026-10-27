@@ -41,7 +41,7 @@ mod tests {
     fn input(phase: u8, active: bool) -> Inputs<'static> {
         Inputs {
             remove_mode: 0,
-            frame: FrameTick(1),
+            frame: FrameTick::new(1),
             fall_profile: &[0; 22],
             door_phase: phase,
             sequence_active: active,

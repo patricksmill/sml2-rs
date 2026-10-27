@@ -30,7 +30,7 @@ impl handler_0x5a739::World for Inputs<'_> {
 impl ObjectSim {
     pub(super) fn handler_0x5a739(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = Actor::from_raw_slot(&st.b);
-        let frame = FrameTick(u64::from(self.fff0));
+        let frame = self.frame_tick();
         let player_x = self.mario_ref_x;
         let result = handler_0x5a739::update(&mut actor, frame, player_x, &mut Inputs { layout });
         st.b = actor.to_raw_slot();

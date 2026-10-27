@@ -65,7 +65,7 @@ impl ObjectSim {
         let mut legacy = Actor::from_raw_slot(&staging.b);
         let mut walker = from_actor(&legacy);
         let context = GroundWalkerContext {
-            frame: FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             mario_ref_x: self.mario_ref_x,
         };
         let effect = groundwalker::update(

@@ -180,7 +180,7 @@ mod tests {
         // Mario to left
         let mut actor = make_test_actor(100, 80);
         let ctx = WaveFlyerContext {
-            frame: FrameTick(0),
+            frame: FrameTick::new(0),
             mario_ref_x: 60,
         };
         let effect = update(&mut actor, ctx);
@@ -195,7 +195,7 @@ mod tests {
         // Mario to right
         let mut actor = make_test_actor(100, 80);
         let ctx = WaveFlyerContext {
-            frame: FrameTick(0),
+            frame: FrameTick::new(0),
             mario_ref_x: 140,
         };
         let effect = update(&mut actor, ctx);
@@ -206,7 +206,7 @@ mod tests {
         // Mario at same X
         let mut actor = make_test_actor(100, 80);
         let ctx = WaveFlyerContext {
-            frame: FrameTick(0),
+            frame: FrameTick::new(0),
             mario_ref_x: 100,
         };
         let effect = update(&mut actor, ctx);
@@ -225,7 +225,7 @@ mod tests {
         update(
             &mut actor,
             WaveFlyerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 100,
             },
         );
@@ -236,7 +236,7 @@ mod tests {
             update(
                 &mut actor,
                 WaveFlyerContext {
-                    frame: FrameTick(f),
+                    frame: FrameTick::new(f),
                     mario_ref_x: 100,
                 },
             );
@@ -247,7 +247,7 @@ mod tests {
         update(
             &mut actor,
             WaveFlyerContext {
-                frame: FrameTick(4),
+                frame: FrameTick::new(4),
                 mario_ref_x: 100,
             },
         );
@@ -264,7 +264,7 @@ mod tests {
             let effect = update(
                 &mut actor,
                 WaveFlyerContext {
-                    frame: FrameTick(f),
+                    frame: FrameTick::new(f),
                     mario_ref_x: 100,
                 },
             );
@@ -287,7 +287,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WaveFlyerContext {
-                frame: FrameTick(4),
+                frame: FrameTick::new(4),
                 mario_ref_x: 100,
             },
         );
@@ -308,7 +308,7 @@ mod tests {
             let eff = update(
                 &mut actor,
                 WaveFlyerContext {
-                    frame: FrameTick(f),
+                    frame: FrameTick::new(f),
                     mario_ref_x: 100,
                 },
             );
@@ -324,7 +324,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WaveFlyerContext {
-                frame: FrameTick(96),
+                frame: FrameTick::new(96),
                 mario_ref_x: 100,
             },
         );
@@ -338,7 +338,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WaveFlyerContext {
-                frame: FrameTick(100),
+                frame: FrameTick::new(100),
                 mario_ref_x: 100,
             },
         );
@@ -359,7 +359,7 @@ mod tests {
             let eff = update(
                 &mut actor,
                 WaveFlyerContext {
-                    frame: FrameTick(f),
+                    frame: FrameTick::new(f),
                     mario_ref_x: 100,
                 },
             );
@@ -379,7 +379,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WaveFlyerContext {
-                frame: FrameTick(192),
+                frame: FrameTick::new(192),
                 mario_ref_x: 100,
             },
         );
@@ -400,7 +400,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WaveFlyerContext {
-                frame: FrameTick(196),
+                frame: FrameTick::new(196),
                 mario_ref_x: 100,
             },
         );
@@ -428,7 +428,7 @@ mod tests {
 
         let mut actor = Actor::from_raw_slot(&slot);
         let ctx = WaveFlyerContext {
-            frame: FrameTick(0),
+            frame: FrameTick::new(0),
             mario_ref_x: 300,
         };
         let eff = update(&mut actor, ctx);

@@ -6,7 +6,7 @@ use std::cmp::Ordering;
 impl ObjectSim {
     pub(super) fn handler_0x5a2d0(&mut self, st: &mut Staging, layout: &LevelLayout) {
         let mut actor = Actor::from_raw_slot(&st.b);
-        let frame = FrameTick(u64::from(self.fff0));
+        let frame = self.frame_tick();
         let result = handler_0x5a2d0::update(&mut actor, frame, self.mario_ref_x);
         st.b = actor.to_raw_slot();
         match result {

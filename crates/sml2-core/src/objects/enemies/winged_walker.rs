@@ -349,7 +349,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WingedWalkerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 60,
             },
             &mut world,
@@ -365,7 +365,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WingedWalkerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 140,
             },
             &mut world,
@@ -385,7 +385,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WingedWalkerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 60,
             },
             &mut world,
@@ -402,7 +402,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WingedWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 60,
             },
             &mut world,
@@ -420,7 +420,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WingedWalkerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 60,
             },
             &mut world,
@@ -442,7 +442,7 @@ mod tests {
         update(
             &mut actor,
             WingedWalkerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 120,
             },
             &mut world,
@@ -453,7 +453,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WingedWalkerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 120,
             },
             &mut world,
@@ -475,7 +475,7 @@ mod tests {
             let eff = update(
                 &mut actor,
                 WingedWalkerContext {
-                    frame: FrameTick(f),
+                    frame: FrameTick::new(f),
                     mario_ref_x: 150, // Mario to right
                 },
                 &mut world,
@@ -489,7 +489,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WingedWalkerContext {
-                frame: FrameTick(40),
+                frame: FrameTick::new(40),
                 mario_ref_x: 150,
             },
             &mut world,
@@ -504,7 +504,7 @@ mod tests {
             let eff = update(
                 &mut actor,
                 WingedWalkerContext {
-                    frame: FrameTick(f),
+                    frame: FrameTick::new(f),
                     mario_ref_x: 150,
                 },
                 &mut world,
@@ -521,7 +521,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WingedWalkerContext {
-                frame: FrameTick(74),
+                frame: FrameTick::new(74),
                 mario_ref_x: 150,
             },
             &mut world,
@@ -538,7 +538,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WingedWalkerContext {
-                frame: FrameTick(75),
+                frame: FrameTick::new(75),
                 mario_ref_x: 150,
             },
             &mut world,
@@ -556,7 +556,7 @@ mod tests {
         let eff = update(
             &mut actor,
             WingedWalkerContext {
-                frame: FrameTick(77),
+                frame: FrameTick::new(77),
                 mario_ref_x: 150,
             },
             &mut world,

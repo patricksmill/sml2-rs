@@ -11,7 +11,7 @@ impl ObjectSim {
                     position: s.position,
                     marker: s.marker,
                 });
-        let frame = FrameTick(u64::from(self.fff0));
+        let frame = self.frame_tick();
         let result = handler_0x5a5c7::update(&mut actor, frame, source);
         st.b = actor.to_raw_slot();
         if result.is_err() {

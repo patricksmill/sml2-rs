@@ -204,7 +204,7 @@ impl EndingSequenceController {
                 let _ = append_secondary(tables, y, false, &mut cells);
             }
             EndingSpriteMode::Burst => {
-                let _ = append_burst(tables, FrameTick(self.sprite_frame as u64), &mut cells);
+                let _ = append_burst(tables, FrameTick::new(self.sprite_frame as u64), &mut cells);
             }
         }
         cells
@@ -237,7 +237,7 @@ impl EndingSequenceController {
                     let _ = append_secondary(t, scene.credits_sprite_y, false, &mut cells);
                 }
                 EndingSpriteMode::Burst => {
-                    let comp = append_burst(t, FrameTick(self.frame as u64), &mut cells);
+                    let comp = append_burst(t, FrameTick::new(self.frame as u64), &mut cells);
                     if let Some(EndingSoundEffect::RequestSound1(sfx)) = comp.sound_effect {
                         self.sfx_request_1 = sfx;
                     }

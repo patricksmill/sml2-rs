@@ -7,7 +7,7 @@ const FORWARD: [u8; 25] = [
 ];
 fn context() -> Context {
     Context {
-        frame: FrameTick(0),
+        frame: FrameTick::new(0),
         spawn_flip: SpriteFlipFlags::from_bits(0x93),
         hit_processed: false,
         stomp_latched: false,
@@ -267,7 +267,7 @@ fn handler_0x0ab8b_walk_order_bounds_and_frame_timer_gates() {
     for frame in 0..16 {
         for timer in 0..4 {
             let mut c = context();
-            c.frame = FrameTick(frame);
+            c.frame = FrameTick::new(frame);
             c.level_timer_low = timer;
             let mut before = slot(4);
             before[10] = 113;
@@ -341,7 +341,7 @@ fn handler_0x0ab8b_ground_thresholds_screen_wrap_and_unknown_motion_leg() {
     assert_eq!((actual[24], actual[15], actual[11]), (0xa5, 9, 83));
     for frame in 0..16 {
         let mut c = context();
-        c.frame = FrameTick(frame);
+        c.frame = FrameTick::new(frame);
         let mut raw = slot(7);
         raw[28] = 2;
         assert_eq!(run(raw, c).0[11], if frame % 8 == 0 { 86 ^ 31 } else { 86 });

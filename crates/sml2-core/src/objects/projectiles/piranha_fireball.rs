@@ -107,7 +107,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FireballContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
             },
         );
         assert_eq!(eff, FireballEffect::Initialized);
@@ -130,7 +130,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FireballContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
             },
         );
         assert_eq!(eff, FireballEffect::Initialized);
@@ -153,7 +153,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FireballContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
             },
         );
         assert_eq!(eff, FireballEffect::Moving);
@@ -172,7 +172,7 @@ mod tests {
         let eff = update(
             &mut actor,
             FireballContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
             },
         );
         assert_eq!(eff, FireballEffect::Moving);
@@ -189,7 +189,7 @@ mod tests {
         update(
             &mut actor,
             FireballContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
             },
         );
         assert_eq!(actor.sprite, 22, "odd frame: no toggle");
@@ -197,7 +197,7 @@ mod tests {
         update(
             &mut actor,
             FireballContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
             },
         );
         assert_eq!(actor.sprite, 23, "even frame: toggled");
@@ -205,7 +205,7 @@ mod tests {
         update(
             &mut actor,
             FireballContext {
-                frame: FrameTick(3),
+                frame: FrameTick::new(3),
             },
         );
         assert_eq!(actor.sprite, 23, "odd frame: no toggle");
@@ -213,7 +213,7 @@ mod tests {
         update(
             &mut actor,
             FireballContext {
-                frame: FrameTick(4),
+                frame: FrameTick::new(4),
             },
         );
         assert_eq!(actor.sprite, 22, "even frame: toggled back");

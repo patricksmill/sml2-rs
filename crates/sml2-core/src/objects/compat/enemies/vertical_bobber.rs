@@ -8,7 +8,7 @@ use std::cmp::Ordering;
 impl ObjectSim {
     pub(super) fn handler_0x591f9(&mut self, st: &mut Staging) {
         let context = BobberContext {
-            frame: FrameTick(u64::from(self.fff0)),
+            frame: self.frame_tick(),
             player_ref_y: self.mario_ref_y,
         };
         let mut actor = Actor::from_raw_slot(&st.b);

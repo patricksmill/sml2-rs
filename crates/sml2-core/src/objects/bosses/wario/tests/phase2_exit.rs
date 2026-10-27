@@ -48,7 +48,7 @@ fn helper_0x0ac55_native_cadence_cycle_flash_and_wrapping_bytes() {
                 }
                 let mut actor = Actor::from_raw_slot(&bytes);
                 assert_eq!(
-                    update_exit(&mut actor, FrameTick(u64::from(frame)), 0).unwrap(),
+                    update_exit(&mut actor, FrameTick::new(u64::from(frame)), 0).unwrap(),
                     ExitEffects {
                         replacement_animation: None
                     }
@@ -71,7 +71,7 @@ fn helper_0x0ac55_native_clear_boundary_and_difficulty_bit_zero() {
             bytes[B_ANIMFRAME] = 3;
             bytes[B_SCRX] = x;
             let mut actor = Actor::from_raw_slot(&bytes);
-            let effects = update_exit(&mut actor, FrameTick(4), flags).unwrap();
+            let effects = update_exit(&mut actor, FrameTick::new(4), flags).unwrap();
             assert_eq!(actor.to_raw_slot(), [0; 32]);
             assert_eq!(
                 effects.replacement_animation,
@@ -88,7 +88,7 @@ fn helper_0x0ac55_cycle_precedes_flash_and_movement() {
     bytes[B_SCRX] = 0xBE;
     let mut actor = Actor::from_raw_slot(&bytes);
     assert_eq!(
-        update_exit(&mut actor, FrameTick(0), 0),
+        update_exit(&mut actor, FrameTick::new(0), 0),
         Err(AnimationFrameError { frame: 5 })
     );
     bytes[B_ANIMFRAME] = 5;

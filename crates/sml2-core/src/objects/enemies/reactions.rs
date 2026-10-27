@@ -202,7 +202,7 @@ mod tests {
             ..World::default()
         };
         assert_eq!(
-            update_stun(&mut actor, FrameTick(0), &mut world),
+            update_stun(&mut actor, FrameTick::new(0), &mut world),
             StunEffect::None
         );
         assert_eq!(
@@ -210,13 +210,13 @@ mod tests {
             (1, 192, 6)
         );
         for _ in 0..192 {
-            update_stun(&mut actor, FrameTick(1), &mut world);
+            update_stun(&mut actor, FrameTick::new(1), &mut world);
         }
         assert_eq!(actor.state, 2);
         actor.sprite = 0x40;
         let mut revived = 0;
         for frame in 0..32 {
-            if update_stun(&mut actor, FrameTick(frame), &mut world) == StunEffect::Revive {
+            if update_stun(&mut actor, FrameTick::new(frame), &mut world) == StunEffect::Revive {
                 revived += 1;
             }
         }
@@ -228,7 +228,7 @@ mod tests {
         let mut actor = Actor::default();
         actor.state = 1;
         actor.timer = 10;
-        update_stun(&mut actor, FrameTick(0), &mut World::default());
+        update_stun(&mut actor, FrameTick::new(0), &mut World::default());
         assert_eq!(
             (actor.position.y, actor.motion_phase),
             (u16::from(FALL_STEP0), 1)

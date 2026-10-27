@@ -37,7 +37,7 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick) -> Result<Effect, Erro
         1 | 2 => {
             if actor.timer != 0 {
                 if frame.every(2) {
-                    actor.flash.toggle_palette();
+                    actor.flash.toggle_palette(frame);
                 }
                 actor.timer -= 1;
                 if actor.timer != 0 {

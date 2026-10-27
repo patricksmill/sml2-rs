@@ -32,7 +32,7 @@ impl ObjectSim {
         let result = reward_motion::update(
             &mut actor,
             part,
-            FrameTick(u64::from(self.fff0)),
+            self.frame_tick(),
             &tables.boss_picker_profile,
         );
         st.b = actor.to_raw_slot();

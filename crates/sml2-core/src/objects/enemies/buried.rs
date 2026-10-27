@@ -141,7 +141,7 @@ mod tests {
                 player: 0x3400 | 255u8.wrapping_add(distance) as u16,
                 ..Scene::default()
             };
-            update(&mut a, FrameTick(0), &mut w).unwrap();
+            update(&mut a, FrameTick::new(0), &mut w).unwrap();
             assert_eq!((a.state, a.contact_kind.raw()), (expected, 32));
         }
     }
@@ -157,7 +157,7 @@ mod tests {
                     wall: blocked,
                     ..Scene::default()
                 };
-                update(&mut a, FrameTick(0), &mut w).unwrap();
+                update(&mut a, FrameTick::new(0), &mut w).unwrap();
                 assert_eq!(a.position.x, if state % 2 == 0 { 0 } else { 65535 });
                 assert_eq!(a.sprite, if state <= 2 { 61 } else { 60 });
                 assert_eq!(w.probes, vec![(a.position, state % 2 == 0)]);
@@ -173,20 +173,20 @@ mod tests {
         a.motion_phase = 20;
         a.position.y = 65535;
         let mut w = Scene::default();
-        update(&mut a, FrameTick(1), &mut w).unwrap();
+        update(&mut a, FrameTick::new(1), &mut w).unwrap();
         assert_eq!((a.state, a.position.y, a.motion_phase), (3, 65535, 20));
-        update(&mut a, FrameTick(3), &mut w).unwrap();
+        update(&mut a, FrameTick::new(3), &mut w).unwrap();
         assert_eq!((a.position.y, a.motion_phase), (2, 21));
-        update(&mut a, FrameTick(5), &mut w).unwrap();
+        update(&mut a, FrameTick::new(5), &mut w).unwrap();
         assert_eq!((a.position.y, a.motion_phase), (5, 21));
         w.floor = true;
-        update(&mut a, FrameTick(7), &mut w).unwrap();
+        update(&mut a, FrameTick::new(7), &mut w).unwrap();
         assert_eq!((a.state, a.position.y, a.motion_phase), (1, 5, 0));
         a.state = 2;
-        update(&mut a, FrameTick(9), &mut w).unwrap();
+        update(&mut a, FrameTick::new(9), &mut w).unwrap();
         assert_eq!(a.state, 2);
         a.state = 4;
-        update(&mut a, FrameTick(11), &mut w).unwrap();
+        update(&mut a, FrameTick::new(11), &mut w).unwrap();
         assert_eq!(a.state, 2);
     }
     #[test]
@@ -196,31 +196,31 @@ mod tests {
         a.animation_frame = 30;
         a.sprite = 60;
         let mut w = Scene::default();
-        update(&mut a, FrameTick(1), &mut w).unwrap();
+        update(&mut a, FrameTick::new(1), &mut w).unwrap();
         assert_eq!((a.state, a.animation_frame, a.sprite), (5, 31, 60));
-        update(&mut a, FrameTick(2), &mut w).unwrap();
+        update(&mut a, FrameTick::new(2), &mut w).unwrap();
         assert_eq!((a.state, a.animation_frame, a.sprite), (6, 0, 61));
-        update(&mut a, FrameTick(4), &mut w).unwrap();
+        update(&mut a, FrameTick::new(4), &mut w).unwrap();
         assert_eq!(a.sprite, 61);
-        update(&mut a, FrameTick(7), &mut w).unwrap();
+        update(&mut a, FrameTick::new(7), &mut w).unwrap();
         assert_eq!(a.sprite, 61);
-        update(&mut a, FrameTick(8), &mut w).unwrap();
+        update(&mut a, FrameTick::new(8), &mut w).unwrap();
         assert_eq!((a.state, a.sprite, a.contact_kind.raw()), (1, 62, 77));
         a.state = 5;
         a.animation_frame = 32;
-        update(&mut a, FrameTick(9), &mut w).unwrap();
+        update(&mut a, FrameTick::new(9), &mut w).unwrap();
         assert_eq!((a.state, a.animation_frame), (5, 33));
         a.state = 5;
         a.animation_frame = 255;
-        update(&mut a, FrameTick(9), &mut w).unwrap();
+        update(&mut a, FrameTick::new(9), &mut w).unwrap();
         assert_eq!((a.state, a.animation_frame), (5, 0));
         a.state = 6;
         a.sprite = 62;
-        update(&mut a, FrameTick(16), &mut w).unwrap();
+        update(&mut a, FrameTick::new(16), &mut w).unwrap();
         assert_eq!((a.state, a.sprite), (6, 63));
         a.state = 6;
         a.sprite = 255;
-        update(&mut a, FrameTick(16), &mut w).unwrap();
+        update(&mut a, FrameTick::new(16), &mut w).unwrap();
         assert_eq!((a.state, a.sprite), (6, 0));
     }
     #[test]
@@ -240,7 +240,7 @@ mod tests {
                         player: target,
                         ..Scene::default()
                     };
-                    update(&mut a, FrameTick(8), &mut w).unwrap();
+                    update(&mut a, FrameTick::new(8), &mut w).unwrap();
                     let right = target > a.position.x;
                     assert_eq!(
                         (a.state, a.sprite_flip.bits(), w.faces),

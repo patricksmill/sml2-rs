@@ -3,7 +3,7 @@ use crate::actor::{Actor, ContactKind, Facing, FlashFlags, FrameTick, MotionProf
 
 fn context(frame: u64) -> ChildContext {
     ChildContext {
-        frame: FrameTick(frame),
+        frame: FrameTick::new(frame),
         transition_pending: true,
         respawn_edge: RespawnEdge::Left,
     }

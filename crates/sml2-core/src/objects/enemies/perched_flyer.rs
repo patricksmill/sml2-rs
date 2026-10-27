@@ -123,7 +123,7 @@ mod tests {
         let eff = update(
             &mut actor,
             PerchedFlyerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 0,
             },
         );
@@ -143,7 +143,7 @@ mod tests {
         let eff = update(
             &mut actor,
             PerchedFlyerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 130,
             },
         );
@@ -165,7 +165,7 @@ mod tests {
         let eff = update(
             &mut actor,
             PerchedFlyerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 110,
             },
         );
@@ -184,7 +184,7 @@ mod tests {
         let eff1 = update(
             &mut actor,
             PerchedFlyerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 110,
             },
         );
@@ -202,7 +202,7 @@ mod tests {
         let eff2 = update(
             &mut actor,
             PerchedFlyerContext {
-                frame: FrameTick(2),
+                frame: FrameTick::new(2),
                 mario_ref_x: 110,
             },
         );
@@ -229,7 +229,7 @@ mod tests {
         let eff = update(
             &mut actor,
             PerchedFlyerContext {
-                frame: FrameTick(0),
+                frame: FrameTick::new(0),
                 mario_ref_x: 90,
             },
         );
@@ -247,7 +247,7 @@ mod tests {
         let eff1 = update(
             &mut actor,
             PerchedFlyerContext {
-                frame: FrameTick(1),
+                frame: FrameTick::new(1),
                 mario_ref_x: 90,
             },
         );

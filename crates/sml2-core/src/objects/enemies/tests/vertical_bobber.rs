@@ -5,7 +5,7 @@ fn tick(actor: &mut Actor, frame: u64) -> Result<BobberEffect, BobberError> {
     update(
         actor,
         BobberContext {
-            frame: FrameTick(frame),
+            frame: FrameTick::new(frame),
             player_ref_y: 0,
         },
     )
@@ -31,7 +31,7 @@ fn initialization_compares_full_world_y_and_preserves_other_actor_fields() {
             update(
                 &mut actor,
                 BobberContext {
-                    frame: FrameTick(255),
+                    frame: FrameTick::new(255),
                     player_ref_y: player_y,
                 }
             ),
