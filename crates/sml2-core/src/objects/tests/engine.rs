@@ -923,7 +923,7 @@ fn below_bonk_marks_idle_objects_in_the_tile_window() {
 /// `$20` flip toggle — and the knockback (`$411A`: X + 1, Y − the bounce
 /// curve's first step 3, `+16` 0 → 1) on the slot-parity cadence.
 ///
-/// Measured on the console (`captures/probe_below_hit.py` pokes the same
+/// Measured on the console (the historical below-hit probe pokes the same
 /// state into slot 0 and logs the 32 bytes per frame): sprite `$7F` →
 /// `$1F`, type `$86` kept, `+23` `$20` → 0, `+27` → 2, `+15` → 0, then
 /// `+15` 1 / `+13` `$20`, then (one parity frame later) (100,468) →

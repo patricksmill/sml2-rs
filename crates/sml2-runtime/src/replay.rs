@@ -70,7 +70,7 @@ pub(crate) fn observe_player_pose(
     }
 }
 
-/// One captured live frame (`trajectory_capture*.py`) for sim replays.
+/// One frozen ROM observation for simulation replays.
 #[derive(Deserialize)]
 struct Frame {
     x: u16,
@@ -243,7 +243,7 @@ struct GapJ {
 }
 
 /// The `$1CBA` exit-tile arm's facts that a per-frame table cannot express,
-/// carried on the arm's own record by `captures/trajectory_capture17.py`: the
+/// carried on the arm's own record in `captures/traj17.json`: the
 /// frame it fired on, the tile the probe read, and the fade span measured from
 /// outside the in-level hook (`$05E4` stops firing once `$FF9B` leaves 4, so
 /// the capture splices the frames after it in from a `$028D` hook).

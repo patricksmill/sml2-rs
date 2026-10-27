@@ -610,8 +610,8 @@ fn a_bouncing_coin_block_clears_its_background_until_it_lands() {
 /// `768 - 144`: the engine lets the view overhang and the tilemap window's rows come back
 /// around under the status bar. Clamping the view to the level instead shifted the whole
 /// background 8 px down against Mario's OAM, and he looked like he floated above the
-/// block row. The console — PyBoy, entered through the map route in
-/// `captures/probe_level_select.py` — draws that block row's top on row 118.
+/// block row. The historical ROM check entered through the map route and
+/// draws that block row's top on row 118.
 #[test]
 fn a_camera_at_the_level_bottom_does_not_shift_the_background() {
     let (manifest, layout, bg) = level_files("level06.manifest.json", "level06.bgblock.bin");

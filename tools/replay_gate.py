@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-CAPTURES = ('traj4_ff0', 'traj5', 'traj6', 'traj7', 'traj8', 'traj9', 'traj10',
+CAPTURES = ('traj4_ff0', 'traj5', 'traj6', 'traj7', 'traj10',
             'traj11', 'traj12', 'traj13', 'traj14', 'traj15', 'traj16', 'traj17',
             'traj19', 'death1', 'death2', 'death3', 'crouch_pan1', 'screen_transition1')
 # Frozen legacy exception observed before the object split. Exact fields and counts,

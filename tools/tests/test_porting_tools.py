@@ -478,6 +478,11 @@ UnknownCall_0x58000:
 
 
 class GateTests(unittest.TestCase):
+    def test_every_retained_capture_is_gated_once(self):
+        captures = {path.stem for path in (ROOT / 'captures').glob('*.json')}
+        self.assertEqual(set(replay_gate.CAPTURES), captures)
+        self.assertEqual(len(replay_gate.CAPTURES), len(captures))
+
     @staticmethod
     def output(fields=None):
         if fields is None:
