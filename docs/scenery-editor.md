@@ -68,7 +68,8 @@ To ship your changes:
 2. Choose a destination using **Browse…**, or type its path and choose
    **Export**. Export failures leave the draft and undo history intact.
 3. Save approved exports in the repository's `assets/scenery/` directory and
-   register them as described in [Approved scenery](../assets/scenery/README.md).
+   register them (levels and scenes have separate registries) as described in
+   [Approved scenery](../assets/scenery/README.md).
 4. Review native and DX play, run the documented checks, and commit the export
    and registry entry together.
 

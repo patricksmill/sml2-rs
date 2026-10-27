@@ -48,7 +48,8 @@ cargo run --release -p sml2-desktop
 Use your distribution's installed `lvp_icd` filename. This renders on the CPU
 for that launch. Mesa probing errors do not necessarily mean rendering failed.
 Windows packaging/build instructions: [Windows builds](windows-builds.md).
-The current live audio backend is PulseAudio/PipeWire; use `--no-audio` elsewhere.
+Live audio uses WASAPI on Windows and PulseAudio (`pacat`) or PipeWire
+(`pw-play`) on Linux and macOS. Without either, the game runs silently.
 
 ## SML2DX Mode
 
@@ -64,8 +65,9 @@ curves and friction. DX supplies every level/pipe room/demo, space character
 graphics, title, file select, maps/minigames, boss arenas, castle, Game Over,
 ending and credits. Eight levels have regional BG/OBJ changes. Star/pause
 colors, DX fades, white blanking, castle entry and coin flash, and the credit
-palettes are supported. Regional palette switches are not yet frame-exact, and
-boss palette load order is unverified.
+palettes are supported. Regional palettes follow the pose pass's staged
+references, and boss scene loads override them. Palette uploads do not yet
+follow the ROM's VBlank job-queue order. Full-game DX verification is open.
 See the [DX audit](sml2dx-audit.md) for exact compatibility and evidence limits.
 
 DX ignores the selected display filter. A render failure falls back to the
@@ -108,8 +110,11 @@ fractional scaling. Output uses physical pixels and nearest sampling.
 **Mods -> View** offers widescreen Off/16:9/21:9/Window size and camera zoom
 100/125/150/200%. Native logical size is 160x144; zoom 200% doubles dimensions.
 Window size follows the game-area aspect ratio. Enlarged levels put three
-quarters of extra height above the native rect and one quarter below; HUD stays
-bottom-center. Wider object spawn/update windows affect gameplay; attract demos
+quarters of extra height above the native rect and one quarter below. The
+**Original** status bar stays bottom-center; **Modern** (Display -> HUD) floats
+its tiles in the view's top corners. **Motion smoothing** draws levels between
+ticks on displays faster than 60 Hz, one frame behind. Wider object
+spawn/update windows affect gameplay; attract demos
 retain native spawning. Hub maps expand within 512x512 bounds; zones and fixed
 screens keep their authored 160x144 picture, with approved surroundings or bars.
 

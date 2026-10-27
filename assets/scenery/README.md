@@ -22,6 +22,14 @@ Only authored coordinates and metatile references belong here. Do not add ROMs,
 extracted graphics, player saves, or personal settings. Scenery changes rendering
 only; collision, actors, and level layouts remain the original simulation.
 
-Both the desktop game and CLI load this registry through `SessionAssets`.
+Scene surroundings (zone maps, minigames, fixed screens, boss arenas, the
+ending) export as names such as `scenery-map-09.json` and register in `BUNDLED`
+in `crates/sml2-runtime/src/scene_scenery.rs`:
+
+```rust
+(SceneTarget::Map(9), include_str!("../../../assets/scenery/scenery-map-09.json")),
+```
+
+Both the desktop game and CLI load these registries through `SessionAssets`.
 Malformed files, repeated level registrations, and invalid metatile references
 are startup errors. Gameplay never reopens scenery files.

@@ -45,7 +45,7 @@ must preserve the gate's nonzero exit status.
 
 ## Unit of work (mandatory)
 
-Never assign “port the object engine” or “fix DeepSeek’s mess in `objects.rs`”.
+Never assign “port the object engine” or “clean up everything under `objects/`”.
 
 **One ticket = one of:**
 
@@ -80,7 +80,7 @@ crates/sml2-core/src/objects/
     boo.rs               # one named native behavior per file
     cannon_ant.rs
     hopping.rs
-    tests/hopping.rs
+    tests/hopping_adapter.rs
   platforms/             # named platform files and tests/
   items/                 # named collectible and marker files and tests/
   projectiles/           # named projectile files and tests/
@@ -112,8 +112,8 @@ established. ROM addresses belong in source references, dispatch and verificatio
 not in domain filenames or directory names.
 
 Slot adapters mirror the domain filename under `compat/`. Tests belong in the
-category's `tests/` directory, such as `enemies/tests/hopping.rs`; a separate
-adapter suite can use `hopping_adapter.rs`. Boss families may keep subdirectories
+category's `tests/` directory, such as `enemies/tests/umbrella_hopper.rs`; an
+adapter suite uses the `_adapter` suffix, such as `hopping_adapter.rs`. Boss families may keep subdirectories
 for their parts and phases. Module registrations use explicit paths to preserve
 existing private access and the dispatch facade. Ordinary object modules register
 in `objects/mod.rs`; Wario and Mario Zone keep their own registrations.
@@ -131,7 +131,7 @@ Cheap / flash models are **not** allowed to own logic ports.
 | **Slicer** | Run `handler_task.py`, queue JSON, `cargo test` parse | Script or smallest model |
 | **Porter** | One handler + one test from `tasks/handlers/*.md` | Strong coding model (e.g. DeepSeek V4 **Pro**, Gemini Argon, Sonnet-class) |
 | **Escalation** | `push hl`/`ret` tricks, cross-bank trampolines, borrow hell after **2** failed fix attempts | Opus / Sonnet, **same file only** |
-| **Forbidden** | “Read all of `objects.rs` and port anims 13–14” | Any model |
+| **Forbidden** | “Read all of `objects/` and port anims 13–14” | Any model |
 
 **Context budget per porter turn:** aim &lt; 15k tokens input — slice markdown + one handler file + `staging.rs` + `helpers.rs` + test error output. Do not attach `main.asm`, full `PORT_QUEUE.json`, or `DESIGN.md`.
 
@@ -149,7 +149,7 @@ dynamic reachability. Follow [ORCHESTRATION.md](ORCHESTRATION.md) for dispatch.
 
 ## Rendering claims
 
-Replay sweep does **not** validate pixels. For visual bugs use `DESIGN.md` console vs `sml2-runtime --out` diff procedure (keep cameras in the assertion).
+Replay sweep does **not** validate pixels. For visual bugs compare against the ROM with `tools/compare_tas.py --pixel-report` (ROM frame N vs port frame N-1); see [visual parity](docs/visual-parity.md) and [TAS playback](docs/tas-playback.md).
 
 ---
 

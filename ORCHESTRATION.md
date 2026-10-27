@@ -18,7 +18,7 @@ Tool contracts: [tools/README.md](tools/README.md).
 
 Flash/small models do not own logic ports. Porter context target <=15k tokens:
 brief plus <=4 named Rust files and errors. Supervisor context target <=8k.
-Do not attach whole `objects.rs`, `main.asm`, DESIGN.md, archived queue, captures,
+Do not attach the whole `objects/` tree, `main.asm`, DESIGN.md, archived queue, captures,
 notes or multiple handler bodies. Do not bulk-transpile assembly into Rust.
 
 ## Dispatch loop

@@ -61,7 +61,8 @@ Import an **SML2DX v1.8.1** ROM or IPS patch through
 **Settings → Game → Add DX ROM / IPS…**, then enable **DX Mode**.
 Choose Mario or Luigi in **Settings → Mods**.
 
-Some DX color changes may land a frame early or late. See
+DX palette uploads don't yet follow the original's VBlank job order, so a
+color change can land a frame off. See
 [DX compatibility](docs/desktop.md#sml2dx-mode).
 
 ## Controls

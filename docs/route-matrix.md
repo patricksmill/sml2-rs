@@ -70,11 +70,11 @@ even zero/overlapping ones; do not infer valid starts from nonzero bytes alone.
 | Every exit cell | Core `route_matrix` tests activate all 35 source $4A/$4B cells and assert exit flag, music and 192-frame fade |
 | Map entry | Runtime session cases cover 64 header/secret-entry combinations at 32 ordinary origins plus Wario castle-door entry |
 | Reviewed ordinary rows | Levels 1–5,12,19,28,29; other mechanic/route narratives need review |
-| Played ordinary routes | Level 28 walk, 29 timed float, and 19 header/secret starts to both bells. Fixed inputs assert movement, float use, fade/handoff/tally/save bytes |
+| Played ordinary routes | Levels 1 and 2 (header and secret starts), 4 (both starts), 5 (header), 28 walk, 29 timed float, and 19 header/secret starts to both bells. Level 3's tapes were dropped after the water-entry and platform-carry fixes (`60bec84`). Fixed inputs assert movement, float use, fade/handoff/tally/save bytes |
 | Continuous map/save routes | Six approaches across 19/28/29 run actual map selection, completion, return, host save and reload |
-| Boss routes | Levels 6/10/14 have played header approaches through defeat/reward/map return. All nine definitions accept scene-driven arena entry; direct placement is not a played approach |
+| Boss routes | Levels 10/14/24 have played header approaches through defeat/reward/map return. Level 6 and 17's tapes were dropped with level 3's (`60bec84`). All nine definitions accept scene-driven arena entry; direct placement is not a played approach |
 | Graphics | [Visual parity](visual-parity.md) records independent evidence and accepted differences; smoke rendering proves neither |
-| Remaining completion | Other normal/secret approaches, bosses 17/20/24, Wario's full route, continuous hub navigation, audio evidence and uninterrupted full-game save/reload remain queue work |
+| Remaining completion | Other normal/secret approaches, level 3, bosses 6/17/20, Wario's full route, continuous hub navigation, audio evidence and uninterrupted full-game save/reload remain queue work |
 
 `PlayTape::Buttons` supports simultaneous held buttons through the same live
 loop; CLI `--keys` keeps its ASCII grammar. Tests compare both representations.

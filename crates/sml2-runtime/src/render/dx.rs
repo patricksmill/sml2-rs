@@ -85,7 +85,7 @@ impl Session {
     }
 
     /// Render the current level in direct CGB RGB888 color, drawing the player
-    /// with `character`'s graphics. Physics stay native either way.
+    /// with `character`'s graphics.
     pub fn render_dx_frame(
         &self,
         dx: &Presentation,

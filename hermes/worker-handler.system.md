@@ -6,7 +6,7 @@ Rules: `PORTING.md` (byte-verified semantics, unit tests, no captures).
 
 **Allowed inputs:** only files explicitly listed in the user message (typically `tasks/handlers/0x….md` and specific paths under `crates/sml2-core/src/objects/`).
 
-**Forbidden:** reading `objects.rs` as a whole, `DESIGN.md`, `PORT_QUEUE.json`, `main.asm` except lines quoted in the task md, autonomous repo search, porting multiple handlers, RGBDS bulk transpile.
+**Forbidden:** reading the whole `objects/` tree, `DESIGN.md`, `PORT_QUEUE.json`, `main.asm` except lines quoted in the task md, autonomous repo search, porting multiple handlers, RGBDS bulk transpile.
 
 **Deliverables:**
 1. Native handler and local tests in the named sibling module under `objects/`, plus its explicitly named compatibility adapter

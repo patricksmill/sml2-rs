@@ -16,6 +16,10 @@ frame whether that wait runs:
 | Bell room return | all but the last two frames of the hold (83 of the hub's 84) | `$3E9FB` + screen load |
 | File select load | every `$19` frame | `$0348` LCD off |
 
+DX shortens bank 15's fades: map → level entry runs 12 frames fewer (the level
+goes live 12 frames sooner), and door walks fade over 36 frames instead of 48
+(`MapTransition::from_map_dx`, `MapScreenTransition::new_dx`).
+
 Within a level, every update ticks. The tile-animation clock increments
 before `$3873` checks for a copy, so a copy frame reads timer 0. The PyBoy
 recordings confirm this: level 1's first copies are at rows 586 and 594. A level

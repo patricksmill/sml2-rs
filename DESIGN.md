@@ -105,9 +105,10 @@ OAM order, raw color-index transparency/priority and the leading camera; do not
 replace it with player-centered following or separately clamp terrain/sprites.
 
 In enlarged levels, the native rect stays horizontally centered with three
-quarters of added height above and one quarter below; the HUD sits bottom-center.
+quarters of added height above and one quarter below; the classic HUD sits
+bottom-center and the Modern style floats in the view's top corners.
 Fixed screens retain their authored frame. Test native pixels within enlarged
-views (`runtime/src/tests/widescreen.rs`). Cosmetic scenery must not modify
+views (`sml2-runtime/src/tests/widescreen.rs`). Cosmetic scenery must not modify
 collision, actors, spawns or progression. Default output uses nearest sampling
 and integer scaling; optional fractional scaling remains a presentation choice.
 
@@ -115,8 +116,9 @@ and integer scaling; optional fractional scaling remains a presentation choice.
 
 Bring your own exact supported ROM; never redistribute patched code or graphics.
 Extract validated data into a local cache; implement behavior in native Rust.
-Palettes/attributes feed rendering, while future character physics/content feed
-simulation through a typed mode selected at safe load boundaries. Current
+Palettes/attributes feed rendering; DX layouts, spawn positions, object patches
+and Luigi's movement feed simulation through a typed mode selected at safe
+level-entry boundaries. Current
 support and source findings are in the [DX audit](docs/sml2dx-audit.md), with
 remaining work in the [DX plan](docs/plans/2026-10-26-dx-completion.md).
 

@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Native Desktop App (`sml2`)**: High-performance, cross-platform port written in Rust with fixed 60 Hz simulation and variable display refresh rates.
-- **In-App ROM Verification & Importer**: Drag-and-drop or use the file picker on first launch to verify and extract assets directly from your legally-owned Super Mario Land 2 ROM (`.gb` / `.gbc`). No pre-extracted assets or manual extraction required.
-- **SML2DX Color Support**: Settings option to import DX color palettes and graphics from a user-supplied SML2DX ROM, with support for playing as Mario or Luigi.
+- **In-App ROM Verification & Importer**: Use the file picker on first launch to verify and extract assets directly from your legally-owned Super Mario Land 2 ROM (`.gb` / `.gbc`). No pre-extracted assets or manual extraction required.
+- **SML2DX Support**: Import DX graphics, palettes, level layouts and Luigi's movement from a user-supplied SML2DX v1.8.1 ROM or IPS patch, and play as Mario or Luigi.
 - **Custom Display Filters**: Grayscale, DMG green, Pocket, GBC auto, 32 Super Game Boy (SGB) hardware presets, and Amber phosphor.
 - **Controller & Input Configuration**: Full gamepad support via gilrs with runtime rebinding, customizable keyboard mapping, hotplugging, and fullscreen toggle.
 - **Packaging Pipeline**: Standalone distribution binaries for Windows x64, Linux x86_64, and macOS Apple Silicon (arm64).
@@ -18,4 +18,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Known Limitations
 - The game mechanics port is progressing in parallel. Zone bosses, final Wario encounters, and select late-game route combinations are actively being finalized.
-- Live audio backend currently uses PulseAudio / PipeWire; native Windows and macOS audio backends are in development (`--no-audio` is available for silent play).
+- Live audio uses WASAPI on Windows and PulseAudio / PipeWire on Linux. macOS has no native backend and runs silently unless PulseAudio's `pacat` is installed.

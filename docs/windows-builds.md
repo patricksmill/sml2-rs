@@ -2,15 +2,16 @@
 
 Releases/workflow artifacts provide the game and a separate tools bundle; no
 ROMs or extracted graphics are included. Download from GitHub Releases when
-published, or a successful Windows workflow run under Actions. The optional
-scenery editor is distributed separately.
+published, or a successful Windows workflow run under Actions. Releases put the
+optional scenery editor in the tools bundle; the Windows workflow uploads it as
+its own artifact.
 
 ## Run
 
 Extract the archive and open `sml2.exe`. Use Settings -> Game to import your own
 original UE v1.0 ROM and optionally DX. The game/editor share installed assets.
-Use `--no-audio` while native Windows audio is unavailable. See included
-`Desktop.md` or the [source desktop guide](desktop.md) for controls/settings.
+Audio plays through WASAPI; `--no-audio` disables it. See the tools package's
+`Desktop.md` or the [desktop guide](desktop.md) for controls/settings.
 
 Tools can use an existing extracted tree:
 

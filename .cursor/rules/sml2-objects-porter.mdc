@@ -8,8 +8,8 @@ alwaysApply: false
 
 When editing under `objects/`, you are implementing **one** handler from `tasks/handlers/0x*.md`.
 
-- Mirror ASM branch structure; use `helpers.rs` for shared `$5Bxxx` behavior.
+- Match the source's behavior with typed actors and shared native helpers, per `docs/idiomatic-rust-porting.md`; keep slot bytes in the `compat/` adapter.
 - Add `#[test]` with in-memory slot bytes; run `cargo test -p sml2-core`.
-- Do not refactor unrelated handlers or read the whole legacy `objects.rs` monolith unless explicitly scoped to a bounded module extraction under `PORTING.md`.
+- Do not refactor unrelated handlers or read the whole `objects/` tree unless explicitly scoped under `PORTING.md`.
 
 See `hermes/worker-handler.system.md` and `PORTING.md`.

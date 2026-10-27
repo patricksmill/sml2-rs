@@ -11,10 +11,13 @@ patch publisher/version. ROMs and imported graphics remain local.
 
 ## Implemented presentation
 
-Schema 8 imports 42 banks plus loader tables/headers. `sml2-dx::Presentation`
+Schema 10 imports 42 banks plus loader tables/headers, movement curves and
+packed spawn streams. `sml2-dx::Presentation`
 derives level graphics, CGB attributes/palettes, both characters and space themes,
 object mappings, arenas, title/file select, maps/minigames, castle, Game Over,
-ending and credits. Saves and gameplay still use the native game.
+ending and credits. Saves are shared with the original game; DX sessions
+simulate DX layouts, spawn positions, object patches and Luigi's movement
+(see the gameplay sections below).
 
 Key source locations (bank:CPU; range ends exclusive):
 
@@ -42,8 +45,8 @@ using the copied row and animation phase.
 
 ## Regional palettes
 
-All eight branches are implemented in `session/dx_palette.rs` (`291981a`).
-Timing and scene-order verification remain open. Below, XH/XL and YH/YL are
+All eight branches are implemented in `session/dx_palette.rs` (`291981a`),
+timed from the pose pass's staged references (`451b824`). Below, XH/XL and YH/YL are
 bytes of the **staged** references `(player_x+8, player_y+32) mod 65536`;
 S is the shared `$FFAD` latch. Unmatched positions retain state/colors, and
 ordinary actions skip when S already equals their target.
@@ -64,13 +67,19 @@ bytes; direct OBJ patches leave neighboring colors and BG unchanged.
 
 Source order: home `$0618` pose setup -> bank1 `$54CF` -> `$26:$6B00/$6B0B`,
 then home `$0636` object engine stages the next references at `$02:$4100..$4120`.
-The native selector currently uses fresh end-of-frame coordinates. Pin previous-
-pass references, frozen frames and special pose calls `$22C4/$2304` before
-claiming timing parity. Level HUD initialization `$24:$793C` clears S; boot and
-hub palette branches also write it. No unconditional pipe/arena reset was found.
-The renderer's boss-palette precedence needs checking against actual load order.
+The native selector runs at `$0618` on the previous object pass's `$AF30..$AF33`
+bytes and skips paused, frozen and dead frames. `$22C4` pumps pose/objects only
+when `$A28C` is nonzero; `$2304` sits in `$22DF`, which nothing calls in this
+ROM (`regional_timing.rs`). Level HUD initialization `$24:$793C` clears S; boot
+and hub palette branches also write it. No unconditional pipe/arena reset was
+found. Boss scene loads (`$36:$7306`, except Wario 7) replace the colors while
+S keeps the section, so a later regional trigger can override fight palettes.
 
-## Missing fades and scene effects
+## Fades and scene effects
+
+Implemented in `session/dx_effects.rs` and the DX renderer (`5a10a26`,
+`f5cc37f`, `47169a2`, `6467e18`). The job queue's one-upload-per-VBlank
+ordering below is not yet modeled; effects are applied when rendering.
 
 Palette jobs `$24:$7800..$7912` consume `$FFF8` once per eligible VBlank, then
 queue `$FFF7` for the next dispatch. Jobs 1/2/3 upload pointer BG/OBJ/both; 4
@@ -95,7 +104,11 @@ cache; no new raw bank/schema is needed for these effects. Ordinary bank1
 `$6442` level fades, home `$03AF` ending-entry fade, map walk-in `$0F:$63BA`
 and legacy fade-in `$6A68` retain DMG-only writes. Do not invent CGB fades there.
 
-## Missing gameplay and object differences
+## Gameplay and object differences
+
+Implemented: movement curves and Luigi friction (`ff04d84`, `beecfec`), DX
+layouts and spawn positions (`875e815`) and object patches (`6467e18`). Attract
+demos always use DX Mario (`6137fc8`).
 
 Mario's curves match base. Luigi friction is 3 instead of 4 (home `$16E9/$16F2`
 via `$19FF`), applied at the existing phase even with held input. Preserve
@@ -119,8 +132,7 @@ by `audited_dx_character_table_inventory`; this is not whole-ROM equivalence.
 Bank `$24:$7D00..$7D60` already contains 32 forced-character FF values, 32 friction
 override FF values (fallback 4-character), and 32 autoscroll values 1. The new
 `$0DD3 -> $1A2C` scroll hook therefore preserves supported-ROM behavior.
-Schema 8 omits bank1 movement curves: extract narrow validated data and bump
-schema/importer/cache identity when physics is implemented. Do not import code.
+Schema 9 added the narrow H256/V76 curves from bank 1; no DX code is imported.
 
 `audited_dx_content_difference_inventory` confirms 21 changed metatile tables,
 14 changed layouts, and collision changes only in levels 01/06/0D/0E/11/1B
@@ -165,6 +177,7 @@ the sibling base ROM for source-inventory tests:
 ```sh
 cargo test -p sml2-dx --test contracts -- --ignored
 cargo test -p sml2-dx --test revision -- --ignored
+cargo test -p sml2-dx --test regional_timing -- --ignored
 cargo test -p sml2-runtime --test dx_preview -- --ignored
 cargo test -p sml2-desktop real_rom_import_restart -- --ignored
 ```
