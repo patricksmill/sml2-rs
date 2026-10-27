@@ -884,14 +884,11 @@ fn render(
         .mappings;
     let level_source = (&level.bg_palettes[..], &level.obj_palettes[..]);
     let (bg_source, obj_source) = fight.map_or(level_source, |f| (&f.bg_palettes, &f.obj_palettes));
-    // `$26:$6B0B`'s regional sets replace the level's own; a boss fight's
-    // scene load brings its own palettes instead.
-    let (bg_source, obj_source) = if fight.is_none() {
-        ctx.dx_regional
-            .resolve(level_source.0, level_source.1, |at| dx.rom(0x26, at, 64))?
-    } else {
-        (bg_source.to_vec(), obj_source.to_vec())
-    };
+    // A fight load clears earlier overrides; later regional triggers can
+    // replace its colors, while `$FFAD` survives the load.
+    let (bg_source, obj_source) = ctx
+        .dx_regional
+        .resolve(bg_source, obj_source, |at| dx.rom(0x26, at, 64))?;
     // `$31:$4000`'s pause dims whatever `$D200` holds, regional sets included.
     let bg_palettes = if ctx.sim.paused {
         pause_palettes(&bg_source, ctx.sim.frame_counter & 16 != 0)

@@ -197,6 +197,15 @@ impl LevelContext {
                 },
             },
         );
+        // `$0618` poses Mario before `$0636` stages the next object references.
+        // Paused/fade frames and `$0640`'s dead draw do not call `$530D`.
+        if head.gameplay && !head.frozen && self.sim.dead != 0xFF {
+            self.dx_regional.update_references(
+                self.manifest.level_id,
+                self.obj.mario_ref_x,
+                self.obj.mario_ref_y,
+            );
+        }
         // Sessions progress death fades and depart; diagnostic play holds them.
         if head.gameplay && head.frozen {
             if self.sim.exit_phase {
@@ -251,6 +260,11 @@ impl LevelContext {
         }
         if let Some(definition) = result.boss_definition {
             self.boss_definition = Some(definition);
+            // `$36:$7306` overwrites palettes after the pose selector ran.
+            // Wario 7 (`$7440`) retains the previous palettes; none reset `$FFAD`.
+            if definition != 7 {
+                self.dx_regional.palette_load();
+            }
         }
         if result.active_objects {
             self.active_object_frames += 1;
@@ -304,8 +318,6 @@ impl LevelContext {
                 self.manifest.header.palettes[2]
             };
         }
-        self.dx_regional
-            .update(self.manifest.level_id, self.sim.x, self.sim.y);
         self.tile_animation_copied |= result.tile_animation_copied;
     }
 
@@ -314,3 +326,7 @@ impl LevelContext {
         self.sim.map_handoff_done || (self.sim.game_over && self.sim.fade_timer == 0)
     }
 }
+
+#[cfg(test)]
+#[path = "tests/dx_palette_timing.rs"]
+mod dx_palette_timing_tests;

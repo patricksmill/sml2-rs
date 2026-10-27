@@ -1,6 +1,6 @@
 //! DX `$26:$6B0B`: eight levels change palette sets as Mario crosses regions.
 //!
-//! The dispatcher runs once per gameplay frame on Mario's X+8 and Y+32
+//! The dispatcher runs at Mario's pose setup on the previous object pass's X+8 and Y+32
 //! (`$02:$40FD` stages them at `$AF30-$AF33`). Each level's branch loads a
 //! bank-`$26` BG or OBJ set, or writes a few colors straight into OBJ
 //! palette 5, and remembers the section in `$FFAD`; a section already
@@ -22,10 +22,8 @@ pub struct RegionalPalettes {
 }
 
 impl RegionalPalettes {
-    /// One `$6B0B` pass for level `level_id` with Mario at `(x, y)`.
-    pub fn update(&mut self, level_id: u8, x: u16, y: u16) {
-        let x = x.wrapping_add(8);
-        let y = y.wrapping_add(32);
+    /// One `$6B0B` pass using `$AF30..$AF33`, already offset by `(8, 32)`.
+    pub fn update_references(&mut self, level_id: u8, x: u16, y: u16) {
         let ([x_lo, page], [y_lo, y_hi]) = (x.to_le_bytes(), y.to_le_bytes());
         match level_id {
             0x0C => match page {
@@ -106,6 +104,13 @@ impl RegionalPalettes {
         }
     }
 
+    /// A scene palette upload replaces the colors without clearing `$FFAD`.
+    pub fn palette_load(&mut self) {
+        self.bg = None;
+        self.obj = None;
+        self.obj_writes.clear();
+    }
+
     /// A branch's set load, skipped when `$FFAD` already names the section.
     fn load(&mut self, selector: u8, bg: Option<u16>, obj: Option<u16>) {
         if self.selector == selector {
@@ -162,6 +167,12 @@ impl RegionalPalettes {
 #[cfg(test)]
 mod tests {
     use super::RegionalPalettes;
+
+    impl RegionalPalettes {
+        fn update(&mut self, level_id: u8, x: u16, y: u16) {
+            self.update_references(level_id, x.wrapping_add(8), y.wrapping_add(32));
+        }
+    }
 
     /// Mario at a page and Y+32 high byte, X+8 low byte `$40`.
     fn at(page: u8, y_hi: u8) -> (u16, u16) {
@@ -272,6 +283,30 @@ mod tests {
         assert_eq!(walk(0x18, &[at(8, 1)]).obj, None);
         assert_eq!(walk(0x18, &[at(8, 2)]).obj, Some(0x62C0));
         assert_eq!(walk(0x18, &[at(5, 1)]).obj, Some(0x6340));
+    }
+
+    #[test]
+    fn scene_load_replaces_colors_but_retains_selector_until_a_new_trigger() {
+        let mut state = walk(0x18, &[at(8, 2)]);
+        state.palette_load();
+        assert_eq!(state.selector, 1);
+        assert_eq!((state.bg, state.obj), (None, None));
+        assert!(state.obj_writes.is_empty());
+        state.update(0x18, at(8, 2).0, at(8, 2).1);
+        let (_, obj) = state
+            .resolve(&[1; 64], &[2; 64], |_| Some(&[3; 64]))
+            .unwrap();
+        assert_eq!(obj, [2; 64], "same selector preserves the arena upload");
+        state.update(0x18, at(0, 2).0, at(0, 2).1);
+        let (_, obj) = state
+            .resolve(&[1; 64], &[2; 64], |_| Some(&[3; 64]))
+            .unwrap();
+        assert_eq!(obj, [3; 64], "next trigger overrides arena colors");
+
+        let mut direct = walk(0x07, &[at(8, 1)]);
+        direct.palette_load();
+        assert_eq!(direct.selector, 1);
+        assert!(direct.obj_writes.is_empty());
     }
 
     #[test]

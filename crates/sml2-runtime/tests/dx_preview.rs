@@ -949,7 +949,7 @@ fn conveyor_section_colors_survive_corridors_and_widescreen() {
     let mut game = session();
     game.begin_level(0x0c, 0).unwrap();
     for (x, expected) in [
-        (0x200, [0, 255, 0]),
+        (0x200u16, [0, 255, 0]),
         (0x300, [0, 255, 0]),
         (0x500, [0, 0, 255]),
         (0x600, [0, 0, 255]),
@@ -958,10 +958,17 @@ fn conveyor_section_colors_survive_corridors_and_widescreen() {
         let SessionState::InLevel(ctx) = &mut game.state else {
             panic!("level")
         };
-        ctx.sim.x = x;
+        ctx.obj.mario_ref_x = x.wrapping_add(8);
+        ctx.obj.mario_ref_y = ctx.sim.y.wrapping_add(32);
+        ctx.cam.scene_id = 0;
+        ctx.scene_vm = sml2_core::scene::SceneVm::new();
         game.advance(FrameInput::default());
         let frame = game.render_dx_frame(&bundle, Mario, (256, 144)).unwrap();
         assert_eq!(frame[0], expected, "Mario X {x:04x}");
+        let again = game.render_dx_frame(&bundle, Mario, (256, 144)).unwrap();
+        assert_eq!(again, frame, "drawing does not advance palette timing");
+        let luigi = game.render_dx_frame(&bundle, Luigi, (256, 144)).unwrap();
+        assert_eq!(luigi[0], expected, "Luigi shares regional BG colors");
     }
 }
 
@@ -991,6 +998,10 @@ fn audited_rom_regional_palettes_follow_mario() {
         };
         ctx.sim.x = x;
         ctx.sim.y = y;
+        ctx.obj.mario_ref_x = x.wrapping_add(8);
+        ctx.obj.mario_ref_y = y.wrapping_add(32);
+        ctx.cam.scene_id = 0;
+        ctx.scene_vm = sml2_core::scene::SceneVm::new();
         game.advance(FrameInput::default());
         let after = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
         if bg_changes {
