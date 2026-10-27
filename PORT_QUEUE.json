@@ -4,7 +4,7 @@
   "queue": [
     {
       "id": "f-routes-b",
-      "title": "Route-matrix review for levels 7, 8, 9, 11, 12, with played approaches only where a level relies on a special mechanic",
+      "title": "Route-matrix review for levels 3, 7, 8, 9, 11, 12, with played approaches only where a level relies on a special mechanic",
       "asm_refs": [
         "home.asm:$5579/$55C0 secret-entry overlay",
         "home.asm:$377B entry table",
@@ -68,7 +68,7 @@
     },
     {
       "id": "f-boss-routes-b",
-      "title": "Zone boss levels 17, 20, 24 played end to end: header spawn, arena entry, defeat by live input, coin reward, map return",
+      "title": "Zone boss levels 6, 17, 20 played end to end: header spawn, arena entry, defeat by live input, coin reward, map return",
       "asm_refs": [
         "$9285/$5D6A/$5E12 boss flow",
         "home.asm:$3573 level hand-off"
@@ -126,7 +126,7 @@
         "f-overworld-navigation",
         "f-wario-played"
       ],
-      "verification_gate": "At each checkpoint the ROM frame and the port frame for the same game state (port frame N-1 for ROM frame N) match in tiles, sprites, HUD, palettes, priorities and scroll splits; tile-animation phase and presentation timing are excluded (docs/frame-clock.md) but each animation's frames and order must match; every other difference is fixed or explained in docs; evidence recorded in feature-inventory visual-audio row",
+      "verification_gate": "At each checkpoint the ROM frame and the port frame for the same game state (port frame N-1 for ROM frame N) match in tiles, sprites, HUD, palettes, priorities and scroll splits; tile-animation phase and presentation timing are excluded (docs/frame-clock.md) but each animation's frames and order must match; every other difference is fixed or explained in docs; evidence recorded in docs/visual-parity.md",
       "status": "pending"
     },
     {
@@ -137,14 +137,14 @@
         "tools/dump_pyboy_audio.py"
       ],
       "dependencies": [],
-      "verification_gate": "Per-id APU register-write streams match the emulator exactly; PCM within a documented tolerance; evidence recorded in feature-inventory visual-audio row",
+      "verification_gate": "Per-id APU register-write streams match the emulator exactly; PCM within a documented tolerance; evidence recorded in docs/route-matrix.md",
       "status": "pending"
     },
     {
       "id": "f-full-playthrough",
       "title": "Final integration: fresh extraction and build, then one uninterrupted boot -> new game -> all six coins -> Wario -> credits run, with a mid-game save/reload",
       "asm_refs": [
-        "docs/plans/2026-10-15-rust-completion-workflow.md \u00a77"
+        "docs/route-matrix.md (remaining completion)"
       ],
       "dependencies": [
         "f-inventory-reconcile",
@@ -158,7 +158,7 @@
         "f-visual-parity",
         "f-audio-evidence"
       ],
-      "verification_gate": "Clean-checkout sml2-extract + cargo build; one recorded input tape plays from boot to credits with save/reload; zero unported diagnostics; captures/sweep.sh passes; feature-inventory final-integration row verified",
+      "verification_gate": "Clean-checkout sml2-extract + cargo build; one recorded input tape plays from boot to credits with save/reload; zero unported diagnostics; captures/sweep.sh passes; route-matrix.md remaining-completion row closed",
       "status": "pending"
     }
   ],
