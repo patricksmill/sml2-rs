@@ -45,6 +45,7 @@ reference emulator's progress before blaming the native port.
 
 | Option | Meaning |
 |---|---|
+| `--mode dx --character mario` | Audited DX ROM, CGB reference and full RGB comparison; `luigi` expects selection through movie inputs |
 | `--exact-position` | Stop on any sampled world-X/Y mismatch |
 | `--diverge-threshold N` | Default tolerance 4 pixels; 0 disables this threshold |
 | `--no-diverge` | Disable comparison stops, including exact mode |
@@ -67,7 +68,30 @@ Debug fields do not prove equivalence to arbitrary stopped CPU registers. See
 [visual parity](visual-parity.md), [frame clocks](frame-clock.md) and
 [randomness](randomness.md) for accepted differences and remaining gaps.
 
+DX comparison uses the supported local DX ROM for both PyBoy and native import:
+
+```sh
+python tools/compare_tas.py recordings/dx.json --rom /path/to/sml2dx.gbc --mode dx --character luigi --pixel-report target/dx.jsonl
+```
+
+The movie must match that ROM's SHA-1. Both sides boot as Mario; a Luigi movie
+must use the file-select character door. `--character` checks the expected
+in-level identity and rejects a ROM/native mismatch instead of changing console
+RAM. DX reports count pixels with any RGB channel difference; dumps are PPM.
+PyBoy RGB555 channels use a left shift (white 248); the comparison expands
+the same five bits by replication (white 255) to match native RGB output.
+This conversion applies to reference display/dumps, preserving raw EOF hashes.
+Their `alignment` field compares the completed ROM logic snapshot with its paired
+native level, full world position, camera and character. Outside a level,
+`level_state_match` is null: scene equivalence is not established by this check.
+Framebuffer `diff` still uses the documented previous native frame; `diff_same`
+uses the current frame. Neither score establishes parity after state divergence.
+No arbitrary frame offset is applied.
+
 The bridge emits an ASCII `STATE` line then exactly 160x144 grayscale bytes.
+`--mode dx --dx-rom PATH` changes the payload to 160x144 packed RGB triples and
+adds decimal `mode=1 character=0|1` state fields. Standalone `--character luigi`
+sets native initial identity; the movie comparer starts both sides as Mario.
 Legacy 5-field and 9-field state rows remain supported; debug adds decimal
 `key=value` fields on the same line. Outside a level: `STATE - - - - -`.
 

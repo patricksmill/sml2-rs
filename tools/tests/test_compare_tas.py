@@ -482,5 +482,70 @@ class PixelReportTests(unittest.TestCase):
         self.assertEqual(compare_tas.OUT_OF_LEVEL, {'tile_timer': 5, 'tile_phase': 2})
 
 
+class DxFrameTests(unittest.TestCase):
+    @unittest.skipUnless(HAVE_NUMPY, 'numpy is in the PyBoy comparison environment')
+    def test_rgb_frame_preserves_primary_colors_and_next_state_boundary(self):
+        pixels = bytes([255, 0, 0, 0, 255, 0, 0, 0, 255]) * (160 * 144 // 3)
+        pipe = io.BytesIO(b'STATE 0 34 468 80 448 80 18 1 0 mode=1 character=1\n'
+                          + pixels + b'STATE - - - - - mode=1 character=1\n')
+        self.assertEqual(read_state(pipe)['character'], 1)
+        frame = compare_tas.read_frame(pipe, 'dx')
+        self.assertEqual(frame[0, :3].tolist(), [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]])
+        self.assertIsNone(read_state(pipe))
+        self.assertEqual(compare_tas.OUT_OF_LEVEL['character'], 1)
+        self.addCleanup(compare_tas.OUT_OF_LEVEL.clear)
+
+    @unittest.skipUnless(HAVE_NUMPY, 'numpy is in the PyBoy comparison environment')
+    def test_short_reads_and_truncated_rgb_or_grey_frames(self):
+        class ShortPipe(io.BytesIO):
+            def read(self, length):
+                return super().read(min(37, length))
+        for mode, size in [('dmg', 160 * 144), ('dx', 160 * 144 * 3)]:
+            with self.subTest(mode=mode):
+                self.assertEqual(compare_tas.read_frame(ShortPipe(bytes(size)), mode).shape, (144, 160, 4))
+                with self.assertRaisesRegex(RuntimeError, 'closed unexpectedly'):
+                    compare_tas.read_frame(ShortPipe(bytes(size - 1)), mode)
+
+    @unittest.skipUnless(HAVE_NUMPY, 'numpy is in the PyBoy comparison environment')
+    def test_rgb_counts_pixels_with_any_changed_channel_and_keeps_previous_pair(self):
+        import numpy as np
+        memory = {0xFF9B: 4, 0xA269: 3, 0xA68B: 0x2b}
+        rom = np.full((144, 160, 4), 255, dtype=np.uint8)
+        port = rom.copy()
+        port[0, 0, 1] = 17
+        port[0, 1, 2] = 31
+        port[0, 2, :3] = 0
+        port[0, 3, 3] = 0  # alpha is not cartridge RGB
+        row = compare_tas.pixel_row(7, memory, rom, port, rom, 'dx')
+        self.assertEqual((row['diff_same'], row['diff']), (3, 0))
+
+    @unittest.skipUnless(HAVE_NUMPY, 'numpy is in the PyBoy comparison environment')
+    def test_reference_rgb555_channel_expansion_matches_native_without_changing_source(self):
+        import numpy as np
+        raw = np.array([[[248, 0, 0, 255], [0, 248, 0, 255],
+                         [0, 0, 248, 255], [8, 120, 160, 255]]], dtype=np.uint8)
+        self.assertEqual(compare_tas.cgb_frame(raw).tolist(),
+                         [[[255, 0, 0, 255], [0, 255, 0, 255],
+                           [0, 0, 255, 255], [8, 123, 165, 255]]])
+        self.assertEqual(raw[0, 0, 0], 248)
+
+    def test_alignment_requires_world_pages_camera_and_character(self):
+        memory = dict.fromkeys(compare_tas.SNAPSHOT_ADDRS, 0)
+        memory.update({0xFF9B: 4, 0xA269: 3, 0xFFF6: 0x11,
+                       0xFFC2: 34, 0xFFC3: 1, 0xFFC0: 212, 0xFFC1: 1})
+        native = dict(level=3, x=290, y=468, cam_x=0, cam_y=0, character=1)
+        row = compare_tas.dx_alignment(memory, native, 'luigi')
+        self.assertTrue(row['level_state_match'])
+        self.assertTrue(row['character_match'])
+        self.assertTrue(row['expected_character_match'])
+        for key in ('level', 'x', 'y', 'cam_x', 'cam_y'):
+            changed = dict(native, **{key: native[key] + 1})
+            self.assertFalse(compare_tas.dx_alignment(memory, changed, 'luigi')['level_state_match'])
+        self.assertFalse(compare_tas.dx_alignment(memory, dict(native, character=0), 'luigi')['character_match'])
+        self.assertFalse(compare_tas.dx_alignment(memory, native, 'mario')['expected_character_match'])
+        memory[0xFF9B] = 2
+        self.assertIsNone(compare_tas.dx_alignment(memory, None, 'luigi')['level_state_match'])
+
+
 if __name__ == '__main__':
     unittest.main()

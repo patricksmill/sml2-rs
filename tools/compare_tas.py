@@ -45,7 +45,7 @@ def read_state(pipe):
                 if key not in {"step", "fff0", "update_phase", "standing", "scene", "owns", "pc",
                                "boss_x", "boss_state", "door_phase", "door_parity",
                                "platform_sprite", "tile_anim", "writes", "tile_timer", "tile_phase",
-                               "ff97", "bag", "pow", "wt", "xs", "xp", "ph"}:
+                               "ff97", "bag", "pow", "wt", "xs", "xp", "ph", "mode", "character"}:
                     raise ValueError("unknown diagnostic field")
                 state[key] = int(value)
     except ValueError as exc:
@@ -53,17 +53,21 @@ def read_state(pipe):
     return state
 
 
-def read_frame(pipe):
+def read_frame(pipe, mode="dmg"):
     import numpy as np
+    if mode not in {"dmg", "dx"}:
+        raise ValueError(f"unsupported frame mode: {mode}")
+    size = 160 * 144 * (3 if mode == "dx" else 1)
     data = bytearray()
-    while len(data) < 160 * 144:
-        chunk = pipe.read(160 * 144 - len(data))
+    while len(data) < size:
+        chunk = pipe.read(size - len(data))
         if not chunk:
             raise RuntimeError('native frame bridge closed unexpectedly')
         data.extend(chunk)
-    gray = np.frombuffer(data, dtype=np.uint8).reshape(144, 160)
+    pixels = np.frombuffer(data, dtype=np.uint8)
     rgba = np.empty((144, 160, 4), dtype=np.uint8)
-    rgba[:, :, :3] = gray[:, :, None]
+    rgba[:, :, :3] = (pixels.reshape(144, 160, 3) if mode == "dx"
+                       else pixels.reshape(144, 160, 1))
     rgba[:, :, 3] = 255
     return rgba
 
@@ -218,7 +222,7 @@ def step_masks(mask, phases, st4_keys, frame_held=None):
 
 # Every address `check_divergence` and `--trace` read.
 SNAPSHOT_ADDRS = (0xFF9B, 0xA269, 0xFFC0, 0xFFC1, 0xFFC2, 0xFFC3, 0xFFC8, 0xFFC9,
-                  0xFFCA, 0xFFCB, 0xFFF0, 0xAF08, 0xA26B, 0xA28E, 0xA28F, 0xA200, 0xA201, 0xA202, 0xA218, 0xFF97)
+                  0xFFCA, 0xFFCB, 0xFFF0, 0xAF08, 0xA26B, 0xA28E, 0xA28F, 0xA200, 0xA201, 0xA202, 0xA218, 0xFF97, 0xFFF6)
 
 
 class Snapshot(dict):
@@ -382,25 +386,67 @@ def shade_indices(grey, shades):
     return out
 
 
-def pixel_row(index, memory, rom_screen, native, previous_native):
+def cgb_frame(screen):
+    """PyBoy uses RGB555 << 3; native RGB555 repeats the high bits into low bits."""
+    frame = screen.copy()
+    channels = frame[:, :, :3] >> 3
+    frame[:, :, :3] = (channels << 3) | (channels >> 2)
+    return frame
+
+
+def pixel_row(index, memory, rom_screen, native, previous_native, mode="dmg"):
+    import numpy as np
     """One --pixel-report record: where the ROM is, and how many of the 23,040
-    pixels differ in DMG shade. The console shows a tick's result a frame
+    pixels differ in DMG shade or DX RGB. The console shows a tick's result a frame
     later than the native renderer (by design, see DESIGN.md), so `diff`
     compares against the port's previous frame; `diff_same` against its
     current one."""
-    rom = shade_indices(rom_screen[:, :, 0], ROM_SHADES)
-    port = shade_indices(native[:, :, 0], PORT_SHADES)
+    def pixels(frame, shades):
+        return frame[:, :, :3] if mode == "dx" else shade_indices(frame[:, :, 0], shades)
+
+    def differences(left, right):
+        unequal = left != right
+        return int((np.any(unequal, axis=2) if mode == "dx" else unequal).sum())
+
+    rom = pixels(cgb_frame(rom_screen) if mode == "dx" else rom_screen, ROM_SHADES)
+    port = pixels(native, PORT_SHADES)
     row = {'row': index, 'state': memory[0xFF9B], 'level': memory[0xA269],
-           'map': memory[0xA68B], 'diff_same': int((rom != port).sum())}
+           'map': memory[0xA68B], 'diff_same': differences(rom, port)}
     if previous_native is not None:
-        row['diff'] = int((rom != shade_indices(previous_native[:, :, 0], PORT_SHADES)).sum())
+        row['diff'] = differences(rom, pixels(previous_native, PORT_SHADES))
     return row
+
+
+def dx_alignment(memory, native, expected_character):
+    """Compare a completed logic snapshot, separate from framebuffer latency."""
+    rom_character = memory[0xFFF6] & 0x0f
+    fields = {'rom_character': rom_character,
+              'native_character': native.get('character') if native else OUT_OF_LEVEL.get('character'),
+              'expected_character': int(expected_character == 'luigi')}
+    fields['character_match'] = fields['rom_character'] == fields['native_character']
+    fields['expected_character_match'] = fields['rom_character'] == fields['expected_character']
+    if memory[0xFF9B] != 4 or native is None:
+        fields['level_state_match'] = None
+        return fields
+    rom_state = {'level': memory[0xA269],
+                 'x': memory[0xFFC2] | memory[0xFFC3] << 8,
+                 'y': memory[0xFFC0] | memory[0xFFC1] << 8,
+                 'cam_x': memory[0xFFCA] | memory[0xFFCB] << 8,
+                 'cam_y': memory[0xFFC8] | memory[0xFFC9] << 8}
+    fields['rom_position'] = rom_state
+    fields['native_position'] = {key: native[key] for key in rom_state}
+    fields['level_state_match'] = fields['rom_position'] == fields['native_position']
+    return fields
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('movie', type=Path, help='JSON from import_bk2.py')
     parser.add_argument('--rom', type=Path, required=True)
+    parser.add_argument('--mode', choices=('dmg', 'dx'), default='dmg',
+                        help='DX uses the audited DX ROM in CGB mode and native RGB frames')
+    parser.add_argument('--character', choices=('mario', 'luigi'), default='mario',
+                        help='expected DX character in gameplay; select it through movie input')
     parser.add_argument('--bridge', type=Path, default=Path('target/release/examples/tas_bridge'))
     parser.add_argument('--no-phase-lock', action='store_true',
                         help="do not feed the ROM's $FF97 phase to the port (see --phase-lock)")
@@ -421,7 +467,7 @@ def main():
     parser.add_argument('--trace', metavar='START:END', type=trace_range,
                         help='print ROM and port state for this inclusive input-row range')
     parser.add_argument('--pixel-dump', type=Path, metavar='DIR',
-                        help='with --pixel-rows, save ROM, port and previous port frames as PGM')
+                        help='with --pixel-rows, save ROM, port and previous port frames as PGM (DMG) or PPM (DX)')
     parser.add_argument('--pixel-rows', type=lambda v: {int(x) for x in v.split(',')}, default=set(),
                         help='comma-separated input rows for --pixel-dump')
     parser.add_argument('--pixel-report', type=Path, metavar='PATH',
@@ -445,11 +491,16 @@ def main():
         parser.error('--frames must be positive')
     if args.headless and args.paused:
         parser.error("--paused requires interactive windows")
+    if args.mode == 'dmg' and args.character != 'mario':
+        parser.error('--character luigi requires --mode dx')
+    if args.mode == 'dx' and hashlib.sha256(rom).hexdigest() != (
+            '1dd604a91b9ee99ef381cc795da3ae28c72d04ba9de78b355df829e56ce49c46'):
+        parser.error('unsupported DX ROM revision')
     from pyboy import PyBoy
     if movie.get('source') == 'manual-pyboy':
         from importlib.metadata import version
         import pyboy as pyboy_package
-        boot = args.bootrom or Path(pyboy_package.__file__).parent / 'core' / 'bootrom_dmg.bin'
+        boot = args.bootrom or Path(pyboy_package.__file__).parent / 'core' / ('bootrom_cgb.bin' if args.mode == 'dx' else 'bootrom_dmg.bin')
         if version('pyboy') != movie.get('pyboy_version'):
             parser.error('PyBoy version differs from the manual recording')
         if hashlib.sha1(boot.read_bytes()).hexdigest() != movie.get('bootrom_sha1'):
@@ -458,7 +509,7 @@ def main():
             parser.error('unsupported recording audio configuration')
     # A file-like ROM prevents PyBoy from loading the ROM path's existing .ram.
     pyboy = PyBoy(io.BytesIO(rom), window='null', sound_emulated=False,
-                  cgb=False, bootrom=str(args.bootrom) if args.bootrom else None)
+                  cgb=args.mode == 'dx', bootrom=str(args.bootrom) if args.bootrom else None)
     pyboy.set_emulation_speed(0)
     bridge = None
     pixel_report = None
@@ -466,12 +517,14 @@ def main():
     sdl = None
     try:
         bridge_args = [str(args.bridge.resolve())]
+        if args.mode == 'dx':
+            bridge_args.extend(['--mode', 'dx', '--dx-rom', str(args.rom.resolve())])
         if args.port_initial_phase is not None:
             bridge_args.extend(['--initial-phase', str(args.port_initial_phase)])
         threshold = comparison_threshold(args.diverge_threshold, args.exact_position, args.no_diverge)
         watch = threshold is not None
         phase_lock = not args.no_phase_lock
-        state_rows = watch or args.debug_state or phase_lock or trace is not None
+        state_rows = watch or args.debug_state or phase_lock or trace is not None or args.mode == "dx"
         if state_rows:
             bridge_args.append('--state')
         if args.debug_state:
@@ -481,7 +534,7 @@ def main():
         bridge = subprocess.Popen(bridge_args, stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE)
         native_state = read_state(bridge.stdout) if state_rows else None
-        native = read_frame(bridge.stdout)
+        native = read_frame(bridge.stdout, args.mode)
         native_step = 0
         previous_native_step = None
         previous_frame = None
@@ -570,7 +623,7 @@ def main():
                     scene_phases.append(pyboy.memory[0xFF97] & 7)
 
             pyboy.hook_register(0, 0x273D, scene_resume, None)
-        print(f'Position comparison: {"disabled" if threshold is None else f"level/x/y, world tolerance {threshold}px"}; camera is diagnostic only; pixels are not compared.', flush=True)
+        print(f'Position comparison: {"disabled" if threshold is None else f"level/x/y, world tolerance {threshold}px"}; camera is diagnostic only; pixels never trigger a stop.', flush=True)
         print(f'Phase lock: {"ROM-supplied phases (diagnostic alignment, not native clock parity)" if phase_lock else "off"}.', flush=True)
         print('Space pause/resume BOTH; Right step BOTH; Tab 1x/0.25x; Escape closes BOTH.', flush=True)
         if movie.get('source') == 'manual-pyboy':
@@ -640,7 +693,7 @@ def main():
                         bridge.stdin.flush()
                         if state_rows:
                             native_state = read_state(bridge.stdout)
-                        native = read_frame(bridge.stdout)
+                        native = read_frame(bridge.stdout, args.mode)
                         native_step += 1
                         states.append((native_state, native_step))
                     if watch and divergence is None:
@@ -653,7 +706,7 @@ def main():
                     bridge.stdin.write(f'{mask}\n'.encode())
                     bridge.stdin.flush()
                     native_state = read_state(bridge.stdout) if state_rows else None
-                    native = read_frame(bridge.stdout)
+                    native = read_frame(bridge.stdout, args.mode)
                     native_step += 1
                     # sMarioX/Y are copied from HRAM at the next state-$04 entry,
                     # so this row's ROM state matches the previous row's port state.
@@ -661,16 +714,32 @@ def main():
                         divergence = check_divergence(
                             index - 1, pyboy.memory, previous_native, threshold,
                             native_step=previous_native_step)
+                if args.mode == 'dx' and pyboy.memory[0xFF9B] == 4 and native_state is not None:
+                    character = pyboy.memory[0xFFF6] & 0x0f
+                    if character != native_state['character'] or character != int(args.character == 'luigi'):
+                        raise RuntimeError(f"DX character mismatch: ROM {character}, "
+                                           f"native {native_state['character']}, expected {args.character}")
                 if pixel_report is not None:
-                    pixel_report.write(json.dumps(pixel_row(
-                        index, pyboy.memory, pyboy.screen.ndarray, native, previous_frame)) + '\n')
+                    row = pixel_row(index, pyboy.memory, pyboy.screen.ndarray,
+                                    native, previous_frame, args.mode)
+                    if args.mode == 'dx':
+                        if phase_lock:
+                            sample, (paired, _) = completed_sample(pyboy.memory, events, states)
+                        else:
+                            sample, paired = pyboy.memory, native_state
+                        row.update(mode='dx', alignment=dx_alignment(sample, paired, args.character))
+                    pixel_report.write(json.dumps(row) + '\n')
                 if args.pixel_dump and index in args.pixel_rows:
                     args.pixel_dump.mkdir(parents=True, exist_ok=True)
-                    for name, image in (('rom', pyboy.screen.ndarray), ('port', native),
+                    for name, image in (('rom', cgb_frame(pyboy.screen.ndarray) if args.mode == 'dx' else pyboy.screen.ndarray), ('port', native),
                                         ('portprev', previous_frame)):
                         if image is not None:
-                            (args.pixel_dump / f'{index:06d}_{name}.pgm').write_bytes(
-                                b'P5\n160 144\n255\n' + image[:, :, 0].tobytes())
+                            rgb = args.mode == 'dx'
+                            suffix = 'ppm' if rgb else 'pgm'
+                            payload = image[:, :, :3] if rgb else image[:, :, 0]
+                            header = b'P6\n160 144\n255\n' if rgb else b'P5\n160 144\n255\n'
+                            (args.pixel_dump / f'{index:06d}_{name}.{suffix}').write_bytes(
+                                header + payload.tobytes())
                 previous_frame = native
                 if trace is not None and trace[0] <= index <= trace[1]:
                     if phase_lock:
@@ -699,7 +768,7 @@ def main():
             if divergence:
                 label += f' | DIVERGED dx={divergence["dx"]} dy={divergence["dy"]}'
             if displays:
-                displays[0].draw(pyboy.screen.ndarray, f'PyBoy ROM | {label}')
+                displays[0].draw(cgb_frame(pyboy.screen.ndarray) if args.mode == 'dx' else pyboy.screen.ndarray, f'PyBoy ROM | {label}')
                 port_name = 'Rust port' if args.port_initial_phase is None else f'Rust port [initial phase {args.port_initial_phase}]'
                 displays[1].draw(native, f'{port_name} | {label}')
                 time.sleep(max(0, 1 / (15 if slow else 60) - (time.perf_counter() - started)))

@@ -1,5 +1,5 @@
 //! Pipe host for tools/compare_tas.py: initial frame, then one frame per mask line.
-//! Stdout is raw 160x144 grayscale; diagnostics go to stderr. No save-file I/O.
+//! Stdout is raw 160x144 grayscale (DX: packed RGB); diagnostics go to stderr. No save-file I/O.
 //! With `--state`, every frame (the first included) is preceded by a
 //! `STATE level x y camx camy hvel vvel on_ground phase` line (velocities are
 //! hexadecimal; other fields are decimal) so the viewer can compare native positions
@@ -8,7 +8,8 @@
 //! that same line, preserving the following pixel frame boundary.
 //! With `--debug-state` and `SML2_BRIDGE_OBJECTS` set, stderr also includes
 //! each occupied object slot's raw 32 bytes.
-use sml2_core::player_sim::PlayerKeys;
+use sml2_core::{character::Character, player_sim::PlayerKeys};
+use sml2_dx::Presentation;
 use sml2_runtime::{
     divider_clock::VirtualDividerClock,
     session::{FrameInput, Session, SessionAssets},
@@ -16,6 +17,7 @@ use sml2_runtime::{
 use std::{
     error::Error,
     io::{self, BufRead, Write},
+    sync::Arc,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -24,6 +26,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut state_lines = false;
     let mut phase_lock = false;
     let mut debug_state = false;
+    let mut mode = "dmg".to_string();
+    let mut dx_rom = None;
+    let mut character = Character::Mario;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--initial-phase" => {
@@ -32,6 +37,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                     return Err("initial phase must be 0..7".into());
                 }
                 initial_phase = Some(phase);
+            }
+            "--mode" => mode = args.next().ok_or("missing mode")?,
+            "--dx-rom" => dx_rom = Some(args.next().ok_or("missing DX ROM path")?),
+            "--character" => {
+                character = match args.next().as_deref() {
+                    Some("mario") => Character::Mario,
+                    Some("luigi") => Character::Luigi,
+                    _ => return Err("character must be mario or luigi".into()),
+                };
             }
             "--state" => state_lines = true,
             "--debug-state" => {
@@ -42,11 +56,28 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => return Err(format!("unknown bridge argument: {arg}").into()),
         }
     }
+    let dx = match mode.as_str() {
+        "dmg" if dx_rom.is_none() && character == Character::Mario => None,
+        "dmg" => return Err("DX ROM and Luigi require --mode dx".into()),
+        "dx" => {
+            let rom = std::fs::read(dx_rom.ok_or("--mode dx requires --dx-rom")?)?;
+            Some(Arc::new(Presentation::new(&sml2_dx::extract(&rom)?)?))
+        }
+        _ => return Err("mode must be dmg or dx".into()),
+    };
     let mut session = Session::new(SessionAssets::load()?);
+    session.set_dx(dx.clone(), character);
     session.enter_title();
     let mut out = io::BufWriter::new(io::stdout().lock());
     let mut div_clock = VirtualDividerClock::new(0);
-    write_frame(&mut out, &session, state_lines, debug_state, 0)?;
+    write_frame(
+        &mut out,
+        &session,
+        dx.as_deref(),
+        state_lines,
+        debug_state,
+        0,
+    )?;
     for (index, line) in io::stdin().lock().lines().enumerate() {
         // `--phase-lock` rows are `mask phase`: the ROM's own `$FF97 & 7`, which
         // a frame-synchronous port cannot derive (it counts vblank waits from
@@ -114,6 +145,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         if let Some(timing) = rom_timing {
             session.set_rom_timing(timing);
         }
+        if dx.is_some() {
+            if let sml2_runtime::session::SessionState::FileSelect(menu) = &mut session.state {
+                menu.set_character_door_enabled(true);
+            }
+        }
         let effects = session.advance(FrameInput {
             keys,
             div: boss_div.unwrap_or_else(|| div_clock.sample()),
@@ -124,7 +160,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         for diagnostic in effects.diagnostics {
             eprintln!("{diagnostic}");
         }
-        write_frame(&mut out, &session, state_lines, debug_state, tick)?;
+        write_frame(
+            &mut out,
+            &session,
+            dx.as_deref(),
+            state_lines,
+            debug_state,
+            tick,
+        )?;
     }
     Ok(())
 }
@@ -134,6 +177,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 fn write_frame(
     out: &mut impl Write,
     session: &Session,
+    dx: Option<&Presentation>,
     state_lines: bool,
     debug_state: bool,
     native_step: u64,
@@ -154,6 +198,13 @@ fn write_frame(
             ),
             _ => "STATE - - - - -".to_string(),
         };
+        if dx.is_some() {
+            // Keep the legacy DMG rows byte-for-byte compatible.
+            line.push_str(&format!(
+                " mode=1 character={}",
+                u8::from(session.character == Character::Luigi)
+            ));
+        }
         if debug_state {
             if let sml2_runtime::session::SessionState::InLevel(c) = &session.state {
                 line.push_str(&format!(
@@ -214,7 +265,14 @@ fn write_frame(
         out.write_all(line.as_bytes())?;
         out.write_all(b"\n")?;
     }
-    out.write_all(&session.render_frame((160, 144)))?;
+    if let Some(dx) = dx {
+        let pixels = session.render_dx_frame(dx, session.character, (160, 144))?;
+        for rgb in pixels {
+            out.write_all(&rgb)?;
+        }
+    } else {
+        out.write_all(&session.render_frame((160, 144)))?;
+    }
     out.flush()?;
     Ok(())
 }
