@@ -1191,3 +1191,26 @@ fn audited_rom_levels_enter_with_dx_layouts_and_spawns() {
         assert_eq!(moved, expected, "level {id:02X}");
     }
 }
+
+#[test]
+fn bonus_rooms_draw_the_player_from_their_own_dx_graphics() {
+    let mut bundle = synthetic_bundle();
+    // Rooms read `$8000` sprites from the character's own bank: only Luigi's
+    // tile 0 is opaque, and every frame of both characters draws it.
+    bundle.players[1][0].normal[..16].fill(0xff);
+    for row in &mut bundle.players {
+        row[0].mappings = vec![vec![sml2_core::object::MappingEntry { y: 0, x: 0, tile: 0, attr: 0 }]; 242];
+    }
+    bundle.map.screens[13].obj_palettes[0][6..8].copy_from_slice(&[0, 0x7c]);
+    bundle.map.screens[13].obj_palettes[1][6..8].copy_from_slice(&[0, 0x7c]);
+    for (character, drawn) in [(Mario, false), (Luigi, true)] {
+        let mut game = session();
+        game.begin_bell_room(13, 0, 0);
+        // Let the player walk in from the left edge.
+        for _ in 0..60 {
+            game.advance(FrameInput::default());
+        }
+        let frame = game.render_dx_frame(&bundle, character, (160, 144)).unwrap();
+        assert_eq!(frame.contains(&[0, 0, 255]), drawn, "{character:?}");
+    }
+}

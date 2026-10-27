@@ -408,6 +408,10 @@ impl Session {
         let blank = IndexedPixel::new(if map_sim.screen_id == 0 { 3 } else { 0 }, 0).unwrap();
         let player = dx.player(character, 0);
         let mario = &player.mappings;
+        // `$24:$78B0` loads the rooms' `$8000` sprites from `$2A`/`$2B` by
+        // `$FFF6`; DX's bank-6 copy is only Mario's.
+        let room_tiles = sml2_core::map::RoomCommonTiles::from_bytes(&player.normal)
+            .ok_or("invalid DX player graphics")?;
         // VRAM1 on every map screen: the player's `$8000` overlay over what
         // the title and file select left at `$8800`. Room Mario and the coin
         // rooms' status box (attribute bit 3) draw from it.
@@ -451,7 +455,7 @@ impl Session {
                 wave,
                 sprites: Some(&dx.map.sprites),
                 bell_tiles: Some(&dx.map.bell_tiles),
-                room_tiles: Some(&dx.map.room_tiles),
+                room_tiles: Some(&room_tiles),
                 player_mappings: Some(mario),
             };
             let mut frame = self.overworld_frame(sim, assets, size);
@@ -524,11 +528,10 @@ fn dx_map_pixels(
         };
         background.push(pixel);
     }
-    // `draw_map_objects`: smaller X wins, then the earlier entry.
+    // DX runs in CGB mode, where the earlier OAM entry wins regardless of X.
+    // Luigi's mappings layer VRAM1 face cells over his head in that order.
     let mut objects = vec![None; w * h];
-    let mut order: Vec<_> = frame.composition.oam.iter().enumerate().collect();
-    order.sort_by_key(|&(i, &(_, x, _, _))| (x, i));
-    for (_, &(oy, ox, tile, attr)) in order {
+    for &(oy, ox, tile, attr) in &frame.composition.oam {
         let Some(data) = bank(attr).get(usize::from(tile)) else {
             continue;
         };
@@ -578,9 +581,7 @@ fn fill_cursor_eye_holes(
     palettes: &CgbPalettes,
 ) {
     let mut cover = vec![None; w * h];
-    let mut order: Vec<_> = oam.iter().enumerate().collect();
-    order.sort_by_key(|&(i, &(_, x, _, _))| (x, i));
-    for (_, &(oy, ox, tile, attr)) in order {
+    for &(oy, ox, tile, attr) in oam {
         if tile >= 32 {
             continue;
         }
