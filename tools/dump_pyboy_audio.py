@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""
-Dump audio from PyBoy running baserom.gb.
-
-Usage:
-  python3 tools/dump_pyboy_audio.py --song <ID> [--seconds <S>] [--out <path.wav>]
-  python3 tools/dump_pyboy_audio.py --sfx <SLOT> <ID> [--frames <N>] [--out <path.wav>]
-"""
+"""Export PyBoy song/SFX reference WAVs; use --help for options."""
 
 import argparse
 import sys

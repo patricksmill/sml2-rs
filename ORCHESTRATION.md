@@ -30,7 +30,7 @@ notes or multiple handler bodies. Do not bulk-transpile assembly into Rust.
 
    ```sh
    python3 tools/dispatch_prompt.py --addr 0x58201
-   python3 tools/dispatch_prompt.py --queue QUEUE_ID
+   python3 tools/dispatch_prompt.py --queue QUEUE_ID --file path/to/file.rs
    ```
 
 3. Handler generation must exit 0 with `Slice status: COMPLETE`. Repair source/

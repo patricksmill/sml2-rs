@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""Move a pending PORT_QUEUE item to PORT_QUEUE.done.json.
-
-Usage: python3 tools/queue_done.py <item_id>
-"""
+"""Archive one verified queue item: python3 tools/queue_done.py ITEM_ID."""
 
 import json
 import sys

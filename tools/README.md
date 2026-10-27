@@ -84,7 +84,7 @@ the stronger explicit byte/source-witnessed evidence.
 python3 tools/dispatch_prompt.py --addr 0x58848
 python3 tools/dispatch_prompt.py --addr 0xAD93 \
   --module crates/sml2-core/src/objects/bosses/wario/form3.rs
-python3 tools/dispatch_prompt.py --queue QUEUE_ID
+python3 tools/dispatch_prompt.py --queue QUEUE_ID --file path/to/file.rs
 ```
 
 Successful stdout is the worker message; diagnostics go to stderr. Handler
@@ -92,7 +92,9 @@ prompts regenerate the brief and reject incomplete slices. Existing dispatch
 entries resolve their named native module; new entries require `--module`.
 Adapters mirror native filenames under `compat/`; tests belong to the category.
 Prompts name bounded files, one dispatch arm and registrations. Dependencies and
-state budgets pass through. Queue prompts validate files before dispatch.
+state budgets pass through. Queue prompts require explicit, repeated `--file`
+arguments and reject missing files or paths outside the repository; no retired
+ticket-to-file table is maintained.
 
 ## Checks and playback
 

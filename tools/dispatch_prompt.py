@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Print a Porter user message for Hermes / Cursor subagents.
-
-  python3 tools/dispatch_prompt.py --addr 0x58848
-  python3 tools/dispatch_prompt.py --queue camera_pan_timer
-"""
+"""Generate bounded handler or queue worker prompts; see tools/README.md."""
 
 from __future__ import annotations
 
@@ -15,19 +11,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-
-QUEUE_FILES = {
-    "moon_physics_remaining_arms": ["crates/sml2-core/src/player_sim.rs"],
-    "map_zone_screen_loaders": ["crates/sml2-core/src/map.rs", "crates/sml2-core/src/map_sim.rs"],
-    "camera_pan_timer": ["crates/sml2-core/src/camera.rs", "crates/sml2-core/src/player_sim.rs", "crates/sml2-runtime/src/main.rs"],
-    "boss_arena_phase_cascade": [
-        "crates/sml2-core/src/objects/bosses/shared/handlers.rs",
-        "crates/sml2-core/src/scene.rs",
-    ],
-    "boss_clear_ending_handoff": ["crates/sml2-core/src/scene.rs", "crates/sml2-core/src/player_sim.rs"],
-    "boss_anim_4_5_chain": ["crates/sml2-core/src/objects/bosses/shared/handlers.rs", "crates/sml2-core/src/objects/dispatch.rs", "crates/sml2-core/src/objects/tests/engine.rs"],
-    "remaining_handler_classes": [],  # use --addr instead
-}
 
 
 def run_handler_task(addr: int, *, dependencies=(), budget=800, state_table_contract=None) -> None:
@@ -130,22 +113,23 @@ Reply ESCALATE after 2 failed fix attempts.
 """
 
 
-def queue_prompt(item_id: str) -> str:
+def queue_prompt(item_id: str, files=()) -> str:
     live = json.loads((ROOT / "PORT_QUEUE.json").read_text())
     item = next((e for e in live["queue"] if e["id"] == item_id), None)
     if item is None:
         raise SystemExit(f"unknown or non-pending queue id: {item_id}")
-    files = QUEUE_FILES.get(item_id, [])
-    if item_id == "remaining_handler_classes":
-        raise SystemExit("use --addr for handlers, not --queue remaining_handler_classes")
     if not files:
-        raise ValueError(f'no bounded file list configured for queue item: {item_id}')
+        raise ValueError('queue prompts require an explicit scope: pass --file for each allowed file')
     if any("/objects/" in p for p in files) and "crates/sml2-core/src/objects/tests/engine.rs" not in files:
         files = [*files, "crates/sml2-core/src/objects/tests/engine.rs"]
     for file in files:
+        path = Path(file)
+        if (path.is_absolute() or '..' in path.parts
+                or not (ROOT / path).resolve().is_relative_to(ROOT.resolve())):
+            raise ValueError(f"task file must stay inside the repository: {file}")
         if not (ROOT / file).is_file():
             raise ValueError(f"missing task file: {file}")
-    file_block = "\n".join(f"  - {p}" for p in files) if files else "  - (supervisor must list files)"
+    file_block = "\n".join(f"  - {p}" for p in files)
     refs = ", ".join(item.get("asm_refs", []))
     return f"""Close PORT_QUEUE item: {item_id}
 Title: {item['title']}
@@ -165,14 +149,17 @@ def main() -> None:
     which.add_argument("--addr", type=lambda s: int(s, 0))
     which.add_argument("--queue", type=str)
     ap.add_argument("--module", help="named handler sibling .rs path")
+    ap.add_argument("--file", action="append", default=[], help="allowed repository file for a queue prompt; repeat per file")
     ap.add_argument("--max-states", type=int, default=800)
     ap.add_argument("--dependency", action="append", default=[])
     ap.add_argument("--state-table-contract", help="checked mixed declaration/state predicate passed to handler_task")
     args = ap.parse_args()
+    if args.file and args.addr is not None:
+        ap.error('--file is only valid with --queue; handlers use --module')
     if args.addr is not None:
         print(handler_prompt(args.addr, module=args.module, dependencies=args.dependency, budget=args.max_states, state_table_contract=args.state_table_contract))
     elif args.queue:
-        print(queue_prompt(args.queue))
+        print(queue_prompt(args.queue, files=args.file))
     else:
         raise SystemExit("need --addr or --queue")
 

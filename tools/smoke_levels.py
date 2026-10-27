@@ -1,27 +1,10 @@
 #!/usr/bin/env python3
-"""Boot every level headlessly and fail on any port diagnostic.
+"""Validate 32 extracted levels and run native idle/walk smoke passes.
 
-This turns "all 126 declared handlers are native" into "every level boots and
-runs": it validates the 32 extracted manifests/assets, then runs the runtime's
-own play loop with `--headless` (no window, no rendering, deterministic virtual
-divider clock) for a fixed frame budget, twice per level — idle and holding
-right, so the spawn stream, contact, defeat and death paths actually run.
-
-Fails on: a missing/mismatched manifest record or asset, a nonzero exit, a
-panic, a `note:` line (unported bank-16 handler, unported scene opcode, scene
-with no script cursor, missing edge/scene table), a non-empty `unported=[...]`
-field in the run summary, or a `NOT APPLIED` / `NOT RELOADED` scene tileset
-swap.
-
-Usage:
-    python3 tools/smoke_levels.py                 # all 32, idle + right
-    python3 tools/smoke_levels.py --levels 12,19,28,29
-    python3 tools/smoke_levels.py --frames 900 --json smoke.json
-    python3 tools/smoke_levels.py --passes idle
-
-Exit status: 0 every level booted and ran clean; 1 a level failed; 2 inputs or
-the runtime binary are missing.
-"""
+Rejects missing/mismatched assets, runtime failures, notes, unported IDs and
+unapplied scene reloads. This proves execution, not a completed route or pixels.
+--levels uses zero-based runtime IDs. Build sml2-runtime first.
+Exit 0: clean; 1: failed level; 2: missing input/binary."""
 
 from __future__ import annotations
 

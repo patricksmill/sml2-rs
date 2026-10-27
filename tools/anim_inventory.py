@@ -1,58 +1,12 @@
 #!/usr/bin/env python3
-"""Sprite-frame inventory: every frame the ROM can select, and its port status.
+"""Audit reachable player sprite frames and native source citations.
 
-`anim_closure.py` answers "does every object anim land on a ported handler".
-This tool answers the visual question one layer down: which entries of a
-sprite-frame table the ROM can actually put on screen, which ROM code selects
-them, and whether that code is cited by the native port.
-
-Tables covered so far:
-
-  player  bank-1 ``$4000`` pointer table (242 ``dw``), indexed by ``$FFC6`` and
-          drawn by ``$5297``.  ``extracted/objects.json`` ``player_mappings``.
-
-For a table the tool:
-
-  1. finds every write to its index byte in ``home.asm``/``main.asm`` and
-     follows the flow after it to the routine that reads the byte: the frame
-     draw, or a reader that reuses the byte for something else (``$5267``/
-     ``$5272`` draw a digit tile from it; those sites are not frames);
-  2. infers each site's value set with a small abstract interpreter over the
-     8-bit registers, ``hl`` table pointers and the index byte itself (so a
-     ``ldh a,[$FFC6] / add 32`` rewrite sees what reached it), joining over
-     fall-through, ``jp``/``jr`` and ``call`` predecessors.  ``ld a,[$nnnn]``
-     and ``ld a,[hl]`` reads below ``$8000`` come from ``baserom.gb``, short
-     straight-line callees are run in place, and the RAM variables in
-     ``RAM_DOMAINS`` have reviewed value sets;
-  3. requires every site the interpreter cannot bound to be declared in
-     ``DECLARED`` with a reviewed value set, and every declaration to still
-     name a write site (a new or moved writer fails the check);
-  4. checks the extracted mapping data against the ROM blobs, and that no
-     reachable frame is past the table;
-  5. checks that a native (non-test) source cites the routine around each
-     site: any address inside it for home-bank code and banked ROM offsets
-     (``$3005F``); for an ambiguous ``$4000-$7FFF`` CPU address only the
-     routine's entry or labels, and for banks 2+ only from a file that also
-     cites that bank by ROM offset.  An unlabelled jump-table entry may be
-     cited through its dispatcher.  A comment paragraph that says "not
-     modelled"/"not ported"/"unported"/"TODO" cites nothing.
-
-Port status is a *citation* audit, like ``handler_coverage.py``: a cited site
-has native code that claims to port it, not proof of frame-for-frame parity.
-A cited routine can still be partly ported.  Behaviour parity is the unit
-tests' job (``PORTING.md``).
-
-Usage:
-    python3 tools/anim_inventory.py              # summary + failures
-    python3 tools/anim_inventory.py --frames     # also the per-frame checklist
-    python3 tools/anim_inventory.py --json out.json
-    python3 tools/anim_inventory.py --self-test
-
-Exit status: 0 every reachable frame is in range, its data matches the ROM and
-every selecting site is cited; 1 a frame or site fails one of those; 2 inputs
-are missing, or a write site is unresolved and undeclared (or a declaration
-is stale or contradicts the inferred set).
-"""
+Checks bank1's 242-entry $4000 table against extracted mappings. Reviewed RAM
+value domains and explicit declarations bound index writes; stale declarations,
+unknown writers and out-of-range frames fail. Native citations are not behavior
+parity; TODO/unported paragraphs do not count. Interpreter details stay beside
+the code, CLI/evidence contracts in tools/README.md.
+Exit 0: checked; 1: bad/uncited frame; 2: invalid or unresolved source/input."""
 
 from __future__ import annotations
 

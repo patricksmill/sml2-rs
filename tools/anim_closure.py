@@ -1,37 +1,11 @@
 #!/usr/bin/env python3
-"""Dynamic-spawn closure check for the level and boss anim tables.
+"""Check per-level dynamic anim reachability, not behavior parity.
 
-`handler_coverage.json` proves every *declared* anim-table entry is native.  It
-does not prove that runtime anim writes stay inside those tables.  This tool
-closes that gap from the source side:
-
-  1. roots: every spawn record's anim byte (level data) plus every immediate
-     written to ``sObjectSpawnAnim`` before a spawn call, with the enclosing
-     handler;
-  2. morphs: every writer of the slot anim byte ``$FFD5`` (bank-2 ``$85AA``
-     interaction arms, the `$86E4` record rewrite, and handler-local rewrites)
-     plus the `$86F9` spawn-record anim rewrite;
-  3. closure: fixpoint per level over anim values, then a table range/handler
-     check.
-
-A produced anim must map to a table entry whose handler is implemented (or a
-verified ROM no-op).  An anim at or past the table length indexes nothing:
-``ObjectTables::profile_for`` returns ``None``, the dispatcher sees handler 0,
-and the slot reports ``note_unported(0)`` at runtime.
-
-Completeness: the tool asserts that the set of ``$FFD5`` write sites it finds
-in ``main.asm`` equals the declared set below.  A new writer in the
-disassembly therefore fails the check instead of silently escaping the audit.
-
-Usage:
-    python3 tools/anim_closure.py            # table report, exit 0/1
-    python3 tools/anim_closure.py --json out.json
-    python3 tools/anim_closure.py --quiet    # only failures
-
-Exit status: 0 every produced anim lands on an implemented handler or a
-verified no-op; 1 a produced anim is out of range or not implemented, or a
-slot-anim writer is unclassified; 2 inputs are missing or malformed.
-"""
+Starts from level/boss spawns, follows slot/record morphs to a fixpoint, and
+requires every result to dispatch to an implemented handler or verified no-op.
+New/unclassified $FFD5 writers fail the check. Interaction edges are conservative.
+Exit 0: closed; 1: failed bounds/dispatch/writer checks; 2: invalid inputs.
+See tools/README.md for commands and evidence limits."""
 
 from __future__ import annotations
 

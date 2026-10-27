@@ -24,7 +24,7 @@ python3 tools/dispatch_prompt.py --addr 0x58201   # paste stdout into Porter use
 For queue items (non-handler):
 
 ```bash
-python3 tools/dispatch_prompt.py --queue camera_pan_timer
+python3 tools/dispatch_prompt.py --queue QUEUE_ID --file path/to/file.rs
 ```
 
 Coverage exits 1 for pending work and 2 for invalid inputs (stop and repair).

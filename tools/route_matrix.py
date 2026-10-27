@@ -1,36 +1,10 @@
 #!/usr/bin/env python3
-"""Source-derived per-level route facts.
+"""Derive level entries, exits, secret starts, mechanics and bosses.
 
-The route matrix needs entry, exit, secret route, required mechanic and boss
-facts per level.  This tool derives them from the extracted data plus the two
-ROM sources the extraction does not cover (the `$377B` secret-entry overlay), so
-a matrix row is reproducible instead of transcribed.
-
-Facts and their sources:
-
-  entry        manifest header (`mario_spawn_x/y`, camera), the overworld node
-               table (`extracted/map/nodes.bin`: level index, progress slot)
-  exit         the `$4A`/`$4B` metatiles in the decompressed layout.  The
-               in-level probe is `tile & $FE == $4A`; `$4A` is a plain bell and
-               `$4B` the "route already cleared" twin (`sExitTileFlag = $FF`)
-  secret entry `main.asm` `$55C0`: 8-byte per-level records at ROM `$377B`
-               (the header's Y/X/cam-Y/cam-X block), applied only when
-               `sLevelProgressFlags` bit 3 or the secret-route item set the flag
-  boss         non-zero cells in the 48-byte `sSceneMap` (`levelNN.scene.bin`)
-               plus `boss_def_index`/`boss_def_portable`
-  mechanics    level properties (moon physics, scroll limit, autoscroll), the
-               tile classes the player probe models (`$4C..$4F` water,
-               `$52..$57` moon zone, `$50/$51` hazard), door tiles (`$07`),
-               side-pipe walls (`$0C..$0F`), and the handler names behind the
-               level's anims (`objects/dispatch.rs`)
-
-Usage:
-    python3 tools/route_matrix.py                 # all 32 levels
-    python3 tools/route_matrix.py --levels 12,19,28,29
-    python3 tools/route_matrix.py --levels 12 --json out.json
-
-Exit status: 0 the matrix was built; 2 inputs are missing or malformed.
-"""
+Reads extracted headers/layouts/scene maps/nodes plus ROM $377B secret entries;
+4A/4B cells identify bells, not played-route completion. --levels uses 1-based
+manifest numbers. See docs/route-matrix.md and tools/README.md.
+Exit 0: generated; 2: missing or malformed input."""
 
 from __future__ import annotations
 

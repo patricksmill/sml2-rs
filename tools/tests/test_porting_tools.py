@@ -611,10 +611,63 @@ class PromptTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'descriptive native file'):
                     dispatch_prompt.handler_prompt(0x58848)
 
-    def test_current_queue_files_exist(self):
-        for files in dispatch_prompt.QUEUE_FILES.values():
-            for file in files:
-                self.assertTrue((dispatch_prompt.ROOT / file).is_file(), file)
+    def test_queue_prompt_uses_explicit_scope_for_current_items(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'PORT_QUEUE.json').write_text(json.dumps({'queue': [
+                {'id': 'current', 'title': 'Current work', 'asm_refs': ['home:$1234']}
+            ]}))
+            (root / 'behavior.rs').write_text('// native behavior')
+            with patch.object(dispatch_prompt, 'ROOT', root):
+                output = io.StringIO()
+                with patch.object(sys, 'argv', ['dispatch_prompt', '--queue', 'current',
+                                                '--file', 'behavior.rs']), redirect_stdout(output):
+                    dispatch_prompt.main()
+                self.assertIn('Current work', output.getvalue())
+                self.assertIn('home:$1234', output.getvalue())
+                self.assertIn('Touch ONLY:\n  - behavior.rs', output.getvalue())
+                with self.assertRaisesRegex(ValueError, 'explicit scope'):
+                    dispatch_prompt.queue_prompt('current')
+                with self.assertRaisesRegex(SystemExit, 'non-pending'):
+                    dispatch_prompt.queue_prompt('completed', ['behavior.rs'])
+
+    def test_queue_scope_rejects_missing_and_outside_files(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            (root / 'PORT_QUEUE.json').write_text(json.dumps({'queue': [
+                {'id': 'current', 'title': 'Current work'}
+            ]}))
+            external = Path(outside) / 'outside.rs'
+            external.write_text('// outside the repository')
+            (root / 'linked.rs').symlink_to(external)
+            with patch.object(dispatch_prompt, 'ROOT', root):
+                for file in [str(external), '../outside.rs', 'linked.rs']:
+                    with self.subTest(file=file), self.assertRaisesRegex(ValueError, 'inside the repository'):
+                        dispatch_prompt.queue_prompt('current', [file])
+                with self.assertRaisesRegex(ValueError, 'missing task file'):
+                    dispatch_prompt.queue_prompt('current', ['missing.rs'])
+
+    def test_object_queue_scope_keeps_engine_integration_tests(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'PORT_QUEUE.json').write_text(json.dumps({'queue': [
+                {'id': 'current', 'title': 'Current work'}
+            ]}))
+            behavior = 'crates/sml2-core/src/objects/items/coin.rs'
+            engine = 'crates/sml2-core/src/objects/tests/engine.rs'
+            for file in [behavior, engine]:
+                (root / file).parent.mkdir(parents=True, exist_ok=True)
+                (root / file).touch()
+            with patch.object(dispatch_prompt, 'ROOT', root):
+                prompt = dispatch_prompt.queue_prompt('current', [behavior])
+            self.assertIn(engine, prompt)
+
+    def test_queue_file_option_cannot_silently_change_handler_scope(self):
+        with patch.object(sys, 'argv', ['dispatch_prompt', '--addr', '0x58201',
+                                        '--file', 'behavior.rs']), redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as result:
+                dispatch_prompt.main()
+        self.assertEqual(result.exception.code, 2)
 
     def test_incomplete_slices_cannot_be_dispatched(self):
         with patch.object(dispatch_prompt, 'run_handler_task', side_effect=subprocess.CalledProcessError(2, ['slice'])):
