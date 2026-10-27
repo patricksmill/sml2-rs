@@ -1,6 +1,6 @@
 //! Slot conversion for ROM `$5AEF4` (mode B anim 111).
 use super::{handler_0x5addd, handler_0x5aef4, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 impl ObjectSim {

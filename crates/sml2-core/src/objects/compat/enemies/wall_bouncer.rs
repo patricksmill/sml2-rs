@@ -1,5 +1,5 @@
 use super::{handler_0x59b1f, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 struct Walls<'a> {
     sim: &'a mut ObjectSim,

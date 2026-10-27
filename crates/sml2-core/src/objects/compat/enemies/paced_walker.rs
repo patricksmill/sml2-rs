@@ -1,6 +1,6 @@
 //! Paced walker slot conversion and legacy terrain effects.
 use super::{paced_walker::*, *};
-use crate::actor::{Actor, FrameTick, Position};
+use crate::actor::{Actor, Position};
 
 fn from_actor(actor: &Actor) -> PacedWalker {
     PacedWalker {

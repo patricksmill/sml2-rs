@@ -1,5 +1,5 @@
 use super::{handler_0x597bd, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 impl ObjectSim {
     pub(super) fn handler_0x597bd(&mut self, st: &mut Staging) {

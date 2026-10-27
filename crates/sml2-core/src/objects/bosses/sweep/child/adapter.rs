@@ -1,6 +1,6 @@
 //! Slot conversion and sound effect boundary for boss anim 17.
 use super::{sweep_child, ObjectSim, Staging};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 impl ObjectSim {
     pub(super) fn handler_sweep_child(&mut self, staging: &mut Staging) {

@@ -1,6 +1,6 @@
 //! Adapter for ROM `$59763` (anim 83): bob + walker `$58215` tail.
 use super::{handler_0x59763, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 impl ObjectSim {

@@ -1,6 +1,6 @@
 //! Slot conversion and rider carry for ROM `$595FE` (anim 79).
 use super::{handler_0x595fe, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 impl ObjectSim {
     pub(super) fn handler_0x595fe(&mut self, st: &mut Staging) {

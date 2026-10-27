@@ -1,6 +1,6 @@
 //! Slot conversion and rider displacement for ROM `$58D34` (anim 45).
 use super::{handler_0x58d34, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 impl ObjectSim {

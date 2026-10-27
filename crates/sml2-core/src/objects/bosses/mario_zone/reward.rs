@@ -1,7 +1,7 @@
 //! Slot/world boundary for shared native boss reward motion.
 use super::reward_motion::{self, Part};
 use crate::{
-    actor::{Actor, FrameTick},
+    actor::Actor,
     object::ObjectTables,
     objects::{ObjectSim, Staging},
 };

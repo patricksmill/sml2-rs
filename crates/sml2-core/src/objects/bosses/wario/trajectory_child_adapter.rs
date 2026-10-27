@@ -3,7 +3,7 @@
 use super::trajectory_child::{
     update_trajectory_child, TrajectoryChildContext, TrajectoryChildEffects,
 };
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use crate::objects::{ObjectSim, Staging};
 
 impl ObjectSim {

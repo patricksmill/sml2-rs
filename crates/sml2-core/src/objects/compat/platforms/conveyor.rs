@@ -1,6 +1,6 @@
 //! Slot conversion and rider carry for ROM `$5A236` (mode B anim 62).
 use super::{handler_0x5a236, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 impl ObjectSim {
     pub(super) fn handler_0x5a236(&mut self, st: &mut Staging) {

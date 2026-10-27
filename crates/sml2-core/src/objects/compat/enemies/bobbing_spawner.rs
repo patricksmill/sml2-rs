@@ -1,6 +1,6 @@
 //! Slot conversion and dynamic spawn for ROM `$59FDF` (mode B anim 35).
 use super::{handler_0x59fdf, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 impl ObjectSim {

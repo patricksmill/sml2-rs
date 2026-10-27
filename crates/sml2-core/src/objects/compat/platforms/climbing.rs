@@ -1,6 +1,6 @@
 //! Slot conversion and rider carry for ROM `$5A85C` (mode B anim 79).
 use super::{handler_0x5a85c, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 impl ObjectSim {
     pub(super) fn handler_0x5a85c(&mut self, st: &mut Staging, tables: &ObjectTables) {

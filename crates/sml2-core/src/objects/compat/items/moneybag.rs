@@ -1,6 +1,6 @@
 //! Slot compatibility boundary for ROM `$587A1`.
 use super::{handler_0x587a1, ObjectSim, Staging};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 impl ObjectSim {
     pub(super) fn handler_0x587a1(&mut self, st: &mut Staging) {

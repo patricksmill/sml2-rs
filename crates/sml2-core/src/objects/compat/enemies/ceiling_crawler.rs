@@ -1,6 +1,6 @@
 //! Slot conversion and ceiling probe for ROM `$5A6E7` (mode B anim 74).
 use super::{handler_0x5a6e7, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 struct Inputs<'a> {

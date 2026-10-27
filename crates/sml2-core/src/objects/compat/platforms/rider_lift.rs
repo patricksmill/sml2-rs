@@ -1,6 +1,6 @@
 //! Slot conversion and rider displacement for ROM `$591A3` (anim 55).
 use super::{handler_0x591a3, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 struct Inputs<'a>(&'a mut ObjectSim);
 impl handler_0x591a3::World for Inputs<'_> {

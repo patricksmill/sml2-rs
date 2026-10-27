@@ -1,7 +1,7 @@
 //! Compatibility boundary for boss anim 18.
 use super::{sweep_drop_child, ObjectSim, Staging};
 use crate::{
-    actor::{Actor, FrameTick},
+    actor::Actor,
     object::ObjectTables,
 };
 

@@ -2,7 +2,7 @@
 
 use super::vertical_bobber::{update, BobberContext, BobberEffect};
 use super::*;
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 impl ObjectSim {

@@ -1,7 +1,7 @@
 //! Slot conversion, terrain probes, and dynamic spawn for ROM `$5A0AA` (mode B anim 37).
 use super::terrain_adapter::TerrainWorld;
 use super::{handler_0x5a0aa, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 impl ObjectSim {

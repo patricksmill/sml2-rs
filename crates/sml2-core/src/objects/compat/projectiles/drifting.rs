@@ -1,6 +1,6 @@
 //! Slot conversion for ROM `$5A11E` (mode B anim 38).
 use super::{handler_0x5a11e, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 impl ObjectSim {
     pub(super) fn handler_0x5a11e(&mut self, st: &mut Staging) {

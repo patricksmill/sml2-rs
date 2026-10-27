@@ -1,6 +1,6 @@
 //! Slot conversion for ROM `$59728` (mode A anim 82).
 use super::{handler_0x59728, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 impl ObjectSim {
     pub(super) fn handler_0x59728(&mut self, st: &mut Staging) {

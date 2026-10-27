@@ -1,7 +1,7 @@
 //! Compatibility boundary for the native anim26 handler.
 
 use super::form3::{self, Context};
-use crate::actor::{Actor, ContactKind, FrameTick, SpriteFlipFlags};
+use crate::actor::{Actor, ContactKind, SpriteFlipFlags};
 use crate::objects::boss_stun::HitStunContext;
 use crate::objects::{ObjectSim, ObjectTables, Staging};
 

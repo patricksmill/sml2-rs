@@ -1,6 +1,6 @@
 //! Slot boundary for the native side door (boss anim 7, ROM `$9824`).
 use super::*;
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 impl ObjectSim {
     pub(super) fn handler_0x9824(&mut self, st: &mut Staging, tables: &ObjectTables) {

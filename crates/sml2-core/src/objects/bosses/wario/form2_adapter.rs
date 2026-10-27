@@ -1,6 +1,6 @@
 //! Compatibility boundary for the native anim23 handler.
 use super::form2::{self, Context};
-use crate::actor::{Actor, ContactKind, FrameTick, SpriteFlipFlags};
+use crate::actor::{Actor, ContactKind, SpriteFlipFlags};
 use crate::objects::boss_stun::HitStunContext;
 use crate::objects::{ObjectSim, ObjectTables, Staging};
 impl ObjectSim {

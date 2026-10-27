@@ -1,6 +1,6 @@
 //! Adapter for ROM `$59FB9` (mode B anim 32): bob, then the `$58215` walker on even frames.
 use super::{handler_0x59fb9, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 impl ObjectSim {

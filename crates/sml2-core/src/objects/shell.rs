@@ -2,7 +2,7 @@
 
 use super::shell_behavior::{self as behavior, CarriedEffect, Carrier, KickedEffect, ShellWorld};
 use super::*;
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 /// Level probes and the knock-out scan for a native shell; the slot's
 /// position is synced first, since the ROM probes read the slot.

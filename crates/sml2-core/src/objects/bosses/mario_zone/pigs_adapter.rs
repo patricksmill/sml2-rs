@@ -1,6 +1,6 @@
 //! Compatibility boundary for the native Mario Zone boss handlers.
 use super::pigs::{self, Context, Effects, Part, UpdateError};
-use crate::actor::{Actor, ContactKind, FrameTick};
+use crate::actor::{Actor, ContactKind};
 use crate::level::LevelLayout;
 use crate::object::ObjectTables;
 use crate::objects::boss_stun::HitStunContext;

@@ -1,6 +1,6 @@
 //! Slot conversion for ROM `$5A031` (mode B anim 36).
 use super::{handler_0x5a031, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 struct Inputs<'a> {
     sim: &'a mut ObjectSim,

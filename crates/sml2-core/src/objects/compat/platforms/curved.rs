@@ -1,6 +1,6 @@
 //! Slot conversion and rider carry for ROM `$5A355` (mode B anim 67).
 use super::{handler_0x5a355, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 impl ObjectSim {

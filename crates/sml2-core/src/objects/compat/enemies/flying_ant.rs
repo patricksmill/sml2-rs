@@ -1,6 +1,6 @@
 //! Slot conversion and terrain probes for ROM `$5AB79` (mode B anim 100).
 use super::{handler_0x5ab79, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 struct Inputs<'a> {

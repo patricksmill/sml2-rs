@@ -1,6 +1,6 @@
 //! Slot conversion for ROM `$59EFF` (mode B anim 33).
 use super::{handler_0x59eff, pipe_bobber, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 struct Inputs<'a> {
     sim: &'a ObjectSim,

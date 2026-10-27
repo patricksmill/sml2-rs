@@ -1,6 +1,6 @@
 //! Slot conversion and terrain probes for ROM `$5AC3C` (mode B anim 102).
 use super::{handler_0x5ac3c, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 struct Inputs<'a> {
     sim: &'a mut ObjectSim,

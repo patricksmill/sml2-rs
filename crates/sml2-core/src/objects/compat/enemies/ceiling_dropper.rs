@@ -1,6 +1,6 @@
 //! Slot conversion for ROM `$593DA` (anim 64).
 use super::{handler_0x593da, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 struct Inputs<'a> {
     sim: &'a mut ObjectSim,

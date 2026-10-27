@@ -1,6 +1,6 @@
 //! Slot conversion and ground probe for ROM `$5A739` (mode B anim 76).
 use super::{handler_0x5a739, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 struct Inputs<'a> {

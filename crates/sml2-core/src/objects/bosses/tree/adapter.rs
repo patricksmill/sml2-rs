@@ -1,6 +1,6 @@
 //! World effects and slot conversion for boss anim 1 (`$93A7`).
 use super::{tree_boss, ObjectSim, Staging};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use crate::object::ObjectTables;
 
 impl ObjectSim {

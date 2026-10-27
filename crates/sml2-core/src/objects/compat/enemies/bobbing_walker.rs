@@ -1,6 +1,6 @@
 //! Slot conversion and shared walker body for ROM `$5A667` (mode B anim 72).
 use super::{handler_0x5a667, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 impl ObjectSim {

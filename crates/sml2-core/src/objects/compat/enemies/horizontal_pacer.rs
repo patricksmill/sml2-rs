@@ -1,6 +1,6 @@
 //! Slot conversion for ROM `$5A30E` (mode B anim 65).
 use super::{handler_0x5a30e, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 impl ObjectSim {

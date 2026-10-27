@@ -1,7 +1,7 @@
 //! Compatibility boundary between legacy object staging and native drop child actor.
 
 use super::drop_child::{update_drop_child, DropChildContext};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use crate::objects::{ObjectSim, ObjectTables, Staging};
 
 impl ObjectSim {

@@ -1,6 +1,6 @@
 //! Slot conversion for ROM `$5A9D3` (mode B anim 82).
 use super::{handler_0x5a9d3, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 impl ObjectSim {
     pub(super) fn handler_0x5a9d3(&mut self, st: &mut Staging, layout: &LevelLayout) {

@@ -1,6 +1,6 @@
 //! Slot conversion, side probes, and the anim-69 child for ROM `$5A545`.
 use super::{handler_0x5a545, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 struct Inputs<'a> {

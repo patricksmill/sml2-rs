@@ -1,6 +1,6 @@
 //! Slot conversion and crawler patrol for ROM `$5A2D0` (mode B anim 64).
 use super::{handler_0x5a2d0, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 impl ObjectSim {

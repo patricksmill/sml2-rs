@@ -3,7 +3,7 @@ use super::{
     handler_0x5902d::{self, Effect, World},
     *,
 };
-use crate::actor::{Actor, FrameTick, Position};
+use crate::actor::{Actor, Position};
 use std::cmp::Ordering;
 
 struct Inputs<'a>(&'a mut ObjectSim);

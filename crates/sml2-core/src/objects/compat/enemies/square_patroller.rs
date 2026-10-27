@@ -3,7 +3,7 @@
 //! the table (`$5B0E5`, mid-instruction); only states 1-4 are ever written
 //! after init, so past-the-table values report through `note_unported`.
 use super::{handler_0x5b0d5, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 impl ObjectSim {

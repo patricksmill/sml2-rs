@@ -1,6 +1,6 @@
 //! Slot conversion for ROM `$58804` (mode B anim 24).
 use super::{handler_0x58804, pipe_bobber, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 struct Inputs<'a> {
     sim: &'a ObjectSim,

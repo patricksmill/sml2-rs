@@ -4,7 +4,7 @@ use super::{
     handler_0x59431::{self, Kind},
     *,
 };
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 impl handler_0x59431::World for TerrainWorld<'_> {

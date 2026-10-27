@@ -1,7 +1,7 @@
 //! World and slot conversion boundary for boss anim 16.
 use super::{boss_stun::HitStunContext, sweep_boss, ObjectSim, Staging};
 use crate::{
-    actor::{Actor, ContactKind, FrameTick},
+    actor::{Actor, ContactKind},
     object::ObjectTables,
 };
 

@@ -4,7 +4,7 @@ use super::{
     terrain_probes::TerrainProbes,
     *,
 };
-use crate::actor::{Actor, FrameTick, Position};
+use crate::actor::{Actor, Position};
 
 struct Inputs<'a> {
     sim: &'a mut ObjectSim,

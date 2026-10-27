@@ -1,6 +1,6 @@
 //! Compatibility boundary for the native anim20 handler.
 use super::form1::{self, Context};
-use crate::actor::{Actor, ContactKind, FrameTick};
+use crate::actor::{Actor, ContactKind};
 use crate::objects::boss_stun::HitStunContext;
 use crate::objects::{ObjectSim, ObjectTables, Staging};
 

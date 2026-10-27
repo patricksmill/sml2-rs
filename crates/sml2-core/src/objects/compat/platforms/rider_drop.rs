@@ -1,6 +1,6 @@
 //! Slot conversion, rider carry, and spawn restore for ROM `$5A258` (mode B anim 63).
 use super::{handler_0x5a258, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 impl ObjectSim {
     pub(super) fn handler_0x5a258(&mut self, st: &mut Staging, tables: &ObjectTables) {

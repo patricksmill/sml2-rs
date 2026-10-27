@@ -1,7 +1,7 @@
 //! Slot conversion and terrain probes for ROM `$5A179` (mode B anim 39).
 use super::terrain_adapter::TerrainWorld;
 use super::{handler_0x5a179, pipe_bobber, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 impl handler_0x5a179::World for TerrainWorld<'_> {

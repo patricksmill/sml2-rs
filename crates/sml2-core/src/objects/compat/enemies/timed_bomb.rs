@@ -1,6 +1,6 @@
 //! Slot conversion for ROM `$594FB` (mode A anim 69).
 use super::{handler_0x594fb, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 
 impl ObjectSim {
     pub(super) fn handler_0x594fb(&mut self, st: &mut Staging, tables: &ObjectTables) {

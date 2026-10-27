@@ -1,6 +1,6 @@
 //! Slot conversion for ROM `$59774` (mode A anim 84).
 use super::{handler_0x59774, pipe_bobber::dist_mario_x, *};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use std::cmp::Ordering;
 
 struct Probes<'a> {

@@ -1,7 +1,7 @@
 //! Compatibility boundary between legacy object staging and native actors.
 
 use super::moving_child::{update_child, ChildContext, RespawnEdge};
-use crate::actor::{Actor, FrameTick};
+use crate::actor::Actor;
 use crate::objects::{ObjectSim, ObjectTables, Staging};
 
 impl ObjectSim {
