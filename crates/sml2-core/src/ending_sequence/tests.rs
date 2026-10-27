@@ -154,8 +154,29 @@ fn test_substates_7_to_10_raster_wave_and_transfer_2() {
     });
     assert_eq!(res9.substate, 9);
 
-    // Substate 9: waits for fade_timer == 0
+    assert_eq!(controller.fade_timer, 0x0200);
+    let background = controller.vram_transfer.as_ref().unwrap();
+    assert_eq!(
+        (
+            background.source_bank,
+            background.source_addr,
+            background.dest_addr,
+            background.remaining_bytes
+        ),
+        (0x10, 0x6000, 0x8800, 0x1000)
+    );
+    // Fade zero cannot bypass an active background transfer.
     controller.fade_timer = 0;
+    let blocked = controller.step(&mut EndingStepContext {
+        scene: &mut scene,
+        rom: None,
+        credits_text: None,
+        object_tables: None,
+        decrement_fade: false,
+    });
+    assert_eq!(blocked.substate, 9);
+    controller.vram_transfer.as_mut().unwrap().active = false;
+    controller.fade_timer = 400;
     let res10 = controller.step(&mut EndingStepContext {
         scene: &mut scene,
         rom: None,
@@ -353,4 +374,43 @@ fn test_substates_16_to_19_scroll_text_and_split() {
     assert_eq!(res19_next.substate, 19);
     assert!(res19_next.terminal);
     assert!(res19_next.sound_updated);
+}
+
+#[test]
+fn background_transfer_waits_for_all_64_byte_bursts_and_writes_vram() {
+    let assets = dummy_ending_assets()
+        .with_background_transfer((0..0x1000).map(|i| (i / 64) as u8).collect())
+        .unwrap();
+    let mut scene = EndingScene::default();
+    scene.load(assets, &mut 4, &mut 0);
+    let mut controller = EndingSequenceController::new();
+    controller.substate = 8;
+    controller.step(&mut EndingStepContext {
+        scene: &mut scene,
+        rom: None,
+        credits_text: None,
+        object_tables: None,
+        decrement_fade: false,
+    });
+    assert_eq!(controller.substate, 9);
+    for burst in 0..64usize {
+        controller.step(&mut EndingStepContext {
+            scene: &mut scene,
+            rom: None,
+            credits_text: None,
+            object_tables: None,
+            decrement_fade: false,
+        });
+        let vram = scene.assets().unwrap().tiles();
+        assert_eq!(
+            &vram[0x800 + burst * 64..0x840 + burst * 64],
+            &[burst as u8; 64]
+        );
+        assert_eq!(&vram[..0x800], &[0xAA; 0x800], "font/OBJ VRAM is retained");
+        assert_eq!(controller.substate, if burst == 63 { 10 } else { 9 });
+        assert_eq!(
+            controller.fade_timer, 0x0200,
+            "transfer completion owns the gate"
+        );
+    }
 }

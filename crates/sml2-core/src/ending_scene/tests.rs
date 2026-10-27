@@ -11,6 +11,8 @@ fn assets(seed: u8) -> EndingAssets {
     .unwrap()
     .with_transfer_sources(vec![seed; 0x800], vec![seed ^ 0xFF; 0x400])
     .unwrap()
+    .with_background_transfer(vec![seed.wrapping_mul(3); 0x1000])
+    .unwrap()
 }
 
 #[test]
@@ -18,7 +20,7 @@ fn assets_validate_schema_lengths_and_keep_raw_rendering_data() {
     let original = assets(7);
     let text = serde_json::to_string(&original).unwrap();
     assert_eq!(EndingAssets::from_json(&text).unwrap(), original);
-    assert!(EndingAssets::from_json(&text.replace("sml2-ending/2", "sml2-ending/1")).is_err());
+    assert!(EndingAssets::from_json(&text.replace("sml2-ending/3", "sml2-ending/1")).is_err());
     assert!(EndingAssets::from_json("{}").is_err());
     assert!(EndingAssets::from_json(&text[..text.len() - 1]).is_err());
     for len in [0, 0x17ff, 0x1801] {
@@ -47,6 +49,21 @@ fn assets_validate_schema_lengths_and_keep_raw_rendering_data() {
     );
     assert_eq!(original.transfer_source(0x1A, 0x5096 + 0x3FD, 4), None);
     assert_eq!(original.transfer_source(0x1B, 0x4656, 4), None);
+    assert_eq!(
+        original.transfer_source(0x10, 0x6ffc, 4),
+        Some(&[21; 4][..])
+    );
+    assert_eq!(original.transfer_source(0x10, 0x6ffd, 4), None);
+    assert!(original
+        .clone()
+        .with_background_transfer(vec![0; 0xfff])
+        .is_err());
+    let mut short_background: serde_json::Value = serde_json::from_str(&text).unwrap();
+    short_background["transfer_background"]
+        .as_array_mut()
+        .unwrap()
+        .pop();
+    assert!(EndingAssets::from_json(&short_background.to_string()).is_err());
     assert_eq!(original.tiles().len(), 384 * 16);
     assert_eq!(original.tilemap().len(), 32 * 32);
     for id in 0..=255 {

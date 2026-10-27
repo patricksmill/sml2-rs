@@ -87,6 +87,11 @@ impl VramTransfer {
         Self::new(0x1A, 0x5096, 0x9800, 0x0400)
     }
 
+    /// Substate 8's bank `$10:$6000` background upload (`$1A:$4151`).
+    pub fn ending_background_request() -> Self {
+        Self::new(0x10, 0x6000, 0x8800, 0x1000)
+    }
+
     /// Computes the offset in a 16KB banked ROM slice for a given CPU address $4000..$7FFF.
     pub const fn bank_offset(cpu_addr: u16) -> usize {
         cpu_addr.wrapping_sub(0x4000) as usize

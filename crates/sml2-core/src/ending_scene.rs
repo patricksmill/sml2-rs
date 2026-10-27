@@ -3,13 +3,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::{ending_entry::EndingPalettes, sprite_batch::SpriteBatch, video::bg_tile_offset};
 
-pub const ENDING_ASSET_SCHEMA: &str = "sml2-ending/2";
+pub const ENDING_ASSET_SCHEMA: &str = "sml2-ending/3";
 pub const ENDING_TILES_LEN: usize = 0x1800;
 pub const ENDING_TILEMAP_LEN: usize = 0x400;
 /// `VramTransfer::ending_request_1`'s source, bank `$1A` `$4656` (tiles).
 pub const ENDING_TRANSFER_TILES: (u8, u16, usize) = (0x1A, 0x4656, 0x800);
 /// `VramTransfer::ending_request_2`'s source, bank `$1A` `$5096` (tilemap).
 pub const ENDING_TRANSFER_TILEMAP: (u8, u16, usize) = (0x1A, 0x5096, 0x400);
+/// Substate 8's `$4151..$4176` transfer into background VRAM.
+pub const ENDING_TRANSFER_BACKGROUND: (u8, u16, usize) = (0x10, 0x6000, 0x1000);
 
 /// Original 2bpp data and tile IDs, independent of any output palette or texture pack.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -18,10 +20,11 @@ pub struct EndingAssets {
     schema: String,
     tiles: Vec<u8>,
     tilemap: Vec<u8>,
-    /// The two later VRAM transfers' ROM sources, so a host without the ROM
+    /// The later VRAM transfers' ROM sources, so a host without the ROM
     /// image can still run them; empty when a caller supplies the ROM.
     transfer_tiles: Vec<u8>,
     transfer_tilemap: Vec<u8>,
+    transfer_background: Vec<u8>,
 }
 
 #[derive(Deserialize)]
@@ -31,6 +34,7 @@ struct AssetFile {
     tilemap: Vec<u8>,
     transfer_tiles: Vec<u8>,
     transfer_tilemap: Vec<u8>,
+    transfer_background: Vec<u8>,
 }
 
 impl TryFrom<AssetFile> for EndingAssets {
@@ -41,7 +45,8 @@ impl TryFrom<AssetFile> for EndingAssets {
             return Err(format!("unsupported ending asset schema: {}", file.schema));
         }
         Self::new(file.tiles, file.tilemap)?
-            .with_transfer_sources(file.transfer_tiles, file.transfer_tilemap)
+            .with_transfer_sources(file.transfer_tiles, file.transfer_tilemap)?
+            .with_background_transfer(file.transfer_background)
     }
 }
 
@@ -60,6 +65,7 @@ impl EndingAssets {
             tilemap,
             transfer_tiles: Vec::new(),
             transfer_tilemap: Vec::new(),
+            transfer_background: Vec::new(),
         })
     }
 
@@ -82,12 +88,24 @@ impl EndingAssets {
         Ok(self)
     }
 
+    pub fn with_background_transfer(mut self, background: Vec<u8>) -> Result<Self, String> {
+        if background.len() != ENDING_TRANSFER_BACKGROUND.2 {
+            return Err(format!(
+                "ending background transfer requires 4096 bytes, got {}",
+                background.len()
+            ));
+        }
+        self.transfer_background = background;
+        Ok(self)
+    }
+
     /// `len` bytes at bank `bank` CPU `addr`, when they lie inside one of the
     /// attached transfer sources.
     pub fn transfer_source(&self, bank: u8, addr: u16, len: usize) -> Option<&[u8]> {
         [
             (ENDING_TRANSFER_TILES, &self.transfer_tiles),
             (ENDING_TRANSFER_TILEMAP, &self.transfer_tilemap),
+            (ENDING_TRANSFER_BACKGROUND, &self.transfer_background),
         ]
         .into_iter()
         .find_map(|((src_bank, base, _), block)| {

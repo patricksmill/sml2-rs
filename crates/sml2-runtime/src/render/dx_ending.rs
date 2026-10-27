@@ -68,11 +68,18 @@ fn render_scene(
         .transfer_source(0x1a, 0x4656, 0x800)
         .ok_or("ending font missing")?;
     let dx_font = bank(0x1a, 0x4656, 0x800)?;
+    let background = baseline
+        .transfer_source(0x10, 0x6000, 0x1000)
+        .ok_or("ending background source missing; re-extract assets")?;
+    let dx_background = bank(0x10, 0x6000, 0x1000)?;
     for (i, tile) in native.tiles().chunks_exact(16).enumerate() {
         if tile != &baseline.tiles()[i * 16..i * 16 + 16] {
             // The first transfer replaces $8000 in complete 64-byte bursts.
             if i < 128 && tile == &font[i * 16..i * 16 + 16] {
                 vram[i * 16..i * 16 + 16].copy_from_slice(&dx_font[i * 16..i * 16 + 16]);
+            } else if i >= 128 && tile == &background[(i - 128) * 16..(i - 127) * 16] {
+                vram[i * 16..i * 16 + 16]
+                    .copy_from_slice(&dx_background[(i - 128) * 16..(i - 127) * 16]);
             } else {
                 return Err(format!("unrecognized ending tile transfer {i}"));
             }
@@ -92,9 +99,21 @@ fn render_scene(
             };
         }
     }
-    let attrs = bank(0x29, 0x5200, 0x240)?;
-    let palettes = CgbPalettes::from_bytes(bank(0x29, 0x6769, 64)?, bank(0x29, 0x67a9, 64)?)
-        .map_err(|e| e.to_string())?;
+    // `$1A:$5E00..$5EC1` changes the authored sets when each live
+    // substate advances; later substates retain those writes.
+    let (palette_bank, bg_address, obj_address, attr_bank, attr_address, attr_len) =
+        match sequence.substate {
+            0..=7 => (0x29, 0x6769, 0x67a9, 0x29, 0x5200, 0x240),
+            8 => (0x1a, 0x5ec1, 0x5f81, 0x1a, 0x5fc1, 0x2a0),
+            9 => (0x1a, 0x5f01, 0x5f81, 0x1a, 0x5fc1, 0x2a0),
+            _ => (0x1a, 0x5f41, 0x5f81, 0x1a, 0x5fc1, 0x2a0),
+        };
+    let attrs = bank(attr_bank, attr_address, attr_len)?;
+    let palettes = CgbPalettes::from_bytes(
+        bank(palette_bank, bg_address, 64)?,
+        bank(palette_bank, obj_address, 64)?,
+    )
+    .map_err(|e| e.to_string())?;
     let banks = [&vram[..], &vram[..]];
     let mut bg = Vec::with_capacity(160 * 144);
     for y in 0..144 {
@@ -174,6 +193,44 @@ fn render_scene(
 mod tests {
     use super::*;
     #[test]
+    fn authored_credit_sets_switch_at_live_substates_and_render_without_advancing() {
+        let mut game = Session::new(crate::session::SessionAssets::load().unwrap());
+        game.begin_level(0, 0).unwrap();
+        let mut banks = std::collections::BTreeMap::new();
+        for id in [0x10, 0x11, 0x1a, 0x29] {
+            banks.insert(id, vec![0; 0x4000]);
+        }
+        // Distinct whole sets make the selected source observable at every pixel.
+        banks.get_mut(&0x29).unwrap()[0x2769..0x27a9]
+            .copy_from_slice(&[0x1f, 0].repeat(32));
+        for (address, word) in [(0x5ec1, 0x03e0u16), (0x5f01, 0x7c00), (0x5f41, 0x7fff)] {
+            banks.get_mut(&0x1a).unwrap()[address - 0x4000..address - 0x4000 + 64]
+                .copy_from_slice(&word.to_le_bytes().repeat(32));
+        }
+        let mappings = game.assets.object_tables.player_mappings.clone();
+        for (substate, color) in [(7, [255, 0, 0]), (8, [0, 255, 0]),
+            (9, [0, 0, 255]), (10, [255; 3]), (19, [255; 3])] {
+            let crate::session::SessionState::InLevel(ctx) = &mut game.state else { panic!("level") };
+            ctx.ending_sequence.substate = substate;
+            let ctx = game.level_ctx().unwrap();
+            let first = render_scene(&game, ctx, &banks, &mappings, (160, 144), true).unwrap();
+            let second = render_scene(&game, ctx, &banks, &mappings, (160, 144), true).unwrap();
+            assert_eq!(first, vec![color; 160 * 144], "substate {substate}");
+            assert_eq!(second, first);
+            assert_eq!(game.level_ctx().unwrap().ending_sequence.substate, substate);
+        }
+        // The replacement extends through $9A9F; rows beyond the initial $240 survive.
+        banks.get_mut(&0x1a).unwrap()[0x1fc1 + 0x240..0x1fc1 + 0x2a0].fill(7);
+        let crate::session::SessionState::InLevel(ctx) = &mut game.state else { panic!("level") };
+        ctx.ending_scene.scroll_y = 16;
+        // Palette 7, color 0 changes the newly covered bottom two visible rows.
+        banks.get_mut(&0x1a).unwrap()[0x1f41 + 56..0x1f41 + 58].fill(0);
+        let pixels = render_scene(&game, game.level_ctx().unwrap(), &banks, &mappings, (160, 144), true).unwrap();
+        assert_eq!(pixels[128 * 160], [0; 3]);
+        assert_eq!(pixels[0], [255; 3]);
+    }
+
+    #[test]
     fn ending_and_credits_render_through_live_font_and_map_transfers() {
         let mut game = Session::new(crate::session::SessionAssets::load().unwrap());
         game.begin_level(0, 0).unwrap();
@@ -200,11 +257,16 @@ mod tests {
             if ctx.ending_sequence.frame % 64 == 0 {
                 // Only the ending renderer's imported banks are needed here.
                 let mut banks = std::collections::BTreeMap::new();
-                for id in [0x11, 0x1a, 0x29] {
+                for id in [0x10, 0x11, 0x1a, 0x29] {
                     banks.insert(id, vec![0; 0x4000]);
                 }
                 let palette = banks.get_mut(&0x29).unwrap();
                 palette[0x2769..0x27a9].copy_from_slice(&[0x1f, 0].repeat(32));
+                let palette = banks.get_mut(&0x1a).unwrap();
+                for address in [0x5ec1, 0x5f01, 0x5f41] {
+                    palette[address - 0x4000..address - 0x4000 + 64]
+                        .copy_from_slice(&[0x1f, 0].repeat(32));
+                }
                 let ctx = game.level_ctx().unwrap();
                 let pixels = render_scene(
                     &game,

@@ -159,7 +159,7 @@ fn border_pixels_use_background_swatches_in_native_and_dx() {
     for id in 0..15 {
         dx.map.screens[id].bg_palettes = [0xe0, 3].repeat(32);
     }
-    for bank in [0x05, 0x0c, 0x11, 0x1a, 0x27, 0x29] {
+    for bank in [0x05, 0x0c, 0x10, 0x11, 0x1a, 0x27, 0x29] {
         dx.banks.insert(bank, vec![0; 0x4000]);
     }
     for target in [

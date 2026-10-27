@@ -336,16 +336,18 @@ impl EndingSequenceController {
                 sound_updated = true;
                 self.sound_update_ticks += 1;
                 if self.vram_transfer.as_ref().is_none_or(|t| !t.active) {
+                    self.vram_transfer = Some(VramTransfer::ending_background_request());
+                    self.fade_timer = 0x0200;
                     self.substate = 9;
                 }
                 self.sprite_mode = EndingSpriteMode::None;
                 let _ = context.scene.objects.write_frame(&[]);
             }
             9 => {
-                // Substate 9 ($4139): Wobble, wait fade zero
+                // Substate 9 ($4139): wait for the background transfer ($A248).
                 sound_updated = true;
                 self.sound_update_ticks += 1;
-                if self.fade_timer == 0 {
+                if self.vram_transfer.as_ref().is_none_or(|t| !t.active) {
                     self.substate = 10;
                 }
                 self.sprite_mode = EndingSpriteMode::None;

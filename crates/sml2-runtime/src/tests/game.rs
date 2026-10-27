@@ -309,8 +309,8 @@ fn ending_sequence_runs_from_entry_through_all_substates_to_terminal_completion(
     });
     assert_eq!(res8.substate, 9);
 
-    // Substate 9 -> 10 (fade reaches 0)
-    seq.fade_timer = 0;
+    // Substate 9 -> 10 (substate 8's background transfer finishes)
+    seq.vram_transfer.as_mut().unwrap().active = false;
     let res9 = seq.step(&mut sml2_core::ending_sequence::EndingStepContext {
         scene: &mut scene,
         rom: None,

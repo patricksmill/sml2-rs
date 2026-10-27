@@ -1,7 +1,9 @@
 //! Fixed, uncompressed copies made by home $29DD with bank $1A at entry.
 use std::{error::Error, fs, path::Path};
 
-use sml2_core::ending_scene::{EndingAssets, ENDING_TRANSFER_TILEMAP, ENDING_TRANSFER_TILES};
+use sml2_core::ending_scene::{
+    EndingAssets, ENDING_TRANSFER_BACKGROUND, ENDING_TRANSFER_TILEMAP, ENDING_TRANSFER_TILES,
+};
 
 // ld a,$11 / ld hl,$5800 / ld bc,$1800; then bank $1A, de=$548E.
 const TILES_ROM: usize = 0x45800;
@@ -27,10 +29,12 @@ fn extract(rom: &[u8]) -> Result<EndingAssets, String> {
                 "ending transfer source truncated at ROM ${start:05X}"
             ))
     };
-    EndingAssets::new(tiles.to_vec(), tilemap.to_vec())?.with_transfer_sources(
-        block(ENDING_TRANSFER_TILES)?,
-        block(ENDING_TRANSFER_TILEMAP)?,
-    )
+    EndingAssets::new(tiles.to_vec(), tilemap.to_vec())?
+        .with_transfer_sources(
+            block(ENDING_TRANSFER_TILES)?,
+            block(ENDING_TRANSFER_TILEMAP)?,
+        )?
+        .with_background_transfer(block(ENDING_TRANSFER_BACKGROUND)?)
 }
 
 /// The credits text rows up to and including the `$FE` terminator.
