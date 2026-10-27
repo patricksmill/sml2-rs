@@ -18,3 +18,6 @@ __pycache__/
 
 # Linked worktrees for isolated agent work
 /.worktrees/
+
+# Generated handler briefs (tools/handler_task.py)
+/tasks/

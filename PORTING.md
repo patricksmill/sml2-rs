@@ -57,7 +57,7 @@ Never assign “port the object engine” or “clean up everything under `objec
 
 ### Handler ticket checklist
 
-1. Run `python3 tools/handler_task.py --addr 0x58201` (or `--anim 9` mode A) → writes `tasks/handlers/0x58201.md`. Require exit 0 and `Slice status: COMPLETE`; exit 2 requires source/dependency work. Bank `$16` is decimal 22.
+1. Run `python3 tools/handler_task.py --addr 0x58201` (or `--anim 9` mode A) → writes `tasks/handlers/0x58201.md` (generated locally, git-ignored). Require exit 0 and `Slice status: COMPLETE`; exit 2 requires source/dependency work. Bank `$16` is decimal 22.
 2. If no test exists, add ROM-derived tests in the native category's `tests/` directory in the same PR as the behavior.
 3. Implement in a descriptive file under `objects/enemies/`, `platforms/`, `items/`, or `projectiles/`, with slot conversion under `objects/compat/` (bosses use their family directory); wire **one line** in `objects/dispatch.rs`.
 4. `cargo test -p sml2-core handler_0x58201` (or the test name you chose).

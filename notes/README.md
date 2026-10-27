@@ -5,7 +5,7 @@ Session journals and delegation specs lived here until **2026-10-15**. They were
 **Use instead:**
 
 - [`PORTING.md`](../PORTING.md) — how to work
-- [`tasks/handlers/`](../tasks/handlers/) — per-handler ASM slices (`tools/handler_task.py`)
+- `tasks/handlers/` — per-handler ASM slices, generated locally by `tools/handler_task.py` (not committed)
 - [`../sml2decomp/`](../../sml2decomp/) + `baserom.gb` — truth
 - Rust module headers + `#[test]` — verified semantics
 
