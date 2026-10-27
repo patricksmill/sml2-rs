@@ -217,6 +217,9 @@ pub struct PlayerState {
 
 #[derive(Debug, Clone)]
 pub struct PlayerSim {
+    /// Gameplay identity fixed at level entry; graphics fallbacks do not change it.
+    pub character: crate::character::Character,
+    movement: Option<std::sync::Arc<crate::character::MovementCurves>>,
     pub x: u16,
     pub y: u16,
     pub hvel: u8,
@@ -518,6 +521,13 @@ impl Default for PlayerSim {
 }
 
 impl PlayerSim {
+    pub fn set_dx_movement(&mut self, character: crate::character::Character, curves: Option<std::sync::Arc<crate::character::MovementCurves>>) {
+        self.character = if curves.is_some() { character } else { crate::character::Character::Mario };
+        self.movement = curves;
+    }
+
+    pub fn dx_enabled(&self) -> bool { self.movement.is_some() }
+
     pub fn new() -> Self {
         // `$0F2A` level init: hvel = $80, vvel = 24, facing right.
         Self {
@@ -527,6 +537,8 @@ impl PlayerSim {
             vvel: 24,
             on_ground: true,
             in_air: false,
+            character: crate::character::Character::Mario,
+            movement: None,
             dir_right: true,
             ducking: false,
             swim: false,
@@ -1867,7 +1879,10 @@ impl PlayerSim {
             } else {
                 &SPEED_V
             };
-            let b = table[self.vvel as usize];
+            let b = self.movement.as_ref().and_then(|curves| {
+                let dx_table = if self.moon != 0 { &curves.moon } else if self.swim { &curves.swim } else { &curves.normal };
+                dx_table.get(self.vvel as usize).copied()
+            }).unwrap_or(table[self.vvel as usize]);
             self.y = self.y.wrapping_add(sdelta(b) as u16);
             if self.vvel < 0x19 {
                 if self.on_ground {
@@ -1940,15 +1955,17 @@ impl PlayerSim {
                 }
             }
         }
+        // DX home `$16E9/$16F2`: Luigi uses 3 at this same phase, including held input.
+        let friction = if self.dx_enabled() && self.character == crate::character::Character::Luigi { 3 } else { 4 };
         // $16CC friction
         if self.swim || self.moon & 2 != 0 || self.on_ground {
             let hv = self.hvel & 0xFC;
             if hv == 0x80 {
                 self.hvel = 0x80;
             } else if hv < 0x80 {
-                self.hvel = self.hvel.wrapping_add(4);
+                self.hvel = self.hvel.wrapping_add(friction);
             } else {
-                self.hvel = self.hvel.wrapping_sub(4);
+                self.hvel = self.hvel.wrapping_sub(friction);
             }
         }
         // $181C horizontal integration
@@ -1960,7 +1977,7 @@ impl PlayerSim {
             if !self.goal_bell && (self.swim || (self.moon & 2 != 0 && self.on_ground)) {
                 &SPEED_H_WATER
             } else {
-                &SPEED_H
+                self.movement.as_ref().map_or(&SPEED_H[..], |curves| &curves.horizontal[..])
             };
         let b = htable[(self.hvel as usize + (self.phase & 7) as usize) & 0xFF];
         // $3404-$3415: XSub = XSub_old + speed, and x gets the WHOLE new XSub
