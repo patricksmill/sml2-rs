@@ -27,6 +27,7 @@ fn synthetic_bundle() -> Presentation {
         object_table: 0,
         metatiles: sml2_core::level::MetatileTable::from_bytes(&[0; 512]).unwrap(),
         layout: vec![0; 0x3000],
+        spawns: Vec::new(),
     };
     let player = PlayerGraphics {
         normal: vec![0; 0x800],
@@ -87,6 +88,21 @@ fn synthetic_bundle() -> Presentation {
 }
 
 /// A blank screen whose background is palette 0 color 0.
+/// The synthetic look over the native levels' geometry: DX gameplay
+/// requires every level's spawns to match its objects.
+fn native_geometry_bundle() -> Presentation {
+    let source =
+        ExtractedContent::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../extracted"));
+    let assets = SessionAssets::load_from(&source).unwrap();
+    let mut bundle = synthetic_bundle();
+    for (id, level) in bundle.levels.iter_mut().enumerate() {
+        let content = assets.level(id as u8).unwrap();
+        level.layout = content.layout.cells.clone();
+        level.spawns = content.manifest.spawns.records.clone();
+    }
+    bundle
+}
+
 fn screen() -> sml2_dx::Screen {
     sml2_dx::Screen {
         vram: [vec![0; 0x1800], vec![0; 0x1800]],
@@ -1018,7 +1034,7 @@ fn audited_rom_regional_palettes_follow_mario() {
 
 #[test]
 fn dx_character_selection_reaches_level_entry_and_falls_back_to_mario() {
-    let dx = std::sync::Arc::new(synthetic_bundle());
+    let dx = std::sync::Arc::new(native_geometry_bundle());
     let mut session = session();
     session.set_dx(Some(dx.clone()), Luigi);
     session.debug_warp_level(0).unwrap();
@@ -1039,7 +1055,7 @@ fn dx_character_selection_reaches_level_entry_and_falls_back_to_mario() {
 #[test]
 fn attract_demos_always_run_dx_mario() {
     let mut session = session();
-    session.set_dx(Some(std::sync::Arc::new(synthetic_bundle())), Luigi);
+    session.set_dx(Some(std::sync::Arc::new(native_geometry_bundle())), Luigi);
     assert!(session.start_demo(0));
     let SessionState::Demo(demo) = &session.state else { panic!("demo is live") };
     assert_eq!(demo.ctx.sim.character, Mario);
@@ -1100,4 +1116,76 @@ fn dx_coin_room_entry_shows_one_white_frame() {
         game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(),
         vec![[0, 255, 0]; 160 * 144]
     );
+}
+
+/// DX sessions simulate DX's layout and spawn positions from level entry;
+/// sessions without DX keep the native level.
+#[test]
+fn dx_geometry_and_spawns_drive_simulation_from_entry() {
+    let mut bundle = native_geometry_bundle();
+    // Decoration everywhere: DX ground the native level has is gone.
+    bundle.levels[0].layout.fill(0x7F);
+    let moved = bundle.levels[0].spawns[0].y.wrapping_add(8);
+    bundle.levels[0].spawns[0].y = moved;
+    let bundle = std::sync::Arc::new(bundle);
+
+    let mut native = session();
+    native.begin_level(0, 0).unwrap();
+    let mut dx = session();
+    dx.set_dx(Some(bundle.clone()), Mario);
+    dx.begin_level(0, 0).unwrap();
+    let y = |game: &Session| match &game.state {
+        SessionState::InLevel(ctx) => ctx.sim.y,
+        _ => panic!("level"),
+    };
+    let start = y(&dx);
+    assert_eq!(start, y(&native), "the header still places Mario");
+    let SessionState::InLevel(ctx) = &dx.state else { panic!("level") };
+    assert!(ctx.layout_live.cells.iter().all(|&c| c == 0x7F));
+    assert_eq!(ctx.obj.records[0].y, moved);
+    let SessionState::InLevel(native_ctx) = &native.state else { panic!("level") };
+    assert_ne!(native_ctx.obj.records[0].y, moved);
+    // The DX renderer draws the simulated cells; nothing substitutes native ones.
+    assert!(dx.render_dx_frame(&bundle, Mario, (160, 144)).is_ok());
+
+    for _ in 0..30 {
+        native.advance(FrameInput::default());
+        dx.advance(FrameInput::default());
+    }
+    assert_eq!(y(&native), start, "native ground holds Mario");
+    assert!(y(&dx) > start + 16, "Mario falls through DX's missing ground");
+
+    // A bundle whose objects disagree with the level is refused at entry.
+    let mut mismatched = native_geometry_bundle();
+    mismatched.levels[0].spawns.pop();
+    let mut game = session();
+    game.set_dx(Some(std::sync::Arc::new(mismatched)), Mario);
+    assert!(game.begin_level(0, 0).is_err());
+}
+
+/// Every audited level enters on DX geometry; only level 0B moves a spawn.
+#[test]
+#[ignore = "requires SML2_DX_ROM with the audited local ROM"]
+fn audited_rom_levels_enter_with_dx_layouts_and_spawns() {
+    let bundle = std::sync::Arc::new(audited());
+    let native = session();
+    for id in 0..32u8 {
+        let mut game = session();
+        game.set_dx(Some(bundle.clone()), Mario);
+        game.begin_level(id, 0).unwrap();
+        let SessionState::InLevel(ctx) = &game.state else { panic!("level {id:02X}") };
+        assert_eq!(ctx.layout_live.cells, bundle.levels[usize::from(id)].layout, "level {id:02X}");
+        let native_records = &native.assets.level(id).unwrap().manifest.spawns.records;
+        let moved: Vec<_> = ctx
+            .obj
+            .records
+            .iter()
+            .zip(native_records)
+            .enumerate()
+            .filter(|(_, (dx, native))| (dx.x, dx.y) != (native.x, native.y))
+            .map(|(i, (dx, native))| (i, native.y, dx.y))
+            .collect();
+        let expected: &[(usize, u16, u16)] = if id == 0x0B { &[(30, 392, 400)] } else { &[] };
+        assert_eq!(moved, expected, "level {id:02X}");
+    }
 }

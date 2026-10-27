@@ -34,6 +34,7 @@ fn fixture() -> Bundle {
             .concat()
             .repeat(LEVELS),
         banks: BANKS.iter().map(|&b| (b, vec![0; BANK_LEN])).collect(),
+        spawn_streams: vec![vec![0xFF]; LEVELS],
     };
     put(&mut bundle, 0x24, 0x7D00, &[&[0xFF; 64][..], &[1; 32]].concat());
     // `$42F0[0]` -> `$5000`: runs of metatile 0, 257 bytes each.
@@ -106,6 +107,7 @@ fn old_schemas_other_sources_and_unknown_fields_are_rejected() {
         "extra_pointers",
         "level_headers",
         "banks",
+        "spawn_streams",
     ] {
         let mut bad = value.clone();
         bad.as_object_mut().unwrap().remove(field);
@@ -309,4 +311,24 @@ fn movement_curves_are_narrow_and_configuration_is_validated() {
         put(&mut bad, 0x24, address, &[value]);
         assert!(bad.validate().is_err());
     }
+}
+
+#[test]
+fn spawn_streams_decode_per_level_and_reject_malformed_packs() {
+    let mut bundle = fixture();
+    // Level 0B's DX pack 0: X $0108, Y $190 (b3 $32), anim 0.
+    bundle.spawn_streams[0x0B] = vec![0x01, 0x01, 0x32, 0xFF];
+    let presentation = Presentation::new(&bundle).unwrap();
+    let records = &presentation.levels[0x0B].spawns;
+    assert_eq!(records.len(), 1);
+    assert_eq!((records[0].x, records[0].y), (0x108, 0x190));
+    assert!(presentation.levels[0].spawns.is_empty());
+    for bad in [vec![], vec![1, 2, 3], vec![1, 2, 0xFF], vec![0xFF, 0, 0, 0xFF]] {
+        let mut bundle = fixture();
+        bundle.spawn_streams[3] = bad.clone();
+        assert!(bundle.validate().is_err(), "{bad:?}");
+    }
+    let mut short = fixture();
+    short.spawn_streams.pop();
+    assert!(short.validate().is_err());
 }

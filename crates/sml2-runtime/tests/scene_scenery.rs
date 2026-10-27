@@ -25,6 +25,7 @@ fn synthetic_bundle() -> Presentation {
         object_table: 0,
         metatiles: sml2_core::level::MetatileTable::from_bytes(&[0; 512]).unwrap(),
         layout: vec![0; 0x3000],
+        spawns: Vec::new(),
     };
     let player = PlayerGraphics {
         normal: vec![0; 0x800],

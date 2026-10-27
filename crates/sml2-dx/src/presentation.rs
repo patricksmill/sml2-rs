@@ -37,6 +37,9 @@ pub struct LevelGraphics {
     pub metatiles: MetatileTable,
     /// DX's decompressed layout, `$B000`-addressed like the native one.
     pub layout: Vec<u8>,
+    /// DX's spawn records as `$EBBB` expands them; sprite ids and hitboxes
+    /// are unresolved (the native level's records carry those).
+    pub spawns: Vec<sml2_core::level::SpawnRecord>,
 }
 
 /// One character and theme: `$8000` graphics for the normal and Fire forms,
@@ -405,6 +408,11 @@ fn level_graphics(bundle: &Bundle, level: u8) -> Result<LevelGraphics, ImportErr
     )?)
     .map_err(ImportError::InvalidBundle)?;
     let layout = layout(bundle, header[0x0D], header[0x12] & 0x0F)?;
+    let stream = &bundle.spawn_streams[index];
+    let spawns = sml2_extract::vanilla::decode_object_stream(stream)
+        .ok()
+        .filter(|records| records.len() == stream.len() / 3)
+        .ok_or_else(|| ImportError::InvalidBundle(format!("level {level:02X} spawn stream")))?;
     let hud = bundle.banked(LEVEL_BANK, 0x6000 + u16::from(level) * 2, 2)?;
     let hud = u16::from_le_bytes([hud[0], hud[1]]);
     Ok(LevelGraphics {
@@ -420,6 +428,7 @@ fn level_graphics(bundle: &Bundle, level: u8) -> Result<LevelGraphics, ImportErr
         object_table: 0,
         metatiles,
         layout,
+        spawns,
     })
 }
 

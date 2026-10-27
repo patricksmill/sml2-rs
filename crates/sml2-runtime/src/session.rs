@@ -293,6 +293,32 @@ fn bell_handoff(
     (sim, handoff)
 }
 
+/// The level as a session simulates it. DX replaces the layout and `$EBBB`'s
+/// spawn positions at entry; the native records keep their resolved sprites
+/// and hitboxes, which DX leaves unchanged.
+fn level_content<'a>(
+    assets: &'a SessionAssets,
+    dx: Option<&sml2_dx::Presentation>,
+    level_id: u8,
+) -> Result<std::borrow::Cow<'a, crate::content::LevelContent>, String> {
+    let content = assets.level(level_id)?;
+    let Some(level) = dx.and_then(|dx| dx.level(level_id)) else {
+        return Ok(std::borrow::Cow::Borrowed(content));
+    };
+    let mut content = content.clone();
+    content.layout = LevelLayout::from_bytes(&level.layout)?;
+    let records = &mut content.manifest.spawns.records;
+    if records.len() != level.spawns.len()
+        || records.iter().zip(&level.spawns).any(|(native, dx)| native.anim_index != dx.anim_index)
+    {
+        return Err(format!("DX level {level_id:02X} spawns do not match its objects"));
+    }
+    for (native, dx) in records.iter_mut().zip(&level.spawns) {
+        (native.x, native.y, native.mode_flag, native.raw) = (dx.x, dx.y, dx.mode_flag, dx.raw);
+    }
+    Ok(std::borrow::Cow::Owned(content))
+}
+
 /// Frames `$3F4B1` spends in its graphics copy before the bell script runs.
 /// The setup begins on the frame state becomes `$14`; the script's first step
 /// is eight frames later, so the room waits through the seven frames in between.
@@ -524,7 +550,7 @@ impl Session {
     /// skipped), for acceptance tapes.
     pub fn begin_level(&mut self, level_id: u8, progress_flags: u8) -> Result<(), String> {
         self.remember_level_state();
-        let content = self.assets.level(level_id)?.clone();
+        let content = level_content(&self.assets, self.dx.as_deref(), level_id)?.into_owned();
         let ctx = LevelContext::from_content(
             level_id,
             &content,
@@ -703,12 +729,12 @@ impl Session {
         self.remember_level_state();
         let index = index & 0x03;
         let level_id = DEMO_LEVELS[index as usize];
-        let Ok(content) = self.assets.level(level_id) else {
+        let Ok(content) = level_content(&self.assets, self.dx.as_deref(), level_id) else {
             return false;
         };
         let mut ctx = LevelContext::from_content(
             level_id,
-            content,
+            &content,
             0,
             5,
             0,
@@ -1198,10 +1224,10 @@ impl Session {
                     break 'map StepOutcome::Continue;
                 }
                 if let Some(level_id) = entry.level {
-                    match self.assets.level(level_id).map(|content| {
+                    match level_content(&self.assets, self.dx.as_deref(), level_id).map(|content| {
                         LevelContext::from_content(
                             level_id,
-                            content,
+                            &content,
                             entry.progress_flags,
                             self.lives,
                             map_sim.coins_low,

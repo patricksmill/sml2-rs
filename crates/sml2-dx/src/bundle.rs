@@ -42,6 +42,9 @@ pub const ARENA_MAP_COUNT: usize = 7;
 /// `+$0D`, layout index `+$12`).
 const HEADER_POINTERS: usize = 0x55CB;
 pub const HEADER_LEN: usize = 20;
+/// Bank 3 `$6037` (ROM `$E037`): each level's packed spawn stream, which
+/// `$EBBB` expands at level load.
+const SPAWN_POINTERS: u16 = 0x6037;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -63,6 +66,8 @@ pub struct Bundle {
     pub banks: BTreeMap<u8, Vec<u8>>,
     /// Mario then Luigi: H256, normal V76, swim V76, moon V76.
     pub movement: Vec<u8>,
+    /// Every level's packed spawn stream through its `$FF` terminator.
+    pub spawn_streams: Vec<Vec<u8>>,
 }
 
 impl Bundle {
@@ -93,6 +98,16 @@ impl Bundle {
             if data.len() != length {
                 return bad(format!("{label} needs {length} bytes, got {}", data.len()));
             }
+        }
+        if self.spawn_streams.len() != LEVELS {
+            return bad(format!("spawn streams need {LEVELS} levels"));
+        }
+        if let Some(level) = self
+            .spawn_streams
+            .iter()
+            .position(|s| s.len() % 3 != 1 || s.last() != Some(&0xFF))
+        {
+            return bad(format!("level {level:02X} spawn stream is malformed"));
         }
         if !self.banks.keys().copied().eq(BANKS) {
             return bad("bundle must carry exactly the presentation banks".into());
@@ -152,6 +167,24 @@ pub fn extract(bytes: &[u8]) -> Result<Bundle, ImportError> {
         tile_sets: rom.read(TILE_SETS, LEVELS * 4)?.to_vec(),
         extra_pointers: rom.read(EXTRA_POINTERS, 8)?.to_vec(),
         arena_maps: rom.read(ARENA_MAPS, ARENA_MAP_COUNT * 2)?.to_vec(),
+        spawn_streams: (0..LEVELS)
+            .map(|level| {
+                let pointer = u16::from_le_bytes(
+                    rom.banked(3, SPAWN_POINTERS + level as u16 * 2, 2)?
+                        .try_into()
+                        .unwrap(),
+                );
+                let mut stream = Vec::new();
+                loop {
+                    let at = pointer.wrapping_add(stream.len() as u16);
+                    if rom.banked(3, at, 1)?[0] == 0xFF {
+                        stream.push(0xFF);
+                        break Ok(stream);
+                    }
+                    stream.extend_from_slice(rom.banked(3, at, 3)?);
+                }
+            })
+            .collect::<Result<_, ImportError>>()?,
         level_headers: (0..LEVELS)
             .map(|level| {
                 let pointer = rom.word(HEADER_POINTERS + level * 2)?;

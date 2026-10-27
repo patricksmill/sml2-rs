@@ -24,7 +24,7 @@ pub const SOURCE_ROM: &str = "source.gb";
 /// User-supplied ROM built from the official IPS patch against UE v1.0.
 pub const ROM_SHA256: &str = "1dd604a91b9ee99ef381cc795da3ae28c72d04ba9de78b355df829e56ce49c46";
 pub const IMPORTER_VERSION: u32 = 9;
-pub const BUNDLE_SCHEMA: u32 = 9;
+pub const BUNDLE_SCHEMA: u32 = 10;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportError {

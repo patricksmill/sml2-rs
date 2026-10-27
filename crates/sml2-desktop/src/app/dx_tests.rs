@@ -295,6 +295,7 @@ pub(super) fn red_bundle() -> sml2_dx::Presentation {
         object_table: 0,
         metatiles: sml2_core::level::MetatileTable::from_bytes(&[0; 512]).unwrap(),
         layout: vec![0; 0x3000],
+        spawns: Vec::new(),
     };
     let player = sml2_dx::PlayerGraphics {
         normal: vec![0; 0x800],
@@ -302,7 +303,7 @@ pub(super) fn red_bundle() -> sml2_dx::Presentation {
         bank1: vec![0; 0x800],
         mappings: vec![vec![]; 242],
     };
-    sml2_dx::Presentation {
+    let mut bundle = sml2_dx::Presentation {
         movement: std::array::from_fn(|_| std::sync::Arc::new(sml2_core::character::MovementCurves {
             horizontal: sml2_core::player_sim::SPEED_H,
             normal: sml2_core::player_sim::SPEED_V[..76].try_into().unwrap(),
@@ -345,7 +346,20 @@ pub(super) fn red_bundle() -> sml2_dx::Presentation {
         arenas: Vec::new(),
         arena_metatiles: Vec::new(),
         boss_oam_lists: Vec::new(),
+    };
+    // DX play simulates each level's DX geometry; keep the native levels'.
+    let assets = sml2_runtime::content::SessionAssets::load_from(
+        &sml2_runtime::content::ExtractedContent::new(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../extracted"),
+        ),
+    )
+    .unwrap();
+    for (id, level) in bundle.levels.iter_mut().enumerate() {
+        let content = assets.level(id as u8).unwrap();
+        level.layout = content.layout.cells.clone();
+        level.spawns = content.manifest.spawns.records.clone();
     }
+    bundle
 }
 
 /// A blank screen whose background is palette 0 color 0.

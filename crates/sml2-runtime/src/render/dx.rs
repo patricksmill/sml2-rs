@@ -860,20 +860,6 @@ fn live_background(ctx: &LevelContext, dx: &Presentation, level: &LevelGraphics)
     out
 }
 
-/// The metatile DX draws for an unrewritten cell. DX re-laid out many levels,
-/// mostly decoration; its cell is drawn where it keeps the native cell's
-/// collision class, and the native cell elsewhere, so the picture never shows
-/// ground the native physics lacks. Coin and block rewrites are native state.
-fn dx_cell(ctx: &LevelContext, level: &LevelGraphics, cx: usize, cy: usize) -> Option<u8> {
-    let native = ctx.layout_live.get(cx, cy)?;
-    let classes = &ctx.manifest.metatile_classes;
-    let class = |id: u8| classes.get(usize::from(id));
-    match level.layout.get(cy * LAYOUT_WIDTH + cx) {
-        Some(&dx) if class(dx).is_some() && class(dx) == class(native) => Some(dx),
-        _ => Some(native),
-    }
-}
-
 fn pause_palettes(bytes: &[u8], bright_phase: bool) -> Vec<u8> {
     let subtract = if bright_phase { [18, 8, 4] } else { [8, 4, 4] };
     bytes
@@ -959,10 +945,9 @@ fn render(
         .then(|| dx.arena_metatiles.get(usize::from(ctx.sim.level_gfx_index)))
         .flatten();
     let metatiles = arena_metatiles.unwrap_or(&level.metatiles);
-    let cell_at = |cx: usize, cy: usize| match arena_metatiles {
-        Some(_) => ctx.layout_live.get(cx, cy),
-        None => dx_cell(ctx, level, cx, cy),
-    };
+    // DX sessions simulate DX's layout; a level entered before DX was
+    // enabled keeps its native cells until the next entry.
+    let cell_at = |cx: usize, cy: usize| ctx.layout_live.get(cx, cy);
     let bg_attr = |tile: u8, (wx, wy): (usize, usize), rewritten: bool| {
         let cell = fight
             .filter(|_| !rewritten)

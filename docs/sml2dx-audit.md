@@ -128,8 +128,10 @@ schema/importer/cache identity when physics is implemented. Do not import code.
 only metatile-pointer high byte 42->78. All edge/scene maps, properties, secret
 entries, collision consumers 1C82..1F51 and script blob 14125..141E5 match base.
 Level 0B's last spawn moves Y392->400 (ROM E4F8); all other packed streams match.
-Simulation, actors, rendering and reloads must share the DX geometry/placement
-before removing `render/dx.rs::dx_cell`'s collision-class substitution.
+Schema 10 imports every packed stream (bank 3 `$6037` pointers). DX sessions
+enter each level on DX's layout and spawn positions, so simulation, actors,
+arena reloads (level 18's unchanged blob) and rendering share one geometry;
+a level entered before DX was enabled keeps native cells until re-entry.
 
 Additional object patches: ROM 5872B/5876A change parked FFDC/slot 12 value 80->00;
 5B693 and boss B416 change flash XOR 10->08. Native staging XORs these values
