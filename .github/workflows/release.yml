@@ -227,5 +227,5 @@ jobs:
           TAG_NAME="${GITHUB_REF_NAME:-v0.1.0}"
           gh release create "$TAG_NAME" \
             release-artifacts/*.zip \
-            --title "Super Mario Land 2 (sml2-rs) $TAG_NAME" \
+            --title "Super Mario Land 2 Plus $TAG_NAME" \
             --notes-file release_notes.md

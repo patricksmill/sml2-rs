@@ -1,9 +1,10 @@
-# sml2-rs
+# Super Mario Land 2 Plus
 
-A native Rust port of **Super Mario Land 2: 6 Golden Coins** for desktop.
+An enhanced desktop edition of **Super Mario Land 2: 6 Golden Coins**.
 
 ## Features
 
+- Native Rust port, not an emulator, verified against the original game code.
 - Widescreen: 16:9, 21:9, or your window's aspect ratio.
 - Camera zoom-out presets up to 200%.
 - Optional frame interpolation for high refresh rate displays.

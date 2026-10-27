@@ -22,8 +22,8 @@ mkdir -p "$(dirname "$entry")"
 cat >"$entry" <<EOF
 [Desktop Entry]
 Type=Application
-Name=Super Mario Land 2
-Comment=Native port of Super Mario Land 2
+Name=Super Mario Land 2 Plus
+Comment=Enhanced native Rust port of Super Mario Land 2
 Exec=$binary
 Icon=$icon
 Terminal=false

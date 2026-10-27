@@ -75,7 +75,7 @@ pub fn run(options: Options) -> Result<(), String> {
     let validation = std::sync::Arc::new(std::sync::Mutex::new(None));
     let result = validation.clone();
     eframe::run_native(
-        "Super Mario Land 2",
+        "Super Mario Land 2 Plus",
         eframe::NativeOptions {
             viewport,
             renderer: eframe::Renderer::Wgpu,
