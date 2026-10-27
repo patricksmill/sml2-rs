@@ -9,7 +9,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/level.png" alt="Widescreen level with DX colors" width="720">
+  <img src="docs/screenshots/level.png" alt="Widescreen level with DX colors" width="360">
+  <img src="docs/screenshots/level-classic.png" alt="Widescreen level with the original Game Boy palette" width="360">
+  <br>
+  <sub>SML2DX colors (left) and the original Game Boy look (right), both widescreen.</sub>
 </p>
 
 <p align="center">
