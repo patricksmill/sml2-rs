@@ -7,7 +7,7 @@
 //! a screen row past the third reads past the 48-byte tables, i.e. 0.
 //!
 //! [`World::ROM`] reproduces that exactly and is what every original level
-//! uses. Expanded levels keep the full high byte instead.
+//! uses. Expanded levels ([`World::expanded`]) keep the full high byte instead.
 
 use crate::camera::Room;
 use crate::level::{LAYOUT_HEIGHT, LAYOUT_WIDTH};
@@ -42,6 +42,32 @@ impl World {
         position_mask: 0x0FFF,
         wram_echo: true,
     };
+
+    /// Widest expanded world: every X high byte is a screen.
+    pub const MAX_SCREENS_WIDE: u16 = 256;
+    /// Tallest expanded world: Y high byte `$FF` means "above the level"
+    /// (`PlayerSim`'s `y >> 8 == $FF` checks), so it is never a screen.
+    pub const MAX_SCREENS_HIGH: u16 = 255;
+
+    /// A world with the full 16-bit position space and no WRAM echo, for
+    /// expanded levels.
+    pub fn expanded(screens_wide: u16, screens_high: u16) -> Result<World, String> {
+        if !(1..=Self::MAX_SCREENS_WIDE).contains(&screens_wide)
+            || !(1..=Self::MAX_SCREENS_HIGH).contains(&screens_high)
+        {
+            return Err(format!(
+                "world {screens_wide}x{screens_high} screens: limits are 1-{}x1-{}",
+                Self::MAX_SCREENS_WIDE,
+                Self::MAX_SCREENS_HIGH
+            ));
+        }
+        Ok(World {
+            screens_wide,
+            screens_high,
+            position_mask: 0xFFFF,
+            wram_echo: false,
+        })
+    }
 
     /// `v` after the world's wrap (`and $0F` on the high byte for the ROM).
     pub const fn wrap(self, v: u16) -> u16 {
@@ -160,13 +186,21 @@ mod tests {
     }
 
     #[test]
+    fn expanded_worlds_reserve_the_above_the_level_screen_row() {
+        assert!(World::expanded(256, 255).is_ok());
+        assert!(World::expanded(256, 256).is_err(), "Y high byte $FF");
+        assert!(World::expanded(257, 3).is_err());
+        assert!(World::expanded(0, 3).is_err());
+        let w = World::expanded(16, 4).unwrap();
+        assert_eq!(
+            (w.position_mask, w.wram_echo, w.screens()),
+            (0xFFFF, false, 64)
+        );
+    }
+
+    #[test]
     fn a_full_byte_world_keeps_screens_past_fifteen() {
-        let w = World {
-            screens_wide: 40,
-            screens_high: 5,
-            position_mask: 0xFFFF,
-            wram_echo: false,
-        };
+        let w = World::expanded(40, 5).unwrap();
         assert_eq!(w.screen(0x2710), 0x27);
         assert_eq!(w.screen_index(0x2710, 0x0480), 4 * 40 + 0x27);
         assert_eq!(w.cell(0x2710, 0x0480), (0x271, 0x48));

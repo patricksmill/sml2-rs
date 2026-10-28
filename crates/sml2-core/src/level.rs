@@ -113,6 +113,21 @@ impl LevelLayout {
         })
     }
 
+    /// A layout filling `world`: `cells` row-major with stride
+    /// [`World::cells_wide`].
+    pub fn new(world: World, cells: Vec<u8>) -> Result<Self, String> {
+        let expected = world.cells_wide() * world.cells_high();
+        if cells.len() != expected {
+            return Err(format!(
+                "layout: {}x{} screens need {expected} cells, got {}",
+                world.screens_wide,
+                world.screens_high,
+                cells.len()
+            ));
+        }
+        Ok(Self { cells, world })
+    }
+
     /// Metatile id at cell (x, y); `None` when out of bounds.
     pub fn get(&self, x: usize, y: usize) -> Option<u8> {
         if y < self.world.cells_high() {

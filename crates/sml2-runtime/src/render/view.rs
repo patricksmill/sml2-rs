@@ -249,13 +249,7 @@ mod tests {
     #[test]
     fn a_wider_world_lets_the_view_pass_the_rom_layout_edge() {
         let view = (384, 216);
-        let wide = sml2_core::world::World {
-            screens_wide: 40,
-            screens_high: 3,
-            position_mask: 0xFFFF,
-            wram_echo: false,
-        }
-        .room();
+        let wide = sml2_core::world::World::expanded(40, 3).unwrap().room();
         let cam = (0x1800, 0x1C0);
         let raw = raw_level_origin(view, cam, 0);
         assert_eq!(level_origin(view, cam, 0, wide), raw);

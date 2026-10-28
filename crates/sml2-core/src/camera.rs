@@ -1293,12 +1293,7 @@ mod tests {
     #[test]
     fn crouch_pan_in_a_full_byte_world_carries_into_screen_sixteen() {
         let mut c = pan_cam(0x0FFF);
-        c.world = World {
-            screens_wide: 16,
-            screens_high: 20,
-            position_mask: 0xFFFF,
-            wram_echo: false,
-        };
+        c.world = World::expanded(16, 20).unwrap();
         c.prev_mario_y_lo = 0xFF; // screen Y $62
         c.crouch_pan(&grounded(), &b_down());
         assert_eq!(c.y, 0x1000);
