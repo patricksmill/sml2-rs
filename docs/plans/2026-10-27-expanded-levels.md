@@ -123,13 +123,15 @@ level needs four screen rows, so it cannot fit the ROM world.
      `40 03`) and scene 7 (row 0, screen 4, `40 16`) swap the screen numbers
      but keep the low bytes, so the row-1 stub (columns `$5E-$5F`) and the
      row-0 stub (columns `$40-$41`) sit at the same height in their screens.
-   - `assets/expanded/tree-zone-2.json` (18×4 screens) moves everything past
+   - `assets/expanded/tree-zone-2.json` (17×4 screens) moves everything past
      the pipe by (+2 screens, +1 row): row 0 from screen 4, and rows 1-2 from
-     screen 6. The stubs then join into one four-cell pipe, and both scenes
-     are cleared. The room locks stay, so passing through the pipe slides the
-     camera between the same two rooms the ROM had. Removing the locks
-     (`0x0C` on screens (5, 1) and (6, 1)) makes the camera scroll straight
-     through instead; that also plays correctly.
+     screen 6. The original's empty screen column 15 is dropped. The stubs
+     then join into one four-cell pipe, and both scenes are cleared.
+   - `open_camera` (user decision, 2026-10-27): the only locks are the
+     world's outer edges, so the camera scrolls freely and stops only at the
+     level's start and end and its top and bottom. There are no room slides.
+     Blank filler (metatile 96) that the camera can now see is left for the
+     user to paint.
    - DX changes 0 cells of this level (`audited_dx_content_difference_inventory`),
      so a single fingerprint, `ca02cd33918d332f`, covers vanilla and DX. DX's
      spawns follow the moves (`the_tree_zone_2_recipe_rebuilds_the_dx_level`,

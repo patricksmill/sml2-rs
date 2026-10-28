@@ -17,6 +17,7 @@ fn recipe(level_id: u8, world: [u16; 2]) -> LevelRecipe {
         spawns: Vec::new(),
         start: None,
         secret_start: None,
+        open_camera: false,
     }
 }
 
@@ -352,10 +353,11 @@ fn the_tree_zone_2_recipe_rebuilds_the_dx_level() {
     assert_eq!(ctx.manifest.spawns.records.len(), dx_spawns);
 }
 
-/// Through the pipe the camera slides between the two rooms; an enlarged
-/// view (here a 1182x533 window at 125% zoom) pans across at a steady pace.
+/// Tree Zone 2's open camera: its only locks are the world's edges, so the
+/// pipe scrolls straight through with no room slide, and an enlarged view
+/// (here a 1182x533 window at 125% zoom) follows without stopping or jumping.
 #[test]
-fn the_rebuilt_tree_zone_2_pipe_pans_an_enlarged_view_without_jumps() {
+fn the_rebuilt_tree_zone_2_camera_scrolls_through_the_pipe() {
     use crate::session::FrameInput;
     let view = (399, 180);
     let mut session = tree_zone_2(true, 0);
@@ -363,6 +365,7 @@ fn the_rebuilt_tree_zone_2_pipe_pans_an_enlarged_view_without_jumps() {
     let crate::session::SessionState::InLevel(ctx) = &mut session.state else {
         unreachable!()
     };
+    let world = ctx.layout_live.world.room();
     (ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y) = (0x5A8, 0x1A0, 0x5B0, 0x1B0);
     let mut origins = Vec::new();
     for frame in 0..200 {
@@ -374,18 +377,23 @@ fn the_rebuilt_tree_zone_2_pipe_pans_an_enlarged_view_without_jumps() {
         let crate::session::SessionState::InLevel(ctx) = &session.state else {
             panic!("left the level")
         };
+        let room = ctx.cam.room();
+        assert_eq!(
+            (ctx.cam.transition, room.left, room.right),
+            (0, 0, world.right)
+        );
         let pan = ctx.spr.as_ref().map_or(0, |s| i32::from(s.scroll_pan));
         origins.push(crate::render::view::level_origin(
             view,
             (ctx.cam.x, ctx.cam.y),
             pan,
-            ctx.cam.room(),
+            room,
         ));
     }
     let steps: Vec<_> = origins.windows(2).map(|w| w[1].0 - w[0].0).collect();
-    assert!(steps.iter().all(|&d| (0..=10).contains(&d)), "{steps:?}");
-    // The view crossed from its place in the passage's room to its place in
-    // the next room, which starts at the joined pipe's far end.
-    assert_eq!(origins[0].0, 0x600 - 399);
-    assert_eq!(origins.last().unwrap().0, 0x600);
+    assert!(steps.iter().all(|&d| (0..=4).contains(&d)), "{steps:?}");
+    assert!(
+        origins.last().unwrap().0 > 0x600 - 399 / 2,
+        "the view passed the pipe"
+    );
 }
