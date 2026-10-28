@@ -23,6 +23,11 @@ pub(super) const EXPANDED: &[(u8, &str)] = &[
         2,
         include_str!("../../../../assets/scenery/scenery-02-expanded.json"),
     ),
+    // Tree Zone 3, with the camera opened by `assets/expanded/tree-zone-3.json`.
+    (
+        3,
+        include_str!("../../../../assets/scenery/scenery-03-expanded.json"),
+    ),
 ];
 
 pub(super) fn apply(assets: &mut SessionAssets, entries: &[(u8, &str)]) -> Result<(), String> {

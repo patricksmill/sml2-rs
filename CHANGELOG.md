@@ -12,8 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rebuilt as one connected map. Its pipe no longer teleports Mario between
   sections, and the camera scrolls freely to the level's edges. Turn the
   setting off to play the original layout.
-- Scenery for Tree Zone 1 and the rebuilt Tree Zone 2 in widescreen and
-  zoomed-out views.
+- Tree Zone 3's camera scrolls freely through its pipes instead of sliding
+  between rooms (with Expanded levels on).
+- Scenery for Tree Zone 1, the rebuilt Tree Zone 2 and Tree Zone 3 in
+  widescreen and zoomed-out views.
 - Scenery Editor: rebuilt levels open as their rebuilt map with their own
   scenery file, and a Select tool copies an area to stamp it repeatedly.
 
