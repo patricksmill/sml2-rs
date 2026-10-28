@@ -88,9 +88,30 @@ level needs four screen rows, so it cannot fit the ROM world.
      255 instead of 15, so the camera's edge cases at the world's left and
      top must be checked once a level is playable. `$4x` scene teleports
      still carry 4-bit screen numbers.
-4. **Expanded mode.** Load expanded levels through the `level_content` seam,
+4. **Expanded mode — complete.** Load expanded levels through the `level_content` seam,
    with a setting and save-safe selection at level entry. Renderers, widescreen
    room clamping and scenery overlays use the level's size.
+   - Recipes register in `sml2-runtime/src/content/bundled_recipes.rs` (empty
+     until step 6). Each must list its source fingerprints, and two recipes
+     cannot claim the same layout. `SessionAssets::recipe_for` picks the one
+     written for the loaded vanilla or DX layout.
+   - `level_content` applies the recipe after DX substitution when
+     `Session::expanded_levels` is set. A recipe that fails to apply logs a
+     note, and the original layout loads. Demos always load ROM layouts.
+   - `Session::expanded_levels` defaults to off, so tests, captures and other
+     hosts stay ROM-exact. The desktop's `Settings::expanded_levels` (Mods →
+     Levels) defaults to on and syncs every tick. It takes effect at the next
+     level entry; saves hold only map progress, so switching is save-safe.
+   - Every mid-level sim rebuild goes through level entry, except `$25AF`'s
+     arena swap. That swap now calls `enter_layout_world`: the sims take the
+     ROM-sized arena's world, and a rebuilt level's camera gets back the
+     extracted lock and scene tables (`LevelContent::rom_tables`), which the
+     ROM keeps through the swap.
+   - Edge check: ROM levels lock their outer screens, except where they rely
+     on the 12-bit wrap. In level 10, for example, the left edge wraps to
+     screen 15. A rebuilt level that keeps its locks stops at the world edge
+     (`walking_left_in_a_rebuilt_level_stops_at_the_world_edge`). Open
+     borders are for step 5's editor to flag; they are not an engine change.
 5. **Editor level tools.** The Scenery Editor gains terrain, lock, spawn and
    start-position editing for expanded levels, with collision checks and
    playtest.
