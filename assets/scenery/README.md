@@ -5,7 +5,10 @@ It starts empty. Local editor drafts are never bundled automatically.
 
 1. In the companion Scenery Editor, select a level and choose **Export level…**.
 2. Export into this directory as `scenery-NN.json`, where `NN` is the zero-based
-   level ID (`00` through `31`). The existing `{"paints":[...]}` format is retained.
+   level ID (`00` through `31`). Files use the grouped `sml2-scenery/2` format:
+   each line is a rectangle tiled with a small pattern of metatile ids, such as
+   `{"at":[-16,0],"size":[17,27],"tiles":[[34,35]]}`. Files in the older
+   per-cell `{"paints":[...]}` format still load.
 3. Add the matching entry to `LEVELS` in
    `crates/sml2-runtime/src/content/bundled_scenery.rs`:
 

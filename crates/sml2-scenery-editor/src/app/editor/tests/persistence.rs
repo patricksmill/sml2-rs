@@ -4,7 +4,7 @@ use sml2_core::scenery::{SceneryOverlay, SceneryPaint};
 use sml2_runtime::scene_scenery::SceneTarget;
 
 #[test]
-fn existing_signed_scenery_files_round_trip_without_changing_the_format() {
+fn per_cell_scenery_files_load_and_resave_in_the_grouped_format() {
     let (mut app, ctx, path) = app();
     std::fs::create_dir_all(&path).unwrap();
     let file = path.join("scenery-00.json");
@@ -17,7 +17,9 @@ fn existing_signed_scenery_files_round_trip_without_changing_the_format() {
     work.finish();
     app.save_scenery();
     assert!(!app.editor.work.as_ref().unwrap().dirty);
-    let saved: SceneryOverlay = serde_json::from_slice(&std::fs::read(file).unwrap()).unwrap();
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.contains(sml2_core::scenery::SCENERY_FORMAT), "{text}");
+    let saved: SceneryOverlay = serde_json::from_str(&text).unwrap();
     assert_eq!(saved.get(-2, 48), Some(1));
     assert_eq!(saved.get(256, -1), Some(2));
     assert!(std::fs::read_dir(&path).unwrap().all(|e| !e

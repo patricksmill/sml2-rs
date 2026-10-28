@@ -79,7 +79,10 @@ off in the game and restart the editor.
 ## Drafts and release exports
 
 Existing level drafts remain `scenery-NN.json` beside the game's
-`settings.json`, with zero-based level IDs. Scene drafts use names such as
+`settings.json`, with zero-based level IDs. Drafts and exports are written in
+the grouped `sml2-scenery/2` format (one pattern rectangle per line; see
+[Approved scenery](../assets/scenery/README.md)). Older per-cell drafts load
+and are rewritten in that format on their next save. Scene drafts use names such as
 `scenery-map-09.json` or `scenery-arena-07-00.json`. Neither kind is loaded by
 the normal game. A target without a draft starts from its bundled scenery;
 an explicitly empty draft overrides that starting point in the editor.

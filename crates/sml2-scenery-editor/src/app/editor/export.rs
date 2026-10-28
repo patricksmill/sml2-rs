@@ -38,13 +38,7 @@ impl EditorApp {
             self.editor.export = None;
             return;
         }
-        let bytes = match serde_json::to_vec_pretty(&work.scenery) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                self.status = Some(error.to_string());
-                return;
-            }
-        };
+        let bytes = work.scenery.to_json().into_bytes();
         let filename = self.scenery_file(self.editor.level, work.expanded);
         self.editor.export = Some(ExportDialog {
             path: filename,

@@ -98,9 +98,8 @@ impl EditorApp {
         {
             return;
         }
-        let saved = serde_json::to_vec_pretty(&work.scenery)
-            .map_err(|e| e.to_string())
-            .and_then(|bytes| atomic_write(&path, &bytes).map_err(|e| e.to_string()));
+        let saved =
+            atomic_write(&path, work.scenery.to_json().as_bytes()).map_err(|e| e.to_string());
         match saved {
             Ok(()) => work.dirty = false,
             Err(error) => work.save_error = Some(error),
