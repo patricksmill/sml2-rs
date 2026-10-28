@@ -4,9 +4,11 @@
 
 use sml2_core::level_recipe::LevelRecipe;
 
-/// Register recipes here. Paths are relative to this source file:
-/// `include_str!("../../../../assets/levels/expanded-02.json"),`
-pub(super) const RECIPES: &[&str] = &[];
+/// Register recipes here. Paths are relative to this source file.
+pub(super) const RECIPES: &[&str] = &[
+    // Tree Zone 2 (vanilla and DX share its layout).
+    include_str!("../../../../assets/expanded/tree-zone-2.json"),
+];
 
 pub(super) fn parse(entries: &[&str]) -> Result<Vec<LevelRecipe>, String> {
     let mut recipes: Vec<LevelRecipe> = Vec::with_capacity(entries.len());

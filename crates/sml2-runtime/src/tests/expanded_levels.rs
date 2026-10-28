@@ -114,8 +114,8 @@ fn a_rebuilt_tree_zone_2_loads_into_every_sim_at_its_size() {
         .contains("applied to level 03"));
 }
 
-/// A session whose assets carry a 16x4 rebuild of `level_id` that moves
-/// screens x5-7 of row 1 into the new fourth row.
+/// A session whose assets carry, in place of any bundled one, a 16x4 rebuild
+/// of `level_id` that moves screens x5-7 of row 1 into the new fourth row.
 fn session_with_rebuild(level_id: u8) -> crate::session::Session {
     let mut assets = SessionAssets::load().unwrap();
     let level = assets.level(level_id).unwrap();
@@ -126,6 +126,9 @@ fn session_with_rebuild(level_id: u8) -> crate::session::Session {
         size: [0x30, 0x10],
         to: [0x50, 0x30],
     });
+    assets
+        .recipes
+        .retain(|bundled| bundled.level_id != level_id);
     assets.recipes.push(r);
     crate::session::Session::new(assets)
 }
@@ -250,4 +253,101 @@ fn bundled_recipes_name_their_layouts_and_apply_to_them() {
             level.expanded(recipe).map_err(|e| e.to_string()).unwrap();
         }
     }
+}
+
+/// Tree Zone 2 as bundled, entered at `progress_flags` with expanded levels
+/// set to `rebuilt`.
+fn tree_zone_2(rebuilt: bool, progress_flags: u8) -> crate::session::Session {
+    let mut session = crate::session::Session::new(SessionAssets::load().unwrap());
+    session.expanded_levels = rebuilt;
+    session.begin_level(2, progress_flags).unwrap();
+    session
+}
+
+fn mario(session: &crate::session::Session) -> &sml2_core::player_sim::PlayerSim {
+    let crate::session::SessionState::InLevel(ctx) = &session.state else {
+        panic!("left the level")
+    };
+    &ctx.sim
+}
+
+/// The ROM's pipe (scene 6, `40 03`) cut row 1's passage off at screen 5 and
+/// teleported Mario to screen 4 of row 0. Rebuilt, the two stubs are one pipe:
+/// the same side-pipe travel carries him out of the far mouth, at the ROM's
+/// exit moved by the recipe's (+2 screens, +1 row), with no scene running.
+#[test]
+fn the_rebuilt_tree_zone_2_pipe_joins_its_two_ends() {
+    use crate::session::FrameInput;
+    let walk = |rebuilt: bool| {
+        let mut session = tree_zone_2(rebuilt, 0);
+        let crate::session::SessionState::InLevel(ctx) = &mut session.state else {
+            unreachable!()
+        };
+        // Just left of the row-1 pipe mouth, on the passage floor.
+        (ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y) = (0x5A8, 0x1A0, 0x5B0, 0x1B0);
+        let mut scenes = Vec::new();
+        let mut entered = false;
+        for frame in 0..400 {
+            let keys = sml2_core::player_sim::PlayerKeys {
+                right: frame >= 40,
+                ..Default::default()
+            };
+            session.advance(FrameInput { keys, div: 0 });
+            let crate::session::SessionState::InLevel(ctx) = &session.state else {
+                panic!("left the level")
+            };
+            if ctx.cam.scene_id != 0 {
+                scenes.push(ctx.cam.scene_id);
+            }
+            entered |= ctx.sim.pipe_dir == 0x30;
+            if entered && ctx.sim.pipe_dir == 0 {
+                return ((ctx.sim.x, ctx.sim.y), scenes);
+            }
+        }
+        panic!("Mario never came out of the pipe")
+    };
+    let (rom_exit, rom_scenes) = walk(false);
+    assert!(rom_scenes.contains(&6), "the ROM teleports: {rom_scenes:?}");
+    let (exit, scenes) = walk(true);
+    assert!(
+        scenes.is_empty(),
+        "no scene runs in the rebuilt level: {scenes:?}"
+    );
+    assert_eq!(exit, (rom_exit.0 + 0x200, rom_exit.1 + 0x100));
+}
+
+/// The secret entry's start block (row 0, screen 7) moves with its section.
+#[test]
+fn the_rebuilt_tree_zone_2_secret_entry_lands_in_its_moved_section() {
+    let mut rom = tree_zone_2(false, 8);
+    let mut rebuilt = tree_zone_2(true, 8);
+    for _ in 0..90 {
+        rom.advance(Default::default());
+        rebuilt.advance(Default::default());
+    }
+    let (a, b) = (mario(&rom), mario(&rebuilt));
+    assert_eq!((b.x, b.y), (a.x + 0x200, a.y + 0x100));
+    assert!(b.on_ground && b.dead == 0);
+}
+
+/// DX leaves Tree Zone 2's layout untouched, so the one recipe rebuilds it
+/// under DX too, carrying DX's own spawn positions.
+#[test]
+#[ignore = "requires SML2_DX_ROM with the audited local ROM"]
+fn the_tree_zone_2_recipe_rebuilds_the_dx_level() {
+    let rom = std::fs::read(std::env::var_os("SML2_DX_ROM").expect("set SML2_DX_ROM")).unwrap();
+    let dx = sml2_dx::Presentation::new(&sml2_dx::extract(&rom).unwrap()).unwrap();
+    let dx_spawns = dx.level(2).unwrap().spawns.len();
+    let mut session = crate::session::Session::new(SessionAssets::load().unwrap());
+    session.set_dx(
+        Some(std::sync::Arc::new(dx)),
+        sml2_core::character::Character::Mario,
+    );
+    session.expanded_levels = true;
+    session.begin_level(2, 0).unwrap();
+    assert_eq!(level_world(&session), World::expanded(18, 4).unwrap());
+    let crate::session::SessionState::InLevel(ctx) = &session.state else {
+        unreachable!()
+    };
+    assert_eq!(ctx.manifest.spawns.records.len(), dx_spawns);
 }

@@ -1,0 +1,15 @@
+{
+  "schema": "sml2-expanded-level/1",
+  "level_id": 2,
+  "sources": ["ca02cd33918d332f"],
+  "world": [18, 4],
+  "fill": 96,
+  "moves": [
+    { "from": [64, 0], "size": [192, 16], "to": [96, 16] },
+    { "from": [96, 16], "size": [160, 32], "to": [128, 32] }
+  ],
+  "screens": [
+    { "at": [5, 1], "scene": 0 },
+    { "at": [6, 1], "scene": 0 }
+  ]
+}
