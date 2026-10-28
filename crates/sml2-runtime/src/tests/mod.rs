@@ -30,6 +30,7 @@ mod castle_flow;
 mod conveyor;
 mod death_audio;
 mod debug;
+mod expanded_levels;
 mod front_end;
 mod game;
 mod level_frame;

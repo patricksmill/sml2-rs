@@ -1,13 +1,14 @@
 //! Loading boundary for extracted content. Sources are consumed before ticking;
 //! sessions hold decoded content and never reopen files on level transitions.
 
-use sml2_core::level::{HudStrip, LevelLayout, LevelManifest};
+use sml2_core::level::{HudStrip, LevelLayout, LevelManifest, LevelStart};
+use sml2_core::level_recipe::{LevelParts, LevelRecipe};
 use sml2_core::map::{
     MapNodeRecords, MapNodes, MapWalk, OverworldManifest, OverworldTilemaps, OverworldTiles,
 };
 use sml2_core::object::ObjectTables;
 use sml2_core::scene::SceneScripts;
-use sml2_core::scenery::SceneryOverlay;
+use sml2_core::scenery::{SceneryOverlay, SceneryPaint};
 use sml2_core::tileset::Tilesets;
 use sml2_core::world::World;
 use std::{
@@ -90,6 +91,74 @@ impl LevelContent {
             scene_map,
             scenery: SceneryOverlay::empty(),
         })
+    }
+}
+
+impl LevelContent {
+    /// This level rebuilt by an expanded-level recipe. The layout, lock and
+    /// scene tables, spawns and start blocks come from
+    /// [`LevelRecipe::apply`]; scenery paints follow the moved cells.
+    pub fn expanded(&self, recipe: &LevelRecipe) -> Result<Self, String> {
+        if recipe.level_id != self.manifest.level_id {
+            return Err(format!(
+                "level {:02X} recipe applied to level {:02X}",
+                recipe.level_id, self.manifest.level_id
+            ));
+        }
+        let header = &self.manifest.header;
+        let parts = recipe.apply(&LevelParts {
+            layout: self.layout.clone(),
+            edge_map: self.edge_map.clone().unwrap_or_default(),
+            scene_map: self.scene_map.clone().unwrap_or_default(),
+            spawns: self.manifest.spawns.records.clone(),
+            start: LevelStart {
+                mario_y: header.mario_spawn_y,
+                mario_x: header.mario_spawn_x,
+                camera_y: header.camera_start_y,
+                camera_x: header.camera_start_x,
+            },
+            secret_start: self.manifest.secret_entry,
+        })?;
+        let mut content = self.clone();
+        let manifest = &mut content.manifest;
+        let header = &mut manifest.header;
+        (header.mario_spawn_x, header.mario_spawn_y) = (parts.start.mario_x, parts.start.mario_y);
+        (header.camera_start_x, header.camera_start_y) =
+            (parts.start.camera_x, parts.start.camera_y);
+        manifest.secret_entry = parts.secret_start;
+        manifest.spawns.records = parts.spawns;
+        let world = parts.layout.world;
+        let summary = &mut manifest.layout;
+        summary.width = world.cells_wide() as u16;
+        summary.height = world.cells_high() as u16;
+        summary.size = parts.layout.cells.len() as u32;
+        summary.distinct_metatile_ids = parts.layout.distinct_metatile_ids();
+        summary.most_common = parts.layout.most_common_metatile();
+        content.layout = parts.layout;
+        content.edge_map = Some(parts.edge_map);
+        content.scene_map = Some(parts.scene_map);
+        // Moved paints are set last so they cover what stayed, as moved
+        // cells do in the layout.
+        let mut scenery = SceneryOverlay::empty();
+        let (stay, moved): (Vec<_>, Vec<_>) = self.scenery.paints().into_iter().partition(|p| {
+            recipe.cell_destinations(p.x.into(), p.y.into()) == [(p.x.into(), p.y.into())]
+        });
+        for p in stay.into_iter().chain(moved.iter().flat_map(|p| {
+            recipe
+                .cell_destinations(p.x.into(), p.y.into())
+                .into_iter()
+                .filter_map(|(x, y)| {
+                    Some(SceneryPaint {
+                        x: x.try_into().ok()?,
+                        y: y.try_into().ok()?,
+                        metatile: p.metatile,
+                    })
+                })
+        })) {
+            scenery.set(p, 256)?;
+        }
+        content.scenery = scenery;
+        Ok(content)
     }
 }
 

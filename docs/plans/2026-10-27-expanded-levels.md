@@ -62,13 +62,32 @@ level needs four screen rows, so it cannot fit the ROM world.
      the scene-surroundings grid (`scene_scenery.rs`) stays ROM-only; the scenery
      overlay stores cells past the ROM layout sparsely, which already works for
      any size.
-3. **Sized content.** `LevelLayout`, the edge map and the scene map take their
+3. **Sized content — complete.** `LevelLayout`, the edge map and the scene map take their
    dimensions from the `World`. Extraction still writes 256×48 for ROM levels.
    Define a versioned expanded-level *recipe*. ROM and DX data are never
    redistributed, so a recipe stores only authored operations: world size, region
    moves from the loaded layout, authored metatile cells, lock and scene edits,
    spawn moves and the start position. It applies at load to the player's own
    vanilla or DX extraction.
+   - `World::expanded(w, h)` (full 16-bit positions, no WRAM echo; at most
+     256×255 screens, since Y high byte `$FF` is "above the level") and
+     `LevelLayout::new(world, cells)`.
+   - `sml2-core/src/level_recipe.rs`: schema `sml2-expanded-level/1`. Its
+     module docs define the format and the order it applies in. Moves read
+     the loaded layout, so regions can swap. Whole-screen moves carry their
+     locks and scenes. Spawns, starts and (in the runtime) scenery paints
+     follow the moved cells. Spawns are re-sorted by X for the stream scan
+     (every ROM stream is already sorted). `sources` lists accepted layout
+     fingerprints (FNV-1a 64), so a recipe never applies to a layout it was
+     not written for.
+   - `LevelContent::expanded(&recipe)` returns the rebuilt content. An empty
+     recipe leaves all 32 levels unchanged, and a Tree Zone 2-shaped move
+     loads into the camera, player and object sims at 16×4
+     (`sml2-runtime/src/tests/expanded_levels.rs`).
+   - Left for step 4: a world with a 16-bit mask wraps X below 0 to screen
+     255 instead of 15, so the camera's edge cases at the world's left and
+     top must be checked once a level is playable. `$4x` scene teleports
+     still carry 4-bit screen numbers.
 4. **Expanded mode.** Load expanded levels through the `level_content` seam,
    with a setting and save-safe selection at level entry. Renderers, widescreen
    room clamping and scenery overlays use the level's size.
