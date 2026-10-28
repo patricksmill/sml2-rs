@@ -81,3 +81,39 @@ color change can land a frame off. See
 
 Change bindings in **Settings → Controls**. See the
 [desktop guide](docs/desktop.md) for setup help and save locations.
+
+## How it was made
+
+The port is built on the community
+[Super Mario Land 2 disassembly](https://github.com/froggestspirit/marioland2)
+by froggestspirit, which rebuilds a byte-identical copy of the original ROM
+with RGBDS. Development used a fork,
+[patricksmill/marioland2](https://github.com/patricksmill/marioland2), checked
+out next to this repository as `../sml2decomp/` (`SML2_DECOMP_ROOT` overrides
+the location).
+
+The disassembly served as the reference for porting:
+
+- **Rewriting, not translating.** Each routine was read in the assembly and
+  rewritten as native Rust with typed actors and shared behavior, rather than
+  emulating the CPU or converting instructions line by line. The
+  [porting guide](docs/idiomatic-rust-porting.md) describes the approach.
+- **Bounded tickets.** `tools/handler_task.py` slices one object handler out of
+  the disassembly, following its control flow, jump tables and bank switches,
+  so each change covers a single handler or subsystem.
+- **Byte-level tests.** Each ported routine has unit tests that set up game
+  state, run the Rust code, and check the resulting bytes against what the
+  assembly does. See [PORTING.md](PORTING.md).
+- **Coverage tools.** Scripts in [`tools/`](tools/README.md) compare the
+  disassembly's dispatch tables, animation IDs and level routes with the Rust
+  code to show what is still missing.
+- **Asset extraction.** For development, `sml2-extract` parses the
+  disassembly's source files to find levels, graphics, music and object data
+  in a verified original ROM. The desktop app's ROM import uses the locations
+  found this way, so players don't need the disassembly.
+
+The work also went back into the fork: object handlers, shared helpers and
+handler states identified while porting were named in the disassembly.
+
+No code, ROM data or graphics from the disassembly are included in this
+repository.
