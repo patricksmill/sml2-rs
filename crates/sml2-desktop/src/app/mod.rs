@@ -798,6 +798,7 @@ impl DesktopApp {
             if self.game.is_some() {
                 if let Some(game) = self.game.as_mut() {
                     game.session.set_dx(self.dx_bundle.clone().filter(|_| self.settings.dx_mode), self.settings.character);
+                    game.session.expanded_levels = self.settings.expanded_levels;
                     dx::prepare_tick(&mut game.session, &self.settings, self.dx_bundle.is_some());
                 }
                 let mut keys = if running {

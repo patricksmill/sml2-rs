@@ -59,6 +59,9 @@ pub struct Settings {
     pub camera_zoom: CameraZoom,
     /// Draw levels between the last two ticks on fast displays (Mods).
     pub motion_smoothing: bool,
+    /// Play levels the port has rebuilt into one map where the original
+    /// stitched sections together (Mods). Off restores the ROM layouts.
+    pub expanded_levels: bool,
     /// Draw the top toolbar. F10 toggles this while it is hidden.
     #[serde(default = "toolbar_shown")]
     pub show_toolbar: bool,
@@ -97,6 +100,7 @@ impl Default for Settings {
             widescreen: Widescreen::Off,
             camera_zoom: CameraZoom::Native,
             motion_smoothing: false,
+            expanded_levels: true,
             show_toolbar: true,
             vanilla: None,
         }
@@ -296,6 +300,21 @@ mod tests {
         original.save(&path).unwrap();
         assert_eq!(Settings::load(&path).unwrap(), original);
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn settings_saved_before_expanded_levels_load_with_them_on() {
+        let mut value = serde_json::to_value(Settings::default()).unwrap();
+        value.as_object_mut().unwrap().remove("expanded_levels");
+        let settings: Settings = serde_json::from_value(value).unwrap();
+        assert!(settings.expanded_levels);
+        let off = Settings {
+            expanded_levels: false,
+            ..Default::default()
+        };
+        let restored: Settings =
+            serde_json::from_slice(&serde_json::to_vec(&off).unwrap()).unwrap();
+        assert_eq!(restored, off);
     }
 
     #[test]

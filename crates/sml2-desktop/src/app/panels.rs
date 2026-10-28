@@ -282,6 +282,20 @@ impl DesktopApp {
              smoothing draws levels between frames on displays faster than 60 Hz, one frame \
              behind.",
         );
+        theme::section(ui, "LEVELS");
+        if self.menu.row(
+            ui,
+            "Expanded levels",
+            Value::Toggle(self.settings.expanded_levels),
+        ) {
+            self.settings.expanded_levels = !self.settings.expanded_levels;
+        }
+        theme::note(
+            ui,
+            "Plays levels whose sections the original joined with pipe jumps as one \
+             connected map. Off restores the original layouts. Takes effect when a level \
+             starts.",
+        );
     }
 
     fn audio_page(&mut self, ui: &mut Ui) {
