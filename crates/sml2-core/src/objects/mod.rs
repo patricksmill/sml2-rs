@@ -98,6 +98,7 @@
 
 use crate::level::{LevelLayout, SpawnRecord};
 use crate::object::ObjectTables;
+use crate::world::World;
 use helpers::bcd_add;
 
 mod staging;
@@ -653,6 +654,9 @@ mod winged_walker;
 #[derive(Debug, Clone)]
 pub struct ObjectSim {
     pub slots: [ObjSlot; SLOT_COUNT],
+    /// The level's extent and position wrap for terrain probes;
+    /// [`World::ROM`] for every original level.
+    pub world: World,
     pub records: Vec<SpawnRecord>,
     initial_records: Vec<SpawnRecord>,
     pub stream_index: usize,
@@ -790,6 +794,7 @@ impl ObjectSim {
         let n = records.len();
         Self {
             slots: Default::default(),
+            world: World::ROM,
             initial_records: records.clone(),
             records,
             stream_index: 0,

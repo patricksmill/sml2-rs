@@ -57,6 +57,7 @@
 //! The omitted state fields exist so later work slots in at the same points.
 
 use crate::level::LevelLayout;
+use crate::world::World;
 
 #[path = "player/motion_tables.rs"]
 mod motion_tables;
@@ -464,6 +465,9 @@ pub struct PlayerSim {
     /// `$1DA5`'s own `$FF` pair — are not modelled as collision; the renderer
     /// *does* draw the overlay (see `render_view`).
     pub layout_writes: Vec<(u32, u8)>,
+    /// The level's extent and position wrap, for probe cells and
+    /// [`Self::layout_writes`] keys; [`World::ROM`] for every original level.
+    pub world: World,
     /// `sBlockAnimSlots` ($AA80): 8 slots x $10 for the brick-bump animations.
     /// `+0` type, `+1` timer, `+2/+3` Y, `+4/+5` X; `$5960` allocates, `$5997`
     /// ticks them. The other 10 bytes are only ever written by the level-load
@@ -624,6 +628,7 @@ impl PlayerSim {
             below_bonk: None,
             bump_coin_pending: false,
             layout_writes: Vec::new(),
+            world: World::ROM,
             block_slots: [[0; 16]; 8],
             block_frame: None,
             block_draw: Vec::new(),
@@ -651,25 +656,21 @@ impl PlayerSim {
     /// coin touch's `$1DA5`/`$5CF2`) win over the extracted map — the engine
     /// edits the same WRAM copy the probes read.
     fn tile(&self, layout: &LevelLayout, px: u16, py: u16) -> u8 {
-        let row = ((py.wrapping_sub(16)) >> 4) & 0xFF;
-        let col = ((px.wrapping_sub(8)) >> 4) & 0xFF;
+        let w = self.world;
+        let (col, row) = w.cell(px.wrapping_sub(8), py.wrapping_sub(16));
         // `$1EFA` does not clamp to the map: rows $30..$4D address
         // $E000..$FDFF, the WRAM mirror of $C000..$DDFF (rows $10..$2D).
         // Falling past the map must sample those cells, including live edits,
         // rather than manufacture a solid tile at the bottom edge.
-        let row = if (48..78).contains(&row) {
-            row - 32
-        } else {
-            row
-        };
-        if (row as usize) < 48 {
-            let key = (row as u32) * 256 + col as u32;
-            if let Some((_, v)) = self.layout_writes.iter().find(|(k, _)| *k == key) {
-                return *v;
+        let row = w.echo_row(row);
+        match w.cell_key(col, row) {
+            Some(key) if row < w.cells_high() => {
+                if let Some((_, v)) = self.layout_writes.iter().find(|(k, _)| *k == key) {
+                    return *v;
+                }
+                layout.cells.get(key as usize).copied().unwrap_or(0)
             }
-            layout.cells[(row as usize) * 256 + col as usize]
-        } else {
-            0 // Outside the layout and its WRAM mirror.
+            _ => 0, // Outside the layout and its WRAM mirror.
         }
     }
 
@@ -777,9 +778,8 @@ impl PlayerSim {
         // passable; the write lands in WRAM's copy of the level map, which
         // every later probe (and the renderer) reads.
         let replacement = if tile == 0x48 { 0x60 } else { 0x7F };
-        let row = ((py.wrapping_sub(16)) >> 4) & 0xFF;
-        let col = ((px.wrapping_sub(8)) >> 4) & 0xFF;
-        self.layout_write(row as u8, col as u8, replacement);
+        let (col, row) = self.world.cell(px.wrapping_sub(8), py.wrapping_sub(16));
+        self.layout_write(col, row, replacement);
         // $1D75's tail: `inc a / daa` + `adc 0`, clamped at `$0999`.
         self.coin_credit();
     }
@@ -1113,8 +1113,10 @@ impl PlayerSim {
     /// engine edits the same WRAM map every probe reads, so the overlay keeps
     /// the extracted `LevelLayout` immutable while the sim — and the renderer
     /// — sees the rewritten tile from here on.
-    fn layout_write(&mut self, row: u8, col: u8, tile: u8) {
-        let key = (row as u32) * 256 + col as u32;
+    fn layout_write(&mut self, col: usize, row: usize, tile: u8) {
+        let Some(key) = self.world.cell_key(col, row) else {
+            return;
+        };
         if let Some(w) = self.layout_writes.iter_mut().find(|(k, _)| *k == key) {
             w.1 = tile;
         } else {
@@ -1132,15 +1134,16 @@ impl PlayerSim {
     /// with no bump (the capture's second jump).
     fn block_write_cell(&mut self, i: usize, tile: u8) {
         let s = &self.block_slots[i];
-        let sy = (s[3] as u32) << 8 | s[2] as u32;
-        let sx = (s[5] as u32) << 8 | s[4] as u32;
+        let sy = u16::from_le_bytes([s[2], s[3]]);
+        let sx = u16::from_le_bytes([s[4], s[5]]);
         // Slot Y/X store the probe point with +8 and `& $F0`. Recover the cell:
         // Y = (cell top) + 8 → mask the low byte back off (a plain `& $F0` on
         // the 16-bit value would keep the $01 high byte but read $D0, i.e. row
         // 12 instead of 28); col inverts the same storage: (X - 8) >> 4.
-        let row = ((sy & 0xFFF0).wrapping_sub(16) >> 4) & 0xFF;
-        let col = (sx.wrapping_sub(8) >> 4) & 0xFF;
-        self.layout_write(row as u8, col as u8, tile);
+        let (col, row) = self
+            .world
+            .cell(sx.wrapping_sub(8), (sy & 0xFFF0).wrapping_sub(16));
+        self.layout_write(col, row, tile);
     }
 
     /// `$2C82` → `$5997`: tick every live bump slot. The frame loop calls this

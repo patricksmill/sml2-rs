@@ -10,14 +10,13 @@
 use super::*;
 
 impl ObjectSim {
-    pub(super) fn probe(layout: &LevelLayout, x: u16, y: u16) -> u8 {
-        layout
-            .get(((x >> 4) & 0xFF) as usize, ((y >> 4) & 0xFF) as usize)
-            .unwrap_or(0)
+    pub(super) fn probe(&self, layout: &LevelLayout, x: u16, y: u16) -> u8 {
+        let (col, row) = self.world.cell(x, y);
+        layout.get(col, row).unwrap_or(0)
     }
 
-    pub(super) fn probe_bias(layout: &LevelLayout, x: u16, y: u16) -> u8 {
-        Self::probe(layout, x.wrapping_sub(8), y.wrapping_sub(16))
+    pub(super) fn probe_bias(&self, layout: &LevelLayout, x: u16, y: u16) -> u8 {
+        self.probe(layout, x.wrapping_sub(8), y.wrapping_sub(16))
     }
 
     pub(super) fn derive_sprite(&mut self, st: &mut Staging, tables: &ObjectTables) {
@@ -77,7 +76,7 @@ impl ObjectSim {
     }
 
     pub(super) fn probe_keep(&mut self, st: &Staging, layout: &LevelLayout, limit: u8, flag: u8) {
-        if Self::probe(layout, st.px, st.py) < limit {
+        if self.probe(layout, st.px, st.py) < limit {
             return;
         }
         self.move_flags &= !flag;
@@ -129,11 +128,11 @@ impl ObjectSim {
         } else {
             st.x().wrapping_add(dx as u16)
         };
-        if Self::probe(layout, st.px, st.py) < 0x38 {
+        if self.probe(layout, st.px, st.py) < 0x38 {
             return;
         }
         st.py = st.y().wrapping_sub(retry_dy as u16);
-        if Self::probe(layout, st.px, st.py) < 0x38 {
+        if self.probe(layout, st.px, st.py) < 0x38 {
             return;
         }
         self.move_flags &= !flag;

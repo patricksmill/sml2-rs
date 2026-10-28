@@ -1293,6 +1293,7 @@ mod tests {
             screens_wide: 16,
             screens_high: 20,
             position_mask: 0xFFFF,
+            wram_echo: false,
         };
         c.prev_mario_y_lo = 0xFF; // screen Y $62
         c.crouch_pan(&grounded(), &b_down());

@@ -27,6 +27,11 @@ pub struct World {
     pub screens_high: u16,
     /// Mask applied to wrapped positions (the ROM: `$0FFF`, 12 bits).
     pub position_mask: u16,
+    /// Rows past the layout read WRAM's echo: `$B000 + row*$100` for rows
+    /// `$30-$4D` lands in `$E000-$FDFF`, the mirror of `$C000-$DDFF`, i.e.
+    /// rows `$10-$2D`. The ROM's player probes see it; expanded worlds have
+    /// no echo.
+    pub wram_echo: bool,
 }
 
 impl World {
@@ -35,6 +40,7 @@ impl World {
         screens_wide: 16,
         screens_high: 3,
         position_mask: 0x0FFF,
+        wram_echo: true,
     };
 
     /// `v` after the world's wrap (`and $0F` on the high byte for the ROM).
@@ -52,6 +58,45 @@ impl World {
     /// per row). Rows past the layout index past the table.
     pub const fn screen_index(self, x: u16, y: u16) -> usize {
         self.screen(y) * self.screens_wide as usize + self.screen(x)
+    }
+
+    /// The `(column, row)` cell holding world pixel `(x, y)` after the wrap
+    /// (the ROM: `(x >> 4) & $FF`, `(y >> 4) & $FF`). It can lie past the
+    /// layout.
+    pub const fn cell(self, x: u16, y: u16) -> (usize, usize) {
+        ((self.wrap(x) >> 4) as usize, (self.wrap(y) >> 4) as usize)
+    }
+
+    /// The layout row a player probe of `row` reads (see [`Self::wram_echo`]).
+    pub const fn echo_row(self, row: usize) -> usize {
+        if self.wram_echo && row >= 0x30 && row < 0x4E {
+            row - 0x20
+        } else {
+            row
+        }
+    }
+
+    /// Row-major layout index of a cell, the key of `PlayerSim::layout_writes`
+    /// (the ROM: `row * $100 + col`, the offset from `$B000`). Rows past the
+    /// layout still have a key: the ROM's write lands in WRAM past the map.
+    /// A column past the layout's width has none, since it would alias the
+    /// next row (the ROM's columns never exceed its width).
+    pub const fn cell_key(self, col: usize, row: usize) -> Option<u32> {
+        if col < self.cells_wide() {
+            Some((row * self.cells_wide() + col) as u32)
+        } else {
+            None
+        }
+    }
+
+    /// Layout width in cells (the row stride).
+    pub const fn cells_wide(self) -> usize {
+        self.screens_wide as usize * SCREEN_CELLS
+    }
+
+    /// Layout height in cells.
+    pub const fn cells_high(self) -> usize {
+        self.screens_high as usize * SCREEN_CELLS
     }
 
     /// Entries in a per-screen table.
@@ -115,8 +160,24 @@ mod tests {
             screens_wide: 40,
             screens_high: 5,
             position_mask: 0xFFFF,
+            wram_echo: false,
         };
         assert_eq!(w.screen(0x2710), 0x27);
         assert_eq!(w.screen_index(0x2710, 0x0480), 4 * 40 + 0x27);
+        assert_eq!(w.cell(0x2710, 0x0480), (0x271, 0x48));
+        assert_eq!(w.cell_key(0x271, 0x48), Some(0x48 * 640 + 0x271));
+        assert_eq!(w.cell_key(640, 0), None, "past the right edge");
+        assert_eq!(w.echo_row(0x30), 0x30, "no WRAM echo");
+    }
+
+    #[test]
+    fn rom_cells_match_the_b000_sampler_and_its_wram_echo() {
+        let w = World::ROM;
+        // `$1EFA`: `$B000 + ((y-16)>>4)*$100 + ((x-8)>>4)`, bytes masked.
+        assert_eq!(w.cell(0x1F08, 0x0110), (0xF0, 0x11));
+        assert_eq!(w.cell_key(0xF0, 0x11), Some(0x11F0));
+        assert_eq!(w.cell_key(0, 48), Some(0x3000), "past the map, still keyed");
+        assert_eq!(w.cell_key(0xFF, 0xFF), Some(0xFFFF));
+        assert_eq!((w.echo_row(0x2F), w.echo_row(0x30), w.echo_row(0x4D), w.echo_row(0x4E)), (0x2F, 0x10, 0x2D, 0x4E));
     }
 }

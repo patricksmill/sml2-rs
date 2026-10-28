@@ -45,6 +45,10 @@ level needs four screen rows, so it cannot fit the ROM world.
    scene/edge tables, then object streaming.
    - Camera — complete. `sml2-core/src/world.rs` defines `World`; `CameraSim`
      wraps, indexes its tables and bounds rooms through `cam.world`.
+   - Player and enemy probes — complete. `World::cell`, `echo_row` and
+     `cell_key` replace the `& $FF` cells, the WRAM echo and the
+     `row*256+col` keys; `PlayerSim` and `ObjectSim` carry `world`. The
+     session must set all three `world` fields together (step 3).
 3. **Sized content.** `LevelLayout`, the edge map and the scene map take their
    dimensions from the `World`. Extraction still writes 256×48 for ROM levels.
    Define a versioned expanded-level *recipe*. ROM and DX data are never

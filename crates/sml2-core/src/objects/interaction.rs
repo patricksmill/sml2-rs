@@ -449,7 +449,7 @@ impl ObjectSim {
         // hit adds b back.
         let px = self.mario.x.wrapping_add(16);
         let py = y_new.wrapping_add(if self.mario.powerup != 0 { 18 } else { 28 });
-        let t = Self::probe_bias(layout, px, py);
+        let t = self.probe_bias(layout, px, py);
         if t == 0x7E || t < 0x38 {
             self.mario_y_adjust = Some(self.mario.y);
         }
