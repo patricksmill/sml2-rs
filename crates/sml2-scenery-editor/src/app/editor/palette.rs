@@ -247,24 +247,32 @@ impl EditorApp {
                 pixels[at..at + 16].copy_from_slice(&tile[y * 16..y * 16 + 16]);
             }
         }
-        // Match the runtime's DX layout choice: decoration may change only
-        // when the original collision class is preserved.
-        let layout = content
-            .layout
-            .cells
-            .iter()
-            .enumerate()
-            .map(|(at, &native)| {
-                dx.and_then(|level| level.layout.get(at))
-                    .copied()
-                    .filter(|&id| {
-                        let classes = &content.manifest.metatile_classes;
-                        classes.get(id as usize).is_some()
-                            && classes.get(id as usize) == classes.get(native as usize)
-                    })
-                    .unwrap_or(native)
-            })
-            .collect();
+        // A rebuilt level draws its rebuilt map. DX's decoration is indexed
+        // by the original map, so it is not merged there; DX leaves the one
+        // rebuilt level so far (Tree Zone 2) unchanged.
+        let rebuilt = self.editor.work.as_ref().filter(|work| work.expanded);
+        let layout = if let Some(work) = rebuilt {
+            work.layout.cells.clone()
+        } else {
+            // Match the runtime's DX layout choice: decoration may change only
+            // when the original collision class is preserved.
+            content
+                .layout
+                .cells
+                .iter()
+                .enumerate()
+                .map(|(at, &native)| {
+                    dx.and_then(|level| level.layout.get(at))
+                        .copied()
+                        .filter(|&id| {
+                            let classes = &content.manifest.metatile_classes;
+                            classes.get(id as usize).is_some()
+                                && classes.get(id as usize) == classes.get(native as usize)
+                        })
+                        .unwrap_or(native)
+                })
+                .collect()
+        };
         self.editor.atlas = Some(Atlas {
             texture: ctx.load_texture(
                 "scenery-atlas",

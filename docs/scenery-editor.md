@@ -53,6 +53,20 @@ target's viewport remain available during the app session. A failed save keeps
 the edits; use **Retry**. An unreadable or invalid draft locks editing until
 you repair it and choose **Reload file**.
 
+## Expanded levels
+
+Levels the port has rebuilt into one connected map (marked **· expanded** in
+the level list, currently Tree Zone 2) open as the rebuilt map while the
+game's **Expanded levels** setting (Settings → Mods → Levels) is on. Blank
+areas that the free camera can see are ordinary map cells there, so you paint
+them like any other map scenery, and playtest enters the rebuilt level.
+
+A rebuilt level keeps its own scenery: the draft and export are
+`scenery-NN-expanded.json`, in the rebuilt map's cells. Its first draft starts
+from the original level's scenery, moved with the sections the rebuild moved.
+To edit the original layout's scenery (`scenery-NN.json`), turn the setting
+off in the game and restart the editor.
+
 ## Drafts and release exports
 
 Existing level drafts remain `scenery-NN.json` beside the game's

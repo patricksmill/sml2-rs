@@ -390,3 +390,81 @@ fn switching_levels_and_scenes_keeps_each_workspace() {
     assert_eq!(level.get(-2, 0), Some(3));
     std::fs::remove_dir_all(path).ok();
 }
+
+/// With the game's Expanded levels setting on, Tree Zone 2 opens as its
+/// rebuilt 17×4 map. Its gaps are cells of that map, so their scenery is a
+/// separate draft and export, and playtest enters the rebuilt level with it.
+#[test]
+fn a_rebuilt_level_edits_its_own_scenery_on_the_rebuilt_map() {
+    let (mut app, ctx, path) = app();
+    std::fs::create_dir_all(&path).unwrap();
+    assert!(app.settings.expanded_levels);
+    app.open_editor(&ctx);
+    app.select_editor_level(2);
+    let work = app.editor.work.as_mut().unwrap();
+    assert!(work.expanded);
+    assert_eq!(work.dimensions(), (17 * 16, 4 * 16));
+    // Row 0, screen 5: the rebuild emptied it, and the camera can see it.
+    assert_eq!(work.layout.get(80, 5), Some(96));
+    let cells = work.layout.cells.clone();
+    app.editor_atlas(&ctx);
+    assert_eq!(
+        app.editor.atlas.as_ref().unwrap().layout,
+        cells,
+        "the canvas draws the rebuilt map"
+    );
+    let work = app.editor.work.as_mut().unwrap();
+    work.metatile = 2;
+    work.begin((80, 5), false);
+    work.finish();
+    app.save_scenery();
+    let draft = path.join("scenery-02-expanded.json");
+    let saved: SceneryOverlay = serde_json::from_slice(&std::fs::read(&draft).unwrap()).unwrap();
+    assert_eq!(saved.get(80, 5), Some(2));
+    assert!(
+        !path.join("scenery-02.json").exists(),
+        "the original's draft is untouched"
+    );
+
+    app.begin_export();
+    assert_eq!(app.editor_export_path(), Some("scenery-02-expanded.json"));
+    app.editor.export = None;
+
+    app.play_editor(&ctx);
+    let session = &app.game.as_ref().unwrap().session;
+    let sml2_runtime::session::SessionState::InLevel(level) = &session.state else {
+        panic!("playtest enters the level")
+    };
+    assert_eq!(
+        level.layout_live.world,
+        sml2_core::world::World::expanded(17, 4).unwrap()
+    );
+    assert_eq!(level.scenery.get(80, 5), Some(2));
+    std::fs::remove_dir_all(path).ok();
+}
+
+/// With the setting off, the same level is the original map and its draft.
+#[test]
+fn with_expanded_levels_off_a_rebuilt_level_edits_the_original_map() {
+    let (mut app, ctx, path) = app();
+    std::fs::create_dir_all(&path).unwrap();
+    app.settings.expanded_levels = false;
+    app.open_editor(&ctx);
+    app.select_editor_level(2);
+    let work = app.editor.work.as_mut().unwrap();
+    assert!(!work.expanded);
+    assert_eq!(work.dimensions(), (256, 48));
+    work.metatile = 2;
+    work.begin((-1, 0), false);
+    work.finish();
+    app.save_scenery();
+    assert!(path.join("scenery-02.json").exists());
+    assert!(!path.join("scenery-02-expanded.json").exists());
+    app.play_editor(&ctx);
+    let session = &app.game.as_ref().unwrap().session;
+    let sml2_runtime::session::SessionState::InLevel(level) = &session.state else {
+        panic!("playtest enters the level")
+    };
+    assert_eq!(level.layout_live.world, sml2_core::world::World::ROM);
+    std::fs::remove_dir_all(path).ok();
+}

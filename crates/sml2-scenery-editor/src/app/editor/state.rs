@@ -109,6 +109,9 @@ pub(super) struct Workspace {
     pub count: usize,
     /// Scene targets protect their native 10×9 cells from authoring.
     pub scene_border: bool,
+    /// The level as its expanded-level recipe rebuilds it, with its own
+    /// scenery file in the rebuilt map's cells.
+    pub expanded: bool,
     undo: Vec<Edit>,
     redo: Vec<Edit>,
     pub gesture: Option<Gesture>,
@@ -139,6 +142,7 @@ impl Workspace {
             used,
             count,
             scene_border: false,
+            expanded: false,
             undo: Vec::new(),
             redo: Vec::new(),
             gesture: None,

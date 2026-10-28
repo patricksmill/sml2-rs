@@ -14,7 +14,7 @@ impl EditorApp {
         if work.load_error.is_none() {
             return;
         }
-        let result = self.read_scenery(self.editor.level, work.count);
+        let result = self.read_scenery(self.editor.level, work.count, work.expanded);
         let work = self.editor.work.as_mut().unwrap();
         match result {
             Ok(scenery) => {
@@ -26,20 +26,31 @@ impl EditorApp {
         }
     }
 
-    fn scenery_path(&self, level: u8) -> PathBuf {
+    /// The draft and export name of the selected target's scenery.
+    pub(super) fn scenery_file(&self, level: u8, expanded: bool) -> String {
+        match self.editor.scene {
+            Some(scene) => format!("scenery-{}.json", scene.file_stem()),
+            None if expanded => format!("scenery-{level:02}-expanded.json"),
+            None => format!("scenery-{level:02}.json"),
+        }
+    }
+
+    fn scenery_path(&self, level: u8, expanded: bool) -> PathBuf {
         self.options
             .paths
             .settings
             .parent()
             .unwrap_or(std::path::Path::new("."))
-            .join(self.editor.scene.map_or_else(
-                || format!("scenery-{level:02}.json"),
-                |scene| format!("scenery-{}.json", scene.file_stem()),
-            ))
+            .join(self.scenery_file(level, expanded))
     }
 
-    pub(super) fn read_scenery(&self, level: u8, count: usize) -> Result<SceneryOverlay, String> {
-        let path = self.scenery_path(level);
+    pub(super) fn read_scenery(
+        &self,
+        level: u8,
+        count: usize,
+        expanded: bool,
+    ) -> Result<SceneryOverlay, String> {
+        let path = self.scenery_path(level, expanded);
         let text = match fs::read_to_string(&path) {
             Ok(text) => text,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -49,6 +60,11 @@ impl EditorApp {
                     .map(|game| {
                         if let Some(scene) = self.editor.scene {
                             game.session.scene_scenery(scene).clone()
+                        } else if expanded {
+                            self.editor_level_content(level)
+                                .filter(|(_, rebuilt, _)| *rebuilt)
+                                .map(|(content, _, _)| content.scenery)
+                                .unwrap_or_default()
                         } else {
                             game.session
                                 .assets
@@ -68,7 +84,10 @@ impl EditorApp {
     }
 
     pub(super) fn save_scenery(&mut self) {
-        let path = self.scenery_path(self.editor.level);
+        let Some(expanded) = self.editor.work.as_ref().map(|work| work.expanded) else {
+            return;
+        };
+        let path = self.scenery_path(self.editor.level, expanded);
         let Some(work) = &mut self.editor.work else {
             return;
         };

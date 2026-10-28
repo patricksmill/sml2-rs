@@ -45,10 +45,7 @@ impl EditorApp {
                 return;
             }
         };
-        let filename = self.editor.scene.map_or_else(
-            || format!("scenery-{:02}.json", self.editor.level),
-            |scene| format!("scenery-{}.json", scene.file_stem()),
-        );
+        let filename = self.scenery_file(self.editor.level, work.expanded);
         self.editor.export = Some(ExportDialog {
             path: filename,
             bytes,

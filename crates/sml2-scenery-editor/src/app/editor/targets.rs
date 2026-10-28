@@ -102,7 +102,7 @@ impl EditorApp {
         }
         let mut work = Workspace::new(layout, 90, egui::pos2(80.0, 72.0));
         work.scene_border = true;
-        match self.read_scenery(self.editor.level, 90) {
+        match self.read_scenery(self.editor.level, 90, false) {
             Ok(scenery) => work.scenery = scenery,
             Err(error) => work.load_error = Some(error),
         }

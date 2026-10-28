@@ -112,10 +112,15 @@ impl EditorApp {
         }
         match SessionAssets::load_from(&ExtractedContent::new(&self.options.assets)) {
             Ok(assets) => {
+                let expanded = self.settings.expanded_levels;
                 self.levels = (0..32)
                     .filter_map(|id| {
                         assets.level(id).ok().map(|content| {
-                            (id, format!("{id:02} · {}", content.manifest.graphics.file))
+                            let rebuilt =
+                                expanded && matches!(assets.expanded_level(content), Some(Ok(_)));
+                            let file = &content.manifest.graphics.file;
+                            let suffix = if rebuilt { " · expanded" } else { "" };
+                            (id, format!("{id:02} · {file}{suffix}"))
                         })
                     })
                     .collect();

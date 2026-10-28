@@ -2,6 +2,7 @@
 
 use super::{theme, EditorApp, Screen};
 use eframe::egui::{self, Context, PointerButton, Rect, Ui};
+use sml2_runtime::content::LevelContent;
 use state::{Cell, Tool, Workspace};
 use std::collections::BTreeMap;
 
@@ -54,13 +55,32 @@ impl EditorApp {
         self.navigate(ctx, Screen::Editor);
     }
 
+    /// Level `id` as the game plays it: rebuilt by its recipe while the
+    /// game's Expanded levels setting is on. Like the game, a recipe that
+    /// fails loads the original, and the error is returned beside it.
+    pub(super) fn editor_level_content(
+        &self,
+        id: u8,
+    ) -> Option<(LevelContent, bool, Option<String>)> {
+        let assets = &self.game.as_ref()?.session.assets;
+        let content = assets.level(id).ok()?;
+        match assets
+            .expanded_level(content)
+            .filter(|_| self.settings.expanded_levels)
+        {
+            Some(Ok(rebuilt)) => Some((rebuilt, true, None)),
+            Some(Err(error)) => Some((content.clone(), false, Some(error))),
+            None => Some((content.clone(), false, None)),
+        }
+    }
+
     fn load_editor_level(&mut self) {
-        let Some(game) = &self.game else {
+        let Some((content, expanded, error)) = self.editor_level_content(self.editor.level) else {
             return;
         };
-        let Ok(content) = game.session.assets.level(self.editor.level) else {
-            return;
-        };
+        if error.is_some() {
+            self.status = error;
+        }
         let initial_scenery = content.scenery.clone();
         let mut work = Workspace::new(
             content.layout.clone(),
@@ -71,7 +91,8 @@ impl EditorApp {
             ),
         );
         work.scenery = initial_scenery;
-        match self.read_scenery(self.editor.level, work.count) {
+        work.expanded = expanded;
+        match self.read_scenery(self.editor.level, work.count, expanded) {
             Ok(scenery) => work.scenery = scenery,
             Err(error) => work.load_error = Some(error),
         }
@@ -146,8 +167,15 @@ impl EditorApp {
         let Ok(mut content) = game.session.assets.level(id).cloned() else {
             return;
         };
-        content.scenery = work.scenery.clone();
+        // A rebuilt level's scenery is in the rebuilt map's cells; the
+        // session rebuilds the level at entry and takes it from there.
+        if work.expanded {
+            content.expanded_scenery = Some(work.scenery.clone());
+        } else {
+            content.scenery = work.scenery.clone();
+        }
         game.session.assets.insert_level(id, content);
+        game.session.expanded_levels = work.expanded;
         if let Err(error) = game.session.begin_level(id, 0) {
             self.status = Some(error);
             return;
