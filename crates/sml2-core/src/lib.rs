@@ -20,6 +20,7 @@ pub mod ending_sprites;
 pub mod front_end;
 pub mod hardware_palettes;
 pub mod level;
+pub mod level_recipe;
 pub mod level_timer;
 pub mod map;
 pub mod map_sim;
