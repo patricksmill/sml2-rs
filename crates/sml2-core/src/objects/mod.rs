@@ -1436,7 +1436,10 @@ impl ObjectSim {
         self.object_hit_flag = 0;
         self.pending_kick = false;
         // $81A7 (slot → staging) + $3A50 (bank 16).
+        let engine_ref = (self.mario_ref_x, self.mario_ref_y);
+        (self.mario_ref_x, self.mario_ref_y) = self.slot_mario_ref((st.x(), st.y()));
         self.bank16_update(i, &mut st, layout, tables);
+        (self.mario_ref_x, self.mario_ref_y) = engine_ref;
         // `$C014`: the draw is skipped while this slot's `sObjectDone` is set,
         // and for a staged type of exactly `$80` — the item still inside its
         // block, which `$8611` ignores until `$86E4` releases it.

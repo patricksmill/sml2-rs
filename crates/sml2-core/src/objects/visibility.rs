@@ -27,3 +27,23 @@ impl ObjectSim {
         ((center - half).max(0) as u16, (center + half).max(0) as u16)
     }
 }
+
+impl ObjectSim {
+    /// Mario's reference point as slot `slot` should see it. Handlers measure
+    /// it with 8-bit screen-byte compares, which wrap at 128 px; an enlarged
+    /// view keeps slots active far enough away that a spike 200 px off reads
+    /// as 56 px and drops. There the point is pulled to within 127 px of the
+    /// slot on the same side, so the compares read "far, this side". Native
+    /// views and boss mode keep the engine's point.
+    pub(super) fn slot_mario_ref(&self, slot: (u16, u16)) -> (u16, u16) {
+        let refp = (self.mario_ref_x, self.mario_ref_y);
+        if self.view_margin == (0, 0) || self.mario.scene_state & 0xF0 != 0 {
+            return refp;
+        }
+        let pull = |r: u16, s: u16| {
+            let d = (i32::from(r) - i32::from(s)).clamp(-0x7F, 0x7F);
+            (i32::from(s) + d) as u16
+        };
+        (pull(refp.0, slot.0), pull(refp.1, slot.1))
+    }
+}

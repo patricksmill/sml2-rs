@@ -4618,3 +4618,30 @@ fn an_excluded_slot_box_sits_at_its_world_position() {
 
 #[path = "visibility.rs"]
 mod visibility;
+
+/// A wide view keeps a Pumpkin Zone 1 spike active 200 px from Mario, where
+/// the 8-bit distance wraps to 56 px. It must still wait for him.
+#[test]
+fn a_view_margin_does_not_alias_far_slots_into_proximity_triggers() {
+    let t = tables();
+    let l = blank_layout();
+    let mut obj = ObjectSim::new(Vec::new(), 0);
+    obj.configure(6);
+    obj.mario_ref_x = 0x0100;
+    obj.mario_ref_y = 0x0100;
+    let spike = (0x0100 + 201, 0x00E0);
+    assert_eq!(obj.slot_mario_ref(spike), (0x0100, 0x0100), "native: engine point");
+
+    obj.view_margin = (112, 36);
+    assert_eq!(obj.slot_mario_ref(spike), (spike.0 - 0x7F, 0x0100), "pulled to 127 px, same side");
+    assert_eq!(obj.slot_mario_ref((0x0100 + 40, 0x0100)), (0x0100, 0x0100), "near: exact");
+
+    let mut st = Staging::default();
+    set_x(&mut st.b, spike.0);
+    set_y(&mut st.b, spike.1);
+    st.b[B_SPRITE] = 37;
+    (obj.mario_ref_x, obj.mario_ref_y) = obj.slot_mario_ref(spike);
+    obj.dispatch_handler(0x595B2, &mut st, &l, &t);
+    assert_eq!(st.b[B_FSTATE], 0, "still waiting");
+    assert_eq!(obj.sfx1, 0);
+}
