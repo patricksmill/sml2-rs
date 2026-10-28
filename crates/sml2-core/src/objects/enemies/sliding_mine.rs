@@ -5,14 +5,22 @@
 use super::handler_0x5ace4::{self, Course, Effect, Error};
 use crate::actor::{Actor, FrameTick};
 
-pub(super) fn update(actor: &mut Actor, frame: FrameTick) -> Result<Effect, Error> {
+pub(super) const SCREEN_LIMIT: u8 = 0xB8;
+
+/// `view_bounds`: see [`Course::view_bounds`].
+pub(super) fn update(
+    actor: &mut Actor,
+    frame: FrameTick,
+    view_bounds: Option<std::ops::Range<i32>>,
+) -> Result<Effect, Error> {
     handler_0x5ace4::update(
         actor,
         frame,
         Course {
             dx: 2,
-            screen_limit: 0xB8,
+            screen_limit: SCREEN_LIMIT,
             face_right: true,
+            view_bounds,
         },
     )
 }

@@ -26,6 +26,9 @@ pub(super) struct Course {
     pub dx: i16,
     pub screen_limit: u8,
     pub face_right: bool,
+    /// An enlarged view's world-X band for `screen_limit`, from
+    /// `ObjectSim::horizontal_reset_bounds`; `None` keeps the byte test.
+    pub view_bounds: Option<std::ops::Range<i32>>,
 }
 
 pub(super) fn update(actor: &mut Actor, frame: FrameTick, course: Course) -> Result<Effect, Error> {
@@ -40,9 +43,13 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, course: Course) -> Res
             Ok(Effect::Continue)
         }
         1 => {
+            // The screen X tested is the previous frame's projection.
+            let offscreen = course.view_bounds.map_or(actor.screen.x >= course.screen_limit, |b| {
+                !b.contains(&i32::from(actor.position.x))
+            });
             bob(actor, frame);
             actor.position.move_x(course.dx);
-            if actor.screen.x >= course.screen_limit {
+            if offscreen {
                 Ok(Effect::Respawn)
             } else {
                 Ok(Effect::Continue)

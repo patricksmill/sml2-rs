@@ -6,7 +6,8 @@ impl ObjectSim {
     pub(super) fn handler_0x5ad2d(&mut self, st: &mut Staging, tables: &ObjectTables) {
         let mut actor = Actor::from_raw_slot(&st.b);
         let frame = self.frame_tick();
-        let result = handler_0x5ad2d::update(&mut actor, frame);
+        let bounds = self.horizontal_reset_bounds(handler_0x5ad2d::SCREEN_LIMIT);
+        let result = handler_0x5ad2d::update(&mut actor, frame, bounds);
         st.b = actor.to_raw_slot();
         match result {
             Ok(handler_0x5ace4::Effect::Continue) => {}

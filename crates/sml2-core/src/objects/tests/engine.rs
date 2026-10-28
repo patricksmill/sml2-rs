@@ -4645,3 +4645,79 @@ fn a_view_margin_does_not_alias_far_slots_into_proximity_triggers() {
     assert_eq!(st.b[B_FSTATE], 0, "still waiting");
     assert_eq!(obj.sfx1, 0);
 }
+
+/// Wide view state for the screen-limit tests: 336x216-style margins with
+/// the level bias, camera at (`$300`, `$200`).
+fn wide_reset_sim() -> ObjectSim {
+    let mut obj = ObjectSim::new(Vec::new(), 0x0300);
+    obj.configure(24);
+    obj.camera_position = crate::actor::Position { x: 0x0300, y: 0x0200 };
+    obj
+}
+
+/// A defeated enemy above the native top wraps its screen Y past `$A0` and
+/// would vanish mid-hop; a wide view tests the view's own world band.
+#[test]
+fn a_view_margin_keeps_defeat_falls_until_they_leave_the_view() {
+    let (t, l) = (tables(), blank_layout());
+    let fall = |obj: &mut ObjectSim, y: u16, scr_y: u8| {
+        let mut st = Staging::default();
+        set_x(&mut st.b, 0x0300);
+        set_y(&mut st.b, y);
+        st.b[B_STATE] = 2;
+        st.b[B_FSTATE] = 2;
+        st.b[B_SCRY] = scr_y;
+        obj.active = 1;
+        obj.dispatch_handler(0x581B1, &mut st, &l, &t);
+        st.b[B_STATE] == 0
+    };
+    // Native top is world Y $200 - 88 + 16; 24 px above it the byte is $E8.
+    let mut native = wide_reset_sim();
+    assert!(fall(&mut native, 0x0200 - 88 - 8, 0xE8), "native: wrapped byte removes");
+
+    let mut wide = wide_reset_sim();
+    wide.view_margin = (88, 36);
+    wide.view_bias_y = 18;
+    assert_eq!(wide.vertical_reset_bounds(0xA0), Some(0x0200 - 88 - 54..0x0200 - 88 + 0xA0 + 18));
+    assert!(!fall(&mut wide, 0x0200 - 88 - 8, 0xE8), "inside the raised view: keeps falling");
+    assert!(fall(&mut wide, 0x0200 - 88 + 0xA0 + 18, 0xB2), "past the view's bottom: removed");
+}
+
+/// A Wario's Castle mine past the native right edge reads screen X >= `$B0`
+/// and would respawn while still in a wide view.
+#[test]
+fn a_view_margin_keeps_mines_until_they_leave_the_view() {
+    let t = tables();
+    let record = SpawnRecord {
+        x: 0x0300,
+        y: 0x0200,
+        anim_index: 104,
+        mode_flag: 0,
+        sprite_id: 0,
+        hitbox: [0; 4],
+        raw: [0; 6],
+    };
+    let respawns = |margin: u16, handler: u32, x: u16, scr_x: u8| {
+        let mut obj = ObjectSim::new(vec![record], 0x0300);
+        obj.configure(0); // the synthetic tables fill sprite map A only
+        obj.camera_position = crate::actor::Position { x: 0x0300, y: 0x0200 };
+        obj.view_margin = (margin, 0);
+        obj.active = 1;
+        let mut st = Staging::default();
+        set_x(&mut st.b, x);
+        set_y(&mut st.b, 0x0200);
+        st.b[B_RECHI] = 0xAB;
+        st.b[B_RECHI + 1] = 0x08; // record start $AB06 + 2, as $8CA8 stores it
+        st.b[B_STATE] = 2;
+        st.b[B_FSTATE] = 1;
+        st.b[B_SCRX] = scr_x;
+        obj.dispatch_handler(handler, &mut st, &blank_layout(), &t);
+        assert!(obj.unported.is_empty(), "{:X?}", obj.unported);
+        st.b[B_STATE] == 1
+    };
+    let ahead = 0x0300 + 100; // screen X 188
+    assert!(respawns(0, 0x5ACE4, ahead, 188), "native: respawns");
+    assert!(!respawns(88, 0x5ACE4, ahead, 188), "wide: keeps sliding left");
+    assert!(!respawns(88, 0x5AD2D, ahead, 188), "wide: keeps sliding right");
+    assert!(respawns(88, 0x5AD2D, 0x0300 - 88 + 0xB8 + 88, 0x30), "past the view: respawns");
+}

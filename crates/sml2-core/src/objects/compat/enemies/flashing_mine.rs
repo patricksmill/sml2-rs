@@ -13,6 +13,7 @@ impl ObjectSim {
                 dx: -2,
                 screen_limit: 0xB0,
                 face_right: false,
+                view_bounds: self.horizontal_reset_bounds(0xB0),
             },
         );
         st.b = actor.to_raw_slot();

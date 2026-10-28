@@ -3,6 +3,7 @@
 //! (`$411A..$4185`, landing at `$5819B`). Slot/world mapping lives in the
 //! `walkers` adapter; sprite re-derivation and slot removal stay engine work.
 use std::cmp::Ordering;
+use std::ops::Range;
 
 use super::falling_dropper::step_fall_speed;
 use super::walker::WalkerWorld;
@@ -16,7 +17,7 @@ const REVIVE_SPIN_STEPS: u8 = 8;
 /// Contact kind while stunned.
 const STUNNED_CONTACT: u8 = 0x06;
 /// Screen Y below which a defeated enemy has fallen out of view.
-const DEFEAT_OFFSCREEN_Y: u8 = 0xA0;
+pub const DEFEAT_OFFSCREEN_Y: u8 = 0xA0;
 /// The knockback bounce ends at this phase.
 const BOUNCE_CAP: u8 = 15;
 
@@ -76,14 +77,22 @@ pub enum DefeatEffect {
 }
 
 /// `$581B1`: hop, rise, then fall at double speed until off screen.
-pub fn update_defeat(actor: &mut Actor) -> Result<DefeatEffect, MotionProfileError> {
+/// `view_bounds` is an enlarged view's world-Y band (see
+/// `ObjectSim::vertical_reset_bounds`); `None` keeps the native byte test.
+pub fn update_defeat(
+    actor: &mut Actor,
+    view_bounds: Option<Range<i32>>,
+) -> Result<DefeatEffect, MotionProfileError> {
     match actor.state {
         1 => actor.advance_defeat_rise()?,
         // `$581E2`: the screen Y tested is the previous frame's projection.
         2 => {
+            let offscreen = view_bounds.map_or(actor.screen.y >= DEFEAT_OFFSCREEN_Y, |b| {
+                !b.contains(&i32::from(actor.position.y))
+            });
             let step = step_fall_speed(actor).wrapping_mul(2);
             actor.position.move_y(i16::from(step));
-            if actor.screen.y >= DEFEAT_OFFSCREEN_Y {
+            if offscreen {
                 return Ok(DefeatEffect::Remove);
             }
         }
@@ -242,10 +251,10 @@ mod tests {
         let mut actor = Actor::default();
         actor.state = 2;
         actor.screen.y = 0x9F;
-        assert_eq!(update_defeat(&mut actor).unwrap(), DefeatEffect::None);
+        assert_eq!(update_defeat(&mut actor, None).unwrap(), DefeatEffect::None);
         assert_eq!(actor.position.y, u16::from(FALL_STEP0) * 2);
         actor.screen.y = 0xA0;
-        assert_eq!(update_defeat(&mut actor).unwrap(), DefeatEffect::Remove);
+        assert_eq!(update_defeat(&mut actor, None).unwrap(), DefeatEffect::Remove);
     }
 
     #[test]

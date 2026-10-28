@@ -570,7 +570,8 @@ impl ObjectSim {
     ) {
         let _ = layout;
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
-        let result = reactions::update_defeat(&mut actor);
+        let result =
+            reactions::update_defeat(&mut actor, self.vertical_reset_bounds(reactions::DEFEAT_OFFSCREEN_Y));
         st.b = actor.to_raw_slot();
         match result {
             Ok(reactions::DefeatEffect::None) => {}

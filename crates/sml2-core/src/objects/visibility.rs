@@ -14,6 +14,21 @@ impl ObjectSim {
         Some(screen_zero - margin..screen_zero + i32::from(screen_limit) + margin)
     }
 
+    /// [`Self::horizontal_reset_bounds`] for a screen-Y limit. OAM Y = world
+    /// Y - (camera Y - 72 - pan) + 16; the margin follows the view's upward
+    /// bias. Boss mode keeps the byte test: its screen bytes are not derived
+    /// from world positions.
+    pub(super) fn vertical_reset_bounds(&self, screen_limit: u8) -> Option<std::ops::Range<i32>> {
+        if self.view_margin == (0, 0) || self.mario.scene_state & 0xF0 != 0 {
+            return None;
+        }
+        let screen_zero = i32::from(self.camera_position.y) + i32::from(self.view_offset.1)
+            - 88
+            - i32::from(self.mario.pan & 3);
+        let (margin, bias) = (i32::from(self.view_margin.1), i32::from(self.view_bias_y));
+        Some(screen_zero - margin - bias..screen_zero + i32::from(screen_limit) + margin - bias)
+    }
+
     pub(super) fn horizontal_view_window(&self, camera_x: u16, half: i32) -> (u16, u16) {
         let center = i32::from(camera_x) + i32::from(self.view_offset.0);
         ((center - half).max(0) as u16, (center + half).max(0) as u16)
