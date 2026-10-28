@@ -1,5 +1,5 @@
 //! DX presentation of any level. Rendering never advances native gameplay.
-use super::{draw_corner_hud, hud_row_status, window_coord, window_origin, HudDigits, HudStyle};
+use super::{draw_corner_hud, hud_row_status, hud_shade, window_coord, window_origin, HudDigits, HudStyle};
 use crate::session::{LevelContext, Session, SessionState};
 use sml2_core::actor::ScreenPosition;
 use sml2_core::front_end::screen::{
@@ -1120,6 +1120,7 @@ fn render(
     if hud_style == HudStyle::Modern && !background_only {
         // DX's own HUD tiles paint a dark backing into every cell, so the
         // corners draw the original glyphs in DX's HUD palettes instead.
+        let bgp = ctx.manifest.header.palettes[0];
         draw_corner_hud(
             &row,
             view,
@@ -1129,7 +1130,8 @@ fn render(
                 let bytes: &[u8; 16] = ctx.bg_live[off..off + 16]
                     .try_into()
                     .map_err(|_| format!("HUD tile {tile:#04X} out of range"))?;
-                let color = video::tile_colors(bytes)[usize::from(y) * 8 + usize::from(x)];
+                let color =
+                    hud_shade(bgp, video::tile_colors(bytes)[usize::from(y) * 8 + usize::from(x)]);
                 let attr = CgbAttributes::from_byte(level.hud_attributes[col]);
                 let index =
                     IndexedPixel::new(color, attr.palette()).map_err(|e| e.to_string())?;

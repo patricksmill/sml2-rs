@@ -203,10 +203,8 @@ pub fn render_view_output_smooth(
             video::tile_colors(&bytes)
         })
         .collect();
-    let shades = output.palette(
-        pal_override.unwrap_or(manifest.header.palettes[0]),
-        video::PaletteSource::Bg,
-    );
+    let bgp = pal_override.unwrap_or(manifest.header.palettes[0]);
+    let shades = output.palette(bgp, video::PaletteSource::Bg);
     let (world_w, world_h) = room.world;
     let viewport = view::LevelViewport::new(
         (vw, vh),
@@ -345,16 +343,19 @@ pub fn render_view_output_smooth(
             |_, tile, x, y| {
                 let c = tiles[tile as usize][usize::from(y) * 8 + usize::from(x)];
                 Ok((
-                    c,
+                    hud_shade(bgp, c),
                     NativeBg {
                         shade: shades[c as usize],
                         index: c,
                     },
                 ))
             },
-            |_| NativeBg {
-                shade: shades[0],
-                index: 0,
+            |_| {
+                let c = (0..4).find(|&c| hud_shade(bgp, c) == 0).unwrap_or(0);
+                NativeBg {
+                    shade: shades[c as usize],
+                    index: c,
+                }
             },
         )?;
     }
@@ -753,9 +754,16 @@ pub(crate) fn corner_hud_rects(view: (usize, usize)) -> [(i32, i32, i32, i32); 2
     ]
 }
 
+/// The shade `bgp` gives HUD tile colour `color`. Each tileset draws the
+/// strip for its level's palette (`$93` and `$E1` levels back it with colour
+/// 1, not 0), so the corners read glyphs by shade: 0 is always the backing.
+pub(crate) fn hud_shade(bgp: u8, color: u8) -> u8 {
+    (bgp >> (color * 2)) & 3
+}
+
 /// Draw `row` as [`HudStyle::Modern`] into a window layer of `view` pixels.
-/// `sample(column, tile, x, y)` returns a tile pixel's raw colour and its
-/// pixel; colour 0 is transparent, except for a one-pixel ring of
+/// `sample(column, tile, x, y)` returns a tile pixel's [`hud_shade`] and its
+/// pixel; shade 0 is transparent, except for a one-pixel ring of
 /// `paper(ink)` around the glyphs that keeps them legible on any background.
 pub(crate) fn draw_corner_hud<B: Copy>(
     row: &[u8],

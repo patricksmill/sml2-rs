@@ -282,6 +282,38 @@ fn smoothing_moves_mario_by_his_share_of_the_tick() {
 }
 
 #[test]
+fn corner_hud_drops_the_backing_of_strips_drawn_for_an_inverted_palette() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.begin_level(0, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        unreachable!()
+    };
+    // `$93` levels (Tree Zone 2) show colour 1 as white and colour 0 as black,
+    // so their tilesets back the strip with colour 1 and draw glyphs in 0.
+    ctx.manifest.header.palettes[0] = 0x93;
+    ctx.layout_live.cells.fill(0);
+    ctx.manifest.metatiles.metatiles[0].tiles = [0; 4];
+    ctx.sim.layout_writes.clear();
+    ctx.bg_live.fill(0);
+    for y in 0..8 {
+        ctx.bg_live[0x800 + y * 2 + 1] = 255; // BG tile 0 = colour 2
+        ctx.bg_live[0x810 + y * 2] = !0x18; // HUD tile 1: colour 1, a colour-0 bar at x 3-4
+    }
+    ctx.hud.template = vec![1; 20];
+    ctx.hud.digit_columns.clear();
+    ctx.spr = None;
+    let shade = |frame: &[u8], x: usize, y: usize| frame[y * 160 + x];
+    let classic = session.render_frame((160, 144));
+    assert_eq!(shade(&classic, 3, 140), 0, "classic strip ink");
+    assert_eq!(shade(&classic, 0, 140), 255, "classic strip paper");
+    session.hud_style = crate::render::HudStyle::Modern;
+    let corner = session.render_frame((160, 144));
+    assert_eq!(shade(&corner, 8 + 3, 8), 0, "ink");
+    assert_eq!(shade(&corner, 8 + 2, 8), 255, "the ring is the strip's paper");
+    assert_eq!(shade(&corner, 8, 8), 170, "the backing is transparent");
+}
+
+#[test]
 fn corner_hud_moves_the_status_bar_to_the_top_left_without_its_backing() {
     let mut session = Session::new(SessionAssets::load().unwrap());
     session.begin_level(0, 0).unwrap();
