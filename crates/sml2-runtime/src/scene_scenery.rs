@@ -236,6 +236,23 @@ impl crate::Session {
                     .flatten()
             })
             .ok_or_else(|| format!("level {level} has no arena graphics {gfx}"))?;
+        // The door scene runs inside the room slide that crossing a locked
+        // edge of its screen began, and the slide then carries the camera one
+        // screen on into the arena. Every door screen is open only on the
+        // side Mario arrives from (`$0D`: the left), so he leaves the other way.
+        let locks = content
+            .edge_map
+            .as_ref()
+            .and_then(|e| e.get(cell))
+            .copied()
+            .unwrap_or(0);
+        let onward: (i16, i16) = match locks {
+            l if l & 2 == 0 => (1, 0),
+            l if l & 1 == 0 => (-1, 0),
+            l if l & 4 == 0 => (0, 1),
+            l if l & 8 == 0 => (0, -1),
+            _ => (1, 0),
+        };
         self.begin_level(level, 0)?;
         let SessionState::InLevel(ctx) = &mut self.state else {
             unreachable!()
@@ -276,6 +293,10 @@ impl crate::Session {
         if !ended {
             return Err(format!("arena scene {scene} did not finish"));
         }
+        let world = ctx.cam.world;
+        let on = |v: u16, screens: i16| world.wrap(v.wrapping_add_signed(screens * 0x100));
+        (ctx.cam.x, ctx.cam.y) = (on(ctx.cam.x, onward.0), on(ctx.cam.y, onward.1));
+        (ctx.sim.x, ctx.sim.y) = (on(ctx.sim.x, onward.0), on(ctx.sim.y, onward.1));
         // The script arms $0EB0; run the same boss-load primitives as its
         // runtime consumer, without advancing an authoring preview frame.
         let definition = boss_def_index(level, ctx.cam.boss_fight_phase);

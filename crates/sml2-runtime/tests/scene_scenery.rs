@@ -286,3 +286,46 @@ fn scene_exports_validate_targets_swatches_and_duplicate_entries() {
         .get(SceneTarget::Map(9))
         .is_empty());
 }
+
+/// An arena door's scene runs inside the room slide that crossing its
+/// screen's locked edge began, and the slide then carries the camera one
+/// screen on. Staging shows the screen the fight is played on: for Tree
+/// Zone 5, arena screen 5, where walking through the door arrives.
+#[test]
+fn a_staged_arena_shows_the_screen_the_fight_plays_on() {
+    use sml2_core::player_sim::PlayerKeys;
+    use sml2_runtime::session::FrameInput;
+    let mut play = session();
+    play.begin_level(5, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut play.state else {
+        unreachable!()
+    };
+    // On the ledge in front of the trunk's door pipe.
+    (ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y) = (0xBA0, 0x2A0, 0xBA0, 0x2B0);
+    let right = FrameInput {
+        keys: PlayerKeys {
+            right: true,
+            ..Default::default()
+        },
+        div: 0,
+    };
+    let arrived = (0..300)
+        .find_map(|_| {
+            play.advance(right);
+            let SessionState::InLevel(ctx) = &play.state else {
+                panic!("left the level")
+            };
+            (ctx.arena_loaded && ctx.cam.transition == 0).then_some((ctx.cam.x, ctx.cam.y))
+        })
+        .expect("Mario reaches the arena");
+    assert_eq!(arrived, (0x550, 0x060));
+
+    let mut staged = session();
+    staged
+        .stage_scenery_scene(SceneTarget::Arena { level: 5, gfx: 0 })
+        .unwrap();
+    let SessionState::InLevel(ctx) = &staged.state else {
+        unreachable!()
+    };
+    assert_eq!((ctx.cam.x, ctx.cam.y), arrived);
+}
