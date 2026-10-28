@@ -319,11 +319,10 @@ fn level_content<'a>(
     }
     // A recipe is written against the vanilla or the DX layout, so it is
     // chosen after DX has substituted its own.
-    if let Some(recipe) = assets.recipe_for(&content).filter(|_| expanded) {
-        match content.expanded(recipe) {
-            Ok(rebuilt) => content = std::borrow::Cow::Owned(rebuilt),
-            Err(error) => println!("note: {error}; the original layout loads instead"),
-        }
+    match assets.expanded_level(&content).filter(|_| expanded) {
+        Some(Ok(rebuilt)) => content = std::borrow::Cow::Owned(rebuilt),
+        Some(Err(error)) => println!("note: {error}; the original layout loads instead"),
+        None => {}
     }
     Ok(content)
 }

@@ -63,6 +63,10 @@ pub struct LevelContent {
     pub scene_map: Option<Vec<u8>>,
     /// Approved visual scenery, independent of the simulated layout.
     pub scenery: SceneryOverlay,
+    /// Approved scenery for the level as its recipe rebuilds it, in the
+    /// rebuilt map's cells. Without it [`Self::expanded`] moves `scenery`
+    /// with the cells it covers.
+    pub expanded_scenery: Option<SceneryOverlay>,
     /// Set when a recipe rebuilt the level ([`Self::expanded`]).
     pub rom_tables: Option<RomTables>,
 }
@@ -102,6 +106,7 @@ impl LevelContent {
             edge_map,
             scene_map,
             scenery: SceneryOverlay::empty(),
+            expanded_scenery: None,
             rom_tables: None,
         })
     }
@@ -154,6 +159,10 @@ impl LevelContent {
         content.layout = parts.layout;
         content.edge_map = Some(parts.edge_map);
         content.scene_map = Some(parts.scene_map);
+        if let Some(scenery) = &self.expanded_scenery {
+            content.scenery = scenery.clone();
+            return Ok(content);
+        }
         // Moved paints are set last so they cover what stayed, as moved
         // cells do in the layout.
         let mut scenery = SceneryOverlay::empty();
@@ -328,6 +337,7 @@ impl SessionAssets {
             levels,
         };
         bundled_scenery::apply(&mut assets, scenery)
+            .and_then(|()| bundled_scenery::apply_expanded(&mut assets, bundled_scenery::EXPANDED))
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
         Ok(assets)
     }
@@ -347,6 +357,12 @@ impl SessionAssets {
         self.recipes
             .iter()
             .find(|r| r.level_id == content.manifest.level_id && r.sources.contains(&fingerprint))
+    }
+
+    /// `content` rebuilt by the recipe written for it, if there is one.
+    pub fn expanded_level(&self, content: &LevelContent) -> Option<Result<LevelContent, String>> {
+        self.recipe_for(content)
+            .map(|recipe| content.expanded(recipe))
     }
 
     /// Replace one level before constructing a session (e.g. editor playtest).

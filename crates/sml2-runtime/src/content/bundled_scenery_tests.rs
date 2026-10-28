@@ -168,3 +168,30 @@ fn registry_validation_never_partially_installs_overlays() {
 fn shipping_registry_loads_from_the_public_entry_point() {
     SessionAssets::load_from(&Source::new()).unwrap();
 }
+
+/// Expanded scenery is authored on the rebuilt map, so the rebuild uses it
+/// as it is instead of moving the original level's scenery.
+#[test]
+fn expanded_scenery_replaces_the_moved_scenery_of_a_rebuilt_level() {
+    let mut assets =
+        SessionAssets::load_from_with_scenery(&Source::new(), &[(2, EXPORTED_LEVEL)]).unwrap();
+    let gap = r#"{"paints":[{"x":80,"y":5,"metatile":3}]}"#;
+    apply_expanded(&mut assets, &[(2, gap)]).unwrap();
+    let level = assets.level(2).unwrap();
+    assert_eq!(
+        level.scenery.get(0, 25),
+        Some(2),
+        "the original keeps its own"
+    );
+    let rebuilt = assets.expanded_level(level).unwrap().unwrap();
+    assert_eq!(rebuilt.scenery.get(80, 5), Some(3));
+    assert_eq!(
+        rebuilt.scenery.len(),
+        1,
+        "nothing moved in from the original"
+    );
+
+    let error = apply_expanded(&mut assets, &[(0, gap)]).unwrap_err();
+    assert!(error.contains("level 0 has no recipe"), "{error}");
+    assert!(assets.level(0).unwrap().expanded_scenery.is_none());
+}

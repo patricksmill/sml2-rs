@@ -22,6 +22,15 @@ Only authored coordinates and metatile references belong here. Do not add ROMs,
 extracted graphics, player saves, or personal settings. Scenery changes rendering
 only; collision, actors, and level layouts remain the original simulation.
 
+Rebuilt (expanded) levels export as `scenery-NN-expanded.json`, in the rebuilt
+map's cells, and register in `EXPANDED` in the same file. The level must have a
+bundled recipe (`assets/expanded/`). The game uses that scenery when it loads the
+rebuilt level, and the plain `scenery-NN.json` when it loads the original:
+
+```rust
+(2, include_str!("../../../../assets/scenery/scenery-02-expanded.json")),
+```
+
 Scene surroundings (zone maps, minigames, fixed screens, boss arenas, the
 ending) export as names such as `scenery-map-09.json` and register in `BUNDLED`
 in `crates/sml2-runtime/src/scene_scenery.rs`:
