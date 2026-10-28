@@ -52,6 +52,11 @@ fn origin_range(view: (usize, usize), room: Room) -> ((i32, i32), (i32, i32)) {
     )
 }
 
+fn clamp_origin(view: (usize, usize), raw: (i32, i32), room: Room) -> (i32, i32) {
+    let (x, y) = origin_range(view, room);
+    (raw.0.clamp(x.0, x.1), raw.1.clamp(y.0, y.1))
+}
+
 /// Enlarged gameplay views stop at the camera's room and the layout edges.
 /// Native views retain the hardware window coordinates, including their
 /// wrapping behavior.
@@ -60,8 +65,23 @@ pub fn level_origin(view: (usize, usize), cam: (u16, u16), pan: i32, room: Room)
     if !enlarged(view) {
         return origin;
     }
-    let (x, y) = origin_range(view, room);
-    (origin.0.clamp(x.0, x.1), origin.1.clamp(y.0, y.1))
+    let Some(s) = room.slide else {
+        return clamp_origin(view, origin, room);
+    };
+    // A screen transition moves the view from where it stood in the room the
+    // camera left to where it will stand in the next, at the scroll's pace.
+    // Clamping to the blended edges instead lets an edge sweep past the
+    // camera many pixels per frame, and the view jumps.
+    let at = |bounds: [i32; 4], scrolled: i32| {
+        let raw = (
+            origin.0 + s.step.0 * scrolled,
+            origin.1 + s.step.1 * scrolled,
+        );
+        clamp_origin(view, raw, room.with_bounds(bounds))
+    };
+    let (from, to) = (at(s.from, -s.done), at(s.to, s.span - s.done));
+    let mix = |a: i32, b: i32| a + (b - a) * s.done / s.span;
+    (mix(from.0, to.0), mix(from.1, to.1))
 }
 
 /// One presentation camera shared by terrain, sprites and interpolation.
@@ -83,7 +103,11 @@ impl LevelViewport {
     ) -> Self {
         let raw = raw_level_origin(view, cam, pan);
         let origin = level_origin(view, cam, pan, room);
-        let range = origin_range(view, room);
+        // A slide places the view itself; between ticks it holds.
+        let range = match room.slide {
+            Some(_) => ((origin.0, origin.0), (origin.1, origin.1)),
+            None => origin_range(view, room),
+        };
         let s = scale as i32;
         let clamp_shift = |shift: i32, raw: i32, at: i32, (lo, hi): (i32, i32)| {
             if enlarged(view) {
@@ -255,6 +279,51 @@ mod tests {
         assert_eq!(level_origin(view, cam, 0, wide), raw);
         assert_eq!(level_origin(view, cam, 0, Room::WORLD).0, 0x1000 - 384);
         assert_eq!(level_origin(view, (0x27F0, 0x1C0), 0, wide).0, 0x2800 - 384);
+    }
+
+    /// A transition from a room ending at `$600` into one starting there:
+    /// the view pans from its clamp in the first to its clamp in the second
+    /// at one rate, instead of jumping when the blended edges pass it.
+    #[test]
+    fn a_room_slide_pans_the_view_at_a_steady_pace() {
+        use sml2_core::camera::RoomSlide;
+        let view = (399, 180);
+        let (from, to) = ([0, 0x100, 0x600, 0x208], [0x600, 0x100, 0x1000, 0x208]);
+        let origin = |done: i32| {
+            let room = Room {
+                slide: Some(RoomSlide {
+                    from,
+                    to,
+                    done,
+                    span: 0xA0,
+                    step: (1, 0),
+                }),
+                ..Room::WORLD.with_bounds(to)
+            };
+            level_origin(view, ((0x5B0 + done) as u16, 0x1BD), 0, room).0
+        };
+        assert_eq!(origin(0), 0x600 - 399, "where the first room held it");
+        assert_eq!(origin(0xA0), 0x600, "where the second room holds it");
+        let steps: Vec<_> = (0..0xA0)
+            .step_by(4)
+            .map(|d| origin(d + 4) - origin(d))
+            .collect();
+        assert!(steps.iter().all(|&s| (9..=10).contains(&s)), "{steps:?}");
+        // Native views keep the hardware window.
+        let native = Room {
+            slide: Some(RoomSlide {
+                from,
+                to,
+                done: 8,
+                span: 0xA0,
+                step: (1, 0),
+            }),
+            ..Room::WORLD
+        };
+        assert_eq!(
+            level_origin(NATIVE, (0x5B8, 0x1BD), 0, native),
+            raw_level_origin(NATIVE, (0x5B8, 0x1BD), 0)
+        );
     }
 
     #[test]

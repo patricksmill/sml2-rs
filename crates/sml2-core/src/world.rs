@@ -141,6 +141,7 @@ impl World {
                 self.screens_wide as i32 * SCREEN_PX as i32,
                 self.screens_high as i32 * SCREEN_PX as i32,
             ),
+            slide: None,
         }
     }
 }

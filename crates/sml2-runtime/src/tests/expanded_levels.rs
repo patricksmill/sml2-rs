@@ -351,3 +351,41 @@ fn the_tree_zone_2_recipe_rebuilds_the_dx_level() {
     };
     assert_eq!(ctx.manifest.spawns.records.len(), dx_spawns);
 }
+
+/// Through the pipe the camera slides between the two rooms; an enlarged
+/// view (here a 1182x533 window at 125% zoom) pans across at a steady pace.
+#[test]
+fn the_rebuilt_tree_zone_2_pipe_pans_an_enlarged_view_without_jumps() {
+    use crate::session::FrameInput;
+    let view = (399, 180);
+    let mut session = tree_zone_2(true, 0);
+    session.set_view(view);
+    let crate::session::SessionState::InLevel(ctx) = &mut session.state else {
+        unreachable!()
+    };
+    (ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y) = (0x5A8, 0x1A0, 0x5B0, 0x1B0);
+    let mut origins = Vec::new();
+    for frame in 0..200 {
+        let keys = sml2_core::player_sim::PlayerKeys {
+            right: frame >= 40,
+            ..Default::default()
+        };
+        session.advance(FrameInput { keys, div: 0 });
+        let crate::session::SessionState::InLevel(ctx) = &session.state else {
+            panic!("left the level")
+        };
+        let pan = ctx.spr.as_ref().map_or(0, |s| i32::from(s.scroll_pan));
+        origins.push(crate::render::view::level_origin(
+            view,
+            (ctx.cam.x, ctx.cam.y),
+            pan,
+            ctx.cam.room(),
+        ));
+    }
+    let steps: Vec<_> = origins.windows(2).map(|w| w[1].0 - w[0].0).collect();
+    assert!(steps.iter().all(|&d| (0..=10).contains(&d)), "{steps:?}");
+    // The view crossed from its place in the passage's room to its place in
+    // the next room, which starts at the joined pipe's far end.
+    assert_eq!(origins[0].0, 0x600 - 399);
+    assert_eq!(origins.last().unwrap().0, 0x600);
+}

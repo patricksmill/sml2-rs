@@ -47,12 +47,47 @@ pub struct Room {
     /// `(width, height)` in world pixels of the layout the room lies in. A
     /// view larger than the room still stops at it.
     pub world: (i32, i32),
+    /// Set while a screen transition slides the camera into the next room;
+    /// the edges above are then a blend of the two rooms.
+    pub slide: Option<RoomSlide>,
+}
+
+/// A screen transition's slide between two rooms, so an enlarged view can
+/// move across it at the scroll's own pace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RoomSlide {
+    /// `[left, top, right, bottom]` of the room the camera left.
+    pub from: [i32; 4],
+    /// `[left, top, right, bottom]` of the room it is entering.
+    pub to: [i32; 4],
+    /// Camera pixels scrolled so far, of `span`.
+    pub done: i32,
+    pub span: i32,
+    /// The scroll's direction: `±1` on one axis.
+    pub step: (i32, i32),
 }
 
 impl Room {
     pub const WORLD: Room = World::ROM.room();
 
-    fn lerp(self, to: Room, num: i32, den: i32) -> Room {
+    /// `[left, top, right, bottom]`.
+    pub fn bounds(self) -> [i32; 4] {
+        [self.left, self.top, self.right, self.bottom]
+    }
+
+    /// This room with its edges moved to `bounds` and no slide.
+    pub fn with_bounds(self, [left, top, right, bottom]: [i32; 4]) -> Room {
+        Room {
+            left,
+            top,
+            right,
+            bottom,
+            slide: None,
+            ..self
+        }
+    }
+
+    fn lerp(self, to: Room, num: i32, den: i32, step: (i32, i32)) -> Room {
         let at = |a: i32, b: i32| a + (b - a) * num / den;
         Room {
             left: at(self.left, to.left),
@@ -60,6 +95,13 @@ impl Room {
             right: at(self.right, to.right),
             bottom: at(self.bottom, to.bottom),
             world: to.world,
+            slide: Some(RoomSlide {
+                from: self.bounds(),
+                to: to.bounds(),
+                done: num,
+                span: den,
+                step,
+            }),
         }
     }
 }
@@ -269,26 +311,31 @@ impl CameraSim {
     /// with the scroll, so an enlarged view pans across instead of jumping.
     pub fn room(&self) -> Room {
         let (x, y, w) = (self.x, self.y, self.world);
-        let along = |from: (u16, u16), to: (u16, u16), done: u8, span: i32| {
-            self.room_at(from).lerp(self.room_at(to), i32::from(done).min(span), span)
+        let along = |from: (u16, u16), to: (u16, u16), done: u8, span: i32, step| {
+            self.room_at(from)
+                .lerp(self.room_at(to), i32::from(done).min(span), span, step)
         };
         let t = self.transition;
         if t & 1 != 0 {
             let d = (x as u8).wrapping_sub(0xB0);
             let from = w.wrap(x.wrapping_sub(u16::from(d)));
-            along((from, y), (w.wrap(from.wrapping_add(0xA0)), y), d, 0xA0)
+            let to = w.wrap(from.wrapping_add(0xA0));
+            along((from, y), (to, y), d, 0xA0, (1, 0))
         } else if t & 2 != 0 {
             let d = 0x50u8.wrapping_sub(x as u8);
             let from = w.wrap(x.wrapping_add(u16::from(d)));
-            along((from, y), (w.wrap(from.wrapping_sub(0xA0)), y), d, 0xA0)
+            let to = w.wrap(from.wrapping_sub(0xA0));
+            along((from, y), (to, y), d, 0xA0, (-1, 0))
         } else if t & 4 != 0 {
             let d = 0x48u8.wrapping_sub(y as u8);
             let from = w.wrap(y.wrapping_add(u16::from(d)));
-            along((x, from), (x, w.wrap(from.wrapping_sub(0x90))), d, 0x90)
+            let to = w.wrap(from.wrapping_sub(0x90));
+            along((x, from), (x, to), d, 0x90, (0, -1))
         } else if t & 8 != 0 {
             let d = (y as u8).wrapping_sub(0xC0);
             let from = w.wrap(y.wrapping_sub(u16::from(d)));
-            along((x, from), (x, w.wrap(from.wrapping_add(0x88))), d, 0x88)
+            let to = w.wrap(from.wrapping_add(0x88));
+            along((x, from), (x, to), d, 0x88, (0, 1))
         } else {
             self.room_at((x, y))
         }
