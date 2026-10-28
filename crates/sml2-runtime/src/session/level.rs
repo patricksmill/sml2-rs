@@ -98,8 +98,8 @@ impl LevelContext {
         cam.auto_scroll = manifest.properties.auto_scroll;
         cam.scene_state = manifest.header.scene_state;
 
-        if let Some(edge) = content.edge_map {
-            cam.edge_map = edge;
+        if let Some(edge) = &content.edge_map {
+            cam.edge_map.clone_from(edge);
         }
         if let Some(scene) = &content.scene_map {
             cam.scene_map.clone_from(scene);

@@ -9,6 +9,7 @@ use sml2_core::object::ObjectTables;
 use sml2_core::scene::SceneScripts;
 use sml2_core::scenery::SceneryOverlay;
 use sml2_core::tileset::Tilesets;
+use sml2_core::world::World;
 use std::{
     error::Error,
     fs, io,
@@ -56,7 +57,7 @@ pub struct LevelContent {
     pub layout: LevelLayout,
     pub bg_base: Vec<u8>,
     pub objblock: Vec<u8>,
-    pub edge_map: Option<[u8; 48]>,
+    pub edge_map: Option<Vec<u8>>,
     pub scene_map: Option<Vec<u8>>,
     /// Approved visual scenery, independent of the simulated layout.
     pub scenery: SceneryOverlay,
@@ -75,11 +76,11 @@ impl LevelContent {
         let edge_map = source
             .read(&format!("levels/level{nn:02}.edge.bin"))
             .ok()
-            .and_then(|b| b.try_into().ok());
+            .filter(|b| b.len() == World::ROM.screens());
         let scene_map = source
             .read(&format!("levels/level{nn:02}.scene.bin"))
             .ok()
-            .filter(|b| b.len() == 48);
+            .filter(|b| b.len() == World::ROM.screens());
         Ok(Self {
             manifest,
             layout,

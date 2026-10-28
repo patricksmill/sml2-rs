@@ -49,6 +49,9 @@ level needs four screen rows, so it cannot fit the ROM world.
      `cell_key` replace the `& $FF` cells, the WRAM echo and the
      `row*256+col` keys; `PlayerSim` and `ObjectSim` carry `world`. The
      session must set all three `world` fields together (step 3).
+   - Lock and scene tables — complete. `CameraSim::edge_map` and
+     `LevelContent::edge_map` are `Vec`s validated against
+     `World::ROM.screens()`, like the scene map.
 3. **Sized content.** `LevelLayout`, the edge map and the scene map take their
    dimensions from the `World`. Extraction still writes 256×48 for ROM levels.
    Define a versioned expanded-level *recipe*. ROM and DX data are never

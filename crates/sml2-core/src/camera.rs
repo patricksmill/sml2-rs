@@ -83,7 +83,7 @@ pub struct CameraSim {
     /// `sScreenEdgeMap[y_hi * 16 + x_hi]` — per-16-cell-sector scroll locks
     /// (bit0 left edge `$B0`, bit1 `$50`, bit2 up `$48`, bit3 down `$C0`);
     /// zero for free-scroll levels.
-    pub edge_map: [u8; 48],
+    pub edge_map: Vec<u8>,
     /// Replay/dev override: when set, `edge_bits()` returns this instead of
     /// the position-indexed lookup (the captured engine value of `$FF98`).
     pub edge_now: Option<u8>,
@@ -156,7 +156,7 @@ impl CameraSim {
             mario_screen_x: 0x40,     // `$0F2A` level reset
             mario_screen_x_wide: 0x40,
             world: World::ROM,
-            edge_map: [0; 48],
+            edge_map: vec![0; World::ROM.screens()],
             edge_now: None,
             auto_scroll: 0,
             transition: 0,
@@ -808,7 +808,7 @@ mod tests {
 
     fn cam_at(x: u16, y: u16) -> CameraSim {
         let mut c = CameraSim::new(x, y);
-        c.edge_map = level1_table();
+        c.edge_map = level1_table().to_vec();
         c
     }
 
@@ -1321,7 +1321,7 @@ mod tests {
     /// bit 0 clear, i.e. an even frame — the frames that scroll.
     fn auto_cam(x: u16, y: u16) -> (CameraSim, PlayerSim) {
         let mut c = CameraSim::new(x, y);
-        c.edge_map = [0u8; 48];
+        c.edge_map = vec![0u8; 48];
         c.auto_scroll = 1;
         c.prev_mario_y_lo = y as u8;
         let mut sim = PlayerSim::new();

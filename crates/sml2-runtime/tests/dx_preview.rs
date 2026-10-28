@@ -597,7 +597,7 @@ fn audited_rom_draws_every_level_and_its_arenas() {
     };
     ctx.sim.x = 0x0EB8;
     ctx.sim.y = 0x01D4;
-    let (edge, scene) = (ctx.cam.edge_map, ctx.cam.scene_map.clone());
+    let (edge, scene) = (ctx.cam.edge_map.clone(), ctx.cam.scene_map.clone());
     ctx.cam = sml2_core::camera::CameraSim::new(0x0EB0, 0x01C0);
     ctx.cam.edge_map = edge;
     ctx.cam.scene_map = scene;
