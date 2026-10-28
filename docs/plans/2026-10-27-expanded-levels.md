@@ -43,6 +43,8 @@ level needs four screen rows, so it cannot fit the ROM world.
    `World::ROM` (16×3, 12-bit wrap). Route the inventory through it without
    changing behavior, in bounded steps: camera, then layout/collision, then
    scene/edge tables, then object streaming.
+   - Camera — complete. `sml2-core/src/world.rs` defines `World`; `CameraSim`
+     wraps, indexes its tables and bounds rooms through `cam.world`.
 3. **Sized content.** `LevelLayout`, the edge map and the scene map take their
    dimensions from the `World`. Extraction still writes 256×48 for ROM levels.
    Define a versioned expanded-level *recipe*. ROM and DX data are never

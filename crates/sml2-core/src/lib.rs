@@ -40,6 +40,7 @@ pub mod tile_animation;
 pub mod tileset;
 pub mod video;
 pub mod vram_transfer;
+pub mod world;
 
 /// Mario powerup state (`sCurPowerup` $A216; the draw offsets in
 /// [`player::frame_index`] are the ground truth for these labels).

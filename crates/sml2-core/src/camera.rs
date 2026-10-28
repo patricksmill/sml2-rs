@@ -27,11 +27,11 @@
 //!   `$0F71`'s first call, not part of `$0B2A`: it needs `&mut` camera state.
 //!   See [`CameraSim::crouch_pan`] — the frame loop calls it at the top of the
 //!   player update, before `step`.
-//! - All arithmetic on the low bytes like the engine; the hi byte is masked
-//!   to `$0F` (12-bit world).
+//! - All arithmetic on the low bytes like the engine; the hi byte wraps as
+//!   [`World`] says (`$0F` for every original level: the 12-bit world).
 
-use crate::level::{LAYOUT_HEIGHT, LAYOUT_WIDTH};
 use crate::player_sim::{PlayerKeys, PlayerSim};
+use crate::world::World;
 
 /// The world-pixel span the scroll locks keep the native view inside: a
 /// locked edge is where the 160x144 view stops (`$50`/`$B0` columns put it
@@ -47,12 +47,7 @@ pub struct Room {
 }
 
 impl Room {
-    pub const WORLD: Room = Room {
-        left: 0,
-        top: 0,
-        right: (LAYOUT_WIDTH * 16) as i32,
-        bottom: (LAYOUT_HEIGHT * 16) as i32,
-    };
+    pub const WORLD: Room = World::ROM.room();
 
     fn lerp(self, to: Room, num: i32, den: i32) -> Room {
         let at = |a: i32, b: i32| a + (b - a) * num / den;
@@ -82,6 +77,9 @@ pub struct CameraSim {
     /// left of the camera, where the byte wraps past `$A1` and would read as
     /// the right edge.
     pub mario_screen_x_wide: i32,
+    /// The level's extent and position wrap; [`World::ROM`] for every
+    /// original level.
+    pub world: World,
     /// `sScreenEdgeMap[y_hi * 16 + x_hi]` — per-16-cell-sector scroll locks
     /// (bit0 left edge `$B0`, bit1 `$50`, bit2 up `$48`, bit3 down `$C0`);
     /// zero for free-scroll levels.
@@ -157,6 +155,7 @@ impl CameraSim {
             prev_mario_y_lo: y as u8, // caller seeds with the live value
             mario_screen_x: 0x40,     // `$0F2A` level reset
             mario_screen_x_wide: 0x40,
+            world: World::ROM,
             edge_map: [0; 48],
             edge_now: None,
             auto_scroll: 0,
@@ -255,36 +254,37 @@ impl CameraSim {
         if let Some(e) = self.edge_now {
             return e;
         }
-        let xi = ((self.x >> 8) & 0x0F) as usize;
-        let yi = ((self.y >> 8) & 0x0F) as usize;
-        self.edge_map.get(yi * 16 + xi).copied().unwrap_or(0)
+        self.edge_map
+            .get(self.world.screen_index(self.x, self.y))
+            .copied()
+            .unwrap_or(0)
     }
 
     /// The [`Room`] the camera is in. A screen transition (`$0DED`) slides
     /// it from the room the camera left to the one it is entering, in step
     /// with the scroll, so an enlarged view pans across instead of jumping.
     pub fn room(&self) -> Room {
-        let (x, y) = (self.x, self.y);
+        let (x, y, w) = (self.x, self.y, self.world);
         let along = |from: (u16, u16), to: (u16, u16), done: u8, span: i32| {
             self.room_at(from).lerp(self.room_at(to), i32::from(done).min(span), span)
         };
         let t = self.transition;
         if t & 1 != 0 {
             let d = (x as u8).wrapping_sub(0xB0);
-            let from = x.wrapping_sub(u16::from(d)) & 0x0FFF;
-            along((from, y), (from.wrapping_add(0xA0) & 0x0FFF, y), d, 0xA0)
+            let from = w.wrap(x.wrapping_sub(u16::from(d)));
+            along((from, y), (w.wrap(from.wrapping_add(0xA0)), y), d, 0xA0)
         } else if t & 2 != 0 {
             let d = 0x50u8.wrapping_sub(x as u8);
-            let from = x.wrapping_add(u16::from(d)) & 0x0FFF;
-            along((from, y), (from.wrapping_sub(0xA0) & 0x0FFF, y), d, 0xA0)
+            let from = w.wrap(x.wrapping_add(u16::from(d)));
+            along((from, y), (w.wrap(from.wrapping_sub(0xA0)), y), d, 0xA0)
         } else if t & 4 != 0 {
             let d = 0x48u8.wrapping_sub(y as u8);
-            let from = y.wrapping_add(u16::from(d)) & 0x0FFF;
-            along((x, from), (x, from.wrapping_sub(0x90) & 0x0FFF), d, 0x90)
+            let from = w.wrap(y.wrapping_add(u16::from(d)));
+            along((x, from), (x, w.wrap(from.wrapping_sub(0x90))), d, 0x90)
         } else if t & 8 != 0 {
             let d = (y as u8).wrapping_sub(0xC0);
-            let from = y.wrapping_sub(u16::from(d)) & 0x0FFF;
-            along((x, from), (x, from.wrapping_add(0x88) & 0x0FFF), d, 0x88)
+            let from = w.wrap(y.wrapping_sub(u16::from(d)));
+            along((x, from), (x, w.wrap(from.wrapping_add(0x88))), d, 0x88)
         } else {
             self.room_at((x, y))
         }
@@ -294,14 +294,15 @@ impl CameraSim {
     /// of [`Self::edge_map`]: the camera cannot scroll past one, so the room
     /// runs from the cell holding it. Unlocked directions reach the world.
     fn room_at(&self, (x, y): (u16, u16)) -> Room {
-        let (xi, yi) = (usize::from((x >> 8) as u8 & 0x0F), usize::from((y >> 8) as u8 & 0x0F));
-        let rows = self.edge_map.len() / 16;
-        let cell = |cx: usize, cy: usize| self.edge_map.get(cy * 16 + cx).copied().unwrap_or(0);
-        let mut room = Room::WORLD;
+        let (xi, yi) = (self.world.screen(x), self.world.screen(y));
+        let wide = usize::from(self.world.screens_wide);
+        let rows = self.edge_map.len() / wide;
+        let cell = |cx: usize, cy: usize| self.edge_map.get(cy * wide + cx).copied().unwrap_or(0);
+        let mut room = self.world.room();
         if let Some(k) = (0..=xi).rev().find(|&k| cell(k, yi) & 2 != 0) {
             room.left = k as i32 * 256;
         }
-        if let Some(k) = (xi..16).find(|&k| cell(k, yi) & 1 != 0) {
+        if let Some(k) = (xi..wide).find(|&k| cell(k, yi) & 1 != 0) {
             room.right = (k as i32 + 1) * 256;
         }
         if let Some(k) = (0..=yi).rev().find(|&k| cell(xi, k) & 4 != 0) {
@@ -411,7 +412,7 @@ impl CameraSim {
         if e & 8 != 0 && (self.y as u8) >= 0xC0 {
             return;
         }
-        self.y = self.y.wrapping_add(1) & 0x0FFF;
+        self.y = self.world.wrap(self.y.wrapping_add(1));
     }
 
     /// `$30D9`: the B+Up arm. Needs `sMarioScreenY < $70`, then the cell's up
@@ -426,7 +427,7 @@ impl CameraSim {
         if e & 4 != 0 && (self.y as u8) < 0x49 {
             return;
         }
-        self.y = self.y.wrapping_sub(1) & 0x0FFF;
+        self.y = self.world.wrap(self.y.wrapping_sub(1));
     }
 
     /// The draw-step half (`$54A7`): Mario's screen X sets the enable for
@@ -479,7 +480,7 @@ impl CameraSim {
         }
         self.left_enabled = false;
         // The carry lands in the camera's high byte, masked to four bits.
-        self.x = self.x.wrapping_add(1) & 0x0FFF;
+        self.x = self.world.wrap(self.x.wrapping_add(1));
         self.map_scroll_flags |= 0x10;
     }
 
@@ -540,7 +541,7 @@ impl CameraSim {
                 }
             } else if edges & 1 != 0 && (self.x as u8) > 0xB0 {
                 self.x = self.x.wrapping_sub(1);
-                self.x &= 0x0FFF;
+                self.x = self.world.wrap(self.x);
             } else if d_r != 0 && self.right_enabled {
                 // $0B90: right scroll
                 self.left_enabled = false;
@@ -552,7 +553,7 @@ impl CameraSim {
                 } else if sx < 0x3F {
                     self.x = self.x.wrapping_sub(1);
                 }
-                self.x &= 0x0FFF;
+                self.x = self.world.wrap(self.x);
             }
             // $0BE5 left edge (bit1): at the $50 column the transition fires
             // once Mario's screen X < $0F (Mario warps to x=0, hi+1); below it a
@@ -561,13 +562,13 @@ impl CameraSim {
                 if self.mario_screen_x < 0x0F {
                     // MarioX = 0, MarioX_hi += 1 (mod $10) — $FFC2/$FFC3
                     self.transition = 2;
-                    sim.x = (((sim.x >> 8).wrapping_add(1)) & 0x0F) << 8;
+                    sim.x = self.world.wrap((sim.x >> 8).wrapping_add(1) << 8);
                     self.scene_lookup(sim);
                 }
             } else if edges & 2 != 0 && (self.x as u8) < 0x50 {
                 // pull back toward the $50 lock column (no left scroll)
                 self.x = self.x.wrapping_add(1);
-                self.x &= 0x0FFF;
+                self.x = self.world.wrap(self.x);
             } else if d_l != 0 && self.left_enabled {
                 self.right_enabled = false;
                 self.x = self.x.wrapping_sub(d_l as u16);
@@ -578,7 +579,7 @@ impl CameraSim {
                 } else if sx >= 0x71 {
                     self.x = self.x.wrapping_add(1);
                 }
-                self.x &= 0x0FFF;
+                self.x = self.world.wrap(self.x);
             }
         }
 
@@ -626,7 +627,7 @@ impl CameraSim {
                         // camera's hi.
                         if sy98 < 0x1B {
                             self.transition = 4;
-                            sim.y = ((self.y >> 8) & 0x0F) << 8;
+                            sim.y = self.world.wrap(self.y & 0xFF00);
                             if self.scene_state & 0xF0 == 0 {
                                 self.scene_lookup(sim);
                             }
@@ -647,7 +648,7 @@ impl CameraSim {
                 }
             }
         }
-        self.y &= 0x0FFF;
+        self.y = self.world.wrap(self.y);
         // `$0D97`: `ldh a,[$FFC0] / ld [sPrevMarioY],a` — the latch reads the
         // **live** Mario Y, not the value this body entered with. That matters
         // on the one frame the body itself moves Mario: the up-lock arm warps
@@ -667,7 +668,7 @@ impl CameraSim {
     fn run_transition(&mut self, sim: &mut PlayerSim) {
         let t = self.transition;
         if t & 1 != 0 {
-            self.x = self.x.wrapping_add(4) & 0x0FFF;
+            self.x = self.world.wrap(self.x.wrapping_add(4));
             self.map_scroll_flags = 0x10;
             sim.walk_anim_tick(1);
             sim.x = sim.x.wrapping_add(1);
@@ -675,7 +676,7 @@ impl CameraSim {
                 self.finish_transition();
             }
         } else if t & 2 != 0 {
-            self.x = self.x.wrapping_sub(4) & 0x0FFF;
+            self.x = self.world.wrap(self.x.wrapping_sub(4));
             self.map_scroll_flags = 0x20;
             sim.walk_anim_tick(1);
             sim.x = sim.x.wrapping_sub(1);
@@ -683,7 +684,7 @@ impl CameraSim {
                 self.finish_transition();
             }
         } else if t & 4 != 0 {
-            self.y = self.y.wrapping_sub(4) & 0x0FFF;
+            self.y = self.world.wrap(self.y.wrapping_sub(4));
             self.map_scroll_flags = 0x40;
             sim.walk_anim_tick(1);
             sim.y = sim.y.wrapping_sub(1);
@@ -691,7 +692,7 @@ impl CameraSim {
                 self.finish_transition();
             }
         } else if t & 8 != 0 {
-            self.y = self.y.wrapping_add(4) & 0x0FFF;
+            self.y = self.world.wrap(self.y.wrapping_add(4));
             self.map_scroll_flags = 0x80;
             sim.walk_anim_tick(1);
             // the down scroll carries Mario +1, or +2 on odd `$FF97` frames
@@ -770,7 +771,7 @@ impl CameraSim {
     /// `$0F0B`: latch the scene id under Mario from `sSceneMap` ($A900).
     fn scene_lookup(&mut self, sim: &PlayerSim) {
         self.map_event_flag = 0xFF;
-        let idx = (((sim.y >> 8) as usize & 0x0F) << 4) | ((sim.x >> 8) as usize & 0x0F);
+        let idx = self.world.screen_index(sim.x, sim.y);
         self.scene_id = self.scene_map.get(idx).copied().unwrap_or(0);
         self.palette_fade_step = 0;
     }
@@ -1281,6 +1282,21 @@ mod tests {
         c.prev_mario_y_lo = 0xFF; // screen Y $62
         c.crouch_pan(&grounded(), &b_down());
         assert_eq!(c.y, 0x000, "$FFF + 1 wraps to $000");
+    }
+
+    /// An expanded world keeps the whole hi byte, so the same pan carries
+    /// into screen 16 instead of wrapping.
+    #[test]
+    fn crouch_pan_in_a_full_byte_world_carries_into_screen_sixteen() {
+        let mut c = pan_cam(0x0FFF);
+        c.world = World {
+            screens_wide: 16,
+            screens_high: 20,
+            position_mask: 0xFFFF,
+        };
+        c.prev_mario_y_lo = 0xFF; // screen Y $62
+        c.crouch_pan(&grounded(), &b_down());
+        assert_eq!(c.y, 0x1000);
     }
 
     /// The gate reads the draw step's `sMarioScreenY` — the previous frame's
