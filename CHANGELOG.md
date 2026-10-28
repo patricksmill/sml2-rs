@@ -14,8 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   setting off to play the original layout.
 - Tree Zone 3's camera scrolls freely through its pipes instead of sliding
   between rooms (with Expanded levels on).
-- Scenery for Tree Zone 1, the rebuilt Tree Zone 2 and Tree Zone 3 in
-  widescreen and zoomed-out views.
+- Scenery for Tree Zones 1, 2 (rebuilt), 3 and 4 in widescreen and
+  zoomed-out views.
 - Scenery Editor: rebuilt levels open as their rebuilt map with their own
   scenery file, and a Select tool copies an area to stamp it repeatedly.
 

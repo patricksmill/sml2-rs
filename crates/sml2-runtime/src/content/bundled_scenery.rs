@@ -13,6 +13,11 @@ pub(super) const LEVELS: &[(u8, &str)] = &[
         1,
         include_str!("../../../../assets/scenery/scenery-01.json"),
     ),
+    // Tree Zone 4.
+    (
+        4,
+        include_str!("../../../../assets/scenery/scenery-04.json"),
+    ),
 ];
 
 /// Scenery for levels as their expanded-level recipe rebuilds them, in the
