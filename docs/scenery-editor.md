@@ -33,7 +33,9 @@ painted. The scene tile tray contains background swatches, without actors.
 
 | Action | Control |
 |---|---|
-| Brush / Eraser / Pick / Rectangle | B / E / I / R |
+| Brush / Eraser / Pick / Rectangle / Select | B / E / I / R / S |
+| Copy the selected area | Ctrl/Cmd+C or **Copy** |
+| Stamp copies (click each place; right-click or Escape stops) | Ctrl/Cmd+V or **Paste** |
 | Paint / temporary eraser | Left-drag / right-drag |
 | Pan | Middle-drag or Space + left-drag |
 | Scroll / horizontal scroll | Wheel / Shift-wheel |
@@ -42,6 +44,13 @@ painted. The scene tile tray contains background swatches, without actors.
 | Undo / Redo | Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z |
 | Playtest / Return | Enter / Escape |
 | Cancel unfinished gesture | Escape |
+
+To repeat a pattern, drag an area with **Select**, copy it, then paste: a
+preview follows the pointer and every click stamps the area there as one
+undo step. Copy takes what the canvas shows, map tiles and scenery alike;
+cells that show nothing stay untouched when stamped. Copies stay within the
+level they were taken from. Escape stops stamping, then clears the
+selection.
 
 The canvas has independent pan and 1×–8× zoom. Game display settings determine
 the playtest view; an enlarged view is needed to see scene surroundings.

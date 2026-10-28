@@ -15,6 +15,10 @@ mod targets;
 #[cfg(test)]
 pub(super) mod tests;
 
+/// What Copy leaves on the system clipboard. The tiles stay in the editor;
+/// the text is there so Ctrl/Cmd+V reaches it as a paste.
+const CLIPBOARD_NOTE: &str = "SML2 Scenery Editor tiles";
+
 #[derive(Default)]
 pub(super) struct Editor {
     pub level: u8,
@@ -131,8 +135,9 @@ impl EditorApp {
         self.save_scenery();
     }
 
+    /// Escape in the workspace (see [`Workspace::escape`]).
     pub(super) fn cancel_editor_gesture(&mut self) -> bool {
-        let cancelled = self.editor.work.as_mut().is_some_and(Workspace::cancel);
+        let cancelled = self.editor.work.as_mut().is_some_and(Workspace::escape);
         self.editor.gesture_button = None;
         self.editor.pan_button = None;
         cancelled
@@ -241,9 +246,29 @@ impl EditorApp {
                     .on_hover_text(hint)
                     .clicked()
                 {
-                    work.finish();
-                    work.tool = tool;
+                    work.set_tool(tool);
                 }
+            }
+            ui.separator();
+            if ui
+                .add_enabled(work.selection.is_some(), egui::Button::new("Copy"))
+                .on_hover_text("Ctrl/Cmd+C · Copy the selected area")
+                .clicked()
+            {
+                let drawn = self.editor.atlas.as_ref().map(|a| a.layout.as_slice());
+                if work.copy(drawn) {
+                    ctx.copy_text(CLIPBOARD_NOTE.into());
+                }
+            }
+            if ui
+                .add_enabled(
+                    work.clipboard.is_some(),
+                    egui::Button::new("Paste").selected(work.pasting),
+                )
+                .on_hover_text("Ctrl/Cmd+V · Click to stamp copies; right-click or Esc stops")
+                .clicked()
+            {
+                work.start_paste();
             }
             ui.separator();
             if ui
@@ -315,6 +340,11 @@ impl EditorApp {
         ui.horizontal_wrapped(|ui| {
             ui.strong(if work.dirty { "Saving…" } else { "Saved" });
             ui.label(format!("· {} scenery tiles", work.scenery.len()));
+            if work.pasting {
+                ui.strong("· Click to stamp the copy · Right-click or Esc to stop");
+            } else if work.tool == Tool::Select {
+                ui.label("· Drag to select · Ctrl/Cmd+C copy · Ctrl/Cmd+V stamp");
+            }
             if let Some(cell) = self.editor.hover {
                 ui.label(format!(
                     "· {}, {} · {}",
@@ -349,10 +379,22 @@ impl EditorApp {
         let Some(work) = &mut self.editor.work else {
             return;
         };
-        let (undo, redo, tool, grid, play, zoom_delta) = ctx.input_mut(|i| {
+        let (undo, redo, tool, grid, play, zoom_delta, copy, paste) = ctx.input_mut(|i| {
+            // Desktop backends report Ctrl/Cmd+C and +V as these events, not
+            // as keys; a paste event only comes while the system clipboard
+            // holds text, which Copy leaves there.
+            let mut take = |event: fn(&egui::Event) -> bool| {
+                let before = i.events.len();
+                i.events.retain(|e| !event(e));
+                i.events.len() != before
+            };
+            let copy_event = take(|e| matches!(e, egui::Event::Copy));
+            let paste_event = take(|e| matches!(e, egui::Event::Paste(_)));
             let modifiers = i.modifiers;
             let mut pressed = |key| i.consume_key(modifiers, key);
             let z = modifiers.command && pressed(egui::Key::Z);
+            let copy = copy_event || modifiers.command && pressed(egui::Key::C);
+            let paste = paste_event || modifiers.command && pressed(egui::Key::V);
             let mut tool = None;
             let (mut grid, mut play) = (false, false);
             let mut zoom_delta = 0;
@@ -362,6 +404,7 @@ impl EditorApp {
                     (egui::Key::E, Tool::Eraser),
                     (egui::Key::I, Tool::Eyedropper),
                     (egui::Key::R, Tool::Rectangle),
+                    (egui::Key::S, Tool::Select),
                 ] {
                     if pressed(key) {
                         tool = Some(candidate);
@@ -380,13 +423,24 @@ impl EditorApp {
                 grid,
                 play,
                 zoom_delta,
+                copy,
+                paste,
             )
         });
-        if undo || redo || tool.is_some() || grid || play || zoom_delta != 0 {
+        if undo || redo || tool.is_some() || grid || play || zoom_delta != 0 || copy || paste {
             sml2_desktop::ui::release_focus(ctx);
         }
-        if undo || redo || tool.is_some() {
+        if undo || redo {
             work.finish();
+        }
+        if copy {
+            let drawn = self.editor.atlas.as_ref().map(|a| a.layout.as_slice());
+            if work.copy(drawn) {
+                ctx.copy_text(CLIPBOARD_NOTE.into());
+            }
+        }
+        if paste {
+            work.start_paste();
         }
         if undo {
             work.undo();
@@ -395,7 +449,7 @@ impl EditorApp {
             work.redo();
         }
         if let Some(tool) = tool {
-            work.tool = tool;
+            work.set_tool(tool);
         }
         if grid {
             work.grid = !work.grid;

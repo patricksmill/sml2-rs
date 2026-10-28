@@ -14,10 +14,11 @@ pub(super) enum Tool {
     Eraser,
     Eyedropper,
     Rectangle,
+    Select,
 }
 
 impl Tool {
-    pub const ALL: [(Self, &'static str, &'static str); 4] = [
+    pub const ALL: [(Self, &'static str, &'static str); 5] = [
         (Self::Brush, "Brush", "B · Drag to paint"),
         (Self::Eraser, "Eraser", "E · Drag to erase"),
         (
@@ -26,7 +27,30 @@ impl Tool {
             "I · Pick a tile from terrain or scenery",
         ),
         (Self::Rectangle, "Rectangle", "R · Drag a filled rectangle"),
+        (
+            Self::Select,
+            "Select",
+            "S · Drag an area, Ctrl+C to copy it, Ctrl+V to stamp copies",
+        ),
     ];
+}
+
+/// Tiles copied from a selection, row-major; `None` where nothing shows.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Clip {
+    pub width: i16,
+    pub cells: Vec<Option<u8>>,
+}
+
+impl Clip {
+    /// Each copied tile with its offset from the clip's top-left cell.
+    pub fn tiles(&self) -> impl Iterator<Item = (Cell, u8)> + '_ {
+        let width = self.width.max(1) as usize;
+        self.cells
+            .iter()
+            .enumerate()
+            .filter_map(move |(i, id)| Some((((i % width) as i16, (i / width) as i16), (*id)?)))
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -94,6 +118,15 @@ pub(super) enum Gesture {
         end: Cell,
         value: u8,
     },
+    Select {
+        start: Cell,
+        end: Cell,
+    },
+}
+
+/// The top-left and bottom-right cells of the rectangle two corners span.
+pub(super) fn span(a: Cell, b: Cell) -> (Cell, Cell) {
+    ((a.0.min(b.0), a.1.min(b.1)), (a.0.max(b.0), a.1.max(b.1)))
 }
 
 pub(super) struct Workspace {
@@ -109,6 +142,12 @@ pub(super) struct Workspace {
     pub count: usize,
     /// Scene targets protect their native 10×9 cells from authoring.
     pub scene_border: bool,
+    /// The Select tool's last area, `(top-left, bottom-right)`.
+    pub selection: Option<(Cell, Cell)>,
+    /// What Copy took from the selection, for this level only.
+    pub clipboard: Option<Clip>,
+    /// Clicks stamp the clipboard instead of using the tool.
+    pub pasting: bool,
     /// The level as its expanded-level recipe rebuilds it, with its own
     /// scenery file in the rebuilt map's cells.
     pub expanded: bool,
@@ -142,6 +181,9 @@ impl Workspace {
             used,
             count,
             scene_border: false,
+            selection: None,
+            clipboard: None,
+            pasting: false,
             expanded: false,
             undo: Vec::new(),
             redo: Vec::new(),
@@ -207,6 +249,21 @@ impl Workspace {
         if self.gesture.is_some() || self.load_error.is_some() {
             return;
         }
+        if self.pasting {
+            if erase {
+                self.pasting = false;
+            } else {
+                self.stamp(cell);
+            }
+            return;
+        }
+        if self.tool == Tool::Select && !erase {
+            self.gesture = Some(Gesture::Select {
+                start: cell,
+                end: cell,
+            });
+            return;
+        }
         if self.tool == Tool::Eyedropper && !erase {
             if let Some(id) = self.sample(cell).filter(|&id| usize::from(id) < self.count) {
                 self.metatile = id;
@@ -237,7 +294,7 @@ impl Workspace {
             return;
         };
         match &mut gesture {
-            Gesture::Rectangle { end, .. } => {
+            Gesture::Rectangle { end, .. } | Gesture::Select { end, .. } => {
                 if let Some(cell) = cell {
                     *end = cell;
                 }
@@ -278,6 +335,10 @@ impl Workspace {
             return false;
         };
         let edit: Edit = match gesture {
+            Gesture::Select { start, end } => {
+                self.selection = Some(span(start, end));
+                return false;
+            }
             Gesture::Stroke { changes, .. } => changes
                 .into_values()
                 .filter(|c| c.before != c.after)
@@ -305,6 +366,11 @@ impl Workspace {
                 edit
             }
         };
+        self.commit(edit)
+    }
+
+    /// Record a finished edit as one undo step.
+    fn commit(&mut self, edit: Edit) -> bool {
         if edit.is_empty() {
             return false;
         }
@@ -315,6 +381,94 @@ impl Workspace {
         self.redo.clear();
         self.dirty = true;
         true
+    }
+
+    /// The tile drawn at `cell`: its scenery, else the map cell as the
+    /// canvas shows it (`drawn`, the atlas's layout with DX's decoration),
+    /// else nothing past the map.
+    pub fn shown(&self, cell: Cell, drawn: Option<&[u8]>) -> Option<u8> {
+        if self.paint(cell).is_some() || self.outside(cell) {
+            return self.sample(cell);
+        }
+        let at = cell.1 as usize * self.layout.world.cells_wide() + cell.0 as usize;
+        drawn
+            .and_then(|cells| cells.get(at))
+            .or_else(|| self.layout.cells.get(at))
+            .copied()
+    }
+
+    /// Copy what the selection shows (see [`Self::shown`]). False without one.
+    pub fn copy(&mut self, drawn: Option<&[u8]>) -> bool {
+        let Some((first, last)) = self.selection else {
+            return false;
+        };
+        let cells = (first.1..=last.1)
+            .flat_map(|y| (first.0..=last.0).map(move |x| (x, y)))
+            .map(|cell| {
+                self.shown(cell, drawn)
+                    .filter(|&id| usize::from(id) < self.count)
+            })
+            .collect();
+        self.clipboard = Some(Clip {
+            width: last.0 - first.0 + 1,
+            cells,
+        });
+        true
+    }
+
+    /// Start stamping the clipboard. False when nothing is copied.
+    pub fn start_paste(&mut self) -> bool {
+        self.finish();
+        self.pasting = self.clipboard.is_some();
+        self.pasting
+    }
+
+    /// Paint the clipboard with its top-left at `at`, as one undo step.
+    /// Empty clip cells and a scene's protected picture are left alone.
+    pub fn stamp(&mut self, at: Cell) -> bool {
+        let Some(clip) = self.clipboard.clone() else {
+            return false;
+        };
+        let mut edit = Vec::new();
+        for ((dx, dy), id) in clip.tiles() {
+            let (Some(x), Some(y)) = (at.0.checked_add(dx), at.1.checked_add(dy)) else {
+                continue;
+            };
+            let cell = (x, y);
+            if self.scene_border && !self.outside(cell) {
+                continue;
+            }
+            let before = self.paint(cell);
+            if before == Some(id) {
+                continue;
+            }
+            self.put(cell, Some(id));
+            edit.push(Change {
+                cell,
+                before,
+                after: Some(id),
+            });
+        }
+        self.commit(edit)
+    }
+
+    /// Escape: drop an unfinished gesture, then leave pasting, then clear
+    /// the selection. False when there was nothing to drop.
+    pub fn escape(&mut self) -> bool {
+        if self.cancel() {
+            return true;
+        }
+        if std::mem::take(&mut self.pasting) {
+            return true;
+        }
+        self.selection.take().is_some()
+    }
+
+    /// Change tool, ending any gesture and paste.
+    pub fn set_tool(&mut self, tool: Tool) {
+        self.finish();
+        self.pasting = false;
+        self.tool = tool;
     }
 
     pub fn cancel(&mut self) -> bool {

@@ -1,10 +1,13 @@
 //! Signed world-space canvas; gameplay zoom and camera never participate.
 
-use super::state::{Cell, Gesture, Tool};
+use super::state::{span, Cell, Gesture, Tool};
 use super::Editor;
 use crate::app::theme;
 use eframe::egui::{self, Color32, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind, Ui};
 use std::{collections::HashMap, sync::Arc};
+
+/// The Select tool's outline, apart from the map border and the cursor.
+const SELECTION: Color32 = Color32::from_rgb(120, 230, 160);
 
 #[derive(Default)]
 pub(super) struct CanvasCache {
@@ -96,22 +99,13 @@ impl Editor {
         };
         // Pick what is actually shown, including DX's collision-compatible decoration.
         let picked = if work.tool == Tool::Eyedropper {
-            self.hover.and_then(|cell| {
-                if work.paint(cell).is_some() || work.outside(cell) {
-                    work.sample(cell)
-                } else {
-                    self.atlas
-                        .as_ref()?
-                        .layout
-                        .get(cell.1 as usize * work.layout.world.cells_wide() + cell.0 as usize)
-                        .copied()
-                }
-            })
+            let drawn = self.atlas.as_ref().map(|atlas| atlas.layout.as_slice());
+            self.hover.and_then(|cell| work.shown(cell, drawn))
         } else {
             None
         };
         if let (Some(button), Some(cell)) = (button, self.hover) {
-            if work.tool == Tool::Eyedropper && button == PointerButton::Primary {
+            if work.tool == Tool::Eyedropper && button == PointerButton::Primary && !work.pasting {
                 if let Some(id) = picked.filter(|&id| usize::from(id) < work.count) {
                     work.metatile = id;
                 }
@@ -277,7 +271,34 @@ impl Editor {
                 ui.visuals().text_color(),
             );
         }
-        if let Some(Gesture::Rectangle { start, end, value }) = &work.gesture {
+        let outline = |(first, last): (Cell, Cell), color: Color32| {
+            painter.rect_stroke(
+                cell_rect(first).union(cell_rect(last)),
+                0.0,
+                Stroke::new(2.0_f32, color),
+                StrokeKind::Inside,
+            );
+        };
+        let selected = match &work.gesture {
+            Some(Gesture::Select { start, end }) => Some(span(*start, *end)),
+            _ => work.selection,
+        };
+        if let Some(area) = selected {
+            outline(area, SELECTION);
+        }
+        if let (true, Some(clip), Some(at)) = (work.pasting, &work.clipboard, self.hover) {
+            if self.pan_button.is_none() {
+                let mut last = at;
+                for ((dx, dy), id) in clip.tiles() {
+                    let cell = (at.0.saturating_add(dx), at.1.saturating_add(dy));
+                    last = (last.0.max(cell.0), last.1.max(cell.1));
+                    if !work.scene_border || work.outside(cell) {
+                        draw_tile(id, cell_rect(cell), Color32::from_white_alpha(160));
+                    }
+                }
+                outline((at, last), theme::HIGHLIGHT);
+            }
+        } else if let Some(Gesture::Rectangle { start, end, value }) = &work.gesture {
             for y in start.1.min(end.1)..=start.1.max(end.1) {
                 for x in start.0.min(end.0)..=start.0.max(end.0) {
                     if !work.scene_border || work.outside((x, y)) {
@@ -305,6 +326,7 @@ impl Editor {
                 };
                 if !erasing
                     && work.tool != Tool::Eyedropper
+                    && work.tool != Tool::Select
                     && (!work.scene_border || work.outside(cell))
                 {
                     draw_tile(work.metatile, at, Color32::from_white_alpha(140));

@@ -454,3 +454,109 @@ fn idle_editor_reuses_chunks_and_skips_hidden_game_uploads() {
     assert_eq!(app.editor.canvas_cache.builds, builds + 2);
     std::fs::remove_dir_all(path).ok();
 }
+
+/// The Select tool through real input: drag an area, Ctrl+C (which desktop
+/// backends report as a copy event), Ctrl+V (a paste event), then clicks
+/// stamp copies until Escape.
+#[test]
+fn select_copy_and_paste_repeat_an_area_through_input_events() {
+    let (mut app, ctx, path) = app();
+    app.open_editor(&ctx);
+    let work = app.editor.work.as_mut().unwrap();
+    work.metatile = 1;
+    work.viewport.center = egui::pos2(0.0, 400.0);
+    for cell in [(-4, 24), (-3, 25)] {
+        work.begin(cell, false);
+        work.finish();
+    }
+    let size = (800.0, 720.0);
+    frame(&mut app, &ctx, size, vec![key(Key::S, Modifiers::NONE)]);
+    assert_eq!(app.editor.work.as_ref().unwrap().tool, Tool::Select);
+    let rect = app.editor.canvas_rect.unwrap();
+    let viewport = app.editor.work.as_ref().unwrap().viewport;
+    let at = |x: i16, y: i16| {
+        viewport.screen(
+            rect,
+            egui::pos2(f32::from(x) * 16.0 + 8.0, f32::from(y) * 16.0 + 8.0),
+        )
+    };
+    let (start, end) = (at(-4, 24), at(-3, 25));
+    frame(
+        &mut app,
+        &ctx,
+        size,
+        vec![
+            Event::PointerMoved(start),
+            pointer(start, PointerButton::Primary, true),
+        ],
+    );
+    frame(&mut app, &ctx, size, vec![Event::PointerMoved(end)]);
+    frame(
+        &mut app,
+        &ctx,
+        size,
+        vec![pointer(end, PointerButton::Primary, false)],
+    );
+    assert_eq!(
+        app.editor.work.as_ref().unwrap().selection,
+        Some(((-4, 24), (-3, 25)))
+    );
+
+    let output = frame(&mut app, &ctx, size, vec![Event::Copy]);
+    assert!(
+        output
+            .platform_output
+            .commands
+            .iter()
+            .any(|command| matches!(
+                command,
+                egui::OutputCommand::CopyText(text) if !text.is_empty()
+            )),
+        "Copy leaves text so Ctrl+V reaches the editor"
+    );
+    frame(&mut app, &ctx, size, vec![Event::Paste("anything".into())]);
+    assert!(app.editor.work.as_ref().unwrap().pasting);
+
+    for (x, y) in [(-12, 24), (-8, 27)] {
+        let p = at(x, y);
+        frame(
+            &mut app,
+            &ctx,
+            size,
+            vec![
+                Event::PointerMoved(p),
+                pointer(p, PointerButton::Primary, true),
+            ],
+        );
+        frame(
+            &mut app,
+            &ctx,
+            size,
+            vec![pointer(p, PointerButton::Primary, false)],
+        );
+    }
+    let work = app.editor.work.as_ref().unwrap();
+    for (x, y) in [(-12, 24), (-8, 27)] {
+        assert_eq!(
+            (work.paint((x, y)), work.paint((x + 1, y + 1))),
+            (Some(1), Some(1))
+        );
+        assert_eq!(
+            work.paint((x + 1, y)),
+            None,
+            "the copy's empty cell stays empty"
+        );
+    }
+    frame(
+        &mut app,
+        &ctx,
+        size,
+        vec![key(Key::Escape, Modifiers::NONE)],
+    );
+    assert!(
+        app.screen == Screen::Editor,
+        "Escape stops stamping instead of leaving"
+    );
+    assert!(!app.editor.work.as_ref().unwrap().pasting);
+    std::fs::remove_dir_all(path).ok();
+}

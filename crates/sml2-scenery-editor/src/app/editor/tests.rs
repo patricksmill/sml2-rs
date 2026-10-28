@@ -137,3 +137,66 @@ fn history_retains_the_latest_hundred_gestures() {
         assert_eq!(work.sample((-1, y)), Some(1));
     }
 }
+
+/// Select an area, copy what it shows (scenery and map cells alike) and
+/// stamp it elsewhere: each stamp is one undo step, and cells that showed
+/// nothing are left alone.
+#[test]
+fn a_copied_selection_stamps_as_one_undo_step_and_skips_empty_cells() {
+    let mut work = workspace();
+    work.begin((-1, 0), false);
+    work.finish();
+    work.set_tool(Tool::Select);
+    work.begin((-2, 0), false);
+    work.extend(Some((0, 1)));
+    assert!(!work.finish(), "selecting is not an edit");
+    assert_eq!(work.selection, Some(((-2, 0), (0, 1))));
+    // (-2, y) and (-1, 1) lie past the map, unpainted; column 0 is map cell 0.
+    assert!(work.copy(None));
+    let clip = work.clipboard.clone().unwrap();
+    assert_eq!(clip.width, 3);
+    assert_eq!(clip.cells, [None, Some(1), Some(0), None, None, Some(0)]);
+
+    assert!(work.start_paste());
+    work.begin((-10, 5), false);
+    work.begin((-20, 5), false);
+    assert!(work.gesture.is_none(), "a stamp is a single click");
+    assert_eq!(
+        [(-10, 5), (-9, 5), (-8, 5), (-8, 6)].map(|cell| work.paint(cell)),
+        [None, Some(1), Some(0), Some(0)]
+    );
+    work.undo();
+    assert_eq!(work.paint((-19, 5)), None, "the second stamp undoes alone");
+    assert_eq!(work.paint((-9, 5)), Some(1));
+    work.undo();
+    assert_eq!(work.paint((-9, 5)), None);
+
+    work.begin((-30, 5), true);
+    assert!(!work.pasting, "right-click stops stamping");
+    assert!(work.start_paste());
+    assert!(
+        work.escape() && !work.pasting,
+        "Escape stops stamping first"
+    );
+    assert!(
+        work.escape() && work.selection.is_none(),
+        "then clears the selection"
+    );
+    assert!(!work.escape());
+}
+
+#[test]
+fn stamps_never_cover_a_scenes_protected_picture() {
+    let mut work = workspace();
+    work.scene_border = true;
+    work.clipboard = Some(Clip {
+        width: 2,
+        cells: vec![Some(3); 4],
+    });
+    assert!(work.start_paste());
+    work.begin((-1, 0), false);
+    assert_eq!(
+        [(-1, 0), (0, 0), (-1, 1), (0, 1)].map(|cell| work.paint(cell)),
+        [Some(3), None, Some(3), None]
+    );
+}
