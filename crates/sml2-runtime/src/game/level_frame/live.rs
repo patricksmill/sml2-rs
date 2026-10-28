@@ -89,6 +89,7 @@ pub(crate) struct LiveLevelFrame<'a> {
     pub scripts: &'a SceneScripts,
     pub tilesets: &'a Tilesets,
     pub arena_layout: Option<&'a LevelLayout>,
+    pub rom_tables: Option<&'a crate::content::RomTables>,
     pub anim_rows: &'a [u8],
     pub tile_animation: &'a mut TileAnimationClock,
 }
@@ -132,6 +133,7 @@ pub(crate) fn step_live_level_frame(
         scripts,
         tilesets,
         arena_layout,
+        rom_tables,
         anim_rows,
         tile_animation,
     } = state;
@@ -196,6 +198,7 @@ pub(crate) fn step_live_level_frame(
                 *layout_live = arena.clone();
                 // `$25AF` replaces the map, including prior block edits.
                 sim.layout_writes.clear();
+                crate::session::enter_layout_world(sim, cam, obj, layout_live, rom_tables);
                 true
             } else {
                 false

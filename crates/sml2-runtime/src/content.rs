@@ -2,7 +2,7 @@
 //! sessions hold decoded content and never reopen files on level transitions.
 
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest, LevelStart};
-use sml2_core::level_recipe::{LevelParts, LevelRecipe};
+use sml2_core::level_recipe::{layout_fingerprint, LevelParts, LevelRecipe};
 use sml2_core::map::{
     MapNodeRecords, MapNodes, MapWalk, OverworldManifest, OverworldTilemaps, OverworldTiles,
 };
@@ -17,6 +17,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod bundled_recipes;
 mod bundled_scenery;
 
 /// Relative asset reads, implemented by extracted directories or in-memory bundles.
@@ -62,6 +63,17 @@ pub struct LevelContent {
     pub scene_map: Option<Vec<u8>>,
     /// Approved visual scenery, independent of the simulated layout.
     pub scenery: SceneryOverlay,
+    /// Set when a recipe rebuilt the level ([`Self::expanded`]).
+    pub rom_tables: Option<RomTables>,
+}
+
+/// A rebuilt level's lock and scene tables as loaded. `$25AF`'s arena reload
+/// swaps in the ROM-sized arena layout and keeps the level's own tables, so
+/// the arena needs these, not the rebuilt ones.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RomTables {
+    pub edge_map: Option<Vec<u8>>,
+    pub scene_map: Option<Vec<u8>>,
 }
 
 impl LevelContent {
@@ -90,6 +102,7 @@ impl LevelContent {
             edge_map,
             scene_map,
             scenery: SceneryOverlay::empty(),
+            rom_tables: None,
         })
     }
 }
@@ -134,6 +147,10 @@ impl LevelContent {
         summary.size = parts.layout.cells.len() as u32;
         summary.distinct_metatile_ids = parts.layout.distinct_metatile_ids();
         summary.most_common = parts.layout.most_common_metatile();
+        content.rom_tables = Some(RomTables {
+            edge_map: self.edge_map.clone(),
+            scene_map: self.scene_map.clone(),
+        });
         content.layout = parts.layout;
         content.edge_map = Some(parts.edge_map);
         content.scene_map = Some(parts.scene_map);
@@ -198,6 +215,8 @@ pub struct SessionAssets {
     pub front_end: sml2_core::front_end::FrontEndAssets,
     /// Approved surroundings for fixed screens, maps, rooms, and boss arenas.
     pub scene_scenery: crate::scene_scenery::SceneScenery,
+    /// Expanded-level recipes; [`Self::recipe_for`] picks one at level entry.
+    pub recipes: Vec<LevelRecipe>,
     levels: std::collections::BTreeMap<u8, Result<LevelContent, String>>,
 }
 
@@ -304,6 +323,8 @@ impl SessionAssets {
             front_end,
             scene_scenery: crate::scene_scenery::SceneScenery::bundled()
                 .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+            recipes: bundled_recipes::parse(bundled_recipes::RECIPES)
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
             levels,
         };
         bundled_scenery::apply(&mut assets, scenery)
@@ -317,6 +338,15 @@ impl SessionAssets {
             .ok_or_else(|| format!("level {id} is not loaded"))?
             .as_ref()
             .map_err(Clone::clone)
+    }
+
+    /// The recipe written for `content`'s level and loaded layout (vanilla
+    /// or DX), if any.
+    pub fn recipe_for(&self, content: &LevelContent) -> Option<&LevelRecipe> {
+        let fingerprint = layout_fingerprint(&content.layout);
+        self.recipes
+            .iter()
+            .find(|r| r.level_id == content.manifest.level_id && r.sources.contains(&fingerprint))
     }
 
     /// Replace one level before constructing a session (e.g. editor playtest).

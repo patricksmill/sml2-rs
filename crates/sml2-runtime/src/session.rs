@@ -65,6 +65,7 @@ pub(crate) mod dx_palette;
 pub(crate) mod dx_effects;
 mod level;
 pub use level::LevelContext;
+pub(crate) use level::enter_layout_world;
 
 /// Every nondeterministic gameplay input is supplied by the host.
 #[derive(Debug, Clone, Copy, Default)]
@@ -299,24 +300,32 @@ fn bell_handoff(
 fn level_content<'a>(
     assets: &'a SessionAssets,
     dx: Option<&sml2_dx::Presentation>,
+    expanded: bool,
     level_id: u8,
 ) -> Result<std::borrow::Cow<'a, crate::content::LevelContent>, String> {
-    let content = assets.level(level_id)?;
-    let Some(level) = dx.and_then(|dx| dx.level(level_id)) else {
-        return Ok(std::borrow::Cow::Borrowed(content));
-    };
-    let mut content = content.clone();
-    content.layout = LevelLayout::from_bytes(&level.layout)?;
-    let records = &mut content.manifest.spawns.records;
-    if records.len() != level.spawns.len()
-        || records.iter().zip(&level.spawns).any(|(native, dx)| native.anim_index != dx.anim_index)
-    {
-        return Err(format!("DX level {level_id:02X} spawns do not match its objects"));
+    let mut content = std::borrow::Cow::Borrowed(assets.level(level_id)?);
+    if let Some(level) = dx.and_then(|dx| dx.level(level_id)) {
+        let content = content.to_mut();
+        content.layout = LevelLayout::from_bytes(&level.layout)?;
+        let records = &mut content.manifest.spawns.records;
+        if records.len() != level.spawns.len()
+            || records.iter().zip(&level.spawns).any(|(native, dx)| native.anim_index != dx.anim_index)
+        {
+            return Err(format!("DX level {level_id:02X} spawns do not match its objects"));
+        }
+        for (native, dx) in records.iter_mut().zip(&level.spawns) {
+            (native.x, native.y, native.mode_flag, native.raw) = (dx.x, dx.y, dx.mode_flag, dx.raw);
+        }
     }
-    for (native, dx) in records.iter_mut().zip(&level.spawns) {
-        (native.x, native.y, native.mode_flag, native.raw) = (dx.x, dx.y, dx.mode_flag, dx.raw);
+    // A recipe is written against the vanilla or the DX layout, so it is
+    // chosen after DX has substituted its own.
+    if let Some(recipe) = assets.recipe_for(&content).filter(|_| expanded) {
+        match content.expanded(recipe) {
+            Ok(rebuilt) => content = std::borrow::Cow::Owned(rebuilt),
+            Err(error) => println!("note: {error}; the original layout loads instead"),
+        }
     }
-    Ok(std::borrow::Cow::Owned(content))
+    Ok(content)
 }
 
 /// Frames `$3F4B1` spends in its graphics copy before the bell script runs.
@@ -400,6 +409,10 @@ pub struct Session {
     pub hud_style: crate::render::HudStyle,
     /// The presentation character selected through the DX file-select door.
     pub character: Character,
+    /// Load levels rebuilt by a recipe ([`SessionAssets::recipe_for`]) in
+    /// place of the ROM's. Read at level entry; demos always use the ROM's.
+    /// Off by default so the session stays ROM-exact unless a host opts in.
+    pub expanded_levels: bool,
     dx: Option<std::sync::Arc<sml2_dx::Presentation>>,
     /// Deferred goal-bell handoff inputs: `(node, exit_tile_flag)`.
     bell_return: Option<(u8, u8)>,
@@ -556,7 +569,9 @@ impl Session {
     /// skipped), for acceptance tapes.
     pub fn begin_level(&mut self, level_id: u8, progress_flags: u8) -> Result<(), String> {
         self.remember_level_state();
-        let content = level_content(&self.assets, self.dx.as_deref(), level_id)?.into_owned();
+        let content =
+            level_content(&self.assets, self.dx.as_deref(), self.expanded_levels, level_id)?
+                .into_owned();
         let ctx = LevelContext::from_content(
             level_id,
             &content,
@@ -693,6 +708,7 @@ impl Session {
             easy_mode: false,
             hud_style: Default::default(),
             character: Character::Mario,
+            expanded_levels: false,
             dx: None,
             bell_return: None,
             bell_fade: None,
@@ -736,7 +752,7 @@ impl Session {
         self.remember_level_state();
         let index = index & 0x03;
         let level_id = DEMO_LEVELS[index as usize];
-        let Ok(content) = level_content(&self.assets, self.dx.as_deref(), level_id) else {
+        let Ok(content) = level_content(&self.assets, self.dx.as_deref(), false, level_id) else {
             return false;
         };
         let mut ctx = LevelContext::from_content(
@@ -1234,7 +1250,8 @@ impl Session {
                     break 'map StepOutcome::Continue;
                 }
                 if let Some(level_id) = entry.level {
-                    match level_content(&self.assets, self.dx.as_deref(), level_id).map(|content| {
+                    let expanded = self.expanded_levels;
+                    match level_content(&self.assets, self.dx.as_deref(), expanded, level_id).map(|content| {
                         LevelContext::from_content(
                             level_id,
                             &content,

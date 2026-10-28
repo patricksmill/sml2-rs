@@ -261,8 +261,7 @@ impl crate::Session {
                         return Err(format!("arena graphics {gfx} cannot load"));
                     }
                     ctx.arena_loaded = true;
-                    ctx.layout_live = ctx.arena_layout.clone().ok_or("arena layout is missing")?;
-                    ctx.sim.layout_writes.clear();
+                    ctx.load_arena()?;
                 }
                 SceneStep::End => {
                     ended = true;

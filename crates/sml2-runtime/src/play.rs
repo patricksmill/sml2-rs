@@ -259,6 +259,7 @@ pub(crate) fn run_play(
                 scripts: &scripts,
                 tilesets: &tilesets,
                 arena_layout: arena_layout.as_ref(),
+                rom_tables: None,
                 anim_rows,
                 tile_animation: &mut tile_animation,
             },

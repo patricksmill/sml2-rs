@@ -9,6 +9,26 @@ use super::{
 
 use crate::game::level_frame::{begin_live_level_frame, step_live_level_frame, LiveLevelFrame};
 
+/// Point the sims at the world of a layout swapped in mid-level. The arena
+/// layout is ROM-sized; a rebuilt level's camera also returns to the tables
+/// the arena was authored against, which `$25AF` leaves in place.
+pub(crate) fn enter_layout_world(
+    sim: &mut PlayerSim,
+    cam: &mut CameraSim,
+    obj: &mut ObjectSim,
+    layout: &LevelLayout,
+    rom_tables: Option<&crate::content::RomTables>,
+) {
+    (sim.world, cam.world, obj.world) = (layout.world, layout.world, layout.world);
+    if let Some(tables) = rom_tables {
+        cam.edge_map = tables
+            .edge_map
+            .clone()
+            .unwrap_or_else(|| CameraSim::new(0, 0).edge_map);
+        cam.scene_map = tables.scene_map.clone().unwrap_or_default();
+    }
+}
+
 /// In-level simulation state and working buffers for a live level play.
 pub struct LevelContext {
     pub manifest: LevelManifest,
@@ -35,6 +55,8 @@ pub struct LevelContext {
     pub scripts: SceneScripts,
     pub tilesets: Tilesets,
     pub arena_layout: Option<LevelLayout>,
+    /// The tables an arena reload restores in a rebuilt level.
+    pub rom_tables: Option<crate::content::RomTables>,
     pub tile_animation: TileAnimationClock,
     /// A phase has been copied to `$9200` since the level loaded. Presentation
     /// only: DX tells a phase from identical base tiles by it.
@@ -156,6 +178,7 @@ impl LevelContext {
             scripts,
             tilesets,
             arena_layout,
+            rom_tables: content.rom_tables.clone(),
             tile_animation: TileAnimationClock::default(),
             tile_animation_copied: false,
             dx_regional: Default::default(),
@@ -169,6 +192,21 @@ impl LevelContext {
             active_object_frames: 0,
             gameplay_death_frames: 0,
         }
+    }
+
+    /// `$25AF`: swap in the boss arena's layout, which replaces prior block
+    /// edits. See [`enter_layout_world`].
+    pub(crate) fn load_arena(&mut self) -> Result<(), String> {
+        self.layout_live = self.arena_layout.clone().ok_or("arena layout is missing")?;
+        self.sim.layout_writes.clear();
+        enter_layout_world(
+            &mut self.sim,
+            &mut self.cam,
+            &mut self.obj,
+            &self.layout_live,
+            self.rom_tables.as_ref(),
+        );
+        Ok(())
     }
 
     /// Step the in-level simulation by 1 frame.
@@ -252,6 +290,7 @@ impl LevelContext {
                 scripts: &self.scripts,
                 tilesets: &self.tilesets,
                 arena_layout: self.arena_layout.as_ref(),
+                rom_tables: self.rom_tables.as_ref(),
                 anim_rows: &self.anim_rows,
                 tile_animation: &mut self.tile_animation,
             },
