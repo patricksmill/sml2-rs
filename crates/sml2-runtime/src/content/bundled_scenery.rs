@@ -23,6 +23,11 @@ pub(super) const LEVELS: &[(u8, &str)] = &[
         5,
         include_str!("../../../../assets/scenery/scenery-05.json"),
     ),
+    // Level 29, Tree Zone's bonus level (node 38 on map screen 2).
+    (
+        29,
+        include_str!("../../../../assets/scenery/scenery-29.json"),
+    ),
 ];
 
 /// Scenery for levels as their expanded-level recipe rebuilds them, in the
