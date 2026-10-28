@@ -352,6 +352,14 @@ fn a_hub_view_wider_than_the_map_is_letterboxed() {
 #[test]
 fn every_zone_keeps_its_native_picture_and_hides_unused_tilemap_columns() {
     let mut session = Session::new(SessionAssets::load().unwrap());
+    // Without scenery a map's margins stay black; approved scenery is
+    // allowed to paint them (see the scene scenery tests).
+    for screen in 1..=8 {
+        let map = crate::scene_scenery::SceneTarget::Map(screen);
+        session
+            .set_scene_scenery(map, SceneryOverlay::empty())
+            .unwrap();
+    }
     for cleared in [false, true] {
         if cleared {
             session.debug_clear_all_levels();
@@ -440,4 +448,18 @@ fn the_minigame_doors_stay_native_and_centred() {
     assert_eq!(crop(&wide, view, (112, 36, 160, 144)), native);
     // Its columns past the picture are filler, so the sides are letterbox.
     assert_eq!(wide[36 * view.0 + 104], 0);
+}
+
+/// The Tree Zone map ships scenery, so its margins show it instead of black.
+#[test]
+fn the_tree_zone_map_margins_show_its_bundled_scenery() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    session.debug_warp_map(2, 0x23).unwrap();
+    let view = (384, 216);
+    let wide = session.render_frame(view);
+    let left_margin = (0..view.1).flat_map(|y| (0..(view.0 - 160) / 2).map(move |x| (x, y)));
+    let painted = left_margin
+        .filter(|&(x, y)| wide[y * view.0 + x] != 0)
+        .count();
+    assert!(painted > 0, "the margin shows the map's scenery");
 }

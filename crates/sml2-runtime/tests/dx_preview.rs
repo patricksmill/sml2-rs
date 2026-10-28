@@ -733,6 +733,13 @@ fn assert_zone_picture(frame: &[[u8; 3]], native: &[[u8; 3]], view: (usize, usiz
 fn every_dx_zone_hides_unused_columns_at_all_view_sizes() {
     let bundle = synthetic_bundle();
     let mut game = session();
+    // Without scenery a map's margins stay blank; approved scenery is
+    // allowed to paint them (see the scene scenery tests).
+    for screen in 1..=8 {
+        let map = sml2_runtime::scene_scenery::SceneTarget::Map(screen);
+        game.set_scene_scenery(map, sml2_core::scenery::SceneryOverlay::empty())
+            .unwrap();
+    }
     for cleared in [false, true] {
         if cleared {
             game.debug_clear_all_levels();

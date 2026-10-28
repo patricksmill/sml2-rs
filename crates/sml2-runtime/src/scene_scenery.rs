@@ -66,7 +66,13 @@ impl SceneTarget {
 /// Approved fixed-scene exports. Register only files reviewed for release:
 /// `(SceneTarget::Map(9), include_str!("../../../assets/scenery/scenery-map-09.json"))`.
 /// Local authoring drafts are deliberately absent from this registry.
-const BUNDLED: &[(SceneTarget, &str)] = &[];
+const BUNDLED: &[(SceneTarget, &str)] = &[
+    // Tree Zone map: a leaf scatter made only of the picture's own cells.
+    (
+        SceneTarget::Map(2),
+        include_str!("../../../assets/scenery/scenery-map-02.json"),
+    ),
+];
 
 #[derive(Debug, Clone, Default)]
 pub struct SceneScenery {
