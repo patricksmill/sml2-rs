@@ -7,11 +7,23 @@ use std::collections::BTreeSet;
 /// Register approved exports here. Paths are relative to this source file:
 /// `(0, include_str!("../../../../assets/scenery/scenery-00.json")),`
 /// Keep this empty until scenery is explicitly selected for release.
-pub(super) const LEVELS: &[(u8, &str)] = &[];
+pub(super) const LEVELS: &[(u8, &str)] = &[
+    // Tree Zone 1.
+    (
+        1,
+        include_str!("../../../../assets/scenery/scenery-01.json"),
+    ),
+];
 
 /// Scenery for levels as their expanded-level recipe rebuilds them, in the
 /// rebuilt map's cells: `scenery-NN-expanded.json` exports.
-pub(super) const EXPANDED: &[(u8, &str)] = &[];
+pub(super) const EXPANDED: &[(u8, &str)] = &[
+    // Tree Zone 2, rebuilt by `assets/expanded/tree-zone-2.json`.
+    (
+        2,
+        include_str!("../../../../assets/scenery/scenery-02-expanded.json"),
+    ),
+];
 
 pub(super) fn apply(assets: &mut SessionAssets, entries: &[(u8, &str)]) -> Result<(), String> {
     // Validate the complete registry before replacing any decoded content.
@@ -59,9 +71,11 @@ fn parse(
         if !seen.insert(id) {
             return Err(format!("{what}: level {id} is registered twice"));
         }
-        let content = assets
-            .level(id)
-            .map_err(|error| format!("{what} for level {id}: {error}"))?;
+        // A level that failed to load keeps its own error for level entry;
+        // its scenery has nothing to decorate.
+        let Ok(content) = assets.level(id) else {
+            continue;
+        };
         let scenery = serde_json::from_str::<SceneryOverlay>(json)
             .map_err(|error| format!("{what} for level {id}: {error}"))?;
         let scenery = SceneryOverlay::try_from_paints(

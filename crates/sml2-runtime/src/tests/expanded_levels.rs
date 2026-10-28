@@ -41,7 +41,9 @@ fn an_empty_recipe_leaves_every_level_as_extracted() {
         assert_eq!(out.manifest.spawns, level.manifest.spawns, "level {id:02X}");
         assert_eq!(out.manifest.header, level.manifest.header, "level {id:02X}");
         assert_eq!(out.manifest.secret_entry, level.manifest.secret_entry);
-        assert_eq!(out.scenery, level.scenery, "level {id:02X}");
+        // A level with scenery authored for its rebuild takes that instead.
+        let scenery = level.expanded_scenery.as_ref().unwrap_or(&level.scenery);
+        assert_eq!(&out.scenery, scenery, "level {id:02X}");
     }
 }
 

@@ -195,3 +195,22 @@ fn expanded_scenery_replaces_the_moved_scenery_of_a_rebuilt_level() {
     assert!(error.contains("level 0 has no recipe"), "{error}");
     assert!(assets.level(0).unwrap().expanded_scenery.is_none());
 }
+
+/// Scenery for a level that did not load leaves that level's own entry
+/// error in place instead of failing the whole boot.
+#[test]
+fn scenery_for_a_level_that_did_not_load_is_skipped() {
+    struct Missing(Source);
+    impl ContentSource for Missing {
+        fn read(&self, path: &str) -> io::Result<Vec<u8>> {
+            match path {
+                "levels/level02.manifest.json" => Err(io::ErrorKind::NotFound.into()),
+                _ => self.0.read(path),
+            }
+        }
+    }
+    let assets =
+        SessionAssets::load_from_with_scenery(&Missing(Source::new()), &[(1, EXPORTED_LEVEL)])
+            .unwrap();
+    assert!(assets.level(1).is_err());
+}

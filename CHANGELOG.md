@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Expanded levels (Settings → Mods → Levels, on by default): Tree Zone 2 is
+  rebuilt as one connected map. Its pipe no longer teleports Mario between
+  sections, and the camera scrolls freely to the level's edges. Turn the
+  setting off to play the original layout.
+- Scenery for Tree Zone 1 and the rebuilt Tree Zone 2 in widescreen and
+  zoomed-out views.
+- Scenery Editor: rebuilt levels open as their rebuilt map with their own
+  scenery file, and a Select tool copies an area to stamp it repeatedly.
+
 ### Fixed
+- In widescreen and zoomed-out views, the camera pans smoothly between rooms
+  instead of jumping at the start and end of each screen transition.
 - In widescreen and zoomed-out views, the camera no longer races past the end
   of an autoscroll level when Mario walks left of the screen's middle.
 

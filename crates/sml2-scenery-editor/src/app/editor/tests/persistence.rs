@@ -357,7 +357,20 @@ fn switching_levels_and_scenes_keeps_each_workspace() {
 
     app.select_editor_level(1);
     assert!(app.editor.scene.is_none());
-    assert!(app.editor.work.as_ref().unwrap().scenery.is_empty());
+    let bundled = &app
+        .game
+        .as_ref()
+        .unwrap()
+        .session
+        .assets
+        .level(1)
+        .unwrap()
+        .scenery;
+    assert_eq!(
+        &app.editor.work.as_ref().unwrap().scenery,
+        bundled,
+        "no draft: the bundled scenery"
+    );
     assert!(!path.join("scenery-01.json").exists());
 
     app.select_editor_level(0);
