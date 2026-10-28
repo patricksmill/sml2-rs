@@ -115,9 +115,34 @@ level needs four screen rows, so it cannot fit the ROM world.
 5. **Editor level tools.** The Scenery Editor gains terrain, lock, spawn and
    start-position editing for expanded levels, with collision checks and
    playtest.
-6. **First rebuild: Tree Zone 2.** Lay the sections out contiguously, remove the
+6. **First rebuild: Tree Zone 2 — complete (hand-written recipe; step 5's editor
+   still to come).** Lay the sections out contiguously, remove the
    two pipe teleports, set the locks and move the spawns. Play it in normal and
    DX graphics.
+   - The ROM's pipe is one side pipe cut in two. Scene 6 (row 1, screen 5,
+     `40 03`) and scene 7 (row 0, screen 4, `40 16`) swap the screen numbers
+     but keep the low bytes, so the row-1 stub (columns `$5E-$5F`) and the
+     row-0 stub (columns `$40-$41`) sit at the same height in their screens.
+   - `assets/expanded/tree-zone-2.json` (18×4 screens) moves everything past
+     the pipe by (+2 screens, +1 row): row 0 from screen 4, and rows 1-2 from
+     screen 6. The stubs then join into one four-cell pipe, and both scenes
+     are cleared. The room locks stay, so passing through the pipe slides the
+     camera between the same two rooms the ROM had. Removing the locks
+     (`0x0C` on screens (5, 1) and (6, 1)) makes the camera scroll straight
+     through instead; that also plays correctly.
+   - DX changes 0 cells of this level (`audited_dx_content_difference_inventory`),
+     so a single fingerprint, `ca02cd33918d332f`, covers vanilla and DX. DX's
+     spawns follow the moves (`the_tree_zone_2_recipe_rebuilds_the_dx_level`,
+     ignored; needs `SML2_DX_ROM`).
+   - Checked: Mario's side-pipe travel comes out at the ROM's exit + (`$200`,
+     `$100`) with no scene running. The secret entry lands in its moved
+     section. No open cell gains or loses a neighbour across a move seam.
+     The vacated screens are metatile 96, like the ROM's unused screens.
+   - Notes for step 7: levels `$07` and `$18` also switch DX palettes by
+     Mario's position (`dx_palette.rs`), so rebuilding them must remap those
+     triggers. Level `$0A`'s open left edge relies on the 12-bit wrap. Levels
+     `$0A`, `$11` and `$14` have arena swaps, which restore the ROM tables
+     (step 4).
 7. **Remaining stitched levels.** Rebuild the other seven teleport levels one at
    a time.
 
