@@ -1,0 +1,25 @@
+{
+  "schema": "sml2-expanded-level/1",
+  "level_id": 3,
+  "sources": ["0182b33b57c6fb82", "c062c64ffece8f68"],
+  "world": [16, 3],
+  "fill": 96,
+  "screens": [
+    {"at": [13, 0], "locks": 5},
+    {"at": [0, 1], "locks": 10},
+    {"at": [1, 1], "locks": 8},
+    {"at": [2, 1], "locks": 8},
+    {"at": [3, 1], "locks": 8},
+    {"at": [4, 1], "locks": 8},
+    {"at": [5, 1], "locks": 8},
+    {"at": [6, 1], "locks": 8},
+    {"at": [7, 1], "locks": 8},
+    {"at": [8, 1], "locks": 8},
+    {"at": [9, 1], "locks": 8},
+    {"at": [10, 1], "locks": 8},
+    {"at": [11, 1], "locks": 8},
+    {"at": [12, 1], "locks": 8},
+    {"at": [13, 1], "locks": 9}
+  ],
+  "open_camera": true
+}

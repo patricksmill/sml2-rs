@@ -161,7 +161,8 @@ fn the_session_enters_a_rebuilt_level_only_with_expanded_levels_on() {
 #[test]
 fn a_recipe_that_cannot_apply_loads_the_original_layout() {
     let mut session = session_with_rebuild(2);
-    session.assets.recipes[0].moves[0].to = [0x50, 0x38];
+    // `session_with_rebuild` adds its recipe after the other levels' ones.
+    session.assets.recipes.last_mut().unwrap().moves[0].to = [0x50, 0x38];
     session.expanded_levels = true;
     session.begin_level(2, 0).unwrap();
     assert_eq!(level_world(&session), World::ROM);
@@ -398,4 +399,103 @@ fn the_rebuilt_tree_zone_2_camera_scrolls_through_the_pipe() {
         origins.last().unwrap().0 > 0x600 - 399 / 2,
         "the view passed the pipe"
     );
+}
+
+/// Tree Zone 3 entered with expanded levels set to `rebuilt`, Mario and the
+/// camera placed at `at`, then `keys` held from frame 40. Returns each
+/// frame's Mario position, camera transition, room and view origin.
+fn tree_zone_3_walk(
+    rebuilt: bool,
+    at: ((u16, u16), (u16, u16)),
+    keys: sml2_core::player_sim::PlayerKeys,
+) -> Vec<((u16, u16), u8, sml2_core::camera::Room, (i32, i32))> {
+    use crate::session::FrameInput;
+    let view = (399, 180);
+    let mut session = crate::session::Session::new(SessionAssets::load().unwrap());
+    session.expanded_levels = rebuilt;
+    session.set_view(view);
+    session.begin_level(3, 0).unwrap();
+    let crate::session::SessionState::InLevel(ctx) = &mut session.state else {
+        unreachable!()
+    };
+    let ((x, y), (cx, cy)) = at;
+    (ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y) = (x, y, cx, cy);
+    (0..260)
+        .map(|frame| {
+            let keys = if frame >= 40 {
+                keys
+            } else {
+                Default::default()
+            };
+            session.advance(FrameInput { keys, div: 0 });
+            let crate::session::SessionState::InLevel(ctx) = &session.state else {
+                panic!("left the level")
+            };
+            let room = ctx.cam.room();
+            let origin = crate::render::view::level_origin(view, (ctx.cam.x, ctx.cam.y), 0, room);
+            ((ctx.sim.x, ctx.sim.y), ctx.cam.transition, room, origin)
+        })
+        .collect()
+}
+
+/// Tree Zone 3 keeps its layout and opens its camera: no room slides through
+/// the corridor's side pipe or the pipe down to the middle room, the view
+/// follows at Mario's pace, and the camera stops only at the start, the
+/// exit's right edge, the top and the lower rooms' floor.
+#[test]
+fn tree_zone_3_scrolls_freely_through_its_pipes() {
+    use sml2_core::player_sim::PlayerKeys;
+    let down = PlayerKeys {
+        down: true,
+        ..Default::default()
+    };
+    let right = PlayerKeys {
+        right: true,
+        ..Default::default()
+    };
+    for (at, keys, slide) in [
+        (((0x778, 0x0A8), (0x778, 0x0C0)), down, 0x08),
+        (((0x2A0, 0x0C0), (0x2A0, 0x0D0)), right, 0x01),
+    ] {
+        let rom = tree_zone_3_walk(false, at, keys);
+        assert!(
+            rom.iter().any(|f| f.1 == slide),
+            "the ROM slides between rooms"
+        );
+        let open = tree_zone_3_walk(true, at, keys);
+        for (_, transition, room, _) in &open {
+            assert_eq!(*transition, 0);
+            assert_eq!(room.bounds(), [0, 0, 14 * 256, 0x100 + 0xC0 + 72]);
+        }
+        let steps = open.windows(2).map(|w| {
+            (w[1].3 .0 - w[0].3 .0)
+                .abs()
+                .max((w[1].3 .1 - w[0].3 .1).abs())
+        });
+        assert!(
+            steps.max().unwrap() <= 4,
+            "the view follows without jumping"
+        );
+        assert_eq!(
+            open.last().unwrap().0,
+            rom.last().unwrap().0,
+            "Mario ends where the ROM puts him"
+        );
+    }
+}
+
+/// DX edits 39 of Tree Zone 3's cells, so the recipe lists DX's layout too.
+#[test]
+#[ignore = "requires SML2_DX_ROM with the audited local ROM"]
+fn the_tree_zone_3_recipe_opens_the_dx_level_too() {
+    let rom = std::fs::read(std::env::var_os("SML2_DX_ROM").expect("set SML2_DX_ROM")).unwrap();
+    let dx = sml2_dx::Presentation::new(&sml2_dx::extract(&rom).unwrap()).unwrap();
+    let mut session = crate::session::Session::new(SessionAssets::load().unwrap());
+    session.set_dx(
+        Some(std::sync::Arc::new(dx)),
+        sml2_core::character::Character::Mario,
+    );
+    session.expanded_levels = true;
+    session.begin_level(3, 0).unwrap();
+    assert_eq!(level_world(&session), World::expanded(16, 3).unwrap());
 }

@@ -8,6 +8,8 @@ use sml2_core::level_recipe::LevelRecipe;
 pub(super) const RECIPES: &[&str] = &[
     // Tree Zone 2 (vanilla and DX share its layout).
     include_str!("../../../../assets/expanded/tree-zone-2.json"),
+    // Tree Zone 3: the camera only (vanilla and DX layouts).
+    include_str!("../../../../assets/expanded/tree-zone-3.json"),
 ];
 
 pub(super) fn parse(entries: &[&str]) -> Result<Vec<LevelRecipe>, String> {
