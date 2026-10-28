@@ -369,11 +369,15 @@ impl DesktopApp {
             let value = if self.capture == Some(action) {
                 "press a button…".to_string()
             } else {
-                self.settings.bindings.0[action as usize]
-                    .iter()
-                    .map(|b| b.label())
-                    .collect::<Vec<_>>()
-                    .join(" / ")
+                let row = &self.settings.bindings.0[action as usize];
+                if row.is_empty() {
+                    "unbound".to_string()
+                } else {
+                    row.iter()
+                        .map(|b| b.label())
+                        .collect::<Vec<_>>()
+                        .join(" / ")
+                }
             };
             if self.menu.row(ui, action.label(), Value::Text(value)) && self.capture.is_none() {
                 self.capture = Some(action);

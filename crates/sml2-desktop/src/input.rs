@@ -18,6 +18,10 @@ pub enum PadButton {
     RightThumb,
     LeftShoulder,
     RightShoulder,
+    /// ZL / L2.
+    LeftTrigger,
+    /// ZR / R2.
+    RightTrigger,
     StickUp,
     StickDown,
     StickLeft,
@@ -63,10 +67,12 @@ pub enum Action {
     Run,
     Start,
     Select,
+    /// Holds Down while Mario is airborne, so the spin jump needs no D-pad.
+    Spin,
 }
 
 impl Action {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Right,
         Self::Left,
         Self::Up,
@@ -75,6 +81,7 @@ impl Action {
         Self::Run,
         Self::Start,
         Self::Select,
+        Self::Spin,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -86,12 +93,17 @@ impl Action {
             Self::Run => "Run / B",
             Self::Start => "Game Start",
             Self::Select => "Game Select",
+            Self::Spin => "Spin jump",
         }
+    }
+    /// Actions the original controls already cover may be left unbound.
+    pub fn optional(self) -> bool {
+        self == Self::Spin
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Bindings(pub [Vec<Button>; 8]);
+pub struct Bindings(pub [Vec<Button>; 9]);
 
 impl Default for Bindings {
     fn default() -> Self {
@@ -111,6 +123,7 @@ impl Default for Bindings {
             row(&["X", "Shift"], &[West, East]),
             row(&["Enter"], &[LeftThumb]),
             row(&["Backspace"], &[Select]),
+            row(&["C"], &[LeftTrigger, RightTrigger]),
         ])
     }
 }
@@ -120,7 +133,7 @@ impl Bindings {
         let mut used = BTreeSet::new();
         for action in Action::ALL {
             let row = &self.0[action as usize];
-            if row.is_empty() {
+            if row.is_empty() && !action.optional() {
                 return Err(format!("{} needs a binding", action.label()));
             }
             for button in row {
@@ -158,6 +171,13 @@ impl Bindings {
         row.push(button);
         Ok(())
     }
+}
+
+/// One tick's gameplay input: the joypad plus the host-only spin button.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Controls {
+    pub keys: PlayerKeys,
+    pub spin: bool,
 }
 
 #[derive(Default)]
@@ -204,7 +224,11 @@ impl InputState {
     }
 
     pub fn sample_player(&mut self, bindings: &Bindings) -> PlayerKeys {
-        let values: [bool; 8] = std::array::from_fn(|index| {
+        self.sample_controls(bindings).keys
+    }
+
+    pub fn sample_controls(&mut self, bindings: &Bindings) -> Controls {
+        let values: [bool; 9] = std::array::from_fn(|index| {
             bindings.0[index].iter().any(|b| {
                 !self.blocked.contains(b) && (self.held.contains(b) || self.pressed.contains(b))
             })
@@ -215,7 +239,7 @@ impl InputState {
             }
         }
         // Opposite directions cancel consistently across keyboard and gamepad.
-        PlayerKeys {
+        let keys = PlayerKeys {
             right: values[0] && !values[1],
             left: values[1] && !values[0],
             up: values[2] && !values[3],
@@ -224,6 +248,10 @@ impl InputState {
             b: values[5],
             start: values[6],
             select: values[7],
+        };
+        Controls {
+            keys,
+            spin: values[8],
         }
     }
 }
@@ -308,6 +336,22 @@ mod tests {
         assert!(keys.right && !keys.a);
         input.clear();
         assert!(!input.sample_player(&bindings).right);
+    }
+    #[test]
+    fn zl_and_zr_drive_the_spin_action_without_touching_the_joypad() {
+        let bindings = Bindings::default();
+        for trigger in [PadButton::LeftTrigger, PadButton::RightTrigger] {
+            let mut input = InputState::default();
+            input.event(Button::Pad(trigger), true);
+            let controls = input.sample_controls(&bindings);
+            assert!(controls.spin);
+            assert!(!controls.keys.down);
+        }
+        let mut unbound = bindings.clone();
+        unbound.0[Action::Spin as usize].clear();
+        assert!(unbound.validate().is_ok());
+        unbound.0[Action::Jump as usize].clear();
+        assert!(unbound.validate().is_err());
     }
     #[test]
     fn stick_hysteresis_and_opposite_directions_are_stable() {

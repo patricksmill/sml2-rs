@@ -73,6 +73,7 @@ color change can land a frame off. See
 | Move | Arrow keys | D-pad / left stick |
 | Jump | Z / Space | Bottom face button |
 | Run / fire | X / Shift | Left or right face button |
+| Spin jump (in the air) | C | ZL / ZR (L2 / R2) |
 | Start / confirm | Enter | Left stick click |
 | Select | Backspace | Select / Back |
 | Pause menu / resume | Escape | Start |

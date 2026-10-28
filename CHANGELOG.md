@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the Tree Zone map in widescreen and zoomed-out views.
 - Scenery Editor: rebuilt levels open as their rebuilt map with their own
   scenery file, and a Select tool copies an area to stamp it repeatedly.
+- Spin jump button: ZL / ZR on a controller (C on the keyboard) spins Mario
+  while he is in the air, without holding Down. Rebind it in Settings →
+  Controls; existing settings files pick up the new default.
 
 ### Fixed
 - Scenery Editor: boss arenas show the screen the fight is played on, not the

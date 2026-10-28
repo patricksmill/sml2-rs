@@ -7,7 +7,7 @@ use sml2_core::{
 };
 use sml2_runtime::{
     audio_output::AudioOutput, content::SessionAssets, divider_clock::VirtualDividerClock,
-    FrameInput, Session,
+    session::SessionState, FrameInput, Session,
 };
 use std::{fs, path::PathBuf};
 
@@ -129,6 +129,11 @@ impl Game {
         } else if !running {
             self.output = None;
         }
+    }
+
+    /// Mario is in a level and off the floor, where Down starts a spin jump.
+    pub fn airborne(&self) -> bool {
+        matches!(&self.session.state, SessionState::InLevel(ctx) if !ctx.sim.on_ground)
     }
 
     pub fn tick(&mut self, keys: PlayerKeys, volume: impl Into<Volume>) {

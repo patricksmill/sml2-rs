@@ -1,7 +1,7 @@
 use crate::input::{Button, InputState, PadButton, StickAxis};
 use gilrs::{Axis, Button as GilButton, EventType, GamepadId, Gilrs};
 
-const BUTTONS: [(GilButton, PadButton); 14] = [
+const BUTTONS: [(GilButton, PadButton); 16] = [
     (GilButton::South, PadButton::South),
     (GilButton::East, PadButton::East),
     (GilButton::West, PadButton::West),
@@ -16,6 +16,8 @@ const BUTTONS: [(GilButton, PadButton); 14] = [
     (GilButton::RightThumb, PadButton::RightThumb),
     (GilButton::LeftTrigger, PadButton::LeftShoulder),
     (GilButton::RightTrigger, PadButton::RightShoulder),
+    (GilButton::LeftTrigger2, PadButton::LeftTrigger),
+    (GilButton::RightTrigger2, PadButton::RightTrigger),
 ];
 
 pub struct Controllers {

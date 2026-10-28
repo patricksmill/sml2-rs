@@ -141,7 +141,7 @@ fn scrolled_settings_keep_tabs_and_back_reachable_by_mouse_and_controller() {
         if controller {
             // Traverse the bindings: the selected row must scroll into view,
             // while the tabs and footer stay outside the scrolling region.
-            for _ in 0..10 {
+            for _ in 0..11 {
                 app.input
                     .event(Button::Pad(crate::input::PadButton::Down), true);
                 frame(&mut app, &ctx, size, vec![]);
@@ -150,7 +150,7 @@ fn scrolled_settings_keep_tabs_and_back_reachable_by_mouse_and_controller() {
                 frame(&mut app, &ctx, size, vec![]);
             }
             let output = settle(&mut app, &ctx, size);
-            text_rect(&output, "Game Select");
+            text_rect(&output, "Spin jump");
             assert_eq!(text_rect(&output, "DISPLAY"), display_tab);
             assert_eq!(text_rect(&output, "Back"), back);
             // Reset controls follows the bindings, then Back.

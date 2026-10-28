@@ -198,6 +198,28 @@ impl Settings {
                 value["filter"] = serde_json::json!({"Sgb": 0});
             }
         }
+        // Files written before an action existed gain its default binding.
+        if let Some(rows) = value
+            .get_mut("bindings")
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            let defaults = Bindings::default().0;
+            while rows.len() < defaults.len() {
+                let used: Vec<_> = rows
+                    .iter()
+                    .flat_map(|r| r.as_array().cloned())
+                    .flatten()
+                    .collect();
+                let mut row = Vec::new();
+                for button in &defaults[rows.len()] {
+                    let button = serde_json::to_value(button).map_err(|e| e.to_string())?;
+                    if !used.contains(&button) {
+                        row.push(button);
+                    }
+                }
+                rows.push(row.into());
+            }
+        }
         let mut settings: Self = serde_json::from_value(value).map_err(|e| e.to_string())?;
         settings.validate()?;
         Ok(settings)
@@ -268,6 +290,24 @@ mod tests {
         fs::write(&path, future).unwrap();
         assert!(Settings::load(&path).is_err());
         assert_eq!(fs::read(&path).unwrap(), future);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn eight_action_bindings_gain_spin_without_duplicating_buttons() {
+        let path =
+            std::env::temp_dir().join(format!("sml2_settings_spin_{}.json", std::process::id()));
+        let mut value = serde_json::to_value(Settings::default()).unwrap();
+        let rows = value["bindings"].as_array_mut().unwrap();
+        rows.truncate(8);
+        rows[5] = serde_json::json!([{"Key": "X"}, {"Pad": "RightTrigger"}]);
+        fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        let settings = Settings::load(&path).unwrap();
+        use crate::input::{Action, Button, PadButton};
+        assert_eq!(
+            settings.bindings.0[Action::Spin as usize],
+            [Button::key("C"), Button::Pad(PadButton::LeftTrigger)]
+        );
         fs::remove_file(path).unwrap();
     }
 

@@ -802,7 +802,16 @@ impl DesktopApp {
                     dx::prepare_tick(&mut game.session, &self.settings, self.dx_bundle.is_some());
                 }
                 let mut keys = if running {
-                    self.input.sample_player(&self.settings.bindings)
+                    let controls = self.input.sample_controls(&self.settings.bindings);
+                    let mut keys = controls.keys;
+                    // Spin is Down held in the air ($126F); on the ground it
+                    // would duck or pan, so the button only reaches the
+                    // joypad once Mario has left the floor.
+                    if controls.spin && self.game.as_ref().is_some_and(Game::airborne) {
+                        keys.down = true;
+                        keys.up = false;
+                    }
+                    keys
                 } else {
                     PlayerKeys::default()
                 };
