@@ -901,6 +901,7 @@ fn f10_hides_the_toolbar_and_its_tabs_open_the_matching_settings_pages() {
     let _ = std::fs::remove_dir_all(path);
 }
 
+#[test]
 fn overlay_rects_scale_view_pixels_from_the_image_origin() {
     let rect = egui::Rect::from_min_size(egui::pos2(10.0, 20.0), egui::vec2(480.0, 432.0));
     let r = overlay_rect(rect, (160, 144), (5, 7, 10, 21));

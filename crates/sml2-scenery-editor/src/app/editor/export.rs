@@ -20,6 +20,7 @@ impl EditorApp {
         self.editor.export.is_some()
     }
 
+    #[cfg(test)]
     pub(in crate::app) fn editor_export_path(&self) -> Option<&str> {
         self.editor
             .export
