@@ -11,6 +11,7 @@ fn workspace() -> Workspace {
     let mut work = Workspace::new(
         LevelLayout {
             cells: vec![0; LAYOUT_SIZE],
+            world: sml2_core::world::World::ROM,
         },
         128,
         Pos2::ZERO,

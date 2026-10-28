@@ -111,6 +111,10 @@ impl World {
             top: 0,
             right: self.screens_wide as i32 * SCREEN_PX as i32,
             bottom: self.screens_high as i32 * SCREEN_PX as i32,
+            world: (
+                self.screens_wide as i32 * SCREEN_PX as i32,
+                self.screens_high as i32 * SCREEN_PX as i32,
+            ),
         }
     }
 }
@@ -152,6 +156,7 @@ mod tests {
     fn the_rom_room_is_the_256_by_48_cell_layout() {
         let r = World::ROM.room();
         assert_eq!((r.left, r.top, r.right, r.bottom), (0, 0, 4096, 768));
+        assert_eq!(r.world, (4096, 768));
     }
 
     #[test]
@@ -178,6 +183,7 @@ mod tests {
         assert_eq!(w.cell_key(0xF0, 0x11), Some(0x11F0));
         assert_eq!(w.cell_key(0, 48), Some(0x3000), "past the map, still keyed");
         assert_eq!(w.cell_key(0xFF, 0xFF), Some(0xFFFF));
-        assert_eq!((w.echo_row(0x2F), w.echo_row(0x30), w.echo_row(0x4D), w.echo_row(0x4E)), (0x2F, 0x10, 0x2D, 0x4E));
+        let rows = [0x2F, 0x30, 0x4D, 0x4E].map(|r| w.echo_row(r));
+        assert_eq!(rows, [0x2F, 0x10, 0x2D, 0x4E]);
     }
 }

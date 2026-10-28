@@ -46,10 +46,9 @@ fn origin_range(view: (usize, usize), room: Room) -> ((i32, i32), (i32, i32)) {
             (at, at)
         }
     };
-    let world = Room::WORLD;
     (
-        axis(room.left, room.right, world.right, view.0),
-        axis(room.top, room.bottom, world.bottom, view.1),
+        axis(room.left, room.right, room.world.0, view.0),
+        axis(room.top, room.bottom, room.world.1, view.1),
     )
 }
 
@@ -229,6 +228,7 @@ mod tests {
             top: 0x100,
             right: 0x800,
             bottom: 0x208,
+            ..Room::WORLD
         };
         // At the $B0 lock the native view ends on the room's edge; the wide
         // one stops there too instead of showing past it.
@@ -244,6 +244,23 @@ mod tests {
             ..room
         };
         assert_eq!(level_origin(view, (0x850, 0x1C0), 0, cell).0, 0x880 - 192);
+    }
+
+    #[test]
+    fn a_wider_world_lets_the_view_pass_the_rom_layout_edge() {
+        let view = (384, 216);
+        let wide = sml2_core::world::World {
+            screens_wide: 40,
+            screens_high: 3,
+            position_mask: 0xFFFF,
+            wram_echo: false,
+        }
+        .room();
+        let cam = (0x1800, 0x1C0);
+        let raw = raw_level_origin(view, cam, 0);
+        assert_eq!(level_origin(view, cam, 0, wide), raw);
+        assert_eq!(level_origin(view, cam, 0, Room::WORLD).0, 0x1000 - 384);
+        assert_eq!(level_origin(view, (0x27F0, 0x1C0), 0, wide).0, 0x2800 - 384);
     }
 
     #[test]

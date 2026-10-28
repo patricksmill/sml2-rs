@@ -44,6 +44,9 @@ pub struct Room {
     pub top: i32,
     pub right: i32,
     pub bottom: i32,
+    /// `(width, height)` in world pixels of the layout the room lies in. A
+    /// view larger than the room still stops at it.
+    pub world: (i32, i32),
 }
 
 impl Room {
@@ -56,6 +59,7 @@ impl Room {
             top: at(self.top, to.top),
             right: at(self.right, to.right),
             bottom: at(self.bottom, to.bottom),
+            world: to.world,
         }
     }
 }
@@ -1855,6 +1859,7 @@ mod tests {
             top: 0x100,
             right: 0x800,
             bottom: 0x100 + 0xC0 + 72,
+            ..Room::WORLD
         };
         assert_eq!(room(0x350), first);
         assert_eq!(room(0x7B0), first, "the lock cell ends the room");

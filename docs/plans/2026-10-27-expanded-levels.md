@@ -38,7 +38,7 @@ level needs four screen rows, so it cannot fit the ROM world.
    0x0F` masks, `LAYOUT_WIDTH`/`LAYOUT_HEIGHT`/`LAYOUT_SIZE`, the 48-byte edge and
    scene maps, layout indexing (`$B000 + row*$100 + col`) and object streaming
    by screen. Record each one as wrap-relevant or size-only.
-2. **World size type.** Introduce a `World` that holds the width and height in
+2. **World size type — complete.** Introduce a `World` that holds the width and height in
    screens, the layout stride and the wrap rule. ROM levels construct
    `World::ROM` (16×3, 12-bit wrap). Route the inventory through it without
    changing behavior, in bounded steps: camera, then layout/collision, then
@@ -52,6 +52,16 @@ level needs four screen rows, so it cannot fit the ROM world.
    - Lock and scene tables — complete. `CameraSim::edge_map` and
      `LevelContent::edge_map` are `Vec`s validated against
      `World::ROM.screens()`, like the scene map.
+   - Renderers and editor — complete. `LevelLayout` carries its `world`
+     (`LevelContext::from_content` copies it into the camera, player and
+     object sims); `Room::world` gives the view clamp and both renderers the
+     layout extent, and write keys use `World::cell_key`.
+   - Left for later steps: `LevelLayout::from_bytes` still accepts only the
+     ROM size and every content path builds `World::ROM` (step 3); sims rebuilt
+     mid-level (resets, arena swaps) must keep the level's world (step 4);
+     the scene-surroundings grid (`scene_scenery.rs`) stays ROM-only; the scenery
+     overlay stores cells past the ROM layout sparsely, which already works for
+     any size.
 3. **Sized content.** `LevelLayout`, the edge map and the scene map take their
    dimensions from the `World`. Extraction still writes 256×48 for ROM levels.
    Define a versioned expanded-level *recipe*. ROM and DX data are never

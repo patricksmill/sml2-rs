@@ -2,7 +2,7 @@
 
 use crate::{SCREEN_H, SCREEN_W};
 use serde::Deserialize;
-use sml2_core::level::{HudStrip, LevelLayout, LevelManifest, LAYOUT_HEIGHT, LAYOUT_WIDTH};
+use sml2_core::level::{HudStrip, LevelLayout, LevelManifest};
 use sml2_core::object::ObjectTables;
 use sml2_core::video;
 
@@ -161,7 +161,7 @@ pub fn render_view_output(
         bg,
         cam_x,
         cam_y,
-        sml2_core::camera::Room::WORLD,
+        layout.world.room(),
         vw,
         vh,
         hud,
@@ -207,8 +207,7 @@ pub fn render_view_output_smooth(
         pal_override.unwrap_or(manifest.header.palettes[0]),
         video::PaletteSource::Bg,
     );
-    let world_w = (LAYOUT_WIDTH * 16) as i32;
-    let world_h = (LAYOUT_HEIGHT * 16) as i32;
+    let (world_w, world_h) = room.world;
     let viewport = view::LevelViewport::new(
         (vw, vh),
         (cam_x, cam_y),
@@ -257,8 +256,11 @@ pub fn render_view_output_smooth(
                 });
             let (cx, tx) = ((wx as usize) >> 4, (wx as usize) & 15);
             let (cy, ty) = ((wy as usize) >> 4, (wy as usize) & 15);
-            let key = (cy * 256 + cx) as u32;
-            let rewritten = overlay.iter().find(|(k, _)| *k == key).map(|(_, v)| *v);
+            let rewritten = layout
+                .world
+                .cell_key(cx, cy)
+                .and_then(|key| overlay.iter().find(|(k, _)| *k == key))
+                .map(|(_, v)| *v);
             let Some(id) = rewritten.or_else(|| layout.get(cx, cy)) else {
                 continue;
             };

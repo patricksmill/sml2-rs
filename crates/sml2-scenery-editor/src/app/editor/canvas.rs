@@ -4,7 +4,6 @@ use super::state::{Cell, Gesture, Tool};
 use super::Editor;
 use crate::app::theme;
 use eframe::egui::{self, Color32, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind, Ui};
-use sml2_core::level::LAYOUT_WIDTH;
 use std::{collections::HashMap, sync::Arc};
 
 #[derive(Default)]
@@ -104,7 +103,7 @@ impl Editor {
                     self.atlas
                         .as_ref()?
                         .layout
-                        .get(cell.1 as usize * LAYOUT_WIDTH + cell.0 as usize)
+                        .get(cell.1 as usize * work.layout.world.cells_wide() + cell.0 as usize)
                         .copied()
                 }
             })
@@ -201,7 +200,10 @@ impl Editor {
                                     } else {
                                         atlas
                                             .layout
-                                            .get(y as usize * LAYOUT_WIDTH + x as usize)
+                                            .get(
+                                                y as usize * work.layout.world.cells_wide()
+                                                    + x as usize,
+                                            )
                                             .copied()
                                     }
                                 });

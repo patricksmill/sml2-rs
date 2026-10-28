@@ -2,7 +2,6 @@
 //! Enlarged views sample unpainted terrain through the bounded presentation camera.
 
 use sml2_core::camera::Room;
-use sml2_core::level::{LAYOUT_HEIGHT, LAYOUT_WIDTH};
 use sml2_core::scenery::SceneryOverlay;
 
 use super::view;
@@ -26,6 +25,8 @@ pub(crate) struct SceneryWindow {
     origin: (i32, i32),
     first: (i32, i32),
     width: usize,
+    /// The layout's extent in cells, from the room's world.
+    cells: (i32, i32),
     paints: Vec<Option<u8>>,
     rewrites: Vec<Option<u8>>,
 }
@@ -59,6 +60,7 @@ impl SceneryWindow {
             origin,
             first,
             width,
+            cells: (room.world.0 / 16, room.world.1 / 16),
             rewrites: vec![None; paints.len()],
             paints,
         }
@@ -67,11 +69,9 @@ impl SceneryWindow {
     pub fn with_layout_writes(mut self, writes: &[(u32, u8)]) -> Self {
         let height = self.paints.len() / self.width;
         for &(key, value) in writes {
-            let (x, y) = (
-                (key % LAYOUT_WIDTH as u32) as i32,
-                (key / LAYOUT_WIDTH as u32) as i32,
-            );
-            if y >= LAYOUT_HEIGHT as i32 {
+            let stride = self.cells.0 as u32;
+            let (x, y) = ((key % stride) as i32, (key / stride) as i32);
+            if y >= self.cells.1 {
                 continue;
             }
             let (x, y) = (x - self.first.0, y - self.first.1);
@@ -107,7 +107,7 @@ impl SceneryWindow {
         if !view::enlarged(view) {
             return MarginSample::Native;
         }
-        if (0..LAYOUT_WIDTH as i32).contains(&cx) && (0..LAYOUT_HEIGHT as i32).contains(&cy) {
+        if (0..self.cells.0).contains(&cx) && (0..self.cells.1).contains(&cy) {
             return MarginSample::Level {
                 wx: world_x,
                 wy: world_y,

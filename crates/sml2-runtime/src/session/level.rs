@@ -80,6 +80,7 @@ impl LevelContext {
         let objblock = content.objblock.clone();
 
         let mut sim = PlayerSim::new();
+        sim.world = layout.world;
         seed_level_timer(&mut sim, &manifest);
         sim.lives = player_lives;
         sim.coins_low = player_coins_low;
@@ -92,6 +93,7 @@ impl LevelContext {
 
         let level_entry = manifest.header.entry(level_progress, manifest.secret_entry);
         let mut cam = CameraSim::new(level_entry.start.camera_x, level_entry.start.camera_y);
+        cam.world = layout.world;
         apply_level_entry(&mut sim, &mut cam, level_entry);
         cam.prev_mario_y_lo = sim.y as u8;
         cam.map_scroll_limit = manifest.properties.unknown != 0;
@@ -106,6 +108,7 @@ impl LevelContext {
         }
 
         let mut obj = ObjectSim::new(manifest.spawns.records.clone(), cam.x);
+        obj.world = layout.world;
         obj.configure(level_id);
         ObjectClock::default().initialize_level(&mut obj);
 

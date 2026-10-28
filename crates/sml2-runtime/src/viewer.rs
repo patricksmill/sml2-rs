@@ -2,7 +2,7 @@
 
 use crate::present::letterbox_gray;
 use crate::render::{apply_tile_anim, render_view, SpriteCtx};
-use sml2_core::level::{LevelLayout, LevelManifest, LAYOUT_HEIGHT, LAYOUT_WIDTH};
+use sml2_core::level::{LevelLayout, LevelManifest};
 
 /// Everything the window viewer needs per frame.
 pub(crate) struct Viewer<'a> {
@@ -54,8 +54,7 @@ pub(crate) fn run_window(
     .map_err(|e| format!("cannot open a window ({e}) — no display found; use --out instead"))?;
     window.set_target_fps(60);
     let (mut cx, mut cy) = (start.0 as i32, start.1 as i32);
-    let max_x = (LAYOUT_WIDTH * 16) as i32;
-    let max_y = (LAYOUT_HEIGHT * 16) as i32;
+    let (max_x, max_y) = layout.world.room().world;
     let mut buf = vec![0u32; vw * scale * vh * scale];
     let mut anim_timer: u32 = 0;
     while window.is_open() && !window.is_key_down(Key::Escape) && !window.is_key_down(Key::Q) {

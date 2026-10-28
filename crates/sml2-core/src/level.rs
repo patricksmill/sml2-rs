@@ -32,6 +32,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::collision;
+use crate::world::World;
 
 /// Level layout width in metatile cells.
 pub const LAYOUT_WIDTH: usize = 256;
@@ -91,6 +92,10 @@ impl MetatileTable {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LevelLayout {
     pub cells: Vec<u8>,
+    /// The world the cells fill, row stride [`World::cells_wide`];
+    /// [`World::ROM`] for every extracted layout.
+    #[serde(skip)]
+    pub world: World,
 }
 
 impl LevelLayout {
@@ -104,13 +109,15 @@ impl LevelLayout {
         }
         Ok(Self {
             cells: bytes.to_vec(),
+            world: World::ROM,
         })
     }
 
     /// Metatile id at cell (x, y); `None` when out of bounds.
     pub fn get(&self, x: usize, y: usize) -> Option<u8> {
-        if x < LAYOUT_WIDTH && y < LAYOUT_HEIGHT {
-            Some(self.cells[y * LAYOUT_WIDTH + x])
+        if y < self.world.cells_high() {
+            let key = self.world.cell_key(x, y)?;
+            self.cells.get(key as usize).copied()
         } else {
             None
         }

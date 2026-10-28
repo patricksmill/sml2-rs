@@ -11,6 +11,7 @@ use crate::objects::{
 fn blank_layout() -> LevelLayout {
     LevelLayout {
         cells: vec![0; 256 * 32],
+        world: crate::world::World::ROM,
     }
 }
 

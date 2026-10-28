@@ -1,7 +1,7 @@
 //! Authoring state and reversible gestures, independent of the live game.
 
 use eframe::egui::{Pos2, Rect, Vec2};
-use sml2_core::level::{LevelLayout, LAYOUT_HEIGHT, LAYOUT_WIDTH};
+use sml2_core::level::LevelLayout;
 use sml2_core::scenery::{SceneryOverlay, SceneryPaint};
 use std::collections::BTreeMap;
 
@@ -163,7 +163,8 @@ impl Workspace {
         if self.scene_border {
             (10, 9)
         } else {
-            (LAYOUT_WIDTH, LAYOUT_HEIGHT)
+            let world = self.layout.world;
+            (world.cells_wide(), world.cells_high())
         }
     }
 

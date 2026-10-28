@@ -7,7 +7,7 @@ use sml2_core::front_end::screen::{
 };
 use sml2_core::{
     character::Character,
-    level::{HudStrip, TileAnim, LAYOUT_HEIGHT, LAYOUT_WIDTH},
+    level::{HudStrip, TileAnim},
     player::{self, Cell, CellStyle},
     tileset::{BG_TILES_OFFSET, EXTRA_OFFSET, OBJ_TILES_OFFSET},
     video::{
@@ -972,8 +972,7 @@ fn render(
     let lift = if background_only { 0 } else { hud_style.lift() };
     let (sx, sy) = (viewport.origin.0, viewport.origin.1 - lift);
     let raw_origin = super::view::raw_level_origin(view, camera, pan);
-    let world_w = (LAYOUT_WIDTH * 16) as i32;
-    let world_h = (LAYOUT_HEIGHT * 16) as i32;
+    let (world_w, world_h) = room.world;
     let (span_x, span_y) = (super::view::window_span(vw), super::view::window_span(vh));
     let (ox, oy) = (
         window_origin(sx, world_w, span_x),
@@ -998,12 +997,11 @@ fn render(
             }
             let (cx, cy) = (wx as usize / 16, wy as usize / 16);
             let (tx, ty) = (wx as usize & 15, wy as usize & 15);
-            let key = (cy * 256 + cx) as u32;
             let rewritten = ctx
-                .sim
-                .layout_writes
-                .iter()
-                .find(|(k, _)| *k == key)
+                .layout_live
+                .world
+                .cell_key(cx, cy)
+                .and_then(|key| ctx.sim.layout_writes.iter().find(|(k, _)| *k == key))
                 .map(|(_, v)| *v);
             let Some(id) = rewritten.or_else(|| cell_at(cx, cy)) else {
                 continue;
