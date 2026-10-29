@@ -174,7 +174,8 @@ impl Session {
                     room_tiles: None,
                     player_mappings: None,
                 };
-                let mut frame = self.overworld_frame(map, assets, size);
+                let mut frame =
+                    self.overworld_frame(map, assets, size, super::session::MapLayer::Screen);
                 frame.composition.oam.clear();
                 Ok(sml2_core::map::rasterize_overworld(
                     &frame.composition,

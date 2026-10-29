@@ -442,7 +442,7 @@ impl Session {
         } else {
             [0, 0, 0]
         };
-        self.overworld_view(map_sim, view, surround, |sim, size| {
+        self.overworld_view(map_sim, view, surround, |sim, size, layer| {
             let wave = self
                 .map_wave
                 .as_ref()
@@ -458,7 +458,7 @@ impl Session {
                 room_tiles: Some(&room_tiles),
                 player_mappings: Some(mario),
             };
-            let mut frame = self.overworld_frame(sim, assets, size);
+            let mut frame = self.overworld_frame(sim, assets, size, layer);
             if background_only {
                 frame.composition.oam.clear();
             }

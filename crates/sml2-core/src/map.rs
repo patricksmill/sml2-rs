@@ -1407,6 +1407,25 @@ pub struct BgSample {
     pub pixel: u8,
 }
 
+/// The hub's background at screen pixel `(px, py)` under camera `(cam_x, cam_y)`:
+/// its 64x64-tile map wraps every 512 pixels.
+pub fn hub_bg_sample(
+    tilemaps: &OverworldTilemaps,
+    (cam_x, cam_y): (u16, u16),
+    (px, py): (usize, usize),
+) -> BgSample {
+    let wx = (cam_x as usize + px) % 512;
+    let wy = (cam_y as usize + py) % 512;
+    let (tx, ty) = (wx / 8, wy / 8);
+    let tile_byte = tilemaps.hub_tile(tx, ty);
+    BgSample {
+        tile: signed_bg_tile_index(tile_byte),
+        tile_byte,
+        cell: (tx as u16, ty as u16),
+        pixel: ((wy % 8) * 8 + wx % 8) as u8,
+    }
+}
+
 /// An overworld frame before rasterizing: each pixel's background sample
 /// (`None` draws color 0) and the OAM cells `(y, x, tile, attr)` in staging
 /// order. The native DMG renderer and DX's colors both draw from it.
@@ -1561,20 +1580,8 @@ pub fn compose_overworld_view(
     if screen_id == 0 {
         // Hub 64x64 stitched map
         for py in 0..vh {
-            let wy = (cam_y as usize + py) % 512;
-            let ty = wy / 8;
-            let sub_y = wy % 8;
             for px in 0..vw {
-                let wx = (cam_x as usize + px) % 512;
-                let tx = wx / 8;
-                let sub_x = wx % 8;
-                let tile_byte = tilemaps.hub_tile(tx, ty);
-                bg[py * vw + px] = Some(BgSample {
-                    tile: signed_bg_tile_index(tile_byte),
-                    tile_byte,
-                    cell: (tx as u16, ty as u16),
-                    pixel: (sub_y * 8 + sub_x) as u8,
-                });
+                bg[py * vw + px] = Some(hub_bg_sample(tilemaps, (cam_x, cam_y), (px, py)));
             }
         }
     } else {

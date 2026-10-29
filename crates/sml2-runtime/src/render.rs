@@ -696,8 +696,8 @@ pub(crate) fn hud_row_status(hud: &HudStrip, digits: HudDigits) -> Vec<u8> {
     row
 }
 
-/// Where levels draw the status bar. Presentation only: the counters and the
-/// simulation are the same for both.
+/// Where levels and the hub draw the status bar. Presentation only: the
+/// counters and the simulation are the same for both.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, Deserialize)]
 pub enum HudStyle {
     /// The original window strip along the bottom of the screen.
@@ -705,7 +705,7 @@ pub enum HudStyle {
     Classic,
     /// The same tiles floating in the view's corners, without the strip's
     /// backing: lives and coins over enemies at the top left, time at the
-    /// top right.
+    /// top right. The hub's lives and coins move to the top left.
     #[serde(alias = "Corner")]
     Modern,
 }

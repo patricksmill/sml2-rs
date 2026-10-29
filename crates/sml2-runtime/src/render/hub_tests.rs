@@ -53,7 +53,7 @@ fn panning_fills_the_available_hub_and_draws_each_blinking_arrow_once() {
             let oy = (i32::from(camera) + 72 - size.1 as i32 / 2).clamp(0, 512 - size.1 as i32);
             for arrows_on in [true, false] {
                 let frame = session
-                    .overworld_view(&map, view, 0, |m, s| panel(m, s, arrows_on))
+                    .overworld_view(&map, view, 0, |m, s, _| panel(m, s, arrows_on))
                     .unwrap();
                 // Independent expected screen coordinates retain native edge insets.
                 let arrows = [
@@ -103,4 +103,57 @@ fn panning_fills_the_available_hub_and_draws_each_blinking_arrow_once() {
             }
         }
     }
+}
+
+#[test]
+fn a_modern_hud_moves_the_hub_counters_to_the_top_left() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    let SessionState::Overworld(map) = &session.state else {
+        panic!("boots to hub")
+    };
+    assert_eq!(map.screen_id, 0);
+    let at = |frame: &[u8], width: usize, x: usize, y: usize| frame[y * width + x];
+    for view in [(160, 144), (384, 216)] {
+        session.hud_style = crate::render::HudStyle::Classic;
+        let classic = session.render_frame(view);
+        // The classic strip: native at the bottom right, centred in a wider view.
+        let (sx, sy) = ((view.0 - 160) / 2 + 80, view.1 - 8);
+        // Column 4, between lives and coins, is bare backing.
+        let paper = at(&classic, view.0, sx + 4 * 8, sy);
+        session.hud_style = crate::render::HudStyle::Modern;
+        let modern = session.render_frame(view);
+        let mut ink = 0;
+        for y in 0..8 {
+            for x in 0..80 {
+                let glyph = at(&classic, view.0, sx + x, sy + y);
+                if glyph != paper {
+                    ink += 1;
+                    assert_eq!(
+                        at(&modern, view.0, 8 + x, 8 + y),
+                        glyph,
+                        "{view:?} ({x}, {y})"
+                    );
+                }
+            }
+        }
+        assert!(ink > 0, "the counters have ink");
+        // Ringed in the strip's backing.
+        assert_eq!(at(&modern, view.0, 7, 8 + 3), paper);
+        let strip = |frame: &[u8]| crop(frame, view, (sx, sy, 80, 8));
+        assert_ne!(
+            strip(&modern),
+            strip(&classic),
+            "{view:?}: the map shows under the strip"
+        );
+    }
+}
+
+fn crop(
+    frame: &[u8],
+    view: (usize, usize),
+    (x0, y0, w, h): (usize, usize, usize, usize),
+) -> Vec<u8> {
+    (y0..y0 + h)
+        .flat_map(|y| frame[y * view.0 + x0..y * view.0 + x0 + w].to_vec())
+        .collect()
 }

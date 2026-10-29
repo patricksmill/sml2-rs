@@ -178,7 +178,7 @@ impl Session {
                 } else {
                     fill
                 };
-                self.overworld_view(map_sim, view, surround, |sim, (w, h)| {
+                self.overworld_view(map_sim, view, surround, |sim, (w, h), layer| {
                     let assets = MapAssets {
                         tilemaps: &self.assets.overworld_tilemaps,
                         manifest: &self.assets.overworld_manifest,
@@ -190,7 +190,7 @@ impl Session {
                         room_tiles: None,
                         player_mappings: None,
                     };
-                    let frame = self.overworld_frame(sim, assets, (w, h));
+                    let frame = self.overworld_frame(sim, assets, (w, h), layer);
                     Ok(sml2_core::map::rasterize_overworld(
                         &frame.composition,
                         &frame.vram,
@@ -300,6 +300,16 @@ pub(crate) struct MapAssets<'a> {
     pub player_mappings: Option<&'a [Vec<sml2_core::object::MappingEntry>]>,
 }
 
+/// What an overworld frame draws.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MapLayer {
+    /// The screen. A [`HudStyle::Modern`] hub leaves out `$3F203`'s
+    /// counters and their strip.
+    Screen,
+    /// Only the hub's counters, in place over the empty strip backing.
+    Counters,
+}
+
 /// One overworld frame laid out, with the tiles and DMG palettes it draws with.
 pub(crate) struct OverworldFrame {
     pub composition: sml2_core::map::OverworldComposition,
@@ -368,16 +378,28 @@ impl Session {
     /// Zones and minigames keep their native 160-wide picture
     /// centered in a solid room-color surround; unused tilemap columns are
     /// not scenery. Screen 8, the minigame doors, also stays native.
-    pub(crate) fn overworld_view<P: Copy>(
+    pub(crate) fn overworld_view<P: Copy + PartialEq>(
         &self,
         map_sim: &sml2_core::map_sim::MapSim,
         view: (usize, usize),
         fill: P,
-        mut render: impl FnMut(&sml2_core::map_sim::MapSim, (usize, usize)) -> Result<Vec<P>, String>,
+        mut render: impl FnMut(
+            &sml2_core::map_sim::MapSim,
+            (usize, usize),
+            MapLayer,
+        ) -> Result<Vec<P>, String>,
     ) -> Result<Vec<P>, String> {
         use super::view::{enlarged, letterbox, NATIVE};
         if !enlarged(view) {
-            return render(map_sim, view);
+            let mut pixels = render(map_sim, view, MapLayer::Screen)?;
+            // Panning hides the counters, as `$3C9F4` does.
+            if self.hud_style == HudStyle::Modern
+                && map_sim.screen_id == 0
+                && map_sim.scroll_only_latch == 0
+            {
+                self.corner_counters(map_sim, &mut pixels, view, &mut render)?;
+            }
+            return Ok(pixels);
         }
         match map_sim.screen_id {
             0 => {
@@ -385,8 +407,12 @@ impl Session {
                 let pixels = self.stitched_hub(map_sim, size, fill, render)?;
                 Ok(letterbox(&pixels, size, view, fill))
             }
-            9..=14 => Ok(letterbox(&render(map_sim, NATIVE)?, NATIVE, view, fill)),
-            _ => Ok(letterbox(&render(map_sim, NATIVE)?, NATIVE, view, fill)),
+            _ => Ok(letterbox(
+                &render(map_sim, NATIVE, MapLayer::Screen)?,
+                NATIVE,
+                view,
+                fill,
+            )),
         }
     }
 
@@ -396,6 +422,7 @@ impl Session {
         map_sim: &sml2_core::map_sim::MapSim,
         assets: MapAssets<'_>,
         (vw, vh): (usize, usize),
+        layer: MapLayer,
     ) -> OverworldFrame {
         let mut vram = if map_sim.screen_id >= 13 {
             // Screens 13/14 copy bank 25 `$5000` to `$8800`; the zone
@@ -512,6 +539,8 @@ impl Session {
             Some(t) => bar.cells_in(t.status_bar),
             None => bar.cells(),
         });
+        // A Modern hub draws them from the counters layer instead.
+        let screen_cells = status_cells.filter(|_| self.hud_style == HudStyle::Classic);
         let zone_live = (1..=8).contains(&map_sim.screen_id);
         let tilemaps = assets
             .tilemaps
@@ -532,7 +561,7 @@ impl Session {
             scroll_y: map_sim.zone_background_scroll(0).1,
             obj_palette1: transition_palettes.map_or_else(|| obj_palette1, |p| p.2),
         };
-        let composition = sml2_core::map::compose_overworld_view(
+        let mut composition = sml2_core::map::compose_overworld_view(
             map_sim.screen_id,
             map_sim.cam_x,
             map_sim.cam_y,
@@ -543,7 +572,7 @@ impl Session {
             map_sim.walk_frame,
             map_sim.cursor_pose,
             &decor_cells,
-            status_cells.as_ref().map(|c| &c[..]),
+            screen_cells.as_ref().map(|c| &c[..]),
             map_sim.scroll_only_latch != 0,
             // `$3C9F4` reads `$FF97`, a frame counter that free-runs from
             // boot; the session's own frame count is the same shape.
@@ -555,6 +584,26 @@ impl Session {
             vh,
             Some(&video),
         );
+        match layer {
+            MapLayer::Counters => {
+                composition.bg.fill(None);
+                composition.oam = status_cells.map_or_else(Vec::new, |c| c.to_vec());
+            }
+            // The counters' strip goes with them: the map shows through.
+            MapLayer::Screen if status_cells.is_some() && screen_cells.is_none() => {
+                let (x0, y0, x1, y1) = sml2_core::map::status_bar_strip_rect(vw, vh);
+                for py in y0..y1 {
+                    for px in x0..x1 {
+                        composition.bg[py * vw + px] = Some(sml2_core::map::hub_bg_sample(
+                            &tilemaps,
+                            (map_sim.cam_x, map_sim.cam_y),
+                            (px, py),
+                        ));
+                    }
+                }
+            }
+            MapLayer::Screen => {}
+        }
         OverworldFrame {
             composition,
             vram,
