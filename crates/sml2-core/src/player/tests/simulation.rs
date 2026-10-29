@@ -4266,3 +4266,60 @@ fn death_draw_y_unwraps_the_low_byte_arc() {
     sim.y = 0x0150;
     assert_eq!(sim.death_draw_y(0x0100), 0x0150);
 }
+
+/// A 288-row view's bottom sits past screen Y `$C0`, where the byte arc
+/// reads as above the screen; the wide arc tracks and fades on `death_y`.
+#[test]
+fn an_enlarged_view_fades_the_death_arc_below_its_own_bottom() {
+    let cam_y = 0x0200;
+    let view = ViewRect {
+        x: 0,
+        y: i32::from(cam_y) - 144 - 36,
+        w: 672,
+        h: 288,
+    };
+    let bottom = view.y + view.h; // camY + 108
+    let mut sim = PlayerSim::new();
+    sim.view = Some(view);
+    sim.dead = 0xFF;
+    sim.vvel = 1; // MarioSpeedTableDead[1] = 3.
+    sim.y = cam_y + 100;
+    sim.death_y = Some(sim.y);
+    for _ in 0..4 {
+        sim.death_arc(cam_y);
+    }
+    // The native band ($B0 = camY + 78) is behind it; still on the view.
+    assert_eq!(sim.death_y, Some(cam_y + 112));
+    assert!(!sim.dead_fade);
+    assert_eq!(sim.death_draw_y(cam_y), cam_y + 112);
+    sim.death_arc(cam_y);
+    assert_eq!(i32::from(sim.death_y.unwrap()), bottom + 7);
+    assert!(sim.dead_fade, "6 px past the view's bottom");
+    assert_eq!(sim.music_request, 2);
+}
+
+/// The wide arc carries a rise past a byte boundary into the high byte.
+#[test]
+fn the_wide_death_arc_carries_across_the_low_byte() {
+    let cam_y = 0x0200;
+    let mut sim = PlayerSim::new();
+    sim.view = Some(ViewRect {
+        x: 0,
+        y: i32::from(cam_y) - 108,
+        w: 384,
+        h: 216,
+    });
+    sim.dead = 0xFF;
+    sim.vvel = 95; // rising: MarioSpeedTableDead[95] = 0 ... [70] = $FD.
+    sim.y = cam_y + 1;
+    sim.death_y = Some(sim.y);
+    for _ in 0..35 {
+        sim.death_arc(cam_y);
+    }
+    assert!(!sim.dead_fade, "rising on the view");
+    assert_eq!(sim.vvel, 60);
+    let y = sim.death_y.unwrap();
+    assert!(y < 0x0200, "rose into the previous page: {y:#06X}");
+    assert_eq!(y as u8, sim.y as u8, "same low byte as the ROM arc");
+    assert_eq!(sim.y >> 8, 2, "the ROM arc stays on its page");
+}

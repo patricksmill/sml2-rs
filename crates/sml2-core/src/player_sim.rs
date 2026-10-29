@@ -216,6 +216,10 @@ pub struct PlayerState {
     pub swim: bool,
 }
 
+/// How far below a view's bottom row the death arc fades: `$3186`'s screen
+/// band `$B0` is world `camY + 78`, the native view's bottom is `camY + 72`.
+const DEATH_FADE_BELOW: i32 = 6;
+
 /// An enlarged view's world rect, in pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ViewRect {
@@ -309,6 +313,10 @@ pub struct PlayerSim {
     /// `$FF9B = 9` — the death fade. The frame loop leaves the level, so the
     /// whole sim (player, camera, objects) freezes here.
     pub dead_fade: bool,
+    /// Mario's world Y through the death arc, carried into the high byte. Not
+    /// ROM state: [`Self::death_arc`] steps only `y`'s low byte, which 256
+    /// screen rows cannot place in a view taller than the screen.
+    pub death_y: Option<u16>,
     /// `$FF9B = 24` — the exit/level-clear phase, set by the `$1CBA` bell arm.
     /// State `$18` (`$3547`) replaces the in-level loop, so — like the death
     /// fade — the whole sim freezes while this is set. `exit_fade_step` models
@@ -598,6 +606,7 @@ impl PlayerSim {
             dead: 0,
             invincibility: 0,
             dead_fade: false,
+            death_y: None,
             exit_phase: false,
             boss_clear: false,
             exit_completed: false,
@@ -2104,6 +2113,7 @@ impl PlayerSim {
     /// hit still moves normally and only the next frame enters the arc.
     fn death_dispatch(&mut self) {
         if self.dead == 0 {
+            self.death_y = None;
             return;
         }
         if self.dead == 0x80 || self.powerup == 0 {
@@ -2111,6 +2121,7 @@ impl PlayerSim {
             self.dead = 0xFF;
             self.walk_timer = 0;
             self.vvel = 95;
+            self.death_y = Some(self.y);
             return;
         }
         // $319F: lose a powerup tier + 128 frames of invincibility.
@@ -2222,12 +2233,21 @@ impl PlayerSim {
     /// branch runs *only* this plus the object engine — the camera is frozen,
     /// and the Y add is 8-bit with NO carry into `$FFC1` (the low byte wraps;
     /// verified live). Ends in the fade (`$3186`: state 9, fade timer 192)
-    /// once the draw's screen Y `(y - camY + 98) & $F0 == $B0`.
+    /// once the draw's screen Y `(y - camY + 98) & $F0 == $B0`: 6 px below
+    /// the native view's bottom row (`camY + 72`). An enlarged [`Self::view`]
+    /// fades the same 6 px below its own bottom, tested on [`Self::death_y`].
     pub fn death_arc(&mut self, cam_y: u16) {
         let b = SPEED_V_DEAD[self.vvel as usize];
+        let death_y = self.death_y.get_or_insert(self.y);
+        *death_y = death_y.wrapping_add_signed(i16::from(b as i8));
+        let death_y = *death_y;
         self.y = (self.y & 0xFF00) | (self.y as u8).wrapping_add(b) as u16;
         let sy = (self.y as u8).wrapping_sub(cam_y as u8).wrapping_add(98);
-        if sy & 0xF0 == 0xB0 {
+        let gone = match self.view {
+            Some(view) => i32::from(death_y) >= view.y + view.h + DEATH_FADE_BELOW,
+            None => sy & 0xF0 == 0xB0,
+        };
+        if gone {
             self.music_request = 2; // $3186: death jingle as Mario leaves the screen.
             self.dead_fade = true;
             self.fade_timer = 192; // $3186
@@ -2245,8 +2265,12 @@ impl PlayerSim {
     /// steps only `y`'s low byte, which the console draws through the 8-bit
     /// OAM Y `(y - camY + 98)`, so the jump of 256 px when it wraps never
     /// shows. A view taller than the screen would draw that jump, so this
-    /// rebuilds Y from the screen Y, with `$C0..$FF` above the screen.
+    /// rebuilds Y from the screen Y, with `$C0..$FF` above the screen. An
+    /// enlarged view, too tall for that split, draws [`Self::death_y`].
     pub fn death_draw_y(&self, cam_y: u16) -> u16 {
+        if let (Some(_), Some(y)) = (self.view, self.death_y) {
+            return y;
+        }
         let sy = (self.y as u8).wrapping_sub(cam_y as u8).wrapping_add(98);
         let above = if sy >= 0xC0 { 256 } else { 0 };
         cam_y.wrapping_add(u16::from(sy)).wrapping_sub(98 + above)
