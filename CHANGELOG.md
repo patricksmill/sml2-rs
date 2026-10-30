@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the top-left corner instead of the bottom-right strip.
 
 ### Fixed
+- Modern HUD counters let arena scenery show through their gaps instead of
+  leaving white rectangles. Glyphs and outlines remain visible in native and
+  DX rendering, and native pause flashes keep the HUD background transparent.
 - Tree Zone 3's outdoor entrance keeps its original DX colors when the hive's
   palette loads while the entrance is still visible in widescreen or zoomed-out
   views.

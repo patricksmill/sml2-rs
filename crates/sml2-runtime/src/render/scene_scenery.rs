@@ -19,6 +19,7 @@ pub(crate) fn paint_border<P: Copy>(
     background: &[P],
     protected: &[(i32, i32, i32, i32)],
     origin: (i32, i32),
+    hud: &[Option<()>],
 ) {
     if scenery.is_empty() || !view::enlarged(view) || background.len() != 160 * 144 {
         return;
@@ -32,6 +33,12 @@ pub(crate) fn paint_border<P: Copy>(
         let x = (index % width / scale) as i32 - mx;
         let y = (index / width / scale) as i32 - my;
         if (0..160).contains(&x) && (0..144).contains(&y) {
+            continue;
+        }
+        if hud
+            .get(index / width / scale * view.0 + index % width / scale)
+            .is_some_and(Option::is_some)
+        {
             continue;
         }
         if protected.iter().any(|&(left, top, width, height)| {
@@ -71,7 +78,7 @@ impl Session {
 
     /// Protected pixels in scene-local coordinates, in addition to the
     /// original screen. Arena cameras retain the level renderer's framing
-    /// and HUD, so those live pixels also remain untouched.
+    /// and classic HUD strip. The modern HUD is protected per pixel when painting.
     pub fn scene_border_protected_rects(&self, size: (usize, usize)) -> Vec<(i32, i32, i32, i32)> {
         let mut rectangles = vec![(0, 0, 160, 144)];
         if matches!(self.scene_scenery_target(), Some(SceneTarget::Arena { .. })) {
@@ -84,13 +91,59 @@ impl Session {
                         160,
                         8,
                     )),
-                    super::HudStyle::Modern => rectangles.extend(
-                        super::corner_hud_rects(size).map(|(x, y, w, h)| (x - mx, y - my, w, h)),
-                    ),
+                    super::HudStyle::Modern => {}
                 }
             }
         }
         rectangles
+    }
+
+    fn scene_border_hud(
+        &self,
+        size: (usize, usize),
+        dx: Option<&sml2_dx::Presentation>,
+    ) -> Vec<Option<()>> {
+        let Some(ctx) = self.level_ctx().filter(|ctx| ctx.arena_loaded) else {
+            return Vec::new();
+        };
+        if self.hud_style != super::HudStyle::Modern {
+            return Vec::new();
+        }
+        let mut hud = ctx.hud.clone();
+        if let Some(dx) = dx {
+            hud.template = dx.hud_tiles.clone();
+        }
+        let row = super::hud_row_status(
+            &hud,
+            super::HudDigits {
+                lives: ctx.sim.lives,
+                coins_high: ctx.sim.coins_high,
+                coins_low: ctx.sim.coins_low,
+                money_bag: ctx.obj.money_bag,
+                timer_high: ctx.sim.level_timer.high,
+                timer_low: ctx.sim.level_timer.low,
+            },
+        );
+        let bgp = ctx.manifest.header.palettes[0];
+        let mut mask = vec![None; size.0 * size.1];
+        // Use the renderer's glyphs and outline, leaving their gaps available to scenery.
+        super::draw_corner_hud(
+            &row,
+            size,
+            &mut mask,
+            |_, tile, x, y| {
+                let off = sml2_core::video::bg_tile_offset(tile);
+                let bytes = ctx.bg_live[off..off + 16]
+                    .try_into()
+                    .expect("loaded HUD tile");
+                let color =
+                    sml2_core::video::tile_colors(bytes)[usize::from(y) * 8 + usize::from(x)];
+                Ok((super::hud_shade(bgp, color), ()))
+            },
+            |_| (),
+        )
+        .expect("loaded HUD tiles");
+        mask
     }
 
     pub fn scene_scenery_target(&self) -> Option<SceneTarget> {
@@ -285,6 +338,7 @@ impl Session {
                     &background,
                     &self.scene_border_protected_rects(view),
                     self.scene_border_origin(view),
+                    &self.scene_border_hud(view, None),
                 );
             }
         }
@@ -312,6 +366,7 @@ impl Session {
                 &background,
                 &self.scene_border_protected_rects(view),
                 self.scene_border_origin(view),
+                &self.scene_border_hud(view, Some(dx)),
             );
         }
         Ok(())

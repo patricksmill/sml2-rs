@@ -336,6 +336,8 @@ pub fn render_view_output_smooth(
         }
     }
     if let (Some((row, _)), HudStyle::Modern) = (hud, hud_style) {
+        // Palette flashes change the ink colors, not the glyph silhouette.
+        let hud_bgp = manifest.header.palettes[0];
         draw_corner_hud(
             row,
             (vw, vh),
@@ -343,7 +345,7 @@ pub fn render_view_output_smooth(
             |_, tile, x, y| {
                 let c = tiles[tile as usize][usize::from(y) * 8 + usize::from(x)];
                 Ok((
-                    hud_shade(bgp, c),
+                    hud_shade(hud_bgp, c),
                     NativeBg {
                         shade: shades[c as usize],
                         index: c,
@@ -351,7 +353,7 @@ pub fn render_view_output_smooth(
                 ))
             },
             |_| {
-                let c = (0..4).find(|&c| hud_shade(bgp, c) == 0).unwrap_or(0);
+                let c = (0..4).find(|&c| hud_shade(hud_bgp, c) == 0).unwrap_or(0);
                 NativeBg {
                     shade: shades[c as usize],
                     index: c,
@@ -743,16 +745,6 @@ const CORNER_HUD_LEFT: [(usize, i32, i32); 13] = [
 const CORNER_HUD_RIGHT: [(usize, i32, i32); 4] = [(16, 0, 0), (17, 1, 0), (18, 2, 0), (19, 3, 0)];
 /// Game pixels between each group and the view's edges.
 const CORNER_HUD_INSET: i32 = 8;
-
-/// Each corner group's `(x, y, w, h)` in view pixels, its ring included.
-pub(crate) fn corner_hud_rects(view: (usize, usize)) -> [(i32, i32, i32, i32); 2] {
-    let right = view.0 as i32 - CORNER_HUD_INSET - CORNER_HUD_RIGHT.len() as i32 * 8;
-    let y = CORNER_HUD_INSET - 1;
-    [
-        (CORNER_HUD_INSET - 1, y, 10 * 8 + 2, 2 * 8 + 2),
-        (right - 1, y, CORNER_HUD_RIGHT.len() as i32 * 8 + 2, 8 + 2),
-    ]
-}
 
 /// The shade `bgp` gives HUD tile colour `color`. Each tileset draws the
 /// strip for its level's palette (`$93` and `$E1` levels back it with colour

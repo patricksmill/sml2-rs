@@ -402,3 +402,106 @@ fn arena_reload_stops_level_scenery_in_native_and_dx_presentation() {
         assert_eq!(game.render_dx_frame(&dx, Mario, view).unwrap(), colored);
     }
 }
+
+#[test]
+fn modern_arena_hud_gaps_show_scenery_while_ink_and_outlines_survive() {
+    use sml2_runtime::render::{motion::Smooth, HudStyle};
+    let mut game = session();
+    game.hud_style = HudStyle::Modern;
+    let mut dx = synthetic_bundle();
+    dx.hud_tiles.fill(0x80);
+    for level in &mut dx.levels {
+        level.bg_palettes = [0x1f, 0, 0xe0, 3, 0, 0x7c, 0xff, 0x7f].repeat(8);
+        // Swatch 0 is blue, distinct from the red off-screen fill.
+        level.background[0][0x800..0x810].copy_from_slice(&[0, 255].repeat(8));
+    }
+    let targets: Vec<_> = game
+        .scenery_scenes()
+        .into_iter()
+        .filter(|target| matches!(target, SceneTarget::Arena { .. }))
+        .collect();
+    assert!(targets.len() >= 6);
+    for target in targets {
+        game.stage_scenery_scene(target).unwrap();
+        let SessionState::InLevel(ctx) = &mut game.state else {
+            unreachable!()
+        };
+        let bgp = ctx.manifest.header.palettes[0];
+        let paper = (0..4).find(|&c| (bgp >> (c * 2)) & 3 == 0).unwrap();
+        let ink = (0..4).find(|&c| (bgp >> (c * 2)) & 3 == 3).unwrap();
+        ctx.hud.template.fill(0x80);
+        ctx.hud.digit_columns.clear();
+        for y in 0..8 {
+            ctx.bg_live[y * 2] = if paper & 1 != 0 { 255 } else { 0 };
+            ctx.bg_live[y * 2 + 1] = if paper & 2 != 0 { 255 } else { 0 };
+            ctx.bg_live[y * 2] ^= if (paper ^ ink) & 1 != 0 { 0x18 } else { 0 };
+            ctx.bg_live[y * 2 + 1] ^= if (paper ^ ink) & 2 != 0 { 0x18 } else { 0 };
+        }
+        for view in [(384, 216), (672, 288)] {
+            let (mx, my) = game.scene_border_origin(view);
+            let scenery = SceneryOverlay::try_from_paints(
+                (-20..40)
+                    .flat_map(|y| (-30..50).map(move |x| SceneryPaint { x, y, metatile: 0 }))
+                    .collect(),
+                SCENE_SWATCHES,
+            )
+            .unwrap();
+            for phase in [None, Some(0), Some(16)] {
+                let SessionState::InLevel(ctx) = &mut game.state else {
+                    unreachable!()
+                };
+                ctx.sim.paused = phase.is_some();
+                ctx.sim.frame_counter = phase.unwrap_or(0);
+                for scale in [1, 2] {
+                    let smooth = Smooth { alpha: 1.0, scale };
+                    game.set_scene_scenery(target, SceneryOverlay::empty())
+                        .unwrap();
+                    let (native, _) = game.render_palette_frame_smooth(view, smooth);
+                    let (colored, _) = game
+                        .render_dx_frame_smooth(&dx, Mario, view, smooth)
+                        .unwrap();
+                    let source = game.scene_palette_frame().unwrap();
+                    let dx_source = game.scene_palette_dx(&dx, Mario).unwrap();
+                    game.set_scene_scenery(target, scenery.clone()).unwrap();
+                    let (painted, _) = game.render_palette_frame_smooth(view, smooth);
+                    let (dx_painted, _) = game
+                        .render_dx_frame_smooth(&dx, Mario, view, smooth)
+                        .unwrap();
+                    // First and last cells of both counter groups: backing, ring, ink.
+                    for x0 in [8, 8 + 9 * 8, view.0 - 16] {
+                        for sub_y in 0..scale {
+                            for sub_x in 0..scale {
+                                let at =
+                                    |x| (8 * scale + sub_y) * view.0 * scale + x * scale + sub_x;
+                                let sx = (x0 as i32 - mx).rem_euclid(16) as usize;
+                                let sy = (8 - my).rem_euclid(16) as usize;
+                                assert_eq!(
+                                    painted[at(x0)],
+                                    source[sy * 160 + sx],
+                                    "{target:?} gap"
+                                );
+                                assert_eq!(
+                                    dx_painted[at(x0)],
+                                    dx_source[sy * 160 + sx],
+                                    "{target:?} DX gap"
+                                );
+                                for x in [x0 + 2, x0 + 3] {
+                                    assert_eq!(
+                                        painted[at(x)],
+                                        native[at(x)],
+                                        "{target:?} ink/ring"
+                                    );
+                                    assert_eq!(
+                                        dx_painted[at(x)],
+                                        colored[at(x)],
+                                        "{target:?} DX ink/ring"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
