@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   between rooms (with Expanded levels on).
 - Scenery for Tree Zones 1, 2 (rebuilt), 3, 4 and 5, the zone's bonus level
   and the Tree Zone map in widescreen and zoomed-out views.
+- Cloud scenery around the Tree Zone boss arena in widescreen and zoomed-out
+  views, also available in the Scenery Editor.
 - Scenery Editor: rebuilt levels open as their rebuilt map with their own
   scenery file, and a Select tool copies an area to stamp it repeatedly.
 - Spin jump button: ZL / ZR on a controller (C on the keyboard) spins Mario
@@ -29,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the top-left corner instead of the bottom-right strip.
 
 ### Fixed
+- Boss arenas no longer draw the preceding level's scenery with the arena's
+  DX tiles and palettes. Arena scenery follows the camera's picture instead
+  of the center of the window.
 - Modern status bar counters render correctly in levels whose palettes use
   different colors for the original status strip's background and numbers.
 - Scenery Editor: boss arenas show the screen the fight is played on, not the

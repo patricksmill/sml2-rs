@@ -34,12 +34,16 @@ fn synthetic_bundle() -> Presentation {
         mappings: vec![vec![]; 242],
     };
     Presentation {
-        movement: std::array::from_fn(|_| std::sync::Arc::new(sml2_core::character::MovementCurves {
-            horizontal: sml2_core::player_sim::SPEED_H,
-            normal: sml2_core::player_sim::SPEED_V[..76].try_into().unwrap(),
-            swim: sml2_core::player_sim::SPEED_V_GOO[..76].try_into().unwrap(),
-            moon: sml2_core::player_sim::SPEED_V_WATER[..76].try_into().unwrap(),
-        })),
+        movement: std::array::from_fn(|_| {
+            std::sync::Arc::new(sml2_core::character::MovementCurves {
+                horizontal: sml2_core::player_sim::SPEED_H,
+                normal: sml2_core::player_sim::SPEED_V[..76].try_into().unwrap(),
+                swim: sml2_core::player_sim::SPEED_V_GOO[..76].try_into().unwrap(),
+                moon: sml2_core::player_sim::SPEED_V_WATER[..76]
+                    .try_into()
+                    .unwrap(),
+            })
+        }),
         levels: vec![level; 32],
         players: [[player.clone(), player.clone()], [player.clone(), player]],
         object_tables: vec![vec![vec![]; 228]],
@@ -136,7 +140,7 @@ fn all_available_scene_borders_preserve_native_pixels_and_simulation() {
         game.set_scene_scenery(target, surround()).unwrap();
         let painted = game.render_frame((385, 217));
         assert_eq!(native, game.render_frame((160, 144)), "{target:?}");
-        let (mx, my) = sml2_runtime::render::view::margin((385, 217));
+        let (mx, my) = game.scene_border_origin((385, 217));
         for y in 0..144 {
             let at = (my as usize + y) * 385 + mx as usize;
             assert_eq!(
@@ -200,7 +204,8 @@ fn border_pixels_use_background_swatches_in_native_and_dx() {
         .unwrap();
         let native = game.render_palette_frame((384, 216));
         let colored = game.render_dx_frame(&dx, Mario, (384, 216)).unwrap();
-        let (mx, my) = (112, 36);
+        let (mx, my) = game.scene_border_origin((384, 216));
+        let (mx, my) = (mx as usize, my as usize);
         for y in 0..16 {
             for x in 0..16 {
                 let at = (my + y) * 384 + mx - 16 + x;
@@ -230,10 +235,10 @@ fn arena_borders_preserve_the_level_camera_region_and_relocated_hud() {
     let view = (384, 216);
     let baseline = game.render_frame(view);
     let rects = game.scene_border_protected_rects(view);
-    assert_eq!(rects.len(), 3);
+    assert_eq!(rects.len(), 2);
     game.set_scene_scenery(target, surround()).unwrap();
     let painted = game.render_frame(view);
-    let (mx, my) = sml2_runtime::render::view::margin(view);
+    let (mx, my) = game.scene_border_origin(view);
     for (left, top, width, height) in rects {
         for y in top + my..top + my + height {
             for x in left + mx..left + mx + width {
@@ -328,4 +333,72 @@ fn a_staged_arena_shows_the_screen_the_fight_plays_on() {
         unreachable!()
     };
     assert_eq!((ctx.cam.x, ctx.cam.y), arrived);
+}
+
+#[test]
+fn tree_arena_surround_follows_the_camera_and_uses_only_arena_swatches() {
+    let mut game = session();
+    game.expanded_levels = true;
+    let target = SceneTarget::Arena { level: 5, gfx: 0 };
+    game.stage_scenery_scene(target).unwrap();
+    assert!(!game.scene_scenery(target).is_empty());
+    let source = game.scene_palette_frame().unwrap();
+    // Swatches 5 and 43 are the arena's sky and cloud interior, respectively.
+    let sky = source[80];
+    let cloud = source[64 * 160 + 48];
+    assert_ne!(sky, cloud);
+    for (view, origin) in [((384, 216), (112, 24)), ((672, 288), (256, 24))] {
+        assert_eq!(game.scene_border_origin(view), origin);
+        let painted = game.render_palette_frame(view);
+        assert_eq!(painted[0], sky);
+        assert_eq!(painted[(view.1 - 16) * view.0], cloud);
+        let native = game.render_frame((160, 144));
+        let enlarged = game.render_frame(view);
+        // The native terrain stays at the level camera's position; the HUD
+        // moves to the bottom of the enlarged view.
+        for y in 0..128 {
+            let at = (origin.1 as usize + y) * view.0 + origin.0 as usize;
+            assert_eq!(&enlarged[at..at + 160], &native[y * 160..y * 160 + 160]);
+        }
+    }
+}
+
+#[test]
+fn arena_reload_stops_level_scenery_in_native_and_dx_presentation() {
+    let mut game = session();
+    game.stage_scenery_scene(SceneTarget::Arena { level: 5, gfx: 0 })
+        .unwrap();
+    let mut dx = synthetic_bundle();
+    dx.levels[5].bg_palettes = [0x1f, 0, 0xe0, 3, 0, 0x7c, 0xff, 0x7f].repeat(8);
+    dx.levels[5].bg_palettes[8..16].copy_from_slice(&[0xe0, 3].repeat(4));
+    dx.levels[5].metatiles.metatiles[127].tiles = [1; 4];
+    dx.levels[5].tile_attributes[1] = 1;
+    for view in [(160, 144), (384, 216), (672, 288)] {
+        let SessionState::InLevel(ctx) = &mut game.state else {
+            unreachable!()
+        };
+        ctx.scenery = SceneryOverlay::empty();
+        let native = game.render_frame(view);
+        let colored = game.render_dx_frame(&dx, Mario, view).unwrap();
+        let SessionState::InLevel(ctx) = &mut game.state else {
+            unreachable!()
+        };
+        // A level-scoped paint over the fight itself must never survive the
+        // arena tileset swap, even at the original view size.
+        ctx.scenery = SceneryOverlay::try_from_paints(
+            (0..12)
+                .flat_map(|y| {
+                    (70..110).map(move |x| SceneryPaint {
+                        x,
+                        y,
+                        metatile: 127,
+                    })
+                })
+                .collect(),
+            128,
+        )
+        .unwrap();
+        assert_eq!(game.render_frame(view), native);
+        assert_eq!(game.render_dx_frame(&dx, Mario, view).unwrap(), colored);
+    }
 }

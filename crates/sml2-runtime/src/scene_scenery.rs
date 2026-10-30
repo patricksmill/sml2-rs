@@ -67,6 +67,11 @@ impl SceneTarget {
 /// `(SceneTarget::Map(9), include_str!("../../../assets/scenery/scenery-map-09.json"))`.
 /// Local authoring drafts are deliberately absent from this registry.
 const BUNDLED: &[(SceneTarget, &str)] = &[
+    // Tree Zone boss: continue the clouds around the original nest.
+    (
+        SceneTarget::Arena { level: 5, gfx: 0 },
+        include_str!("../../../assets/scenery/scenery-arena-05-00.json"),
+    ),
     // Tree Zone map: a leaf scatter made only of the picture's own cells.
     (
         SceneTarget::Map(2),

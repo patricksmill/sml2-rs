@@ -1032,7 +1032,10 @@ fn render(
     let scenery_window =
         super::margin::SceneryWindow::new(view, (ctx.cam.x, ctx.cam.y), pan, room, border + lift, &ctx.scenery)
             .with_layout_writes(&ctx.sim.layout_writes);
-    let past_level = ctx.spr.as_ref().and_then(|s| s.pipe_background).is_none();
+    // Arena tiles replace the level's metatile table; its scenery references
+    // must stop here too, just as they do in the native renderer.
+    let past_level = !ctx.arena_loaded
+        && ctx.spr.as_ref().and_then(|s| s.pipe_background).is_none();
     for py in -border..vh as i32 + border {
         if !past_level {
             break;
