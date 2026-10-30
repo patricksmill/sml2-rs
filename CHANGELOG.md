@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the top-left corner instead of the bottom-right strip.
 
 ### Fixed
+- Tree Zone 3's outdoor entrance keeps its original DX colors when the hive's
+  palette loads while the entrance is still visible in widescreen or zoomed-out
+  views.
 - Boss arenas no longer draw the preceding level's scenery with the arena's
   DX tiles and palettes. Arena scenery follows the camera's picture instead
   of the center of the window.

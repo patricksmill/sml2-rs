@@ -1003,6 +1003,65 @@ fn conveyor_section_colors_survive_corridors_and_widescreen() {
     }
 }
 
+#[test]
+fn tree_hive_palette_swap_keeps_the_visible_outdoor_entrance_green() {
+    use sml2_runtime::render::{motion::Smooth, view, HudStyle};
+    let mut bundle = synthetic_bundle();
+    let bank = bundle.banks.get_mut(&0x26).unwrap();
+    bank[0x1a00..0x1a40].copy_from_slice(&[0x1f, 0].repeat(32));
+    bank[0x1a40..0x1a80].copy_from_slice(&[0xe0, 3].repeat(32));
+    let mut game = session();
+    game.expanded_levels = true;
+    game.begin_level(3, 0).unwrap();
+    let SessionState::InLevel(ctx) = &mut game.state else {
+        unreachable!()
+    };
+    ctx.obj.mario_ref_x = 0x120;
+    game.advance(FrameInput::default());
+    let SessionState::InLevel(ctx) = &mut game.state else {
+        unreachable!()
+    };
+    // The hive's palette has loaded, while the wide view still sees page 0.
+    ctx.cam.x = 280;
+    let size = (384, 216);
+    let origin = view::level_origin(size, (ctx.cam.x, ctx.cam.y), 0, ctx.cam.room());
+    let boundary = (0x100 - origin.0) as usize;
+    for paused in [false, true] {
+        let SessionState::InLevel(ctx) = &mut game.state else {
+            unreachable!()
+        };
+        ctx.sim.paused = paused;
+        ctx.sim.frame_counter = 0;
+        let (outdoor, indoor) = if paused {
+            ([189, 0, 0], [0, 222, 0])
+        } else {
+            (RED, [0, 255, 0])
+        };
+        for style in [HudStyle::Classic, HudStyle::Modern] {
+            game.hud_style = style;
+            for scale in [1, 2] {
+                let smooth = Smooth { alpha: 1.0, scale };
+                let (frame, used_scale) = game
+                    .render_dx_frame_smooth(&bundle, Mario, size, smooth)
+                    .unwrap();
+                assert_eq!(used_scale, scale);
+                let at = |x: usize, y: usize| frame[y * scale * size.0 * scale + x * scale];
+                assert_eq!(at(boundary - 1, 80), outdoor);
+                assert_eq!(at(boundary, 80), indoor);
+                if style == HudStyle::Classic {
+                    assert_eq!(at(112, 208), indoor, "the HUD retains the live palette");
+                }
+            }
+            let native = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
+            assert_eq!(
+                native[80 * 160],
+                indoor,
+                "native views keep the ROM's global swap"
+            );
+        }
+    }
+}
+
 /// `$26:$6B0B`: past a trigger, the eight regional levels draw with the set
 /// it loads. BG swaps recolor the whole frame; OBJ-only levels keep drawing.
 #[test]

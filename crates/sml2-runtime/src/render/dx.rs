@@ -1316,6 +1316,41 @@ fn render(
         cell.shift.1 += viewport.sprite_shift.1;
     }
     let (background, objects) = layers.compose(offsets.scale, viewport.bg_shift, |_, _| false);
+    // Tree Zone 3's page-1 swap reuses the outdoor palettes. A wider view
+    // still shows the entrance on page 0, so keep its original BG colors.
+    if level_id == 3
+        && !ctx.arena_loaded
+        && super::view::enlarged(view)
+        && ctx.dx_regional.bg == Some(0x5A40)
+        && sx < 0x100
+    {
+        let entrance_bg = if ctx.sim.paused {
+            pause_palettes(&level.bg_palettes, ctx.sim.frame_counter & 16 != 0)
+        } else {
+            level.bg_palettes.clone()
+        };
+        let entrance =
+            CgbPalettes::from_bytes(&entrance_bg, &obj_source).map_err(|e| e.to_string())?;
+        let scale = offsets.scale;
+        let width = vw * scale;
+        return Ok(background
+            .iter()
+            .zip(&objects)
+            .enumerate()
+            .map(|(i, (&bg, &obj))| {
+                let x = i % width;
+                let y = i / width;
+                let wx = sx + (x as i32 - viewport.bg_shift.0).div_euclid(scale as i32);
+                let window = layers.window[y / scale * vw + x / scale].is_some();
+                let colors = if wx < 0x100 && !window {
+                    &entrance
+                } else {
+                    &palettes
+                };
+                cgb::compose_pixel(bg, obj, true, colors)
+            })
+            .collect());
+    }
     cgb::compose_frame(&background, &objects, true, &palettes).map_err(|e| e.to_string())
 }
 
