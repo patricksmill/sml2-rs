@@ -85,13 +85,8 @@ Change bindings in **Settings → Controls**. See the
 
 ## How it was made
 
-The port is built on the community
-[Super Mario Land 2 disassembly](https://github.com/froggestspirit/marioland2)
-by froggestspirit, which rebuilds a byte-identical copy of the original ROM
-with RGBDS. Development used a fork,
-[patricksmill/marioland2](https://github.com/patricksmill/marioland2), checked
-out next to this repository as `../sml2decomp/` (`SML2_DECOMP_ROOT` overrides
-the location).
+Development used [patricksmill/marioland2](https://github.com/patricksmill/marioland2), forked from [Super Mario Land 2 disassembly](https://github.com/froggestspirit/marioland2) by froggestspirit, which rebuilds a byte-identical copy of the original ROM
+with RGBDS. 
 
 The disassembly served as the reference for porting:
 
@@ -113,8 +108,7 @@ The disassembly served as the reference for porting:
   in a verified original ROM. The desktop app's ROM import uses the locations
   found this way, so players don't need the disassembly.
 
-The work also went back into the fork: object handlers, shared helpers and
-handler states identified while porting were named in the disassembly.
+The work also went back into the fork: object handlers, shared helpers and handler states identified while porting were named in the disassembly.
 
 No code, ROM data or graphics from the disassembly are included in this
 repository.
