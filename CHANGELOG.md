@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.0] - Unreleased
+
 ### Added
 - Expanded levels (Settings → Mods → Levels, on by default): Tree Zone 2 is
   rebuilt as one connected map. Its pipe no longer teleports Mario between
@@ -22,13 +24,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   while he is in the air, without holding Down. Rebind it in Settings →
   Controls; existing settings files pick up the new default.
 
+### Changed
+- With the Modern status bar, the overworld hub's lives and coins appear in
+  the top-left corner instead of the bottom-right strip.
+
 ### Fixed
+- Modern status bar counters render correctly in levels whose palettes use
+  different colors for the original status strip's background and numbers.
 - Scenery Editor: boss arenas show the screen the fight is played on, not the
   part of the arena layout beside it.
 - In widescreen and zoomed-out views, the camera pans smoothly between rooms
   instead of jumping at the start and end of each screen transition.
 - In widescreen and zoomed-out views, the camera no longer races past the end
   of an autoscroll level when Mario walks left of the screen's middle.
+- In widescreen and zoomed-out views, distant objects no longer trigger
+  proximity behavior too early, including Pumpkin Zone spikes and the
+  hippo level's waiting bobbers.
+- In widescreen and zoomed-out views, defeated enemies, respawning enemies
+  and Wario's Castle mines use the visible area's edges, preventing enemies
+  from disappearing or respawning while still in view.
+- In zoomed-out views, Mario's death animation follows a continuous arc and
+  fades after he falls below the visible area.
 
 ## [v0.1.1] - 2026-10-27
 
