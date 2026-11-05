@@ -63,6 +63,23 @@ target's viewport remain available during the app session. A failed save keeps
 the edits; use **Retry**. An unreadable or invalid draft locks editing until
 you repair it and choose **Reload file**.
 
+### DX palette preview
+
+Some DX levels change palettes during play. Pan the canvas so its center is
+at the desired Mario position, then choose **Preview at view center** in the
+**DX palette preview** row. The canvas, tile tray, and brush/stamp previews
+use that palette together. Coordinates are original-level pixels; expanded
+maps still use the original layout's palette-trigger coordinates.
+
+Palette triggers are stateful: applying a position without a trigger retains
+the last preview palette. Apply positions in travel order to preview a
+sequence, or choose **Reset palette** to restore the level's starting colors.
+Changing levels also resets the preview. The row is available for level
+targets with DX graphics enabled, not fixed-scene targets.
+
+This selection is preview-only. Exports still contain tile references, not
+colors, and playtests start normally and apply their own palette transitions.
+
 ## Expanded levels
 
 Levels the port has rebuilt into one connected map (marked **· expanded** in

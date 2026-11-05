@@ -62,6 +62,7 @@ pub fn pack_joypad(
 }
 
 pub(crate) mod dx_palette;
+pub use dx_palette::RegionalPalettes;
 pub(crate) mod dx_effects;
 mod level;
 pub use level::LevelContext;

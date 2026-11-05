@@ -30,6 +30,7 @@ pub(super) struct Editor {
     atlas: Option<palette::Atlas>,
     canvas_cache: canvas::CanvasCache,
     all_tiles: bool,
+    palette_preview: sml2_runtime::session::RegionalPalettes,
     pub playtesting: bool,
     canvas_rect: Option<Rect>,
     hover: Option<Cell>,
@@ -117,6 +118,7 @@ impl EditorApp {
         }
         self.editor.scene = None;
         self.editor.level = id;
+        self.editor.palette_preview = Default::default();
         self.editor.work = self.editor.levels.remove(&id);
         if self.editor.work.is_none() {
             self.load_editor_level();
@@ -191,6 +193,7 @@ impl EditorApp {
     }
 
     pub(super) fn editor_view(&mut self, ctx: &Context, ui: &mut Ui) {
+        self.editor_palette_controls(ui);
         self.editor_atlas(ctx);
         ui.scope(|ui| {
             ui.spacing_mut().interact_size.y = 26.0;

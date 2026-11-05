@@ -307,7 +307,12 @@ fn dx_atlas_samples_banks_flips_and_palettes_like_the_scenery_renderer() {
     graphics.background[1][0..2].copy_from_slice(&[0x80, 0x01]);
     graphics.background[1][14..16].copy_from_slice(&[0x01, 0x01]);
     graphics.bg_palettes[24..32].copy_from_slice(&[0, 0, 0xe0, 3, 0, 0x7c, 0xff, 0x7f]);
-    let expected = dx_tile(graphics, 1).unwrap();
+    let palettes = sml2_core::video::cgb::CgbPalettes::from_bytes(
+        &graphics.bg_palettes,
+        &graphics.obj_palettes,
+    )
+    .unwrap();
+    let expected = dx_tile(graphics, 1, &palettes).unwrap();
     assert_eq!(expected[0], Color32::WHITE);
     assert_eq!(expected[7 * 16 + 7], Color32::from_rgb(0, 255, 0));
     assert_eq!(expected[7 * 16], Color32::from_rgb(0, 0, 255));
@@ -336,6 +341,167 @@ fn dx_atlas_samples_banks_flips_and_palettes_like_the_scenery_renderer() {
             let [r, g, b] = frame[py as usize * size.0 + px as usize];
             assert_eq!(expected[y * 16 + x], Color32::from_rgb(r, g, b));
         }
+    }
+    std::fs::remove_dir_all(path).ok();
+}
+
+/// Drive the visible control rather than changing palette state behind the UI.
+fn click_palette_control(
+    app: &mut crate::app::EditorApp,
+    ctx: &eframe::egui::Context,
+    label: &str,
+) -> eframe::egui::FullOutput {
+    use crate::app::tests::frame;
+    use eframe::egui::{Event, Modifiers, PointerButton, Shape};
+    let output = frame(app, ctx, vec![]);
+    let pos = output
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            Shape::Text(text) if text.galley.text() == label => {
+                Some(text.pos + text.galley.size() / 2.0)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("missing palette control: {label}"));
+    frame(
+        app,
+        ctx,
+        vec![
+            Event::PointerMoved(pos),
+            Event::PointerButton {
+                pos,
+                button: PointerButton::Primary,
+                pressed: true,
+                modifiers: Modifiers::NONE,
+            },
+        ],
+    );
+    frame(
+        app,
+        ctx,
+        vec![
+            Event::PointerMoved(pos),
+            Event::PointerButton {
+                pos,
+                button: PointerButton::Primary,
+                pressed: false,
+                modifiers: Modifiers::NONE,
+            },
+        ],
+    )
+}
+
+#[test]
+fn regional_palette_preview_updates_visible_tiles_and_resets() {
+    use crate::app::tests::frame;
+    let (mut app, ctx, path) = app();
+    app.settings.dx_mode = true;
+    let mut dx = red_bundle();
+    let mut bank = vec![0; 0x4000];
+    bank[0x20c0..0x2100].copy_from_slice(&[0xe0, 3].repeat(32));
+    dx.banks.insert(0x26, bank);
+    app.dx_bundle = Some(dx);
+    app.open_editor(&ctx);
+    app.select_editor_level(21);
+    for _ in 0..2 {
+        super::workspace_ui::frame(&mut app, &ctx, (480.0, 400.0), vec![]);
+    }
+    assert!(app.editor.canvas_rect.unwrap().height() >= 48.0);
+    app.editor.work.as_mut().unwrap().viewport.center = eframe::egui::pos2(2360.0, 544.0);
+    frame(&mut app, &ctx, vec![]);
+    for (label, color) in [
+        ("Preview at view center", Color32::GREEN),
+        ("Reset palette", Color32::RED),
+    ] {
+        let output = click_palette_control(&mut app, &ctx, label);
+        let texture = app.editor.atlas.as_ref().unwrap().texture.id();
+        let (_, delta) = output
+            .textures_delta
+            .set
+            .iter()
+            .find(|(id, _)| *id == texture)
+            .unwrap();
+        let eframe::egui::ImageData::Color(image) = &delta.image;
+        assert!(image.pixels.iter().all(|pixel| *pixel == color), "{label}");
+        if color == Color32::GREEN {
+            // A non-trigger retains the selected palette rather than returning to the starting set.
+            app.editor.work.as_mut().unwrap().viewport.center = eframe::egui::pos2(800.0, 544.0);
+            click_palette_control(&mut app, &ctx, "Preview at view center");
+            let output = frame(&mut app, &ctx, vec![]);
+            assert_eq!(app.editor.atlas.as_ref().unwrap().texture.id(), texture);
+            assert!(!output
+                .textures_delta
+                .set
+                .iter()
+                .any(|(id, _)| *id == texture));
+        }
+    }
+    std::fs::remove_dir_all(path).ok();
+}
+
+#[test]
+fn palette_preview_does_not_change_exports_or_playtest_palette_transitions() {
+    use crate::app::tests::frame;
+    let (mut app, ctx, path) = app();
+    app.settings.dx_mode = true;
+    let mut dx = red_bundle();
+    let mut bank = vec![0; 0x4000];
+    bank[0x20c0..0x2100].copy_from_slice(&[0xe0, 3].repeat(32));
+    dx.banks.insert(0x26, bank);
+    app.dx_bundle = Some(dx);
+    app.open_editor(&ctx);
+    app.select_editor_level(21);
+    let work = app.editor.work.as_mut().unwrap();
+    work.scenery = SceneryOverlay::try_from_paints(
+        vec![SceneryPaint {
+            x: 0,
+            y: 24,
+            metatile: 1,
+        }],
+        128,
+    )
+    .unwrap();
+    work.viewport.center = eframe::egui::pos2(2360.0, 544.0);
+    app.begin_export();
+    let before = path.join("before.json");
+    app.export_to(&before).unwrap();
+    app.editor.export = None;
+    frame(&mut app, &ctx, vec![]);
+    click_palette_control(&mut app, &ctx, "Preview at view center");
+    app.begin_export();
+    let after = path.join("after.json");
+    app.export_to(&after).unwrap();
+    assert_eq!(
+        std::fs::read(&before).unwrap(),
+        std::fs::read(&after).unwrap()
+    );
+    app.editor.export = None;
+    app.play_editor(&ctx);
+    let session = &mut app.game.as_mut().unwrap().session;
+    let scenery = session.assets.level(21).unwrap().scenery.clone();
+    let size = (384, 216);
+    for expected in [[255, 0, 0], [0, 255, 0]] {
+        session.preview_scenery((80, 448), scenery.clone());
+        let origin = view::level_origin(size, (80, 448), 0, room(session));
+        let pixels = session
+            .render_dx_frame(
+                app.dx_bundle.as_ref().unwrap(),
+                app.settings.character,
+                size,
+            )
+            .unwrap();
+        let at = (384 - origin.1) as usize * size.0 + (-origin.0) as usize;
+        assert_eq!(
+            pixels[at], expected,
+            "preview selection must not override gameplay"
+        );
+        let SessionState::InLevel(level) = &mut session.state else {
+            unreachable!()
+        };
+        level.obj.mario_ref_x = 0x0940;
+        level.obj.mario_ref_y = 0x0240;
+        session.advance(sml2_runtime::session::FrameInput::default());
     }
     std::fs::remove_dir_all(path).ok();
 }

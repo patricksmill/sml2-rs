@@ -4,7 +4,7 @@ use super::{Editor, EditorApp};
 use crate::settings::Filter;
 use eframe::egui::{self, Color32, ColorImage, Context, Rect, TextureHandle, TextureOptions, Ui};
 use sml2_core::level::Metatile;
-use sml2_core::video::{self, PalettePixel, PaletteSource, cgb};
+use sml2_core::video::{self, cgb, PalettePixel, PaletteSource};
 use sml2_dx::LevelGraphics;
 
 pub(super) struct Atlas {
@@ -59,13 +59,15 @@ pub(super) fn native_tile(
     Ok(pixels)
 }
 
-pub(super) fn dx_tile(level: &LevelGraphics, id: u8) -> Result<Vec<Color32>, String> {
+pub(super) fn dx_tile(
+    level: &LevelGraphics,
+    id: u8,
+    palettes: &cgb::CgbPalettes,
+) -> Result<Vec<Color32>, String> {
     let metatile = level
         .metatiles
         .get(id)
         .ok_or("Scenery tile missing from DX graphics")?;
-    let palettes = cgb::CgbPalettes::from_bytes(&level.bg_palettes, &level.obj_palettes)
-        .map_err(|e| e.to_string())?;
     let banks = [&level.background[0][..], &level.background[1][..]];
     let mut pixels = Vec::with_capacity(256);
     for y in 0..16 {
@@ -92,7 +94,7 @@ pub(super) fn dx_tile(level: &LevelGraphics, id: u8) -> Result<Vec<Color32>, Str
                 },
                 None,
                 true,
-                &palettes,
+                palettes,
             );
             pixels.push(Color32::from_rgb(r, g, b));
         }
@@ -101,6 +103,38 @@ pub(super) fn dx_tile(level: &LevelGraphics, id: u8) -> Result<Vec<Color32>, Str
 }
 
 impl EditorApp {
+    pub(super) fn editor_palette_controls(&mut self, ui: &mut Ui) {
+        if self.editor.scene.is_some() || !self.settings.dx_mode || self.dx_bundle.is_none() {
+            return;
+        }
+        let Some(work) = &self.editor.work else {
+            return;
+        };
+        let x = work.viewport.center.x.clamp(0.0, u16::MAX as f32) as u16;
+        let y = work.viewport.center.y.clamp(0.0, u16::MAX as f32) as u16;
+        ui.horizontal_wrapped(|ui| {
+            ui.label("DX palette preview");
+            if ui.button("Preview at view center")
+                .on_hover_text("Apply the original level's palette trigger at the view center as Mario's position. Non-trigger positions retain the previous palette. Preview only; scenery and playtests are unchanged.")
+                .clicked()
+            {
+                self.editor.palette_preview.update_references(
+                    self.editor.level, x.wrapping_add(8), y.wrapping_add(32),
+                );
+            }
+            if ui.button("Reset palette").clicked() {
+                self.editor.palette_preview = Default::default();
+            }
+            let source = self.editor.palette_preview.bg
+                .map_or_else(|| "starting BG".into(), |at| format!("BG ${at:04X}"));
+            ui.label(source)
+                .on_hover_text(format!("Reference position: ({x}, {y}) in original-level pixels"));
+            if work.expanded {
+                ui.label("Reference coordinates use the original layout.");
+            }
+        });
+    }
+
     fn editor_scene_atlas(&mut self, ctx: &Context, key: String) {
         let Some(game) = &self.game else {
             return;
@@ -167,13 +201,14 @@ impl EditorApp {
 
     pub(super) fn editor_atlas(&mut self, ctx: &Context) {
         let key = format!(
-            "{}:{:?}:{:?}:{}:{:?}:{}",
+            "{}:{:?}:{:?}:{}:{:?}:{}:{:?}",
             self.editor.level,
             self.editor.scene,
             self.settings.filter,
             self.settings.dx_mode,
             self.settings.dx_installation,
-            self.dx_bundle.is_some()
+            self.dx_bundle.is_some(),
+            self.editor.palette_preview,
         );
         if self
             .editor
@@ -219,10 +254,21 @@ impl EditorApp {
             .and_then(|bundle| bundle.level(self.editor.level));
         let mut warning = None;
         let (tiles, dx) = if let Some(level) = dx {
-            match (0..count)
-                .map(|id| dx_tile(level, id as u8))
-                .collect::<Result<Vec<_>, _>>()
-            {
+            let bundle = self.dx_bundle.as_ref().unwrap();
+            let tiles = self
+                .editor
+                .palette_preview
+                .resolve(&level.bg_palettes, &level.obj_palettes, |at| {
+                    bundle.rom(0x26, at, 64)
+                })
+                .and_then(|(bg, obj)| {
+                    let palettes =
+                        cgb::CgbPalettes::from_bytes(&bg, &obj).map_err(|e| e.to_string())?;
+                    (0..count)
+                        .map(|id| dx_tile(level, id as u8, &palettes))
+                        .collect::<Result<Vec<_>, _>>()
+                });
+            match tiles {
                 Ok(tiles) => (Ok(tiles), Some(level)),
                 Err(error) => {
                     warning = Some(format!("DX preview unavailable: {error}"));
@@ -310,7 +356,9 @@ impl Editor {
                 });
                 egui::ScrollArea::vertical()
                     .id_salt("scenery-tray")
-                    .max_height(64.0)
+                    .min_scrolled_height(32.0)
+                    // Reserve space for the canvas and status row in compact windows.
+                    .max_height((ui.available_height() - 128.0).clamp(32.0, 64.0))
                     .show(ui, |ui| {
                         ui.horizontal_wrapped(|ui| {
                             for id in 0..work.count.min(256) {
