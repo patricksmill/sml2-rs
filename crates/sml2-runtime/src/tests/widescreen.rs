@@ -304,6 +304,24 @@ fn castle_entrance_and_game_over_extend_the_wall_instead_of_letterboxing() {
     }
 }
 
+/// Mario walks in from `walk_y` 168, below the native picture; an enlarged
+/// view shows the part of him that is past the native bottom edge.
+#[test]
+fn castle_walk_in_draws_mario_below_the_native_picture() {
+    let mut session = Session::new(SessionAssets::load().unwrap());
+    let view = (384, 216);
+    let mut seq = sml2_core::castle_sequence::CastleSequence::default();
+    seq.state = sml2_core::castle_sequence::STATE_REVEAL_B;
+    (seq.menu, seq.walk_x, seq.walk_y, seq.sprite_id) = (0, 88, 152, 0xBB);
+    session.state = SessionState::Castle(seq.clone());
+    let with_mario = session.render_frame(view);
+    seq.walk_y = 200;
+    session.state = SessionState::Castle(seq);
+    let without = session.render_frame(view);
+    let below = |frame: &[u8]| crop(frame, view, (112, 36 + 144, 160, 36));
+    assert_ne!(below(&with_mario), below(&without));
+}
+
 #[test]
 fn the_hub_view_stays_inside_the_map_and_keeps_the_native_centre() {
     let mut session = Session::new(SessionAssets::load().unwrap());

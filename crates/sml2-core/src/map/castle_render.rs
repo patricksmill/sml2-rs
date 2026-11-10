@@ -258,6 +258,22 @@ fn draw(
                 image.push(shades[color as usize]);
             }
         }
+        // Sprites cross the native edge (Mario walks in from y 168), so they
+        // are drawn over the backdrop too; the native picture keeps its part.
+        draw_sprites(
+            &mut image,
+            vram,
+            obp,
+            sprites,
+            metas,
+            output,
+            (mx, my),
+            (vw, vh),
+        );
+        for ny in 0..144 {
+            let row = (ny + my) as usize * vw + mx as usize;
+            image[row..row + 160].copy_from_slice(&native[ny as usize * 160..][..160]);
+        }
         return image;
     }
     let mut img = vec![shades[0]; vw * vh];
@@ -271,6 +287,31 @@ fn draw(
             }
         }
     }
+    draw_sprites(
+        &mut img,
+        vram,
+        obp,
+        sprites,
+        metas,
+        output,
+        (0, 0),
+        (vw, vh),
+    );
+    img
+}
+
+/// OBJ cells of `sprites` onto `img`, with the native origin at `origin`.
+#[allow(clippy::too_many_arguments)]
+fn draw_sprites(
+    img: &mut [u8],
+    vram: &[[u8; 64]],
+    obp: [u8; 2],
+    sprites: &[(u8, u8, u8)],
+    metas: &SpriteMetas,
+    output: crate::video::OutputMode,
+    origin: (i32, i32),
+    (vw, vh): (usize, usize),
+) {
     let mut cells = Vec::new();
     for &(x, y, id) in sprites {
         cells.extend(metas.expand(id, x, y));
@@ -289,18 +330,17 @@ fn draw(
             },
         );
         draw_obj_tile(
-            &mut img,
+            img,
             vram,
             &palette,
-            x as i32 - 8,
-            y as i32 - 16,
+            x as i32 - 8 + origin.0,
+            y as i32 - 16 + origin.1,
             tile,
             attr,
             vw,
             vh,
         );
     }
-    img
 }
 
 #[cfg(test)]

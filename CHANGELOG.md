@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Walking out of Wario's Castle door with fewer than six coins no longer
   sends Mario straight back inside.
+- Mario is no longer cut off at the bottom while walking up to Wario's Castle
+  door in widescreen and zoomed-out views.
 
 ## [v0.2.1] - 2026-11-02
 

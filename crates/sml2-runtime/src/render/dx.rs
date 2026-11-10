@@ -279,7 +279,9 @@ impl Session {
                 [0; 3],
             ));
         }
-        let mut extended = screen(&scene, &[], None, view, castle_backdrop, 0)?;
+        // Sprites cross the native edge (Mario walks in from y 168), so the
+        // backdrop pass draws them too; the native picture covers its own part.
+        let mut extended = screen(&scene, &cells, None, view, castle_backdrop, 0)?;
         super::view::copy_rect(
             &mut extended,
             view,
