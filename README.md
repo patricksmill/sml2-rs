@@ -30,6 +30,9 @@
 - Optional frame interpolation for high refresh rate displays.
 - SML2DX graphics and colors, with Mario or Luigi.
 - Game Boy, Pocket, Game Boy Color, and Super Game Boy display palettes when not in DX mode.
+- 28 local achievements with completion progress, unlock timestamps and
+  in-game banners in **Settings → Achievements**. Progress stays on this device;
+  no account or RetroAchievements synchronization is involved.
 
 ## Accuracy
 

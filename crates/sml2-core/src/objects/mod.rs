@@ -766,6 +766,10 @@ pub struct ObjectSim {
     /// `sBossDefeated` (`$A2E0`): the room's remaining-enemy count, mirrored
     /// from the camera for the pass and written back after it.
     pub boss_defeated: u8,
+    /// Number of regular enemies defeated through [`ObjectSim::defeat`] this
+    /// level. Achievement observation reads this instead of guessing from slot
+    /// visibility; the counter resets with the object engine on level load.
+    pub defeated: u32,
     pub boss_slots_raw: [u8; 512],
     pub boss_oam: Vec<BossOamCell>,
     /// The records behind `boss_oam`, in draw order.
@@ -886,6 +890,7 @@ impl ObjectSim {
             boss_transition: 0,
             ending_door_active: 0,
             boss_defeated: 0,
+            defeated: 0,
             boss_slots_raw: [0; 512],
             boss_oam: Vec::new(),
             boss_draws: Vec::new(),
@@ -1058,6 +1063,7 @@ impl ObjectSim {
         // Clear the object-side mirror and its consumed game-state event too.
         self.boss_clear_flag = 0;
         self.boss_clear_handoff = false;
+        self.defeated = 0;
         for s in self.slots.iter_mut() {
             s.b = [0; 32];
         }

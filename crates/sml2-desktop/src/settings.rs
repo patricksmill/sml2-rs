@@ -27,6 +27,56 @@ pub enum Zoom {
     Integer(u8),
 }
 
+/// One achievement this install has unlocked. `id` is the native achievement
+/// id (the same number the public set uses); `unlocked_at` is Unix seconds and
+/// stays `0` for entries written before timestamps were recorded.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UnlockedAchievement {
+    pub id: u32,
+    #[serde(default)]
+    pub unlocked_at: u64,
+}
+
+/// Device-local achievement progress. The runtime evaluates game events; this
+/// file only records what has already unlocked so a restart restores it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Achievements {
+    /// Show the gold banner when a challenge unlocks.
+    pub toasts: bool,
+    /// Unlock history in first-unlock order. Nothing leaves this device.
+    pub unlocked: Vec<UnlockedAchievement>,
+}
+
+impl Default for Achievements {
+    fn default() -> Self {
+        Self {
+            toasts: true,
+            unlocked: Vec::new(),
+        }
+    }
+}
+
+impl Achievements {
+    /// Record a first unlock. Returns `false` when the id was already there.
+    pub fn record(&mut self, id: u32, unlocked_at: u64) -> bool {
+        if self.unlocked.iter().any(|entry| entry.id == id) {
+            return false;
+        }
+        self.unlocked.push(UnlockedAchievement { id, unlocked_at });
+        true
+    }
+
+    pub fn is_unlocked(&self, id: u32) -> bool {
+        self.unlocked.iter().any(|entry| entry.id == id)
+    }
+
+    /// Saved ids, including ones this build no longer knows.
+    pub fn ids(&self) -> impl Iterator<Item = u32> + '_ {
+        self.unlocked.iter().map(|entry| entry.id)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -67,6 +117,9 @@ pub struct Settings {
     pub show_toolbar: bool,
     #[serde(default)]
     pub vanilla: Option<VanillaInstall>,
+    /// Local achievement progress and banner preference.
+    #[serde(default)]
+    pub achievements: Achievements,
 }
 
 fn toolbar_shown() -> bool {
@@ -103,6 +156,7 @@ impl Default for Settings {
             expanded_levels: true,
             show_toolbar: true,
             vanilla: None,
+            achievements: Achievements::default(),
         }
     }
 }
@@ -175,6 +229,12 @@ impl Settings {
         }
         self.dead_zone = self.dead_zone.clamp(0.1, 0.8);
         self.bindings.validate()?;
+        // A hand-edited file must not double-count an achievement. Keep the
+        // first (earliest) entry for each id.
+        let mut seen = std::collections::BTreeSet::new();
+        self.achievements
+            .unlocked
+            .retain(|entry| seen.insert(entry.id));
         Ok(())
     }
 
@@ -418,6 +478,41 @@ mod tests {
             ..Default::default()
         };
         assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn achievement_progress_round_trips_and_deduplicates_on_load() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.json");
+        let mut settings = Settings::default();
+        assert!(settings.achievements.toasts);
+        assert!(settings.achievements.record(20_117, 1_700_000_000));
+        assert!(!settings.achievements.record(20_117, 1_700_000_001));
+        assert!(settings.achievements.is_unlocked(20_117));
+        settings.save(&path).unwrap();
+        assert_eq!(Settings::load(&path).unwrap(), settings);
+
+        // A hand-edited file that repeats an id counts it once.
+        let mut duplicate: serde_json::Value = serde_json::to_value(&settings).unwrap();
+        duplicate["achievements"]["unlocked"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"id": 20_117, "unlocked_at": 1_800_000_000}));
+        fs::write(&path, serde_json::to_vec(&duplicate).unwrap()).unwrap();
+        let loaded = Settings::load(&path).unwrap();
+        assert_eq!(loaded.achievements.unlocked.len(), 1);
+        assert_eq!(loaded.achievements.unlocked[0].unlocked_at, 1_700_000_000);
+    }
+
+    #[test]
+    fn settings_saved_before_achievements_load_with_banners_and_no_history() {
+        let mut value = serde_json::to_value(Settings::default()).unwrap();
+        value.as_object_mut().unwrap().remove("achievements");
+        let settings: Settings = serde_json::from_value(value).unwrap();
+        assert!(settings.achievements.toasts);
+        assert!(settings.achievements.unlocked.is_empty());
+        assert_eq!(settings.achievements.ids().count(), 0);
+        assert_eq!(settings.version, SETTINGS_VERSION);
     }
 
     #[test]

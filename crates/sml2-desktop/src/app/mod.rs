@@ -1,4 +1,5 @@
 use crate::{
+    achievements::AchievementToasts,
     controllers::Controllers,
     game::Game,
     input::{Action, Button, InputState},
@@ -120,6 +121,8 @@ pub struct DesktopApp {
     dx_restore: bool,
     /// Which library row is waiting on the system dialog or the in-app browser.
     library_pick: Option<LibraryPick>,
+    /// Local unlock banners, played one at a time for four seconds.
+    toasts: AchievementToasts,
 }
 
 enum LibraryPick {
@@ -190,6 +193,7 @@ impl DesktopApp {
             library_dx_import: false,
             dx_restore: false,
             library_pick: None,
+            toasts: AchievementToasts::default(),
         };
         app.library.dx_installed = app.settings.dx_installation.is_some();
         app.library.dx_mode = app.settings.dx_mode;
@@ -237,6 +241,11 @@ impl DesktopApp {
             app.screen = Screen::Settings;
             app.page = Page::Game;
         }
+        if app.options.open_achievements {
+            app.return_screen = Screen::Game;
+            app.page = Page::Achievements;
+            app.screen = Screen::Settings;
+        }
         if let Some(scale) = app.options.scale {
             app.zoom(ctx, Some(scale));
         }
@@ -256,6 +265,7 @@ impl DesktopApp {
                     self.options.paths.save.clone(),
                     self.options.audio,
                 ));
+                self.restore_achievements();
                 self.level_choices();
             }
             Err(e) => self.status = Some(format!("Game data could not be loaded: {e}")),
@@ -836,6 +846,11 @@ impl DesktopApp {
                 self.start_click = false;
             }
         }
+        self.record_achievements(now);
+        self.toasts.update(now);
+        if self.screen == Screen::Game && self.settings.achievements.toasts {
+            self.toasts.paint(ctx, now);
+        }
         // A screenshot is checked against this CPU frame, which must be a tick.
         let smooth = if self.settings.motion_smoothing
             && running
@@ -1102,6 +1117,50 @@ impl DesktopApp {
         if self.show_native_border {
             if let Some(r) = game.session.native_border(view) {
                 outline(r, Color32::from_rgb(255, 0, 255));
+            }
+        }
+    }
+
+    /// Seed the live tracker from the device-local history. Called for every
+    /// game load, including retries and library launches, so a restart cannot
+    /// re-award or lose anything.
+    fn restore_achievements(&mut self) {
+        let Some(game) = self.game.as_mut() else {
+            return;
+        };
+        game.session
+            .restore_achievements(self.settings.achievements.ids());
+    }
+
+    /// Move tick-time unlocks into settings, save them at once, and queue a
+    /// banner for each first unlock. An unreadable settings file is never
+    /// overwritten; the unlock still lives in this session and shows its banner.
+    fn record_achievements(&mut self, now: Instant) {
+        let events = match self.game.as_mut() {
+            Some(game) => game.take_achievement_events(),
+            None => return,
+        };
+        if events.is_empty() {
+            return;
+        }
+        let unlocked_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_secs());
+        let mut changed = false;
+        for id in events {
+            if self.settings.achievements.record(id.id(), unlocked_at) {
+                changed = true;
+                if self.settings.achievements.toasts {
+                    self.toasts.push(id, now);
+                }
+            }
+        }
+        if changed && self.allow_save {
+            match self.settings.save(&self.options.paths.settings) {
+                Ok(()) => self.saved_settings = self.settings.clone(),
+                Err(error) => {
+                    self.status = Some(format!("Achievements could not be saved: {error}"));
+                }
             }
         }
     }

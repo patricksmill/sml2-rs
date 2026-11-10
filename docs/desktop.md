@@ -98,8 +98,8 @@ suspend ticking independently of the original game's pause. Confirmation/binding
 buttons wait for release; short taps survive to the next tick, opposite directions
 cancel consistently. Debug stepping advances one outer session tick.
 
-Settings pages: Display, Audio, Controls, Mods, Game, Debug. PgUp/PgDn or LB/RB
-switches pages; left/right changes choices, Enter/click advances them. Escape
+Settings pages: Display, Audio, Controls, Mods, Game, Achievements, Debug.
+PgUp/PgDn or LB/RB switches pages; left/right changes choices, Enter/click advances them. Escape
 cancels binding capture; conflicts/reserved shortcuts are reported. Bindings use
 physical key positions; changing one device retains the other's bindings.
 
@@ -138,6 +138,31 @@ Settings/saves use platform config/data directories. On Linux:
 retained until explicitly reset. CLI `sml2.sav` is separate: use `--save ./sml2.sav`
 to select it deliberately. `--config FILE`, `--save FILE`, `--scale 1..8` and
 `--fullscreen` override startup choices.
+
+### Local achievements
+
+**Settings → Achievements** lists 28 challenges worth 302 local points, their
+criteria, completion status and UTC unlock timestamps. Native gameplay events
+evaluate the challenges; there is no emulated memory bus or achievement library.
+Each new unlock queues a gold-bordered banner for four seconds. Disable
+**Unlock banners** to hide notifications without disabling tracking.
+
+Unlocks are saved immediately in the existing settings file and restored when
+the game loads. They are shared across the device's save slots and are not
+retroactively inferred from an old game save. Unreadable settings retain the
+existing protection against overwriting; save errors are reported in the menu.
+Unfinished enemy/secret-course/life progress belongs to the current run, not
+the persistent unlock history.
+
+These challenges mirror the public Super Mario Land 2 achievement list, but
+their identifiers and points are local. No credentials are stored, nothing is
+uploaded, and neither RetroAchievements synchronization nor official Hardcore
+compatibility is provided. RetroAchievements'
+[standalone policy](https://docs.retroachievements.org/general/standalone-support.html)
+excludes unofficial ports. Badge artwork is not bundled.
+
+For a bounded native-window inspection of this page, add `--achievements` to
+the smoke command below.
 
 ## Scenery
 

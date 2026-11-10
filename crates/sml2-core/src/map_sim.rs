@@ -729,6 +729,8 @@ pub struct MapSim {
     pub pending_save: bool,
     /// The active bank-24 room script (screens 9-14), started by the loader.
     pub room: Option<crate::castle_room::CastleRoom>,
+    /// The room's last award set `sLives` to the 99-up value this frame.
+    pub room_99up: bool,
     /// This frame's `rDIV` reads in ROM order, when the host knows them (a
     /// comparison against the ROM). The reads that feed `sMapKeysXor`,
     /// `sMapRandLatch` and `sMapRandAccum` take them in turn; without one they
@@ -796,6 +798,7 @@ impl MapSim {
             coins_high: 0,
             pending_save: false,
             room: None,
+            room_99up: false,
             div_reads: std::collections::VecDeque::new(),
             ram_seeded: false,
             lives: 0,
@@ -1497,6 +1500,7 @@ impl MapSim {
         records: &MapNodeRecords,
     ) -> MapEntry {
         let mut out = MapEntry::default();
+        self.room_99up = false;
         // `$3C38C` runs *before* the cursor logic and may overwrite the pressed byte
         // with a synthetic key, so the whole frame sees the map's own press.
         // Bonus screens $3C0C3-$3C10E run only their room scripts.
@@ -1567,6 +1571,7 @@ impl MapSim {
             coins_low: self.coins_low,
             coins_high: self.coins_high,
             save: false,
+            is_99up: false,
         };
         let room_input = crate::castle_room::RoomInput {
             keys_pressed: input.keys_pressed,
@@ -1616,6 +1621,7 @@ impl MapSim {
         self.lives = rewards.lives;
         self.coins_low = rewards.coins_low;
         self.coins_high = rewards.coins_high;
+        self.room_99up = rewards.is_99up;
         if rewards.save {
             self.pending_save = true;
             out.saved = true;

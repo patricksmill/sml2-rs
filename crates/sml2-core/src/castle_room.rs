@@ -76,6 +76,10 @@ pub struct RoomRewards {
     pub coins_low: u8,
     pub coins_high: u8,
     pub save: bool,
+    /// The award set `sLives` to BCD 99 (`153` in the ROM's literal), which is
+    /// the real 99-up producer. Achievement observation uses this instead of
+    /// inferring a 99-up from a life delta.
+    pub is_99up: bool,
 }
 
 /// One of the five `$0D`-screen slots (`$A7D0` value, `$A7DA` counter,
@@ -702,7 +706,10 @@ impl CastleRoom {
             5 => self.add_lives(rewards, 3),
             6 => self.add_lives(rewards, 5),
             7 => self.add_lives(rewards, 80),
-            8 => rewards.lives = 153,
+            8 => {
+                rewards.lives = 153;
+                rewards.is_99up = true;
+            }
             9 => rewards.coins_high = bcd_add(rewards.coins_high, 3).0,
             10 => rewards.coins_high = bcd_add(rewards.coins_high, 5).0,
             11 => self.add_lives(rewards, 32),
@@ -727,7 +734,12 @@ impl CastleRoom {
 
     fn add_lives(&mut self, rewards: &mut RoomRewards, amount: u8) {
         let (value, carry) = bcd_add(rewards.lives, amount);
-        rewards.lives = if carry { 153 } else { value };
+        if carry {
+            rewards.lives = 153;
+            rewards.is_99up = true;
+        } else {
+            rewards.lives = value;
+        }
     }
 
     /// `$60CF9`: the per-frame commit. The VRAM tile copies (`$60EE6`,
@@ -1335,7 +1347,12 @@ impl CastleRoom {
         self.sfx[0] = 9;
         let amount = if self.item_index == 3 { 1 } else { 3 };
         let (value, carry) = bcd_add(rewards.lives, amount);
-        rewards.lives = if carry { 153 } else { value };
+        if carry {
+            rewards.lives = 153;
+            rewards.is_99up = true;
+        } else {
+            rewards.lives = value;
+        }
     }
 
     fn bell_preview(&self) -> u8 {
@@ -2219,6 +2236,22 @@ mod tests {
         let after = rewards.lives;
         room.tick(input(1, 0), &mut rewards);
         assert_eq!(rewards.lives, after, "no second award in state 6");
+    }
+
+    #[test]
+    fn the_coin_room_item_8_sets_the_99up_flag() {
+        let scripts = scripts();
+        let mut room = CastleRoom::enter_coin(&scripts, 10);
+        let mut rewards = RoomRewards {
+            lives: 0x05,
+            ..Default::default()
+        };
+        room.item_index = 8;
+        room.state = 2;
+        room.timer = 1;
+        room.tick(input(0, 0), &mut rewards);
+        assert_eq!(rewards.lives, 0x99, "item 8 writes BCD 99");
+        assert!(rewards.is_99up);
     }
 
     /// `$3F307` starts a coin room in state 4: Mario walks up from y=156 and

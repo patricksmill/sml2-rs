@@ -74,8 +74,11 @@ fn run() -> Result<(), String> {
                 options.smoke_frames = Some(frames);
             }
             "--screenshot" => options.screenshot = Some(PathBuf::from(value()?)),
+            // Opens Settings → Achievements so a display smoke test can capture
+            // the local profile without clicking through the menu.
+            "--achievements" => options.open_achievements = true,
             "--help" | "-h" => {
-                println!("sml2 [--assets DIR] [--config FILE] [--save FILE] [--play] [--title] [--file-select] [--room 9..14] [--reveal] [--filter gray|dmg|pocket|gbc|sgb|sgb-1a..sgb-4h|amber]\n  [--scale 1..8] [--fullscreen] [--no-audio]\n  Validation: --smoke-frames N [--screenshot FILE]\n\nLaunch opens the in-game title. --play skips to the overworld.\nEsc / Controller Start: menu | F11: fullscreen | +/-: zoom\nF1: debug | F10: toolbar | F2: debug pause | F3: one tick");
+                println!("sml2 [--assets DIR] [--config FILE] [--save FILE] [--play] [--title] [--file-select] [--room 9..14] [--reveal] [--achievements] [--filter gray|dmg|pocket|gbc|sgb|sgb-1a..sgb-4h|amber]\n  [--scale 1..8] [--fullscreen] [--no-audio]\n  Validation: --smoke-frames N [--screenshot FILE]\n\nLaunch opens the in-game title. --play skips to the overworld.\n--achievements opens the local achievements page on launch.\nEsc / Controller Start: menu | F11: fullscreen | +/-: zoom\nF1: debug | F10: toolbar | F2: debug pause | F3: one tick");
                 return Ok(());
             }
             _ => return Err(format!("Unknown option: {argument}")),

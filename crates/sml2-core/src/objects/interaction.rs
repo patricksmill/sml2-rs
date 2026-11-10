@@ -199,6 +199,7 @@ impl ObjectSim {
     }
 
     pub(super) fn defeat(&mut self, st: &mut Staging) {
+        self.defeated = self.defeated.saturating_add(1);
         self.add_money_bag_reward();
         st.b[B_DEF] = 0;
         st.b[B_FSTATE] = 0;

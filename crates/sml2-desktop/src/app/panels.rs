@@ -17,16 +17,18 @@ pub(super) enum Page {
     Controls,
     Mods,
     Game,
+    Achievements,
     Debug,
 }
 
 impl Page {
-    pub(super) const ALL: [Page; 6] = [
+    pub(super) const ALL: [Page; 7] = [
         Page::Display,
         Page::Audio,
         Page::Controls,
         Page::Mods,
         Page::Game,
+        Page::Achievements,
         Page::Debug,
     ];
     pub(super) fn label(self) -> &'static str {
@@ -36,6 +38,7 @@ impl Page {
             Page::Controls => "CONTROLS",
             Page::Mods => "MODS",
             Page::Game => "GAME",
+            Page::Achievements => "ACHIEVEMENTS",
             Page::Debug => "DEBUG",
         }
     }
@@ -120,6 +123,7 @@ impl DesktopApp {
         self.settings.window_size = window_size;
         self.settings.dx_installation = dx_installation;
         self.allow_save = true;
+        self.toasts.clear();
         // Force replacement even when the current values already match defaults.
         self.saved_settings.version = 0;
         self.persist();
@@ -184,6 +188,7 @@ impl DesktopApp {
                     self.dx_controls(ui);
                 }
                 Page::Game => self.installation_page(ui),
+                Page::Achievements => self.achievements_page(ui),
                 Page::Debug => self.debug_page(ui),
             }
             if let Some(message) = &self.status {
@@ -392,6 +397,86 @@ impl DesktopApp {
             ui,
             "Choose an action, then press a key or controller button; Esc cancels. Rebinding keeps the other device's controls. Controller Start opens the menu.",
         );
+    }
+
+    /// Settings → Achievements: the device-local profile and the full set.
+    fn achievements_page(&mut self, ui: &mut Ui) {
+        theme::section(ui, "LOCAL ACHIEVEMENTS");
+        theme::note(
+            ui,
+            "Unlocks are evaluated from the native simulation and saved on this device \
+             only. Nothing is uploaded, no account is needed, and progress never leaves \
+             this computer. The 28 challenges mirror the public RetroAchievements set \
+             for this game.",
+        );
+        if self.menu.row(
+            ui,
+            "Unlock banners",
+            Value::Toggle(self.settings.achievements.toasts),
+        ) {
+            self.settings.achievements.toasts = !self.settings.achievements.toasts;
+            if !self.settings.achievements.toasts {
+                self.toasts.clear();
+            }
+        }
+        theme::note(
+            ui,
+            "A gold banner announces a new unlock for four seconds. Simultaneous \
+             unlocks queue and play one after another.",
+        );
+
+        let profile = crate::achievements::profile(&self.settings.achievements.unlocked);
+        theme::section(ui, "PROGRESS");
+        ui.label(format!(
+            "{} of {} unlocked · {} of {} points",
+            profile.unlocked, profile.total, profile.score, profile.total_score
+        ));
+        ui.add(
+            egui::ProgressBar::new(profile.completion())
+                .desired_width(theme::ROW_SIZE.x)
+                .show_percentage(),
+        );
+        theme::note(
+            ui,
+            "This local score counts the points of each challenge exactly once; \
+             there is no online gamertag or server score here.",
+        );
+
+        theme::section(ui, "CHALLENGES");
+        for id in sml2_core::achievements::ALL_ACHIEVEMENTS {
+            let metadata = id.metadata();
+            let unlocked = self
+                .settings
+                .achievements
+                .unlocked
+                .iter()
+                .find(|entry| entry.id == id.id());
+            ui.horizontal_wrapped(|ui| {
+                let title = format!("{} · {} pts", metadata.title, metadata.points);
+                if unlocked.is_some() {
+                    ui.colored_label(theme::HIGHLIGHT, title);
+                } else {
+                    ui.strong(title);
+                }
+            });
+            ui.weak(metadata.description);
+            match unlocked {
+                Some(entry) => {
+                    ui.colored_label(
+                        theme::HIGHLIGHT,
+                        format!(
+                            "Unlocked {}",
+                            crate::achievements::format_unlocked_at(entry.unlocked_at)
+                        ),
+                    );
+                }
+                None => {
+                    ui.weak("Locked");
+                }
+            }
+            ui.add_space(6.0);
+        }
+        theme::note(ui, "Progress is saved with the rest of your settings.");
     }
 
     fn debug_page(&mut self, ui: &mut Ui) {

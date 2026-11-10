@@ -94,6 +94,7 @@ impl Session {
             }
             _ => {}
         }
+        self.rebaseline_achievements();
     }
 
     /// The `sLevelProgress` offsets that belong to a stage: every slot some
@@ -219,6 +220,7 @@ impl Session {
             SessionState::Castle(seq) => seq.level_tally = packed,
             _ => {}
         }
+        self.rebaseline_achievements();
     }
 
     /// The live purse as a decimal value (`sCoinLow`/`sCoinHigh` are BCD).
@@ -247,6 +249,7 @@ impl Session {
             }
             _ => {}
         }
+        self.rebaseline_achievements();
     }
 
     /// Add (or subtract) coins, saturating at 0000 and 9999.
@@ -274,6 +277,7 @@ impl Session {
             SessionState::InLevel(ctx) => ctx.sim.lives = packed,
             _ => {}
         }
+        self.rebaseline_achievements();
     }
 
     /// Add (or subtract) lives, saturating at 00 and 99.
@@ -416,6 +420,9 @@ impl Session {
         self.debug_release_pause_audio();
         self.sound_driver.music_request = music;
         self.state = SessionState::Overworld(Box::new(map));
+        // A debug warp is a state write, not gameplay: adopt the result as the
+        // achievement baseline so the next frame's deltas stay honest.
+        self.rebaseline_achievements();
         Ok(())
     }
 

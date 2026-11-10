@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Local achievements: 28 native gameplay challenges worth 302 points, with
+  completion progress and unlock timestamps in Settings → Achievements.
+- Four-second, queued in-game unlock banners and offline persistence in the
+  existing settings file. No RetroAchievements account or network connection
+  is used; local unlocks do not award RetroAchievements points.
+
 ## [v0.2.1] - 2026-11-02
 
 ### Added
