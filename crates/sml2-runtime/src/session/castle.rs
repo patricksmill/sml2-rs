@@ -71,7 +71,12 @@ impl Session {
                 StepOutcome::LevelEntered(id)
             }
             Some(CastleTransition::ReturnToMap { walked_out }) => {
-                if let Some((screen, node, flag, direction)) = self.castle_return.take() {
+                if let Some((screen, mut node, flag, direction)) = self.castle_return.take() {
+                    // `$3EF2B` -> `$3F0B1`: the path node `$5B` presses Start
+                    // by itself, so the return lands on the castle node `$5C`.
+                    if node == 0x5B {
+                        node = 0x5C;
+                    }
                     let mut map = MapSim::new();
                     map.set_castle_scripts(self.assets.castle_scripts.clone());
                     map.lives = self.lives;

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Walking out of Wario's Castle door with fewer than six coins no longer
+  sends Mario straight back inside.
+
 ## [v0.2.1] - 2026-11-02
 
 ### Added

@@ -99,6 +99,52 @@ fn saved_map_walks_to_locked_castle_then_down_returns_and_reloads() {
     arrive(&mut reloaded);
 }
 
+/// Issue #4: walking up the path enters the castle from node `$5B`, whose
+/// synthetic Start would re-enter it at once; `$3EF2B` returns Mario to `$5C`.
+#[test]
+fn walking_out_of_a_walked_in_castle_visit_stays_on_the_map() {
+    let tap = |keys: PlayerKeys, f: u32| {
+        if f % 2 == 0 {
+            keys
+        } else {
+            PlayerKeys::default()
+        }
+    };
+    let up = PlayerKeys {
+        up: true,
+        ..Default::default()
+    };
+    let down = PlayerKeys {
+        down: true,
+        ..Default::default()
+    };
+    let mut session = at_castle_node(0);
+    for f in 0..200 {
+        step(&mut session, tap(down, f));
+    }
+    assert!(matches!(&session.state, SessionState::Overworld(map) if map.screen_id == 0));
+    let mut f = 0;
+    while !matches!(&session.state, SessionState::Castle(seq) if seq.menu == 2) {
+        assert!(f < 600, "walking up never reached the castle door");
+        step(&mut session, tap(up, f));
+        f += 1;
+    }
+    step(&mut session, down);
+    let mut returned = false;
+    for _ in 0..300 {
+        step(&mut session, PlayerKeys::default());
+        match session.state {
+            SessionState::Overworld(_) => returned = true,
+            SessionState::Castle(_) => assert!(!returned, "the castle re-entered without input"),
+            _ => panic!("left the map"),
+        }
+    }
+    let SessionState::Overworld(map) = &session.state else {
+        panic!("returned map")
+    };
+    assert_eq!((map.screen_id, map.node), (7, 0x5C));
+}
+
 #[test]
 fn six_coin_map_visit_accepts_a_start_or_up_and_enters_real_wario_level() {
     for key in [
