@@ -8,6 +8,8 @@ pub mod timing;
 pub mod vanilla_import;
 
 #[cfg(feature = "native")]
+pub mod achievements;
+#[cfg(feature = "native")]
 pub mod app;
 #[cfg(any(feature = "native", test))]
 pub mod controllers;

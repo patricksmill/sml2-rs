@@ -5,10 +5,14 @@ pub use crate::content::SessionAssets;
 // Compatibility facade for existing CLI and tests; new hosts can own Session directly.
 pub use crate::host::{AudioClock, SessionRunner};
 
+mod achievements;
 mod castle;
 mod debug;
 mod object_clock;
+
+use achievements::SessionAchievements;
 use object_clock::ObjectClock;
+use sml2_core::achievements::AchievementId;
 mod file_select_loading;
 pub use file_select_loading::FileSelectLoading;
 mod map_pan;
@@ -431,6 +435,8 @@ pub struct Session {
     castle_saved_node: Option<u8>,
     /// `sLevelProgress` while the reveal owns it.
     castle_progress: [u8; 42],
+    /// Native achievement observation state and unlocked ids.
+    achievements: SessionAchievements,
 }
 
 impl Session {
@@ -600,6 +606,13 @@ impl Session {
             ctx.ending_scene.load(assets, &mut state, &mut fade);
         }
         self.state = SessionState::InLevel(ctx);
+        self.achievements.begin_level(
+            level_id,
+            self.lives,
+            self.coins_low,
+            self.coins_high,
+            self.level_tally,
+        );
         Ok(())
     }
 
@@ -717,7 +730,36 @@ impl Session {
             castle_return: None,
             castle_saved_node: None,
             castle_progress: [0; 42],
+            achievements: SessionAchievements::default(),
         }
+    }
+
+    /// Drain the achievements unlocked during recent `advance` calls. The
+    /// returned vector is empty (and unallocated) when nothing unlocked.
+    pub fn take_achievement_events(&mut self) -> Vec<AchievementId> {
+        self.achievements.take_events()
+    }
+
+    /// Restore locally persisted unlock ids without re-emitting their events.
+    /// Unknown ids are ignored; the return value is the number recognised.
+    pub fn restore_achievements<I: IntoIterator<Item = u32>>(&mut self, ids: I) -> usize {
+        self.achievements.restore(ids)
+    }
+
+    pub fn is_achievement_unlocked(&self, id: AchievementId) -> bool {
+        self.achievements.is_unlocked(id)
+    }
+
+    /// Debug writes adopt their result as the achievement baseline so an
+    /// editor edit is never replayed as a gameplay unlock.
+    pub(crate) fn rebaseline_achievements(&mut self) {
+        self.achievements.rebaseline(
+            &self.state,
+            &self.castle_progress,
+            self.level_tally,
+            self.lives,
+            (self.coins_low, self.coins_high),
+        );
     }
 
     /// `$30000`: enter the file select directly (desktop smoke/evidence).
@@ -834,6 +876,7 @@ impl Session {
             self.flutter_charge = 0;
             self.state = SessionState::Overworld(Box::new(map));
             self.map_pan_return = None;
+            self.achievements.reset_run();
             true
         } else {
             false
@@ -1270,6 +1313,13 @@ impl Session {
                     }) {
                         Ok(mut ctx) => {
                             self.object_clock.initialize_level(&mut ctx.obj);
+                            self.achievements.begin_level(
+                                level_id,
+                                self.lives,
+                                map_sim.coins_low,
+                                map_sim.coins_high,
+                                self.level_tally,
+                            );
                             self.map_ram =
                                 sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
                             ctx.obj.easy_mode = self.easy_mode;
@@ -1397,6 +1447,7 @@ impl Session {
                     div,
                     &self.assets.nodes,
                 );
+                self.achievements.on_level_frame(ctx);
                 self.scroll_enables = (ctx.cam.right_enabled, ctx.cam.left_enabled);
                 self.money_bag = ctx.obj.money_bag;
                 // The map's work bytes are the live metatile table's: a boss
@@ -1442,6 +1493,7 @@ impl Session {
                     self.flutter_charge = sim.flutter_charge;
                     self.walk_timer = sim.walk_timer;
                     sim.game_over_enter();
+                    self.achievements.reset_run();
                     self.lives = sim.lives;
                     self.coins_low = sim.coins_low;
                     self.coins_high = sim.coins_high;
@@ -1510,6 +1562,11 @@ impl Session {
                         self.coins_high = ctx.sim.coins_high;
                         self.level_tally = ctx.sim.level_tally;
                         self.powerup = ctx.sim.powerup;
+                        // A pause/SELECT abandon also reaches the hand-off,
+                        // but only the exit-fade/boss path set `exit_phase`.
+                        if ctx.sim.exit_phase {
+                            self.achievements.on_level_clear(ctx);
+                        }
                         let target_node = handoff.node;
                         let target_screen = handoff.screen.unwrap_or(0);
                         if ctx.sim.boss_clear {
@@ -1536,7 +1593,10 @@ impl Session {
                                 .iter()
                                 .position(|&off| off == offset)
                             {
-                                seq.coins[index] = ctx.sim.level_progress_flags;
+                                // The boss hand-off wrote the coin's bit 7 into
+                                // `sLevelProgress`; `sLevelProgressFlags` is the
+                                // level-entry working copy and does not carry it.
+                                seq.coins[index] = ctx.sim.level_progress[offset];
                                 seq.golden_count =
                                     sml2_core::castle_sequence::CastleSequence::count_coins(
                                         &seq.coins,
@@ -1544,7 +1604,7 @@ impl Session {
                             }
                             seq.state = sml2_core::castle_sequence::STATE_REVEAL_D;
                             self.castle_progress = ctx.sim.level_progress;
-                            self.castle_progress[offset] = ctx.sim.level_progress_flags;
+                            self.castle_progress[offset] = ctx.sim.level_progress[offset];
                             self.castle_return = Some((
                                 target_screen,
                                 target_node,
@@ -1754,6 +1814,14 @@ impl Session {
         if let SessionState::InLevel(ref mut ctx) = self.state {
             ctx.sim.current_song = self.sound_driver.active_song;
         }
+        self.achievements.after_advance(
+            &self.state,
+            &self.castle_progress,
+            self.level_tally,
+            &self.sound_driver,
+            self.lives,
+            (self.coins_low, self.coins_high),
+        );
         FrameEffects {
             outcome,
             persist_slots: persist_slots || !saves.is_empty(),

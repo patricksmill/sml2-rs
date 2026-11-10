@@ -4721,3 +4721,15 @@ fn a_view_margin_keeps_mines_until_they_leave_the_view() {
     assert!(!respawns(88, 0x5AD2D, ahead, 188), "wide: keeps sliding right");
     assert!(respawns(88, 0x5AD2D, 0x0300 - 88 + 0xB8 + 88, 0x30), "past the view: respawns");
 }
+
+#[test]
+fn native_defeat_increments_the_observed_counter() {
+    let mut sim = ObjectSim::new(Vec::new(), 0);
+    let mut st = Staging::default();
+    st.b[B_TYPE] = 0x4E; // a harmful regular enemy type
+    sim.defeat(&mut st);
+    assert_eq!(sim.defeated, 1);
+    st.b[B_TYPE] = 0x4D;
+    sim.defeat(&mut st);
+    assert_eq!(sim.defeated, 2);
+}

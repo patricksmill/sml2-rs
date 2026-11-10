@@ -1,6 +1,7 @@
 use crate::settings::atomic_write;
 pub use crate::settings::Volume;
 use sml2_core::{
+    achievements::AchievementId,
     audio::{apu::CHANNEL_WEIGHT_UNIT, Apu},
     front_end::{SaveSlots, SAVE_IMAGE_LEN, SLOT_LEN},
     player_sim::PlayerKeys,
@@ -19,6 +20,8 @@ pub struct Game {
     output: Option<AudioOutput>,
     audio_enabled: bool,
     div_clock: VirtualDividerClock,
+    /// Unlocks produced by the most recent ticks, until the host records them.
+    achievements: Vec<AchievementId>,
     pub diagnostics: Vec<String>,
 }
 
@@ -91,6 +94,7 @@ impl Game {
             output: None,
             audio_enabled,
             div_clock: VirtualDividerClock::seeded_from_time(),
+            achievements: Vec::new(),
             diagnostics,
         }
     }
@@ -117,6 +121,12 @@ impl Game {
         self.persist_slots()
     }
 
+    /// Newly unlocked achievements from the ticks since the last call. The
+    /// host records and presents them; a preview session never reaches a save.
+    pub fn take_achievement_events(&mut self) -> Vec<AchievementId> {
+        std::mem::take(&mut self.achievements)
+    }
+
     pub fn audio_running(&mut self, running: bool) {
         if running && self.audio_enabled && self.output.is_none() {
             self.output = AudioOutput::open();
@@ -141,6 +151,8 @@ impl Game {
         self.div_clock.advance_tick();
         let div = self.div_clock.sample();
         let effects = self.session.advance(FrameInput { keys, div });
+        self.achievements
+            .extend(self.session.take_achievement_events());
         if effects.persist_slots {
             if let Err(e) = self.persist_slots() {
                 self.diagnostics.push(format!("Save: {e}"));

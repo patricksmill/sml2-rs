@@ -33,6 +33,7 @@ pub(super) fn app() -> (DesktopApp, Context, PathBuf) {
         smoke_frames: None,
         screenshot: None,
         launch_library: false,
+        open_achievements: false,
     };
     let ctx = Context::default();
     let mut app = DesktopApp::new(&ctx, options, Settings::default(), None);
@@ -104,6 +105,7 @@ fn play_flag_skips_the_title_for_the_overworld() {
         smoke_frames: None,
         screenshot: None,
         launch_library: false,
+        open_achievements: false,
     };
     let restarted = DesktopApp::new(&Context::default(), options, Settings::default(), None);
     assert_eq!(restarted.screen, Screen::Game);
@@ -191,6 +193,7 @@ fn quit_to_title_from_the_map_opens_the_in_game_title() {
         smoke_frames: None,
         screenshot: None,
         launch_library: false,
+        open_achievements: false,
     };
     let mut app = DesktopApp::new(&Context::default(), options, Settings::default(), None);
     app.controllers = Controllers::disconnected();
@@ -781,6 +784,7 @@ fn home_pipes_show_the_saved_stage_tally_across_a_restart() {
         smoke_frames: None,
         screenshot: None,
         launch_library: false,
+        open_achievements: false,
     };
     let restarted = DesktopApp::new(&Context::default(), options, Settings::default(), None);
     assert_eq!(tally(&restarted), Some(0x31));
@@ -842,6 +846,106 @@ fn bound_controller_button_toggles_toolbar_once_per_press_and_persists() {
     );
 }
 
+/// Arm Mario Zone 1's real goal-bell exit, the same stage the runtime
+/// acceptance fixture uses, so the desktop test exercises `Session::advance`
+/// gameplay. Its header seeds 400 seconds, above Go Go Mario's 340.
+fn stage_level_exit(app: &mut DesktopApp) {
+    app.screen = Screen::Game;
+    let game = app.game.as_mut().unwrap();
+    game.session.begin_level(10, 0).unwrap();
+    let SessionState::InLevel(level) = &mut game.session.state else {
+        panic!("Mario Zone 1 must load");
+    };
+    level.sim.exit_phase = true;
+    level.sim.fade_timer = 2;
+}
+
+#[test]
+fn level_clear_unlock_banners_and_persists_across_a_restart() {
+    let (mut app, ctx, directory) = app();
+    stage_level_exit(&mut app);
+    let target = sml2_core::achievements::AchievementId::GoGoMario;
+    for _ in 0..200 {
+        frame(&mut app, &ctx, vec![]);
+        if app.settings.achievements.is_unlocked(target.id()) {
+            break;
+        }
+    }
+    assert!(
+        app.settings.achievements.is_unlocked(target.id()),
+        "a small-Mario clear of level 1 with time left unlocks Go Go Mario!"
+    );
+
+    let toast = app.toasts.active().expect("the unlock queues a banner");
+    assert_eq!(toast.id, target);
+    assert!(!toast.title.is_empty());
+    assert_eq!(app.toasts.len(), 1, "one banner per first unlock");
+
+    let settings_path = app.options.paths.settings.clone();
+    let saved = Settings::load(&settings_path).unwrap();
+    let entry = saved
+        .achievements
+        .unlocked
+        .iter()
+        .find(|entry| entry.id == target.id())
+        .expect("the unlock is written immediately");
+    assert!(entry.unlocked_at > 0, "the unlock records its time");
+
+    // The banner owns exactly four seconds.
+    let start = toast.started_at;
+    app.toasts.update(start + Duration::from_millis(3_900));
+    assert!(app.toasts.active().is_some());
+    app.toasts
+        .update(start + crate::achievements::TOAST_DURATION);
+    assert!(app.toasts.is_empty());
+
+    // A fresh launch reads the same settings file and seeds the live tracker,
+    // so the browser list and the runtime agree without replaying old events.
+    let options = Options {
+        assets: app.options.assets.clone(),
+        paths: AppPaths {
+            settings: settings_path.clone(),
+            save: app.options.paths.save.clone(),
+        },
+        audio: false,
+        filter: None,
+        play: true,
+        boot_title: false,
+        boot_select: false,
+        room: None,
+        reveal: false,
+        scale: None,
+        fullscreen: false,
+        smoke_frames: None,
+        screenshot: None,
+        launch_library: false,
+        open_achievements: false,
+    };
+    let mut restarted = DesktopApp::new(
+        &Context::default(),
+        options,
+        Settings::load(&settings_path).unwrap(),
+        None,
+    );
+    restarted.controllers = Controllers::disconnected();
+    assert!(restarted
+        .game
+        .as_ref()
+        .unwrap()
+        .session
+        .is_achievement_unlocked(target));
+    assert_eq!(restarted.settings.achievements.unlocked.len(), 1);
+
+    // Clearing the same level again cannot re-award or queue a second banner.
+    stage_level_exit(&mut restarted);
+    for _ in 0..200 {
+        frame(&mut restarted, &ctx, vec![]);
+    }
+    assert!(restarted.toasts.is_empty(), "the restore deduplicates");
+    assert_eq!(restarted.settings.achievements.unlocked.len(), 1);
+    std::fs::remove_dir_all(directory).ok();
+}
+
 #[test]
 fn f10_hides_the_toolbar_and_its_tabs_open_the_matching_settings_pages() {
     let (mut app, ctx, path) = app();
@@ -890,7 +994,15 @@ fn f10_hides_the_toolbar_and_its_tabs_open_the_matching_settings_pages() {
             .collect();
         assert_eq!(
             tabs.iter().map(|(label, _)| *label).collect::<Vec<_>>(),
-            ["DISPLAY", "AUDIO", "CONTROLS", "MODS", "GAME", "DEBUG"]
+            [
+                "DISPLAY",
+                "AUDIO",
+                "CONTROLS",
+                "MODS",
+                "GAME",
+                "ACHIEVEMENTS",
+                "DEBUG",
+            ]
         );
         let pos = tabs
             .iter()
@@ -1032,6 +1144,7 @@ fn library_launch_checks_the_saved_install_and_keeps_play_off() {
         smoke_frames: None,
         screenshot: None,
         launch_library: true,
+        open_achievements: false,
     };
     let mut settings = crate::settings::Settings::default();
     settings.vanilla = Some(crate::settings::VanillaInstall {
@@ -1087,6 +1200,7 @@ fn library_launch_checks_the_saved_install_and_keeps_play_off() {
             smoke_frames: None,
             screenshot: None,
             launch_library: true,
+            open_achievements: false,
         },
         crate::settings::Settings::default(),
         None,

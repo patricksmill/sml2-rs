@@ -21,6 +21,8 @@ pub struct Options {
     pub smoke_frames: Option<u64>,
     pub screenshot: Option<PathBuf>,
     pub launch_library: bool,
+    /// Open Settings → Achievements on launch, for a focused UI smoke test.
+    pub open_achievements: bool,
 }
 impl Options {
     pub fn defaults() -> Result<Self, String> {
@@ -39,6 +41,7 @@ impl Options {
             smoke_frames: None,
             screenshot: None,
             launch_library: false,
+            open_achievements: false,
         })
     }
 
