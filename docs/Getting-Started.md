@@ -3,13 +3,14 @@
 Use a Windows x64, Linux x86_64 or macOS Apple Silicon build and your own
 **Super Mario Land 2 UE v1.0** ROM. Game graphics are not included.
 
-1. Download one file from the release: `six-golden-coins-windows-x64.exe`,
-   `six-golden-coins-linux-x86_64` or `six-golden-coins-macos-arm64`. On
-   Windows, run it (SmartScreen may ask, since it is unsigned). On Linux, run
-   `chmod +x six-golden-coins-linux-x86_64` once, then start it. On macOS, run
-   `chmod +x six-golden-coins-macos-arm64` and
-   `xattr -d com.apple.quarantine six-golden-coins-macos-arm64` once, since the
-   build is unsigned, then start it from Terminal.
+1. Download your platform's file from the latest release:
+   `SixGoldenCoins-vX.Y.Z-windows-x64.zip`,
+   `SixGoldenCoins-vX.Y.Z-linux-x86_64.AppImage` or
+   `SixGoldenCoins-vX.Y.Z-macos-arm64.zip`. On Windows, unzip and run
+   `sml2.exe` (SmartScreen may ask, since it is unsigned). On Linux, run
+   `chmod +x` on the AppImage once, then start it. On macOS, unzip and
+   right-click **Six Golden Coins.app** → **Open** the first time, since the
+   build is unsigned. Later versions install from **Help → Check for Updates…**.
 2. If game data is missing, Settings -> Game opens. Choose **Import ROM…**
    and select your `.gb`/`.gbc` file. Only the supported digest is accepted.
 3. Choose **Play**. Arrows move, Z/Space jumps, X/Shift runs; Enter is Start,

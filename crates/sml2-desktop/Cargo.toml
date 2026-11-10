@@ -2,6 +2,7 @@
 name = "sml2-desktop"
 version.workspace = true
 edition = "2021"
+license.workspace = true
 
 [features]
 default = ["native"]
@@ -21,6 +22,9 @@ sml2-runtime = { path = "../sml2-runtime" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 directories = "6"
+sha2 = "0.10"
+ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
+zip = { version = "8", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 eframe = { version = "0.33", default-features = false, features = ["default_fonts", "wgpu", "wayland", "x11"], optional = true }
 wgpu = { version = "27", default-features = false, features = ["vulkan", "gles", "dx12", "metal", "wgsl"], optional = true }
 png = { version = "0.17", optional = true }

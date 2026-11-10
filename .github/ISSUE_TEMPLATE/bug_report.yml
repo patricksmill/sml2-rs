@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a crash, glitch or gameplay bug in Six Golden Coins.
+title: "[Bug]: "
+labels: [needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do not attach a ROM or extracted game
+        data: this tracker only needs the description, logs and screenshots.
+        Builds from a fork are out of scope.
+  - type: input
+    id: version
+    attributes:
+      label: Game version
+      description: Shown in Help → About Six Golden Coins, e.g. v0.2.1.
+      placeholder: v0.2.1
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux X11
+        - Linux Wayland
+    validations:
+      required: true
+  - type: dropdown
+    id: build
+    attributes:
+      label: Build source
+      description: Where the copy you ran came from.
+      options:
+        - official release
+        - built from source
+        - fork
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What you did, in order, and what happened instead.
+      placeholder: |
+        1. Launch the game and import the ROM
+        2. Enter Tree Zone 1
+        3. Jump on the first platform
+        Expected: ...
+        Instead: ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots (optional)
+      description: Paste terminal output or drag in screenshots. Do not attach game data.
+    validations:
+      required: false

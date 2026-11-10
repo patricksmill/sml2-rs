@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Six Golden Coins
+Comment=Enhanced native Rust port of Super Mario Land 2
+Exec=sml2
+Icon=sml2
+Terminal=false
+Categories=Game;
+StartupWMClass=sml2

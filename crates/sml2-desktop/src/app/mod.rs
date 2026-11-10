@@ -6,7 +6,7 @@ use crate::{
     menu::{Menu, pressed, release_focus},
     settings::{Settings, VanillaInstall, Zoom},
     timing::{TickBudget, game_rectangle},
-    vanilla_import,
+    update, vanilla_import,
 };
 #[cfg(test)]
 use eframe::egui::RawInput;
@@ -32,6 +32,7 @@ mod panels;
 mod pause_backdrop;
 mod pointer;
 mod startup;
+mod update_ui;
 pub(crate) use crate::ui::{colorized, theme};
 pub use startup::{Options, run};
 #[cfg(test)]
@@ -120,6 +121,10 @@ pub struct DesktopApp {
     dx_restore: bool,
     /// Which library row is waiting on the system dialog or the in-app browser.
     library_pick: Option<LibraryPick>,
+    /// Background release lookup, download and staged install.
+    updater: update::Updater,
+    /// The About window is open.
+    about_open: bool,
 }
 
 enum LibraryPick {
@@ -190,6 +195,8 @@ impl DesktopApp {
             library_dx_import: false,
             dx_restore: false,
             library_pick: None,
+            updater: update::Updater::new(),
+            about_open: false,
         };
         app.library.dx_installed = app.settings.dx_installation.is_some();
         app.library.dx_mode = app.settings.dx_mode;
@@ -240,6 +247,8 @@ impl DesktopApp {
         if let Some(scale) = app.options.scale {
             app.zoom(ctx, Some(scale));
         }
+        update::remove_previous_executable();
+        app.check_updates(false);
         app
     }
 
@@ -721,11 +730,16 @@ impl DesktopApp {
             }
         }
 
-        if self.settings.show_toolbar
-            && self.game.is_some()
-            && (!self.options.launch_library || self.menu_from_game || self.screen == Screen::Game)
-        {
-            self.toolbar(ctx);
+        if self.settings.show_toolbar {
+            if self.game.is_some()
+                && (!self.options.launch_library
+                    || self.menu_from_game
+                    || self.screen == Screen::Game)
+            {
+                self.toolbar(ctx);
+            } else {
+                egui::TopBottomPanel::top("help-bar").show(ctx, |ui| self.help_menu(ui));
+            }
         }
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(Color32::BLACK))
@@ -759,6 +773,11 @@ impl DesktopApp {
             self.pause_menu(ctx);
         }
         self.dx_picker_window(ctx);
+        let on_launcher =
+            self.screen == Screen::Home && self.options.launch_library && !self.menu_from_game;
+        let in_play = self.screen == Screen::Game && !on_title;
+        self.update_notice(ctx, on_title || on_launcher, in_play);
+        self.about_window(ctx);
         if self.screen != Screen::Game || on_title {
             self.menu.finish();
         }
@@ -960,6 +979,7 @@ impl DesktopApp {
                         }
                     }
                 }
+                self.help_menu(ui);
             });
         });
     }
@@ -1138,5 +1158,6 @@ impl eframe::App for DesktopApp {
     }
     fn on_exit(&mut self) {
         self.persist();
+        self.updater.apply_on_exit();
     }
 }

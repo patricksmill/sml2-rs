@@ -67,9 +67,22 @@ pub struct Settings {
     pub show_toolbar: bool,
     #[serde(default)]
     pub vanilla: Option<VanillaInstall>,
+    /// Check for a new official release at most once a day.
+    #[serde(default = "updates_enabled")]
+    pub check_for_updates: bool,
+    /// Unix seconds of the last automatic or manual update check.
+    #[serde(default)]
+    pub last_update_check: Option<u64>,
+    /// The release tag the player chose to skip.
+    #[serde(default)]
+    pub skipped_version: Option<String>,
 }
 
 fn toolbar_shown() -> bool {
+    true
+}
+
+fn updates_enabled() -> bool {
     true
 }
 
@@ -103,6 +116,9 @@ impl Default for Settings {
             expanded_levels: true,
             show_toolbar: true,
             vanilla: None,
+            check_for_updates: true,
+            last_update_check: None,
+            skipped_version: None,
         }
     }
 }
@@ -409,6 +425,34 @@ mod tests {
     fn the_hud_style_saved_as_corner_loads_as_modern() {
         let settings: Settings = serde_json::from_str(r#"{"hud_style":"Corner"}"#).unwrap();
         assert_eq!(settings.hud_style, HudStyle::Modern);
+    }
+
+    #[test]
+    fn update_checks_default_on_and_round_trip() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.json");
+        let settings = Settings::default();
+        assert!(settings.check_for_updates);
+        assert_eq!(settings.last_update_check, None);
+        assert_eq!(settings.skipped_version, None);
+        settings.save(&path).unwrap();
+        assert_eq!(Settings::load(&path).unwrap(), settings);
+
+        let mut old: serde_json::Value = serde_json::to_value(Settings::default()).unwrap();
+        for field in ["check_for_updates", "last_update_check", "skipped_version"] {
+            old.as_object_mut().unwrap().remove(field);
+        }
+        let loaded: Settings = serde_json::from_value(old).unwrap();
+        assert!(loaded.check_for_updates);
+
+        let skipped = Settings {
+            check_for_updates: false,
+            last_update_check: Some(1_700_000_000),
+            skipped_version: Some("v0.2.2".into()),
+            ..Default::default()
+        };
+        skipped.save(&path).unwrap();
+        assert_eq!(Settings::load(&path).unwrap(), skipped);
     }
 
     #[test]

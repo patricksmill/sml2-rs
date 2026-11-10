@@ -1,6 +1,7 @@
 [package]
 name = "sml2-scenery-editor"
 version.workspace = true
+license.workspace = true
 edition = "2021"
 
 [features]
