@@ -127,10 +127,12 @@ fn ending_frames_draw_scene_tiles_sprites_and_per_line_raster() {
     let mut ending = Ending::new();
     // `$4520` (substates 0..3) leaves the faded-white screen up.
     ending.step();
-    assert!(ending
-        .frame()
-        .iter()
-        .all(|p| p.shade == 0 && p.source == crate::video::PaletteSource::Bg));
+    assert!(
+        ending
+            .frame()
+            .iter()
+            .all(|p| p.shade == 0 && p.source == crate::video::PaletteSource::Bg)
+    );
 
     // Walk (substate 5): the scene's tiles, no wobble, Mario's sprites.
     ending.run_until(|s| s.substate == 5);

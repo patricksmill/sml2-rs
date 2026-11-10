@@ -448,7 +448,11 @@ impl ObjectSim {
         let _ = tables;
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
         let revision = self.revision;
-        let effect = hopper::update(&mut actor, &mut SimWalkerWorld::new(self, st, layout), revision);
+        let effect = hopper::update(
+            &mut actor,
+            &mut SimWalkerWorld::new(self, st, layout),
+            revision,
+        );
         st.b = actor.to_raw_slot();
         if effect == hopper::Effect::Parked {
             self.done = 1;
@@ -570,8 +574,10 @@ impl ObjectSim {
     ) {
         let _ = layout;
         let mut actor = crate::actor::Actor::from_raw_slot(&st.b);
-        let result =
-            reactions::update_defeat(&mut actor, self.vertical_reset_bounds(reactions::DEFEAT_OFFSCREEN_Y));
+        let result = reactions::update_defeat(
+            &mut actor,
+            self.vertical_reset_bounds(reactions::DEFEAT_OFFSCREEN_Y),
+        );
         st.b = actor.to_raw_slot();
         match result {
             Ok(reactions::DefeatEffect::None) => {}

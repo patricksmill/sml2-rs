@@ -14,8 +14,8 @@
 
 use super::{Session, SessionState};
 use sml2_core::castle_sequence::GOLDEN_COIN_OFFSETS;
-use sml2_core::map::progress_offset as po;
 use sml2_core::map::MapNodes;
+use sml2_core::map::progress_offset as po;
 use sml2_core::map_sim::MapSim;
 
 /// Highest `sMapScreenId` a warp accepts: screen 8 is the castle. Screens 9-14

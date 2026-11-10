@@ -165,7 +165,7 @@ fn test_apu_sensitivity() {
 
 #[test]
 fn test_ingest_driver_applies_master_volume() {
-    use crate::audio::driver::{SoundDriver, MASTER_VOLUME_LOW_TIME, MASTER_VOLUME_NORMAL};
+    use crate::audio::driver::{MASTER_VOLUME_LOW_TIME, MASTER_VOLUME_NORMAL, SoundDriver};
 
     let mut driver = SoundDriver::new();
     let mut apu = Apu::new();

@@ -173,14 +173,16 @@ fn handler_0xa372_invalid_animation_and_state_preserve_source_prefix() {
     assert_eq!(actor.to_raw_slot(), expected);
     let mut expected = raw(255);
     let mut actor = Actor::from_raw_slot(&expected);
-    assert!(update(
-        &mut actor,
-        Inputs {
-            frame: FrameTick::new(1),
-            ..input()
-        }
-    )
-    .is_err());
+    assert!(
+        update(
+            &mut actor,
+            Inputs {
+                frame: FrameTick::new(1),
+                ..input()
+            }
+        )
+        .is_err()
+    );
     expected[14] = 16;
     assert_eq!(actor.to_raw_slot(), expected);
 }

@@ -1,7 +1,7 @@
 //! Native first-form Wario, ROM `$A8AB` (bank 2 CPU `$68AB`); slot/world mapping
 //! lives in `form1_adapter`.
 use crate::actor::{Actor, ContactKind, Facing, FrameTick, RiseProfile, SpriteFlipFlags};
-use crate::objects::boss_stun::{update_hit_stun, HitStunContext};
+use crate::objects::boss_stun::{HitStunContext, update_hit_stun};
 
 /// The fade low byte that starts the door intro and its blink.
 const INTRO_FADE_LOW: u8 = 0x61;

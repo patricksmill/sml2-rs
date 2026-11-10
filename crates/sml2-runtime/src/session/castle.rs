@@ -1,6 +1,6 @@
 //! Host-independent castle transitions; all input is edge-triggered joypad data.
 use super::*;
-use sml2_core::castle_sequence::{CastleTransition, SequenceInput, LEVEL_PROGRESS_OFFSETS};
+use sml2_core::castle_sequence::{CastleTransition, LEVEL_PROGRESS_OFFSETS, SequenceInput};
 
 impl Session {
     pub(super) fn advance_castle(

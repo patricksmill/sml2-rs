@@ -1,5 +1,5 @@
 //! Slot compatibility and rider displacement for the native rising platform.
-use super::{rising_platform, ObjectSim, Staging};
+use super::{ObjectSim, Staging, rising_platform};
 use crate::actor::Actor;
 
 impl ObjectSim {

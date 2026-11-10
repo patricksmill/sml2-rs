@@ -35,7 +35,7 @@ use std::path::{Path, PathBuf};
 use sml2_core::collision;
 use sml2_core::level::{
     GraphicsRef, IndexLevel, LevelHeader, LevelLayout, LevelManifest, LevelProperties,
-    MetatileTable, TileAnim, TilesetMapRef, MANIFEST_SCHEMA, METATILE_COUNT,
+    MANIFEST_SCHEMA, METATILE_COUNT, MetatileTable, TileAnim, TilesetMapRef,
 };
 use sml2_core::object;
 

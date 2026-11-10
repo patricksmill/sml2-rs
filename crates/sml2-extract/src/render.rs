@@ -13,7 +13,7 @@ use png::{BitDepth, ColorType, Encoder};
 
 use sml2_core::object::MappingEntry;
 
-pub use sml2_core::video::{bgp_shades, tile_colors, BG_VRAM_LEN, SHADES};
+pub use sml2_core::video::{BG_VRAM_LEN, SHADES, bgp_shades, tile_colors};
 
 /// Write an 8-bit greyscale PNG.
 pub fn write_gray_png(path: &Path, width: u32, height: u32, data: &[u8]) -> Result<(), String> {

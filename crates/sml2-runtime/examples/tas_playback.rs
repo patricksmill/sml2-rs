@@ -112,7 +112,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         movie.rom_sha1,
         movie.frames.len()
     );
-    eprintln!("Fresh native title, one movie row per native 60 Hz tick; BIOS/lag timing is not emulated. No save files read or written.");
+    eprintln!(
+        "Fresh native title, one movie row per native 60 Hz tick; BIOS/lag timing is not emulated. No save files read or written."
+    );
     let mut session = Session::new(SessionAssets::load()?);
     session.enter_title();
     let mut window = if headless {
@@ -136,7 +138,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             .chars()
             .filter(|c| c.is_ascii_alphanumeric() || *c == ' ' || *c == '_')
             .collect();
-        let filter = format!("scale=640:576:flags=neighbor,pad=640:656:0:0:black,drawtext=text='Native port - imported TAS input attempt':fontcolor=white:fontsize=18:x=10:y=582,drawtext=text='TAS inputs by {author}':fontcolor=white:fontsize=18:x=10:y=606,drawtext=text='Input frame %{{n}} - native 60 Hz':fontcolor=white:fontsize=18:x=10:y=630");
+        let filter = format!(
+            "scale=640:576:flags=neighbor,pad=640:656:0:0:black,drawtext=text='Native port - imported TAS input attempt':fontcolor=white:fontsize=18:x=10:y=582,drawtext=text='TAS inputs by {author}':fontcolor=white:fontsize=18:x=10:y=606,drawtext=text='Input frame %{{n}} - native 60 Hz':fontcolor=white:fontsize=18:x=10:y=630"
+        );
         Some(
             Command::new("ffmpeg")
                 .args([
@@ -258,7 +262,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Err("ffmpeg video export failed".into());
         }
     }
-    eprintln!("Played {index}/{} input frames; final native state: {}. Playback is an attempt, not a completion assertion.", movie.frames.len(), state(&session));
+    eprintln!(
+        "Played {index}/{} input frames; final native state: {}. Playback is an attempt, not a completion assertion.",
+        movie.frames.len(),
+        state(&session)
+    );
     Ok(())
 }
 

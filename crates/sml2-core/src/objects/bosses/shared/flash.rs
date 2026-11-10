@@ -1,6 +1,6 @@
 //! ROM `$B40E..$B419`, bank 2 CPU `$740E`: toggle `$FFDE` every fourth frame.
 
-use super::{ObjectSim, Staging, B_FLASH};
+use super::{B_FLASH, ObjectSim, Staging};
 
 impl ObjectSim {
     pub(super) fn boss_flash_b40e(&self, st: &mut Staging) {
@@ -42,7 +42,10 @@ mod tests {
         st.b[B_FLASH] = 0x10;
         sim.boss_flash_b40e(&mut st);
         assert_eq!(st.b[B_FLASH], 0x18);
-        assert_eq!(sim.frame_tick().revision(), crate::actor::ObjectRevision::Dx);
+        assert_eq!(
+            sim.frame_tick().revision(),
+            crate::actor::ObjectRevision::Dx
+        );
         assert_eq!(sim.frame_tick().0, 4);
     }
 

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sml2_core::{
-    hardware_palettes::{gbc_auto, rgb555, sgb_preset, HardwarePalettes},
+    hardware_palettes::{HardwarePalettes, gbc_auto, rgb555, sgb_preset},
     video::{PalettePixel, PaletteSource},
 };
 
@@ -81,7 +81,7 @@ impl Filter {
             Self::Sgb(index) => {
                 return sgb_preset(usize::from(index))
                     .expect("validated SGB preset")
-                    .into()
+                    .into();
             }
             Self::Gray => [[255, 255, 255], [170, 170, 170], [85, 85, 85], [0, 0, 0]],
             Self::Dmg => [[155, 188, 15], [139, 172, 15], [48, 98, 48], [15, 56, 15]],
@@ -112,7 +112,9 @@ impl std::str::FromStr for Filter {
                 if let [group @ b'1'..=b'4', shade @ b'a'..=b'h'] = preset {
                     return Ok(Self::Sgb((group - b'1') * 8 + shade - b'a'));
                 }
-                Err(format!("--filter must be gray, dmg, pocket, gbc, sgb, sgb-1a..sgb-4h or amber, got {value}"))
+                Err(format!(
+                    "--filter must be gray, dmg, pocket, gbc, sgb, sgb-1a..sgb-4h or amber, got {value}"
+                ))
             }
         }
     }

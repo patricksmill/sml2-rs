@@ -9,7 +9,7 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 
-use sml2_core::front_end::{FrontEndAssets, DEMO_TAPES_LEN, TILEMAP_LEN, VRAM_LEN};
+use sml2_core::front_end::{DEMO_TAPES_LEN, FrontEndAssets, TILEMAP_LEN, VRAM_LEN};
 
 /// Bank 5 `$41E5`, 0x1800 bytes (`GFX_TitleScreen`).
 const TITLE_VRAM_ROM: usize = 5 * 0x4000 + (0x41E5 - 0x4000);

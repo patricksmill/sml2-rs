@@ -94,7 +94,10 @@ mod tests {
         for frame in [1, 255, 257, u64::MAX] {
             let mut child = seeded_actor(0x60);
             let expected = child.to_raw_slot();
-            assert_eq!(update(&mut child, FrameTick::new(frame), 0x8F), FallEffect::None);
+            assert_eq!(
+                update(&mut child, FrameTick::new(frame), 0x8F),
+                FallEffect::None
+            );
             assert_eq!(child.to_raw_slot(), expected);
         }
     }
@@ -106,7 +109,10 @@ mod tests {
                 let mut child = seeded_actor(start_y);
                 let mut expected = child;
                 expected.screen.y = end_y;
-                assert_eq!(update(&mut child, FrameTick::new(frame), 0x80), FallEffect::None);
+                assert_eq!(
+                    update(&mut child, FrameTick::new(frame), 0x80),
+                    FallEffect::None
+                );
                 assert_eq!(child.to_raw_slot(), expected.to_raw_slot());
             }
         }
@@ -136,7 +142,10 @@ mod tests {
         let mut child = seeded_actor(0x6F);
         let mut expected = child;
         expected.screen.y = 0x70;
-        assert_eq!(update(&mut child, FrameTick::new(0), 0x80), FallEffect::None);
+        assert_eq!(
+            update(&mut child, FrameTick::new(0), 0x80),
+            FallEffect::None
+        );
         assert_eq!(child.to_raw_slot(), expected.to_raw_slot());
     }
 }

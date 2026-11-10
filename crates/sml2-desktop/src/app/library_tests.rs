@@ -80,10 +80,12 @@ fn title_screen_action_bar_play_starts_mario_settings_opens_menu_and_quit_closes
     app.input.event(Button::key("Enter"), true);
     let output = super::tests::frame(&mut app, &ctx, vec![]);
     app.input.event(Button::key("Enter"), false);
-    assert!(output.viewport_output[&egui::ViewportId::ROOT]
-        .commands
-        .iter()
-        .any(|command| matches!(command, ViewportCommand::Close)));
+    assert!(
+        output.viewport_output[&egui::ViewportId::ROOT]
+            .commands
+            .iter()
+            .any(|command| matches!(command, ViewportCommand::Close))
+    );
 
     // Advance past the initial opening hold (64 frames) where the ROM title ignores Start.
     if let SessionState::Title(title) = &mut app.game.as_mut().unwrap().session.state {
@@ -120,14 +122,17 @@ fn launcher_shows_the_title_and_bottom_actions_before_and_after_rom_verification
         assert_eq!(text, "Play\nSettings\nQuit\n");
     }
     assert!(app.launcher.is_some());
-    assert!(ctx
-        .memory(|memory| memory.area_rect(egui::Id::new("pause-menu")))
-        .is_none());
+    assert!(
+        ctx.memory(|memory| memory.area_rect(egui::Id::new("pause-menu")))
+            .is_none()
+    );
     let output = confirm(&mut app, &ctx, 2);
-    assert!(output.viewport_output[&egui::ViewportId::ROOT]
-        .commands
-        .iter()
-        .any(|command| matches!(command, ViewportCommand::Close)));
+    assert!(
+        output.viewport_output[&egui::ViewportId::ROOT]
+            .commands
+            .iter()
+            .any(|command| matches!(command, ViewportCommand::Close))
+    );
     let _ = std::fs::remove_dir_all(path);
 }
 
@@ -144,10 +149,12 @@ fn settings_opens_usual_options_and_escape_returns_to_the_launch_menu() {
     app.input.event(Button::key("Escape"), true);
     let output = super::tests::frame(&mut app, &ctx, vec![]);
     assert_eq!(app.screen, Screen::Home);
-    assert!(!output.viewport_output[&egui::ViewportId::ROOT]
-        .commands
-        .iter()
-        .any(|command| matches!(command, ViewportCommand::Close)));
+    assert!(
+        !output.viewport_output[&egui::ViewportId::ROOT]
+            .commands
+            .iter()
+            .any(|command| matches!(command, ViewportCommand::Close))
+    );
     let _ = std::fs::remove_dir_all(path);
 }
 
@@ -194,10 +201,12 @@ fn escape_exits_the_launcher_after_a_game_has_loaded() {
     app.input.event(Button::key("Escape"), true);
     let output = super::tests::frame(&mut app, &ctx, vec![]);
     assert_eq!(app.screen, Screen::Home);
-    assert!(output.viewport_output[&egui::ViewportId::ROOT]
-        .commands
-        .iter()
-        .any(|command| matches!(command, ViewportCommand::Close)));
+    assert!(
+        output.viewport_output[&egui::ViewportId::ROOT]
+            .commands
+            .iter()
+            .any(|command| matches!(command, ViewportCommand::Close))
+    );
     let _ = std::fs::remove_dir_all(path);
 }
 

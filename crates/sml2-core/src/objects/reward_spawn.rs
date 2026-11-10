@@ -1,6 +1,6 @@
 //! Camera reward allocation, ROM `$5B346`, sharing `$5B36D`'s spawn tail.
-use super::handler_0x5b36d::{spawn_dynamic_object, DynamicSpawnRequest};
 use super::SLOT_COUNT;
+use super::handler_0x5b36d::{DynamicSpawnRequest, spawn_dynamic_object};
 use crate::actor::{Actor, Position};
 
 /// `$ACE8 + $20` selects slot zero's activity byte, then scans in slot order.

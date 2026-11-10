@@ -52,11 +52,7 @@ impl std::error::Error for CreditsTextError {}
 #[inline]
 pub const fn char_to_tile(c: u8) -> u8 {
     let tile = c.wrapping_sub(48);
-    if tile == 0xF0 {
-        BLANK_TILE
-    } else {
-        tile
-    }
+    if tile == 0xF0 { BLANK_TILE } else { tile }
 }
 
 /// Converts a phase value (typically 4 down to 1) to a row index (0..3)

@@ -1,6 +1,6 @@
 //! Unit tests for native Wario drop child (anim 28, ROM `$0B0C2`).
 
-use super::drop_child::{update_drop_child, DropChildContext, DropChildEffects, DropChildError};
+use super::drop_child::{DropChildContext, DropChildEffects, DropChildError, update_drop_child};
 use crate::actor::{Actor, FrameTick, SpriteFlipFlags};
 use crate::objects::{ObjectSim, Staging};
 
@@ -69,7 +69,7 @@ fn drop_child_proximity_triggers_state3_and_sfx0() {
 
     let ctx = DropChildContext {
         frame: FrameTick::new(4), // frame & 3 == 0
-        player_screen_x: 50, // abs_diff = 53 - 50 = 3 < 8 (after x -= 2: x = 53)
+        player_screen_x: 50,      // abs_diff = 53 - 50 = 3 < 8 (after x -= 2: x = 53)
         picker_profile: &DUMMY_PICKER_PROFILE,
     };
 

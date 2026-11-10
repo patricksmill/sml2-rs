@@ -35,9 +35,10 @@ fn the_card_draws_easy_mode_in_one_row_at_its_rom_position() {
         .map(|i| (i % 160, i / 160))
         .collect();
     assert!(!lit.is_empty());
-    assert!(lit
-        .iter()
-        .all(|&(x, y)| (44..116).contains(&x) && (64..72).contains(&y)));
+    assert!(
+        lit.iter()
+            .all(|&(x, y)| (44..116).contains(&x) && (64..72).contains(&y))
+    );
     // The gap cell between the words stays background.
     assert!(lit.iter().all(|&(x, _)| !(76..84).contains(&x)));
     // Each of the eight letter cells has ink.
@@ -48,8 +49,10 @@ fn the_card_draws_easy_mode_in_one_row_at_its_rom_position() {
             "cell {cell}"
         );
     }
-    assert!(frame
-        .iter()
-        .filter(|p| p.source == PaletteSource::Bg)
-        .all(|p| p.shade == 0));
+    assert!(
+        frame
+            .iter()
+            .filter(|p| p.source == PaletteSource::Bg)
+            .all(|p| p.shade == 0)
+    );
 }

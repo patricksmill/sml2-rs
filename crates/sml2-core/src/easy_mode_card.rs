@@ -9,7 +9,7 @@
 mod tests;
 
 use crate::room_sprites::SpriteMetas;
-use crate::video::{tile_colors, OutputMode, PaletteSource};
+use crate::video::{OutputMode, PaletteSource, tile_colors};
 
 /// `sFadeTimer` frames `$35CD` holds the card.
 pub const EASY_CARD_FRAMES: u16 = 64;

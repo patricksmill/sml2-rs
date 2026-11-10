@@ -24,8 +24,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::level::{LevelLayout, LevelStart, SpawnRecord, METATILE_COUNT};
-use crate::world::{World, SCREEN_CELLS};
+use crate::level::{LevelLayout, LevelStart, METATILE_COUNT, SpawnRecord};
+use crate::world::{SCREEN_CELLS, World};
 
 /// Schema id every recipe carries.
 pub const RECIPE_SCHEMA: &str = "sml2-expanded-level/1";

@@ -1,5 +1,5 @@
 //! Slot conversion and world effects for boss anim 8.
-use super::{central_door, ObjectSim, ObjectTables, Staging};
+use super::{ObjectSim, ObjectTables, Staging, central_door};
 use crate::actor::Actor;
 
 impl ObjectSim {

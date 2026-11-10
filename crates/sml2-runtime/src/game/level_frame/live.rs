@@ -1,7 +1,7 @@
 //! The native frame driver; hosts retain departure and presentation ownership.
 use super::{
-    prepare_object_step, step_camera, step_ending_sequence, step_level_scene, step_objects,
-    step_player, FloatStep,
+    FloatStep, prepare_object_step, step_camera, step_ending_sequence, step_level_scene,
+    step_objects, step_player,
 };
 use crate::render::{SpriteCtx, SpriteInst};
 use crate::session::BOSS_LOAD_VBLANKS;
@@ -234,7 +234,11 @@ pub(crate) fn step_live_level_frame(
     };
 
     if let Some(s) = spr.as_mut() {
-        let y = if was_dead { sim.death_draw_y(cam.y) } else { sim.y };
+        let y = if was_dead {
+            sim.death_draw_y(cam.y)
+        } else {
+            sim.y
+        };
         s.player = Some((sim.x, y, f));
         s.streak_counter = streak;
         // `$54C8`: `$FFC7` from the star countdown; the dead draw (`$5550`)

@@ -1,7 +1,7 @@
 //! Native ending sprite composition from ROM $6845F/$68492/$684C5/$684E0.
 use crate::actor::{FrameTick, ScreenPosition};
 use crate::object::ObjectTables;
-use crate::player::{append_cells, Cell, CellStyle};
+use crate::player::{Cell, CellStyle, append_cells};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MissingEndingFrame(pub u8);

@@ -206,9 +206,15 @@ mod tests {
         let mut actor = Actor::default();
         actor.position.y = 0x80;
         for _ in 0..15 {
-            assert_eq!(update_pickup(&mut actor, FrameTick::new(1)), PoseEffect::None);
+            assert_eq!(
+                update_pickup(&mut actor, FrameTick::new(1)),
+                PoseEffect::None
+            );
         }
-        assert_eq!(update_pickup(&mut actor, FrameTick::new(1)), PoseEffect::Remove);
+        assert_eq!(
+            update_pickup(&mut actor, FrameTick::new(1)),
+            PoseEffect::Remove
+        );
         assert_eq!(actor.position.y, 0x80 - 32);
     }
 }

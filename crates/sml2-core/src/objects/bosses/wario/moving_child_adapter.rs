@@ -1,6 +1,6 @@
 //! Compatibility boundary between legacy object staging and native actors.
 
-use super::moving_child::{update_child, ChildContext, RespawnEdge};
+use super::moving_child::{ChildContext, RespawnEdge, update_child};
 use crate::actor::Actor;
 use crate::objects::{ObjectSim, ObjectTables, Staging};
 

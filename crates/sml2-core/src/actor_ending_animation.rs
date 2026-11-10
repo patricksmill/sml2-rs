@@ -144,9 +144,11 @@ mod tests {
             expected[13] = index;
             assert_eq!(actor.to_raw_slot(), expected);
         }
-        assert!(EndingBobError { lookup_index: 64 }
-            .to_string()
-            .contains("64"));
+        assert!(
+            EndingBobError { lookup_index: 64 }
+                .to_string()
+                .contains("64")
+        );
     }
 
     #[test]

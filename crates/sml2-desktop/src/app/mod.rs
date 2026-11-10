@@ -3,9 +3,9 @@ use crate::{
     game::Game,
     input::{Action, Button, InputState},
     library::{Library, Row},
-    menu::{pressed, release_focus, Menu},
+    menu::{Menu, pressed, release_focus},
     settings::{Settings, VanillaInstall, Zoom},
-    timing::{game_rectangle, TickBudget},
+    timing::{TickBudget, game_rectangle},
     vanilla_import,
 };
 #[cfg(test)]
@@ -15,7 +15,7 @@ use eframe::egui::{
 };
 use sml2_core::player_sim::PlayerKeys;
 use sml2_runtime::content::{ExtractedContent, SessionAssets};
-use sml2_runtime::render::motion::{pick_scale, Smooth};
+use sml2_runtime::render::motion::{Smooth, pick_scale};
 #[cfg(test)]
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -33,7 +33,7 @@ mod pause_backdrop;
 mod pointer;
 mod startup;
 pub(crate) use crate::ui::{colorized, theme};
-pub use startup::{run, Options};
+pub use startup::{Options, run};
 #[cfg(test)]
 mod dx_tests;
 #[cfg(test)]
@@ -797,7 +797,10 @@ impl DesktopApp {
             let mut clear_start = false;
             if self.game.is_some() {
                 if let Some(game) = self.game.as_mut() {
-                    game.session.set_dx(self.dx_bundle.clone().filter(|_| self.settings.dx_mode), self.settings.character);
+                    game.session.set_dx(
+                        self.dx_bundle.clone().filter(|_| self.settings.dx_mode),
+                        self.settings.character,
+                    );
                     game.session.expanded_levels = self.settings.expanded_levels;
                     dx::prepare_tick(&mut game.session, &self.settings, self.dx_bundle.is_some());
                 }
@@ -927,7 +930,7 @@ impl DesktopApp {
                             .into_iter()
                             .map(|[r, g, b]| Color32::from_rgb(r, g, b))
                             .collect(),
-                    ))
+                    ));
                 }
                 Err(error) => self.dx_message = error,
             }

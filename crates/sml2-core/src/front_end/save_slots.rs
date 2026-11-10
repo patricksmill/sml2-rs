@@ -6,7 +6,7 @@
 //! three slots when the file select opens; an invalid slot is replaced with the
 //! `$2913`/`$30226` fresh-file template.
 
-use crate::map::{save_record_valid, SAVE_SIGNATURE};
+use crate::map::{SAVE_SIGNATURE, save_record_valid};
 
 /// Bytes per save slot (`$A050 - $A000`).
 pub const SLOT_LEN: usize = 0x50;

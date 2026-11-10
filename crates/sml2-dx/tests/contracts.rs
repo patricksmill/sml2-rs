@@ -1,6 +1,6 @@
 //! Reproducible phase-1 content inventory. No ROM data leaves the process.
 use sml2_core::collision::classify;
-use sml2_dx::{extract, Presentation};
+use sml2_dx::{Presentation, extract};
 use sml2_extract::vanilla::{decompress_level, identify, read_packed_stream};
 use std::{env, fs, path::PathBuf};
 
@@ -142,7 +142,9 @@ fn audited_dx_content_difference_inventory() {
                 .collect();
             assert_eq!(differences, [(92, 0x31, 0x32)]);
         }
-        println!("{id:02X}: metatile_bytes={metatile_bytes} layout_cells={cells} collision_cells={classes}");
+        println!(
+            "{id:02X}: metatile_bytes={metatile_bytes} layout_cells={cells} collision_cells={classes}"
+        );
     }
     assert_eq!(changed_headers, [(0x1b, 12, 0x42, 0x78)]);
     assert_eq!(changed_spawns, [0x0b]);

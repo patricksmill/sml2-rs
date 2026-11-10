@@ -580,8 +580,8 @@ impl CastleRevealTiles {
 #[path = "map/castle_render.rs"]
 mod castle_render;
 pub use castle_render::{
-    castle_sequence_projection, game_over_sprites, render_castle_reveal, render_castle_sequence,
-    render_castle_sequence_output, render_game_over_output, GameOverView,
+    GameOverView, castle_sequence_projection, game_over_sprites, render_castle_reveal,
+    render_castle_sequence, render_castle_sequence_output, render_game_over_output,
 };
 
 impl BellRoomTiles {
@@ -1979,9 +1979,11 @@ mod tests {
                 .expect("4,096-byte bell tileset");
         let vram = tiles.vram_tiles();
         assert_eq!(vram.len(), 384);
-        assert!(vram[..BellRoomTiles::FIRST_TILE]
-            .iter()
-            .all(|t| t.iter().all(|&c| c == 0)));
+        assert!(
+            vram[..BellRoomTiles::FIRST_TILE]
+                .iter()
+                .all(|t| t.iter().all(|&c| c == 0))
+        );
         assert!(
             vram[BellRoomTiles::FIRST_TILE].iter().any(|&c| c != 0),
             "$8800 tile 0 is the ring tile"
@@ -2007,7 +2009,7 @@ mod tests {
         blob[0] = 42; // Hub (0, 0)
         blob[63] = 43; // Hub (63, 0)
         blob[63 * 64 + 63] = 44; // Hub (63, 63)
-                                 // Screen 1 (Pumpkin)
+        // Screen 1 (Pumpkin)
         let s1_off = OverworldTilemaps::HUB_LEN;
         blob[s1_off] = 77;
         blob[s1_off + 31] = 78;

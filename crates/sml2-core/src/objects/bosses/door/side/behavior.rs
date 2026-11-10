@@ -58,11 +58,7 @@ mod tests {
                     let mut actor = Actor::from_raw_slot(&expected);
                     update(&mut actor, input(phase, true), parity, slot).unwrap();
                     let wanted = if phase == 1 {
-                        if parity == 0 {
-                            0x20
-                        } else {
-                            0x60
-                        }
+                        if parity == 0 { 0x20 } else { 0x60 }
                     } else if parity == 0 {
                         0x60
                     } else {

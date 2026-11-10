@@ -1,6 +1,6 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
-use sml2_scenery_editor::app::{run, Options};
+use sml2_scenery_editor::app::{Options, run};
 use std::path::PathBuf;
 
 fn main() -> Result<(), String> {
@@ -41,7 +41,9 @@ fn launch() -> Result<(), String> {
                 options.smoke_frames = Some(count);
             }
             "--help" | "-h" => {
-                println!("sml2-scenery-editor [--assets DIR] [--config FILE] [--no-audio]\n  Validation: --smoke-frames N\n\nOptional scenery authoring companion. Uses the game's imported ROM and DX graphics.\nDrafts autosave beside settings.json; Export level writes files for a port release.\nEnter: playtest | Escape: return/cancel | B/E/I/R: tools | Ctrl+Z: undo");
+                println!(
+                    "sml2-scenery-editor [--assets DIR] [--config FILE] [--no-audio]\n  Validation: --smoke-frames N\n\nOptional scenery authoring companion. Uses the game's imported ROM and DX graphics.\nDrafts autosave beside settings.json; Export level writes files for a port release.\nEnter: playtest | Escape: return/cancel | B/E/I/R: tools | Ctrl+Z: undo"
+                );
                 return Ok(());
             }
             _ => return Err(format!("Unknown option: {argument}")),

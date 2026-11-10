@@ -3,9 +3,10 @@ use super::native_state::{self, Device, NativeState, Snapshot};
 use crate::input::InputState;
 use block2::RcBlock;
 use objc2::{
+    MainThreadMarker,
     rc::Retained,
     runtime::{Bool, ProtocolObject},
-    sel, MainThreadMarker,
+    sel,
 };
 use objc2_foundation::{NSNotification, NSNotificationCenter, NSObjectProtocol, NSOperationQueue};
 use objc2_game_controller::{
@@ -16,8 +17,8 @@ use objc2_game_controller::{
 use std::{
     ptr::NonNull,
     sync::{
-        mpsc::{self, Receiver, Sender},
         Arc, Mutex,
+        mpsc::{self, Receiver, Sender},
     },
 };
 

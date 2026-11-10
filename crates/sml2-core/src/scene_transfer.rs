@@ -1,6 +1,6 @@
 //! Blocking timing of `$Bx` tile transfers (`$216C -> $2202 -> $22B9`).
-use super::{SceneScripts, SceneVm, OPERANDS};
-use crate::vram_transfer::{VramTransfer, TRANSFER_BURST_MASK};
+use super::{OPERANDS, SceneScripts, SceneVm};
+use crate::vram_transfer::{TRANSFER_BURST_MASK, VramTransfer};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

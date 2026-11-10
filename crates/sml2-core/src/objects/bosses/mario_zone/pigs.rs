@@ -3,7 +3,7 @@
 //! the spawner (anim 2, `$9606`) and the controller's child (anim 13, `$9EE3`).
 //! Slot/world mapping lives in `pigs_adapter`.
 use crate::actor::{Actor, ContactKind, FrameTick, RiseProfile, SpriteFlipFlags};
-use crate::objects::boss_stun::{update_hit_stun, HitStunContext};
+use crate::objects::boss_stun::{HitStunContext, update_hit_stun};
 
 /// Arena walls for every walk.
 const LEFT_WALL_X: u8 = 0x10;

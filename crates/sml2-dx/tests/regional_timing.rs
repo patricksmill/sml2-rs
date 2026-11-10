@@ -21,7 +21,9 @@ fn audited_regional_pose_call_sites_and_scene_pump_gates() {
     // `$22C4` pumps pose/objects only when `$A28C` is nonzero.
     assert_eq!(
         &rom[0x22be..0x22ca],
-        &[0xfa, 0x8c, 0xa2, 0xa7, 0x28, 0x11, 0xcd, 0x0a, 0x2d, 0xcd, 0x52, 0x06]
+        &[
+            0xfa, 0x8c, 0xa2, 0xa7, 0x28, 0x11, 0xcd, 0x0a, 0x2d, 0xcd, 0x52, 0x06
+        ]
     );
     let direct_stores: Vec<_> = rom
         .windows(3)
@@ -32,9 +34,10 @@ fn audited_regional_pose_call_sites_and_scene_pump_gates() {
     assert_eq!(rom[0x231e], 0xaf, "the only direct store clears the flag");
     // `$2304` lives in `$22DF`, which has no direct call/jump in this ROM.
     assert_eq!(&rom[0x2304..0x230a], &[0xcd, 0x0a, 0x2d, 0xcd, 0x52, 0x06]);
-    assert!(!rom
-        .windows(3)
-        .any(|b| b == [0xcd, 0xdf, 0x22] || b == [0xc3, 0xdf, 0x22]));
+    assert!(
+        !rom.windows(3)
+            .any(|b| b == [0xcd, 0xdf, 0x22] || b == [0xc3, 0xdf, 0x22])
+    );
     // Pin supported scripts rather than fabricating an opcode0/pump route.
     let scripts = &rom[0x14125..0x141e5];
     let operands = [

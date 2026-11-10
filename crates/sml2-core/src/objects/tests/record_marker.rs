@@ -46,7 +46,9 @@ fn record_marker_source_instructions_copy_then_store_two_and_remove_zero_or_spen
     assert_eq!(&rom[0x8CA8..0x8CAE], &[0x1A, 0x22, 0x13, 0x05, 0x20, 0xFA]);
     assert_eq!(
         &rom[0x8CCA..0x8CD6],
-        &[0xFA, 0x1E, 0xAF, 0x67, 0xFA, 0x1F, 0xAF, 0xC6, 2, 0x6F, 0x36, 2]
+        &[
+            0xFA, 0x1E, 0xAF, 0x67, 0xFA, 0x1F, 0xAF, 0xC6, 2, 0x6F, 0x36, 2
+        ]
     );
     // Mode != 0 and dynamic pointers skip marker writes; actor marker $10
     // survives, every other actor marker becomes zero at the record pointer.
@@ -114,11 +116,7 @@ fn record_marker_remove_uses_actor_marker_and_mode_without_changing_count_policy
                         st.b[B_STATE] = state;
                         sim.remove_object(&mut st, &tables);
                         let expected = if mode == 0 {
-                            if marker == 0x10 {
-                                0x10
-                            } else {
-                                0
-                            }
+                            if marker == 0x10 { 0x10 } else { 0 }
                         } else {
                             dirty
                         };

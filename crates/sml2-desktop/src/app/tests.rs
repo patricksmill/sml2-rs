@@ -235,10 +235,12 @@ fn fullscreen_shortcut_requests_a_native_transition_without_ticking_the_menu() {
     frame(&mut app, &ctx, vec![]);
     let output = frame(&mut app, &ctx, vec![key(egui::Key::F11, true)]);
     assert!(app.settings.fullscreen);
-    assert!(output.viewport_output[&egui::ViewportId::ROOT]
-        .commands
-        .iter()
-        .any(|c| matches!(c, ViewportCommand::Fullscreen(true))));
+    assert!(
+        output.viewport_output[&egui::ViewportId::ROOT]
+            .commands
+            .iter()
+            .any(|c| matches!(c, ViewportCommand::Fullscreen(true)))
+    );
     assert_eq!(app.game.as_ref().unwrap().session.frame_n, 0);
     let _ = std::fs::remove_dir_all(path);
 }
@@ -287,10 +289,11 @@ fn debug_panel_renders_with_a_game_and_lists_every_level() {
     frame(&mut app, &ctx, vec![]);
     frame(&mut app, &ctx, vec![]);
     assert_eq!(app.levels.len(), 32, "every extracted level is offered");
-    assert!(app
-        .levels
-        .iter()
-        .any(|(id, label)| *id == 0 && label.contains("level1")));
+    assert!(
+        app.levels
+            .iter()
+            .any(|(id, label)| *id == 0 && label.contains("level1"))
+    );
     let _ = std::fs::remove_dir_all(path);
 }
 
@@ -483,10 +486,12 @@ fn fit_to_window_scales_the_same_view_and_toggles_without_resizing_the_window() 
     app.menu.selected = 1; // Display: Fit to window, after the tab strip.
     let output = frame(&mut app, &ctx, vec![key(egui::Key::Enter, true)]);
     assert_eq!(app.settings.zoom, Zoom::Auto);
-    assert!(!output.viewport_output[&egui::ViewportId::ROOT]
-        .commands
-        .iter()
-        .any(|command| matches!(command, ViewportCommand::InnerSize(_))));
+    assert!(
+        !output.viewport_output[&egui::ViewportId::ROOT]
+            .commands
+            .iter()
+            .any(|command| matches!(command, ViewportCommand::InnerSize(_)))
+    );
     frame(&mut app, &ctx, vec![key(egui::Key::Enter, false)]);
     app.screen = Screen::Game;
     let view = app.settings.view();
@@ -516,10 +521,12 @@ fn fit_to_window_scales_the_same_view_and_toggles_without_resizing_the_window() 
     app.menu.selected = 1;
     let output = frame(&mut app, &ctx, vec![key(egui::Key::Enter, true)]);
     assert_eq!(app.settings.zoom, Zoom::Integer(scale));
-    assert!(!output.viewport_output[&egui::ViewportId::ROOT]
-        .commands
-        .iter()
-        .any(|command| matches!(command, ViewportCommand::InnerSize(_))));
+    assert!(
+        !output.viewport_output[&egui::ViewportId::ROOT]
+            .commands
+            .iter()
+            .any(|command| matches!(command, ViewportCommand::InnerSize(_)))
+    );
     app.persist();
     assert_eq!(
         Settings::load(&app.options.paths.settings).unwrap().zoom,
@@ -599,9 +606,11 @@ fn actual_session_frames_use_the_extracted_cartridge_palette_for_every_filter() 
     let game = app.game.as_ref().unwrap();
     let native = game.session.render_palette_frame((160, 144));
     assert_eq!(native.len(), 160 * 144);
-    assert!(native
-        .iter()
-        .any(|p| p.source != sml2_core::video::PaletteSource::Bg));
+    assert!(
+        native
+            .iter()
+            .any(|p| p.source != sml2_core::video::PaletteSource::Bg)
+    );
     for filter in Filter::ALL {
         let image = colorized(
             &native,

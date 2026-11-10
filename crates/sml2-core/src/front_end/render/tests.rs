@@ -1,6 +1,6 @@
 use super::*;
 use crate::front_end::file_select::FileSelect;
-use crate::front_end::save_slots::{SaveSlots, SLOT_LEN};
+use crate::front_end::save_slots::{SLOT_LEN, SaveSlots};
 use crate::front_end::{TILEMAP_LEN, VRAM_LEN};
 
 /// A solid tile at `offset`: `color` 0..=3 in both bitplanes.

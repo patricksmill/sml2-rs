@@ -1,6 +1,6 @@
 //! Hidden-block ceiling contact and collision-visible foothold, `$15B6/$1993/$5B3C`.
 use crate::{
-    level::{LevelLayout, LAYOUT_SIZE},
+    level::{LAYOUT_SIZE, LevelLayout},
     player_sim::{PlayerKeys, PlayerSim},
 };
 

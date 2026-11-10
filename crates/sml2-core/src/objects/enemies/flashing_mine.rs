@@ -44,9 +44,11 @@ pub(super) fn update(actor: &mut Actor, frame: FrameTick, course: Course) -> Res
         }
         1 => {
             // The screen X tested is the previous frame's projection.
-            let offscreen = course.view_bounds.map_or(actor.screen.x >= course.screen_limit, |b| {
-                !b.contains(&i32::from(actor.position.x))
-            });
+            let offscreen = course
+                .view_bounds
+                .map_or(actor.screen.x >= course.screen_limit, |b| {
+                    !b.contains(&i32::from(actor.position.x))
+                });
             bob(actor, frame);
             actor.position.move_x(course.dx);
             if offscreen {

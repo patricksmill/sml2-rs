@@ -1,6 +1,6 @@
 //! Native presentation previews, not console captures. Writes PNGs under /tmp.
 use sml2_core::castle_sequence::{
-    CastleSequence, SequenceInput, GOLDEN_COIN_OFFSETS, STATE_REVEAL_D,
+    CastleSequence, GOLDEN_COIN_OFFSETS, STATE_REVEAL_D, SequenceInput,
 };
 use sml2_core::map::render_castle_sequence;
 use sml2_runtime::session::SessionAssets;

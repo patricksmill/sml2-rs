@@ -309,7 +309,11 @@ fn corner_hud_drops_the_backing_of_strips_drawn_for_an_inverted_palette() {
     session.hud_style = crate::render::HudStyle::Modern;
     let corner = session.render_frame((160, 144));
     assert_eq!(shade(&corner, 8 + 3, 8), 0, "ink");
-    assert_eq!(shade(&corner, 8 + 2, 8), 255, "the ring is the strip's paper");
+    assert_eq!(
+        shade(&corner, 8 + 2, 8),
+        255,
+        "the ring is the strip's paper"
+    );
     assert_eq!(shade(&corner, 8, 8), 170, "the backing is transparent");
 }
 
@@ -351,16 +355,28 @@ fn corner_hud_moves_the_status_bar_to_the_top_left_without_its_backing() {
     assert!((8..16).all(|y| shade(&corner, 8 + 4 * 8 + 3, y) == 170));
     // The timer's last tile ends 8 pixels from the right edge.
     assert_eq!(shade(&corner, 160 - 16 + 3, 8), 85);
-    assert!((17..24).all(|y| shade(&corner, 160 - 16 + 3, y) == 170), "one row, under its ring");
+    assert!(
+        (17..24).all(|y| shade(&corner, 160 - 16 + 3, y) == 170),
+        "one row, under its ring"
+    );
     let wide = session.render_frame((256, 144));
-    assert_eq!(wide[8 * 256 + 256 - 16 + 3], 85, "the timer follows a wider view's edge");
+    assert_eq!(
+        wide[8 * 256 + 256 - 16 + 3],
+        85,
+        "the timer follows a wider view's edge"
+    );
     for counter in [0, 16] {
-        let SessionState::InLevel(ctx) = &mut session.state else { unreachable!() };
+        let SessionState::InLevel(ctx) = &mut session.state else {
+            unreachable!()
+        };
         ctx.sim.paused = true;
         ctx.sim.frame_counter = counter;
         let paused = session.render_frame((160, 144));
-        assert_eq!(shade(&paused, 8, 8), shade(&paused, 80, 80),
-            "pause flash {counter} keeps the backing transparent");
+        assert_eq!(
+            shade(&paused, 8, 8),
+            shade(&paused, 80, 80),
+            "pause flash {counter} keeps the backing transparent"
+        );
     }
     let mut real = Session::new(SessionAssets::load().unwrap());
     real.begin_level(1, 0).unwrap();
@@ -371,7 +387,10 @@ fn corner_hud_moves_the_status_bar_to_the_top_left_without_its_backing() {
     // Terrain and sprites move down together, hiding the rows the strip covered.
     assert_eq!(corner[32 * 160..], classic[24 * 160..136 * 160]);
     if let Ok(dir) = std::env::var("SML2_HUD_PNG") {
-        for style in [crate::render::HudStyle::Classic, crate::render::HudStyle::Modern] {
+        for style in [
+            crate::render::HudStyle::Classic,
+            crate::render::HudStyle::Modern,
+        ] {
             real.hud_style = style;
             for size in [(160, 144), (256, 144)] {
                 let frame = real.render_frame(size);

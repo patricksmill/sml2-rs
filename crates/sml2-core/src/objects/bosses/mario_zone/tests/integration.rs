@@ -1,10 +1,10 @@
 //! Mario Zone boss unit tests (Def 2: Three Piggys).
 
-use crate::level::{LevelLayout, LAYOUT_SIZE};
+use crate::level::{LAYOUT_SIZE, LevelLayout};
 use crate::object::ObjectTables;
 use crate::objects::{
-    ObjectSim, Staging, B_DEF, B_FLAGS, B_FLIP, B_FSTATE, B_PHASE, B_SCRX, B_SCRY, B_SPRITE,
-    B_STATE, B_T24, B_T28, B_TYPE,
+    B_DEF, B_FLAGS, B_FLIP, B_FSTATE, B_PHASE, B_SCRX, B_SCRY, B_SPRITE, B_STATE, B_T24, B_T28,
+    B_TYPE, ObjectSim, Staging,
 };
 
 fn blank_layout() -> LevelLayout {

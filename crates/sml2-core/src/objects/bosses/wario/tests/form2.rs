@@ -1,5 +1,5 @@
 //! Expected byte writes independently transcribed from `$AB8B..$AD90`.
-use super::form2::{update, Context};
+use super::form2::{Context, update};
 use crate::actor::{Actor, ContactKind, FrameTick, SpriteFlipFlags};
 use crate::objects::boss_stun::HitStunContext;
 const FORWARD: [u8; 25] = [

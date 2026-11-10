@@ -1,7 +1,7 @@
 //! Transactional, local-only presentation bundles. Cache names are derived from
 //! content identity; neither ROM metadata nor manifests supply filesystem paths.
 
-use crate::{sha256, ImportError, BUNDLE_SCHEMA, IMPORTER_VERSION, ROM_SHA256};
+use crate::{BUNDLE_SCHEMA, IMPORTER_VERSION, ImportError, ROM_SHA256, sha256};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File, OpenOptions},
@@ -316,14 +316,16 @@ mod tests {
         );
         assert_eq!(entries(root.path()), 0);
         publish(root.path(), &key(), b"{}", accept, &running()).unwrap();
-        assert!(publish(
-            root.path(),
-            &key(),
-            b"[]",
-            |_| Err(invalid("reject")),
-            &running()
-        )
-        .is_err());
+        assert!(
+            publish(
+                root.path(),
+                &key(),
+                b"[]",
+                |_| Err(invalid("reject")),
+                &running()
+            )
+            .is_err()
+        );
         assert_eq!(
             publish(root.path(), &key(), b"{}", accept, &cancelled),
             Err(ImportError::Cancelled)
@@ -358,14 +360,16 @@ mod tests {
     #[test]
     fn payload_and_manifest_limits_are_enforced() {
         let root = tempfile::tempdir().unwrap();
-        assert!(publish(
-            root.path(),
-            &key(),
-            &vec![0; MAX_PAYLOAD_BYTES + 1],
-            accept,
-            &running()
-        )
-        .is_err());
+        assert!(
+            publish(
+                root.path(),
+                &key(),
+                &vec![0; MAX_PAYLOAD_BYTES + 1],
+                accept,
+                &running()
+            )
+            .is_err()
+        );
         assert_eq!(entries(root.path()), 0);
         let path = publish(root.path(), &key(), b"{}", accept, &running()).unwrap();
         fs::write(

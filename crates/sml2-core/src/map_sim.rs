@@ -54,7 +54,7 @@
 //! rejection uses successive DIV samples rather than reproducing CPU timing.
 //! Blocking screen transitions remain represented by their native flow effects.
 
-use crate::map::{map_enterable, progress_offset, MapNodeRecords, MapNodes, MapWalk, WalkDir};
+use crate::map::{MapNodeRecords, MapNodes, MapWalk, WalkDir, map_enterable, progress_offset};
 
 /// One class of the `$3C38C` node chain — the synthetic key the map presses when
 /// the cursor sits on a node of that class.

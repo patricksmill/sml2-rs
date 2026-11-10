@@ -95,10 +95,11 @@ fn a_wrong_length_save_is_reported_and_left_alone() {
     let path = temp_save("short");
     std::fs::write(&path, b"abc").unwrap();
     let game = Game::new(SessionAssets::load().unwrap(), path.clone(), false);
-    assert!(game
-        .diagnostics
-        .iter()
-        .any(|d| d.contains("is not a 240-byte slot image")));
+    assert!(
+        game.diagnostics
+            .iter()
+            .any(|d| d.contains("is not a 240-byte slot image"))
+    );
     assert_eq!(std::fs::read(&path).unwrap(), b"abc");
     let _ = std::fs::remove_file(path);
 }
@@ -111,10 +112,11 @@ fn saving_persists_all_three_pipes_as_one_image() {
     std::fs::write(&path, slots.image()).unwrap();
 
     let mut game = Game::new(SessionAssets::load().unwrap(), path.clone(), false);
-    assert!(game
-        .session
-        .slots
-        .write_slot(2, &MapSim::new().save_record(5, 9, 0)));
+    assert!(
+        game.session
+            .slots
+            .write_slot(2, &MapSim::new().save_record(5, 9, 0))
+    );
     game.persist_slots().unwrap();
 
     let data = std::fs::read(&path).unwrap();

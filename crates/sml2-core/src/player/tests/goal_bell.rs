@@ -1,5 +1,5 @@
 use super::*;
-use crate::level::{LevelLayout, LAYOUT_SIZE};
+use crate::level::{LAYOUT_SIZE, LevelLayout};
 
 /// `$181C`: sGoalBell selects MarioSpeedTableH before the swim/moon
 /// branches. `$17C5` sets $B8 on the ground; friction leaves $B4.

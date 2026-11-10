@@ -54,10 +54,12 @@ fn assets_validate_schema_lengths_and_keep_raw_rendering_data() {
         Some(&[21; 4][..])
     );
     assert_eq!(original.transfer_source(0x10, 0x6ffd, 4), None);
-    assert!(original
-        .clone()
-        .with_background_transfer(vec![0; 0xfff])
-        .is_err());
+    assert!(
+        original
+            .clone()
+            .with_background_transfer(vec![0; 0xfff])
+            .is_err()
+    );
     let mut short_background: serde_json::Value = serde_json::from_str(&text).unwrap();
     short_background["transfer_background"]
         .as_array_mut()

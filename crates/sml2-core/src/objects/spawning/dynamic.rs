@@ -13,7 +13,7 @@
 //! Common exit ($5B3AE):
 //! - Unconditionally clears `sObjectSpawnAnim`, `sObjectSpawnSprite`, `sObjectSpawnAttr`.
 
-use super::{ObjectSim, Staging, SLOT_COUNT};
+use super::{ObjectSim, SLOT_COUNT, Staging};
 use crate::actor::{Actor, SpriteFlipFlags};
 
 /// Parameters for spawning a dynamic object via ROM `$5B36D`.

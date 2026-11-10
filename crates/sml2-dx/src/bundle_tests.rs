@@ -36,7 +36,12 @@ fn fixture() -> Bundle {
         banks: BANKS.iter().map(|&b| (b, vec![0; BANK_LEN])).collect(),
         spawn_streams: vec![vec![0xFF]; LEVELS],
     };
-    put(&mut bundle, 0x24, 0x7D00, &[&[0xFF; 64][..], &[1; 32]].concat());
+    put(
+        &mut bundle,
+        0x24,
+        0x7D00,
+        &[&[0xFF; 64][..], &[1; 32]].concat(),
+    );
     // `$42F0[0]` -> `$5000`: runs of metatile 0, 257 bytes each.
     put(&mut bundle, 0x09, 0x42F0, &0x5000u16.to_le_bytes());
     put(&mut bundle, 0x09, 0x5000, &[0x80, 0x00].repeat(48));
@@ -299,7 +304,9 @@ fn each_boss_arena_reads_its_loader_sources() {
 #[test]
 fn movement_curves_are_narrow_and_configuration_is_validated() {
     let mut bundle = fixture();
-    for (i, byte) in bundle.movement.iter_mut().enumerate() { *byte = (i / 76) as u8; }
+    for (i, byte) in bundle.movement.iter_mut().enumerate() {
+        *byte = (i / 76) as u8;
+    }
     let dx = Presentation::new(&bundle).unwrap();
     assert_eq!(dx.movement[0].horizontal[255], 3);
     assert_eq!(dx.movement[0].normal[0], 3);
@@ -323,7 +330,12 @@ fn spawn_streams_decode_per_level_and_reject_malformed_packs() {
     assert_eq!(records.len(), 1);
     assert_eq!((records[0].x, records[0].y), (0x108, 0x190));
     assert!(presentation.levels[0].spawns.is_empty());
-    for bad in [vec![], vec![1, 2, 3], vec![1, 2, 0xFF], vec![0xFF, 0, 0, 0xFF]] {
+    for bad in [
+        vec![],
+        vec![1, 2, 3],
+        vec![1, 2, 0xFF],
+        vec![0xFF, 0, 0, 0xFF],
+    ] {
         let mut bundle = fixture();
         bundle.spawn_streams[3] = bad.clone();
         assert!(bundle.validate().is_err(), "{bad:?}");

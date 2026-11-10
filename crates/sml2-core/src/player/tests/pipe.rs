@@ -1,5 +1,5 @@
 use super::*;
-use crate::level::{LevelLayout, LAYOUT_SIZE};
+use crate::level::{LAYOUT_SIZE, LevelLayout};
 
 /// `$0F71` calls `$13FE` BEFORE testing the travelling direction. `$13FE`
 /// clears $A202/$A218/$A283 (XSub, XPushed, PipeAlignTarget), even when

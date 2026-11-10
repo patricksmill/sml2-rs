@@ -1,8 +1,8 @@
 //! Wario 20's live timer input and camera-impact producer/consumer paths.
 
 use crate::objects::{
-    LevelLayout, ObjectSim, ObjectTables, B_DEF, B_FSTATE, B_PHASE, B_SCRX, B_SCRY, B_SPRITE,
-    B_T24, B_T28,
+    B_DEF, B_FSTATE, B_PHASE, B_SCRX, B_SCRY, B_SPRITE, B_T24, B_T28, LevelLayout, ObjectSim,
+    ObjectTables,
 };
 use crate::{
     camera::CameraSim,

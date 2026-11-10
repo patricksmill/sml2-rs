@@ -42,11 +42,7 @@ impl ObjectSim {
         self.fade_timer = (self.fade_timer & 0xFF00) | u16::from(FADE_LOW);
         self.fade_timer_set = Some(self.fade_timer);
         let mut actor = Actor::from_raw_slot(&st.b);
-        let effects = update_exit(
-            &mut actor,
-            self.frame_tick(),
-            u8::from(self.easy_mode),
-        );
+        let effects = update_exit(&mut actor, self.frame_tick(), u8::from(self.easy_mode));
         st.b = actor.to_raw_slot();
         let effects = effects.expect("Wario exit cycle must address the four-entry ROM table");
         if let Some(animation) = effects.replacement_animation {

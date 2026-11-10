@@ -103,8 +103,7 @@ fn set_taskbar_icon(cc: &eframe::CreationContext<'_>) {
     use windows_sys::Win32::{
         System::LibraryLoader::GetModuleHandleW,
         UI::WindowsAndMessaging::{
-            GetSystemMetrics, LoadImageW, SendMessageW, ICON_BIG, IMAGE_ICON, SM_CXICON,
-            WM_SETICON,
+            GetSystemMetrics, ICON_BIG, IMAGE_ICON, LoadImageW, SM_CXICON, SendMessageW, WM_SETICON,
         },
     };
 

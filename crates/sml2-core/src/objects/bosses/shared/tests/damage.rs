@@ -1,6 +1,6 @@
 use super::*;
 use crate::actor::Actor;
-use crate::objects::{ObjectSim, Staging, B_FLAGS, B_FSTATE, B_SPRITE, B_T28, B_TYPE};
+use crate::objects::{B_FLAGS, B_FSTATE, B_SPRITE, B_T28, B_TYPE, ObjectSim, Staging};
 
 fn effects(flags: u8, primary_slot: bool, hits: u8, definition: u8) -> DamageEffects {
     damage(

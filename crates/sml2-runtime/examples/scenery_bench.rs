@@ -1,6 +1,6 @@
 use sml2_core::scenery::{SceneryOverlay, SceneryPaint};
-use sml2_runtime::content::SessionAssets;
 use sml2_runtime::Session;
+use sml2_runtime::content::SessionAssets;
 use std::{hint::black_box, time::Instant};
 fn main() {
     let mut session = Session::new(SessionAssets::load().unwrap());

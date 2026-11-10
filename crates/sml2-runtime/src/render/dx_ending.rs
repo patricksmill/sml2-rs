@@ -201,16 +201,22 @@ mod tests {
             banks.insert(id, vec![0; 0x4000]);
         }
         // Distinct whole sets make the selected source observable at every pixel.
-        banks.get_mut(&0x29).unwrap()[0x2769..0x27a9]
-            .copy_from_slice(&[0x1f, 0].repeat(32));
+        banks.get_mut(&0x29).unwrap()[0x2769..0x27a9].copy_from_slice(&[0x1f, 0].repeat(32));
         for (address, word) in [(0x5ec1, 0x03e0u16), (0x5f01, 0x7c00), (0x5f41, 0x7fff)] {
             banks.get_mut(&0x1a).unwrap()[address - 0x4000..address - 0x4000 + 64]
                 .copy_from_slice(&word.to_le_bytes().repeat(32));
         }
         let mappings = game.assets.object_tables.player_mappings.clone();
-        for (substate, color) in [(7, [255, 0, 0]), (8, [0, 255, 0]),
-            (9, [0, 0, 255]), (10, [255; 3]), (19, [255; 3])] {
-            let crate::session::SessionState::InLevel(ctx) = &mut game.state else { panic!("level") };
+        for (substate, color) in [
+            (7, [255, 0, 0]),
+            (8, [0, 255, 0]),
+            (9, [0, 0, 255]),
+            (10, [255; 3]),
+            (19, [255; 3]),
+        ] {
+            let crate::session::SessionState::InLevel(ctx) = &mut game.state else {
+                panic!("level")
+            };
             ctx.ending_sequence.substate = substate;
             let ctx = game.level_ctx().unwrap();
             let first = render_scene(&game, ctx, &banks, &mappings, (160, 144), true).unwrap();
@@ -221,11 +227,21 @@ mod tests {
         }
         // The replacement extends through $9A9F; rows beyond the initial $240 survive.
         banks.get_mut(&0x1a).unwrap()[0x1fc1 + 0x240..0x1fc1 + 0x2a0].fill(7);
-        let crate::session::SessionState::InLevel(ctx) = &mut game.state else { panic!("level") };
+        let crate::session::SessionState::InLevel(ctx) = &mut game.state else {
+            panic!("level")
+        };
         ctx.ending_scene.scroll_y = 16;
         // Palette 7, color 0 changes the newly covered bottom two visible rows.
         banks.get_mut(&0x1a).unwrap()[0x1f41 + 56..0x1f41 + 58].fill(0);
-        let pixels = render_scene(&game, game.level_ctx().unwrap(), &banks, &mappings, (160, 144), true).unwrap();
+        let pixels = render_scene(
+            &game,
+            game.level_ctx().unwrap(),
+            &banks,
+            &mappings,
+            (160, 144),
+            true,
+        )
+        .unwrap();
         assert_eq!(pixels[128 * 160], [0; 3]);
         assert_eq!(pixels[0], [255; 3]);
     }

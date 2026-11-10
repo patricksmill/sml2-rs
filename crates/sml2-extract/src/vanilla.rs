@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 
 use sml2_core::collision;
 use sml2_core::level::{
-    GraphicsRef, IndexLevel, LevelHeader, LevelLayout, LevelManifest, LevelProperties, LevelStart,
-    MetatileTable, SpawnRecord, TileAnim, TilesetMapRef, LAYOUT_SIZE, MANIFEST_SCHEMA,
-    METATILE_COUNT,
+    GraphicsRef, IndexLevel, LAYOUT_SIZE, LevelHeader, LevelLayout, LevelManifest, LevelProperties,
+    LevelStart, MANIFEST_SCHEMA, METATILE_COUNT, MetatileTable, SpawnRecord, TileAnim,
+    TilesetMapRef,
 };
 use sml2_core::object;
 use sml2_core::tileset::TilesetEntry;
@@ -1233,9 +1233,11 @@ mod tests {
         extract(&rom, &out).unwrap();
         let mut files = Vec::new();
         walk(&out, &out, &mut files);
-        assert!(files
-            .iter()
-            .any(|path| path.ends_with("levels/level01.manifest.json")));
+        assert!(
+            files
+                .iter()
+                .any(|path| path.ends_with("levels/level01.manifest.json"))
+        );
         for relative in &files {
             assert!(!relative.ends_with(".png"), "{relative}");
             assert!(!relative.starts_with("renders/"), "{relative}");

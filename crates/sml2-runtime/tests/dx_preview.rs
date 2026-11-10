@@ -36,12 +36,16 @@ fn synthetic_bundle() -> Presentation {
         mappings: vec![vec![]; 242],
     };
     Presentation {
-        movement: std::array::from_fn(|_| std::sync::Arc::new(sml2_core::character::MovementCurves {
-            horizontal: sml2_core::player_sim::SPEED_H,
-            normal: sml2_core::player_sim::SPEED_V[..76].try_into().unwrap(),
-            swim: sml2_core::player_sim::SPEED_V_GOO[..76].try_into().unwrap(),
-            moon: sml2_core::player_sim::SPEED_V_WATER[..76].try_into().unwrap(),
-        })),
+        movement: std::array::from_fn(|_| {
+            std::sync::Arc::new(sml2_core::character::MovementCurves {
+                horizontal: sml2_core::player_sim::SPEED_H,
+                normal: sml2_core::player_sim::SPEED_V[..76].try_into().unwrap(),
+                swim: sml2_core::player_sim::SPEED_V_GOO[..76].try_into().unwrap(),
+                moon: sml2_core::player_sim::SPEED_V_WATER[..76]
+                    .try_into()
+                    .unwrap(),
+            })
+        }),
         levels: vec![level; 32],
         players: [[player.clone(), player.clone()], [player.clone(), player]],
         object_tables: vec![vec![vec![]; 228]],
@@ -267,7 +271,8 @@ fn dx_frames_take_the_view_size_and_keep_native_parity() {
             unreachable!()
         };
         let camera = (ctx.cam.x, ctx.cam.y);
-        let origin = sml2_runtime::render::view::level_origin((384, 216), camera, 0, ctx.cam.room());
+        let origin =
+            sml2_runtime::render::view::level_origin((384, 216), camera, 0, ctx.cam.room());
         let crop_at = (
             (camera.0 as i32 - 80 - origin.0) as usize,
             (camera.1 as i32 - 72 - origin.1) as usize,
@@ -475,8 +480,10 @@ fn audited_rom_forms_effects_and_initial_frame() {
         }
         let pixels = preview.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
         if let SessionState::InLevel(ctx) = &preview.state {
-            eprintln!("DX comparison: ticks={ticks}, Mario=({},{}), camera=({},{}), animation={:?}, HUD={}",
-                ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y, ctx.tile_animation, ctx.hud_y);
+            eprintln!(
+                "DX comparison: ticks={ticks}, Mario=({},{}), camera=({},{}), animation={:?}, HUD={}",
+                ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y, ctx.tile_animation, ctx.hud_y
+            );
         }
         let mut encoder = png::Encoder::new(std::fs::File::create(path).unwrap(), 160, 144);
         encoder.set_color(png::ColorType::Rgb);
@@ -1005,7 +1012,7 @@ fn conveyor_section_colors_survive_corridors_and_widescreen() {
 
 #[test]
 fn tree_hive_palette_swap_keeps_the_visible_outdoor_entrance_green() {
-    use sml2_runtime::render::{motion::Smooth, view, HudStyle};
+    use sml2_runtime::render::{HudStyle, motion::Smooth, view};
     let mut bundle = synthetic_bundle();
     let bank = bundle.banks.get_mut(&0x26).unwrap();
     bank[0x1a00..0x1a40].copy_from_slice(&[0x1f, 0].repeat(32));
@@ -1112,16 +1119,22 @@ fn dx_character_selection_reaches_level_entry_and_falls_back_to_mario() {
     let mut session = session();
     session.set_dx(Some(dx.clone()), Luigi);
     session.debug_warp_level(0).unwrap();
-    let SessionState::InLevel(ctx) = &session.state else { panic!("level is live") };
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!("level is live")
+    };
     assert_eq!(ctx.sim.character, Luigi);
     assert!(ctx.sim.dx_enabled());
 
     // Disabling DX holds until the next entry, which runs vanilla Mario.
     session.set_dx(None, Luigi);
-    let SessionState::InLevel(ctx) = &session.state else { panic!("level is live") };
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!("level is live")
+    };
     assert!(ctx.sim.dx_enabled());
     session.debug_warp_level(0).unwrap();
-    let SessionState::InLevel(ctx) = &session.state else { panic!("level is live") };
+    let SessionState::InLevel(ctx) = &session.state else {
+        panic!("level is live")
+    };
     assert_eq!(ctx.sim.character, Mario);
     assert!(!ctx.sim.dx_enabled());
 }
@@ -1131,7 +1144,9 @@ fn attract_demos_always_run_dx_mario() {
     let mut session = session();
     session.set_dx(Some(std::sync::Arc::new(native_geometry_bundle())), Luigi);
     assert!(session.start_demo(0));
-    let SessionState::Demo(demo) = &session.state else { panic!("demo is live") };
+    let SessionState::Demo(demo) = &session.state else {
+        panic!("demo is live")
+    };
     assert_eq!(demo.ctx.sim.character, Mario);
     assert!(demo.ctx.sim.dx_enabled());
     assert_eq!(session.character, Luigi, "the selection survives the demo");
@@ -1144,7 +1159,9 @@ fn dx_boss_reload_shows_white_for_the_native_blank_window() {
     let bundle = synthetic_bundle();
     let mut game = session();
     game.begin_level(13, 0).unwrap();
-    let SessionState::InLevel(ctx) = &mut game.state else { panic!("level") };
+    let SessionState::InLevel(ctx) = &mut game.state else {
+        panic!("level")
+    };
     ctx.cam.scene_id = 14;
     ctx.cam.transition = 1;
     ctx.cam.x = 0x6B0;
@@ -1173,18 +1190,28 @@ fn dx_coin_room_entry_shows_one_white_frame() {
     bundle.map.screens[9].bg_palettes = [0xe0, 3].repeat(32);
     let mut game = session();
     game.debug_warp_map(0, 0x71).unwrap();
-    let SessionState::Overworld(map) = &mut game.state else { panic!("map") };
+    let SessionState::Overworld(map) = &mut game.state else {
+        panic!("map")
+    };
     (map.coins_low, map.coins_high) = (0x99, 0x09);
     let press_a = FrameInput {
-        keys: sml2_core::player_sim::PlayerKeys { a: true, ..Default::default() },
+        keys: sml2_core::player_sim::PlayerKeys {
+            a: true,
+            ..Default::default()
+        },
         div: 0,
     };
     game.advance(press_a);
-    let SessionState::Overworld(map) = &game.state else { panic!("map") };
+    let SessionState::Overworld(map) = &game.state else {
+        panic!("map")
+    };
     assert_eq!(map.screen_id, 9, "the coin door opened");
     let white = game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap();
     assert_eq!(white, vec![[255; 3]; 160 * 144]);
-    assert_eq!(game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(), white);
+    assert_eq!(
+        game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(),
+        white
+    );
     game.advance(FrameInput::default());
     assert_eq!(
         game.render_dx_frame(&bundle, Mario, (160, 144)).unwrap(),
@@ -1214,13 +1241,20 @@ fn dx_geometry_and_spawns_drive_simulation_from_entry() {
     };
     let start = y(&dx);
     assert_eq!(start, y(&native), "the header still places Mario");
-    let SessionState::InLevel(ctx) = &dx.state else { panic!("level") };
+    let SessionState::InLevel(ctx) = &dx.state else {
+        panic!("level")
+    };
     assert!(ctx.layout_live.cells.iter().all(|&c| c == 0x7F));
     assert_eq!(ctx.obj.records[0].y, moved);
     assert_eq!(ctx.obj.revision, sml2_core::actor::ObjectRevision::Dx);
-    let SessionState::InLevel(native_ctx) = &native.state else { panic!("level") };
+    let SessionState::InLevel(native_ctx) = &native.state else {
+        panic!("level")
+    };
     assert_ne!(native_ctx.obj.records[0].y, moved);
-    assert_eq!(native_ctx.obj.revision, sml2_core::actor::ObjectRevision::Original);
+    assert_eq!(
+        native_ctx.obj.revision,
+        sml2_core::actor::ObjectRevision::Original
+    );
     // The DX renderer draws the simulated cells; nothing substitutes native ones.
     assert!(dx.render_dx_frame(&bundle, Mario, (160, 144)).is_ok());
 
@@ -1229,7 +1263,10 @@ fn dx_geometry_and_spawns_drive_simulation_from_entry() {
         dx.advance(FrameInput::default());
     }
     assert_eq!(y(&native), start, "native ground holds Mario");
-    assert!(y(&dx) > start + 16, "Mario falls through DX's missing ground");
+    assert!(
+        y(&dx) > start + 16,
+        "Mario falls through DX's missing ground"
+    );
 
     // A bundle whose objects disagree with the level is refused at entry.
     let mut mismatched = native_geometry_bundle();
@@ -1249,8 +1286,14 @@ fn audited_rom_levels_enter_with_dx_layouts_and_spawns() {
         let mut game = session();
         game.set_dx(Some(bundle.clone()), Mario);
         game.begin_level(id, 0).unwrap();
-        let SessionState::InLevel(ctx) = &game.state else { panic!("level {id:02X}") };
-        assert_eq!(ctx.layout_live.cells, bundle.levels[usize::from(id)].layout, "level {id:02X}");
+        let SessionState::InLevel(ctx) = &game.state else {
+            panic!("level {id:02X}")
+        };
+        assert_eq!(
+            ctx.layout_live.cells,
+            bundle.levels[usize::from(id)].layout,
+            "level {id:02X}"
+        );
         let native_records = &native.assets.level(id).unwrap().manifest.spawns.records;
         let moved: Vec<_> = ctx
             .obj
@@ -1273,7 +1316,15 @@ fn bonus_rooms_draw_the_player_from_their_own_dx_graphics() {
     // tile 0 is opaque, and every frame of both characters draws it.
     bundle.players[1][0].normal[..16].fill(0xff);
     for row in &mut bundle.players {
-        row[0].mappings = vec![vec![sml2_core::object::MappingEntry { y: 0, x: 0, tile: 0, attr: 0 }]; 242];
+        row[0].mappings = vec![
+            vec![sml2_core::object::MappingEntry {
+                y: 0,
+                x: 0,
+                tile: 0,
+                attr: 0
+            }];
+            242
+        ];
     }
     bundle.map.screens[13].obj_palettes[0][6..8].copy_from_slice(&[0, 0x7c]);
     bundle.map.screens[13].obj_palettes[1][6..8].copy_from_slice(&[0, 0x7c]);
@@ -1284,7 +1335,9 @@ fn bonus_rooms_draw_the_player_from_their_own_dx_graphics() {
         for _ in 0..60 {
             game.advance(FrameInput::default());
         }
-        let frame = game.render_dx_frame(&bundle, character, (160, 144)).unwrap();
+        let frame = game
+            .render_dx_frame(&bundle, character, (160, 144))
+            .unwrap();
         assert_eq!(frame.contains(&[0, 0, 255]), drawn, "{character:?}");
     }
 }

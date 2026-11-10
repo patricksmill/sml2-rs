@@ -204,8 +204,20 @@ fn walk_mismatch(song: u8, frames: usize) -> Option<String> {
                 return Some(format!(
                     "song {song} frame {frame} ch{}: rom active={} stream={:#06x} timer={} dur={} freq={:02x}{:02x} rest={} | port active={} stream={:#06x} timer={} dur={} freq={:02x}{:02x} rest={}",
                     i + 1,
-                    u8::from(rc.active()), rc.stream, rc.timer, rc.duration, rc.freq_lo, rc.freq_hi, rc.rest,
-                    u8::from(pc.active), pc.stream_ptr, pc.note_timer, pc.note_duration, pc.freq_lo, pc.freq_hi, u8::from(pc.rest),
+                    u8::from(rc.active()),
+                    rc.stream,
+                    rc.timer,
+                    rc.duration,
+                    rc.freq_lo,
+                    rc.freq_hi,
+                    rc.rest,
+                    u8::from(pc.active),
+                    pc.stream_ptr,
+                    pc.note_timer,
+                    pc.note_duration,
+                    pc.freq_lo,
+                    pc.freq_hi,
+                    u8::from(pc.rest),
                 ));
             }
         }

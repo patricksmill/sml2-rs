@@ -1,14 +1,14 @@
 //! Background import/restore boundary, independent of the desktop UI.
 use sml2_dx::{
-    cache::{self, CacheKey},
     Bundle, ImportError, Presentation,
+    cache::{self, CacheKey},
 };
 use std::{
     path::{Path, PathBuf},
     sync::{
+        Arc,
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver},
-        Arc,
     },
 };
 
@@ -145,8 +145,8 @@ impl Worker {
 
     pub fn start(
         job: impl FnOnce(&AtomicBool, &dyn Fn(&'static str)) -> Result<(CacheKey, Presentation), String>
-            + Send
-            + 'static,
+        + Send
+        + 'static,
     ) -> Self {
         let (sender, events) = mpsc::channel();
         let cancelled = Arc::new(AtomicBool::new(false));

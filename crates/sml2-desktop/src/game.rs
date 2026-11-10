@@ -1,13 +1,13 @@
-use crate::settings::atomic_write;
 pub use crate::settings::Volume;
+use crate::settings::atomic_write;
 use sml2_core::{
-    audio::{apu::CHANNEL_WEIGHT_UNIT, Apu},
-    front_end::{SaveSlots, SAVE_IMAGE_LEN, SLOT_LEN},
+    audio::{Apu, apu::CHANNEL_WEIGHT_UNIT},
+    front_end::{SAVE_IMAGE_LEN, SLOT_LEN, SaveSlots},
     player_sim::PlayerKeys,
 };
 use sml2_runtime::{
-    audio_output::AudioOutput, content::SessionAssets, divider_clock::VirtualDividerClock,
-    session::SessionState, FrameInput, Session,
+    FrameInput, Session, audio_output::AudioOutput, content::SessionAssets,
+    divider_clock::VirtualDividerClock, session::SessionState,
 };
 use std::{fs, path::PathBuf};
 

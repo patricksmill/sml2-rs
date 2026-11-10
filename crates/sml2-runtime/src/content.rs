@@ -2,7 +2,7 @@
 //! sessions hold decoded content and never reopen files on level transitions.
 
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest, LevelStart};
-use sml2_core::level_recipe::{layout_fingerprint, LevelParts, LevelRecipe};
+use sml2_core::level_recipe::{LevelParts, LevelRecipe, layout_fingerprint};
 use sml2_core::map::{
     MapNodeRecords, MapNodes, MapWalk, OverworldManifest, OverworldTilemaps, OverworldTiles,
 };

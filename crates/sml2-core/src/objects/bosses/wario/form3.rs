@@ -5,7 +5,7 @@ use crate::actor::{
     SpriteFlipFlags,
 };
 use crate::objects::boss_spawn::BossSpawnRequest;
-use crate::objects::boss_stun::{update_hit_stun, HitStunContext};
+use crate::objects::boss_stun::{HitStunContext, update_hit_stun};
 
 #[derive(Clone, Copy)]
 pub(super) struct Context {

@@ -5,9 +5,9 @@
 use std::cmp::Ordering;
 use std::ops::Range;
 
+use super::BOUNCE_SPEED;
 use super::falling_dropper::step_fall_speed;
 use super::walker::WalkerWorld;
-use super::BOUNCE_SPEED;
 use crate::actor::{Actor, ContactKind, FrameTick, MotionProfileError};
 
 /// Frames a stunned enemy lies still before it spins back up.
@@ -254,7 +254,10 @@ mod tests {
         assert_eq!(update_defeat(&mut actor, None).unwrap(), DefeatEffect::None);
         assert_eq!(actor.position.y, u16::from(FALL_STEP0) * 2);
         actor.screen.y = 0xA0;
-        assert_eq!(update_defeat(&mut actor, None).unwrap(), DefeatEffect::Remove);
+        assert_eq!(
+            update_defeat(&mut actor, None).unwrap(),
+            DefeatEffect::Remove
+        );
     }
 
     #[test]

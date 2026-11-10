@@ -17,7 +17,9 @@ fn handler_0xa2be_dispatch_reward_ignores_hits_state_and_slot_pointer() {
     assert_eq!(tables.boss_anim_handler(18), Some(0xA2BE));
     assert_eq!(
         &tables.boss_picker_profile[..22],
-        &[0, 0, 1, 1, 1, 2, 1, 2, 2, 1, 2, 3, 2, 3, 3, 3, 2, 3, 3, 2, 3, 3]
+        &[
+            0, 0, 1, 1, 1, 2, 1, 2, 2, 1, 2, 3, 2, 3, 3, 3, 2, 3, 3, 2, 3, 3
+        ]
     );
     for ptr in [0, 0x20, 0x40, 0x60] {
         let mut sim = ObjectSim::new(vec![], 0);

@@ -5,7 +5,7 @@
 //! covers a 256x256-pixel plane that wraps. No window, no sprites here — the
 //! file select's OAM pass is added by its own renderer.
 
-use crate::video::{tile_colors, OutputMode, PaletteSource};
+use crate::video::{OutputMode, PaletteSource, tile_colors};
 
 /// The `$8000-$97FF` background window.
 pub const VRAM_LEN: usize = 0x1800;

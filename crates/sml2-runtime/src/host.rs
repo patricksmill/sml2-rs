@@ -8,7 +8,7 @@ use crate::session::{Boot, FrameInput, Session, SessionAssets, StepOutcome};
 use minifb::{Key, Window, WindowOptions};
 use sml2_core::{
     audio::apu::Apu,
-    front_end::{SaveSlots, SAVE_IMAGE_LEN, SLOT_LEN},
+    front_end::{SAVE_IMAGE_LEN, SLOT_LEN, SaveSlots},
     player_sim::PlayerKeys,
 };
 use std::{

@@ -58,11 +58,7 @@ pub struct PipeBobberContext {
 #[inline]
 pub fn dist_mario_x(mario_ref_x: u16, actor_x: u16) -> u8 {
     let d = (mario_ref_x as u8).wrapping_sub(actor_x as u8);
-    if d & 0x80 != 0 {
-        d.wrapping_neg()
-    } else {
-        d
-    }
+    if d & 0x80 != 0 { d.wrapping_neg() } else { d }
 }
 
 /// Domain update for Pipe Bobber (ROM $584CB / $584E0, anims 7, 12, 66).

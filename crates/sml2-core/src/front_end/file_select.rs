@@ -6,7 +6,7 @@
 //! or apply the erase result.
 
 use super::keys::{A, DOWN, LEFT, RIGHT, SELECT, START};
-use super::save_slots::{fresh_template, SaveSlots, SLOT_COUNT, SLOT_LEN};
+use super::save_slots::{SLOT_COUNT, SLOT_LEN, SaveSlots, fresh_template};
 
 /// `$30000`: the file select requests song 13.
 pub const MUSIC: u8 = 13;

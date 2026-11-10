@@ -16,7 +16,9 @@ fn handler_0x98c8_dispatch_runs_full_cycle_and_carries_rider() {
     assert_eq!(tables.boss_anim_handler(8), Some(0x98C8));
     assert_eq!(
         &tables.boss_picker_profile[..22],
-        &[0, 0, 1, 1, 1, 2, 1, 2, 2, 1, 2, 3, 2, 3, 3, 3, 2, 3, 3, 2, 3, 3]
+        &[
+            0, 0, 1, 1, 1, 2, 1, 2, 2, 1, 2, 3, 2, 3, 3, 3, 2, 3, 3, 2, 3, 3
+        ]
     );
     let mut sim = ObjectSim::new(vec![], 0);
     sim.door_sequence_active = 1;

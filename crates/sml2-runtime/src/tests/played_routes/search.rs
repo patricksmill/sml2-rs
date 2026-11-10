@@ -98,7 +98,7 @@ fn judge(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerKeys]) -> V
 }
 
 fn session_judge(assets: &RouteAssets, progress: u8, flag: u8, tape: &[PlayerKeys]) -> Verdict {
-    use crate::session::{FrameInput, SessionState, StepOutcome, MAP_ENTRY_FRAMES};
+    use crate::session::{FrameInput, MAP_ENTRY_FRAMES, SessionState, StepOutcome};
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let path = std::env::temp_dir().join(format!(
         "sml2_route_search_{}_{}.sav",

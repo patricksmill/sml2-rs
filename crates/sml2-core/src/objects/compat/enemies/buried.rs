@@ -119,11 +119,7 @@ mod tests {
                 assert_eq!(
                     sim.move_flags,
                     if right {
-                        if blocked {
-                            0x11
-                        } else {
-                            0x10
-                        }
+                        if blocked { 0x11 } else { 0x10 }
                     } else if blocked {
                         0x22
                     } else {

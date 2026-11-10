@@ -1,4 +1,4 @@
-use super::{screenshot, DesktopApp, Screen};
+use super::{DesktopApp, Screen, screenshot};
 use crate::{
     input::{Button, PadButton},
     menu::pressed,

@@ -1,5 +1,5 @@
 use super::*;
-use crate::level::{LevelLayout, LAYOUT_SIZE};
+use crate::level::{LAYOUT_SIZE, LevelLayout};
 use crate::level_timer::LevelTimer;
 use crate::objects::ObjectSim;
 

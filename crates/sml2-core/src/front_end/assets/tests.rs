@@ -77,13 +77,15 @@ fn every_blob_must_match_the_source_length() {
             "the {name} length error must name the blob"
         );
         parts[index].push(0);
-        assert!(FrontEndAssets::new(
-            parts[0].clone(),
-            parts[1].clone(),
-            parts[2].clone(),
-            parts[3].clone(),
-            parts[4].clone(),
-        )
-        .is_ok());
+        assert!(
+            FrontEndAssets::new(
+                parts[0].clone(),
+                parts[1].clone(),
+                parts[2].clone(),
+                parts[3].clone(),
+                parts[4].clone(),
+            )
+            .is_ok()
+        );
     }
 }

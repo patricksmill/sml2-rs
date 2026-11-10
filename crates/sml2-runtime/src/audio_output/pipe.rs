@@ -3,8 +3,8 @@
 //! Samples pass through a smooth soft-limiter to provide comfortable, rich
 //! loudness without digital clipping.
 
-use super::queue::SampleQueue;
 use super::LIVE_FRAME_SAMPLES;
+use super::queue::SampleQueue;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::sync::Arc;

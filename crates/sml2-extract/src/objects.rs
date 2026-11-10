@@ -4,7 +4,7 @@
 //! ($C000-$FFFF); addresses are documented with the `main.asm` references
 //! that use them (see `sml2-core::object` for the full chain).
 
-use sml2_core::object::{AnimProfile, Extents, MappingEntry, ObjectTables, OBJECTS_SCHEMA};
+use sml2_core::object::{AnimProfile, Extents, MappingEntry, OBJECTS_SCHEMA, ObjectTables};
 
 /// anim -> sprite id, 96 entries; `main.asm` `$8240`, CPU base `$4B61`
 /// (mode A: `sSpriteMapIndex == 0`).

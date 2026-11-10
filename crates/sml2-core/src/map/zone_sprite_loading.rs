@@ -164,11 +164,7 @@ impl MapSim {
 }
 
 fn marker(progress: u8) -> u8 {
-    if progress & 0x80 != 0 {
-        14
-    } else {
-        0xFF
-    }
+    if progress & 0x80 != 0 { 14 } else { 0xFF }
 }
 
 #[cfg(test)]

@@ -18,7 +18,7 @@ use crate::actor::FrameTick;
 use crate::credits_text::CreditsTextState;
 use crate::ending_scene::EndingScene;
 use crate::ending_sprites::{
-    append_burst, append_pair, append_secondary, append_walk, EndingSoundEffect,
+    EndingSoundEffect, append_burst, append_pair, append_secondary, append_walk,
 };
 use crate::object::ObjectTables;
 use crate::vram_transfer::VramTransfer;

@@ -1,5 +1,5 @@
 //! Compatibility boundary for anim 15: damage, screen targets and facing output.
-use super::{patrol_child, ObjectSim, Staging};
+use super::{ObjectSim, Staging, patrol_child};
 use crate::actor::{Actor, ScreenPosition};
 use std::cmp::Ordering;
 

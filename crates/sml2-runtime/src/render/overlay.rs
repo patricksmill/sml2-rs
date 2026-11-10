@@ -176,7 +176,10 @@ mod tests {
             i32::from(spr.scroll_pan),
             ctx.cam.room(),
         );
-        assert_eq!(wx - (i32::from(px) - origin.0), x - (i32::from(px) - native.0));
+        assert_eq!(
+            wx - (i32::from(px) - origin.0),
+            x - (i32::from(px) - native.0)
+        );
     }
 
     #[test]

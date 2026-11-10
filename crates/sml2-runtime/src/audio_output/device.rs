@@ -6,8 +6,8 @@
 //! forced to 44.1 kHz. The audio callback drains a bounded queue; on a hitch
 //! the oldest PCM is dropped so playback never runs behind the game.
 
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
@@ -69,7 +69,10 @@ impl AudioOutput {
                     .ok()?
             }
             other => {
-                eprintln!("note: unsupported {} sample format {other:?}", host.id().name());
+                eprintln!(
+                    "note: unsupported {} sample format {other:?}",
+                    host.id().name()
+                );
                 return None;
             }
         };

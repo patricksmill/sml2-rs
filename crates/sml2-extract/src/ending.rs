@@ -2,7 +2,7 @@
 use std::{error::Error, fs, path::Path};
 
 use sml2_core::ending_scene::{
-    EndingAssets, ENDING_TRANSFER_BACKGROUND, ENDING_TRANSFER_TILEMAP, ENDING_TRANSFER_TILES,
+    ENDING_TRANSFER_BACKGROUND, ENDING_TRANSFER_TILEMAP, ENDING_TRANSFER_TILES, EndingAssets,
 };
 
 // ld a,$11 / ld hl,$5800 / ld bc,$1800; then bank $1A, de=$548E.

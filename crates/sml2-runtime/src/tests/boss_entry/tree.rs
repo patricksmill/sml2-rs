@@ -2,7 +2,7 @@
 use super::*;
 use sml2_core::{
     camera::CameraSim,
-    objects::{ObjectSim, B_DEF, B_FSTATE},
+    objects::{B_DEF, B_FSTATE, ObjectSim},
 };
 
 #[test]

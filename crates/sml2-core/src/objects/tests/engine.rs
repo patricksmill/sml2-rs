@@ -1,6 +1,6 @@
 //! Object engine regression tests.
 use super::*;
-use crate::level::{SpawnRecord, LAYOUT_SIZE};
+use crate::level::{LAYOUT_SIZE, SpawnRecord};
 use crate::object::AnimProfile;
 
 fn prof(handler: u32) -> AnimProfile {
@@ -1394,7 +1394,11 @@ fn fire_hit_keeps_the_last_verdict_and_still_defeats() {
     let mut obj = ObjectSim::new(Vec::new(), 0);
     fire_slot(&mut obj, 0, 0x24, 0); // defeat
     fire_slot(&mut obj, 1, 0x20, 0); // die
-    assert_eq!(obj.fire_hit(0x4A, 0x4A, (0, 0)), FireHit::Die, "the last hit wins");
+    assert_eq!(
+        obj.fire_hit(0x4A, 0x4A, (0, 0)),
+        FireHit::Die,
+        "the last hit wins"
+    );
     assert_eq!(obj.slots[0].b[B_FLAGS], 0x02, "the earlier defeat stands");
 }
 
@@ -4456,10 +4460,7 @@ fn an_enlarged_view_never_excludes_boss_contacts() {
     obj.mario.scene_state = 0xF0;
     assert!(!obj.contact_excluded(0), "boss mode: screen bytes rule");
     obj.mario.scene_state = 0;
-    assert!(
-        obj.contact_excluded(0),
-        "level mode: out of Mario's reach"
-    );
+    assert!(obj.contact_excluded(0), "level mode: out of Mario's reach");
 }
 
 /// How the contact-box equivalence test stages its slot's screen bytes.
@@ -4630,11 +4631,23 @@ fn a_view_margin_does_not_alias_far_slots_into_proximity_triggers() {
     obj.mario_ref_x = 0x0100;
     obj.mario_ref_y = 0x0100;
     let spike = (0x0100 + 201, 0x00E0);
-    assert_eq!(obj.slot_mario_ref(spike), (0x0100, 0x0100), "native: engine point");
+    assert_eq!(
+        obj.slot_mario_ref(spike),
+        (0x0100, 0x0100),
+        "native: engine point"
+    );
 
     obj.view_margin = (112, 36);
-    assert_eq!(obj.slot_mario_ref(spike), (spike.0 - 0x7F, 0x0100), "pulled to 127 px, same side");
-    assert_eq!(obj.slot_mario_ref((0x0100 + 40, 0x0100)), (0x0100, 0x0100), "near: exact");
+    assert_eq!(
+        obj.slot_mario_ref(spike),
+        (spike.0 - 0x7F, 0x0100),
+        "pulled to 127 px, same side"
+    );
+    assert_eq!(
+        obj.slot_mario_ref((0x0100 + 40, 0x0100)),
+        (0x0100, 0x0100),
+        "near: exact"
+    );
 
     let mut st = Staging::default();
     set_x(&mut st.b, spike.0);
@@ -4651,7 +4664,10 @@ fn a_view_margin_does_not_alias_far_slots_into_proximity_triggers() {
 fn wide_reset_sim() -> ObjectSim {
     let mut obj = ObjectSim::new(Vec::new(), 0x0300);
     obj.configure(24);
-    obj.camera_position = crate::actor::Position { x: 0x0300, y: 0x0200 };
+    obj.camera_position = crate::actor::Position {
+        x: 0x0300,
+        y: 0x0200,
+    };
     obj
 }
 
@@ -4673,14 +4689,26 @@ fn a_view_margin_keeps_defeat_falls_until_they_leave_the_view() {
     };
     // Native top is world Y $200 - 88 + 16; 24 px above it the byte is $E8.
     let mut native = wide_reset_sim();
-    assert!(fall(&mut native, 0x0200 - 88 - 8, 0xE8), "native: wrapped byte removes");
+    assert!(
+        fall(&mut native, 0x0200 - 88 - 8, 0xE8),
+        "native: wrapped byte removes"
+    );
 
     let mut wide = wide_reset_sim();
     wide.view_margin = (88, 36);
     wide.view_bias_y = 18;
-    assert_eq!(wide.vertical_reset_bounds(0xA0), Some(0x0200 - 88 - 54..0x0200 - 88 + 0xA0 + 18));
-    assert!(!fall(&mut wide, 0x0200 - 88 - 8, 0xE8), "inside the raised view: keeps falling");
-    assert!(fall(&mut wide, 0x0200 - 88 + 0xA0 + 18, 0xB2), "past the view's bottom: removed");
+    assert_eq!(
+        wide.vertical_reset_bounds(0xA0),
+        Some(0x0200 - 88 - 54..0x0200 - 88 + 0xA0 + 18)
+    );
+    assert!(
+        !fall(&mut wide, 0x0200 - 88 - 8, 0xE8),
+        "inside the raised view: keeps falling"
+    );
+    assert!(
+        fall(&mut wide, 0x0200 - 88 + 0xA0 + 18, 0xB2),
+        "past the view's bottom: removed"
+    );
 }
 
 /// A Wario's Castle mine past the native right edge reads screen X >= `$B0`
@@ -4700,7 +4728,10 @@ fn a_view_margin_keeps_mines_until_they_leave_the_view() {
     let respawns = |margin: u16, handler: u32, x: u16, scr_x: u8| {
         let mut obj = ObjectSim::new(vec![record], 0x0300);
         obj.configure(0); // the synthetic tables fill sprite map A only
-        obj.camera_position = crate::actor::Position { x: 0x0300, y: 0x0200 };
+        obj.camera_position = crate::actor::Position {
+            x: 0x0300,
+            y: 0x0200,
+        };
         obj.view_margin = (margin, 0);
         obj.active = 1;
         let mut st = Staging::default();
@@ -4717,7 +4748,16 @@ fn a_view_margin_keeps_mines_until_they_leave_the_view() {
     };
     let ahead = 0x0300 + 100; // screen X 188
     assert!(respawns(0, 0x5ACE4, ahead, 188), "native: respawns");
-    assert!(!respawns(88, 0x5ACE4, ahead, 188), "wide: keeps sliding left");
-    assert!(!respawns(88, 0x5AD2D, ahead, 188), "wide: keeps sliding right");
-    assert!(respawns(88, 0x5AD2D, 0x0300 - 88 + 0xB8 + 88, 0x30), "past the view: respawns");
+    assert!(
+        !respawns(88, 0x5ACE4, ahead, 188),
+        "wide: keeps sliding left"
+    );
+    assert!(
+        !respawns(88, 0x5AD2D, ahead, 188),
+        "wide: keeps sliding right"
+    );
+    assert!(
+        respawns(88, 0x5AD2D, 0x0300 - 88 + 0xB8 + 88, 0x30),
+        "past the view: respawns"
+    );
 }

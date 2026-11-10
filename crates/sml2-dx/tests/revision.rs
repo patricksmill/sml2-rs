@@ -1,7 +1,7 @@
 //! Local-ROM acceptance. No copyrighted fixture is stored in the repository.
 use sml2_core::character::Character;
 use sml2_core::{object::MappingEntry, video::cgb::CgbPalettes};
-use sml2_dx::{extract, identify, Bundle, Presentation, REVISION};
+use sml2_dx::{Bundle, Presentation, REVISION, extract, identify};
 
 #[test]
 #[ignore = "requires SML2_DX_ROM pointing to the user-supplied audited ROM"]
@@ -28,11 +28,13 @@ fn audited_opening_tables_and_bundle_round_trip() {
     assert_eq!(palettes.objects()[0], [0x7777, 0x7fff, 0x107c, 0]);
     assert_eq!(palettes.objects()[6], [0x7777, 0x7fff, 0x0137, 0]);
     assert_eq!(level.hud_attributes[5], 0x89);
-    assert!(level
-        .hud_attributes
-        .iter()
-        .enumerate()
-        .all(|(i, &a)| a == if i == 5 { 0x89 } else { 0x8f }));
+    assert!(
+        level
+            .hud_attributes
+            .iter()
+            .enumerate()
+            .all(|(i, &a)| a == if i == 5 { 0x89 } else { 0x8f })
+    );
     assert_eq!(mario.mappings[0].len(), 11);
     assert_eq!(
         mario.mappings[0][0],

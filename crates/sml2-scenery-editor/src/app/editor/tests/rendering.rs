@@ -430,11 +430,13 @@ fn regional_palette_preview_updates_visible_tiles_and_resets() {
             click_palette_control(&mut app, &ctx, "Preview at view center");
             let output = frame(&mut app, &ctx, vec![]);
             assert_eq!(app.editor.atlas.as_ref().unwrap().texture.id(), texture);
-            assert!(!output
-                .textures_delta
-                .set
-                .iter()
-                .any(|(id, _)| *id == texture));
+            assert!(
+                !output
+                    .textures_delta
+                    .set
+                    .iter()
+                    .any(|(id, _)| *id == texture)
+            );
         }
     }
     std::fs::remove_dir_all(path).ok();

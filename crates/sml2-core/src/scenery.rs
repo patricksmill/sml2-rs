@@ -567,16 +567,18 @@ mod tests {
             )
             .unwrap();
         assert_eq!(overlay.get(7, 24), Some(4));
-        assert!(overlay
-            .set(
-                SceneryPaint {
-                    x: -1,
-                    y: 48,
-                    metatile: 200,
-                },
-                128,
-            )
-            .is_err());
+        assert!(
+            overlay
+                .set(
+                    SceneryPaint {
+                        x: -1,
+                        y: 48,
+                        metatile: 200,
+                    },
+                    128,
+                )
+                .is_err()
+        );
         assert_eq!(overlay.get(7, 24), Some(4));
         overlay.erase(7, 24);
         assert_eq!(overlay.get(7, 24), None);

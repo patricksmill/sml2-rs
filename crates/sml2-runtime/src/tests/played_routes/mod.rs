@@ -202,7 +202,7 @@ impl RouteAssets {
     /// transition) before this level's first frame. Each step ticks the
     /// session's divider once.
     fn map_entry_ticks(&self, node: u8, progress: u8) -> u64 {
-        use crate::session::{SessionAssets, StepOutcome, MAP_ENTRY_FRAMES};
+        use crate::session::{MAP_ENTRY_FRAMES, SessionAssets, StepOutcome};
         *self
             .entry_ticks
             .lock()

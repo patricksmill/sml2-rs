@@ -59,8 +59,8 @@ impl DesktopApp {
 mod tests {
     use super::*;
     use crate::app::{
-        tests::{app, frame},
         Screen,
+        tests::{app, frame},
     };
     use crate::settings::{Filter, Widescreen, Zoom};
 
@@ -126,15 +126,19 @@ mod tests {
             let resumed = frame(&mut app, &ctx, vec![]);
             assert_eq!(app.screen, Screen::Game);
             assert!(!app.menu_from_game);
-            assert!(resumed
-                .textures_delta
-                .set
-                .iter()
-                .any(|(id, _)| *id == app.texture.id()));
-            assert!(!resumed.viewport_output[&egui::ViewportId::ROOT]
-                .commands
-                .iter()
-                .any(|command| matches!(command, egui::ViewportCommand::Close)));
+            assert!(
+                resumed
+                    .textures_delta
+                    .set
+                    .iter()
+                    .any(|(id, _)| *id == app.texture.id())
+            );
+            assert!(
+                !resumed.viewport_output[&egui::ViewportId::ROOT]
+                    .commands
+                    .iter()
+                    .any(|command| matches!(command, egui::ViewportCommand::Close))
+            );
             let _ = std::fs::remove_dir_all(path);
         }
     }

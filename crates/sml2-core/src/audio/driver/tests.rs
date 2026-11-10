@@ -256,9 +256,11 @@ fn test_music_wave_pattern_is_kept_for_the_slot1_restore() {
     driver.update_sound(); // start + first tick: song 1's ch3 $9D
     let pattern = driver.wave_music.wave_pattern;
     assert_ne!(pattern, [0u8; 16], "song 1 uploads a wave pattern");
-    assert!(driver
-        .music_writes
-        .contains(&MusicWrite::Ch3WavePattern(pattern)));
+    assert!(
+        driver
+            .music_writes
+            .contains(&MusicWrite::Ch3WavePattern(pattern))
+    );
 
     // The pointer (and so the pattern) survives later frames.
     driver.update_sound();
@@ -376,27 +378,37 @@ fn pause_mode_stops_the_engine_and_starts_the_beep() {
     // `$13FE7`'s eight register writes.
     assert!(driver.pulse_writes.contains(&PulseWrite::Envelope(8)));
     assert!(driver.pulse_writes.contains(&PulseWrite::Ch2Envelope(8)));
-    assert!(driver
-        .pulse_writes
-        .contains(&PulseWrite::FrequencyControl(0x80)));
-    assert!(driver
-        .pulse_writes
-        .contains(&PulseWrite::Ch2FrequencyControl(0x80)));
+    assert!(
+        driver
+            .pulse_writes
+            .contains(&PulseWrite::FrequencyControl(0x80))
+    );
+    assert!(
+        driver
+            .pulse_writes
+            .contains(&PulseWrite::Ch2FrequencyControl(0x80))
+    );
     assert!(driver.pulse_writes.contains(&PulseWrite::Sweep(0)));
     assert!(driver.noise_writes.contains(&NoiseWrite::Envelope(8)));
     assert!(driver.noise_writes.contains(&NoiseWrite::Control(0x80)));
     assert!(driver.wave_writes.contains(&WaveWrite::Enable(0)));
     // `$5970`'s beep, on pulse 2, with its 5-frame budget.
-    assert!(driver
-        .pulse_writes
-        .contains(&PulseWrite::Ch2DutyLength(0x80)));
+    assert!(
+        driver
+            .pulse_writes
+            .contains(&PulseWrite::Ch2DutyLength(0x80))
+    );
     assert!(driver.pulse_writes.contains(&PulseWrite::Ch2Envelope(0xA1)));
-    assert!(driver
-        .pulse_writes
-        .contains(&PulseWrite::Ch2FrequencyLow(0xC1)));
-    assert!(driver
-        .pulse_writes
-        .contains(&PulseWrite::Ch2FrequencyControl(0xC7)));
+    assert!(
+        driver
+            .pulse_writes
+            .contains(&PulseWrite::Ch2FrequencyLow(0xC1))
+    );
+    assert!(
+        driver
+            .pulse_writes
+            .contains(&PulseWrite::Ch2FrequencyControl(0xC7))
+    );
     assert_eq!(driver.pause_beep_timer, 5);
     assert_eq!(driver.pause_beep_index, 0);
 

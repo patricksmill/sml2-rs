@@ -1,5 +1,5 @@
 //! Damage, slot conversion and child commands for boss anim 14.
-use super::{boss_stun::HitStunContext, patrol_boss, ObjectSim, Staging};
+use super::{ObjectSim, Staging, boss_stun::HitStunContext, patrol_boss};
 use crate::actor::{Actor, ContactKind};
 
 impl ObjectSim {

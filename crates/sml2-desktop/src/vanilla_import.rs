@@ -1,7 +1,7 @@
 use crate::settings::VanillaInstall;
 use sml2_extract::vanilla::{
-    extract, identify, publish_directory, sha256, IdentifyError, Manifest, PublishError,
-    IMPORTER_VERSION, MAX_READ, SCHEMA,
+    IMPORTER_VERSION, IdentifyError, MAX_READ, Manifest, PublishError, SCHEMA, extract, identify,
+    publish_directory, sha256,
 };
 use std::fs::File;
 use std::io::Read;

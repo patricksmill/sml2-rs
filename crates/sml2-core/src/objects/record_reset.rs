@@ -1,5 +1,5 @@
 //! Legacy staging adapter for the native spawn reset contract.
-use super::{record_origin::RecordResetError, ObjectSim, ObjectTables, Staging};
+use super::{ObjectSim, ObjectTables, Staging, record_origin::RecordResetError};
 use crate::actor::{Actor, SpriteReset};
 
 impl ObjectSim {

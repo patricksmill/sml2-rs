@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     actor::ScreenPosition,
     object::ObjectTables,
-    player::{append_cells, CellStyle},
+    player::{CellStyle, append_cells},
 };
 
 fn cell(bytes: [u8; 4]) -> Cell {

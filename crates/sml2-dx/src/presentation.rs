@@ -3,14 +3,14 @@
 //! "All levels".
 
 use crate::{
-    bundle::{Bundle, HEADER_LEN, LEVELS},
     ImportError,
+    bundle::{Bundle, HEADER_LEN, LEVELS},
 };
 use sml2_core::{
     character::Character,
-    level::{MetatileTable, LAYOUT_SIZE},
+    level::{LAYOUT_SIZE, MetatileTable},
     map::{BellRoomTiles, OverworldManifest, OverworldTilemaps, OverworldTiles, RoomCommonTiles},
-    object::{sprite_map_index, MappingEntry},
+    object::{MappingEntry, sprite_map_index},
     room_sprites::RoomSpriteTable,
     video::cgb::CgbPalettes,
 };

@@ -18,7 +18,7 @@
 //! `$0264` samples input before `$19`, then `$1A` samples again after loading.
 //! Loading work never polls input; it must not remember transient busy input.
 
-use super::{pack_joypad, Session, SessionState};
+use super::{Session, SessionState, pack_joypad};
 use sml2_core::player_sim::PlayerKeys;
 
 const GRAPHICS_COPY_CYCLES: u32 = 0x1800 * 52 + 5 * (16 - 4);
@@ -124,10 +124,12 @@ mod tests {
         for _ in 1..5 {
             assert!(matches!(session.state, SessionState::FileSelectLoading(_)));
             assert_eq!(session.slots.slot(0), Some(&corrupt));
-            assert!(session
-                .render_frame((160, 144))
-                .iter()
-                .all(|&pixel| pixel == 255));
+            assert!(
+                session
+                    .render_frame((160, 144))
+                    .iter()
+                    .all(|&pixel| pixel == 255)
+            );
             session.advance(FrameInput {
                 keys: PlayerKeys::default(),
                 div: 0,

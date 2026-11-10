@@ -4,8 +4,8 @@
 //! defeat, removal and the sprite re-derive stay engine work.
 use std::cmp::Ordering;
 
-use super::falling_dropper::step_fall_speed;
 use super::SPIN_WOBBLE;
+use super::falling_dropper::step_fall_speed;
 use crate::actor::{Actor, ContactKind, FrameTick};
 
 /// A live kicked shell; the knock-out scan skips other shells by this kind.

@@ -150,11 +150,7 @@ fn bcd_add_50(a: u8) -> (u8, bool) {
 /// The engine's `add b` / `sub 16` position trick: bytes $F0..$FF mean −16..−1.
 #[inline]
 pub fn sdelta(b: u8) -> i16 {
-    if b < 0xF0 {
-        b as i16
-    } else {
-        b as i16 - 0x100
-    }
+    if b < 0xF0 { b as i16 } else { b as i16 - 0x100 }
 }
 
 /// What one `$FF9B = $14` hand-off run did — see [`PlayerSim::map_handoff`].
@@ -557,12 +553,22 @@ impl Default for PlayerSim {
 }
 
 impl PlayerSim {
-    pub fn set_dx_movement(&mut self, character: crate::character::Character, curves: Option<std::sync::Arc<crate::character::MovementCurves>>) {
-        self.character = if curves.is_some() { character } else { crate::character::Character::Mario };
+    pub fn set_dx_movement(
+        &mut self,
+        character: crate::character::Character,
+        curves: Option<std::sync::Arc<crate::character::MovementCurves>>,
+    ) {
+        self.character = if curves.is_some() {
+            character
+        } else {
+            crate::character::Character::Mario
+        };
         self.movement = curves;
     }
 
-    pub fn dx_enabled(&self) -> bool { self.movement.is_some() }
+    pub fn dx_enabled(&self) -> bool {
+        self.movement.is_some()
+    }
 
     pub fn new() -> Self {
         // `$0F2A` level init: hvel = $80, vvel = 24, facing right.
@@ -722,11 +728,7 @@ impl PlayerSim {
         let py = self.y.wrapping_add(dy);
         self.probe_point = (px, py);
         let t = self.tile(layout, px, py);
-        if t == 0x7E || t < 0x38 {
-            Some(t)
-        } else {
-            None
-        }
+        if t == 0x7E || t < 0x38 { Some(t) } else { None }
     }
 
     /// `$1E7C` (left, x+11) / `$1E8D` (right, x+20) wall probes at y+20/+32/+40.
@@ -1929,10 +1931,20 @@ impl PlayerSim {
             } else {
                 &SPEED_V
             };
-            let b = self.movement.as_ref().and_then(|curves| {
-                let dx_table = if self.moon != 0 { &curves.moon } else if self.swim { &curves.swim } else { &curves.normal };
-                dx_table.get(self.vvel as usize).copied()
-            }).unwrap_or(table[self.vvel as usize]);
+            let b = self
+                .movement
+                .as_ref()
+                .and_then(|curves| {
+                    let dx_table = if self.moon != 0 {
+                        &curves.moon
+                    } else if self.swim {
+                        &curves.swim
+                    } else {
+                        &curves.normal
+                    };
+                    dx_table.get(self.vvel as usize).copied()
+                })
+                .unwrap_or(table[self.vvel as usize]);
             self.y = self.y.wrapping_add(sdelta(b) as u16);
             if self.vvel < 0x19 {
                 if self.on_ground {
@@ -2006,7 +2018,12 @@ impl PlayerSim {
             }
         }
         // DX home `$16E9/$16F2`: Luigi uses 3 at this same phase, including held input.
-        let friction = if self.dx_enabled() && self.character == crate::character::Character::Luigi { 3 } else { 4 };
+        let friction = if self.dx_enabled() && self.character == crate::character::Character::Luigi
+        {
+            3
+        } else {
+            4
+        };
         // $16CC friction
         if self.swim || self.moon & 2 != 0 || self.on_ground {
             let hv = self.hvel & 0xFC;
@@ -2027,7 +2044,9 @@ impl PlayerSim {
             if !self.goal_bell && (self.swim || (self.moon & 2 != 0 && self.on_ground)) {
                 &SPEED_H_WATER
             } else {
-                self.movement.as_ref().map_or(&SPEED_H[..], |curves| &curves.horizontal[..])
+                self.movement
+                    .as_ref()
+                    .map_or(&SPEED_H[..], |curves| &curves.horizontal[..])
             };
         let b = htable[(self.hvel as usize + (self.phase & 7) as usize) & 0xFF];
         // $3404-$3415: XSub = XSub_old + speed, and x gets the WHOLE new XSub
@@ -3096,24 +3115,12 @@ impl PlayerSim {
                 self.moon_jump_pose_timer -= 1;
             }
             if self.dir_right {
-                if timer_active {
-                    19
-                } else {
-                    18
-                }
+                if timer_active { 19 } else { 18 }
             } else {
-                if timer_active {
-                    21
-                } else {
-                    20
-                }
+                if timer_active { 21 } else { 20 }
             }
         } else if self.ducking {
-            if self.dir_right {
-                14
-            } else {
-                15
-            }
+            if self.dir_right { 14 } else { 15 }
         } else if self.on_ground || self.on_ground_obj {
             if self.dir_right {
                 if self.hvel < 0x80 {
@@ -3141,11 +3148,7 @@ impl PlayerSim {
                 5 + cell
             }
         } else if self.in_air {
-            if self.dir_right {
-                8
-            } else {
-                9
-            }
+            if self.dir_right { 8 } else { 9 }
         } else if self.dir_right {
             10
         } else {

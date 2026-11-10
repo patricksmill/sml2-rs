@@ -1,5 +1,5 @@
 use super::*;
-use crate::level::{LevelLayout, LAYOUT_SIZE};
+use crate::level::{LAYOUT_SIZE, LevelLayout};
 
 /// Every cell `$60` (the level map's own empty air) — a probe only sees
 /// what a test sets explicitly.

@@ -252,8 +252,11 @@ fn handler_0x93a7_return_sweeps_delay_blink_order_phase_wrap_and_turns() {
                                 expected_effect.sound2 = Some(2);
                             }
                         }
-                        assert_eq!(actor.to_raw_slot(), expected,
-                            "state={state} phase={phase} timer={timer} alt={alternate} frame={frame}");
+                        assert_eq!(
+                            actor.to_raw_slot(),
+                            expected,
+                            "state={state} phase={phase} timer={timer} alt={alternate} frame={frame}"
+                        );
                         assert_eq!(effect, expected_effect);
                     }
                 }

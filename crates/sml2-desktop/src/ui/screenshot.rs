@@ -75,12 +75,14 @@ mod tests {
 
     #[test]
     fn verify_rejects_incomplete_native_frames() {
-        assert!(verify(
-            &image(85),
-            &ColorImage::new([1, 1], vec![Color32::BLACK]),
-            [0, 0, 160, 144]
-        )
-        .is_err());
+        assert!(
+            verify(
+                &image(85),
+                &ColorImage::new([1, 1], vec![Color32::BLACK]),
+                [0, 0, 160, 144]
+            )
+            .is_err()
+        );
     }
 
     #[test]

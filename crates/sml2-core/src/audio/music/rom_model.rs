@@ -7,7 +7,7 @@
 //! byte-for-byte — section pointer, stream pointer, note timer/duration,
 //! frequency cache and rest flag — not the APU writes.
 
-use super::tables::{bank4_offset, SONG_POINTERS};
+use super::tables::{SONG_POINTERS, bank4_offset};
 
 const PITCH_TABLE: u16 = 0x5AF4;
 

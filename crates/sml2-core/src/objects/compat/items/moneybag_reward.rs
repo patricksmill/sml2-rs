@@ -1,5 +1,5 @@
 //! Legacy world boundary for native money bag reward production.
-use super::{handler_0x5b36d::DynamicSpawnRequest, reward_spawn, ObjectSim};
+use super::{ObjectSim, handler_0x5b36d::DynamicSpawnRequest, reward_spawn};
 use crate::actor::{Actor, SpriteFlipFlags};
 
 impl ObjectSim {

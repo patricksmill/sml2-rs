@@ -1,5 +1,5 @@
 //! World and slot conversion boundary for boss anim 19.
-use super::{boss_stun::HitStunContext, circuit_boss, ObjectSim, Staging};
+use super::{ObjectSim, Staging, boss_stun::HitStunContext, circuit_boss};
 use crate::actor::{Actor, ContactKind};
 
 impl ObjectSim {

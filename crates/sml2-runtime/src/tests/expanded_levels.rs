@@ -1,7 +1,7 @@
 //! Expanded-level recipes applied to the extracted levels.
 
 use crate::session::{LevelContext, SessionAssets};
-use sml2_core::level_recipe::{layout_fingerprint, LevelRecipe, RegionMove, RECIPE_SCHEMA};
+use sml2_core::level_recipe::{LevelRecipe, RECIPE_SCHEMA, RegionMove, layout_fingerprint};
 use sml2_core::world::World;
 
 fn recipe(level_id: u8, world: [u16; 2]) -> LevelRecipe {
@@ -79,9 +79,11 @@ fn a_rebuilt_tree_zone_2_loads_into_every_sim_at_its_size() {
         .iter()
         .filter(|s| (0x500..0x800).contains(&s.x) && (0x100..0x200).contains(&s.y));
     for s in moved {
-        assert!(records
-            .iter()
-            .any(|o| (o.x, o.y, o.anim_index) == (s.x, s.y + 0x200, s.anim_index)));
+        assert!(
+            records
+                .iter()
+                .any(|o| (o.x, o.y, o.anim_index) == (s.x, s.y + 0x200, s.anim_index))
+        );
     }
 
     let ctx = LevelContext::from_content(
@@ -108,13 +110,15 @@ fn a_rebuilt_tree_zone_2_loads_into_every_sim_at_its_size() {
 
     r.sources = vec!["0".repeat(16)];
     assert!(level.expanded(&r).err().unwrap().contains("written for"));
-    assert!(assets
-        .level(3)
-        .unwrap()
-        .expanded(&r)
-        .err()
-        .unwrap()
-        .contains("applied to level 03"));
+    assert!(
+        assets
+            .level(3)
+            .unwrap()
+            .expanded(&r)
+            .err()
+            .unwrap()
+            .contains("applied to level 03")
+    );
 }
 
 /// A session whose assets carry, in place of any bundled one, a 16x4 rebuild
@@ -467,11 +471,9 @@ fn tree_zone_3_scrolls_freely_through_its_pipes() {
             assert_eq!(*transition, 0);
             assert_eq!(room.bounds(), [0, 0, 14 * 256, 0x100 + 0xC0 + 72]);
         }
-        let steps = open.windows(2).map(|w| {
-            (w[1].3 .0 - w[0].3 .0)
-                .abs()
-                .max((w[1].3 .1 - w[0].3 .1).abs())
-        });
+        let steps = open
+            .windows(2)
+            .map(|w| (w[1].3.0 - w[0].3.0).abs().max((w[1].3.1 - w[0].3.1).abs()));
         assert!(
             steps.max().unwrap() <= 4,
             "the view follows without jumping"

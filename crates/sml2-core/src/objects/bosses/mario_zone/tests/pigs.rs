@@ -2,7 +2,7 @@
 //! Constants are read from ROM bytes: `$B402` tests `$FFF0 & $0F`; Pig 2
 //! (`$9D4F`) and the controller (`$9E07`) count `$FFEC` up to `$30`; only Pig 1
 //! (`$9C84`) calls the fade test `$B14E`.
-use super::pigs::{update_controller, update_part, Context, Part};
+use super::pigs::{Context, Part, update_controller, update_part};
 use crate::actor::{Actor, ContactKind, FrameTick};
 use crate::objects::boss_stun::HitStunContext;
 

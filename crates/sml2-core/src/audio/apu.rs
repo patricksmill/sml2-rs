@@ -401,11 +401,7 @@ impl NoiseChannel {
         if !self.enabled || self.volume == 0 {
             return 0;
         }
-        if (self.lfsr & 1) == 0 {
-            self.volume
-        } else {
-            0
-        }
+        if (self.lfsr & 1) == 0 { self.volume } else { 0 }
     }
 
     pub fn clock(&mut self) -> u8 {
@@ -870,8 +866,7 @@ impl Apu {
 
         // Full scale is all four channels at level 15 with NR50 at 7 and unity
         // weight. The weight unit is a power of two, so unity output is exact.
-        let scale =
-            1.0 / (blip::UNIT as f64 * (4 * 15 * 8) as f64 * CHANNEL_WEIGHT_UNIT as f64);
+        let scale = 1.0 / (blip::UNIT as f64 * (4 * 15 * 8) as f64 * CHANNEL_WEIGHT_UNIT as f64);
         // AC-coupling capacitor: `out = in - cap; cap = in - out * charge`.
         // With every DAC off the amplifier is disconnected: the output is 0
         // and the capacitor holds its charge.

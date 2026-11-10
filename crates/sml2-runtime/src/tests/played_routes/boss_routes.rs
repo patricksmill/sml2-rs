@@ -140,7 +140,7 @@ fn level24_macro_zone_boss_header_spawn_to_map_through_live_play() {
 #[test]
 #[ignore = "authoring tool: run explicitly to trace a session replay"]
 fn trace_session_route() {
-    use crate::session::{SessionAssets, SessionState, StepOutcome, MAP_ENTRY_FRAMES};
+    use crate::session::{MAP_ENTRY_FRAMES, SessionAssets, SessionState, StepOutcome};
     let level: u8 = std::env::var("ROUTE_LEVEL").unwrap().parse().unwrap();
     let every: usize = std::env::var("ROUTE_EVERY").map_or(50, |v| v.parse().unwrap());
     let tape = spans(&std::env::var("ROUTE_TAPE").unwrap());

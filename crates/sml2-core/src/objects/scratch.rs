@@ -71,7 +71,7 @@ impl ObjectSim {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::objects::{ObjectTables, SpawnRecord, B_DEF, SLOT_COUNT};
+    use crate::objects::{B_DEF, ObjectTables, SLOT_COUNT, SpawnRecord};
 
     #[test]
     fn tree_boss_alternate_phase_clears_on_arena_entry_and_level_reset() {

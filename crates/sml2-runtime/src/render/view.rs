@@ -256,8 +256,14 @@ mod tests {
         };
         // At the $B0 lock the native view ends on the room's edge; the wide
         // one stops there too instead of showing past it.
-        assert_eq!(level_origin(view, (0x7B0, 0x1C0), 0, room), (0x800 - 384, 0x208 - 216));
-        assert_eq!(level_origin(NATIVE, (0x7B0, 0x1C0), 0, room), (0x7B0 - 80, 0x1C0 - 72));
+        assert_eq!(
+            level_origin(view, (0x7B0, 0x1C0), 0, room),
+            (0x800 - 384, 0x208 - 216)
+        );
+        assert_eq!(
+            level_origin(NATIVE, (0x7B0, 0x1C0), 0, room),
+            (0x7B0 - 80, 0x1C0 - 72)
+        );
         // Mid-room the view follows the camera.
         let raw = raw_level_origin(view, (0x400, 0x180), 0);
         assert_eq!(level_origin(view, (0x400, 0x180), 0, room), raw);

@@ -1,9 +1,11 @@
 //! DX presentation of any level. Rendering never advances native gameplay.
-use super::{draw_corner_hud, hud_row_status, hud_shade, window_coord, window_origin, HudDigits, HudStyle};
+use super::{
+    HudDigits, HudStyle, draw_corner_hud, hud_row_status, hud_shade, window_coord, window_origin,
+};
 use crate::session::{LevelContext, Session, SessionState};
 use sml2_core::actor::ScreenPosition;
 use sml2_core::front_end::screen::{
-    castle_backdrop, file_select_backdrop, title_backdrop, Backdrop,
+    Backdrop, castle_backdrop, file_select_backdrop, title_backdrop,
 };
 use sml2_core::{
     character::Character,
@@ -106,7 +108,11 @@ impl Session {
         smooth: super::motion::Smooth,
     ) -> Result<(Vec<[u8; 3]>, usize), String> {
         // Attract demos always show Mario, whatever the file select chose.
-        let character = if matches!(self.state, SessionState::Demo(_)) { Character::Mario } else { character };
+        let character = if matches!(self.state, SessionState::Demo(_)) {
+            Character::Mario
+        } else {
+            character
+        };
         let (mut frame, scale) = self.render_dx_frame_smooth_base(dx, character, view, smooth)?;
         self.decorate_scene_dx(&mut frame, view, scale, dx, character)?;
         Ok((frame, scale))
@@ -145,7 +151,7 @@ impl Session {
                     .map(|p| (p, 1));
             }
             SessionState::Overworld(map_sim) => {
-                return Ok((self.render_dx_map(map_sim, dx, character, view, false)?, 1))
+                return Ok((self.render_dx_map(map_sim, dx, character, view, false)?, 1));
             }
             _ => {}
         }
@@ -236,7 +242,8 @@ impl Session {
         if let SessionState::Castle(seq) = &self.state {
             if seq.state == sml2_core::castle_sequence::STATE_REVEAL_B && seq.menu == 3 {
                 bg_palettes = crate::session::dx_effects::castle_entry(&bg_palettes, seq.fade_low);
-                obj_palettes = crate::session::dx_effects::castle_entry(&obj_palettes, seq.fade_low);
+                obj_palettes =
+                    crate::session::dx_effects::castle_entry(&obj_palettes, seq.fade_low);
             } else if seq.state == sml2_core::castle_sequence::STATE_MENU && seq.menu == 1 {
                 crate::session::dx_effects::castle_coin(&mut obj_palettes, self.ff97());
             }
@@ -381,8 +388,10 @@ impl Session {
             obj_palettes = crate::session::dx_effects::map_exit(&obj_palettes, transition.frame, 9);
         } else if let Some(transition) = &self.map_screen_transition {
             if transition.entering && transition.shows_source() {
-                bg_palettes = crate::session::dx_effects::map_exit(&bg_palettes, transition.frame, 9);
-                obj_palettes = crate::session::dx_effects::map_exit(&obj_palettes, transition.frame, 9);
+                bg_palettes =
+                    crate::session::dx_effects::map_exit(&bg_palettes, transition.frame, 9);
+                obj_palettes =
+                    crate::session::dx_effects::map_exit(&obj_palettes, transition.frame, 9);
             } else if !transition.entering {
                 let waits = transition.frame.saturating_sub(80);
                 bg_palettes = crate::session::dx_effects::map_exit(&bg_palettes, waits, 5);
@@ -396,8 +405,8 @@ impl Session {
             bg_palettes = crate::session::dx_effects::white(bg_palettes.len());
             obj_palettes = crate::session::dx_effects::white(obj_palettes.len());
         }
-        let palettes = CgbPalettes::from_bytes(&bg_palettes, &obj_palettes)
-            .map_err(|e| e.to_string())?;
+        let palettes =
+            CgbPalettes::from_bytes(&bg_palettes, &obj_palettes).map_err(|e| e.to_string())?;
         let space_path =
             map_sim.level_progress[sml2_core::map::progress_offset::SPACE_PATH_0] & 1 != 0;
         let attributes = match (&colors.alternate_attributes, space_path) {
@@ -676,7 +685,7 @@ fn screen(
     backdrop: Backdrop,
     scroll_x: i32,
 ) -> Result<Vec<[u8; 3]>, String> {
-    use super::view::{enlarged, margin, NATIVE};
+    use super::view::{NATIVE, enlarged, margin};
     let (view, at) = if enlarged(view) {
         (view, margin(view))
     } else {
@@ -970,7 +979,8 @@ fn render(
     let pan = ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
     let camera = (ctx.cam.x, ctx.cam.y);
     let room = ctx.cam.room();
-    let viewport = super::view::LevelViewport::new(view, camera, pan, room, offsets.scale, offsets.bg);
+    let viewport =
+        super::view::LevelViewport::new(view, camera, pan, room, offsets.scale, offsets.bg);
     let lift = if background_only { 0 } else { hud_style.lift() };
     let (sx, sy) = (viewport.origin.0, viewport.origin.1 - lift);
     let raw_origin = super::view::raw_level_origin(view, camera, pan);
@@ -1031,13 +1041,19 @@ fn render(
         }
     }
     let pan = ctx.spr.as_ref().map_or(0, |s| s.scroll_pan as i32);
-    let scenery_window =
-        super::margin::SceneryWindow::new(view, (ctx.cam.x, ctx.cam.y), pan, room, border + lift, &ctx.scenery)
-            .with_layout_writes(&ctx.sim.layout_writes);
+    let scenery_window = super::margin::SceneryWindow::new(
+        view,
+        (ctx.cam.x, ctx.cam.y),
+        pan,
+        room,
+        border + lift,
+        &ctx.scenery,
+    )
+    .with_layout_writes(&ctx.sim.layout_writes);
     // Arena tiles replace the level's metatile table; its scenery references
     // must stop here too, just as they do in the native renderer.
-    let past_level = !ctx.arena_loaded
-        && ctx.spr.as_ref().and_then(|s| s.pipe_background).is_none();
+    let past_level =
+        !ctx.arena_loaded && ctx.spr.as_ref().and_then(|s| s.pipe_background).is_none();
     for py in -border..vh as i32 + border {
         if !past_level {
             break;
@@ -1135,11 +1151,12 @@ fn render(
                 let bytes: &[u8; 16] = ctx.bg_live[off..off + 16]
                     .try_into()
                     .map_err(|_| format!("HUD tile {tile:#04X} out of range"))?;
-                let color =
-                    hud_shade(bgp, video::tile_colors(bytes)[usize::from(y) * 8 + usize::from(x)]);
+                let color = hud_shade(
+                    bgp,
+                    video::tile_colors(bytes)[usize::from(y) * 8 + usize::from(x)],
+                );
                 let attr = CgbAttributes::from_byte(level.hud_attributes[col]);
-                let index =
-                    IndexedPixel::new(color, attr.palette()).map_err(|e| e.to_string())?;
+                let index = IndexedPixel::new(color, attr.palette()).map_err(|e| e.to_string())?;
                 Ok((
                     color,
                     BackgroundPixel {
@@ -1154,7 +1171,11 @@ fn render(
             },
         )?;
     }
-    let classic_rows = if background_only || hud_style != HudStyle::Classic { 0 } else { 8 };
+    let classic_rows = if background_only || hud_style != HudStyle::Classic {
+        0
+    } else {
+        8
+    };
     for dy in 0..classic_rows {
         let py = ctx.hud_y as i32 + vh as i32 - 144 + dy;
         if !(0..vh as i32).contains(&py) {

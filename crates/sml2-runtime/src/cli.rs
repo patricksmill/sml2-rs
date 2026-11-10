@@ -5,11 +5,11 @@ use crate::game::{apply_level_entry, seed_level_timer, seed_unique_level_map_nod
 use crate::image_output::write_png_scaled;
 use crate::play::run_play;
 use crate::play_tape::PlayTape;
-use crate::render::{apply_tile_anim, hud_row, render_view, SpriteCtx, SpriteInst};
+use crate::render::{SpriteCtx, SpriteInst, apply_tile_anim, hud_row, render_view};
 use crate::replay::run_replay;
-use crate::viewer::{run_window, Viewer};
-use crate::{session, SCREEN_H, SCREEN_W};
-use sml2_core::level::{HudStrip, LevelLayout, LevelManifest, LAYOUT_HEIGHT, LAYOUT_WIDTH};
+use crate::viewer::{Viewer, run_window};
+use crate::{SCREEN_H, SCREEN_W, session};
+use sml2_core::level::{HudStrip, LAYOUT_HEIGHT, LAYOUT_WIDTH, LevelLayout, LevelManifest};
 use sml2_core::object::ObjectTables;
 use sml2_core::player_sim::PlayerSim;
 use sml2_core::video;
@@ -278,7 +278,7 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
                     "title" => crate::session::Boot::Title,
                     "overworld" => crate::session::Boot::Overworld,
                     other => {
-                        return Err(format!("--boot must be title or overworld, got {other}").into())
+                        return Err(format!("--boot must be title or overworld, got {other}").into());
                     }
                 };
             }

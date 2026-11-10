@@ -1,13 +1,13 @@
 //! A still title scene and floating actions over its grass. The preview owns no save
 //! or audio output and never advances the title's attract-mode countdown.
-use super::{colorized, filter_preview::FilterPreview, DesktopApp, Screen};
+use super::{DesktopApp, Screen, colorized, filter_preview::FilterPreview};
 use crate::settings::{Filter, Zoom};
 use eframe::egui::{
     self, Color32, ColorImage, Context, Rect, TextureHandle, TextureOptions, Ui, ViewportCommand,
 };
 use sml2_runtime::{
-    content::{ExtractedContent, SessionAssets},
     Session,
+    content::{ExtractedContent, SessionAssets},
 };
 
 #[derive(PartialEq, Eq)]

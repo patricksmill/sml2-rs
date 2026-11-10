@@ -5,9 +5,9 @@
 //! `walkers` adapter.
 use std::cmp::Ordering;
 
+use super::HOVER_SPEED;
 use super::falling_dropper::step_fall_speed;
 use super::walker::WalkerWorld;
-use super::HOVER_SPEED;
 use crate::actor::{Actor, ContactKind, FlashFlags, FrameTick};
 
 /// The hover rises along this curve, then falls.

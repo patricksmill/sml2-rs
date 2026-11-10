@@ -1,4 +1,4 @@
-use super::{update_child, ChildContext, ChildEffects, ChildError, RespawnEdge};
+use super::{ChildContext, ChildEffects, ChildError, RespawnEdge, update_child};
 use crate::actor::{Actor, ContactKind, Facing, FlashFlags, FrameTick, MotionProfileError};
 
 fn context(frame: u64) -> ChildContext {

@@ -8,7 +8,7 @@
 //! zero raw hex offsets or register plumbing.
 
 use crate::actor::{
-    animate_sprite_blink, ContactKind, FlashFlags, FrameTick, Position, SpriteFlipFlags,
+    ContactKind, FlashFlags, FrameTick, Position, SpriteFlipFlags, animate_sprite_blink,
 };
 use std::cmp::Ordering;
 

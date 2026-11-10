@@ -147,14 +147,14 @@ impl ObjectSim {
                 self.boss_render(&st, tables); // $3A14 -> bank 25 $66000
                 st.b[B_FLAGS] = 0; // $FFE7 = 0
                 self.refresh_hitbox(&mut st, tables, true); // $9048
-                                                            // NO `$C090` screen staging here: in the boss path
-                                                            // `B_SCRY`/`B_SCRX` are the object's *screen* position, written
-                                                            // by the def image itself (def 0's `$AD05` image carries
-                                                            // $7C/$58 = `B_SCRY`/`B_SCRX`) and then moved by the handlers'
-                                                            // `$B264`/`$B26A`/`$B270`/`$B276`; `$66000` consumes them as-is.
-                                                            // Deriving them from world coords here would clobber every boss
-                                                            // that moved. `sSpriteFlipFlags` is written *inside* the render
-                                                            // pass (`$6087`), which is also the ROM's order.
+                // NO `$C090` screen staging here: in the boss path
+                // `B_SCRY`/`B_SCRX` are the object's *screen* position, written
+                // by the def image itself (def 0's `$AD05` image carries
+                // $7C/$58 = `B_SCRY`/`B_SCRX`) and then moved by the handlers'
+                // `$B264`/`$B26A`/`$B270`/`$B276`; `$66000` consumes them as-is.
+                // Deriving them from world coords here would clobber every boss
+                // that moved. `sSpriteFlipFlags` is written *inside* the render
+                // pass (`$6087`), which is also the ROM's order.
                 self.slots[i].b = st.b; // $81BD
             }
             remaining = remaining.wrapping_sub(1);

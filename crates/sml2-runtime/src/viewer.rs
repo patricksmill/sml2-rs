@@ -1,7 +1,7 @@
 //! Window host for inspecting a level without simulation.
 
 use crate::present::letterbox_gray;
-use crate::render::{apply_tile_anim, render_view, SpriteCtx};
+use crate::render::{SpriteCtx, apply_tile_anim, render_view};
 use sml2_core::level::{LevelLayout, LevelManifest};
 
 /// Everything the window viewer needs per frame.

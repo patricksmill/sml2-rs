@@ -1,11 +1,11 @@
 use super::trajectory_child::{
-    update_trajectory_child, TrajectoryChildContext, TrajectoryChildEffects, HORIZONTAL_PROFILE,
-    VERTICAL_PROFILE,
+    HORIZONTAL_PROFILE, TrajectoryChildContext, TrajectoryChildEffects, VERTICAL_PROFILE,
+    update_trajectory_child,
 };
 use crate::actor::{Actor, ContactKind, FrameTick};
 use crate::level::LevelLayout;
 use crate::objects::{
-    ObjectSim, ObjectTables, Staging, B_DEF, B_FLIP, B_FSTATE, B_PHASE, B_SCRX, B_SCRY, B_SPRITE,
+    B_DEF, B_FLIP, B_FSTATE, B_PHASE, B_SCRX, B_SCRY, B_SPRITE, ObjectSim, ObjectTables, Staging,
 };
 
 fn blank_layout() -> LevelLayout {

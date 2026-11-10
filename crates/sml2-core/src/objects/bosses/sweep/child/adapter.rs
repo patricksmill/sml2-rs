@@ -1,5 +1,5 @@
 //! Slot conversion and sound effect boundary for boss anim 17.
-use super::{sweep_child, ObjectSim, Staging};
+use super::{ObjectSim, Staging, sweep_child};
 use crate::actor::Actor;
 
 impl ObjectSim {

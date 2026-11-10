@@ -1,4 +1,4 @@
-use crate::level::{LevelLayout, LAYOUT_SIZE};
+use crate::level::{LAYOUT_SIZE, LevelLayout};
 use crate::objects::*;
 
 fn tables() -> ObjectTables {

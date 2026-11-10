@@ -2,11 +2,11 @@
 
 use crate::content::{load_arena_layout, load_map_nodes, load_scene_scripts, load_tilesets};
 use crate::divider_clock::VirtualDividerClock;
-use crate::game::level_frame::{begin_live_level_frame, step_live_level_frame, LiveLevelFrame};
-use crate::game::{note_handoff_screen, BellArm, TimedFloatUse};
+use crate::game::level_frame::{LiveLevelFrame, begin_live_level_frame, step_live_level_frame};
+use crate::game::{BellArm, TimedFloatUse, note_handoff_screen};
 use crate::play_tape::PlayTape;
 use crate::present::letterbox_gray;
-use crate::render::{hud_row_status, render_view, HudDigits, SpriteCtx};
+use crate::render::{HudDigits, SpriteCtx, hud_row_status, render_view};
 use sml2_core::ending_entry::{EndingEntry, EndingInput};
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest};
 use sml2_core::player_sim::{PlayerKeys, PlayerSim};

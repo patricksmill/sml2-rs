@@ -1,7 +1,7 @@
 use crate::divider::Divider;
 use crate::objects::{
-    LevelLayout, ObjectSim, ObjectTables, Staging, B_DEF, B_FLASH, B_FSTATE, B_PHASE, B_SCRX,
-    B_SCRY, B_SPRITE, B_T24, B_T25, B_T28, B_TYPE,
+    B_DEF, B_FLASH, B_FSTATE, B_PHASE, B_SCRX, B_SCRY, B_SPRITE, B_T24, B_T25, B_T28, B_TYPE,
+    LevelLayout, ObjectSim, ObjectTables, Staging,
 };
 
 fn tables() -> ObjectTables {

@@ -1,7 +1,7 @@
 //! Compatibility boundary between legacy object staging and native trajectory child actor.
 
 use super::trajectory_child::{
-    update_trajectory_child, TrajectoryChildContext, TrajectoryChildEffects,
+    TrajectoryChildContext, TrajectoryChildEffects, update_trajectory_child,
 };
 use crate::actor::Actor;
 use crate::objects::{ObjectSim, Staging};

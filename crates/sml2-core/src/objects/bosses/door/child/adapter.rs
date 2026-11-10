@@ -1,5 +1,5 @@
 //! Staging and shared boss effects for anim 9.
-use super::{door_child, ObjectSim, Staging};
+use super::{ObjectSim, Staging, door_child};
 use crate::actor::Actor;
 
 impl ObjectSim {

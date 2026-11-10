@@ -1,13 +1,13 @@
 //! Live level state and its ordered simulation tick.
 
 use super::{
-    apply_level_entry, note_handoff_screen, player_behind_bg, seed_level_timer, BellArm, CameraSim,
-    EndingEntry, EndingInput, EndingScene, EndingSequenceController, HudStrip, LevelLayout,
-    LevelManifest, MapHandoffOutcome, MapNodes, ObjectClock, ObjectSim, ObjectTables, PlayerKeys,
-    PlayerSim, SceneScripts, SceneVm, SpriteCtx, TileAnimationClock, Tilesets,
+    BellArm, CameraSim, EndingEntry, EndingInput, EndingScene, EndingSequenceController, HudStrip,
+    LevelLayout, LevelManifest, MapHandoffOutcome, MapNodes, ObjectClock, ObjectSim, ObjectTables,
+    PlayerKeys, PlayerSim, SceneScripts, SceneVm, SpriteCtx, TileAnimationClock, Tilesets,
+    apply_level_entry, note_handoff_screen, player_behind_bg, seed_level_timer,
 };
 
-use crate::game::level_frame::{begin_live_level_frame, step_live_level_frame, LiveLevelFrame};
+use crate::game::level_frame::{LiveLevelFrame, begin_live_level_frame, step_live_level_frame};
 
 /// Point the sims at the world of a layout swapped in mid-level. The arena
 /// layout is ROM-sized; a rebuilt level's camera also returns to the tables

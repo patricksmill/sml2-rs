@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 mod editor;
 mod imports;
 mod startup;
-pub use startup::{run, Options};
+pub use startup::{Options, run};
 #[cfg(test)]
 mod tests;
 
@@ -310,7 +310,7 @@ impl EditorApp {
                             .into_iter()
                             .map(|[r, g, b]| Color32::from_rgb(r, g, b))
                             .collect(),
-                    ))
+                    ));
                 }
                 Err(error) => self.status = Some(format!("DX preview unavailable: {error}")),
             }

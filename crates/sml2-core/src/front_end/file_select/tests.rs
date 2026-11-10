@@ -1,6 +1,6 @@
 use super::*;
 use crate::front_end::keys::{A, DOWN, LEFT, RIGHT, SELECT, START};
-use crate::front_end::save_slots::{fresh_template, SaveSlots, SLOT_LEN};
+use crate::front_end::save_slots::{SLOT_LEN, SaveSlots, fresh_template};
 use crate::map::SAVE_SIGNATURE;
 
 fn valid_record(node: u8) -> [u8; SLOT_LEN] {

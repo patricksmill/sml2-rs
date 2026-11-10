@@ -1,7 +1,7 @@
 //! Music channel state and bytecode decoding.
 
-use super::tables::*;
 use super::MusicWrite;
+use super::tables::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct MusicChannel {
@@ -296,11 +296,7 @@ impl MusicChannel {
     fn read_stream_byte(&mut self, bank: &[u8]) -> u8 {
         let off = bank4_offset(self.stream_ptr);
         self.stream_ptr = self.stream_ptr.wrapping_add(1);
-        if off < bank.len() {
-            bank[off]
-        } else {
-            0
-        }
+        if off < bank.len() { bank[off] } else { 0 }
     }
 
     fn trigger_note(

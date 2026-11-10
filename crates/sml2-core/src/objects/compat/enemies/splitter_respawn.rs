@@ -1,5 +1,5 @@
 //! Slot conversion for ROM `$5AA68` (mode B anim 84).
-use super::{handler_0x5917a, handler_0x5aa68, *};
+use super::{handler_0x5aa68, handler_0x5917a, *};
 use crate::actor::Actor;
 
 impl ObjectSim {

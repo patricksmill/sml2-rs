@@ -63,14 +63,16 @@ fn native_metasprite_append_concatenates_real_ending_poses() {
 #[test]
 fn native_metasprite_append_preserves_every_attribute_with_all_styles() {
     let mut tables = tables();
-    tables.player_mappings = vec![(0..=255)
-        .map(|attr| MappingEntry {
-            y: -1,
-            x: 1,
-            tile: 0x5A,
-            attr,
-        })
-        .collect()];
+    tables.player_mappings = vec![
+        (0..=255)
+            .map(|attr| MappingEntry {
+                y: -1,
+                x: 1,
+                tile: 0x5A,
+                attr,
+            })
+            .collect(),
+    ];
     for (force_palette_one, behind_background, expected_mask) in [
         (false, false, 0x00),
         (true, false, 0x10),

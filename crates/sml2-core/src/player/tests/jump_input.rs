@@ -1,6 +1,6 @@
 //! Source `$1675..$16AE` jump selection followed by `$14FA` moon gravity.
 use crate::{
-    level::{LevelLayout, LAYOUT_SIZE},
+    level::{LAYOUT_SIZE, LevelLayout},
     player_sim::{PlayerKeys, PlayerSim},
 };
 

@@ -5,7 +5,7 @@
 use crate::settings::Filter;
 use eframe::egui::{self, TextureHandle, TextureOptions, Ui};
 use sml2_core::video::PalettePixel;
-use sml2_runtime::{content::SessionAssets, FrameInput, Session};
+use sml2_runtime::{FrameInput, Session, content::SessionAssets};
 
 /// Ticks into the opening level: past the fade-in, with an enemy on screen.
 const SAMPLE_TICKS: u32 = 120;

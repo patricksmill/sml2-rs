@@ -12,7 +12,7 @@ use crate::ending_raster::{background_tile_offset, ending_projection};
 use crate::ending_scene::EndingScene;
 use crate::ending_sequence::EndingSequenceController;
 use crate::sprite_batch::MAX_SPRITE_CELLS;
-use crate::video::{tile_colors, OutputMode, PaletteSource};
+use crate::video::{OutputMode, PaletteSource, tile_colors};
 
 /// Visible screen size.
 const SCREEN: (usize, usize) = (160, 144);

@@ -9,7 +9,7 @@ pub mod cache;
 mod fingerprint;
 mod ips;
 mod presentation;
-pub use bundle::{extract, Bundle, BANKS};
+pub use bundle::{BANKS, Bundle, extract};
 pub use fingerprint::base_fingerprint;
 pub use ips::apply_ips;
 pub use presentation::{

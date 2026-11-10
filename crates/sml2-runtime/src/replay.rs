@@ -10,7 +10,7 @@ use crate::game::{
     apply_level_entry, build_contact, note_handoff_screen, scene_frame_head, seed_level_timer,
 };
 use crate::image_output::write_png_scaled;
-use crate::render::{apply_tile_anim, hud_row_status, render_view, HudDigits, SpriteCtx};
+use crate::render::{HudDigits, SpriteCtx, apply_tile_anim, hud_row_status, render_view};
 use crate::{SCREEN_H, SCREEN_W};
 use serde::Deserialize;
 use sml2_core::ending_entry::{EndingEntry, EndingFrame, EndingInput};
@@ -709,8 +709,15 @@ pub(crate) fn run_replay(
                         if msg.is_empty() {
                             msg = format!(
                                 "slot {k}: state sim={st} exp={} def sim={} exp={} spr sim={} exp={} rec sim=${:04X} exp=${:04X} pos sim=({},{})",
-                                sl.state, s.def(), sl.def_, s.sprite(), sl.sprite, s.rec_index(), sl.rec,
-                                s.x(), s.y()
+                                sl.state,
+                                s.def(),
+                                sl.def_,
+                                s.sprite(),
+                                sl.sprite,
+                                s.rec_index(),
+                                sl.rec,
+                                s.x(),
+                                s.y()
                             );
                         }
                     }

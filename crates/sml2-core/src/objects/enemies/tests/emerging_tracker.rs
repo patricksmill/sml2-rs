@@ -274,11 +274,7 @@ fn handler_0x5902d_real_anim53_step_dispatch_death_and_parity_gates() {
                     assert_eq!(
                         result[28],
                         if runs {
-                            if initial_state == 0 {
-                                48
-                            } else {
-                                4
-                            }
+                            if initial_state == 0 { 48 } else { 4 }
                         } else {
                             5
                         }

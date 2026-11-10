@@ -6,7 +6,7 @@ use sml2_core::map::save_record_valid;
 use sml2_core::player_sim::PlayerKeys;
 
 use crate::session::{
-    AudioClock, SessionAssets, SessionRunner, SessionState, StepOutcome, MAP_ENTRY_FRAMES,
+    AudioClock, MAP_ENTRY_FRAMES, SessionAssets, SessionRunner, SessionState, StepOutcome,
 };
 
 /// Press A on the map and run out the console's entry transition: the map

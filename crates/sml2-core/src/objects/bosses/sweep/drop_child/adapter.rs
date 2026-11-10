@@ -1,9 +1,6 @@
 //! Compatibility boundary for boss anim 18.
-use super::{sweep_drop_child, ObjectSim, Staging};
-use crate::{
-    actor::Actor,
-    object::ObjectTables,
-};
+use super::{ObjectSim, Staging, sweep_drop_child};
+use crate::{actor::Actor, object::ObjectTables};
 
 impl ObjectSim {
     pub(super) fn handler_sweep_drop_child(

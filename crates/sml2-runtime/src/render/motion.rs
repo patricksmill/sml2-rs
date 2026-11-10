@@ -130,11 +130,7 @@ impl Offsets {
     /// Background pixels to render past each view edge: only a shifted
     /// background can expose them, at any scale.
     pub fn border(&self) -> usize {
-        if self.bg != (0, 0) {
-            BORDER
-        } else {
-            0
-        }
+        if self.bg != (0, 0) { BORDER } else { 0 }
     }
 
     pub fn between(

@@ -769,7 +769,15 @@ pub(crate) fn draw_corner_hud<B: Copy>(
         (&CORNER_HUD_LEFT[..], CORNER_HUD_INSET),
         (&CORNER_HUD_RIGHT[..], right),
     ] {
-        draw_hud_group(row, cells, (x0, CORNER_HUD_INSET), view, window, &mut sample, &paper)?;
+        draw_hud_group(
+            row,
+            cells,
+            (x0, CORNER_HUD_INSET),
+            view,
+            window,
+            &mut sample,
+            &paper,
+        )?;
     }
     Ok(())
 }
@@ -839,7 +847,7 @@ pub(crate) fn apply_tile_anim(
 
 #[cfg(test)]
 mod tests {
-    use super::{hud_row_status, in_obj_priority_order, native_cell, HudDigits, NativeObj};
+    use super::{HudDigits, NativeObj, hud_row_status, in_obj_priority_order, native_cell};
     use sml2_core::level::HudStrip;
     use sml2_core::player::Cell;
 

@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
+    FrameInput, Session,
     content::{ContentSource, ExtractedContent},
     session::SessionState,
-    FrameInput, Session,
 };
 use sml2_core::player_sim::PlayerKeys;
 use std::{cell::Cell, io, path::PathBuf};

@@ -13,7 +13,7 @@ mod file_select_loading;
 pub use file_select_loading::FileSelectLoading;
 mod map_pan;
 mod map_transition;
-pub use map_pan::{MapPanReturn, MAP_PAN_RELOAD_FRAMES, MAP_PAN_RETURN_FRAMES};
+pub use map_pan::{MAP_PAN_RELOAD_FRAMES, MAP_PAN_RETURN_FRAMES, MapPanReturn};
 pub use map_transition::MapScreenTransition;
 
 use sml2_core::audio::driver::SoundDriver;
@@ -23,7 +23,7 @@ use sml2_core::ending_entry::{EndingEntry, EndingInput};
 use sml2_core::ending_scene::EndingScene;
 use sml2_core::ending_sequence::EndingSequenceController;
 use sml2_core::front_end::{
-    DemoTape, FileSelect, FileSelectAction, SaveSlots, TitleAction, TitleScreen, DEMO_LEVELS,
+    DEMO_LEVELS, DemoTape, FileSelect, FileSelectAction, SaveSlots, TitleAction, TitleScreen,
 };
 use sml2_core::level::{HudStrip, LevelLayout, LevelManifest};
 use sml2_core::map::MapNodes;
@@ -35,7 +35,7 @@ use sml2_core::scene::{SceneScripts, SceneVm};
 use sml2_core::tile_animation::TileAnimationClock;
 use sml2_core::tileset::Tilesets;
 
-use crate::game::{apply_level_entry, note_handoff_screen, seed_level_timer, BellArm};
+use crate::game::{BellArm, apply_level_entry, note_handoff_screen, seed_level_timer};
 use crate::render::SpriteCtx;
 
 /// Pack boolean keyboard inputs into the Game Boy hardware joypad register format
@@ -196,7 +196,10 @@ impl MapTransition {
     }
 
     pub(crate) fn fade_end(&self) -> u16 {
-        self.easy_card.unwrap_or_else(|| self.live_at.saturating_sub(MAP_ENTRY_FRAMES - MAP_EASY_CARD_START))
+        self.easy_card.unwrap_or_else(|| {
+            self.live_at
+                .saturating_sub(MAP_ENTRY_FRAMES - MAP_EASY_CARD_START)
+        })
     }
 
     /// Whether transition frame `frame` runs the `$0300` frame wait: not
@@ -310,9 +313,14 @@ fn level_content<'a>(
         content.layout = LevelLayout::from_bytes(&level.layout)?;
         let records = &mut content.manifest.spawns.records;
         if records.len() != level.spawns.len()
-            || records.iter().zip(&level.spawns).any(|(native, dx)| native.anim_index != dx.anim_index)
+            || records
+                .iter()
+                .zip(&level.spawns)
+                .any(|(native, dx)| native.anim_index != dx.anim_index)
         {
-            return Err(format!("DX level {level_id:02X} spawns do not match its objects"));
+            return Err(format!(
+                "DX level {level_id:02X} spawns do not match its objects"
+            ));
         }
         for (native, dx) in records.iter_mut().zip(&level.spawns) {
             (native.x, native.y, native.mode_flag, native.raw) = (dx.x, dx.y, dx.mode_flag, dx.raw);
@@ -461,19 +469,28 @@ impl Session {
 
     /// Queue gameplay selection for the next level entry or reload. Active
     /// levels retain their simulation even when presentation falls back.
-    pub fn set_dx(&mut self, dx: Option<std::sync::Arc<sml2_dx::Presentation>>, character: Character) {
+    pub fn set_dx(
+        &mut self,
+        dx: Option<std::sync::Arc<sml2_dx::Presentation>>,
+        character: Character,
+    ) {
         self.dx = dx;
         self.character = character;
     }
 
-    pub fn dx_enabled(&self) -> bool { self.dx.is_some() }
+    pub fn dx_enabled(&self) -> bool {
+        self.dx.is_some()
+    }
 
     fn seed_character(&self, ctx: &mut LevelContext, character: Character) {
         ctx.obj.revision = match self.dx {
             Some(_) => sml2_core::actor::ObjectRevision::Dx,
             None => sml2_core::actor::ObjectRevision::Original,
         };
-        let curves = self.dx.as_ref().map(|dx| dx.movement[usize::from(character == Character::Luigi)].clone());
+        let curves = self
+            .dx
+            .as_ref()
+            .map(|dx| dx.movement[usize::from(character == Character::Luigi)].clone());
         ctx.sim.set_dx_movement(character, curves);
     }
 
@@ -569,9 +586,13 @@ impl Session {
     /// skipped), for acceptance tapes.
     pub fn begin_level(&mut self, level_id: u8, progress_flags: u8) -> Result<(), String> {
         self.remember_level_state();
-        let content =
-            level_content(&self.assets, self.dx.as_deref(), self.expanded_levels, level_id)?
-                .into_owned();
+        let content = level_content(
+            &self.assets,
+            self.dx.as_deref(),
+            self.expanded_levels,
+            level_id,
+        )?
+        .into_owned();
         let ctx = LevelContext::from_content(
             level_id,
             &content,
@@ -636,7 +657,11 @@ impl Session {
     /// `MapSim::tick`: `source` is the map as the frame began, `destination`
     /// the screen the door loaded.
     pub(crate) fn begin_door_transition(&mut self, source: MapSim, direction: u8, destination: u8) {
-        self.map_screen_transition = Some(MapScreenTransition::new_dx(source, direction, self.dx_enabled()));
+        self.map_screen_transition = Some(MapScreenTransition::new_dx(
+            source,
+            direction,
+            self.dx_enabled(),
+        ));
         self.last_map_screen = Some(destination);
         self.map_wave = if destination == 0 {
             sml2_core::map::MapWave::seed(self.assets.overworld_tiles.screen_raw(0))
@@ -939,8 +964,7 @@ impl Session {
             ctx.obj.view_bias_y = crate::render::view::level_bias(self.view) as u16;
             let camera = (ctx.cam.x, ctx.cam.y);
             let raw = crate::render::view::raw_level_origin(self.view, camera, 0);
-            let bounded =
-                crate::render::view::level_origin(self.view, camera, 0, ctx.cam.room());
+            let bounded = crate::render::view::level_origin(self.view, camera, 0, ctx.cam.room());
             ctx.obj.view_offset = ((bounded.0 - raw.0) as i16, (bounded.1 - raw.1) as i16);
             ctx.sim.view = crate::render::view::enlarged(self.view).then_some(ViewRect {
                 x: bounded.0,
@@ -1160,8 +1184,9 @@ impl Session {
                 );
                 self.map_ram = map_sim.map_ram();
                 let coin_room = |screen: u8| (9..=12).contains(&screen);
-                self.coin_room_blank =
-                    !coin_room(source_map.screen_id) && coin_room(map_sim.screen_id) && map_sim.room.is_some();
+                self.coin_room_blank = !coin_room(source_map.screen_id)
+                    && coin_room(map_sim.screen_id)
+                    && map_sim.room.is_some();
 
                 if let Some(direction) = entry.transition {
                     let destination = map_sim.screen_id;
@@ -1251,24 +1276,26 @@ impl Session {
                 }
                 if let Some(level_id) = entry.level {
                     let expanded = self.expanded_levels;
-                    match level_content(&self.assets, self.dx.as_deref(), expanded, level_id).map(|content| {
-                        LevelContext::from_content(
-                            level_id,
-                            &content,
-                            entry.progress_flags,
-                            self.lives,
-                            map_sim.coins_low,
-                            map_sim.coins_high,
-                            self.powerup,
-                            map_sim.node,
-                            self.assets.scripts.clone(),
-                            self.assets.tilesets.clone(),
-                            self.assets.arena_layout.clone(),
-                            self.assets.anim_rows.clone(),
-                            self.assets.hud.clone(),
-                            self.assets.object_tables.clone(),
-                        )
-                    }) {
+                    match level_content(&self.assets, self.dx.as_deref(), expanded, level_id).map(
+                        |content| {
+                            LevelContext::from_content(
+                                level_id,
+                                &content,
+                                entry.progress_flags,
+                                self.lives,
+                                map_sim.coins_low,
+                                map_sim.coins_high,
+                                self.powerup,
+                                map_sim.node,
+                                self.assets.scripts.clone(),
+                                self.assets.tilesets.clone(),
+                                self.assets.arena_layout.clone(),
+                                self.assets.anim_rows.clone(),
+                                self.assets.hud.clone(),
+                                self.assets.object_tables.clone(),
+                            )
+                        },
+                    ) {
                         Ok(mut ctx) => {
                             self.object_clock.initialize_level(&mut ctx.obj);
                             self.map_ram =

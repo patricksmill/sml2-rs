@@ -58,11 +58,7 @@ pub fn base_frame_index(
             14
         } else if on_ground_or_object {
             if hvel >= 0x80 {
-                if hvel == 0x80 {
-                    0
-                } else {
-                    1 + walk
-                }
+                if hvel == 0x80 { 0 } else { 1 + walk }
             } else {
                 13
             }

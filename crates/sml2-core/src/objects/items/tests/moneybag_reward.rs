@@ -87,7 +87,7 @@ fn helper_0x5b31d_overflow_nonoverflow_invalid_decimal_and_capacity_sound() {
 
 #[test]
 fn helper_0x5b31d_step_squashed_expiry_produces_camera_reward_then_promotes() {
-    use crate::level::{LevelLayout, LAYOUT_SIZE};
+    use crate::level::{LAYOUT_SIZE, LevelLayout};
     use crate::object::AnimProfile;
     let mut tables = tables();
     tables.anim_profiles_a[1] = AnimProfile {

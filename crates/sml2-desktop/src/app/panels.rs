@@ -313,9 +313,8 @@ impl DesktopApp {
                 Value::Meter(*level, format!("{:.0}%", *level * 100.0)),
             ) || adjust != 0
             {
-                *level = ((*level * 10.0).round()
-                    + if adjust != 0 { adjust as f32 } else { 1.0 })
-                .clamp(0.0, 10.0)
+                *level = ((*level * 10.0).round() + if adjust != 0 { adjust as f32 } else { 1.0 })
+                    .clamp(0.0, 10.0)
                     / 10.0;
             }
         }

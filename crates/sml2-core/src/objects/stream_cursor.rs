@@ -30,8 +30,8 @@ impl ObjectSim {
 mod tests {
     use super::*;
     use crate::objects::{
-        ObjectTables, SpawnRecord, Staging, B_DEF, B_MARKER, B_RECHI, B_RECLO, B_SCRX, B_STATE,
-        B_XHI, B_XLO, B_YHI, B_YLO,
+        B_DEF, B_MARKER, B_RECHI, B_RECLO, B_SCRX, B_STATE, B_XHI, B_XLO, B_YHI, B_YLO,
+        ObjectTables, SpawnRecord, Staging,
     };
 
     fn tables() -> ObjectTables {

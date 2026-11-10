@@ -23,7 +23,7 @@ mod sprite_deltas;
 
 #[path = "actor_vertical_tracking.rs"]
 mod vertical_tracking;
-pub use vertical_tracking::{VerticalTrackingError, VERTICAL_TRACKING_Y_SPEED};
+pub use vertical_tracking::{VERTICAL_TRACKING_Y_SPEED, VerticalTrackingError};
 
 #[path = "actor_direction_allocation.rs"]
 mod direction_allocation;

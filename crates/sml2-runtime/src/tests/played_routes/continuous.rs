@@ -2,7 +2,7 @@
 //! map return and real disk persistence. Fixtures start at source map nodes;
 //! they do not claim to navigate from the title to every node.
 use super::*;
-use crate::session::{SessionAssets, SessionRunner, SessionState, StepOutcome, MAP_ENTRY_FRAMES};
+use crate::session::{MAP_ENTRY_FRAMES, SessionAssets, SessionRunner, SessionState, StepOutcome};
 use sml2_core::castle_sequence::GOLDEN_COIN_OFFSETS;
 use sml2_core::map_sim::MapSim;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -248,10 +248,19 @@ pub(super) fn verify_map_entry_completion_and_reload(
                     !dying,
                     "the played route must not die: dead={} frame={} xy=({}, {}) clock={} phase={} camera=({}, {}) active_objects={:?}",
                     ctx.sim.dead,
-                    ctx.frame_n, ctx.sim.x, ctx.sim.y, ctx.obj.fff0,
-                    ctx.obj.phase, ctx.cam.x, ctx.cam.y,
-                    ctx.obj.slots.iter().filter(|slot| slot.active())
-                        .map(|slot| (slot.def(), slot.x(), slot.y())).collect::<Vec<_>>(),
+                    ctx.frame_n,
+                    ctx.sim.x,
+                    ctx.sim.y,
+                    ctx.obj.fff0,
+                    ctx.obj.phase,
+                    ctx.cam.x,
+                    ctx.cam.y,
+                    ctx.obj
+                        .slots
+                        .iter()
+                        .filter(|slot| slot.active())
+                        .map(|slot| (slot.def(), slot.x(), slot.y()))
+                        .collect::<Vec<_>>(),
                 );
             }
             assert!(ctx.obj.unported.is_empty());
@@ -266,7 +275,19 @@ pub(super) fn verify_map_entry_completion_and_reload(
     }
     if !exited {
         if let SessionState::InLevel(ctx) = &runner.session.state {
-            eprintln!("route end level={} xy=({}, {}) dead={} frame={} exit={} arm={:?} moon={} float={} flags={}", ctx.manifest.level_id, ctx.sim.x, ctx.sim.y, ctx.sim.dead, ctx.frame_n, ctx.sim.exit_phase, ctx.bell_arm.as_ref().map(|arm| (arm.frame, arm.position)), ctx.sim.moon, ctx.sim.moon_float_timer, ctx.sim.level_progress_flags);
+            eprintln!(
+                "route end level={} xy=({}, {}) dead={} frame={} exit={} arm={:?} moon={} float={} flags={}",
+                ctx.manifest.level_id,
+                ctx.sim.x,
+                ctx.sim.y,
+                ctx.sim.dead,
+                ctx.frame_n,
+                ctx.sim.exit_phase,
+                ctx.bell_arm.as_ref().map(|arm| (arm.frame, arm.position)),
+                ctx.sim.moon,
+                ctx.sim.moon_float_timer,
+                ctx.sim.level_progress_flags
+            );
         } else {
             eprintln!("route left the level unexpectedly");
         }

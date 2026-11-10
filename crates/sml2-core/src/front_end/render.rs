@@ -8,16 +8,16 @@
 //! `$5267` two-cell row.
 
 use super::assets::FrontEndAssets;
-use super::file_select::{FileSelect, FILE_SELECT_BGP, FILE_SELECT_OBP0, FILE_SELECT_OBP1};
-use super::save_slots::{SaveSlots, SLOT_COUNT};
+use super::file_select::{FILE_SELECT_BGP, FILE_SELECT_OBP0, FILE_SELECT_OBP1, FileSelect};
+use super::save_slots::{SLOT_COUNT, SaveSlots};
 use super::screen::{
-    file_select_backdrop, render_bg_output, render_bg_wide_output, title_backdrop, TileData,
+    TileData, file_select_backdrop, render_bg_output, render_bg_wide_output, title_backdrop,
 };
 use super::title::BGP as TITLE_BGP;
 use crate::actor::ScreenPosition;
 use crate::object::ObjectTables;
-use crate::player::{append_cells, Cell, CellStyle};
-use crate::video::{tile_colors, OutputMode, PaletteSource};
+use crate::player::{Cell, CellStyle, append_cells};
+use crate::video::{OutputMode, PaletteSource, tile_colors};
 
 /// `$300FE`: tally sprites' shared OAM Y.
 const TALLY_Y: u8 = 88;

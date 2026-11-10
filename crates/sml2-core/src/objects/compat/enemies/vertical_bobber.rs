@@ -1,6 +1,6 @@
 //! Compatibility facade for the native vertical bobber (ROM `0x591F9`).
 
-use super::vertical_bobber::{update, BobberContext, BobberEffect};
+use super::vertical_bobber::{BobberContext, BobberEffect, update};
 use super::*;
 use crate::actor::Actor;
 use std::cmp::Ordering;

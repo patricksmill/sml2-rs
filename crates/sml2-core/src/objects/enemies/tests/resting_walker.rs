@@ -188,11 +188,7 @@ fn handler_0x58a6f_divider_mask_animation_boundaries_and_post_move_wall() {
                         assert_eq!(
                             sim.move_flags,
                             if state == 1 {
-                                if tile == 0x37 {
-                                    0x22
-                                } else {
-                                    0x20
-                                }
+                                if tile == 0x37 { 0x22 } else { 0x20 }
                             } else if tile == 0x37 {
                                 0x11
                             } else {

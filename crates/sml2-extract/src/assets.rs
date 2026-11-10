@@ -2,10 +2,10 @@
 //! Source discovery and cross-checks remain in each import path.
 
 use sml2_core::level::{
-    HudStrip, IndexLevel, IndexTilesetMap, LayoutSummary, LevelLayout, LevelManifest, LevelsIndex,
-    ObjectStream, SpawnRecord, INDEX_SCHEMA, LAYOUT_HEIGHT, LAYOUT_SIZE, LAYOUT_WIDTH,
+    HudStrip, INDEX_SCHEMA, IndexLevel, IndexTilesetMap, LAYOUT_HEIGHT, LAYOUT_SIZE, LAYOUT_WIDTH,
+    LayoutSummary, LevelLayout, LevelManifest, LevelsIndex, ObjectStream, SpawnRecord,
 };
-use sml2_core::tileset::{TilesetEntry, Tilesets, TILESET_SCHEMA};
+use sml2_core::tileset::{TILESET_SCHEMA, TilesetEntry, Tilesets};
 
 pub fn tilesets(entries: Vec<TilesetEntry>, extra_8e80: &[u8]) -> Tilesets {
     Tilesets {

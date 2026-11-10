@@ -97,11 +97,13 @@ fn castle_surroundings_follow_filter_fade_and_dx_changes() {
     let output = frame(&mut app, &ctx, size, 1.0);
     let backdrop = app.castle_backdrop.as_ref().unwrap();
     assert_eq!(backdrop.key.filter, Filter::Dmg);
-    assert!(output
-        .textures_delta
-        .set
-        .iter()
-        .any(|(id, _)| *id == backdrop.texture.id()));
+    assert!(
+        output
+            .textures_delta
+            .set
+            .iter()
+            .any(|(id, _)| *id == backdrop.texture.id())
+    );
     let SessionState::Castle(seq) = &mut app.game.as_mut().unwrap().session.state else {
         panic!("castle")
     };
@@ -125,10 +127,12 @@ fn castle_surroundings_follow_filter_fade_and_dx_changes() {
         .find(|(id, _)| *id == backdrop.texture.id())
         .unwrap();
     let egui::ImageData::Color(image) = &image.image;
-    assert!(image
-        .pixels
-        .iter()
-        .all(|pixel| *pixel == Color32::from_rgb(255, 0, 0)));
+    assert!(
+        image
+            .pixels
+            .iter()
+            .all(|pixel| *pixel == Color32::from_rgb(255, 0, 0))
+    );
     let _ = std::fs::remove_dir_all(path);
 }
 

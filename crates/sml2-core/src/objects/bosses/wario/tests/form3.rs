@@ -1,6 +1,6 @@
 //! Unit tests for native third-form Wario (anim 26, ROM `$0AD93`).
 
-use super::form3::{update, Context, UpdateError};
+use super::form3::{Context, UpdateError, update};
 use crate::actor::{
     Actor, AnimationFrameError, ContactKind, EndingBobError, Facing, FrameTick, SpriteFlipFlags,
 };

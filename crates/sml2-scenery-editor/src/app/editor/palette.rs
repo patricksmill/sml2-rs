@@ -4,7 +4,7 @@ use super::{Editor, EditorApp};
 use crate::settings::Filter;
 use eframe::egui::{self, Color32, ColorImage, Context, Rect, TextureHandle, TextureOptions, Ui};
 use sml2_core::level::Metatile;
-use sml2_core::video::{self, cgb, PalettePixel, PaletteSource};
+use sml2_core::video::{self, PalettePixel, PaletteSource, cgb};
 use sml2_dx::LevelGraphics;
 
 pub(super) struct Atlas {

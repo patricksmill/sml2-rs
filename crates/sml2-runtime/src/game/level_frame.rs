@@ -1,7 +1,7 @@
 //! Ordered gameplay phases shared by native hosts and capture replay.
 
 mod live;
-pub(crate) use live::{begin_live_level_frame, step_live_level_frame, LiveLevelFrame};
+pub(crate) use live::{LiveLevelFrame, begin_live_level_frame, step_live_level_frame};
 
 use sml2_core::{
     camera::CameraSim,
@@ -12,7 +12,7 @@ use sml2_core::{
     object::ObjectTables,
     objects::{FireHit, MarioContact, ObjectSim, SlotState},
     player_sim::PlayerSim,
-    scene::{boss_def_index, boss_def_portable, SceneScripts, SceneStep, SceneVm},
+    scene::{SceneScripts, SceneStep, SceneVm, boss_def_index, boss_def_portable},
 };
 
 pub(crate) struct FloatStep {

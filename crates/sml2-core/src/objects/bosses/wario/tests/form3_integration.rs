@@ -2,7 +2,7 @@
 
 use crate::camera::CameraSim;
 use crate::objects::{
-    LevelLayout, ObjectSim, ObjectTables, B_DEF, B_FSTATE, B_SCRX, B_SPRITE, B_T28,
+    B_DEF, B_FSTATE, B_SCRX, B_SPRITE, B_T28, LevelLayout, ObjectSim, ObjectTables,
 };
 use crate::player_sim::PlayerSim;
 
@@ -80,7 +80,7 @@ fn form3_spawn_and_defeat_ending_cascade_integration() {
 
 #[test]
 fn source_regression_jump_profile_is_saved_at_walk_transition() {
-    use crate::objects::{Staging, B_PHASE};
+    use crate::objects::{B_PHASE, Staging};
     let tables = tables();
     // AF70..AF75: literal powerups 0/1/2/3 store FE/FF/00/01 in AFD1.
     for (power, saved, changed, terminal) in [
@@ -122,7 +122,7 @@ fn source_regression_jump_profile_is_saved_at_walk_transition() {
 
 #[test]
 fn form3_dirty_ending_adapter_preserves_count_and_consumes_combined_event_once() {
-    use crate::objects::{Staging, B_FLAGS};
+    use crate::objects::{B_FLAGS, Staging};
     let mut obj = ObjectSim::new(vec![], 0);
     obj.boss_def_count = 7;
     obj.saved_power_state = 0xFE;
@@ -154,7 +154,7 @@ fn form3_dirty_ending_adapter_preserves_count_and_consumes_combined_event_once()
 
 #[test]
 fn form3_jump_tests_saved_byte_for_zero_only() {
-    use crate::objects::{Staging, B_PHASE, B_T24};
+    use crate::objects::{B_PHASE, B_T24, Staging};
     let tables = tables();
     for saved in [0, 1, 2, 3] {
         for leg in [0, 1] {

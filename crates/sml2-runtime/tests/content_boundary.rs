@@ -3,7 +3,7 @@ use std::{cell::Cell, io, path::PathBuf};
 use sml2_core::{level::LevelManifest, player_sim::PlayerKeys};
 use sml2_runtime::{
     content::{ContentSource, ExtractedContent, SessionAssets},
-    session::{SessionRunner, SessionState, StepOutcome, MAP_ENTRY_FRAMES},
+    session::{MAP_ENTRY_FRAMES, SessionRunner, SessionState, StepOutcome},
 };
 
 /// An importer/editor may overlay one asset without writing an extracted tree.

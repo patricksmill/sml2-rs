@@ -1,12 +1,12 @@
 //! Runtime behavior tests, grouped by the subsystem or route they exercise.
 
 use crate::{
+    SCREEN_H, SCREEN_W,
     content::load_map_nodes,
     game::*,
-    play::{run_play, PlayOutcome},
+    play::{PlayOutcome, run_play},
     play_tape::PlayTape,
-    render::{render_view, SpriteCtx},
-    SCREEN_H, SCREEN_W,
+    render::{SpriteCtx, render_view},
 };
 use sml2_core::{
     ending_entry::{EndingEntry, EndingEntryState, EndingFrame, EndingInput},
@@ -14,7 +14,7 @@ use sml2_core::{
     map::MapNodes,
     object::ObjectTables,
     player_sim::{PlayerKeys, PlayerSim},
-    scene::{boss_def_index, boss_def_portable, SceneScripts, SceneStep, SceneVm},
+    scene::{SceneScripts, SceneStep, SceneVm, boss_def_index, boss_def_portable},
     video,
 };
 use std::{

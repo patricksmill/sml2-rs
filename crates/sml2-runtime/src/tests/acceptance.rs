@@ -1,8 +1,8 @@
 //! FE-8 acceptance tapes: fixed inputs through the live session, byte asserts.
 
 use sml2_core::front_end::save_slots::fresh_template;
-use sml2_core::front_end::{SaveSlots, SAVE_IMAGE_LEN, SLOT_LEN};
-use sml2_core::map::{save_record_valid, SAVE_SIGNATURE};
+use sml2_core::front_end::{SAVE_IMAGE_LEN, SLOT_LEN, SaveSlots};
+use sml2_core::map::{SAVE_SIGNATURE, save_record_valid};
 use sml2_core::map_sim::MapSim;
 use sml2_core::player_sim::PlayerKeys;
 

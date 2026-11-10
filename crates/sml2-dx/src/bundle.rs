@@ -1,7 +1,7 @@
 //! The persisted import: the DX ROM's bank-0 level loader tables and the raw
 //! banks every level's presentation reads. See docs/sml2dx-audit.md.
 
-use crate::{presentation::Presentation, ImportError, Rom, BUNDLE_SCHEMA, ROM_SHA256};
+use crate::{BUNDLE_SCHEMA, ImportError, ROM_SHA256, Rom, presentation::Presentation};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -156,10 +156,20 @@ impl Bundle {
 pub fn extract(bytes: &[u8]) -> Result<Bundle, ImportError> {
     let rom = Rom::new(bytes)?;
     let bundle = Bundle {
-        movement: [(0x4000, 256), (0x4200, 76), (0x424C, 76), (0x4298, 76),
-                   (0x42E4, 256), (0x44E4, 76), (0x4530, 76), (0x457C, 76)]
-            .into_iter().map(|(at, len)| rom.banked(1, at, len))
-            .collect::<Result<Vec<_>, _>>()?.concat(),
+        movement: [
+            (0x4000, 256),
+            (0x4200, 76),
+            (0x424C, 76),
+            (0x4298, 76),
+            (0x42E4, 256),
+            (0x44E4, 76),
+            (0x4530, 76),
+            (0x457C, 76),
+        ]
+        .into_iter()
+        .map(|(at, len)| rom.banked(1, at, len))
+        .collect::<Result<Vec<_>, _>>()?
+        .concat(),
         schema: BUNDLE_SCHEMA,
         source_sha256: ROM_SHA256.into(),
         level_config: rom.read(LEVEL_CONFIG, LEVELS)?.to_vec(),
@@ -203,7 +213,7 @@ pub fn extract(bytes: &[u8]) -> Result<Bundle, ImportError> {
 
 /// Banks as `{"1B": "hex…"}`: half the size of a JSON number array.
 mod hex_banks {
-    use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
     use std::collections::BTreeMap;
 
     pub fn serialize<S: Serializer>(

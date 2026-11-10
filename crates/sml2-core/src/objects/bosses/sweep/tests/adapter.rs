@@ -18,7 +18,9 @@ fn handler_0xa0b9_dispatch_independent_busy_children_full_flip_and_preserved_byt
     );
     assert_eq!(
         &tables.boss_sweep_profile[..27],
-        &[0, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 3, 2, 3, 2, 1, 2, 2, 1, 2, 1, 1, 1, 0]
+        &[
+            0, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 2, 3, 3, 3, 2, 3, 2, 1, 2, 2, 1, 2, 1, 1, 1, 0
+        ]
     );
     assert_eq!(&tables.boss_sweep_profile[27..], &[0; 85]);
     let layout = LevelLayout::from_bytes(&[0x60; 0x3000]).unwrap();
@@ -45,11 +47,7 @@ fn handler_0xa0b9_dispatch_independent_busy_children_full_flip_and_preserved_byt
                 if busy[index] == 0 {
                     expected[index][B_SCRY] = if index == 0 { 1 } else { 17 };
                     expected[index][B_SCRX] = if index == 0 {
-                        if state == 3 {
-                            250
-                        } else {
-                            10
-                        }
+                        if state == 3 { 250 } else { 10 }
                     } else {
                         2
                     };

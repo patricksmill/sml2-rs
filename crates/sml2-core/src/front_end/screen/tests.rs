@@ -94,12 +94,16 @@ fn the_map_scrolls_and_wraps_at_256_pixels() {
 fn short_background_inputs_are_rejected() {
     let vram = vec![0u8; VRAM_LEN];
     let map = vec![0u8; TILEMAP_LEN];
-    assert!(render_bg(&vram[..VRAM_LEN - 1], &map, 0, (0, 0), (8, 8))
-        .unwrap_err()
-        .contains("background VRAM"));
-    assert!(render_bg(&vram, &map[..TILEMAP_LEN - 1], 0, (0, 0), (8, 8))
-        .unwrap_err()
-        .contains("background map"));
+    assert!(
+        render_bg(&vram[..VRAM_LEN - 1], &map, 0, (0, 0), (8, 8))
+            .unwrap_err()
+            .contains("background VRAM")
+    );
+    assert!(
+        render_bg(&vram, &map[..TILEMAP_LEN - 1], 0, (0, 0), (8, 8))
+            .unwrap_err()
+            .contains("background map")
+    );
 }
 
 #[test]
