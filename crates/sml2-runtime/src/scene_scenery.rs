@@ -77,6 +77,15 @@ const BUNDLED: &[(SceneTarget, &str)] = &[
         SceneTarget::Map(2),
         include_str!("../../../assets/scenery/scenery-map-02.json"),
     ),
+    // Macro Zone map and boss arena: authored scenery under visual review.
+    (
+        SceneTarget::Map(3),
+        include_str!("../../../assets/scenery/scenery-map-03.json"),
+    ),
+    (
+        SceneTarget::Arena { level: 23, gfx: 4 },
+        include_str!("../../../assets/scenery/scenery-arena-23-04.json"),
+    ),
 ];
 
 #[derive(Debug, Clone, Default)]

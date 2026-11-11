@@ -47,3 +47,19 @@ paints outside it decorate the scene's surroundings:
 Both the desktop game and CLI load these registries through `SessionAssets`.
 Malformed files, repeated level registrations, and invalid metatile references
 are startup errors. Gameplay never reopens scenery files.
+
+## Macro Zone live review
+
+Macro Zone 1–4 (`scenery-20.json` through `scenery-23.json`), its map
+(`scenery-map-03.json`), and its boss arena (`scenery-arena-23-04.json`) are
+registered together for in-game visual review. These are snapshots of authored
+drafts; further editor changes need a fresh export and rebuild.
+
+In the desktop game, press **F1**, then **Macro** to enter its map. Use the
+level picker and **Enter level** to jump to levels 20–23. Play level 23 through
+to its boss to review the arena in the normal transition. **F2** pauses and
+**F3** advances one tick for inspecting motion or palette transitions.
+
+Review the complete levels, pipe rooms, map, and boss arena in enlarged native
+and DX views before treating the scenery as visually approved. Successful
+loading and a few rendered frames alone do not establish complete coverage.

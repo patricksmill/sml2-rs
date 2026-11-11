@@ -28,6 +28,23 @@ pub(super) const LEVELS: &[(u8, &str)] = &[
         29,
         include_str!("../../../../assets/scenery/scenery-29.json"),
     ),
+    // Macro Zone 1–4: authored scenery under visual review.
+    (
+        20,
+        include_str!("../../../../assets/scenery/scenery-20.json"),
+    ),
+    (
+        21,
+        include_str!("../../../../assets/scenery/scenery-21.json"),
+    ),
+    (
+        22,
+        include_str!("../../../../assets/scenery/scenery-22.json"),
+    ),
+    (
+        23,
+        include_str!("../../../../assets/scenery/scenery-23.json"),
+    ),
 ];
 
 /// Scenery for levels as their expanded-level recipe rebuilds them, in the
