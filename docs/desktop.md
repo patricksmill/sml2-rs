@@ -93,71 +93,38 @@ base assets and integrity before use.
 | Toolbar | F10 | Optional binding in Settings → Controls |
 | Debug inspector / pause / one tick | F1 / F2 / F3 | Debug panel |
 
-The desktop menu, focus loss, minimization and controller disconnect
+The desktop menu, focus loss, minimization and selected-controller disconnect
 suspend ticking independently of the original game's pause. Confirmation/binding
 buttons wait for release; short taps survive to the next tick, opposite directions
 cancel consistently. Debug stepping advances one outer session tick.
 
-### Local two-player play: joining and dropping out
+### Local two-player keyboard play
 
-Every launch starts single player, even with several controllers connected;
-whether Player 2 has joined is never saved. An input device is the keyboard or
-one gamepad, and a device belongs to at most one player:
+The desktop enables simultaneous two-player play in levels. Both players use
+one keyboard and share the screen, camera, lives, coins, checkpoints and save
+progress; power-ups and damage are independent. Title screens and the overworld
+retain one shared selection cursor.
 
-- **Player 1** is the device that first presses Start (gamepad) or Enter
-  (keyboard) on the title screen. When there is no title screen (the launcher
-  goes straight to a map, or a save is continued into the map), Player 1 is
-  the first gamepad in connection order, else the keyboard.
-- **Player 2 joins** by pressing Start/Enter on a different device, on the
-  title screen or an overworld/zone map only — never in a level, boss arena,
-  bonus room, launcher or pause menu. Only Player 1 moves the overworld
-  cursor and selects levels. A device that has not joined does nothing else.
-- A small corner banner reads "Press + to join" for a gamepad or "Press Enter
-  to join" for the keyboard while a joinable device is connected and nobody
-  has joined. "Player 2 joined" and "Player 2 left" show briefly afterwards.
-- Player 2 can also leave with Select (keyboard: Backspace) on the title or
-  an overworld map.
-- **Either player's Start/Enter opens the pause menu anywhere**, including
-  levels. The menu belongs to the device that opened it; **Drop out** is
-  shown while two players are present and removes that owner. Player 1's menu
-  never removes Player 2. If Player 1 drops out, Player 2 becomes Player 1,
-  keeps its device and takes over the map cursor.
+| Action | Player 1 defaults | Player 2 |
+|---|---|---|
+| Move | Arrows | W / A / S / D |
+| Jump | Z / Space | F |
+| Run | X / Shift | G |
+| Spin in the air | C | H |
+| Start / pause | Enter | 1 |
+| Select | Backspace | 2 |
 
-Once joined, both players use the Settings → Controls bindings for their own
-device. A keyboard that joins as Player 2 therefore uses Player 1's configured
-keyboard layout, not a fixed WASD layout; one keyboard cannot be both players.
-Focus loss and the desktop menu release both players' inputs.
+Player 1 remains configurable. Player 2's fixed keys are reserved in
+Settings → Controls. If an older Player 1 configuration uses one of those
+keys, play pauses and Controls identifies the conflicting actions; rebind them
+or explicitly reset Player 1's controls. Loading the configuration does not
+silently discard custom bindings. Focus loss and the desktop menu release both
+players' inputs.
 
 Player 2 plays the character Player 1 did not choose (with DX installed,
 Luigi's graphics and movement when Player 1 is Mario, and vice versa). Without
 DX both players use the cartridge's Mario graphics. The players start 24 px
 apart around the entry point.
-
-Controller disconnects follow the gamepad, not the player:
-
-- If **Player 2's** gamepad disconnects inside a level, Player 2 enters a
-  bubble and stops responding. It is removed when the map returns, unless the
-  same gamepad reconnects first, which resumes control. Outside a level,
-  Player 2 is removed immediately.
-- If **Player 1's** gamepad disconnects and the keyboard is not Player 2's,
-  Player 1 falls back to the keyboard. Otherwise play pauses with "Reconnect
-  Player 1's controller" until a gamepad reconnects, or until Player 1 drops
-  out from that pause menu and Player 2 is promoted.
-
-The old always-present keyboard Player 2 is still available for testing as
-**Settings → Debug → Keyboard Player 2 · WASD**, off by default. With it on,
-Player 2 is always present at level entry and uses the fixed layout below;
-binding-conflict checks and the conflict screen only run while it is on.
-With it off, those WASD keys are ordinary keys and Player 1 may bind them.
-
-| Action | Player 2's debug WASD layout |
-|---|---|
-| Move | W / A / S / D |
-| Jump | F |
-| Run | G |
-| Spin in the air | H |
-| Start / pause | 1 |
-| Select | 2 |
 
 Co-op follows New Super Mario Bros. Wii's rules, taken from the
 NSMBW-Decomp sources where they exist (`daPlBase_c::checkDispSideLemit`,
@@ -187,17 +154,12 @@ NSMBW-Decomp sources where they exist (`daPlBase_c::checkDispSideLemit`,
 The bubble outline is drawn by the renderer, because the cartridge has no
 bubble graphic.
 
-The keyboard and every connected gamepad are independent input devices, so
-two players can use any two of them. A host samples each player's own device,
-never a merged stream, so one player's controller cannot move the other.
+The existing controller input remains assigned to Player 1; this mode does
+not provide two-controller multiplayer.
 
 The runtime's single-player `Session::advance` interface remains available for
-diagnostics and replay. A co-op host calls
-`set_local_multiplayer(two_players)` before level entry and submits both
-inputs with `advance_two_players(FrameInput, PlayerKeys)`. Dropping out uses
-`set_local_multiplayer(false)` (or `drop_out_player_one` when Player 2 is
-promoted), and a lost Player 2 gamepad uses `bubble_second_player` /
-`resume_second_player`.
+diagnostics and replay. A co-op host enables `set_local_multiplayer(true)` and
+submits both inputs with `advance_two_players(FrameInput, PlayerKeys)`.
 
 ```sh
 cargo run -p sml2-runtime --example local_multiplayer_smoke

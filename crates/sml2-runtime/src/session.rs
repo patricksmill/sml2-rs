@@ -1096,49 +1096,6 @@ impl Session {
         }
     }
 
-    /// Whether level frames run both players.
-    pub fn local_multiplayer(&self) -> bool {
-        self.local_multiplayer
-    }
-
-    /// Player 2's device vanished inside a level: put Player 2 into a bubble
-    /// so it neither moves nor blocks progress. The host removes the slot when
-    /// the map returns, or resumes it if the device reconnects first.
-    pub fn bubble_second_player(&mut self) -> bool {
-        match &mut self.state {
-            SessionState::InLevel(ctx) => ctx.bubble_second_player(),
-            _ => false,
-        }
-    }
-
-    /// Player 2's device came back before the level ended.
-    pub fn resume_second_player(&mut self) -> bool {
-        match &mut self.state {
-            SessionState::InLevel(ctx) => ctx.resume_second_player(),
-            _ => false,
-        }
-    }
-
-    /// Player 1 dropped out of a two-player party: Player 2 becomes Player 1,
-    /// keeping its device, position and character. Returns whether a second
-    /// player was actually promoted.
-    pub fn drop_out_player_one(&mut self) -> bool {
-        let promoted = match &mut self.state {
-            SessionState::InLevel(ctx) => ctx.promote_second_player(),
-            _ => true,
-        };
-        if promoted {
-            self.local_multiplayer = false;
-            self.second_powerup = 0;
-            self.character = self.character.next();
-            self.prev_a2 = false;
-            self.prev_b2 = false;
-            self.prev_start2 = false;
-            self.prev_select2 = false;
-        }
-        promoted
-    }
-
     /// Player 2's in-level airborne state, for a host that maps its own spin
     /// button to a held Down only while airborne. False outside a live level
     /// or while player 2 is disabled/bubbled.
@@ -1246,10 +1203,21 @@ impl Session {
                 (false, false, false, false)
             };
 
-        // Only Player 1 moves the overworld cursor and confirms front-end
-        // menus. Player 2 joins outside the runtime and never steers these;
-        // in a level each player reads its own keys below.
-        let menu_keys = keys;
+        // Outside a live level the shared cursor/menu accepts either player's
+        // pad, so player 2 can trigger the transition that carries both.
+        let menu_keys = match second_keys {
+            Some(keys2) => PlayerKeys {
+                right: keys.right || keys2.right,
+                left: keys.left || keys2.left,
+                up: keys.up || keys2.up,
+                down: keys.down || keys2.down,
+                a: keys.a || keys2.a,
+                b: keys.b || keys2.b,
+                start: keys.start || keys2.start,
+                select: keys.select || keys2.select,
+            },
+            None => keys,
+        };
         let mut deferred_sfx0: Option<u8> = None;
         let mut coop_restart: Option<(u8, u8)> = None;
         let mut outcome = match &mut self.state {

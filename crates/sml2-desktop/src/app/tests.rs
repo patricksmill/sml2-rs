@@ -200,11 +200,11 @@ fn quit_to_title_from_the_map_opens_the_in_game_title() {
     app.input.event(Button::key("Escape"), false);
     assert_eq!(app.screen, Screen::Home);
     for _ in 0..2 {
-        app.input.event(Button::key("ArrowDown"), true);
+        app.input.event(Button::Pad(PadButton::Down), true);
         frame(&mut app, &ctx, vec![]);
-        app.input.event(Button::key("ArrowDown"), false);
+        app.input.event(Button::Pad(PadButton::Down), false);
     }
-    app.input.event(Button::key("Enter"), true);
+    app.input.event(Button::Pad(PadButton::South), true);
     frame(&mut app, &ctx, vec![]);
     assert_eq!(app.screen, Screen::Game);
     assert!(matches!(
@@ -942,33 +942,6 @@ fn overlay_rects_scale_view_pixels_from_the_image_origin() {
     let r = overlay_rect(rect, (160, 144), (5, 7, 10, 21));
     assert_eq!(r.min, egui::pos2(25.0, 41.0));
     assert_eq!(r.size(), egui::vec2(30.0, 63.0));
-}
-
-#[test]
-fn leave_keeps_the_fixed_select_and_backspace_buttons_when_rebound() {
-    let mut bindings = Bindings::default();
-    // Simulate a loaded layout that replaced the default Select row.
-    bindings.0[Action::Select as usize] = vec![Button::key("Q")];
-
-    let mut input = InputState::default();
-    input.event(Button::key("Backspace"), true);
-    assert!(take_leave_press(
-        &mut input,
-        &mut BTreeMap::new(),
-        Device::Keyboard,
-        &bindings
-    ));
-
-    let mut pads = BTreeMap::new();
-    let mut pad = InputState::default();
-    pad.event(Button::Pad(PadButton::Select), true);
-    pads.insert(3, pad);
-    assert!(take_leave_press(
-        &mut input,
-        &mut pads,
-        Device::Pad(3),
-        &bindings
-    ));
 }
 
 #[test]
