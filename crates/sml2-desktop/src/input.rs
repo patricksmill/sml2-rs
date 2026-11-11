@@ -40,7 +40,12 @@ impl Button {
     }
     pub fn label(&self) -> String {
         match self {
-            Self::Key(key) => key.clone(),
+            Self::Key(key) => match key.strip_prefix("Num") {
+                Some(digit) if digit.len() == 1 && digit.as_bytes()[0].is_ascii_digit() => {
+                    digit.to_string()
+                }
+                _ => key.clone(),
+            },
             Self::Pad(pad) => format!("Pad {pad:?}"),
         }
     }
@@ -133,6 +138,43 @@ impl Default for Bindings {
 }
 
 impl Bindings {
+    /// Player 2's fixed keyboard layout. It deliberately avoids every default
+    /// Player 1 button and every desktop menu shortcut, so both players can
+    /// share one keyboard. Controllers stay on Player 1.
+    pub fn player_two() -> Self {
+        let row = |keys: &[&str]| keys.iter().map(|k| Button::key(k)).collect();
+        Self([
+            row(&["D"]),
+            row(&["A"]),
+            row(&["W"]),
+            row(&["S"]),
+            row(&["F"]),
+            row(&["G"]),
+            row(&["Num1"]),
+            row(&["Num2"]),
+            row(&["H"]),
+            row(&[]),
+        ])
+    }
+
+    /// Player 1 actions whose buttons `reserved` already claims. Player 2's
+    /// fixed layout is reserved, so loaded or hand-edited settings cannot
+    /// silently give one key to both players.
+    pub fn conflicts_with(&self, reserved: &Bindings) -> Vec<(Action, Vec<Button>)> {
+        let mut conflicts = Vec::new();
+        for action in Action::ALL {
+            let buttons: Vec<Button> = self.0[action as usize]
+                .iter()
+                .filter(|button| reserved.0.iter().flatten().any(|other| other == *button))
+                .cloned()
+                .collect();
+            if !buttons.is_empty() {
+                conflicts.push((action, buttons));
+            }
+        }
+        conflicts
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         let mut used = BTreeSet::new();
         for action in Action::ALL {
@@ -164,6 +206,14 @@ impl Bindings {
                 "{} is reserved for the desktop menu",
                 button.label()
             ));
+        }
+        if Self::player_two()
+            .0
+            .iter()
+            .flatten()
+            .any(|other| other == &button)
+        {
+            return Err(format!("{} is reserved for Player 2", button.label()));
         }
         for other in Action::ALL {
             if other != action && self.0[other as usize].contains(&button) {
@@ -232,16 +282,37 @@ impl InputState {
     }
 
     pub fn sample_controls(&mut self, bindings: &Bindings) -> Controls {
+        let controls = self.read_controls(bindings, None);
+        self.consume_presses(bindings);
+        controls
+    }
+
+    /// Sample both keyboard players from the same event stream. Both reads
+    /// happen before presses are consumed, and a button bound by both players
+    /// reaches neither, so a hand-edited duplicate can never drive two players.
+    pub fn sample_two_players(
+        &mut self,
+        first: &Bindings,
+        second: &Bindings,
+    ) -> (Controls, Controls) {
+        let one = self.read_controls(first, Some(second));
+        let two = self.read_controls(second, Some(first));
+        self.consume_presses(first);
+        self.consume_presses(second);
+        (one, two)
+    }
+
+    fn read_controls(&self, bindings: &Bindings, also_bound: Option<&Bindings>) -> Controls {
         let values: [bool; 9] = std::array::from_fn(|index| {
             bindings.0[index].iter().any(|b| {
+                if also_bound
+                    .is_some_and(|other| other.0.iter().flatten().any(|shared| shared == b))
+                {
+                    return false;
+                }
                 !self.blocked.contains(b) && (self.held.contains(b) || self.pressed.contains(b))
             })
         });
-        for row in &bindings.0 {
-            for button in row {
-                self.pressed.remove(button);
-            }
-        }
         // Opposite directions cancel consistently across keyboard and gamepad.
         let keys = PlayerKeys {
             right: values[0] && !values[1],
@@ -256,6 +327,14 @@ impl InputState {
         Controls {
             keys,
             spin: values[8],
+        }
+    }
+
+    fn consume_presses(&mut self, bindings: &Bindings) {
+        for row in &bindings.0 {
+            for button in row {
+                self.pressed.remove(button);
+            }
         }
     }
 }
@@ -371,5 +450,61 @@ mod tests {
         input.event(Button::Pad(PadButton::Left), true);
         let keys = input.sample_player(&Bindings::default());
         assert!(!keys.right && !keys.left);
+    }
+    #[test]
+    fn both_keyboard_players_sample_independently_without_overlapping_defaults() {
+        let first = Bindings::default();
+        let second = Bindings::player_two();
+        second.validate().unwrap();
+        for action in Action::ALL {
+            for button in &first.0[action as usize] {
+                assert!(
+                    !second.0.iter().flatten().any(|other| other == button),
+                    "{} is bound to both players",
+                    button.label()
+                );
+            }
+        }
+
+        let mut input = InputState::default();
+        input.event(Button::key("ArrowRight"), true);
+        input.event(Button::key("D"), true);
+        input.event(Button::key("W"), true);
+        let (one, two) = input.sample_two_players(&first, &second);
+        assert!(one.keys.right && !one.keys.up);
+        assert!(two.keys.right && two.keys.up && !two.keys.left);
+
+        // Pausing blocks both players until each held key is released.
+        input.event(Button::key("ArrowRight"), true);
+        input.event(Button::key("D"), true);
+        input.suppress_until_release();
+        let (one, two) = input.sample_two_players(&first, &second);
+        assert!(!one.keys.right && !two.keys.right);
+        for name in ["ArrowRight", "D"] {
+            input.event(Button::key(name), false);
+            input.event(Button::key(name), true);
+        }
+        let (one, two) = input.sample_two_players(&first, &second);
+        assert!(one.keys.right && two.keys.right);
+
+        // Window focus loss releases held keys for both players.
+        input.clear();
+        let (one, two) = input.sample_two_players(&first, &second);
+        assert!(!one.keys.right && !two.keys.right && !two.keys.up);
+    }
+    #[test]
+    fn loaded_conflicts_are_reported_and_never_drive_both_players() {
+        let second = Bindings::player_two();
+        let mut first = Bindings::default();
+        first.0[Action::Jump as usize] = vec![Button::key("D")];
+        assert_eq!(
+            first.conflicts_with(&second),
+            vec![(Action::Jump, vec![Button::key("D")])]
+        );
+
+        let mut input = InputState::default();
+        input.event(Button::key("D"), true);
+        let (one, two) = input.sample_two_players(&first, &second);
+        assert!(!one.keys.a && !two.keys.right);
     }
 }

@@ -47,13 +47,13 @@ pub struct Room {
     /// `(width, height)` in world pixels of the layout the room lies in. A
     /// view larger than the room still stops at it.
     pub world: (i32, i32),
-    /// Set while a screen transition slides the camera into the next room;
-    /// the edges above are then a blend of the two rooms.
+    /// Set while crossing a room boundary, either by a screen transition or
+    /// ordinary vertical scrolling; the edges are a blend of the two rooms.
     pub slide: Option<RoomSlide>,
 }
 
-/// A screen transition's slide between two rooms, so an enlarged view can
-/// move across it at the scroll's own pace.
+/// A slide between two rooms, so an enlarged view can move across changing
+/// bounds at the camera's pace rather than snapping at a screen boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RoomSlide {
     /// `[left, top, right, bottom]` of the room the camera left.
@@ -185,6 +185,9 @@ pub struct CameraSim {
     pub scroll_delta_right: u8,
     /// `sScrollDeltaLeft` ($A20C): horizontal scroll delta accumulated for the camera pass.
     pub scroll_delta_left: u8,
+    /// Local co-op: the player whose push started the current screen
+    /// transition, walked by `$0DED` (see `camera_coop.rs`).
+    pub coop_leader: usize,
 }
 
 impl CameraSim {
@@ -225,6 +228,7 @@ impl CameraSim {
             scroll_x,
             scroll_delta_right: 0,
             scroll_delta_left: 0,
+            coop_leader: 0,
         }
     }
 
@@ -1504,7 +1508,11 @@ mod tests {
         };
         // sx = 0 - $B0 + $60 = -$50, which wraps to the byte $B0.
         assert_eq!(at_end_lock(true, 0x0000), 0, "left of the wide view");
-        assert_eq!(at_end_lock(true, 0x00F5), 1, "the real right edge still fires");
+        assert_eq!(
+            at_end_lock(true, 0x00F5),
+            1,
+            "the real right edge still fires"
+        );
         assert_eq!(at_end_lock(false, 0x0000), 1, "native reads the ROM byte");
     }
 
@@ -1967,6 +1975,10 @@ mod tests {
         assert_eq!((c.room().left, c.room().right), (0x400, 0xC00));
     }
 }
+
+#[path = "camera_coop.rs"]
+mod coop;
+pub use coop::{CoopCameraStep, CoopPlayer};
 
 #[cfg(test)]
 #[path = "camera_latch_tests.rs"]

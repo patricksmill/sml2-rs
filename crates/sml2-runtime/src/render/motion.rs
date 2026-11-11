@@ -45,7 +45,11 @@ pub struct MotionSnapshot {
     pub level: u8,
     pub cam: (u16, u16),
     pub player: Option<(u16, u16)>,
+    pub player_two: Option<(u16, u16)>,
     pub shield: Option<(u16, u16)>,
+    pub shield_two: Option<(u16, u16)>,
+    pub player_bubble: Option<(u16, u16)>,
+    pub player_two_bubble: Option<(u16, u16)>,
     pub fireballs: Vec<(u16, u16)>,
     pub bumpers: Vec<(u16, u16)>,
     /// `(slot, position)` per drawn object.
@@ -71,7 +75,11 @@ impl MotionSnapshot {
             level: ctx.manifest.level_id,
             cam: pans.anchored((ctx.cam.x, ctx.cam.y)),
             player: s.player.map(mario),
+            player_two: s.player_two.map(mario),
             shield: s.player_shield.map(mario),
+            shield_two: s.player_two_shield.map(mario),
+            player_bubble: s.player_bubble.map(mario),
+            player_two_bubble: s.player_two_bubble.map(mario),
             fireballs: s.fireballs.iter().map(anchored).collect(),
             bumpers: s.bumpers.iter().map(anchored).collect(),
             objects: s.insts.iter().map(|i| (i.slot, (i.x, i.y))).collect(),
@@ -108,7 +116,11 @@ pub struct Offsets {
     pub scale: usize,
     pub bg: (i32, i32),
     pub player: (i32, i32),
+    pub player_two: (i32, i32),
     pub shield: (i32, i32),
+    pub shield_two: (i32, i32),
+    pub player_bubble: (i32, i32),
+    pub player_two_bubble: (i32, i32),
     pub fireballs: Vec<(i32, i32)>,
     pub bumpers: Vec<(i32, i32)>,
     pub objects: Vec<(u8, (i32, i32))>,
@@ -120,7 +132,11 @@ impl Offsets {
             scale: 1,
             bg: (0, 0),
             player: (0, 0),
+            player_two: (0, 0),
             shield: (0, 0),
+            shield_two: (0, 0),
+            player_bubble: (0, 0),
+            player_two_bubble: (0, 0),
             fireballs: Vec::new(),
             bumpers: Vec::new(),
             objects: Vec::new(),
@@ -160,7 +176,15 @@ impl Offsets {
             (own.0 - cam.0, own.1 - cam.1)
         };
         out.player = cur.player.map_or(out.bg, |c| rel(prev.player, c));
+        out.player_two = cur.player_two.map_or(out.bg, |c| rel(prev.player_two, c));
         out.shield = cur.shield.map_or(out.bg, |c| rel(prev.shield, c));
+        out.shield_two = cur.shield_two.map_or(out.bg, |c| rel(prev.shield_two, c));
+        out.player_bubble = cur
+            .player_bubble
+            .map_or(out.bg, |c| rel(prev.player_bubble, c));
+        out.player_two_bubble = cur
+            .player_two_bubble
+            .map_or(out.bg, |c| rel(prev.player_two_bubble, c));
         out.fireballs = cur
             .fireballs
             .iter()
