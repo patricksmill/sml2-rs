@@ -306,9 +306,9 @@ impl CameraSim {
             .unwrap_or(0)
     }
 
-    /// The [`Room`] the camera is in. A screen transition (`$0DED`) slides
-    /// it from the room the camera left to the one it is entering, in step
-    /// with the scroll, so an enlarged view pans across instead of jumping.
+    /// The presentation room. Screen transitions (`$0DED`) slide between
+    /// rooms; unlocked vertical scrolling blends across the native window's
+    /// height so changing shaft widths cannot snap an enlarged view sideways.
     pub fn room(&self) -> Room {
         let (x, y, w) = (self.x, self.y, self.world);
         let along = |from: (u16, u16), to: (u16, u16), done: u8, span: i32, step| {
@@ -337,6 +337,33 @@ impl CameraSim {
             let to = w.wrap(from.wrapping_add(0x88));
             along((x, from), (x, to), d, 0x88, (0, 1))
         } else {
+            // An unlocked row can widen a shaft without starting `$0DED`.
+            // Blend the endpoint views as the native window crosses that row,
+            // just as for a scripted slide; blending only the edges can still
+            // make the enlarged view accelerate sharply when its clamp moves.
+            let boundary = if y & 0xFF < 72 {
+                i32::from(y & 0xFF00)
+            } else if y & 0xFF >= 256 - 72 {
+                i32::from(y & 0xFF00) + 256
+            } else {
+                return self.room_at((x, y));
+            };
+            if boundary > 0 && boundary < i32::from(w.screens_high) * 256 {
+                let upper = (boundary - 1) as u16;
+                let lower = boundary as u16;
+                let edge = |y| {
+                    self.edge_map
+                        .get(w.screen_index(x, y))
+                        .copied()
+                        .unwrap_or(0)
+                };
+                if edge(upper) & 8 == 0 && edge(lower) & 4 == 0 {
+                    let (from, to) = (self.room_at((x, upper)), self.room_at((x, lower)));
+                    if (from.left, from.right) != (to.left, to.right) {
+                        return from.lerp(to, i32::from(y) - (boundary - 72), 144, (0, 1));
+                    }
+                }
+            }
             self.room_at((x, y))
         }
     }
