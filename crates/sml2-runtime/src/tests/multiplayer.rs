@@ -770,3 +770,98 @@ fn player_two_can_trigger_the_exit_bell_for_both() {
     }
     assert!(cleared, "the shared exit fade reached the map hand-off");
 }
+
+#[test]
+fn dropping_player_two_mid_level_leaves_player_one_alone() {
+    let mut session = coop_session();
+    let first = {
+        let ctx = live(&mut session);
+        (ctx.sim.x, ctx.sim.y)
+    };
+    assert!(session.local_multiplayer());
+    session.set_local_multiplayer(false);
+    assert!(!session.local_multiplayer());
+    {
+        let ctx = live(&mut session);
+        assert!(ctx.second.is_none());
+        assert!(!ctx.sim.shared_screen);
+        assert_eq!((ctx.sim.x, ctx.sim.y), first);
+    }
+    // The same tick path now advances exactly one player.
+    let effects = step(
+        &mut session,
+        PlayerKeys::default(),
+        PlayerKeys {
+            right: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(effects.outcome, StepOutcome::Continue);
+    assert!(live(&mut session).second.is_none());
+}
+
+#[test]
+fn a_disconnected_player_two_bubbles_until_its_device_returns() {
+    let mut session = coop_session();
+    let at = {
+        let ctx = live(&mut session);
+        let second = ctx.second.as_ref().unwrap();
+        (second.sim.x, second.sim.y)
+    };
+    assert!(session.bubble_second_player());
+    let bubble = {
+        let ctx = live(&mut session);
+        let second = ctx.second.as_ref().unwrap();
+        let bubble = second.bubble.expect("bubbled at once");
+        assert_eq!(bubble.delay, 0, "a disconnect bubble is visible now");
+        assert!(ctx.spr.as_ref().unwrap().player_two.is_none());
+        bubble
+    };
+    let _ = step(&mut session, PlayerKeys::default(), PlayerKeys::default());
+    assert!(live(&mut session).second.as_ref().unwrap().bubble.is_some());
+
+    session.resume_second_player();
+    {
+        let ctx = live(&mut session);
+        let second = ctx.second.as_ref().unwrap();
+        assert!(second.bubble.is_none(), "control resumes");
+        assert_eq!(second.sim.dead, 0);
+        assert_eq!(
+            (second.sim.x, second.sim.y),
+            (bubble.x, bubble.y),
+            "resumed where the bubble was"
+        );
+        assert!(ctx.spr.as_ref().unwrap().player_two.is_some());
+    }
+    assert!((at.0 as i32 - bubble.x as i32).abs() < 64);
+}
+
+#[test]
+fn removing_a_bubbled_player_two_drops_the_slot() {
+    let mut session = coop_session();
+    assert!(session.bubble_second_player());
+    session.set_local_multiplayer(false);
+    let ctx = live(&mut session);
+    assert!(ctx.second.is_none());
+    assert!(ctx.first_bubble.is_none());
+    assert!(!ctx.sim.shared_screen);
+}
+
+#[test]
+fn player_two_becomes_player_one_after_player_one_drops_out() {
+    let mut session = coop_session();
+    let previous_character = session.character;
+    let at = {
+        let ctx = live(&mut session);
+        let second = ctx.second.as_ref().unwrap();
+        (second.sim.x, second.sim.y)
+    };
+    assert!(session.drop_out_player_one());
+    assert!(!session.local_multiplayer());
+    assert_ne!(session.character, previous_character);
+    let ctx = live(&mut session);
+    assert!(ctx.second.is_none());
+    assert!(!ctx.sim.shared_screen);
+    assert_eq!((ctx.sim.x, ctx.sim.y), at, "the survivor keeps its place");
+    assert_eq!(ctx.spr.as_ref().unwrap().player_two, None);
+}

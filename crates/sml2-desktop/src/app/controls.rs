@@ -2,6 +2,7 @@ use super::{DesktopApp, Screen, screenshot};
 use crate::{
     input::{Button, PadButton},
     menu::pressed,
+    players::Device,
 };
 use eframe::egui::{self, Context, RawInput};
 
@@ -65,12 +66,15 @@ impl DesktopApp {
                     sml2_runtime::session::SessionState::Title(_)
                 )
             });
-        let back_buttons: &[Button] = if on_title {
-            &[Button::key("Escape")]
-        } else {
-            &[Button::key("Escape"), Button::Pad(PadButton::Start)]
-        };
-        let back = pressed(&mut self.input, back_buttons);
+        // File pickers and binding capture are host dialogs; the in-game
+        // menus read only the devices that own a player.
+        let escape = pressed(&mut self.input, &[Button::key("Escape")]);
+        let pad_back = !on_title && pressed(&mut self.input, &[Button::Pad(PadButton::Start)]);
+        let back = escape || pad_back;
+        let menu_escape = pressed(&mut self.ui_input, &[Button::key("Escape")]);
+        let menu_pad_back =
+            !on_title && pressed(&mut self.ui_input, &[Button::Pad(PadButton::Start)]);
+        let menu_back = menu_escape || menu_pad_back;
         if self.dx_picker.is_some() {
             if back || self.input.take_press(&Button::Pad(PadButton::East)) {
                 self.dx_picker = None;
@@ -102,30 +106,13 @@ impl DesktopApp {
             }
             return;
         }
-        let in_level = self.screen == Screen::Game
-            && self.game.as_ref().is_some_and(|game| {
-                matches!(
-                    game.session.state,
-                    sml2_runtime::session::SessionState::InLevel(_)
-                )
-            });
-        let mut game_start = false;
-        if in_level {
-            for bindings in [&self.settings.bindings, &self.second_bindings] {
-                let start = crate::input::Action::Start as usize;
-                if bindings.0[start]
-                    .iter()
-                    .any(|button| self.input.take_press(button))
-                {
-                    game_start = true;
-                    break;
-                }
-            }
-        }
-        if self.screen != Screen::Game && self.input.take_press(&Button::Pad(PadButton::East))
-            || back
-            || game_start
-        {
+        // The reconnect prompt is left only by reconnecting or dropping out
+        // from its pause menu, never by a back press. The press is consumed
+        // either way so it cannot queue past the prompt.
+        let east =
+            self.screen != Screen::Game && self.ui_input.take_press(&Button::Pad(PadButton::East));
+        if !self.reconnect_pause && (east || menu_back) {
+            let from_game = self.screen == Screen::Game;
             let target = match self.screen {
                 Screen::Settings => self.return_screen,
                 Screen::Home
@@ -137,6 +124,11 @@ impl DesktopApp {
                 _ => Screen::Home,
             };
             self.navigate(ctx, target);
+            if from_game && menu_escape {
+                self.menu_owner = Some(Device::Keyboard);
+            } else if !from_game {
+                self.menu_owner = None;
+            }
         }
         if self.input.take_press(&Button::key("F11")) {
             self.fullscreen(ctx);
