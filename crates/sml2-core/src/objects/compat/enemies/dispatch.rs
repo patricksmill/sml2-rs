@@ -247,8 +247,7 @@ impl ObjectSim {
         if st.b[B_FLAGS] & 0x08 == 0 {
             return;
         }
-        let y = self.mario_y_adjust.unwrap_or(self.mario.y);
-        self.mario_y_adjust = Some(y.wrapping_add(b as u16));
+        self.carry_rider_dy(i16::from(b));
     }
 
     pub(super) fn carry_mario_x(&mut self, st: &mut Staging, dx: i16) {

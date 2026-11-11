@@ -269,6 +269,28 @@ impl AppPaths {
 mod tests {
     use super::*;
     #[test]
+    fn conflicting_player_one_binding_loads_without_silent_rewrite() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.json");
+        let mut settings = Settings::default();
+        settings.bindings.0[crate::input::Action::Jump as usize] =
+            vec![crate::input::Button::key("D")];
+        settings.save(&path).unwrap();
+
+        let loaded = Settings::load(&path).unwrap();
+        assert_eq!(loaded, settings);
+        assert_eq!(
+            loaded
+                .bindings
+                .conflicts_with(&crate::input::Bindings::player_two()),
+            vec![(
+                crate::input::Action::Jump,
+                vec![crate::input::Button::key("D")]
+            )]
+        );
+    }
+
+    #[test]
     fn widescreen_modes_round_trip_without_changing_existing_settings() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("settings.json");

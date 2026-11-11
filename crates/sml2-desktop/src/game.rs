@@ -6,7 +6,7 @@ use sml2_core::{
     player_sim::PlayerKeys,
 };
 use sml2_runtime::{
-    FrameInput, Session, audio_output::AudioOutput, content::SessionAssets,
+    FrameEffects, FrameInput, Session, audio_output::AudioOutput, content::SessionAssets,
     divider_clock::VirtualDividerClock, session::SessionState,
 };
 use std::{fs, path::PathBuf};
@@ -136,11 +136,37 @@ impl Game {
         matches!(&self.session.state, SessionState::InLevel(ctx) if !ctx.sim.on_ground)
     }
 
+    /// The second player's airborne state, for the host-only spin binding.
+    pub fn second_player_airborne(&self) -> bool {
+        self.session.second_player_airborne()
+    }
+
     pub fn tick(&mut self, keys: PlayerKeys, volume: impl Into<Volume>) {
         let volume = volume.into();
         self.div_clock.advance_tick();
         let div = self.div_clock.sample();
         let effects = self.session.advance(FrameInput { keys, div });
+        self.finish_tick(effects, volume);
+    }
+
+    /// Advance one tick with both keyboard players. The first player carries
+    /// the frame's divider sample; `tick` remains the single-player path.
+    pub fn tick_two_players(
+        &mut self,
+        first: PlayerKeys,
+        second: PlayerKeys,
+        volume: impl Into<Volume>,
+    ) {
+        let volume = volume.into();
+        self.div_clock.advance_tick();
+        let div = self.div_clock.sample();
+        let effects = self
+            .session
+            .advance_two_players(FrameInput { keys: first, div }, second);
+        self.finish_tick(effects, volume);
+    }
+
+    fn finish_tick(&mut self, effects: FrameEffects, volume: Volume) {
         if effects.persist_slots {
             if let Err(e) = self.persist_slots() {
                 self.diagnostics.push(format!("Save: {e}"));

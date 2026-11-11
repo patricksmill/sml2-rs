@@ -532,6 +532,7 @@ mod hopping;
 #[path = "platforms/horizontal.rs"]
 mod horizontal_platform;
 mod interaction;
+mod multiplayer;
 #[path = "platforms/patrol_motion.rs"]
 mod patrol_motion;
 mod visibility;
@@ -696,6 +697,12 @@ pub struct ObjectSim {
     pub on_ground_cleared: bool,
     pub mario_x_adjust: Option<u16>,
     pub mario_y_adjust: Option<u16>,
+    cooperative: bool,
+    coop_riders: [u8; SLOT_COUNT],
+    coop_contacts: [MarioContact; 2],
+    coop_carry: [(Option<u16>, Option<u16>); 2],
+    coop_slot: usize,
+    coop_contact: u8,
     pub stomp_bounce_timer: u8,
     pub stomp_chain: u8,
     pub award_lives: u8,
@@ -833,6 +840,12 @@ impl ObjectSim {
             on_ground_cleared: false,
             mario_x_adjust: None,
             mario_y_adjust: None,
+            cooperative: false,
+            coop_riders: [0; SLOT_COUNT],
+            coop_contacts: [MarioContact::default(); 2],
+            coop_carry: [(None, None); 2],
+            coop_slot: 0,
+            coop_contact: 0,
             stomp_bounce_timer: 0,
             stomp_chain: 0,
             award_lives: 0,
@@ -1032,6 +1045,7 @@ impl ObjectSim {
         mario: &MarioContact,
         boss_mode: bool,
     ) {
+        self.cooperative = false;
         self.camera_position = crate::actor::Position { x: cam_x, y: cam_y };
         self.mario = *mario;
         if !mario.travelling {
@@ -1046,6 +1060,28 @@ impl ObjectSim {
         } else {
             self.engine(cam_x, cam_y, layout, tables);
         }
+    }
+
+    /// Resolve an additional player's contacts without advancing the world.
+    ///
+    /// `dead` belongs to this player, not the preceding contact pass. Results
+    /// use the same latches as [`Self::step`]; consume them before installing
+    /// another player's contact. Slot reactions remain queued for the engine.
+    fn contact_pass(
+        &mut self,
+        cam_x: u16,
+        cam_y: u16,
+        layout: &LevelLayout,
+        mario: &MarioContact,
+        dead: u8,
+    ) -> u8 {
+        self.camera_position = crate::actor::Position { x: cam_x, y: cam_y };
+        self.mario = *mario;
+        self.mario_dead = dead;
+        if !mario.travelling {
+            self.collide(cam_x, cam_y, layout);
+        }
+        self.mario_dead
     }
 
     /// The `$EBBB` level-(re)load tail: `$EC40` clears the object scratch
@@ -1114,9 +1150,8 @@ impl ObjectSim {
     /// - Mario's X += b
     /// - If Mario is not moving left (hvel >= 0x80), scroll_delta_right += b.
     pub(super) fn carry_mario_right(&mut self, b: u8) {
-        let x = self.mario_x_adjust.unwrap_or(self.mario.x);
-        self.mario_x_adjust = Some(x.wrapping_add(b as u16));
-        if self.mario.hvel >= 0x80 {
+        self.carry_rider_dx(i16::from(b));
+        if self.rider_scrolls(true) {
             self.scroll_delta_right = self.scroll_delta_right.wrapping_add(b);
         }
     }
@@ -1126,9 +1161,8 @@ impl ObjectSim {
     /// - Mario's X -= b
     /// - If Mario is not moving right (hvel < 0x81), scroll_delta_left += b.
     pub(super) fn carry_mario_left(&mut self, b: u8) {
-        let x = self.mario_x_adjust.unwrap_or(self.mario.x);
-        self.mario_x_adjust = Some(x.wrapping_sub(b as u16));
-        if self.mario.hvel < 0x81 {
+        self.carry_rider_dx(-i16::from(b));
+        if self.rider_scrolls(false) {
             self.scroll_delta_left = self.scroll_delta_left.wrapping_add(b);
         }
     }
@@ -1424,6 +1458,7 @@ impl ObjectSim {
         layout: &LevelLayout,
         tables: &ObjectTables,
     ) {
+        self.coop_slot = i;
         let mut st = Staging {
             b: self.slots[i].b,
             ..Default::default()

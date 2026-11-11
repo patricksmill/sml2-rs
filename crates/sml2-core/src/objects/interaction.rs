@@ -425,6 +425,9 @@ impl ObjectSim {
         if a & 0x20 != 0 {
             // Stompable-on-top: stand on it (nudge Mario up 1 px).
             self.on_object = true;
+            if self.cooperative {
+                self.coop_riders[i] |= self.coop_contact;
+            }
             self.slots[i].b[B_FLAGS] = 8;
             if y_delta < 3 {
                 return;
