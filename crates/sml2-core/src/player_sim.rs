@@ -408,9 +408,6 @@ pub struct PlayerSim {
     /// its own path, so this is what lets Mario walk out to the edges of a
     /// view wider than 160; the free-scroll camera already tracks him.
     pub view_clamp: bool,
-    /// Local co-op: the shared-screen rules replace `$0FBF`'s clamp, so the
-    /// player update leaves X alone and the frame applies the party's edges.
-    pub shared_screen: bool,
     /// `sCameraY` low byte, same frame-start timing as [`Self::camx`] —
     /// `$1BFF`'s hazard arm reads `sMarioScreenY`, which the draw step
     /// computed from the previous frame's camera.
@@ -635,7 +632,6 @@ impl PlayerSim {
             camx: 0,
             view: None,
             view_clamp: false,
-            shared_screen: false,
             camy: 0,
             collision_tile: 0,
             probe_point: (0, 0),
@@ -775,20 +771,6 @@ impl PlayerSim {
 
     fn right_wall(&mut self, layout: &LevelLayout) -> bool {
         self.wall_hit(layout, self.x.wrapping_add(20))
-    }
-
-    /// Whether the side probes would hit a wall at the right (`x+20`) or left
-    /// (`x+11`) probe column, without the coin touch the update's own probes
-    /// make. The shared-screen edge must not push a player into a wall.
-    pub fn wall_beside(&self, layout: &LevelLayout, right: bool) -> bool {
-        let px = self.x.wrapping_add(if right { 20 } else { 11 });
-        let rows: &[u16] = if self.powerup != 0 && !self.ducking {
-            &[20, 32, 40]
-        } else {
-            &[32, 40]
-        };
-        rows.iter()
-            .any(|&dy| self.tile(layout, px, self.y.wrapping_add(dy)) < 0x38)
     }
 
     /// `$1D75`: the coin touch, called by the side probes for every tile they
@@ -1742,9 +1724,6 @@ impl PlayerSim {
     /// the same span runs across [`Self::view`], in world pixels, so a wide
     /// autoscroller does not wrap the check through a byte.
     fn clamp_screen_x(&mut self) {
-        if self.shared_screen {
-            return;
-        }
         let Some(view) = self.view.filter(|_| self.view_clamp) else {
             let sx = self.x.wrapping_sub(self.camx).wrapping_add(96) & 0xFF;
             if sx < 0x10 {

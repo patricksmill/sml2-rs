@@ -79,61 +79,6 @@ fn blank_layout() -> LevelLayout {
 }
 
 #[test]
-fn additional_player_contact_is_not_suppressed_by_previous_players_damage() {
-    let mut obj = ObjectSim::new(Vec::new(), 0);
-    let layout = blank_layout();
-    let contact = MarioContact::default();
-    let slot = &mut obj.slots[0];
-    slot.b[B_STATE] = 2;
-    slot.b[B_TYPE] = 0x40;
-    slot.b[B_SCRX] = 96;
-    slot.b[B_SCRY] = 96;
-    slot.b[B_HB_BOTTOM] = 16;
-    slot.b[B_HB_RIGHT] = 16;
-    obj.mario_dead = 15;
-    assert_eq!(obj.contact_pass(0, 0, &layout, &contact, 0), 15);
-    assert_eq!(obj.sfx0, 15);
-    assert_eq!(obj.slots[0].b[B_FLAGS], 0x10);
-
-    obj.slots[0].b[B_FLAGS] = 0;
-    let shielded = MarioContact {
-        moon_physics: 4,
-        ..contact
-    };
-    assert_eq!(obj.contact_pass(0, 0, &layout, &shielded, 0), 0);
-    assert_eq!(obj.mario.moon_physics & 4, 0);
-    assert_eq!(obj.mario.invincibility, 0x80);
-}
-
-#[test]
-fn one_harmful_enemy_can_damage_both_players_in_the_same_frame() {
-    use crate::player_sim::PlayerSim;
-    let mut obj = ObjectSim::new(Vec::new(), 0);
-    let mut first = PlayerSim::new();
-    let mut second = PlayerSim::new();
-    let contact = MarioContact::default();
-    let slot = &mut obj.slots[0];
-    slot.b[B_STATE] = 2;
-    slot.b[B_TYPE] = 0x40;
-    slot.b[B_SCRX] = 96;
-    slot.b[B_SCRY] = 96;
-    slot.b[B_HB_BOTTOM] = 16;
-    slot.b[B_HB_RIGHT] = 16;
-    obj.step_two_players(
-        0,
-        0,
-        &blank_layout(),
-        &tables(),
-        [&mut first, &mut second],
-        [Some(contact); 2],
-        [false; 2],
-        false,
-        0,
-    );
-    assert_eq!((first.dead, second.dead), (15, 15));
-}
-
-#[test]
 fn handler_0x0ab30_boss_dispatch_moves_child_then_delivers_delay_and_removes() {
     let mut t = tables();
     t.boss_anim_handlers = vec![0x9322; 23];

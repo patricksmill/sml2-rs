@@ -34,7 +34,6 @@ mod expanded_levels;
 mod front_end;
 mod game;
 mod level_frame;
-mod multiplayer;
 mod pause_audio;
 mod played_routes;
 mod scene_pipe;

@@ -94,7 +94,6 @@ impl DesktopApp {
                     Ok(()) => {
                         self.capture = None;
                         self.status = None;
-                        self.refresh_binding_conflicts();
                     }
                     Err(e) => self.status = Some(e),
                 }
@@ -102,26 +101,16 @@ impl DesktopApp {
             }
             return;
         }
-        let in_level = self.screen == Screen::Game
+        let game_start = self.screen == Screen::Game
             && self.game.as_ref().is_some_and(|game| {
                 matches!(
                     game.session.state,
                     sml2_runtime::session::SessionState::InLevel(_)
                 )
-            });
-        let mut game_start = false;
-        if in_level {
-            for bindings in [&self.settings.bindings, &self.second_bindings] {
-                let start = crate::input::Action::Start as usize;
-                if bindings.0[start]
-                    .iter()
-                    .any(|button| self.input.take_press(button))
-                {
-                    game_start = true;
-                    break;
-                }
-            }
-        }
+            })
+            && self.settings.bindings.0[crate::input::Action::Start as usize]
+                .iter()
+                .any(|button| self.input.take_press(button));
         if self.screen != Screen::Game && self.input.take_press(&Button::Pad(PadButton::East))
             || back
             || game_start

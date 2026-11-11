@@ -11,7 +11,8 @@ impl ObjectSim {
         match result {
             Ok(handler_0x5a5ec::Effect::Moved { dx, dy, riding }) if riding => {
                 self.carry_mario_dx(dx);
-                self.carry_rider_dy(dy);
+                let y = self.mario_y_adjust.unwrap_or(self.mario.y);
+                self.mario_y_adjust = Some(y.wrapping_add_signed(dy));
             }
             Ok(handler_0x5a5ec::Effect::Moved { .. }) | Ok(handler_0x5a5ec::Effect::Continue) => {}
             Ok(handler_0x5a5ec::Effect::Respawn) => self.respawn_object_5b2bf(st, tables),

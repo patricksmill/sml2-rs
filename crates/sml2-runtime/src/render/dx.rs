@@ -912,11 +912,9 @@ fn render(
         .zip(ctx.boss_definition)
         .and_then(|(arena, definition)| arena.fight(definition));
     // The reload's `$A21A` bump moves `$2C:$5D62` to the other mapping table.
-    let player_theme = level.theme + arena.map_or(0, |a| a.theme);
-    let mappings = &dx.player(character, player_theme).mappings;
-    // Local co-op's player 2 is the other character, with its own tiles.
-    let partner = dx.player(character.next(), level.theme);
-    let partner_mappings = &dx.player(character.next(), player_theme).mappings;
+    let mappings = &dx
+        .player(character, level.theme + arena.map_or(0, |a| a.theme))
+        .mappings;
     let level_source = (&level.bg_palettes[..], &level.obj_palettes[..]);
     let (bg_source, obj_source) = fight.map_or(level_source, |f| (&f.bg_palettes, &f.obj_palettes));
     // A fight load clears earlier overrides; later regional triggers can
@@ -933,33 +931,24 @@ fn render(
     let palettes = CgbPalettes::from_bytes(&bg_palettes, &obj_source).map_err(|e| e.to_string())?;
     let background = [live_background(ctx, dx, level), level.background[1].clone()];
     // Each assembled bank starts at $8000. Signed BG tile addressing adds $800.
-    let build_banks = |graphics: &sml2_dx::PlayerGraphics, powerup: u8| {
-        let mut banks: [Vec<u8>; 2] = std::array::from_fn(|bank| {
-            let mut bytes = if bank == 1 {
-                graphics.bank1.clone()
-            } else if powerup == 3 {
-                graphics.fire.clone()
-            } else {
-                graphics.normal.clone()
-            };
-            bytes.extend_from_slice(&background[bank]);
-            bytes
-        });
-        if let Some(arena) = arena {
-            copy_vram(&mut banks[1], &arena.vram1);
-        }
-        for copy in fight.iter().flat_map(|f| &f.vram0) {
-            copy_vram(&mut banks[0], copy);
-        }
-        banks
-    };
-    let owned_banks = build_banks(player, ctx.sim.powerup);
-    let banks = [&owned_banks[0][..], &owned_banks[1][..]];
-    let partner_banks = ctx
-        .second
-        .as_ref()
-        .filter(|_| !background_only)
-        .map(|second| build_banks(partner, second.sim.powerup));
+    let mut banks: [Vec<u8>; 2] = std::array::from_fn(|bank| {
+        let mut bytes = if bank == 1 {
+            player.bank1.clone()
+        } else if ctx.sim.powerup == 3 {
+            player.fire.clone()
+        } else {
+            player.normal.clone()
+        };
+        bytes.extend_from_slice(&background[bank]);
+        bytes
+    });
+    if let Some(arena) = arena {
+        copy_vram(&mut banks[1], &arena.vram1);
+    }
+    for copy in fight.iter().flat_map(|f| &f.vram0) {
+        copy_vram(&mut banks[0], copy);
+    }
+    let banks = [&banks[0][..], &banks[1][..]];
     // A fight's load writes its own VRAM1 attribute rows; tiles drawn since
     // (layout rewrites) take the per-tile table.
     let tile_attributes = fight
@@ -1256,83 +1245,6 @@ fn render(
                 offsets.player,
             )?;
         }
-        if let Some((x, y, frame)) = s.player_bubble {
-            let ((ax, ay), offset) = place(x, y);
-            if let Some(cells) = player::draw_cells(&tables, frame, x, y, ax, ay, false) {
-                push_bubble_ring(
-                    &mut layers.cells,
-                    &palettes,
-                    &cells,
-                    s.player_pan,
-                    offset,
-                    offsets.player_bubble,
-                )?;
-                push_cells(
-                    &mut layers.cells,
-                    banks,
-                    cells,
-                    s.player_pan,
-                    offset,
-                    offsets.player_bubble,
-                )?;
-            }
-        }
-        if let Some(partner_banks) = &partner_banks {
-            let partner_banks = [&partner_banks[0][..], &partner_banks[1][..]];
-            let player_mappings =
-                std::mem::replace(&mut tables.player_mappings, partner_mappings.clone());
-            if let Some((x, y, frame)) = s.player_two {
-                let ((ax, ay), offset) = place(x, y);
-                let mut cells = player::draw_cells_styled(
-                    &tables,
-                    frame,
-                    x,
-                    y,
-                    ax,
-                    ay,
-                    CellStyle {
-                        force_palette_one: s.player_two_star_flash,
-                        behind_background: s.player_two_behind_bg,
-                    },
-                )
-                .ok_or_else(|| format!("missing DX player-two frame {frame}"))?;
-                for cell in &mut cells {
-                    if s.player_two_behind_bg {
-                        cell.attr |= 0x80;
-                    }
-                }
-                push_cells(
-                    &mut layers.cells,
-                    partner_banks,
-                    cells,
-                    s.player_pan,
-                    offset,
-                    offsets.player_two,
-                )?;
-            }
-            if let Some((x, y, frame)) = s.player_two_bubble {
-                let ((ax, ay), offset) = place(x, y);
-                if let Some(cells) = player::draw_cells(&tables, frame, x, y, ax, ay, false) {
-                    push_bubble_ring(
-                        &mut layers.cells,
-                        &palettes,
-                        &cells,
-                        s.player_pan,
-                        offset,
-                        offsets.player_two_bubble,
-                    )?;
-                    push_cells(
-                        &mut layers.cells,
-                        partner_banks,
-                        cells,
-                        s.player_pan,
-                        offset,
-                        offsets.player_two_bubble,
-                    )?;
-                }
-            }
-            tables.player_mappings = player_mappings;
-        }
         if let Some((x, y, frame)) = s.player_shield {
             let ((ax, ay), offset) = place(x, y);
             if let Some(cells) = player::draw_cells(&tables, frame, x, y, ax, ay, false) {
@@ -1343,19 +1255,6 @@ fn render(
                     s.player_pan,
                     offset,
                     offsets.shield,
-                )?;
-            }
-        }
-        if let Some((x, y, frame)) = s.player_two_shield {
-            let ((ax, ay), offset) = place(x, y);
-            if let Some(cells) = player::draw_cells(&tables, frame, x, y, ax, ay, false) {
-                push_cells(
-                    &mut layers.cells,
-                    banks,
-                    cells,
-                    s.player_pan,
-                    offset,
-                    offsets.shield_two,
                 )?;
             }
         }
@@ -1518,46 +1417,6 @@ fn obj_cell(
         shift,
         pixels,
     })
-}
-
-/// The renderer-drawn revival bubble ([`super::bubble_ring`]) in the
-/// bubbled player's own OBJ palette — its darkest entry for the outline, its
-/// lightest for the shine — pushed before its cells so the ring is in front.
-fn push_bubble_ring(
-    out: &mut Vec<Cell8>,
-    palettes: &CgbPalettes,
-    cells: &[Cell],
-    pan: u8,
-    offset: (i32, i32),
-    shift: (i32, i32),
-) -> Result<(), String> {
-    let palette = cells.first().map_or(0, |c| c.attr & 7);
-    let colors = palettes.objects()[usize::from(palette)];
-    let luma = |c: u8| {
-        let rgb = colors[usize::from(c)];
-        (rgb & 0x1F) * 3 + ((rgb >> 5) & 0x1F) * 6 + ((rgb >> 10) & 0x1F)
-    };
-    let outline = (1..=3).min_by_key(|&c| luma(c)).unwrap_or(3);
-    let shine = (1..=3).max_by_key(|&c| luma(c)).unwrap_or(1);
-    for (x, y, mask) in super::bubble_ring(cells).into_iter().flatten() {
-        let mut pixels = [None; 64];
-        for (pixel, &shade) in pixels.iter_mut().zip(&mask) {
-            if shade != 0 {
-                let color = if shade == 3 { outline } else { shine };
-                *pixel = Some(ObjectPixel {
-                    index: IndexedPixel::new(color, palette).map_err(|e| e.to_string())?,
-                    behind_background: false,
-                });
-            }
-        }
-        out.push(Cell8 {
-            x: x - 8 + offset.0,
-            y: y - i32::from(pan) - 16 + offset.1,
-            shift,
-            pixels,
-        });
-    }
-    Ok(())
 }
 
 type Cell8 = super::layers::Cell<ObjectPixel>;

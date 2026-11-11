@@ -65,8 +65,8 @@ pub(crate) mod dx_palette;
 pub use dx_palette::RegionalPalettes;
 pub(crate) mod dx_effects;
 mod level;
+pub use level::LevelContext;
 pub(crate) use level::enter_layout_world;
-pub use level::{Bubble, CoopFrameResult, LevelContext, SecondPlayer, TwoPlayerFrameInput};
 
 /// Every nondeterministic gameplay input is supplied by the host.
 #[derive(Debug, Clone, Copy, Default)]
@@ -353,16 +353,6 @@ pub(crate) fn player_behind_bg(pipe_dir: u8) -> bool {
     pipe_dir >= 0x10
 }
 
-/// `sub 1 / daa` on the shared BCD `sLives`; a zero is a game over, so the
-/// caller checks that first.
-fn bcd_decrement(v: u8) -> u8 {
-    if v & 0x0F == 0 {
-        ((v >> 4).wrapping_sub(1) << 4) | 0x09
-    } else {
-        v - 1
-    }
-}
-
 /// Native session state. Advancing it performs no I/O or clock sampling.
 pub struct Session {
     object_clock: ObjectClock,
@@ -408,15 +398,6 @@ pub struct Session {
     pub prev_b: bool,
     pub prev_start: bool,
     pub prev_select: bool,
-    /// Player 2's edge baseline while local co-op is active.
-    prev_a2: bool,
-    prev_b2: bool,
-    prev_start2: bool,
-    prev_select2: bool,
-    /// Simultaneous shared-screen co-op is enabled for level frames.
-    local_multiplayer: bool,
-    /// Player 2's powerup tier, carried between levels; damage is independent.
-    second_powerup: u8,
     /// `$FF97`: advanced only on frames the ROM's `$0300` frame wait runs
     /// (see [`Session::main_loop_waits`]), every level frame included.
     ff97: u8,
@@ -518,16 +499,6 @@ impl Session {
         self.ff97
     }
 
-    /// Player 2 plays the character player 1 did not choose.
-    fn seed_second_character(&self, second: &mut SecondPlayer) {
-        let character = self.character.next();
-        let curves = self
-            .dx
-            .as_ref()
-            .map(|dx| dx.movement[usize::from(character == Character::Luigi)].clone());
-        second.sim.set_dx_movement(character, curves);
-    }
-
     /// A level continues the tile-animation bytes and scroll enables. Its movement phase keeps
     /// its own origin: the console's depends on every load's length and every
     /// lag frame since power-on, which a native port does not reproduce.
@@ -540,15 +511,6 @@ impl Session {
         ctx.sim.flutter = self.flutter;
         ctx.sim.flutter_armed = self.flutter_armed;
         ctx.sim.flutter_charge = self.flutter_charge;
-        if self.local_multiplayer {
-            ctx.enable_second_player(self.second_powerup);
-            if let Some(second) = ctx.second.as_mut() {
-                self.seed_second_character(second);
-            }
-            if let (Some(spr), Some(second)) = (ctx.spr.as_mut(), ctx.second.as_ref()) {
-                spr.player_two = Some((second.sim.x, second.sim.y, 0));
-            }
-        }
     }
 
     /// Whether this frame runs the `$0300` frame wait that increments `$FF97`
@@ -663,57 +625,6 @@ impl Session {
         Ok(())
     }
 
-    /// Rebuild the live level at its entry checkpoint after a co-op party
-    /// wipe. Shared counters and progress survive; both powerups reset.
-    fn restart_current_level(&mut self, level_id: u8, entry_progress: u8) -> Result<u8, String> {
-        let (map_node, level_progress, level_tally, coins_low, coins_high, lives) =
-            match &self.state {
-                SessionState::InLevel(ctx) => (
-                    ctx.sim.map_node,
-                    ctx.sim.level_progress,
-                    ctx.sim.level_tally,
-                    ctx.sim.coins_low,
-                    ctx.sim.coins_high,
-                    ctx.sim.lives,
-                ),
-                _ => (
-                    0,
-                    [0; 42],
-                    self.level_tally,
-                    self.coins_low,
-                    self.coins_high,
-                    self.lives,
-                ),
-            };
-        self.powerup = 0;
-        self.second_powerup = 0;
-        self.lives = lives;
-        self.coins_low = coins_low;
-        self.coins_high = coins_high;
-        self.level_tally = level_tally;
-        self.pending_level = None;
-        self.begin_level(level_id, entry_progress)?;
-        if let SessionState::InLevel(ctx) = &mut self.state {
-            ctx.sim.map_node = map_node;
-            ctx.sim.level_progress = level_progress;
-            ctx.sim.level_tally = level_tally;
-            ctx.sim.lives = lives;
-            ctx.sim.coins_low = coins_low;
-            ctx.sim.coins_high = coins_high;
-            ctx.sim.golden_coin_flags = ctx.sim.golden_coin_flags();
-            if let Some(second) = ctx.second.as_mut() {
-                second.sim.map_node = map_node;
-                second.sim.level_progress = level_progress;
-                second.sim.level_tally = level_tally;
-                second.sim.lives = lives;
-                second.sim.coins_low = coins_low;
-                second.sim.coins_high = coins_high;
-                second.sim.golden_coin_flags = second.sim.golden_coin_flags();
-            }
-        }
-        Ok(level_id)
-    }
-
     /// Stage a bell room the way the goal-bell exit does, for acceptance tapes.
     pub fn begin_bell_room(&mut self, screen: u8, node: u8, exit_tile_flag: u8) {
         self.remember_level_state();
@@ -812,12 +723,6 @@ impl Session {
             prev_b: false,
             prev_start: false,
             prev_select: false,
-            prev_a2: false,
-            prev_b2: false,
-            prev_start2: false,
-            prev_select2: false,
-            local_multiplayer: false,
-            second_powerup: 0,
             ff97: 0,
             frame_n: 0,
             view: crate::render::view::NATIVE,
@@ -893,13 +798,6 @@ impl Session {
         );
         self.object_clock.initialize_level(&mut ctx.obj);
         self.seed_level_state(&mut ctx);
-        // Attract demos are recorded single-player; never draw a second actor.
-        ctx.second = None;
-        if let Some(spr) = ctx.spr.as_mut() {
-            spr.player_two = None;
-            spr.player_two_bubble = None;
-            spr.player_two_shield = None;
-        }
         // Attract tapes were recorded with Mario; the selection never drives them.
         self.seed_character(&mut ctx, Character::Mario);
         self.map_ram = sml2_core::map_sim::MapRam::from_level(&ctx.manifest.metatiles);
@@ -934,7 +832,6 @@ impl Session {
     /// Apply an already-read ROM-format progress record.
     pub fn apply_save_record(&mut self, data: &[u8]) -> bool {
         self.remember_level_state();
-        self.second_powerup = 0;
         if !sml2_core::map::save_record_valid(data) {
             return false;
         }
@@ -1053,85 +950,7 @@ impl Session {
         Offsets::between(self.motion_prev.as_ref(), cur.as_ref(), smooth)
     }
 
-    /// Enable or disable simultaneous shared-screen local co-op. Enabling
-    /// while a level is live seeds player 2 at player 1's position; disabling
-    /// drops player 2 without touching player 1. A lone death bubbles the
-    /// player beside the survivor (press the survivor's A after a short grace,
-    /// or wait three seconds, to revive); only a party wipe spends one shared
-    /// life and restarts the level's entry checkpoint.
-    pub fn set_local_multiplayer(&mut self, enabled: bool) {
-        self.local_multiplayer = enabled;
-        if !enabled {
-            self.second_powerup = 0;
-            if let SessionState::InLevel(ctx) = &mut self.state {
-                ctx.second = None;
-                ctx.first_bubble = None;
-                ctx.wipe_frames = 0;
-                ctx.sim.shared_screen = false;
-                if let Some(spr) = ctx.spr.as_mut() {
-                    spr.player_two = None;
-                    spr.player_two_bubble = None;
-                    spr.player_two_shield = None;
-                }
-            }
-            return;
-        }
-        let character = self.character.next();
-        let curves = self
-            .dx
-            .as_ref()
-            .map(|dx| dx.movement[usize::from(character == Character::Luigi)].clone());
-        let powerup = self.second_powerup;
-        if let SessionState::InLevel(ctx) = &mut self.state {
-            let had_second = ctx.second.is_some();
-            ctx.enable_second_player(powerup);
-            if let Some(second) = ctx.second.as_mut() {
-                second.sim.set_dx_movement(character, curves);
-            }
-            if !had_second {
-                if let (Some(spr), Some(second)) = (ctx.spr.as_mut(), ctx.second.as_ref()) {
-                    spr.player_two = Some((second.sim.x, second.sim.y, 0));
-                }
-            }
-        }
-    }
-
-    /// Player 2's in-level airborne state, for a host that maps its own spin
-    /// button to a held Down only while airborne. False outside a live level
-    /// or while player 2 is disabled/bubbled.
-    pub fn second_player_airborne(&self) -> bool {
-        match &self.state {
-            SessionState::InLevel(ctx) => ctx
-                .second
-                .as_ref()
-                .is_some_and(|second| second.bubble.is_none() && !second.sim.on_ground),
-            _ => false,
-        }
-    }
-
-    /// Advance one frame with both keyboard players. `first` carries player
-    /// 1's keys and the frame's divider; `second` carries player 2's keys.
-    /// With local multiplayer disabled this is exactly [`Session::advance`].
-    pub fn advance_two_players(&mut self, first: FrameInput, second: PlayerKeys) -> FrameEffects {
-        if self.local_multiplayer {
-            let missing = matches!(
-                &self.state,
-                SessionState::InLevel(ctx) if ctx.second.is_none()
-            );
-            if missing {
-                self.set_local_multiplayer(true);
-            }
-            self.advance_internal(first, Some(second))
-        } else {
-            self.advance_internal(first, None)
-        }
-    }
-
     pub fn advance(&mut self, input: FrameInput) -> FrameEffects {
-        self.advance_internal(input, None)
-    }
-
-    fn advance_internal(&mut self, input: FrameInput, second: Option<PlayerKeys>) -> FrameEffects {
         let dx_enabled = self.dx_enabled();
         self.coin_room_blank = false;
         self.motion_prev = self
@@ -1155,15 +974,8 @@ impl Session {
             });
             // Autoscroll does not follow Mario, so the native `$0FBF` window
             // would leave the extra view unreachable. Free-scroll levels keep
-            // the ROM window; the camera already tracks him. Co-op replaces
-            // the window with the shared screen's edges.
+            // the ROM window; the camera already tracks him.
             ctx.sim.view_clamp = ctx.cam.auto_scroll != 0;
-            ctx.sim.shared_screen = ctx.second.is_some();
-            if let Some(second) = ctx.second.as_mut() {
-                second.sim.view = ctx.sim.view;
-                second.sim.view_clamp = ctx.sim.view_clamp;
-                second.sim.shared_screen = true;
-            }
         }
         let FrameInput { keys, div } = input;
         let rom_timing = self.rom_timing.take();
@@ -1187,42 +999,10 @@ impl Session {
         self.prev_start = keys.start;
         let select_pressed = keys.select && !self.prev_select;
         self.prev_select = keys.select;
-        let second_keys = second;
-        let (a2_pressed, b2_pressed, start2_pressed, select2_pressed) =
-            if let Some(keys2) = second_keys {
-                let a = keys2.a && !self.prev_a2;
-                self.prev_a2 = keys2.a;
-                let b = keys2.b && !self.prev_b2;
-                self.prev_b2 = keys2.b;
-                let start = keys2.start && !self.prev_start2;
-                self.prev_start2 = keys2.start;
-                let select = keys2.select && !self.prev_select2;
-                self.prev_select2 = keys2.select;
-                (a, b, start, select)
-            } else {
-                (false, false, false, false)
-            };
 
-        // Outside a live level the shared cursor/menu accepts either player's
-        // pad, so player 2 can trigger the transition that carries both.
-        let menu_keys = match second_keys {
-            Some(keys2) => PlayerKeys {
-                right: keys.right || keys2.right,
-                left: keys.left || keys2.left,
-                up: keys.up || keys2.up,
-                down: keys.down || keys2.down,
-                a: keys.a || keys2.a,
-                b: keys.b || keys2.b,
-                start: keys.start || keys2.start,
-                select: keys.select || keys2.select,
-            },
-            None => keys,
-        };
         let mut deferred_sfx0: Option<u8> = None;
-        let mut coop_restart: Option<(u8, u8)> = None;
         let mut outcome = match &mut self.state {
             SessionState::Overworld(ref mut map_sim) => 'map: {
-                let keys = menu_keys;
                 // A level entry from the map is the console's own 37-frame
                 // transition (measured: $0C at f66 -> $0B f80 -> $02 f81 ->
                 // $03 f83 -> $04 f103). The map handler stops running, so the
@@ -1555,7 +1335,6 @@ impl Session {
             }
 
             SessionState::Title(ref mut title) => {
-                let keys = menu_keys;
                 let keys_held = pack_joypad(
                     keys.right,
                     keys.left,
@@ -1586,12 +1365,11 @@ impl Session {
             }
 
             SessionState::FileSelectLoading(_) => {
-                self.advance_file_select_loading(menu_keys);
+                self.advance_file_select_loading(keys);
                 StepOutcome::Continue
             }
 
             SessionState::FileSelect(ref mut file_select) => {
-                let keys = menu_keys;
                 let keys_held = pack_joypad(
                     keys.right,
                     keys.left,
@@ -1638,41 +1416,15 @@ impl Session {
             }
 
             SessionState::InLevel(ref mut ctx) => {
-                let coop = if let Some(keys2) = second_keys {
-                    ctx.step_two_player_frame(
-                        TwoPlayerFrameInput {
-                            first: keys,
-                            first_pressed: PlayerKeys {
-                                a: a_pressed,
-                                b: b_pressed,
-                                start: start_pressed,
-                                select: select_pressed,
-                                ..Default::default()
-                            },
-                            second: keys2,
-                            second_pressed: PlayerKeys {
-                                a: a2_pressed,
-                                b: b2_pressed,
-                                start: start2_pressed,
-                                select: select2_pressed,
-                                ..Default::default()
-                            },
-                            div,
-                        },
-                        &self.assets.nodes,
-                    )
-                } else {
-                    ctx.step_frame(
-                        keys,
-                        a_pressed,
-                        b_pressed,
-                        start_pressed,
-                        select_pressed,
-                        div,
-                        &self.assets.nodes,
-                    );
-                    CoopFrameResult::default()
-                };
+                ctx.step_frame(
+                    keys,
+                    a_pressed,
+                    b_pressed,
+                    start_pressed,
+                    select_pressed,
+                    div,
+                    &self.assets.nodes,
+                );
                 self.scroll_enables = (ctx.cam.right_enabled, ctx.cam.left_enabled);
                 self.money_bag = ctx.obj.money_bag;
                 // The map's work bytes are the live metatile table's: a boss
@@ -1706,60 +1458,6 @@ impl Session {
 
                 self.object_clock.observe(&ctx.obj);
                 self.tile_animation = ctx.tile_animation;
-                if let Some(second) = ctx.second.as_mut() {
-                    let sim2 = &mut second.sim;
-                    if sim2.sfx0 != 0 {
-                        self.sound_driver.sfx_request_0 = sim2.sfx0;
-                        sim2.sfx0 = 0;
-                    }
-                    if sim2.sfx1 != 0 {
-                        self.sound_driver.sfx_request_1 = sim2.sfx1;
-                        sim2.sfx1 = 0;
-                    }
-                    if sim2.sfx2 != 0 {
-                        self.sound_driver.sfx_request_2 = sim2.sfx2;
-                        sim2.sfx2 = 0;
-                    }
-                    if sim2.music_request != 0 {
-                        self.sound_driver.music_request = sim2.music_request;
-                        sim2.music_request = 0;
-                    }
-                    if sim2.sound_mode != 0 {
-                        self.sound_driver.sound_mode = sim2.sound_mode;
-                        sim2.sound_mode = 0;
-                    }
-                    self.sound_driver.low_time_flag |= sim2.low_time_flag != 0;
-                    self.second_powerup = if second.bubble.is_some() {
-                        0
-                    } else {
-                        sim2.powerup
-                    };
-                }
-                // Co-op restarts and the shared HUD need the live counters,
-                // not the values from level entry.
-                if second_keys.is_some() {
-                    self.lives = ctx.sim.lives;
-                    self.coins_low = ctx.sim.coins_low;
-                    self.coins_high = ctx.sim.coins_high;
-                    self.level_tally = ctx.sim.level_tally;
-                }
-                if coop.restart_checkpoint {
-                    let entry_progress = ctx.entry_progress;
-                    let level_id = ctx.manifest.level_id;
-                    if self.lives == 0 {
-                        // The party wipe spends the last shared life.
-                        ctx.sim.game_over = true;
-                        ctx.sim.fade_timer = 0;
-                        ctx.sim.dead_fade = false;
-                    } else {
-                        self.lives = bcd_decrement(self.lives);
-                        ctx.sim.lives = self.lives;
-                        if let Some(second) = ctx.second.as_mut() {
-                            second.sim.lives = self.lives;
-                        }
-                        coop_restart = Some((level_id, entry_progress));
-                    }
-                }
                 if ctx.is_finished() && ctx.sim.game_over {
                     // `$311A`'s lives borrow: state `$05` (`$27AF`), not the map.
                     let mut sim = ctx.sim.clone();
@@ -1778,7 +1476,6 @@ impl Session {
                     self.level_tally = sim.level_tally;
                     self.money_bag = 0;
                     self.powerup = 0;
-                    self.second_powerup = 0;
                     self.sound_driver.music_request = sim.music_request;
                     self.state = SessionState::GameOver(Box::new(GameOverScreen { sim, obp }));
                     // `$2934`: the save the level-clear hand-off also makes.
@@ -1805,7 +1502,6 @@ impl Session {
                         {
                             self.lives = ctx.sim.lives;
                             self.powerup = 0; // Death resets powerup
-                            self.second_powerup = 0;
                             let target_node = handoff.node;
                             let target_screen = handoff.screen.unwrap_or(0);
                             let mut map_sim = MapSim::from_player(&ctx.sim);
@@ -1842,8 +1538,6 @@ impl Session {
                         self.coins_high = ctx.sim.coins_high;
                         self.level_tally = ctx.sim.level_tally;
                         self.powerup = ctx.sim.powerup;
-                        self.second_powerup =
-                            ctx.second.as_ref().map_or(0, |second| second.sim.powerup);
                         let target_node = handoff.node;
                         let target_screen = handoff.screen.unwrap_or(0);
                         if ctx.sim.boss_clear {
@@ -1952,7 +1646,7 @@ impl Session {
             }
 
             SessionState::Demo(ref mut demo) => {
-                let mut finished = start_pressed || start2_pressed;
+                let mut finished = start_pressed;
                 if !finished {
                     match demo.tape.step() {
                         Some((held, pressed)) => {
@@ -2012,7 +1706,6 @@ impl Session {
                 StepOutcome::Continue
             }
             SessionState::Castle(_) => {
-                let keys = menu_keys;
                 let held = pack_joypad(
                     keys.right,
                     keys.left,
@@ -2031,7 +1724,6 @@ impl Session {
             SessionState::GameOver(screen) => {
                 // `$0300`: `$FF97` ticks every frame, VBlank runs the fade.
                 screen.sim.frame_counter = screen.sim.frame_counter.wrapping_add(1);
-                let keys = menu_keys;
                 let held = pack_joypad(
                     keys.right,
                     keys.left,
@@ -2051,13 +1743,6 @@ impl Session {
                 StepOutcome::Continue
             }
         };
-
-        if let Some((level_id, entry_progress)) = coop_restart {
-            match self.restart_current_level(level_id, entry_progress) {
-                Ok(id) => outcome = StepOutcome::LevelEntered(id),
-                Err(error) => diagnostics.push(format!("checkpoint restart failed: {error}")),
-            }
-        }
 
         // The frozen map arm advances the counter; once it reaches the console's
         // entry length the level goes live (its own music request starts on the

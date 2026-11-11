@@ -44,15 +44,8 @@ pub struct SpriteCtx {
     pub obp1: u8,
     /// Optional player (Mario): world position + `$FFC6` frame.
     pub player: Option<(u16, u16, u8)>,
-    /// Local co-op player 2: world position + `$FFC6` frame.
-    pub player_two: Option<(u16, u16, u8)>,
-    /// A bubbled player waiting beside the survivor: world position + bubble
-    /// frame (220/221, the same round mapping the moon shield uses).
-    pub player_bubble: Option<(u16, u16, u8)>,
-    pub player_two_bubble: Option<(u16, u16, u8)>,
     /// Optional 3-up moon shield ($54FB): world position + frame 220/221.
     pub player_shield: Option<(u16, u16, u8)>,
-    pub player_two_shield: Option<(u16, u16, u8)>,
     /// Star defeat streak counter ($551E): `(timer, chain)` where timer is post-decrement (31..0).
     pub streak_counter: Option<(u8, u8)>,
     /// `$530D`'s `$FFBB` in draw order: true while pipe travel has set it to 0,
@@ -61,9 +54,6 @@ pub struct SpriteCtx {
     /// `$54C8`'s `$FFC7`: the star countdown's bit 2, which makes `$5297` set
     /// attr bit 4 on every one of Mario's cells (OBP1 — the star flash).
     pub player_star_flash: bool,
-    pub player_two_star_flash: bool,
-    /// `$530D`'s pipe-travel `$FFBB` applies per player in co-op.
-    pub player_two_behind_bg: bool,
     /// Brick-bump sprites for this frame (`PlayerSim::block_draw`): the engine
     /// stages `$FFC4`/`$FFC5`/`$FFC6` and enqueues them (`$5297`), so they are
     /// extra OAM sprites drawn at the block — through the same player-sprite
@@ -440,72 +430,6 @@ pub fn render_view_output_smooth(
                 ));
             }
         }
-        if let Some((px, py, frame)) = s.player_two {
-            let ((ax, ay), (ox, oy)) = place(px, py);
-            let cells = sml2_core::player::draw_cells_styled(
-                &s.tables,
-                frame,
-                px,
-                py,
-                ax,
-                ay,
-                sml2_core::player::CellStyle {
-                    force_palette_one: s.player_two_star_flash,
-                    behind_background: s.player_two_behind_bg,
-                },
-            )
-            .ok_or_else(|| format!("player two frame {frame} has no mapping"))?;
-            let cells = in_obj_priority_order(cells);
-            for c in cells {
-                layers.cells.push(native_cell(
-                    &s.objblock,
-                    &pal0,
-                    &pal1,
-                    c.x as i32 - 8 + ox,
-                    c.y.wrapping_sub(s.player_pan) as i32 - 16 + oy,
-                    c.tile,
-                    c.attr,
-                    offsets.player_two,
-                ));
-            }
-        }
-        for (bubble, offsets) in [
-            (s.player_bubble, offsets.player_bubble),
-            (s.player_two_bubble, offsets.player_two_bubble),
-        ] {
-            let Some((bx, by, bframe)) = bubble else {
-                continue;
-            };
-            let ((ax, ay), (ox, oy)) = place(bx, by);
-            let cells = sml2_core::player::draw_cells(&s.tables, bframe, bx, by, ax, ay, false)
-                .ok_or_else(|| format!("bubble frame {bframe} has no mapping"))?;
-            // The ring is pushed first so it stays in front of the player.
-            for (rx, ry, mask) in bubble_ring(&cells).into_iter().flatten() {
-                layers.cells.push(layers::Cell {
-                    x: rx - 8 + ox,
-                    y: ry - i32::from(s.player_pan) - 16 + oy,
-                    shift: offsets,
-                    pixels: std::array::from_fn(|i| {
-                        (mask[i] != 0).then(|| NativeObj {
-                            shade: pal0[usize::from(mask[i])],
-                            behind: false,
-                        })
-                    }),
-                });
-            }
-            for c in cells {
-                layers.cells.push(native_cell(
-                    &s.objblock,
-                    &pal0,
-                    &pal1,
-                    c.x as i32 - 8 + ox,
-                    c.y.wrapping_sub(s.player_pan) as i32 - 16 + oy,
-                    c.tile,
-                    c.attr,
-                    offsets,
-                ));
-            }
-        }
         if let Some((shx, shy, sframe)) = s.player_shield {
             let ((ax, ay), (ox, oy)) = place(shx, shy);
             let cells = sml2_core::player::draw_cells(&s.tables, sframe, shx, shy, ax, ay, false)
@@ -520,24 +444,6 @@ pub fn render_view_output_smooth(
                     c.tile,
                     c.attr,
                     offsets.shield,
-                ));
-            }
-        }
-        if let Some((shx, shy, sframe)) = s.player_two_shield {
-            let ((ax, ay), (ox, oy)) = place(shx, shy);
-            let cells =
-                sml2_core::player::draw_cells(&s.tables, sframe, shx, shy, ax, ay, false)
-                    .ok_or_else(|| format!("player two shield frame {sframe} has no mapping"))?;
-            for c in cells {
-                layers.cells.push(native_cell(
-                    &s.objblock,
-                    &pal0,
-                    &pal1,
-                    c.x as i32 - 8 + ox,
-                    c.y.wrapping_sub(s.player_pan) as i32 - 16 + oy,
-                    c.tile,
-                    c.attr,
-                    offsets.shield_two,
                 ));
             }
         }
@@ -730,42 +636,6 @@ fn native_cell(
         shift,
         pixels,
     }
-}
-
-/// Radius, in pixels, of the revival bubble's outline.
-const BUBBLE_RADIUS: f32 = 11.0;
-
-/// The revival bubble drawn around a bubbled player's cells: nine 8x8
-/// colour-index masks (0 transparent, 3 outline, 1 shine) covering a 24-px
-/// ring centred on the cells, in the cells' own OAM coordinates. Neither
-/// cartridge has a bubble graphic, so the renderer draws it.
-pub(crate) fn bubble_ring(cells: &[sml2_core::player::Cell]) -> Option<[(i32, i32, [u8; 64]); 9]> {
-    let xs = cells.iter().map(|c| i32::from(c.x));
-    let ys = cells.iter().map(|c| i32::from(c.y));
-    let (left, right) = (xs.clone().min()?, xs.max()? + 8);
-    let (top, bottom) = (ys.clone().min()?, ys.max()? + 8);
-    let (cx, cy) = ((left + right) as f32 / 2.0, (top + bottom) as f32 / 2.0);
-    let (ox, oy) = (cx as i32 - 12, cy as i32 - 12);
-    Some(std::array::from_fn(|k| {
-        let (gx, gy) = (ox + (k % 3) as i32 * 8, oy + (k / 3) as i32 * 8);
-        let mask = std::array::from_fn(|i| {
-            let dx = (gx + (i % 8) as i32) as f32 + 0.5 - cx;
-            let dy = (gy + (i / 8) as i32) as f32 + 0.5 - cy;
-            let r = (dx * dx + dy * dy).sqrt();
-            if (r - BUBBLE_RADIUS).abs() < 0.75 {
-                3
-            } else if (r - (BUBBLE_RADIUS - 3.0)).abs() < 0.75
-                && dx < 0.0
-                && dy < 0.0
-                && (dx - dy).abs() < 3.0
-            {
-                1
-            } else {
-                0
-            }
-        });
-        (gx, gy, mask)
-    }))
 }
 
 mod session;

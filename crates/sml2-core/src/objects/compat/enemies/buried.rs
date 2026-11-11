@@ -34,7 +34,8 @@ impl World for Inputs<'_> {
         self.sim.sfx2 = 1;
     }
     fn carry_player_up(&mut self, distance: u8) {
-        self.sim.carry_rider_dy(-i16::from(distance));
+        let y = self.sim.mario_y_adjust.unwrap_or(self.sim.mario.y);
+        self.sim.mario_y_adjust = Some(y.wrapping_sub(u16::from(distance)));
     }
 }
 impl ObjectSim {

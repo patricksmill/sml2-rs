@@ -1,7 +1,7 @@
 use crate::{
     controllers::Controllers,
     game::Game,
-    input::{Action, Bindings, Button, InputState},
+    input::{Action, Button, InputState},
     library::{Library, Row},
     menu::{Menu, pressed, release_focus},
     settings::{Settings, VanillaInstall, Zoom},
@@ -81,10 +81,6 @@ pub struct DesktopApp {
     /// The Display page's sample frame; `None` until the game data loads.
     filter_preview: Option<filter_preview::FilterPreview>,
     input: InputState,
-    /// Player 2's fixed keyboard layout; both players share `input`.
-    second_bindings: Bindings,
-    /// Player 1 actions whose loaded buttons are reserved for Player 2.
-    binding_conflicts: Vec<(Action, Vec<Button>)>,
     controllers: Controllers,
     menu: Menu,
     capture: Option<Action>,
@@ -167,8 +163,6 @@ impl DesktopApp {
             reset_armed: false,
             filter_preview: None,
             input: InputState::default(),
-            second_bindings: Bindings::player_two(),
-            binding_conflicts: Vec::new(),
             controllers: Controllers::new(),
             menu: Menu::default(),
             capture: None,
@@ -253,10 +247,6 @@ impl DesktopApp {
         if let Some(scale) = app.options.scale {
             app.zoom(ctx, Some(scale));
         }
-        app.refresh_binding_conflicts();
-        if app.game.is_some() {
-            app.show_binding_conflicts();
-        }
         update::remove_previous_executable();
         app.check_updates(false);
         app
@@ -270,15 +260,12 @@ impl DesktopApp {
                     Ok(preview) => self.filter_preview = Some(preview),
                     Err(e) => eprintln!("Filter preview unavailable: {e}"),
                 }
-                let mut game =
-                    Game::new(assets, self.options.paths.save.clone(), self.options.audio);
-                // The desktop is the two-keyboard-player host. The shared
-                // Game/tick singleton path stays single-player for the
-                // scenery editor and diagnostics.
-                game.session.set_local_multiplayer(true);
-                self.game = Some(game);
+                self.game = Some(Game::new(
+                    assets,
+                    self.options.paths.save.clone(),
+                    self.options.audio,
+                ));
                 self.level_choices();
-                self.refresh_binding_conflicts();
             }
             Err(e) => self.status = Some(format!("Game data could not be loaded: {e}")),
         }
@@ -458,7 +445,6 @@ impl DesktopApp {
                         game.session.enter_title();
                     }
                     self.screen = Screen::Game;
-                    self.show_binding_conflicts();
                 }
             }
             Err(error) => {
@@ -553,7 +539,6 @@ impl DesktopApp {
             game.session.enter_title();
         }
         self.screen = Screen::Game;
-        self.show_binding_conflicts();
     }
 
     fn load_library_game(&mut self) -> bool {
@@ -663,28 +648,6 @@ impl DesktopApp {
         self.input.suppress_until_release();
         self.budget.reset();
         release_focus(ctx);
-        self.aim = None;
-        self.start_click = false;
-    }
-
-    /// Keep the loaded Player 1 bindings away from Player 2's reserved keys.
-    /// Settings are never rewritten here; conflicts stay visible until fixed.
-    fn refresh_binding_conflicts(&mut self) {
-        self.binding_conflicts = self.settings.bindings.conflicts_with(&self.second_bindings);
-    }
-
-    /// Open the Controls page instead of play when loaded bindings collide.
-    fn show_binding_conflicts(&mut self) {
-        if self.binding_conflicts.is_empty() {
-            return;
-        }
-        self.return_screen = Screen::Game;
-        self.page = Page::Controls;
-        self.screen = Screen::Settings;
-        self.menu_from_game = self.game.is_some();
-        self.menu = Menu::default();
-        self.input.suppress_until_release();
-        self.budget.reset();
         self.aim = None;
         self.start_click = false;
     }
@@ -827,16 +790,12 @@ impl DesktopApp {
         self.last_update = now;
         let running = focused
             && self.screen == Screen::Game
-            && self.binding_conflicts.is_empty()
             && !self.paused
             && self.capture.is_none()
             && self.dx_picker.is_none()
             && !self.screenshot_pending;
         let mut ticks = self.budget.advance(elapsed, running);
-        let stepped = self.step
-            && focused
-            && self.screen == Screen::Game
-            && self.binding_conflicts.is_empty();
+        let stepped = self.step && focused && self.screen == Screen::Game;
         if stepped {
             ticks = 1;
         }
@@ -864,43 +823,31 @@ impl DesktopApp {
                     game.session.expanded_levels = self.settings.expanded_levels;
                     dx::prepare_tick(&mut game.session, &self.settings, self.dx_bundle.is_some());
                 }
-                let (mut first, mut second) = if running {
-                    let (one, two) = self
-                        .input
-                        .sample_two_players(&self.settings.bindings, &self.second_bindings);
-                    let (one_airborne, two_airborne) =
-                        self.game.as_ref().map_or((false, false), |g| {
-                            (g.airborne(), g.second_player_airborne())
-                        });
-                    let mut first = one.keys;
-                    let mut second = two.keys;
+                let mut keys = if running {
+                    let controls = self.input.sample_controls(&self.settings.bindings);
+                    let mut keys = controls.keys;
                     // Spin is Down held in the air ($126F); on the ground it
                     // would duck or pan, so the button only reaches the
-                    // joypad once that player has left the floor.
-                    if one.spin && one_airborne {
-                        first.down = true;
-                        first.up = false;
+                    // joypad once Mario has left the floor.
+                    if controls.spin && self.game.as_ref().is_some_and(Game::airborne) {
+                        keys.down = true;
+                        keys.up = false;
                     }
-                    if two.spin && two_airborne {
-                        second.down = true;
-                        second.up = false;
-                    }
-                    (first, second)
+                    keys
                 } else {
-                    (PlayerKeys::default(), PlayerKeys::default())
+                    PlayerKeys::default()
                 };
                 if on_title {
                     // The launcher owns title input. Held gameplay bindings
                     // must neither bypass Play nor cancel its queued start.
-                    first = PlayerKeys::default();
-                    second = PlayerKeys::default();
+                    keys = PlayerKeys::default();
                 }
-                let merged = pointer::merge_pointer(&snap, &first, self.aim, self.start_click);
-                let first = merged.keys;
+                let merged = pointer::merge_pointer(&snap, &keys, self.aim, self.start_click);
+                let keys = merged.keys;
                 clear_aim = merged.clear_aim;
                 clear_start = merged.clear_start;
                 if let Some(game) = self.game.as_mut() {
-                    game.tick_two_players(first, second, volume);
+                    game.tick(keys, volume);
                     self.settings.character = game.session.character;
                 }
             }
@@ -1139,18 +1086,9 @@ impl DesktopApp {
                 self.on_picture_click(pos, rect);
             }
         }
-        if !self.binding_conflicts.is_empty() {
-            ui.painter().text(
-                available.min + egui::vec2(12.0, 12.0),
-                egui::Align2::LEFT_TOP,
-                "PLAYER 1 BINDING CONFLICT · Settings > Controls",
-                egui::FontId::proportional(15.0),
-                Color32::LIGHT_RED,
-            );
-        }
         if self.paused {
             ui.painter().text(
-                available.min + egui::vec2(12.0, 32.0),
+                available.min + egui::vec2(12.0, 12.0),
                 egui::Align2::LEFT_TOP,
                 "DEBUG PAUSED · F3 to step",
                 egui::FontId::proportional(15.0),

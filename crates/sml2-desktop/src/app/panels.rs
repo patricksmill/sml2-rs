@@ -54,14 +54,12 @@ impl DesktopApp {
         ui.spacing_mut().item_spacing.y = 4.0;
         if self.game.is_some() && self.menu.button(ui, "Resume") {
             self.navigate(ctx, Screen::Game);
-            self.show_binding_conflicts();
         }
         if self.game.is_none() {
             if self.menu.button(ui, "Retry loading game") {
                 self.load_game();
                 if self.game.is_some() {
                     self.navigate(ctx, Screen::Game);
-                    self.show_binding_conflicts();
                 }
             }
         }
@@ -121,7 +119,6 @@ impl DesktopApp {
         self.settings = Default::default();
         self.settings.window_size = window_size;
         self.settings.dx_installation = dx_installation;
-        self.refresh_binding_conflicts();
         self.allow_save = true;
         // Force replacement even when the current values already match defaults.
         self.saved_settings.version = 0;
@@ -335,33 +332,6 @@ impl DesktopApp {
     }
 
     fn controls_page(&mut self, ui: &mut Ui) {
-        if !self.binding_conflicts.is_empty() {
-            theme::section(ui, "PLAYER 1 CONFLICT");
-            theme::error(
-                ui,
-                "Player 1 uses keys reserved for Player 2. Play is paused until each conflict is rebound or Player 1 is reset.",
-            );
-            for (action, buttons) in self.binding_conflicts.clone() {
-                let keys = buttons
-                    .iter()
-                    .map(|b| b.label())
-                    .collect::<Vec<_>>()
-                    .join(" / ");
-                if self
-                    .menu
-                    .row(ui, &format!("Rebind {}", action.label()), Value::Text(keys))
-                    && self.capture.is_none()
-                {
-                    self.capture = Some(action);
-                    self.input.suppress_until_release();
-                }
-            }
-            if self.menu.row(ui, "Reset Player 1 controls", Value::None) && self.capture.is_none() {
-                self.settings.bindings = Bindings::default();
-                self.refresh_binding_conflicts();
-                self.input.suppress_until_release();
-            }
-        }
         theme::section(ui, "CONTROLLER");
         if self.menu.row(
             ui,
@@ -415,29 +385,11 @@ impl DesktopApp {
         }
         if self.menu.row(ui, "Reset controls", Value::None) && self.capture.is_none() {
             self.settings.bindings = Bindings::default();
-            self.refresh_binding_conflicts();
             self.input.suppress_until_release();
         }
         theme::note(
             ui,
             "Choose an action, then press a key or controller button; Esc cancels. Rebinding keeps the other device's controls. Controller Start opens the menu.",
-        );
-        theme::section(ui, "PLAYER 2 · KEYBOARD");
-        for action in Action::ALL {
-            let row = &self.second_bindings.0[action as usize];
-            if row.is_empty() {
-                continue;
-            }
-            let keys = row
-                .iter()
-                .map(|b| b.label())
-                .collect::<Vec<_>>()
-                .join(" / ");
-            theme::note(ui, &format!("{}: {keys}", action.label()));
-        }
-        theme::note(
-            ui,
-            "Player 2 shares this keyboard. These keys are fixed, and Player 1 rebinding rejects them, so both players can play at once; controllers stay on Player 1.",
         );
     }
 

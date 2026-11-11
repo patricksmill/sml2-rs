@@ -385,36 +385,6 @@ fn is_red(image: &ColorImage) -> bool {
 }
 
 #[test]
-fn coop_player_two_is_drawn_with_the_other_characters_graphics() {
-    let (mut app, _, _) = super::tests::app();
-    let session = &mut app.game.as_mut().unwrap().session;
-    session.set_local_multiplayer(true);
-    session.begin_level(0, 0).unwrap();
-    let frame = |luigi_tiles: u8| {
-        let mut dx = red_bundle();
-        for character in &mut dx.players {
-            for player in character {
-                player.mappings = vec![
-                    vec![sml2_core::object::MappingEntry {
-                        y: 0,
-                        x: 0,
-                        tile: 0,
-                        attr: 0,
-                    }];
-                    242
-                ];
-            }
-        }
-        dx.players[1][0].normal.fill(luigi_tiles);
-        session
-            .render_dx_frame(&dx, sml2_core::character::Character::Mario, (160, 144))
-            .unwrap()
-    };
-    // Player 1 is Mario; only player 2 reads Luigi's tiles.
-    assert_ne!(frame(0xFF), frame(0));
-}
-
-#[test]
 fn dx_mode_frames_follow_the_view_settings() {
     let (mut app, _, path) = super::tests::app();
     app.dx_bundle = Some((red_bundle()).into());
