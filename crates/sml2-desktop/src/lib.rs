@@ -3,6 +3,7 @@
 pub mod dx_import;
 pub mod input;
 pub mod library;
+pub mod players;
 pub mod settings;
 pub mod timing;
 pub mod update;

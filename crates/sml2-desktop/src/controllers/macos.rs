@@ -1,6 +1,7 @@
 //! GameController host. All Objective-C ownership stays on the main/UI thread.
+use super::DeviceChange;
 use super::native_state::{self, Device, NativeState, Snapshot};
-use crate::input::InputState;
+use crate::input::{InputState, StickAxis};
 use block2::RcBlock;
 use objc2::{
     MainThreadMarker,
@@ -14,6 +15,7 @@ use objc2_game_controller::{
     GCControllerDidConnectNotification, GCControllerDidDisconnectNotification, GCDevice,
     GCExtendedGamepad,
 };
+use std::collections::BTreeMap;
 use std::{
     ptr::NonNull,
     sync::{
@@ -61,6 +63,8 @@ pub struct Controllers {
     tx: Sender<Message>,
     rx: Receiver<Message>,
     next_id: u64,
+    /// One stick pair per connected pad, keyed like `pads`.
+    axes: BTreeMap<u64, (StickAxis, StickAxis)>,
     // MainThreadMarker is !Send/!Sync; disconnected test hosts need no marker.
     main_thread: Option<MainThreadMarker>,
     pub error: Option<String>,
@@ -76,6 +80,7 @@ impl Controllers {
             tx,
             rx,
             next_id: 0,
+            axes: BTreeMap::new(),
             main_thread: None,
             error: None,
         }
@@ -157,6 +162,62 @@ impl Controllers {
         let devices = self.descriptors();
         self.state
             .poll(&devices, events, input, preference, dead_zone)
+    }
+
+    /// Poll every pad separately, feeding each one's own state as well as the
+    /// merged host-event stream. Returns pads that appeared or vanished.
+    pub fn poll_devices(
+        &mut self,
+        merged: &mut InputState,
+        pads: &mut BTreeMap<u64, InputState>,
+        dead_zone: f32,
+    ) -> Vec<DeviceChange> {
+        if self.main_thread.is_none() {
+            return Vec::new();
+        }
+        let (removed, events) = self.drain();
+        self.refresh(&removed);
+        let live: Vec<(u64, String, Snapshot)> = self
+            .devices
+            .iter()
+            .map(|d| (d.device.id, d.device.name.clone(), d.device.snapshot))
+            .collect();
+        let mut changes = Vec::new();
+        let stale: Vec<u64> = pads
+            .keys()
+            .copied()
+            .filter(|id| !live.iter().any(|(live, _, _)| live == id))
+            .collect();
+        for id in stale {
+            pads.remove(&id);
+            self.axes.remove(&id);
+            changes.push(DeviceChange::Disconnected { id });
+        }
+        for (id, name, _) in &live {
+            if !pads.contains_key(id) {
+                pads.entry(*id).or_default();
+                self.axes
+                    .insert(*id, (StickAxis::default(), StickAxis::default()));
+                changes.push(DeviceChange::Connected {
+                    id: *id,
+                    name: name.clone(),
+                });
+            }
+        }
+        for (id, _, snapshot) in live {
+            let Some(state) = pads.get_mut(&id) else {
+                continue;
+            };
+            let (x_axis, y_axis) = self.axes.entry(id).or_default();
+            // Preserve press/release pairs that both arrived between redraws.
+            for (_, snapshot) in events.iter().filter(|(source, _)| *source == id) {
+                native_state::apply_snapshot(*snapshot, x_axis, y_axis, state, dead_zone);
+            }
+            native_state::apply_snapshot(snapshot, x_axis, y_axis, state, dead_zone);
+        }
+        // One aggregate for host menus: any pad holding a button holds it.
+        merged.merge_pads(pads.values());
+        changes
     }
 
     fn descriptors(&self) -> Vec<Device> {

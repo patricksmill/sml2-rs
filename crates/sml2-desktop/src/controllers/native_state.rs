@@ -120,19 +120,30 @@ impl NativeState {
     }
 
     fn apply(&mut self, snapshot: Snapshot, input: &mut InputState, dead_zone: f32) {
-        for (button, down) in BUTTONS.into_iter().zip(snapshot.buttons) {
-            input.event(Button::Pad(button), down);
-        }
-        let x = self.x.update(snapshot.left[0], dead_zone);
-        let y = self.y.update(snapshot.left[1], dead_zone);
-        for (button, down) in [
-            (PadButton::StickLeft, x < 0),
-            (PadButton::StickRight, x > 0),
-            (PadButton::StickDown, y < 0),
-            (PadButton::StickUp, y > 0),
-        ] {
-            input.event(Button::Pad(button), down);
-        }
+        apply_snapshot(snapshot, &mut self.x, &mut self.y, input, dead_zone);
+    }
+}
+
+/// Apply one pad snapshot to that pad's stick hysteresis and input state.
+pub(super) fn apply_snapshot(
+    snapshot: Snapshot,
+    x_axis: &mut StickAxis,
+    y_axis: &mut StickAxis,
+    input: &mut InputState,
+    dead_zone: f32,
+) {
+    for (button, down) in BUTTONS.into_iter().zip(snapshot.buttons) {
+        input.event(Button::Pad(button), down);
+    }
+    let x = x_axis.update(snapshot.left[0], dead_zone);
+    let y = y_axis.update(snapshot.left[1], dead_zone);
+    for (button, down) in [
+        (PadButton::StickLeft, x < 0),
+        (PadButton::StickRight, x > 0),
+        (PadButton::StickDown, y < 0),
+        (PadButton::StickUp, y > 0),
+    ] {
+        input.event(Button::Pad(button), down);
     }
 }
 
