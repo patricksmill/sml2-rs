@@ -37,3 +37,29 @@ _Avoid_: Auto-update, patching, upgrade
 **Skipped version**:
 An official release the player chose to ignore; the update check stays silent about it until a newer one appears.
 _Avoid_: Dismissed update, ignored release
+
+## Players
+
+**Single player**:
+The default way to play: one person, with no Player 2. Every launch starts here.
+_Avoid_: Solo mode, 1P
+
+**Player 1**:
+The player whose input device first pressed Start (or Enter) on the title screen, or who opened the map when there was no title screen. Player 1 alone moves the overworld cursor.
+_Avoid_: P1, host, main player
+
+**Player 2**:
+A second player who has joined and plays alongside Player 1 until they drop out or the game quits.
+_Avoid_: P2, Luigi (when meaning the player), guest
+
+**Join**:
+Player 2 entering the game by pressing Start (or Enter) on an input device that is not Player 1's, allowed only on the title screen or an overworld map.
+_Avoid_: Co-op mode, multiplayer toggle, drop in
+
+**Drop out**:
+A player leaving from the pause menu their own input device opened, allowed anywhere. If Player 1 drops out, Player 2 becomes Player 1.
+_Avoid_: Remove player, kick, leave game
+
+**Input device**:
+The keyboard or one gamepad; each belongs to at most one player.
+_Avoid_: Controller (when the keyboard is meant too)
