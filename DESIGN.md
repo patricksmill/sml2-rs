@@ -122,6 +122,10 @@ one-player play.
 In enlarged levels, the native rect stays horizontally centered with three
 quarters of added height above and one quarter below; the classic HUD sits
 bottom-center and the Modern style floats in the view's top corners.
+Enlarged framing blends between room bounds during screen transitions and
+across unlocked vertical row boundaries, so a shaft widening into a corridor
+does not snap the view sideways. Native camera movement and lock bits remain
+unchanged.
 Fixed screens retain their authored frame. Test native pixels within enlarged
 views (`sml2-runtime/src/tests/widescreen.rs`). Cosmetic scenery must not modify
 collision, actors, spawns or progression. Default output uses nearest sampling
