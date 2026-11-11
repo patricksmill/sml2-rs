@@ -405,6 +405,55 @@ fn the_rebuilt_tree_zone_2_camera_scrolls_through_the_pipe() {
     );
 }
 
+/// In the ROM, the small room's secret pipe (row 2, screen 11) leads out of
+/// the world's bottom, and scenes 1/2 (`40 3B`/`40 18`) link it to the cave's
+/// ceiling pipe in screen 8. Rebuilt, the cave sits directly below the room
+/// and one painted pipe joins the two mouths: Mario rides it into the cave
+/// with no scene running and walks out of the `$4B` secret exit.
+#[test]
+fn the_rebuilt_pumpkin_zone_2_secret_pipe_leads_to_the_secret_exit() {
+    use crate::session::FrameInput;
+    let mut session = crate::session::Session::new(SessionAssets::load().unwrap());
+    session.expanded_levels = true;
+    session.begin_level(7, 0).unwrap();
+    assert_eq!(level_world(&session), World::expanded(16, 4).unwrap());
+    let crate::session::SessionState::InLevel(ctx) = &mut session.state else {
+        unreachable!()
+    };
+    // Ducking into the room's pipe mouth (its blocks already broken).
+    (ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y) = (0xBD8, 0x28F, 0xB90, 0x230);
+    ctx.cam.prev_mario_y_lo = 0x8F;
+    ctx.cam.update_enables(ctx.sim.x);
+    ctx.sim.on_ground = true;
+    ctx.sim.pipe_dir = 0x10;
+    let mut scenes = Vec::new();
+    let mut landed = None;
+    for _ in 0..1200 {
+        let keys = sml2_core::player_sim::PlayerKeys {
+            right: landed.is_some(),
+            ..Default::default()
+        };
+        session.advance(FrameInput { keys, div: 0 });
+        let crate::session::SessionState::InLevel(ctx) = &session.state else {
+            panic!("left the level")
+        };
+        if ctx.cam.scene_id != 0 {
+            scenes.push(ctx.cam.scene_id);
+        }
+        if landed.is_none() && ctx.sim.pipe_dir == 0 {
+            landed = Some((ctx.sim.x >> 4, ctx.sim.y >> 4));
+        }
+        if let Some(arm) = &ctx.bell_arm {
+            assert!(scenes.is_empty(), "no scene runs: {scenes:?}");
+            // The cave's mouth (col 141, row 43) moved by (+3 screens, +1 row).
+            assert_eq!(landed, Some((189, 59)));
+            assert_eq!((arm.exit_tile_flag, arm.dead), (0xFF, 0));
+            return;
+        }
+    }
+    panic!("Mario never reached the secret exit (landed {landed:?})")
+}
+
 /// Tree Zone 3 entered with expanded levels set to `rebuilt`, Mario and the
 /// camera placed at `at`, then `keys` held from frame 40. Returns each
 /// frame's Mario position, camera transition, room and view origin.

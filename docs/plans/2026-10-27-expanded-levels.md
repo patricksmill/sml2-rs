@@ -147,6 +147,21 @@ level needs four screen rows, so it cannot fit the ROM world.
      (step 4).
 7. **Remaining stitched levels.** Rebuild the other seven teleport levels one at
    a time.
+   - **Pumpkin Zone 2 (ID 7) — complete.** The ROM links the small room's
+     secret pipe (row 2, screen 11, mouth at columns `$BD-$BE`, row `$29`)
+     to the secret cave's ceiling pipe (row 2, screen 8, columns `$8D-$8E`)
+     with scenes 1 (`40 3B`) and 2 (`40 18`). Both pipes sit at the same
+     column within their screens. `assets/expanded/pumpkin-zone-2.json`
+     (16×4 screens) moves screens 8-9 of row 2 to screens 11-12 of the new
+     row 3, paints a pipe body (metatiles 25/26) from row `$2A` to row `$39`
+     to join the two mouths, clears both scenes and opens the camera. New and
+     vacated cells are rock (metatile 39). DX changes 0 cells of this level, so
+     one fingerprint, `14fecf10e044917b`, covers vanilla and DX. Its DX palette
+     triggers (pages 7 and 8) need no remap: the last one Mario passes before
+     the room is page 8, the cave's own set.
+   - Checked: Mario rides the joined pipe out of the moved cave mouth
+     (column 189, row 59) with no scene running and reaches the `$4B` exit
+     (`the_rebuilt_pumpkin_zone_2_secret_pipe_leads_to_the_secret_exit`).
 
 ## Inventory
 
