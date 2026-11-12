@@ -1,0 +1,57 @@
+name: Build problem
+description: Report a failure building Six Golden Coins from source.
+title: "[Build]: "
+labels: [needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please build from a clean checkout of this repository. Builds from
+        modified copies (forks) are out of scope, and this tracker never needs
+        a ROM or extracted game data.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux X11
+        - Linux Wayland
+    validations:
+      required: true
+  - type: dropdown
+    id: build
+    attributes:
+      label: Build source
+      description: What are you building?
+      options:
+        - built from source
+        - fork
+    validations:
+      required: true
+  - type: input
+    id: rustc
+    attributes:
+      label: Toolchain
+      description: Output of `rustc -V`.
+      placeholder: rustc 1.89.0 (29483883e 2025-08-04)
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands you ran and the first error.
+      placeholder: |
+        cargo build --release -p sml2-desktop --bin sml2
+        error: ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Full build log (optional)
+      description: Paste the failing output or attach it as a text file.
+    validations:
+      required: false

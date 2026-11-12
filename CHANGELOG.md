@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Desktop Player 2 join and drop-out. Every launch is single player; the
+  device that first presses Start/Enter on the title (or, with no title, the
+  first gamepad else the keyboard) is Player 1. A different input device
+  joins as Player 2 with Start/Enter on the title or an overworld map only,
+  with a corner prompt until someone joins. Either player's Start/Enter opens
+  the pause menu anywhere and its Drop out removes that menu's owner; if
+  Player 1 leaves, Player 2 becomes Player 1. Select leaves Player 2 on the
+  title or map. A disconnected Player 2 gamepad bubbles Player 2 until the
+  map or a reconnect; a disconnected Player 1 gamepad falls back to the
+  keyboard or waits for a reconnect. The always-present keyboard Player 2 is
+  now a Debug settings option (`W/A/S/D`, F/G/H, 1/2), off by default.
+- Runtime simulation for two players following New Super Mario Bros. Wii's
+  co-op rules: independent motion, damage and powerups; Player 2 as the
+  other character; a shared camera that follows the players in play and
+  stops at scroll locks; screen edges that hold players (pinned players fall
+  behind into a bubble); revival bubbles that drift to the other player and
+  pop on touch, or on Select; shared lives/coins; a checkpoint restart after
+  the whole party is bubbled; one level map and level clock for both
+  players (coins either player takes are gone for both); per-player star
+  countdown and moving-platform carry; and either
+  player driving pipes, room changes and exits. Hosts call
+  `Session::set_local_multiplayer(true)` only while two players are present,
+  then `advance_two_players`; `drop_out_player_one`, `bubble_second_player`
+  and `resume_second_player` cover leaving and controller loss mid-level.
+- `local_multiplayer_smoke` example: deterministic two-player smoke over all
+  32 levels (original and expanded), with bubble/pop, party-wipe and exit
+  probes, representative pipe/boss-arena/platform checks and optional DX rendering.
+- `keyboard_multiplayer_smoke` example exercises both keyboard layouts through
+  the desktop input sampler and game host, with optional PNG output.
+
 ### Fixed
 - Walking out of Wario's Castle door with fewer than six coins no longer
   sends Mario straight back inside.

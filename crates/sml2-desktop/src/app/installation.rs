@@ -79,5 +79,21 @@ impl DesktopApp {
         if !self.library.dx_error.is_empty() && self.library.dx_error != self.dx_message {
             theme::error(ui, &self.library.dx_error);
         }
+
+        theme::section(ui, "UPDATES");
+        if self.menu.row(
+            ui,
+            "Check for updates",
+            Value::Toggle(self.settings.check_for_updates),
+        ) {
+            self.settings.check_for_updates = !self.settings.check_for_updates;
+        }
+        theme::note(
+            ui,
+            "Looks for a new official release at most once a day. Source builds never update.",
+        );
+        if self.menu.row(ui, "Check now", Value::None) {
+            self.check_updates(true);
+        }
     }
 }

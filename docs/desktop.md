@@ -93,10 +93,126 @@ base assets and integrity before use.
 | Toolbar | F10 | Optional binding in Settings → Controls |
 | Debug inspector / pause / one tick | F1 / F2 / F3 | Debug panel |
 
-The desktop menu, focus loss, minimization and selected-controller disconnect
+The desktop menu, focus loss, minimization and controller disconnect
 suspend ticking independently of the original game's pause. Confirmation/binding
 buttons wait for release; short taps survive to the next tick, opposite directions
 cancel consistently. Debug stepping advances one outer session tick.
+
+### Local two-player play: joining and dropping out
+
+Every launch starts single player, even with several controllers connected;
+whether Player 2 has joined is never saved. An input device is the keyboard or
+one gamepad, and a device belongs to at most one player:
+
+- **Player 1** is the device that first presses Start (gamepad) or Enter
+  (keyboard) on the title screen. When there is no title screen (the launcher
+  goes straight to a map, or a save is continued into the map), Player 1 is
+  the first gamepad in connection order, else the keyboard.
+- **Player 2 joins** by pressing Start/Enter on a different device, on the
+  title screen or an overworld/zone map only — never in a level, boss arena,
+  bonus room, launcher or pause menu. Only Player 1 moves the overworld
+  cursor and selects levels. A device that has not joined does nothing else.
+- A small corner banner reads "Press + to join" for a gamepad or "Press Enter
+  to join" for the keyboard while a joinable device is connected and nobody
+  has joined. "Player 2 joined" and "Player 2 left" show briefly afterwards.
+- Player 2 can also leave with Select (keyboard: Backspace) on the title or
+  an overworld map.
+- **Either player's Start/Enter opens the pause menu anywhere**, including
+  levels. The menu belongs to the device that opened it; **Drop out** is
+  shown while two players are present and removes that owner. Player 1's menu
+  never removes Player 2. If Player 1 drops out, Player 2 becomes Player 1,
+  keeps its device and takes over the map cursor.
+
+Once joined, both players use the Settings → Controls bindings for their own
+device. A keyboard that joins as Player 2 therefore uses Player 1's configured
+keyboard layout, not a fixed WASD layout; one keyboard cannot be both players.
+Focus loss and the desktop menu release both players' inputs.
+
+Player 2 plays the character Player 1 did not choose (with DX installed,
+Luigi's graphics and movement when Player 1 is Mario, and vice versa). Without
+DX both players use the cartridge's Mario graphics. The players start 24 px
+apart around the entry point.
+
+Controller disconnects follow the gamepad, not the player:
+
+- If **Player 2's** gamepad disconnects inside a level, Player 2 enters a
+  bubble and stops responding. It is removed when the map returns, unless the
+  same gamepad reconnects first, which resumes control. Outside a level,
+  Player 2 is removed immediately.
+- If **Player 1's** gamepad disconnects and the keyboard is not Player 2's,
+  Player 1 falls back to the keyboard. Otherwise play pauses with "Reconnect
+  Player 1's controller" until a gamepad reconnects, or until Player 1 drops
+  out from that pause menu and Player 2 is promoted.
+
+The old always-present keyboard Player 2 is still available for testing as
+**Settings → Debug → Keyboard Player 2 · WASD**, off by default. With it on,
+Player 2 is always present at level entry and uses the fixed layout below;
+binding-conflict checks and the conflict screen only run while it is on.
+With it off, those WASD keys are ordinary keys and Player 1 may bind them.
+
+| Action | Player 2's debug WASD layout |
+|---|---|
+| Move | W / A / S / D |
+| Jump | F |
+| Run | G |
+| Spin in the air | H |
+| Start / pause | 1 |
+| Select | 2 |
+
+Co-op follows New Super Mario Bros. Wii's rules, taken from the
+NSMBW-Decomp sources where they exist (`daPlBase_c::checkDispSideLemit`,
+`checkDisplayOutDead`, `dAcPy_c::State_Balloon`):
+
+- The camera follows the middle of the players still in play, at up to
+  4 px per frame, and stops at the level's scroll locks. Players in bubbles
+  do not pull it. NSMBW's own camera code is not decompiled, so this follow
+  is this port's design.
+- The screen edges of the visible view (native or enlarged) hold both players.
+  A player pinned behind a wall is not pushed through it; 16 px off-screen,
+  that player goes into a bubble.
+- At a scroll lock, the player walking into the edge starts the room change;
+  the other player follows just behind. A player who does not take the pipe
+  the other player took goes into a bubble.
+- A defeated player goes into a bubble that appears after 150 frames, floats
+  slowly to the side of the player still in play and pops when touched. The
+  popped player
+  keeps playing where it burst, with 127 frames of invulnerability. A player
+  can also bubble on purpose with Select when not paused. If every player is
+  in a bubble, the party spends one shared life and restarts the level
+  checkpoint after 210 frames.
+- Players do not collide with, carry, or bounce on each other. Moving
+  platforms carry each player standing on them, with one shared object-engine
+  update per tick.
+
+The bubble outline is drawn by the renderer, because the cartridge has no
+bubble graphic.
+
+The keyboard and every connected gamepad are independent input devices, so
+two players can use any two of them. A host samples each player's own device,
+never a merged stream, so one player's controller cannot move the other.
+
+The runtime's single-player `Session::advance` interface remains available for
+diagnostics and replay. A co-op host calls
+`set_local_multiplayer(two_players)` before level entry and submits both
+inputs with `advance_two_players(FrameInput, PlayerKeys)`. Dropping out uses
+`set_local_multiplayer(false)` (or `drop_out_player_one` when Player 2 is
+promoted), and a lost Player 2 gamepad uses `bubble_second_player` /
+`resume_second_player`.
+
+```sh
+cargo run -p sml2-runtime --example local_multiplayer_smoke
+cargo run -p sml2-desktop --example keyboard_multiplayer_smoke -- /tmp/sml2-coop.png
+```
+
+The runtime smoke exercises all 32 original and expanded level entries,
+independent movement, rendering, bubbles, party wipes and exit handoffs,
+plus representative pipe, boss-arena and moving-platform probes. The desktop
+smoke routes synthetic keyboard events through the actual input sampler and
+game host and can write a two-player CPU frame. Neither establishes an
+uninterrupted two-player full-game playthrough or physical-keyboard rollover
+limits.
+
+### Settings and controllers
 
 Settings pages: Display, Audio, Controls, Mods, Game, Debug. PgUp/PgDn or LB/RB
 switches pages; left/right changes choices, Enter/click advances them. Escape

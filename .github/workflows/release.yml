@@ -1,8 +1,21 @@
 name: Release Build
 
-# A `v*` tag builds and publishes a release with one game executable per
+# A `v*` tag builds and publishes a release with one packaged asset per
 # platform. A manual run builds and uploads the same files as workflow
 # artifacts without publishing anything.
+#
+# CONTRACT (docs/adr/0001-in-game-self-update.md): the asset names, their
+# contents and the SHA256SUMS.txt format below are relied on by the in-game
+# self-updater in every shipped copy. Changing them breaks self-update for
+# older installs:
+#
+#   SixGoldenCoins-vX.Y.Z-linux-x86_64.AppImage
+#   SixGoldenCoins-vX.Y.Z-windows-x64.zip   (sml2.exe, LICENSE, README.md)
+#   SixGoldenCoins-vX.Y.Z-macos-arm64.zip   (Six Golden Coins.app/)
+#   SHA256SUMS.txt                          (`sha256sum` format over the three)
+#
+# The release body's first line is the one-line player summary shown as the
+# in-game update notice; it is taken from the CHANGELOG entry.
 on:
   push:
     tags:
@@ -29,6 +42,17 @@ jobs:
         with:
           persist-credentials: false
 
+      # Shipped copies compare their compiled version with the release tag to
+      # decide whether to update, so the two must agree.
+      - name: Check tag matches workspace version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match workspace version $version"
+            exit 1
+          fi
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -45,24 +69,31 @@ jobs:
         run: cargo test --locked -p sml2-desktop --no-default-features --lib
 
   build:
-    name: Build ${{ matrix.asset }}
+    name: Build ${{ matrix.platform }}
     needs: gate
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    env:
+      # The tag names the assets and versions the app bundle. Manual runs get
+      # a dev version and are never published.
+      PKG_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.0.0-dev' }}
     strategy:
       fail-fast: true
       matrix:
         include:
           - os: windows-latest
-            binary: sml2.exe
-            asset: six-golden-coins-windows-x64.exe
-          # 22.04's older glibc keeps the binary running on older distros.
+            exe: sml2.exe
+            platform: windows-x64
+            ext: zip
+          # 22.04's older glibc keeps the AppImage running on older distros.
           - os: ubuntu-22.04
-            binary: sml2
-            asset: six-golden-coins-linux-x86_64
+            exe: sml2
+            platform: linux-x86_64
+            ext: AppImage
           - os: macos-14
-            binary: sml2
-            asset: six-golden-coins-macos-arm64
+            exe: sml2
+            platform: macos-arm64
+            ext: zip
     steps:
       - uses: actions/checkout@v6
         with:
@@ -80,6 +111,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build the game
+        env:
+          SML2_RELEASE_BUILD: "1"
         run: cargo build --locked --release -p sml2-desktop --bin sml2
 
       - name: Controller input tests
@@ -91,19 +124,101 @@ jobs:
 
       - name: Check startup
         shell: bash
-        run: target/release/${{ matrix.binary }} --help
+        run: target/release/${{ matrix.exe }} --help
 
-      - name: Stage executable
+      # AppDir plus the shared libraries the game links (libudev); the rest
+      # of the graphics stack is loaded at runtime or provided by drivers.
+      - name: Package Linux AppImage
+        if: runner.os == 'Linux'
         shell: bash
         run: |
+          set -euo pipefail
+          export APPIMAGE_EXTRACT_AND_RUN=1
+
+          appdir="$PWD/build/SixGoldenCoins.AppDir"
+          asset="dist/SixGoldenCoins-${PKG_VERSION}-${{ matrix.platform }}.${{ matrix.ext }}"
           mkdir -p dist
-          cp "target/release/${{ matrix.binary }}" "dist/${{ matrix.asset }}"
-          chmod +x "dist/${{ matrix.asset }}"
+
+          install -Dm755 target/release/sml2 "$appdir/usr/bin/sml2"
+          install -Dm644 packaging/linux/sml2.desktop "$appdir/sml2.desktop"
+          install -Dm644 packaging/linux/sml2.desktop "$appdir/usr/share/applications/sml2.desktop"
+          install -Dm644 assets/icons/sml2-256.png "$appdir/sml2.png"
+          install -Dm644 assets/icons/sml2-256.png "$appdir/usr/share/icons/hicolor/256x256/apps/sml2.png"
+          # The runtime exports $APPDIR and $APPIMAGE; the self-updater uses
+          # $APPIMAGE to replace this file in place.
+          ln -sf usr/bin/sml2 "$appdir/AppRun"
+
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/linuxdeploy" \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x "$RUNNER_TEMP/linuxdeploy"
+          "$RUNNER_TEMP/linuxdeploy" --appdir "$appdir" \
+            --desktop-file "$appdir/sml2.desktop" \
+            --icon-file "$appdir/sml2.png"
+
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/appimagetool" \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x "$RUNNER_TEMP/appimagetool"
+          ARCH=x86_64 "$RUNNER_TEMP/appimagetool" --no-appstream "$appdir" "$asset"
+
+          test -x "$asset"
+          rm -rf "$appdir"
+
+      - name: Package Windows zip
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $stage = "build/windows"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item "target/release/sml2.exe" $stage
+          Copy-Item "LICENSE", "README.md" $stage
+          New-Item -ItemType Directory -Force -Path "dist" | Out-Null
+          Compress-Archive -Path "$stage/*" `
+            -DestinationPath "dist/SixGoldenCoins-$env:PKG_VERSION-${{ matrix.platform }}.${{ matrix.ext }}" `
+            -Force
+          Remove-Item -Recurse -Force $stage
+
+      - name: Package macOS app bundle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${PKG_VERSION#v}"
+          bundle_version="$version"
+          if ! [[ "$bundle_version" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            bundle_version="0.0.0"
+          fi
+
+          app="build/Six Golden Coins.app"
+          asset="dist/SixGoldenCoins-${PKG_VERSION}-${{ matrix.platform }}.${{ matrix.ext }}"
+          mkdir -p dist
+          install -d "$app/Contents/MacOS" "$app/Contents/Resources"
+          install -m 755 target/release/sml2 "$app/Contents/MacOS/sml2"
+          sed -e "s/__VERSION__/${version}/g" \
+              -e "s/__BUNDLE_VERSION__/${bundle_version}/g" \
+              packaging/macos/Info.plist > "$app/Contents/Info.plist"
+          plutil -lint "$app/Contents/Info.plist"
+          printf 'APPL????' > "$app/Contents/PkgInfo"
+
+          # Unsigned release, but arm64 macOS refuses to run an unsigned
+          # binary, so the bundle gets an ad-hoc signature.
+          codesign --force --deep --sign - "$app"
+          codesign --verify --deep "$app"
+
+          ditto -c -k --keepParent "$app" "$asset"
+          rm -rf build/"Six Golden Coins.app"
+
+      - name: Verify staged asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="dist/SixGoldenCoins-${PKG_VERSION}-${{ matrix.platform }}.${{ matrix.ext }}"
+          test -f "$asset"
+          echo "ASSET=$asset" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.asset }}
-          path: dist/${{ matrix.asset }}
+          name: ${{ matrix.platform }}
+          path: ${{ env.ASSET }}
           if-no-files-found: error
           retention-days: 7
 
@@ -115,22 +230,89 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Download executables
+      - name: Download assets
         uses: actions/download-artifact@v7
         with:
           path: dist
           merge-multiple: true
 
-      - name: Extract release notes from CHANGELOG.md
+      - name: Verify contract asset names
         run: |
+          set -euo pipefail
+          cd dist
+          for platform in linux-x86_64.AppImage windows-x64.zip macos-arm64.zip; do
+            test -f "SixGoldenCoins-${GITHUB_REF_NAME}-${platform}" || {
+              echo "missing SixGoldenCoins-${GITHUB_REF_NAME}-${platform}" >&2
+              exit 1
+            }
+          done
+          count=$(find . -maxdepth 1 -type f | wc -l)
+          test "$count" -eq 3 || {
+            echo "expected three assets, found $count" >&2
+            ls -l
+            exit 1
+          }
+
+      # `sha256sum` output is exactly `<64 lowercase hex><two spaces><name>`,
+      # which the self-updater parses.
+      - name: Generate SHA256SUMS.txt
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum SixGoldenCoins-* > SHA256SUMS.txt
+          awk 'length($1) != 64 || $1 !~ /^[0-9a-f]+$/ || substr($0, 65, 2) != "  " { exit 1 }' SHA256SUMS.txt
+          test "$(wc -l < SHA256SUMS.txt)" -eq 3
+          cat SHA256SUMS.txt
+
+      # The release body's first line is the one-line player summary shown as
+      # the in-game update notice; the rest is the CHANGELOG entry, then the
+      # install footer.
+      - name: Build release notes from CHANGELOG.md
+        run: |
+          set -euo pipefail
           python3 - <<'EOF'
           import os, re
+
           tag = os.environ['GITHUB_REF_NAME']
-          content = open('CHANGELOG.md').read()
-          pattern = r'## \[[vV]?' + re.escape(tag.lstrip('vV')) + r'\][^\n]*\n(.*?)(?=\n## \[|\Z)'
+          version = tag.lstrip('vV')
+          content = open('CHANGELOG.md', encoding='utf-8').read()
+          pattern = (r'## \[[vV]?' + re.escape(version)
+                     + r'\][^\n]*\n(.*?)(?=\n## \[|\Z)')
           match = re.search(pattern, content, re.DOTALL)
-          notes = match.group(1).strip() if match else 'Release ' + tag
-          open('release_notes.md', 'w').write(notes + '\n')
+          section = match.group(1).strip() if match else 'Release ' + tag
+
+          # First non-heading line of the entry, without its list marker and
+          # with wrapped continuation lines joined: the updater shows it as a
+          # single notice line.
+          lines = section.splitlines()
+          summary = ''
+          for index, line in enumerate(lines):
+              stripped = line.strip()
+              if not stripped or stripped.startswith('#'):
+                  continue
+              if stripped.startswith(('- ', '* ')):
+                  parts = [stripped[2:].strip()]
+                  for following in lines[index + 1:]:
+                      if not following.strip() or not following[0].isspace():
+                          break
+                      parts.append(following.strip())
+                  summary = ' '.join(parts)
+              else:
+                  summary = stripped
+              break
+          if not summary:
+              summary = 'Six Golden Coins ' + tag
+
+          install = (
+              '---\n'
+              '**Install:** download the asset for your platform (Linux '
+              '`.AppImage`, Windows `.zip`, macOS `.zip`), run it, and use '
+              '**Settings → Game → Import ROM…** to select your own cartridge '
+              'dump. Existing copies can update from **Help → Check for '
+              'Updates…**.\n'
+          )
+          body = summary + '\n\n' + section + '\n\n' + install
+          open('release_notes.md', 'w', encoding='utf-8').write(body)
           EOF
           cat release_notes.md
 
@@ -140,4 +322,5 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "Six Golden Coins $GITHUB_REF_NAME" \
-            --notes-file release_notes.md
+            --notes-file release_notes.md \
+            --latest

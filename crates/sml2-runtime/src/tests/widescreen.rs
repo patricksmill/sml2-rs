@@ -62,8 +62,7 @@ fn enlarged_views_keep_terrain_and_sprites_aligned_at_every_level_edge() {
         ] {
             let wide = session.render_frame(view);
             // The room's locks stop the view before the layout's edges do.
-            let (left, top) =
-                crate::render::view::level_origin(view, (cam_x, cam_y), 0, room);
+            let (left, top) = crate::render::view::level_origin(view, (cam_x, cam_y), 0, room);
             let (x, y) = (
                 (cam_x as i32 - 80 - left) as usize,
                 (cam_y as i32 - 72 - top) as usize,
@@ -413,8 +412,11 @@ fn every_zone_keeps_its_native_picture_and_hides_unused_tilemap_columns() {
                     for y in 0..view.1 {
                         for x in 0..view.0 {
                             if !(mx..mx + 160).contains(&x) || !(my..my + 144).contains(&y) {
-                                assert_eq!(wide[y * view.0 + x], 0,
-                                    "unused map data on screen {screen}, cleared {cleared}, frame {frame}, view {view:?}, pixel {x},{y}");
+                                assert_eq!(
+                                    wide[y * view.0 + x],
+                                    0,
+                                    "unused map data on screen {screen}, cleared {cleared}, frame {frame}, view {view:?}, pixel {x},{y}"
+                                );
                             }
                         }
                     }
@@ -480,4 +482,60 @@ fn the_tree_zone_map_margins_show_its_bundled_scenery() {
         .filter(|&(x, y)| wide[y * view.0 + x] != 0)
         .count();
     assert!(painted > 0, "the margin shows the map's scenery");
+}
+
+#[test]
+fn macro_zone_first_pipe_descent_does_not_snap_the_enlarged_view_sideways() {
+    for size in [NATIVE, (320, 180), (384, 216), (512, 288)] {
+        let mut session = Session::new(SessionAssets::load().unwrap());
+        session.begin_level(20, 0).unwrap();
+        let SessionState::InLevel(ctx) = &mut session.state else {
+            unreachable!()
+        };
+        // Stand on the actual first $08/$09 mouth; input must enter it.
+        ctx.sim.x = 376;
+        ctx.sim.y = 196;
+        ctx.sim.on_ground = true;
+        ctx.sim.hvel = 0x80;
+        ctx.cam.x = 376;
+        ctx.cam.y = 182;
+        ctx.cam.prev_mario_y_lo = 196;
+        ctx.cam.update_enables(ctx.sim.x);
+        let mut previous: Option<i32> = None;
+        let mut entered = false;
+        let mut reached_corridor = false;
+        let mut walked_right = false;
+        for frame in 0..320 {
+            session.advance(FrameInput {
+                keys: PlayerKeys {
+                    down: frame < 160,
+                    right: frame >= 160,
+                    ..Default::default()
+                },
+                div: 0,
+            });
+            let SessionState::InLevel(ctx) = &session.state else {
+                panic!("the pipe must keep Mario in the level")
+            };
+            entered |= ctx.sim.pipe_dir == 0x10;
+            reached_corridor |= ctx.cam.y >= 514 && ctx.sim.pipe_dir == 0;
+            walked_right |= ctx.cam.x >= 544;
+            let origin =
+                crate::render::view::level_origin(size, (ctx.cam.x, ctx.cam.y), 0, ctx.cam.room());
+            if let Some(x) = previous {
+                // The largest view moves its 128px centering offset over the
+                // 34-tick pipe slide. A later unlocked row must not jump 64px.
+                assert!(
+                    (origin.0 - x).abs() <= 4,
+                    "{size:?}, frame {frame}: horizontal viewport {x} -> {}",
+                    origin.0
+                );
+            }
+            previous = Some(origin.0);
+        }
+        assert!(
+            entered && reached_corridor && walked_right,
+            "exercise pipe entry, exit, and walking along the lower corridor"
+        );
+    }
 }

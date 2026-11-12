@@ -28,6 +28,36 @@ pub enum PadButton {
     StickRight,
 }
 
+impl PadButton {
+    /// Every native button, for aggregating all connected pads.
+    #[cfg(any(feature = "native", test))]
+    pub(crate) const ALL: [Self; 20] = {
+        use PadButton::*;
+        [
+            South,
+            East,
+            West,
+            North,
+            Up,
+            Down,
+            Left,
+            Right,
+            Start,
+            Select,
+            LeftThumb,
+            RightThumb,
+            LeftShoulder,
+            RightShoulder,
+            LeftTrigger,
+            RightTrigger,
+            StickUp,
+            StickDown,
+            StickLeft,
+            StickRight,
+        ]
+    };
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Button {
     Key(String),
@@ -40,7 +70,12 @@ impl Button {
     }
     pub fn label(&self) -> String {
         match self {
-            Self::Key(key) => key.clone(),
+            Self::Key(key) => match key.strip_prefix("Num") {
+                Some(digit) if digit.len() == 1 && digit.as_bytes()[0].is_ascii_digit() => {
+                    digit.to_string()
+                }
+                _ => key.clone(),
+            },
             Self::Pad(pad) => format!("Pad {pad:?}"),
         }
     }
@@ -133,6 +168,43 @@ impl Default for Bindings {
 }
 
 impl Bindings {
+    /// Player 2's fixed keyboard layout. It deliberately avoids every default
+    /// Player 1 button and every desktop menu shortcut, so both players can
+    /// share one keyboard. Controllers stay on Player 1.
+    pub fn player_two() -> Self {
+        let row = |keys: &[&str]| keys.iter().map(|k| Button::key(k)).collect();
+        Self([
+            row(&["D"]),
+            row(&["A"]),
+            row(&["W"]),
+            row(&["S"]),
+            row(&["F"]),
+            row(&["G"]),
+            row(&["Num1"]),
+            row(&["Num2"]),
+            row(&["H"]),
+            row(&[]),
+        ])
+    }
+
+    /// Player 1 actions whose buttons `reserved` already claims. Player 2's
+    /// fixed layout is reserved, so loaded or hand-edited settings cannot
+    /// silently give one key to both players.
+    pub fn conflicts_with(&self, reserved: &Bindings) -> Vec<(Action, Vec<Button>)> {
+        let mut conflicts = Vec::new();
+        for action in Action::ALL {
+            let buttons: Vec<Button> = self.0[action as usize]
+                .iter()
+                .filter(|button| reserved.0.iter().flatten().any(|other| other == *button))
+                .cloned()
+                .collect();
+            if !buttons.is_empty() {
+                conflicts.push((action, buttons));
+            }
+        }
+        conflicts
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         let mut used = BTreeSet::new();
         for action in Action::ALL {
@@ -177,6 +249,22 @@ impl Bindings {
     }
 }
 
+/// Which input device a button came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ButtonClass {
+    Keyboard,
+    Pad,
+}
+
+impl ButtonClass {
+    fn matches(self, button: &Button) -> bool {
+        match self {
+            Self::Keyboard => matches!(button, Button::Key(_)),
+            Self::Pad => matches!(button, Button::Pad(_)),
+        }
+    }
+}
+
 /// One tick's gameplay input: the joypad plus the host-only spin button.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Controls {
@@ -184,7 +272,7 @@ pub struct Controls {
     pub spin: bool,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct InputState {
     held: BTreeSet<Button>,
     pressed: BTreeSet<Button>,
@@ -223,8 +311,52 @@ impl InputState {
         self.pressed.remove(button)
     }
 
+    /// Whether `button` was newly pressed this frame, without consuming it.
+    pub fn press_pending(&self, button: &Button) -> bool {
+        self.pressed.contains(button)
+    }
+
+    /// Whether this device has any pending press, without consuming it.
+    #[cfg(feature = "native")]
+    pub(crate) fn any_press(&self, class: ButtonClass) -> bool {
+        self.pressed.iter().any(|button| class.matches(button))
+    }
+
     pub fn first_press(&self) -> Option<Button> {
         self.pressed.first().cloned()
+    }
+
+    /// Copy one device class's state into this stream, so a filtered menu
+    /// stream can carry only the devices that own a player.
+    #[cfg(any(feature = "native", test))]
+    pub(crate) fn merge_class(&mut self, other: &Self, class: ButtonClass) {
+        self.pressed
+            .extend(other.pressed.iter().filter(|b| class.matches(b)).cloned());
+        self.held
+            .extend(other.held.iter().filter(|b| class.matches(b)).cloned());
+        self.blocked
+            .extend(other.blocked.iter().filter(|b| class.matches(b)).cloned());
+    }
+
+    /// Aggregate connected pads into the merged host stream. Any pad holding
+    /// a button holds it, so another pad's release cannot erase the press.
+    #[cfg(any(feature = "native", test))]
+    pub(crate) fn merge_pads<'a>(&mut self, pads: impl IntoIterator<Item = &'a Self>) {
+        let pads: Vec<&Self> = pads.into_iter().collect();
+        for button in PadButton::ALL {
+            let button = Button::Pad(button);
+            let down = pads
+                .iter()
+                .any(|pad| pad.held.contains(&button) || pad.pressed.contains(&button));
+            self.event(button, down);
+        }
+    }
+
+    /// Remove presses that a filtered menu stream already consumed, so they
+    /// cannot reach the game tick or fire again on the next frame.
+    #[cfg(any(feature = "native", test))]
+    pub(crate) fn retain_pressed(&mut self, view: &Self) {
+        self.pressed.retain(|button| view.pressed.contains(button));
     }
 
     pub fn sample_player(&mut self, bindings: &Bindings) -> PlayerKeys {
@@ -232,16 +364,60 @@ impl InputState {
     }
 
     pub fn sample_controls(&mut self, bindings: &Bindings) -> Controls {
+        let controls = self.read_controls(bindings, None, None);
+        self.consume_presses(bindings);
+        controls
+    }
+
+    /// Sample only keyboard buttons. The shared event stream also carries
+    /// every gamepad's buttons, so a keyboard player must not see those.
+    pub fn sample_keyboard(&mut self, bindings: &Bindings) -> Controls {
+        let controls = self.read_controls(bindings, None, Some(ButtonClass::Keyboard));
+        self.consume_presses_for(bindings, ButtonClass::Keyboard);
+        controls
+    }
+
+    /// Sample only gamepad buttons, for one pad's own event stream.
+    pub fn sample_pad(&mut self, bindings: &Bindings) -> Controls {
+        let controls = self.read_controls(bindings, None, Some(ButtonClass::Pad));
+        self.consume_presses_for(bindings, ButtonClass::Pad);
+        controls
+    }
+
+    /// Sample both keyboard players from the same event stream. Both reads
+    /// happen before presses are consumed, and a button bound by both players
+    /// reaches neither, so a hand-edited duplicate can never drive two players.
+    pub fn sample_two_players(
+        &mut self,
+        first: &Bindings,
+        second: &Bindings,
+    ) -> (Controls, Controls) {
+        let one = self.read_controls(first, Some(second), None);
+        let two = self.read_controls(second, Some(first), None);
+        self.consume_presses(first);
+        self.consume_presses(second);
+        (one, two)
+    }
+
+    fn read_controls(
+        &self,
+        bindings: &Bindings,
+        also_bound: Option<&Bindings>,
+        class: Option<ButtonClass>,
+    ) -> Controls {
         let values: [bool; 9] = std::array::from_fn(|index| {
             bindings.0[index].iter().any(|b| {
+                if class.is_some_and(|class| !class.matches(b)) {
+                    return false;
+                }
+                if also_bound
+                    .is_some_and(|other| other.0.iter().flatten().any(|shared| shared == b))
+                {
+                    return false;
+                }
                 !self.blocked.contains(b) && (self.held.contains(b) || self.pressed.contains(b))
             })
         });
-        for row in &bindings.0 {
-            for button in row {
-                self.pressed.remove(button);
-            }
-        }
         // Opposite directions cancel consistently across keyboard and gamepad.
         let keys = PlayerKeys {
             right: values[0] && !values[1],
@@ -256,6 +432,24 @@ impl InputState {
         Controls {
             keys,
             spin: values[8],
+        }
+    }
+
+    fn consume_presses(&mut self, bindings: &Bindings) {
+        for row in &bindings.0 {
+            for button in row {
+                self.pressed.remove(button);
+            }
+        }
+    }
+
+    fn consume_presses_for(&mut self, bindings: &Bindings, class: ButtonClass) {
+        for row in &bindings.0 {
+            for button in row {
+                if class.matches(button) {
+                    self.pressed.remove(button);
+                }
+            }
         }
     }
 }
@@ -371,5 +565,111 @@ mod tests {
         input.event(Button::Pad(PadButton::Left), true);
         let keys = input.sample_player(&Bindings::default());
         assert!(!keys.right && !keys.left);
+    }
+    #[test]
+    fn both_keyboard_players_sample_independently_without_overlapping_defaults() {
+        let first = Bindings::default();
+        let second = Bindings::player_two();
+        second.validate().unwrap();
+        for action in Action::ALL {
+            for button in &first.0[action as usize] {
+                assert!(
+                    !second.0.iter().flatten().any(|other| other == button),
+                    "{} is bound to both players",
+                    button.label()
+                );
+            }
+        }
+
+        let mut input = InputState::default();
+        input.event(Button::key("ArrowRight"), true);
+        input.event(Button::key("D"), true);
+        input.event(Button::key("W"), true);
+        let (one, two) = input.sample_two_players(&first, &second);
+        assert!(one.keys.right && !one.keys.up);
+        assert!(two.keys.right && two.keys.up && !two.keys.left);
+
+        // Pausing blocks both players until each held key is released.
+        input.event(Button::key("ArrowRight"), true);
+        input.event(Button::key("D"), true);
+        input.suppress_until_release();
+        let (one, two) = input.sample_two_players(&first, &second);
+        assert!(!one.keys.right && !two.keys.right);
+        for name in ["ArrowRight", "D"] {
+            input.event(Button::key(name), false);
+            input.event(Button::key(name), true);
+        }
+        let (one, two) = input.sample_two_players(&first, &second);
+        assert!(one.keys.right && two.keys.right);
+
+        // Window focus loss releases held keys for both players.
+        input.clear();
+        let (one, two) = input.sample_two_players(&first, &second);
+        assert!(!one.keys.right && !two.keys.right && !two.keys.up);
+    }
+    #[test]
+    fn each_device_samples_only_its_own_button_class() {
+        let bindings = Bindings::default();
+        let mut input = InputState::default();
+        input.event(Button::key("ArrowRight"), true);
+        input.event(Button::Pad(PadButton::South), true);
+        let keyboard = input.sample_keyboard(&bindings);
+        assert!(keyboard.keys.right);
+        assert!(!keyboard.keys.a, "the pad is another device's input");
+        let pad = input.sample_pad(&bindings);
+        assert!(pad.keys.a);
+        assert!(!pad.keys.right, "the keyboard is another device's input");
+    }
+
+    #[test]
+    fn merged_pad_state_aggregates_every_connected_pad() {
+        let south = Button::Pad(PadButton::South);
+        let mut first = InputState::default();
+        let mut second = InputState::default();
+        let mut merged = InputState::default();
+        first.event(south.clone(), true);
+        second.event(south.clone(), true);
+        merged.merge_pads([&first, &second]);
+        assert!(merged.held.contains(&south));
+        // Model the host consuming the latched taps; holding is what keeps
+        // the aggregate down.
+        merged.take_press(&south);
+        first.take_press(&south);
+        second.take_press(&south);
+        // One pad releasing must not erase the other pad's held button.
+        second.event(south.clone(), false);
+        merged.merge_pads([&first, &second]);
+        assert!(merged.held.contains(&south));
+        first.event(south.clone(), false);
+        merged.merge_pads([&first, &second]);
+        assert!(!merged.held.contains(&south));
+    }
+
+    #[test]
+    fn a_filtered_stream_consumes_only_the_presses_it_sees() {
+        let south = Button::Pad(PadButton::South);
+        let mut pad = InputState::default();
+        pad.event(south.clone(), true);
+        let mut view = InputState::default();
+        view.merge_class(&pad, ButtonClass::Pad);
+        assert!(view.take_press(&south));
+        pad.retain_pressed(&view);
+        assert!(!pad.press_pending(&south), "the menu consumed it");
+    }
+
+    #[test]
+    fn loaded_conflicts_are_reported_and_never_drive_both_players() {
+        let second = Bindings::player_two();
+        let mut first = Bindings::default();
+        first.0[Action::Jump as usize] = vec![Button::key("D")];
+        assert_eq!(
+            first.conflicts_with(&second),
+            vec![(Action::Jump, vec![Button::key("D")])]
+        );
+
+        let mut input = InputState::default();
+        input.event(Button::key("D"), true);
+        let (one, two) = input.sample_two_players(&first, &second);
+        assert!(!one.keys.a && !two.keys.right);
     }
 }

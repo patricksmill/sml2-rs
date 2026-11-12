@@ -52,14 +52,26 @@ impl DesktopApp {
     pub(super) fn home_panel(&mut self, ctx: &Context, ui: &mut Ui) {
         ui.set_width(260.0);
         ui.spacing_mut().item_spacing.y = 4.0;
-        if self.game.is_some() && self.menu.button(ui, "Resume") {
+        if self.players.player_one_needs_reconnect() {
+            theme::error(ui, "Reconnect Player 1's controller");
+        }
+        if self.game.is_some()
+            && !self.players.player_one_needs_reconnect()
+            && self.menu.button(ui, "Resume")
+        {
             self.navigate(ctx, Screen::Game);
+            self.show_binding_conflicts();
+        }
+        if self.players.two_players() && self.menu.button(ui, "Drop out") {
+            self.drop_out(ctx);
+            return;
         }
         if self.game.is_none() {
             if self.menu.button(ui, "Retry loading game") {
                 self.load_game();
                 if self.game.is_some() {
                     self.navigate(ctx, Screen::Game);
+                    self.show_binding_conflicts();
                 }
             }
         }
@@ -119,6 +131,7 @@ impl DesktopApp {
         self.settings = Default::default();
         self.settings.window_size = window_size;
         self.settings.dx_installation = dx_installation;
+        self.refresh_binding_conflicts();
         self.allow_save = true;
         // Force replacement even when the current values already match defaults.
         self.saved_settings.version = 0;
@@ -130,11 +143,11 @@ impl DesktopApp {
         let previous_page = self.page;
         if self.capture.is_none() && self.dx_picker.is_none() {
             let back = pressed(
-                &mut self.input,
+                &mut self.ui_input,
                 &[Button::Pad(PadButton::LeftShoulder), Button::key("PageUp")],
             );
             let next = pressed(
-                &mut self.input,
+                &mut self.ui_input,
                 &[
                     Button::Pad(PadButton::RightShoulder),
                     Button::key("PageDown"),
@@ -332,6 +345,33 @@ impl DesktopApp {
     }
 
     fn controls_page(&mut self, ui: &mut Ui) {
+        if !self.binding_conflicts.is_empty() {
+            theme::section(ui, "PLAYER 1 CONFLICT");
+            theme::error(
+                ui,
+                "Player 1 uses keys reserved for Player 2. Play is paused until each conflict is rebound or Player 1 is reset.",
+            );
+            for (action, buttons) in self.binding_conflicts.clone() {
+                let keys = buttons
+                    .iter()
+                    .map(|b| b.label())
+                    .collect::<Vec<_>>()
+                    .join(" / ");
+                if self
+                    .menu
+                    .row(ui, &format!("Rebind {}", action.label()), Value::Text(keys))
+                    && self.capture.is_none()
+                {
+                    self.capture = Some(action);
+                    self.input.suppress_until_release();
+                }
+            }
+            if self.menu.row(ui, "Reset Player 1 controls", Value::None) && self.capture.is_none() {
+                self.settings.bindings = Bindings::default();
+                self.refresh_binding_conflicts();
+                self.input.suppress_until_release();
+            }
+        }
         theme::section(ui, "CONTROLLER");
         if self.menu.row(
             ui,
@@ -385,12 +425,39 @@ impl DesktopApp {
         }
         if self.menu.row(ui, "Reset controls", Value::None) && self.capture.is_none() {
             self.settings.bindings = Bindings::default();
+            self.refresh_binding_conflicts();
             self.input.suppress_until_release();
         }
         theme::note(
             ui,
             "Choose an action, then press a key or controller button; Esc cancels. Rebinding keeps the other device's controls. Controller Start opens the menu.",
         );
+        if self.debug_wasd {
+            theme::section(ui, "PLAYER 2 · DEBUG KEYBOARD");
+            for action in Action::ALL {
+                let row = &self.second_bindings.0[action as usize];
+                if row.is_empty() {
+                    continue;
+                }
+                let keys = row
+                    .iter()
+                    .map(|b| b.label())
+                    .collect::<Vec<_>>()
+                    .join(" / ");
+                theme::note(ui, &format!("{}: {keys}", action.label()));
+            }
+            theme::note(
+                ui,
+                "Debug Player 2 always uses this fixed layout. Player 1 bindings that \
+                 overlap it pause play until they are rebound.",
+            );
+        } else {
+            theme::note(
+                ui,
+                "Player 2 joins from the title screen or an overworld map by pressing \
+                 Enter (keyboard) or Start (controller), then uses the bindings above.",
+            );
+        }
     }
 
     fn debug_page(&mut self, ui: &mut Ui) {
@@ -401,6 +468,20 @@ impl DesktopApp {
         {
             self.debug = !self.debug;
         }
+        if self.menu.row(
+            ui,
+            "Keyboard Player 2 · WASD",
+            Value::Toggle(self.debug_wasd),
+        ) {
+            self.debug_wasd = !self.debug_wasd;
+            self.refresh_binding_conflicts();
+        }
+        theme::note(
+            ui,
+            "Always-present Player 2 on the fixed W/A/S/D layout, for testing without \
+             a second device. Off by default; while off, Player 2 joins from the title \
+             or overworld map.",
+        );
         if self
             .menu
             .row(ui, "Pause game · F2", Value::Toggle(self.paused))

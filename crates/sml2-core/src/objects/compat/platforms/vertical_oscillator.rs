@@ -10,8 +10,7 @@ impl ObjectSim {
         st.b = actor.to_raw_slot();
         match result {
             Ok(handler_0x595fe::Effect::Moved { dy }) if actor.interactions.stood_on() => {
-                let y = self.mario_y_adjust.unwrap_or(self.mario.y);
-                self.mario_y_adjust = Some(y.wrapping_add_signed(dy));
+                self.carry_rider_dy(dy);
             }
             Ok(_) => {}
             Err(_) => self.note_unported(0x595FE),

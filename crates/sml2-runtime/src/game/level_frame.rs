@@ -1,7 +1,9 @@
 //! Ordered gameplay phases shared by native hosts and capture replay.
 
 mod live;
-pub(crate) use live::{LiveLevelFrame, begin_live_level_frame, step_live_level_frame};
+pub(crate) use live::{
+    LiveLevelFrame, begin_live_level_frame, step_live_level_frame, step_two_player_live_level_frame,
+};
 
 use sml2_core::{
     camera::CameraSim,
@@ -11,7 +13,7 @@ use sml2_core::{
     level::LevelLayout,
     object::ObjectTables,
     objects::{FireHit, MarioContact, ObjectSim, SlotState},
-    player_sim::PlayerSim,
+    player_sim::{PlayerKeys, PlayerSim},
     scene::{SceneScripts, SceneStep, SceneVm, boss_def_index, boss_def_portable},
 };
 
@@ -86,6 +88,104 @@ pub(crate) fn step_camera(sim: &mut PlayerSim, cam: &mut CameraSim) -> bool {
     cam.step(sim);
     cam.update_enables(sim.x);
     transition_before != 0 && cam.transition == 0
+}
+
+/// Keep a live player inside the shared presentation vertically. The native
+/// view is the camera-centred 160x144 rect: its top edge is the ROM's
+/// `y - cam + 80 = 16`, and the bottom kill line is the death arc's
+/// `y - cam + 98 = $B0`. Enlarged views use their own world rect. A player
+/// may rise [`ABOVE_TOP`] past the top, as NSMBW lets players leave the top
+/// of the screen; that reach is also what an up-lock transition needs
+/// (`sMarioScreenY < $1B`). Crossing the bottom is the normal death line
+/// (bubble in co-op), so pits stay lethal.
+pub(crate) fn clamp_shared_vertical(sim: &mut PlayerSim, cam: &CameraSim) {
+    if sim.dead == 0xFF || sim.exit_phase || sim.exit_completed || sim.pipe_dir >= 0x10 {
+        return;
+    }
+    let (top, bottom) = match sim.view {
+        Some(view) => (view.y as u16, view.h),
+        // 64 above the camera centre to the 6-px-below-bottom death line.
+        None => (cam.y.wrapping_sub(64), 142),
+    };
+    let rel = sim.y.wrapping_sub(top) as i16 as i32;
+    if rel < -ABOVE_TOP {
+        sim.y = top.wrapping_sub(ABOVE_TOP as u16);
+        sim.vvel = 24;
+        sim.on_ground = false;
+        return;
+    }
+    if rel >= bottom {
+        sim.dead = 0xFF;
+        sim.dead_fade = false;
+        sim.fade_timer = 0;
+        sim.powerup = 0;
+        sim.invincibility = 0;
+    }
+}
+
+/// Pixels a player may rise above the shared view's top edge.
+const ABOVE_TOP: i32 = 32;
+
+/// One player's contact with the shared screen's side edges this frame.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ScreenEdge {
+    pub pressing_left: bool,
+    pub pressing_right: bool,
+    /// Left behind more than 16 px past an edge: NSMBW bubbles the player
+    /// (`daPlBase_c::checkDisplayOutDead`, multiplayer offset 16).
+    pub off_screen: bool,
+}
+
+/// How far past a side edge a pinned player may fall behind before bubbling.
+const OFF_SCREEN_MARGIN: i32 = 16;
+
+/// NSMBW's `daPlBase_c::checkDispSideLemit` on the frame-start view: a player
+/// past a side edge is put back on it and loses speed into it, unless a wall
+/// stands on the player's inward side, in which case the edge does not push
+/// the player into the wall and the player may drift off-screen. The span is
+/// the ROM's `$10..=$A0` screen X on the native view, or the enlarged view
+/// rect. Pressing reports walking into an edge, which starts the room
+/// transition at a scroll lock.
+pub(crate) fn apply_screen_edges(
+    sim: &mut PlayerSim,
+    layout: &LevelLayout,
+    held: &PlayerKeys,
+) -> ScreenEdge {
+    let mut out = ScreenEdge::default();
+    if sim.dead != 0 || sim.exit_phase || sim.exit_completed || sim.pipe_dir >= 0x10 {
+        return out;
+    }
+    let (left, width) = match sim.view {
+        Some(view) => (view.x as u16, view.w - 16),
+        None => (sim.camx.wrapping_sub(96).wrapping_add(0x10), 0xA0 - 0x10),
+    };
+    let rel = i32::from(sim.x.wrapping_sub(left) as i16);
+    if rel <= 0 {
+        out.pressing_left = held.left;
+        if rel < 0 {
+            if sim.wall_beside(layout, true) {
+                out.off_screen = rel < -OFF_SCREEN_MARGIN;
+            } else {
+                sim.x = left;
+                if !sim.dir_right {
+                    sim.hvel = 0;
+                }
+            }
+        }
+    } else if rel >= width {
+        out.pressing_right = held.right;
+        if rel > width {
+            if sim.wall_beside(layout, false) {
+                out.off_screen = rel > width + OFF_SCREEN_MARGIN;
+            } else {
+                sim.x = left.wrapping_add(width as u16);
+                if sim.dir_right {
+                    sim.hvel = 0;
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Sample the player after the host's observation checkpoint, then load a boss.

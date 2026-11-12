@@ -54,6 +54,15 @@ it installs the captured camera edge between player and camera phases, while
 crouch-look reads the preceding edge; its contact snapshot precedes mutating pose
 selection. Keep these adapter contracts explicit rather than copying game loops.
 
+Local keyboard co-op uses `Session::set_local_multiplayer(true)` and
+`advance_two_players(FrameInput, PlayerKeys)`. Each player owns movement,
+power-ups, damage and projectiles; level content, edits, progress, counters,
+camera and object simulation are shared. `ObjectSim::step_two_players`
+resolves both contact passes before one engine tick and routes carry by
+per-slot rider ownership, not the enemy AI's primary-player reference.
+Single-player `advance` and frozen replay retain their existing ordering.
+
+
 ## Progression ownership
 
 | Boundary | Owner / contract |
@@ -103,10 +112,20 @@ are not simulated; see [frame clocks](docs/frame-clock.md) and
 resolution are separate settings. Preserve source scroll/window addressing,
 OAM order, raw color-index transparency/priority and the leading camera; do not
 replace it with player-centered following or separately clamp terrain/sprites.
+Local co-op is an explicit exception to single-player leading-camera behavior:
+`CameraSim::step_coop` (`camera_coop.rs`) follows the centre of the players in
+play at a bounded speed and stops at the same scroll locks; the frame applies
+NSMBW's screen-edge rule per player (`apply_screen_edges`) instead of `$0FBF`.
+A player owning a pipe drives the ROM `step`, so pipe rooms behave as in
+one-player play.
 
 In enlarged levels, the native rect stays horizontally centered with three
 quarters of added height above and one quarter below; the classic HUD sits
 bottom-center and the Modern style floats in the view's top corners.
+Enlarged framing blends between room bounds during screen transitions and
+across unlocked vertical row boundaries, so a shaft widening into a corridor
+does not snap the view sideways. Native camera movement and lock bits remain
+unchanged.
 Fixed screens retain their authored frame. Test native pixels within enlarged
 views (`sml2-runtime/src/tests/widescreen.rs`). Cosmetic scenery must not modify
 collision, actors, spawns or progression. Default output uses nearest sampling

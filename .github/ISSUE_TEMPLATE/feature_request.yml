@@ -1,0 +1,50 @@
+name: Feature request
+description: Suggest an option, quality-of-life fix or porting improvement.
+title: "[Feature]: "
+labels: [needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is a native port, not an emulator, so requests about
+        emulator-style accuracy or new game content are usually out of scope.
+        Ideas that stay close to the original game's behavior are welcome.
+  - type: input
+    id: version
+    attributes:
+      label: Game version
+      description: The release you are running, e.g. v0.2.1.
+      placeholder: v0.2.1
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux X11
+        - Linux Wayland
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the annoyance or gap, not the implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What should the game do instead? Include menu paths if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered (optional)
+    validations:
+      required: false

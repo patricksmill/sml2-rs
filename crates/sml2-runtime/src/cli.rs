@@ -278,7 +278,9 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
                     "title" => crate::session::Boot::Title,
                     "overworld" => crate::session::Boot::Overworld,
                     other => {
-                        return Err(format!("--boot must be title or overworld, got {other}").into());
+                        return Err(
+                            format!("--boot must be title or overworld, got {other}").into()
+                        );
                     }
                 };
             }
@@ -382,11 +384,17 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
                 obp0: manifest.header.palettes[1],
                 obp1: manifest.header.palettes[2],
                 player: mario,
+                player_two: None,
+                player_bubble: None,
+                player_two_bubble: None,
                 player_shield: None,
+                player_two_shield: None,
                 streak_counter: None,
                 player_behind_bg: false,
+                player_two_behind_bg: false,
                 pipe_background: None,
                 player_star_flash: false,
+                player_two_star_flash: false,
                 player_pan: 0,
                 scroll_pan: 0,
                 bumpers: Vec::new(),

@@ -1,6 +1,6 @@
 # Windows builds
 
-Releases provide one executable, `six-golden-coins-windows-x64.exe`; no ROMs
+Releases provide `SixGoldenCoins-vX.Y.Z-windows-x64.zip` (containing `sml2.exe`); no ROMs
 or extracted graphics are included. Running the manual **Windows build** workflow
 under Actions uploads the game with the developer tools, and the optional
 scenery editor as its own artifact.

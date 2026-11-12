@@ -9,6 +9,13 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/patricksmill/sml2-rs/releases/latest"><img src="https://img.shields.io/github/v/release/patricksmill/sml2-rs?style=flat" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/patricksmill/sml2-rs?style=flat" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue?style=flat" alt="Platforms: Windows, macOS, Linux">
+  <a href="https://github.com/patricksmill/sml2-rs/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/patricksmill/sml2-rs/release.yml?style=flat" alt="Release workflow status"></a>
+</p>
+
+<p align="center">
   <img src="docs/screenshots/level.png" alt="Widescreen level with DX colors" width="360">
   <img src="docs/screenshots/level-classic.png" alt="Widescreen level with the original Game Boy palette" width="360">
   <br>
@@ -45,16 +52,28 @@ original game, set **Widescreen** to **Off** and **Camera zoom** to **100%**.
 ## Getting started
 
 Release builds target **Windows x64**, **Linux x86_64**, and **macOS Apple
-Silicon**. Each is a single executable.
+Silicon**. Download the asset for your platform from the
+[latest release](https://github.com/patricksmill/sml2-rs/releases/latest):
 
-1. Download your platform's executable from
-   [Releases](https://github.com/patricksmill/sml2-rs/releases), or
-   [build locally](docs/desktop.md#build-and-run). See
-   [Getting started](docs/Getting-Started.md) for Linux/macOS first-run steps.
-2. Launch it and use **Settings → Game → Import ROM…** to select your original
-   **Super Mario Land 2 UE v1.0** ROM, then choose **Play**.
+| Platform | Asset | First run |
+| --- | --- | --- |
+| Linux x86_64 | `SixGoldenCoins-v<version>-linux-x86_64.AppImage` | `chmod +x` the file, then run it. If the AppImage cannot mount, run it with `--appimage-extract-and-run`. |
+| Windows x64 | `SixGoldenCoins-v<version>-windows-x64.zip` | Unzip anywhere and run `sml2.exe`. SmartScreen may warn, since the build is unsigned. |
+| macOS Apple Silicon | `SixGoldenCoins-v<version>-macos-arm64.zip` | Unzip and move `Six Golden Coins.app` to Applications. The build is unsigned; on first launch, right-click the app and choose **Open**. |
 
-ROMs and imported game graphics are not included.
+Each release also ships `SHA256SUMS.txt`, so you can check your download with
+`sha256sum -c SHA256SUMS.txt` (Linux) or `shasum -a 256 -c SHA256SUMS.txt`
+(macOS).
+
+1. Launch the game and use **Settings → Game → Import ROM…** to select your own
+   **Super Mario Land 2 UE v1.0** cartridge dump, then choose **Play**.
+2. Check for a newer release any time under **Help → Check for Updates…**, or
+   leave it to the once-a-day automatic check. Updates download, verify against
+   the release's `SHA256SUMS.txt`, and restart the game in place.
+
+Or [build locally](docs/desktop.md#build-and-run); local builds never check for
+updates. See [Getting started](docs/Getting-Started.md) for platform setup
+details.
 
 ## SML2DX
 
@@ -113,3 +132,23 @@ The work also went back into the fork: object handlers, shared helpers and handl
 
 No code, ROM data or graphics from the disassembly are included in this
 repository.
+
+## Legal
+
+Six Golden Coins is a fan-made port for playing a game you own. It ships **no
+ROM data and no Nintendo assets**: every release contains only this project's
+own code, and graphics, music and level data are derived on your machine from
+your own cartridge dump.
+
+- Bring your own **Super Mario Land 2: 6 Golden Coins (UE v1.0)** dump. The
+  game checks the revision and refuses anything else; nothing is downloaded
+  from Nintendo.
+- The port is built on the [Super Mario Land 2
+  disassembly](https://github.com/froggestspirit/marioland2) by froggestspirit
+  and the [patricksmill/marioland2](https://github.com/patricksmill/marioland2)
+  fork.
+- This project is not affiliated with, endorsed by, or sponsored by Nintendo.
+  Super Mario Land 2: 6 Golden Coins, Mario, Luigi and related characters are
+  trademarks of Nintendo, and all rights in the original game belong to
+  Nintendo.
+- This project's own code and art are licensed under the [MIT License](LICENSE).

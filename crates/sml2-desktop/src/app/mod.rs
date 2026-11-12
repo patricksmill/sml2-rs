@@ -1,12 +1,13 @@
 use crate::{
-    controllers::Controllers,
+    controllers::{Controllers, DeviceChange},
     game::Game,
-    input::{Action, Button, InputState},
+    input::{Action, Bindings, Button, ButtonClass, Controls, InputState, PadButton},
     library::{Library, Row},
     menu::{Menu, pressed, release_focus},
+    players::{Connect, Device, Disconnect, DropOut, JoinSpot, Players},
     settings::{Settings, VanillaInstall, Zoom},
     timing::{TickBudget, game_rectangle},
-    vanilla_import,
+    update, vanilla_import,
 };
 #[cfg(test)]
 use eframe::egui::RawInput;
@@ -16,6 +17,8 @@ use eframe::egui::{
 use sml2_core::player_sim::PlayerKeys;
 use sml2_runtime::content::{ExtractedContent, SessionAssets};
 use sml2_runtime::render::motion::{Smooth, pick_scale};
+use sml2_runtime::session::SessionState;
+use std::collections::BTreeMap;
 #[cfg(test)]
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -32,6 +35,7 @@ mod panels;
 mod pause_backdrop;
 mod pointer;
 mod startup;
+mod update_ui;
 pub(crate) use crate::ui::{colorized, theme};
 pub use startup::{Options, run};
 #[cfg(test)]
@@ -80,6 +84,27 @@ pub struct DesktopApp {
     /// The Display page's sample frame; `None` until the game data loads.
     filter_preview: Option<filter_preview::FilterPreview>,
     input: InputState,
+    /// One input state per connected gamepad. `input` carries their aggregate
+    /// for host shortcuts; gameplay samples each pad on its own.
+    pads: BTreeMap<u64, InputState>,
+    /// Menus and pause read only the devices that own a player (or every
+    /// device before Player 1 is claimed), rebuilt each frame.
+    ui_input: InputState,
+    /// Who owns which input device this launch.
+    players: Players,
+    /// Debug-only fixed WASD Player 2, as the prototype always had.
+    debug_wasd: bool,
+    /// The device whose Start/Enter opened the pause menu; `None` when the
+    /// menu is system-owned (toolbar, reconnect prompt).
+    menu_owner: Option<Device>,
+    /// The reconnect prompt pause menu is open.
+    reconnect_pause: bool,
+    /// A short "Player 2 joined/left" banner.
+    banner: Option<(String, Instant)>,
+    /// Player 2's fixed keyboard layout; only used by the debug WASD option.
+    second_bindings: Bindings,
+    /// Player 1 actions whose loaded buttons are reserved for debug Player 2.
+    binding_conflicts: Vec<(Action, Vec<Button>)>,
     controllers: Controllers,
     menu: Menu,
     capture: Option<Action>,
@@ -120,6 +145,10 @@ pub struct DesktopApp {
     dx_restore: bool,
     /// Which library row is waiting on the system dialog or the in-app browser.
     library_pick: Option<LibraryPick>,
+    /// Background release lookup, download and staged install.
+    updater: update::Updater,
+    /// The About window is open.
+    about_open: bool,
 }
 
 enum LibraryPick {
@@ -158,6 +187,15 @@ impl DesktopApp {
             reset_armed: false,
             filter_preview: None,
             input: InputState::default(),
+            pads: BTreeMap::new(),
+            ui_input: InputState::default(),
+            players: Players::default(),
+            debug_wasd: false,
+            menu_owner: None,
+            reconnect_pause: false,
+            banner: None,
+            second_bindings: Bindings::player_two(),
+            binding_conflicts: Vec::new(),
             controllers: Controllers::new(),
             menu: Menu::default(),
             capture: None,
@@ -190,6 +228,8 @@ impl DesktopApp {
             library_dx_import: false,
             dx_restore: false,
             library_pick: None,
+            updater: update::Updater::new(),
+            about_open: false,
         };
         app.library.dx_installed = app.settings.dx_installation.is_some();
         app.library.dx_mode = app.settings.dx_mode;
@@ -240,6 +280,12 @@ impl DesktopApp {
         if let Some(scale) = app.options.scale {
             app.zoom(ctx, Some(scale));
         }
+        app.refresh_binding_conflicts();
+        if app.game.is_some() {
+            app.show_binding_conflicts();
+        }
+        update::remove_previous_executable();
+        app.check_updates(false);
         app
     }
 
@@ -251,12 +297,11 @@ impl DesktopApp {
                     Ok(preview) => self.filter_preview = Some(preview),
                     Err(e) => eprintln!("Filter preview unavailable: {e}"),
                 }
-                self.game = Some(Game::new(
-                    assets,
-                    self.options.paths.save.clone(),
-                    self.options.audio,
-                ));
+                let game = Game::new(assets, self.options.paths.save.clone(), self.options.audio);
+                // Every launch is single player until a second device joins.
+                self.game = Some(game);
                 self.level_choices();
+                self.refresh_binding_conflicts();
             }
             Err(e) => self.status = Some(format!("Game data could not be loaded: {e}")),
         }
@@ -436,6 +481,7 @@ impl DesktopApp {
                         game.session.enter_title();
                     }
                     self.screen = Screen::Game;
+                    self.show_binding_conflicts();
                 }
             }
             Err(error) => {
@@ -530,6 +576,7 @@ impl DesktopApp {
             game.session.enter_title();
         }
         self.screen = Screen::Game;
+        self.show_binding_conflicts();
     }
 
     fn load_library_game(&mut self) -> bool {
@@ -637,8 +684,37 @@ impl DesktopApp {
         self.reset_armed = false;
         self.menu = Menu::default();
         self.input.suppress_until_release();
+        for state in self.pads.values_mut() {
+            state.suppress_until_release();
+        }
         self.budget.reset();
         release_focus(ctx);
+        self.aim = None;
+        self.start_click = false;
+    }
+
+    /// Keep the loaded Player 1 bindings away from Player 2's reserved keys.
+    /// Settings are never rewritten here; conflicts stay visible until fixed.
+    fn refresh_binding_conflicts(&mut self) {
+        self.binding_conflicts = if self.debug_wasd {
+            self.settings.bindings.conflicts_with(&self.second_bindings)
+        } else {
+            Vec::new()
+        };
+    }
+
+    /// Open the Controls page instead of play when loaded bindings collide.
+    fn show_binding_conflicts(&mut self) {
+        if self.binding_conflicts.is_empty() {
+            return;
+        }
+        self.return_screen = Screen::Game;
+        self.page = Page::Controls;
+        self.screen = Screen::Settings;
+        self.menu_from_game = self.game.is_some();
+        self.menu = Menu::default();
+        self.input.suppress_until_release();
+        self.budget.reset();
         self.aim = None;
         self.start_click = false;
     }
@@ -672,6 +748,284 @@ impl DesktopApp {
         ctx.send_viewport_cmd(ViewportCommand::Fullscreen(self.settings.fullscreen));
     }
 
+    fn show_banner(&mut self, text: impl Into<String>) {
+        self.banner = Some((text.into(), Instant::now() + Duration::from_secs(2)));
+    }
+
+    fn connected_devices(&self) -> Vec<Device> {
+        let mut devices = vec![Device::Keyboard];
+        devices.extend(self.pads.keys().map(|id| Device::Pad(*id)));
+        devices
+    }
+
+    /// Where a second device may join: the title screen or an overworld map.
+    fn join_spot(&self) -> Option<JoinSpot> {
+        if self.screen != Screen::Game {
+            return None;
+        }
+        match &self.game.as_ref()?.session.state {
+            SessionState::Title(_) => Some(JoinSpot::Title),
+            // Bonus and coin rooms are map states with a room script; they
+            // are not the overworld map.
+            SessionState::Overworld(map) if map.room.is_none() => Some(JoinSpot::Map),
+            _ => None,
+        }
+    }
+
+    fn in_level(&self) -> bool {
+        self.game
+            .as_ref()
+            .is_some_and(|game| matches!(game.session.state, SessionState::InLevel(_)))
+    }
+
+    fn on_title_screen(&self) -> bool {
+        self.screen == Screen::Game
+            && self
+                .game
+                .as_ref()
+                .is_some_and(|game| matches!(game.session.state, SessionState::Title(_)))
+    }
+
+    fn apply_device_change(&mut self, ctx: &Context, change: DeviceChange) {
+        match change {
+            DeviceChange::Disconnected { id } => {
+                let in_level = self.in_level();
+                match self.players.disconnect(Device::Pad(id), in_level) {
+                    Disconnect::PlayerOneNeedsReconnect => self.open_reconnect_pause(ctx),
+                    Disconnect::PlayerTwoBubbled => {
+                        if let Some(game) = &mut self.game {
+                            game.session.bubble_second_player();
+                        }
+                    }
+                    Disconnect::PlayerTwoLeft => {
+                        if let Some(game) = &mut self.game {
+                            game.session.set_local_multiplayer(false);
+                        }
+                        self.show_banner("Player 2 left");
+                    }
+                    _ => {}
+                }
+            }
+            DeviceChange::Connected { id, .. } => match self.players.connect(Device::Pad(id)) {
+                Connect::PlayerOne => {
+                    if self.reconnect_pause {
+                        self.reconnect_pause = false;
+                        self.menu_owner = None;
+                        self.navigate(ctx, Screen::Game);
+                    }
+                }
+                Connect::PlayerTwo => {
+                    if let Some(game) = &mut self.game {
+                        game.session.resume_second_player();
+                    }
+                }
+                Connect::None => {}
+            },
+        }
+    }
+
+    fn open_reconnect_pause(&mut self, ctx: &Context) {
+        if self.reconnect_pause {
+            return;
+        }
+        self.reconnect_pause = true;
+        if self.game.is_none() {
+            return;
+        }
+        if self.screen != Screen::Home {
+            self.navigate(ctx, Screen::Home);
+        }
+        self.menu_owner = None;
+    }
+
+    /// The input stream menus and pause may read this frame. Before Player 1
+    /// is claimed every device may act on the title; afterwards only the
+    /// devices that own a player can reach a menu.
+    fn build_ui_input(&self) -> InputState {
+        if self.players.player_one_device().is_none() {
+            return self.input.clone();
+        }
+        let mut view = InputState::default();
+        for device in [self.players.player_one(), self.players.player_two()]
+            .into_iter()
+            .flatten()
+        {
+            match device {
+                Device::Keyboard => view.merge_class(&self.input, ButtonClass::Keyboard),
+                Device::Pad(id) => {
+                    if let Some(state) = self.pads.get(&id) {
+                        view.merge_class(state, ButtonClass::Pad);
+                    }
+                }
+            }
+        }
+        view
+    }
+
+    /// Drop presses the filtered stream consumed, so they cannot reach the
+    /// game tick or fire again next frame.
+    fn commit_ui_input(&mut self) {
+        self.input.retain_pressed(&self.ui_input);
+        for state in self.pads.values_mut() {
+            state.retain_pressed(&self.ui_input);
+        }
+    }
+
+    /// Claim, join, leave and pause ownership for this frame.
+    fn handle_players(&mut self, ctx: &Context) {
+        let on_title = self.on_title_screen();
+        let spot = self.join_spot();
+
+        // The press that acts on the title claims Player 1, so a map opened
+        // by that press (or by the menu confirm it produced) belongs to it.
+        if on_title && self.players.player_one_device().is_none() {
+            for device in self.connected_devices() {
+                if pending_claim(&self.input, &self.pads, device) {
+                    self.players.claim_player_one(device);
+                    break;
+                }
+            }
+        }
+        // A launch with no title screen. On a file-select screen the device
+        // that first acts is the one opening the map, so it claims Player 1;
+        // when the map was opened by the pointer there is no device press and
+        // the fallback takes the first pad in connection order, else the
+        // keyboard.
+        if self.screen == Screen::Game && !on_title && self.players.player_one_device().is_none() {
+            let file_select = self.game.as_ref().is_some_and(|game| {
+                matches!(
+                    game.session.state,
+                    SessionState::FileSelect(_) | SessionState::FileSelectLoading(_)
+                )
+            });
+            if !file_select {
+                self.players.resolve_initial();
+            } else {
+                for device in self.connected_devices() {
+                    if pending_action(&self.input, &self.pads, device) {
+                        self.players.claim_player_one(device);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // A device that owns nothing may only join, and only on the title or
+        // a map. Its join press is consumed everywhere else, so a press made
+        // in a level cannot queue up and join on the next map.
+        if let Some(player_one) = self.players.player_one_device() {
+            let can_join = spot.is_some()
+                && !self.debug_wasd
+                && !self.players.two_players()
+                && self.players.player_one().is_some();
+            for device in self.connected_devices() {
+                if device == player_one || Some(device) == self.players.player_two_device() {
+                    continue;
+                }
+                if take_join_press(&mut self.input, &mut self.pads, device) && can_join {
+                    if self.players.join(device) {
+                        self.show_banner("Player 2 joined");
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Player 2 can leave with Select on the title or an overworld map.
+        if spot.is_some() && !self.debug_wasd && self.players.two_players() {
+            if let Some(device) = self.players.player_two() {
+                if take_leave_press(
+                    &mut self.input,
+                    &mut self.pads,
+                    device,
+                    &self.settings.bindings,
+                ) {
+                    if let Some(game) = &mut self.game {
+                        game.session.set_local_multiplayer(false);
+                    }
+                    self.players.drop_out(Some(device));
+                    self.show_banner("Player 2 left");
+                    return;
+                }
+            }
+        }
+
+        // Either player's Start/Enter opens the pause menu anywhere.
+        if self.screen == Screen::Game
+            && !on_title
+            && self.capture.is_none()
+            && self.dx_picker.is_none()
+        {
+            let mut devices: Vec<Device> = [self.players.player_one(), self.players.player_two()]
+                .into_iter()
+                .flatten()
+                .collect();
+            if devices.is_empty() && self.debug_wasd {
+                devices.push(Device::Keyboard);
+            }
+            let mut opener = None;
+            for device in devices {
+                if take_pause_press(
+                    &mut self.input,
+                    &mut self.pads,
+                    device,
+                    &self.settings.bindings,
+                ) {
+                    opener = Some(device);
+                    break;
+                }
+            }
+            if opener.is_none() && self.debug_wasd {
+                // The debug keyboard Player 2 keeps its Num1 pause key.
+                if take_device_action(
+                    &mut self.input,
+                    &mut self.pads,
+                    Device::Keyboard,
+                    &self.second_bindings,
+                    Action::Start,
+                ) {
+                    opener = Some(Device::Keyboard);
+                }
+            }
+            if let Some(device) = opener {
+                self.menu_owner = Some(device);
+                self.reconnect_pause = false;
+                self.navigate(ctx, Screen::Home);
+            }
+        }
+    }
+
+    /// Apply the pause menu's Drop out to the menu's owner.
+    fn drop_out(&mut self, ctx: &Context) {
+        let owner = self.menu_owner.or_else(|| self.players.player_one_device());
+        let Some(outcome) = self.players.drop_out(owner) else {
+            return;
+        };
+        match outcome {
+            DropOut::PlayerTwo => {
+                if let Some(game) = &mut self.game {
+                    game.session.set_local_multiplayer(false);
+                }
+                self.show_banner("Player 2 left");
+            }
+            DropOut::PlayerOnePromoted => {
+                if let Some(game) = &mut self.game {
+                    game.session.drop_out_player_one();
+                    self.settings.character = game.session.character;
+                }
+                self.show_banner("Player 1 left");
+            }
+        }
+        self.menu_owner = None;
+        if self.players.player_one_needs_reconnect() {
+            self.open_reconnect_pause(ctx);
+        } else {
+            self.reconnect_pause = false;
+            self.navigate(ctx, Screen::Game);
+            self.show_binding_conflicts();
+        }
+    }
+
     fn ui(&mut self, ctx: &Context) {
         // Collect the events from the frame that owns the menu. A discarded
         // layout pass must not feed the same keyboard press into it again.
@@ -679,26 +1033,34 @@ impl DesktopApp {
             self.receive_input(&ctx.input(|input| input.raw.clone()));
         }
         let focused = ctx.input(|i| i.focused && i.viewport().minimized != Some(true));
-        let disconnected = self.controllers.poll(
-            &mut self.input,
-            self.settings.preferred_controller.as_deref(),
-            self.settings.dead_zone,
-        );
-        if disconnected && self.screen == Screen::Game {
-            self.navigate(ctx, Screen::Home);
+        let changes =
+            self.controllers
+                .poll_devices(&mut self.input, &mut self.pads, self.settings.dead_zone);
+        for change in changes {
+            self.apply_device_change(ctx, change);
         }
         if !focused {
             self.input.clear();
+            for state in self.pads.values_mut() {
+                state.clear();
+            }
             self.budget.reset();
             self.last_update = Instant::now();
         } else if !self.focused {
             self.input.suppress_until_release();
+            for state in self.pads.values_mut() {
+                state.suppress_until_release();
+            }
             self.budget.reset();
             self.last_update = Instant::now();
         }
         self.focused = focused;
+        self.handle_players(ctx);
         self.quit_library_on_escape(ctx);
+        self.ui_input = self.build_ui_input();
         self.shortcuts(ctx);
+        self.commit_ui_input();
+        self.ui_input = self.build_ui_input();
         self.poll_imports();
         let on_title = self.screen == Screen::Game
             && self.game.as_ref().is_some_and(|g| {
@@ -715,17 +1077,28 @@ impl DesktopApp {
                     && !self.menu_from_game
                     && self.screen == Screen::Home)
             {
-                self.menu.start_horizontal(&mut self.input);
+                self.menu.start_horizontal(&mut self.ui_input);
             } else {
-                self.menu.start(&mut self.input);
+                self.menu.start(&mut self.ui_input);
             }
         }
 
-        if self.settings.show_toolbar
-            && self.game.is_some()
-            && (!self.options.launch_library || self.menu_from_game || self.screen == Screen::Game)
-        {
-            self.toolbar(ctx);
+        if self.settings.show_toolbar {
+            // The cold launcher is the title scene itself; a help bar would
+            // shrink it and repeat actions the grass already shows.
+            let cold_launcher = self.game.is_none()
+                && self.options.launch_library
+                && !self.menu_from_game
+                && self.screen == Screen::Home;
+            if self.game.is_some()
+                && (!self.options.launch_library
+                    || self.menu_from_game
+                    || self.screen == Screen::Game)
+            {
+                self.toolbar(ctx);
+            } else if !cold_launcher {
+                egui::TopBottomPanel::top("help-bar").show(ctx, |ui| self.help_menu(ui));
+            }
         }
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(Color32::BLACK))
@@ -759,9 +1132,15 @@ impl DesktopApp {
             self.pause_menu(ctx);
         }
         self.dx_picker_window(ctx);
+        let on_launcher =
+            self.screen == Screen::Home && self.options.launch_library && !self.menu_from_game;
+        let in_play = self.screen == Screen::Game && !on_title;
+        self.update_notice(ctx, on_title || on_launcher, in_play);
+        self.about_window(ctx);
         if self.screen != Screen::Game || on_title {
             self.menu.finish();
         }
+        self.commit_ui_input();
         if self.debug {
             self.debug_panel(ctx);
         }
@@ -771,12 +1150,16 @@ impl DesktopApp {
         self.last_update = now;
         let running = focused
             && self.screen == Screen::Game
+            && self.binding_conflicts.is_empty()
             && !self.paused
             && self.capture.is_none()
             && self.dx_picker.is_none()
             && !self.screenshot_pending;
         let mut ticks = self.budget.advance(elapsed, running);
-        let stepped = self.step && focused && self.screen == Screen::Game;
+        let stepped = self.step
+            && focused
+            && self.screen == Screen::Game
+            && self.binding_conflicts.is_empty();
         if stepped {
             ticks = 1;
         }
@@ -791,6 +1174,16 @@ impl DesktopApp {
             game.audio_running(running && !self.settings.muted);
         }
         let volume = self.settings.audio_volume();
+        let two_players = self.players.two_players() || self.debug_wasd;
+        if let Some(game) = &mut self.game {
+            // Level entry builds Player 2 only when two players are present.
+            if game.session.local_multiplayer() != two_players {
+                game.session.set_local_multiplayer(two_players);
+            }
+            if self.players.player_two_waiting() {
+                game.session.bubble_second_player();
+            }
+        }
         for _ in 0..ticks {
             let snap = self.front_snap();
             let mut clear_aim = false;
@@ -804,31 +1197,60 @@ impl DesktopApp {
                     game.session.expanded_levels = self.settings.expanded_levels;
                     dx::prepare_tick(&mut game.session, &self.settings, self.dx_bundle.is_some());
                 }
-                let mut keys = if running {
-                    let controls = self.input.sample_controls(&self.settings.bindings);
-                    let mut keys = controls.keys;
+                let (mut first, mut second) = if running {
+                    let (one, two) = if self.debug_wasd {
+                        self.input
+                            .sample_two_players(&self.settings.bindings, &self.second_bindings)
+                    } else {
+                        let p1 = self.players.player_one();
+                        let p2 = self.players.player_two();
+                        let one = sample_device(
+                            &mut self.input,
+                            &mut self.pads,
+                            p1,
+                            &self.settings.bindings,
+                        );
+                        let two = sample_device(
+                            &mut self.input,
+                            &mut self.pads,
+                            p2,
+                            &self.settings.bindings,
+                        );
+                        (one, two)
+                    };
+                    let (one_airborne, two_airborne) =
+                        self.game.as_ref().map_or((false, false), |g| {
+                            (g.airborne(), g.second_player_airborne())
+                        });
+                    let mut first = one.keys;
+                    let mut second = two.keys;
                     // Spin is Down held in the air ($126F); on the ground it
                     // would duck or pan, so the button only reaches the
-                    // joypad once Mario has left the floor.
-                    if controls.spin && self.game.as_ref().is_some_and(Game::airborne) {
-                        keys.down = true;
-                        keys.up = false;
+                    // joypad once that player has left the floor.
+                    if one.spin && one_airborne {
+                        first.down = true;
+                        first.up = false;
                     }
-                    keys
+                    if two.spin && two_airborne {
+                        second.down = true;
+                        second.up = false;
+                    }
+                    (first, second)
                 } else {
-                    PlayerKeys::default()
+                    (PlayerKeys::default(), PlayerKeys::default())
                 };
                 if on_title {
                     // The launcher owns title input. Held gameplay bindings
                     // must neither bypass Play nor cancel its queued start.
-                    keys = PlayerKeys::default();
+                    first = PlayerKeys::default();
+                    second = PlayerKeys::default();
                 }
-                let merged = pointer::merge_pointer(&snap, &keys, self.aim, self.start_click);
-                let keys = merged.keys;
+                let merged = pointer::merge_pointer(&snap, &first, self.aim, self.start_click);
+                let first = merged.keys;
                 clear_aim = merged.clear_aim;
                 clear_start = merged.clear_start;
                 if let Some(game) = self.game.as_mut() {
-                    game.tick(keys, volume);
+                    game.tick_two_players(first, second, volume);
                     self.settings.character = game.session.character;
                 }
             }
@@ -838,6 +1260,20 @@ impl DesktopApp {
             if clear_start {
                 self.start_click = false;
             }
+        }
+        // A pad that vanished mid-level keeps Player 2's slot until the map.
+        let on_map = self
+            .game
+            .as_ref()
+            .is_some_and(|g| matches!(g.session.state, SessionState::Overworld(_)));
+        if on_map
+            && self.players.player_two_waiting()
+            && self.players.remove_absent_player_two().is_some()
+        {
+            if let Some(game) = &mut self.game {
+                game.session.set_local_multiplayer(false);
+            }
+            self.show_banner("Player 2 left");
         }
         // A screenshot is checked against this CPU frame, which must be a tick.
         let smooth = if self.settings.motion_smoothing
@@ -949,6 +1385,7 @@ impl DesktopApp {
             ui.horizontal_wrapped(|ui| {
                 ui.strong("SML2");
                 if ui.button("Menu · Esc").clicked() {
+                    self.menu_owner = None;
                     self.navigate(ctx, Screen::Home);
                 }
                 if self.screen != Screen::Settings {
@@ -960,6 +1397,7 @@ impl DesktopApp {
                         }
                     }
                 }
+                self.help_menu(ui);
             });
         });
     }
@@ -1066,9 +1504,18 @@ impl DesktopApp {
                 self.on_picture_click(pos, rect);
             }
         }
-        if self.paused {
+        if !self.binding_conflicts.is_empty() {
             ui.painter().text(
                 available.min + egui::vec2(12.0, 12.0),
+                egui::Align2::LEFT_TOP,
+                "PLAYER 1 BINDING CONFLICT · Settings > Controls",
+                egui::FontId::proportional(15.0),
+                Color32::LIGHT_RED,
+            );
+        }
+        if self.paused {
+            ui.painter().text(
+                available.min + egui::vec2(12.0, 32.0),
                 egui::Align2::LEFT_TOP,
                 "DEBUG PAUSED · F3 to step",
                 egui::FontId::proportional(15.0),
@@ -1107,6 +1554,42 @@ impl DesktopApp {
                 outline(r, Color32::from_rgb(255, 0, 255));
             }
         }
+        let corner = rect.right_bottom() - egui::vec2(8.0, 8.0);
+        let banner_active = self
+            .banner
+            .as_ref()
+            .is_some_and(|(_, until)| Instant::now() < *until);
+        if banner_active {
+            if let Some((text, _)) = &self.banner {
+                painter.text(
+                    corner,
+                    egui::Align2::RIGHT_BOTTOM,
+                    text,
+                    egui::FontId::proportional(13.0),
+                    Color32::WHITE,
+                );
+            }
+        } else if let Some(prompt) = self
+            .players
+            .join_prompt(self.join_spot().is_some() && !self.debug_wasd)
+        {
+            painter.text(
+                corner,
+                egui::Align2::RIGHT_BOTTOM,
+                prompt,
+                egui::FontId::proportional(13.0),
+                Color32::WHITE,
+            );
+        }
+        if self.players.player_one_needs_reconnect() {
+            painter.text(
+                rect.center_bottom() - egui::vec2(0.0, 8.0),
+                egui::Align2::CENTER_BOTTOM,
+                "Reconnect Player 1's controller",
+                egui::FontId::proportional(13.0),
+                Color32::LIGHT_RED,
+            );
+        }
     }
 
     fn persist(&mut self) {
@@ -1116,6 +1599,147 @@ impl DesktopApp {
                 Err(e) => self.status = Some(format!("Settings could not be saved: {e}")),
             }
         }
+    }
+}
+
+fn button_belongs_to(button: &Button, device: Device) -> bool {
+    match device {
+        Device::Keyboard => matches!(button, Button::Key(_)),
+        Device::Pad(_) => matches!(button, Button::Pad(_)),
+    }
+}
+
+/// Whether a press of `button` on `device` is pending, without consuming it.
+fn pending_button(
+    merged: &InputState,
+    pads: &BTreeMap<u64, InputState>,
+    device: Device,
+    button: &Button,
+) -> bool {
+    if !button_belongs_to(button, device) {
+        return false;
+    }
+    match device {
+        Device::Keyboard => merged.press_pending(button),
+        Device::Pad(id) => pads
+            .get(&id)
+            .is_some_and(|state| state.press_pending(button)),
+    }
+}
+
+/// Consume a press of `button` on `device`. Gamepad events also leave the
+/// merged host stream so they cannot confirm a desktop menu.
+fn take_button(
+    merged: &mut InputState,
+    pads: &mut BTreeMap<u64, InputState>,
+    device: Device,
+    button: &Button,
+) -> bool {
+    if !button_belongs_to(button, device) {
+        return false;
+    }
+    match device {
+        Device::Keyboard => merged.take_press(button),
+        Device::Pad(id) => {
+            let own = pads
+                .get_mut(&id)
+                .is_some_and(|state| state.take_press(button));
+            merged.take_press(button);
+            own
+        }
+    }
+}
+
+/// Whether a device has any pending press. Used on a title-less file select,
+/// where the first device to move or confirm is the one opening the map.
+fn pending_action(merged: &InputState, pads: &BTreeMap<u64, InputState>, device: Device) -> bool {
+    match device {
+        Device::Keyboard => merged.any_press(ButtonClass::Keyboard),
+        Device::Pad(id) => pads
+            .get(&id)
+            .is_some_and(|state| state.any_press(ButtonClass::Pad)),
+    }
+}
+
+/// A title-screen action press claims Player 1: Start on a pad, Enter or
+/// Space on the keyboard. The menu's confirm buttons are included so the
+/// device that opens a map (or the title's Play action) becomes Player 1
+/// instead of an arbitrary pad.
+fn pending_claim(merged: &InputState, pads: &BTreeMap<u64, InputState>, device: Device) -> bool {
+    let buttons = match device {
+        Device::Keyboard => [Button::key("Enter"), Button::key("Space")],
+        Device::Pad(_) => [Button::Pad(PadButton::Start), Button::Pad(PadButton::South)],
+    };
+    buttons
+        .iter()
+        .any(|button| pending_button(merged, pads, device, button))
+}
+
+/// Start/Enter on a device that is not Player 1's joins Player 2.
+fn take_join_press(
+    merged: &mut InputState,
+    pads: &mut BTreeMap<u64, InputState>,
+    device: Device,
+) -> bool {
+    let button = match device {
+        Device::Keyboard => Button::key("Enter"),
+        Device::Pad(_) => Button::Pad(PadButton::Start),
+    };
+    take_button(merged, pads, device, &button)
+}
+
+fn take_device_action(
+    merged: &mut InputState,
+    pads: &mut BTreeMap<u64, InputState>,
+    device: Device,
+    bindings: &Bindings,
+    action: Action,
+) -> bool {
+    let mut found = false;
+    for button in &bindings.0[action as usize] {
+        found |= take_button(merged, pads, device, button);
+    }
+    found
+}
+
+/// Player 2 leaves with Select/− or Backspace even when the Select action
+/// was rebound to another button.
+fn take_leave_press(
+    merged: &mut InputState,
+    pads: &mut BTreeMap<u64, InputState>,
+    device: Device,
+    bindings: &Bindings,
+) -> bool {
+    let mut found = take_device_action(merged, pads, device, bindings, Action::Select);
+    found |= take_button(merged, pads, device, &Button::key("Backspace"));
+    found |= take_button(merged, pads, device, &Button::Pad(PadButton::Select));
+    found
+}
+
+/// Start (gamepad) or Enter (keyboard) also reaches a rebound Start action.
+fn take_pause_press(
+    merged: &mut InputState,
+    pads: &mut BTreeMap<u64, InputState>,
+    device: Device,
+    bindings: &Bindings,
+) -> bool {
+    let mut found = take_device_action(merged, pads, device, bindings, Action::Start);
+    found |= take_join_press(merged, pads, device);
+    found
+}
+
+fn sample_device(
+    merged: &mut InputState,
+    pads: &mut BTreeMap<u64, InputState>,
+    device: Option<Device>,
+    bindings: &Bindings,
+) -> Controls {
+    match device {
+        Some(Device::Keyboard) => merged.sample_keyboard(bindings),
+        Some(Device::Pad(id)) => pads
+            .get_mut(&id)
+            .map_or_else(Controls::default, |state| state.sample_pad(bindings)),
+        None => Controls::default(),
     }
 }
 
@@ -1138,5 +1762,6 @@ impl eframe::App for DesktopApp {
     }
     fn on_exit(&mut self) {
         self.persist();
+        self.updater.apply_on_exit();
     }
 }

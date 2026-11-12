@@ -119,6 +119,7 @@ impl ObjectSim {
             if i >= SLOT_COUNT {
                 return;
             }
+            self.coop_slot = i;
             let mut st = Staging {
                 b: self.slots[i].b,
                 ..Default::default()
