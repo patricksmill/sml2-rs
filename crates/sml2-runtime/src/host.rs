@@ -51,6 +51,9 @@ pub struct SessionRunner {
     pub recorded_audio: Vec<f32>,
     pub live_audio: Option<crate::audio_output::AudioOutput>,
     save_error: Option<std::io::Error>,
+    /// Why the save file that exists at `save_path` was not loaded. While set,
+    /// nothing is written there, so unloaded progress is never replaced.
+    save_blocked: Option<String>,
 }
 
 impl Deref for SessionRunner {
@@ -107,6 +110,7 @@ impl SessionRunner {
                 crate::audio_output::AudioOutput::open()
             },
             save_error: None,
+            save_blocked: None,
         };
         runner.load_from_disk();
         if boot == Boot::Title {
@@ -124,16 +128,12 @@ impl SessionRunner {
         let data = match fs::read(&self.save_path) {
             Ok(data) if matches!(data.len(), SLOT_LEN | SAVE_IMAGE_LEN) => data,
             Ok(data) => {
-                eprintln!(
-                    "Save {}: unsupported length {}",
-                    self.save_path.display(),
-                    data.len()
-                );
+                self.block_saves(format!("unsupported length {}", data.len()));
                 return false;
             }
             Err(error) => {
                 if error.kind() != std::io::ErrorKind::NotFound {
-                    eprintln!("Save {}: {error}", self.save_path.display());
+                    self.block_saves(error.to_string());
                 }
                 return false;
             }
@@ -146,16 +146,36 @@ impl SessionRunner {
         };
         let record = slots.load_slot(slot).unwrap();
         if !self.session.apply_save_record(&record) {
+            self.block_saves(format!("pipe {slot} could not be resumed"));
             return false;
         }
         self.session.slots = slots;
         self.session.active_slot = Some(slot as u8);
         if data.len() == SLOT_LEN {
-            if let Err(error) = atomic_write(&self.save_path, &self.session.slots.image()) {
+            if let Err(error) = self.write_slots(&self.session.slots.image()) {
                 self.report_save_error(error);
             }
         }
         true
+    }
+
+    fn block_saves(&mut self, reason: String) {
+        eprintln!(
+            "Save {}: {reason}; not overwriting it",
+            self.save_path.display()
+        );
+        self.save_blocked = Some(reason);
+    }
+
+    /// The one write path for the slot image; refuses while a save that was
+    /// not loaded sits at `save_path`.
+    fn write_slots(&self, image: &[u8]) -> Result<(), std::io::Error> {
+        if let Some(reason) = &self.save_blocked {
+            return Err(std::io::Error::other(format!(
+                "the existing save could not be loaded ({reason}); not overwriting it"
+            )));
+        }
+        atomic_write(&self.save_path, image)
     }
 
     pub fn save_to_disk(&self) -> Result<(), std::io::Error> {
@@ -167,7 +187,7 @@ impl SessionRunner {
             self.session.active_slot.unwrap_or(0) as usize,
             &self.session.save_record(),
         );
-        atomic_write(&self.save_path, &slots.image())
+        self.write_slots(&slots.image())
     }
 
     fn report_save_error(&mut self, error: std::io::Error) {
@@ -195,7 +215,7 @@ impl SessionRunner {
                 .write_slot(self.session.active_slot.unwrap_or(0) as usize, record);
         }
         if effects.persist_slots {
-            if let Err(error) = atomic_write(&self.save_path, &self.session.slots.image()) {
+            if let Err(error) = self.write_slots(&self.session.slots.image()) {
                 self.report_save_error(error);
             }
         }

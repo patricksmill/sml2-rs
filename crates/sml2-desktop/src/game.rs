@@ -14,6 +14,9 @@ use std::{fs, path::PathBuf};
 pub struct Game {
     pub session: Session,
     save: Option<PathBuf>,
+    /// Why the save file that exists at `save` was not loaded. While set,
+    /// nothing is written there, so unloaded progress is never replaced.
+    save_blocked: Option<String>,
     apu: Apu,
     buffer: Vec<f32>,
     output: Option<AudioOutput>,
@@ -28,6 +31,7 @@ impl Game {
         let mut diagnostics = Vec::new();
         let mut slots = SaveSlots::new();
         let mut migrated = false;
+        let mut save_blocked = None;
 
         match fs::read(&save) {
             Ok(data) if data.len() == SAVE_IMAGE_LEN => {
@@ -37,6 +41,8 @@ impl Game {
                     if let Some(record) = slots.load_slot(slot) {
                         if session.apply_save_record(&record) {
                             session.active_slot = Some(slot as u8);
+                        } else {
+                            save_blocked = Some(format!("pipe {slot} could not be resumed"));
                         }
                     }
                 }
@@ -47,21 +53,27 @@ impl Game {
                     session.active_slot = Some(0);
                     migrated = true;
                 } else {
-                    diagnostics.push("Save data could not be loaded".into());
+                    save_blocked = Some("the legacy save could not be resumed".into());
                 }
             }
-            Ok(data) => diagnostics.push(format!(
-                "Save: {} bytes is not a {SAVE_IMAGE_LEN}-byte slot image",
-                data.len()
-            )),
+            Ok(data) => {
+                save_blocked = Some(format!(
+                    "{} bytes is not a {SAVE_IMAGE_LEN}-byte slot image",
+                    data.len()
+                ))
+            }
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
-                diagnostics.push(format!("Save: {e}"))
+                save_blocked = Some(e.to_string())
             }
             _ => {}
+        }
+        if let Some(reason) = &save_blocked {
+            diagnostics.push(format!("Save: {reason}; not overwriting it"));
         }
         session.slots = slots;
 
         let mut game = Self::with_session(session, Some(save), audio_enabled, diagnostics);
+        game.save_blocked = save_blocked;
         // Rewrite a migrated legacy save in the slot image immediately, so the
         // next launch and the file select see the same three pipes.
         if migrated {
@@ -86,6 +98,7 @@ impl Game {
         Self {
             session,
             save,
+            save_blocked: None,
             apu: Apu::new(),
             buffer: Vec::new(),
             output: None,
@@ -95,12 +108,24 @@ impl Game {
         }
     }
 
-    /// Write the three-slot image (`$F0` bytes) atomically.
+    /// Write the three-slot image (`$F0` bytes) atomically. Refuses while a
+    /// save that was not loaded sits at the save path.
     fn persist_slots(&self) -> Result<(), std::io::Error> {
+        if let Some(reason) = &self.save_blocked {
+            return Err(std::io::Error::other(format!(
+                "the existing save could not be loaded ({reason}); not overwriting it"
+            )));
+        }
         match &self.save {
             Some(save) => atomic_write(save, &self.session.slots.image()),
             None => Ok(()),
         }
+    }
+
+    /// Why progress is not being saved, when the existing save file could not
+    /// be loaded.
+    pub fn save_blocked(&self) -> Option<&str> {
+        self.save_blocked.as_deref()
     }
 
     /// Write the live progress record into the active pipe and persist the

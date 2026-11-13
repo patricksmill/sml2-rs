@@ -104,6 +104,31 @@ fn a_wrong_length_save_is_reported_and_left_alone() {
     let _ = std::fs::remove_file(path);
 }
 
+/// A save that exists but could not be loaded is never replaced, by an
+/// explicit save or the game's own autosave.
+#[test]
+fn an_unloaded_save_is_never_overwritten() {
+    use std::os::unix::fs::PermissionsExt;
+    let mut slots = SaveSlots::new();
+    slots.write_slot(1, &MapSim::new().save_record(5, 0x07, 0));
+    for (bytes, mode) in [(b"abc".to_vec(), 0o644), (slots.image().to_vec(), 0o000)] {
+        let path = temp_save("unloaded");
+        std::fs::write(&path, &bytes).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+        let mut game = Game::new(SessionAssets::load().unwrap(), path.clone(), false);
+        assert!(game.save_blocked().is_some());
+        let error = game.save_now().unwrap_err().to_string();
+        assert!(error.contains("not overwriting"), "{error}");
+        game.session.enter_file_select();
+        for _ in 0..120 {
+            game.tick(PlayerKeys::default(), 0.0);
+        }
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        let _ = std::fs::remove_file(path);
+    }
+}
+
 #[test]
 fn saving_persists_all_three_pipes_as_one_image() {
     let path = temp_save("persist");

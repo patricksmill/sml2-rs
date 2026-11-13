@@ -260,11 +260,15 @@ impl DesktopApp {
                     Ok(preview) => self.filter_preview = Some(preview),
                     Err(e) => eprintln!("Filter preview unavailable: {e}"),
                 }
-                self.game = Some(Game::new(
-                    assets,
-                    self.options.paths.save.clone(),
-                    self.options.audio,
-                ));
+                let game = Game::new(assets, self.options.paths.save.clone(), self.options.audio);
+                if let Some(reason) = game.save_blocked() {
+                    self.status = Some(format!(
+                        "Your save file could not be loaded ({reason}). Progress will not be \
+                         saved until it is fixed or removed: {}",
+                        self.options.paths.save.display()
+                    ));
+                }
+                self.game = Some(game);
                 self.level_choices();
             }
             Err(e) => self.status = Some(format!("Game data could not be loaded: {e}")),

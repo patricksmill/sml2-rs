@@ -91,6 +91,32 @@ fn loads_a_later_valid_pipe_and_leaves_malformed_files_untouched() {
     fs::remove_file(path).unwrap();
 }
 
+/// A save that exists but could not be loaded is never replaced: the next
+/// autosave fails with the reason instead of writing a blank image over it.
+#[test]
+fn an_unloaded_save_is_never_overwritten_by_an_autosave() {
+    use sml2_core::map_sim::MapSim;
+    use std::os::unix::fs::PermissionsExt;
+    let unreadable = MapSim::new().save_record(8, 0x23, 4).to_vec();
+    for (bytes, mode) in [(b"bad".to_vec(), 0o644), (unreadable, 0o000)] {
+        let path = save_path("unloaded");
+        fs::write(&path, &bytes).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
+        let mut host = runner(path.clone());
+        let SessionState::Overworld(map) = &mut host.state else {
+            panic!("map")
+        };
+        map.pending_save = true;
+        let error = host.run_headless(1, None).unwrap_err().to_string();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(error.contains("not overwriting"), "{error}");
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        assert!(host.save_to_disk().is_err());
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        fs::remove_file(path).unwrap();
+    }
+}
+
 #[test]
 fn device_rate_drives_synthesis_and_recorded_wav_timing() {
     for rate in [44_100, 48_000] {
