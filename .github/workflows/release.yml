@@ -90,7 +90,7 @@ jobs:
             exe: sml2
             platform: linux-x86_64
             ext: AppImage
-          - os: macos-14
+          - os: macos-15
             exe: sml2
             platform: macos-arm64
             ext: zip
