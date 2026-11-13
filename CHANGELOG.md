@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.3.1] - 2026-11-13
+
+Safer saves, simpler ROM import, and Pumpkin Zone 2 camera fixes.
+
 ### Fixed
 - In widescreen and zoomed-out views, rebuilt levels (Expanded levels on)
   stop the camera at their goal, like the original, instead of scrolling
   past it; Pumpkin Zone 2 showed the empty screens beyond its goal.
+- In the rebuilt Pumpkin Zone 2, jumping no longer leaves the camera lower
+  than it started, showing the rock below the floor.
 - A save file that exists but can't be read, has the wrong size, or can't be
   resumed is no longer replaced by a blank save on the next save. The game
   explains the problem and saves nothing until the file is fixed or removed.

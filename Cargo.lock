@@ -3421,7 +3421,7 @@ dependencies = [
 
 [[package]]
 name = "sml2-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -3429,7 +3429,7 @@ dependencies = [
 
 [[package]]
 name = "sml2-desktop"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "block2 0.6.2",
  "directories",
@@ -3458,7 +3458,7 @@ dependencies = [
 
 [[package]]
 name = "sml2-dx"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -3470,7 +3470,7 @@ dependencies = [
 
 [[package]]
 name = "sml2-extract"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "png 0.17.16",
  "serde",
@@ -3481,7 +3481,7 @@ dependencies = [
 
 [[package]]
 name = "sml2-runtime"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cpal",
  "minifb",
@@ -3494,7 +3494,7 @@ dependencies = [
 
 [[package]]
 name = "sml2-scenery-editor"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "eframe",
  "rfd",
