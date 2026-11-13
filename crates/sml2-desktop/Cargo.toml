@@ -15,7 +15,7 @@ required-features = ["native"]
 
 [dependencies]
 sml2-dx = { path = "../sml2-dx" }
-rfd = { version = "0.15", optional = true }
+rfd = { version = "0.18", optional = true }
 sml2-core = { path = "../sml2-core" }
 sml2-extract = { path = "../sml2-extract" }
 sml2-runtime = { path = "../sml2-runtime" }
