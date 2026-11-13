@@ -96,25 +96,44 @@ fn loads_a_later_valid_pipe_and_leaves_malformed_files_untouched() {
 #[test]
 fn an_unloaded_save_is_never_overwritten_by_an_autosave() {
     use sml2_core::map_sim::MapSim;
-    use std::os::unix::fs::PermissionsExt;
-    let unreadable = MapSim::new().save_record(8, 0x23, 4).to_vec();
-    for (bytes, mode) in [(b"bad".to_vec(), 0o644), (unreadable, 0o000)] {
+    // Unreadable files rely on Unix permission bits; every platform runs the
+    // wrong-length case.
+    let mut cases = vec![(b"bad".to_vec(), false)];
+    if cfg!(unix) {
+        cases.push((MapSim::new().save_record(8, 0x23, 4).to_vec(), true));
+    }
+    for (bytes, unreadable) in cases {
         let path = save_path("unloaded");
         fs::write(&path, &bytes).unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
+        if unreadable {
+            set_mode(&path, 0o000);
+        }
         let mut host = runner(path.clone());
         let SessionState::Overworld(map) = &mut host.state else {
             panic!("map")
         };
         map.pending_save = true;
         let error = host.run_headless(1, None).unwrap_err().to_string();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        if unreadable {
+            set_mode(&path, 0o644);
+        }
         assert!(error.contains("not overwriting"), "{error}");
         assert_eq!(fs::read(&path).unwrap(), bytes);
         assert!(host.save_to_disk().is_err());
         assert_eq!(fs::read(&path).unwrap(), bytes);
         fs::remove_file(path).unwrap();
     }
+}
+
+#[cfg(unix)]
+fn set_mode(path: &std::path::Path, mode: u32) {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+}
+
+#[cfg(not(unix))]
+fn set_mode(_: &std::path::Path, _: u32) {
+    unreachable!("unreadable saves are only exercised on Unix")
 }
 
 #[test]

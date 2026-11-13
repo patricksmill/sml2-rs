@@ -108,13 +108,20 @@ fn a_wrong_length_save_is_reported_and_left_alone() {
 /// explicit save or the game's own autosave.
 #[test]
 fn an_unloaded_save_is_never_overwritten() {
-    use std::os::unix::fs::PermissionsExt;
     let mut slots = SaveSlots::new();
     slots.write_slot(1, &MapSim::new().save_record(5, 0x07, 0));
-    for (bytes, mode) in [(b"abc".to_vec(), 0o644), (slots.image().to_vec(), 0o000)] {
+    // Unreadable files rely on Unix permission bits; every platform runs the
+    // wrong-length case.
+    let mut cases = vec![(b"abc".to_vec(), false)];
+    if cfg!(unix) {
+        cases.push((slots.image().to_vec(), true));
+    }
+    for (bytes, unreadable) in cases {
         let path = temp_save("unloaded");
         std::fs::write(&path, &bytes).unwrap();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+        if unreadable {
+            set_mode(&path, 0o000);
+        }
         let mut game = Game::new(SessionAssets::load().unwrap(), path.clone(), false);
         assert!(game.save_blocked().is_some());
         let error = game.save_now().unwrap_err().to_string();
@@ -123,10 +130,23 @@ fn an_unloaded_save_is_never_overwritten() {
         for _ in 0..120 {
             game.tick(PlayerKeys::default(), 0.0);
         }
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        if unreadable {
+            set_mode(&path, 0o644);
+        }
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
         let _ = std::fs::remove_file(path);
     }
+}
+
+#[cfg(unix)]
+fn set_mode(path: &std::path::Path, mode: u32) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap();
+}
+
+#[cfg(not(unix))]
+fn set_mode(_: &std::path::Path, _: u32) {
+    unreachable!("unreadable saves are only exercised on Unix")
 }
 
 #[test]
