@@ -550,3 +550,45 @@ fn the_tree_zone_3_recipe_opens_the_dx_level_too() {
     session.begin_level(3, 0).unwrap();
     assert_eq!(level_world(&session), World::expanded(16, 3).unwrap());
 }
+
+/// The ROM locks Pumpkin Zone 2's right edge at the goal (screen 13); the
+/// screens past it are empty. The open camera keeps that lock, so an enlarged
+/// view stops at the goal's edge instead of scrolling into the void.
+#[test]
+fn the_rebuilt_pumpkin_zone_2_camera_stops_at_the_goal() {
+    use crate::session::FrameInput;
+    let view = (399, 180);
+    let mut session = crate::session::Session::new(SessionAssets::load().unwrap());
+    session.expanded_levels = true;
+    session.set_view(view);
+    session.begin_level(7, 0).unwrap();
+    let crate::session::SessionState::InLevel(ctx) = &mut session.state else {
+        unreachable!()
+    };
+    (ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y) = (0xD40, 0x1D0, 0xD40, 0x1C0);
+    ctx.cam.prev_mario_y_lo = 0xD0;
+    ctx.cam.update_enables(ctx.sim.x);
+    let mut reached_goal = false;
+    for frame in 0..300 {
+        let keys = sml2_core::player_sim::PlayerKeys {
+            right: frame >= 40,
+            ..Default::default()
+        };
+        session.advance(FrameInput { keys, div: 0 });
+        let crate::session::SessionState::InLevel(ctx) = &session.state else {
+            break;
+        };
+        let room = ctx.cam.room();
+        let origin = crate::render::view::level_origin(view, (ctx.cam.x, ctx.cam.y), 0, room);
+        assert!(
+            origin.0 + view.0 as i32 <= 14 * 256,
+            "frame {frame}: view reaches {} past the goal's edge; room {:?} cam {:#X} transition {}",
+            origin.0 + view.0 as i32,
+            room.bounds(),
+            ctx.cam.x,
+            ctx.cam.transition
+        );
+        reached_goal |= ctx.sim.exit_phase;
+    }
+    assert!(reached_goal, "Mario reached the goal");
+}

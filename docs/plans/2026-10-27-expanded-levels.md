@@ -162,6 +162,10 @@ level needs four screen rows, so it cannot fit the ROM world.
    - Checked: Mario rides the joined pipe out of the moved cave mouth
      (column 189, row 59) with no scene running and reaches the `$4B` exit
      (`the_rebuilt_pumpkin_zone_2_secret_pipe_leads_to_the_secret_exit`).
+   - The open camera keeps the ROM's goal locks: right on screen 13 of rows 0
+     and 1, and bottom on row 1's goal screen, so enlarged views stop at the
+     goal instead of showing the empty screens 14-15
+     (`the_rebuilt_pumpkin_zone_2_camera_stops_at_the_goal`).
 
 ## Inventory
 

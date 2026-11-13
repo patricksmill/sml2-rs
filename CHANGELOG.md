@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- In widescreen and zoomed-out views, the camera stops at Pumpkin Zone 2's
+  goal (with Expanded levels on) instead of scrolling into the empty screens
+  past it.
+
 ## [v0.3.0] - 2026-11-12
 
 Extended scenery, a connected Pumpkin Zone 2, smoother room transitions, and in-game updates.

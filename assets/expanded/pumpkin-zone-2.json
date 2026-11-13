@@ -20,7 +20,9 @@
   ],
   "screens": [
     { "at": [11, 2], "scene": 0 },
-    { "at": [11, 3], "scene": 0 }
+    { "at": [11, 3], "scene": 0 },
+    { "at": [13, 0], "locks": 5 },
+    { "at": [13, 1], "locks": 9 }
   ],
   "open_camera": true
 }
