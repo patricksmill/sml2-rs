@@ -1,6 +1,6 @@
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use sml2_core::collision;
 use sml2_core::level::{
@@ -71,71 +71,43 @@ pub enum PublishError {
     Io(String),
 }
 
-#[derive(Debug)]
-pub struct Commit {
-    pub backup: Option<PathBuf>,
-}
-
-pub fn publish_directory(
+/// Build a fresh install at `dest`. Callers only install when `dest` is
+/// missing, outdated or broken, so there is no previous install to keep: the
+/// new tree is prepared and validated beside it, then replaces it.
+pub fn install_directory(
     dest: &Path,
     manifest: &Manifest,
     prepare: impl FnOnce(&Path) -> Result<(), PublishError>,
     validate: impl FnOnce(&Path) -> Result<(), PublishError>,
-) -> Result<Commit, PublishError> {
+) -> Result<(), PublishError> {
+    let io = |e: std::io::Error| PublishError::Io(e.to_string());
     let parent = dest
         .parent()
         .ok_or_else(|| PublishError::Io("vanilla cache has no parent".into()))?;
-    fs::create_dir_all(parent).map_err(|e| PublishError::Io(e.to_string()))?;
+    fs::create_dir_all(parent).map_err(io)?;
     let stage = parent.join(format!("vanilla.stage.{}", std::process::id()));
-    let _ = fs::remove_dir_all(&stage);
-    fs::create_dir_all(&stage).map_err(|e| PublishError::Io(e.to_string()))?;
-    if let Err(error) = prepare(&stage) {
+    remove_dir_if_present(&stage).map_err(io)?;
+    fs::create_dir_all(&stage).map_err(io)?;
+    let staged = (|| {
+        prepare(&stage)?;
+        let bytes =
+            serde_json::to_vec_pretty(manifest).map_err(|e| PublishError::Io(e.to_string()))?;
+        fs::write(stage.join("manifest.json"), bytes).map_err(io)?;
+        validate(&stage)?;
+        remove_dir_if_present(dest).map_err(io)?;
+        fs::rename(&stage, dest).map_err(io)
+    })();
+    if staged.is_err() {
+        // Best effort: a leftover stage is removed by the next install.
         let _ = fs::remove_dir_all(&stage);
-        return Err(error);
     }
-    let bytes = serde_json::to_vec_pretty(manifest).map_err(|e| PublishError::Io(e.to_string()))?;
-    if let Err(error) = fs::write(stage.join("manifest.json"), bytes) {
-        let _ = fs::remove_dir_all(&stage);
-        return Err(PublishError::Io(error.to_string()));
-    }
-    if let Err(error) = validate(&stage) {
-        let _ = fs::remove_dir_all(&stage);
-        return Err(error);
-    }
-    let backup = parent.join(format!("vanilla.bak.{}", std::process::id()));
-    let _ = fs::remove_dir_all(&backup);
-    let had_dest = dest.exists();
-    if had_dest {
-        fs::rename(dest, &backup).map_err(|e| PublishError::Io(e.to_string()))?;
-    }
-    if let Err(error) = fs::rename(&stage, dest) {
-        if had_dest {
-            let _ = fs::rename(&backup, dest);
-        }
-        let _ = fs::remove_dir_all(&stage);
-        return Err(PublishError::Io(error.to_string()));
-    }
-    Ok(Commit {
-        backup: had_dest.then_some(backup),
-    })
+    staged
 }
 
-pub fn rollback(dest: &Path, commit: &Commit) -> Result<(), PublishError> {
-    let discarded = dest.with_extension("discarded");
-    let _ = fs::remove_dir_all(&discarded);
-    if dest.exists() {
-        fs::rename(dest, &discarded).map_err(|e| PublishError::Io(e.to_string()))?;
-    }
-    if let Some(backup) = &commit.backup {
-        fs::rename(backup, dest).map_err(|e| PublishError::Io(e.to_string()))?;
-    }
-    let _ = fs::remove_dir_all(&discarded);
-    Ok(())
-}
-
-pub fn discard_backup(commit: &Commit) {
-    if let Some(backup) = &commit.backup {
-        let _ = fs::remove_dir_all(backup);
+fn remove_dir_if_present(dir: &Path) -> std::io::Result<()> {
+    match fs::remove_dir_all(dir) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
     }
 }
 
@@ -1128,87 +1100,71 @@ mod tests {
         assert_eq!(MAX_READ, 524_289);
     }
 
-    #[test]
-    fn a_failed_prepare_leaves_the_previous_install() {
-        let root = std::env::temp_dir().join(format!("sml2_pub_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        let dest = root.join("vanilla");
-        std::fs::create_dir_all(&dest).unwrap();
-        std::fs::write(dest.join("keep.txt"), b"old").unwrap();
-        let manifest = Manifest {
+    fn manifest() -> Manifest {
+        Manifest {
             revision: "ue-v1.0".into(),
             sha256: "ab".into(),
             importer_version: IMPORTER_VERSION,
             schema: SCHEMA,
-        };
-        let err = publish_directory(
+        }
+    }
+
+    #[test]
+    fn a_failed_prepare_or_validate_publishes_nothing() {
+        let root = std::env::temp_dir().join(format!("sml2_pub_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dest = root.join("vanilla");
+        let err = install_directory(
             &dest,
-            &manifest,
+            &manifest(),
             |_| Err(PublishError::Prepare("nope".into())),
             |_| Ok(()),
         )
         .unwrap_err();
         assert!(matches!(err, PublishError::Prepare(_)));
-        assert_eq!(std::fs::read(dest.join("keep.txt")).unwrap(), b"old");
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn a_failed_validate_leaves_the_previous_install() {
-        let root = std::env::temp_dir().join(format!("sml2_pub_val_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        let dest = root.join("vanilla");
-        std::fs::create_dir_all(&dest).unwrap();
-        std::fs::write(dest.join("keep.txt"), b"old").unwrap();
-        let manifest = Manifest {
-            revision: "ue-v1.0".into(),
-            sha256: "ef".into(),
-            importer_version: IMPORTER_VERSION,
-            schema: SCHEMA,
-        };
-        let err = publish_directory(
+        let err = install_directory(
             &dest,
-            &manifest,
-            |stage| {
-                std::fs::write(stage.join("keep.txt"), b"new").unwrap();
-                Ok(())
-            },
+            &manifest(),
+            |_| Ok(()),
             |_| Err(PublishError::Validate("bad".into())),
         )
         .unwrap_err();
         assert!(matches!(err, PublishError::Validate(_)));
-        assert_eq!(std::fs::read(dest.join("keep.txt")).unwrap(), b"old");
-        assert!(!dest.join("manifest.json").exists());
+        assert!(!dest.exists());
+        assert_eq!(
+            std::fs::read_dir(&root).unwrap().count(),
+            0,
+            "no stage left"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    /// A broken install is replaced whole: no stale file survives.
     #[test]
-    fn settings_failure_rolls_the_new_install_back() {
-        let root = std::env::temp_dir().join(format!("sml2_roll_{}", std::process::id()));
+    fn an_install_replaces_a_broken_tree() {
+        let root = std::env::temp_dir().join(format!("sml2_pub_new_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let dest = root.join("vanilla");
         std::fs::create_dir_all(&dest).unwrap();
-        std::fs::write(dest.join("keep.txt"), b"old").unwrap();
-        let manifest = Manifest {
-            revision: "ue-v1.0".into(),
-            sha256: "cd".into(),
-            importer_version: IMPORTER_VERSION,
-            schema: SCHEMA,
-        };
-        let commit = publish_directory(
+        std::fs::write(dest.join("stale.txt"), b"old").unwrap();
+        install_directory(
             &dest,
-            &manifest,
+            &manifest(),
             |stage| {
-                std::fs::write(stage.join("keep.txt"), b"new").unwrap();
-                Ok(())
+                std::fs::write(stage.join("level.bin"), b"new")
+                    .map_err(|e| PublishError::Io(e.to_string()))
             },
             |_| Ok(()),
         )
         .unwrap();
-        assert_eq!(std::fs::read(dest.join("keep.txt")).unwrap(), b"new");
+        assert!(!dest.join("stale.txt").exists());
+        assert_eq!(std::fs::read(dest.join("level.bin")).unwrap(), b"new");
         assert!(dest.join("manifest.json").is_file());
-        rollback(&dest, &commit).unwrap();
-        assert_eq!(std::fs::read(dest.join("keep.txt")).unwrap(), b"old");
+        assert_eq!(
+            std::fs::read_dir(&root).unwrap().count(),
+            1,
+            "no stage left"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 

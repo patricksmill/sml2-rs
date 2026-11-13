@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resumed is no longer replaced by a blank save on the next save. The game
   explains the problem and saves nothing until the file is fixed or removed.
 
+### Changed
+- Importing the original ROM verifies it and reuses a matching install
+  instead of extracting and replacing it again. Only a missing, outdated or
+  broken install is rebuilt. A DX install made for older base files is no
+  longer deleted; it is set aside until the DX ROM is imported again.
+
 ## [v0.3.0] - 2026-11-12
 
 Extended scenery, a connected Pumpkin Zone 2, smoother room transitions, and in-game updates.

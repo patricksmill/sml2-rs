@@ -71,12 +71,7 @@ impl EditorApp {
                     let result = (|| {
                         let rom = vanilla_import::read_rom(&path)?;
                         let destination = vanilla_import::vanilla_cache()?;
-                        vanilla_import::install_rom(&destination, &rom)?;
-                        let identity = serde_json::from_slice(
-                            &std::fs::read(destination.join("manifest.json"))
-                                .map_err(|e| e.to_string())?,
-                        )
-                        .map_err(|e| e.to_string())?;
+                        let identity = vanilla_import::install_rom(&destination, &rom)?;
                         Ok((identity, destination))
                     })();
                     let _ = sender.send(result);

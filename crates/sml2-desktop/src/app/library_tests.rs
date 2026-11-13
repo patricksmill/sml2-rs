@@ -1,4 +1,5 @@
 use super::*;
+use crate::settings::VanillaInstall;
 use sml2_runtime::session::SessionState;
 
 fn visible_text(output: egui::FullOutput) -> String {

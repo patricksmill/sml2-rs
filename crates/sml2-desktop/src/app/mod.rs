@@ -4,7 +4,7 @@ use crate::{
     input::{Action, Button, InputState},
     library::{Library, Row},
     menu::{Menu, pressed, release_focus},
-    settings::{Settings, VanillaInstall, Zoom},
+    settings::{Settings, Zoom},
     timing::{TickBudget, game_rectangle},
     update, vanilla_import,
 };
@@ -396,142 +396,84 @@ impl DesktopApp {
                 return;
             }
         };
-        let commit = match vanilla_import::install_rom(&dest, rom) {
-            Ok(commit) => commit,
+        let identity = match vanilla_import::install_rom(&dest, rom) {
+            Ok(identity) => identity,
             Err(error) => {
                 self.library.importing = false;
                 self.library.rom_error = error;
                 return;
             }
         };
-        let revision = match sml2_extract::vanilla::identify(rom) {
-            Ok(revision) => revision,
-            Err(error) => {
-                if let Err(rollback_error) = sml2_extract::vanilla::rollback(&dest, &commit) {
-                    self.status = Some(vanilla_import::publish_error(rollback_error));
-                }
-                self.library.importing = false;
-                self.library.rom_error = vanilla_import::identify_error(error);
-                return;
-            }
-        };
-        let previous_settings = self.settings.clone();
-        let previous_bundle = self.dx_bundle.clone();
-        let previous_dx_error = self.library.dx_error.clone();
-        let previous_dx_message = self.dx_message.clone();
-        self.settings.vanilla = Some(VanillaInstall {
-            revision: revision.id.to_string(),
-            sha256: sml2_extract::vanilla::sha256(rom),
-        });
-        let remove_dx_after_save = self.mark_dx_for_vanilla(&dest);
+        let revision_name = sml2_extract::vanilla::REVISIONS
+            .iter()
+            .find(|revision| revision.id == identity.revision)
+            .map_or_else(
+                || identity.revision.clone(),
+                |revision| revision.name.to_string(),
+            );
+        self.settings.vanilla = Some(identity);
+        self.retire_mismatched_dx(&dest);
+        // The install is valid whether or not settings reach disk; a failed
+        // save is reported and retried by the next settings change.
         match self.settings.save(&self.options.paths.settings) {
             Ok(()) => {
-                sml2_extract::vanilla::discard_backup(&commit);
                 self.saved_settings = self.settings.clone();
                 self.allow_save = true;
-                if remove_dx_after_save {
-                    self.delete_retired_dx();
-                }
-                self.library.importing = false;
-                self.library.checking = false;
-                self.library.vanilla_ready = true;
-                self.library.revision_name = revision.name.to_string();
-                self.library.rom_error.clear();
-                self.library.dx_installed = self.settings.dx_installation.is_some();
-                self.library.dx_mode = self.settings.dx_mode;
-                if self.options.launch_library {
-                    self.load_launcher();
-                } else if self.game.is_none() {
-                    self.options.assets = dest;
-                    self.load_game();
-                    self.restore_dx();
-                    if let Some(game) = self.game.as_mut() {
-                        game.session.enter_title();
-                    }
-                    self.screen = Screen::Game;
-                }
             }
             Err(error) => {
-                let mut message = format!("Settings could not be saved: {error}");
-                if let Err(rollback_error) = sml2_extract::vanilla::rollback(&dest, &commit) {
-                    message = format!(
-                        "{message} {}",
-                        vanilla_import::publish_error(rollback_error)
-                    );
-                }
-                self.settings = previous_settings;
-                self.dx_bundle = previous_bundle;
-                self.library.dx_error = previous_dx_error;
-                self.dx_message = previous_dx_message;
-                self.library.dx_installed = self.settings.dx_installation.is_some();
-                self.library.dx_mode = self.settings.dx_mode;
-                self.library.importing = false;
-                self.library.rom_error = message.clone();
+                let message = format!("Settings could not be saved: {error}");
                 self.status = Some(message);
             }
         }
+        self.library.importing = false;
+        self.library.checking = false;
+        self.library.vanilla_ready = true;
+        self.library.revision_name = revision_name;
+        self.library.rom_error.clear();
+        self.library.dx_installed = self.settings.dx_installation.is_some();
+        self.library.dx_mode = self.settings.dx_mode;
+        if self.options.launch_library {
+            self.load_launcher();
+        } else if self.game.is_none() {
+            self.options.assets = dest;
+            self.load_game();
+            self.restore_dx();
+            if let Some(game) = self.game.as_mut() {
+                game.session.enter_title();
+            }
+            self.screen = Screen::Game;
+        }
     }
 
-    /// Record how the published vanilla tree relates to the installed DX key.
-    ///
-    /// Returns whether that DX directory should be deleted after settings save.
-    /// This never deletes files: a failed save must still be able to roll vanilla back.
-    fn mark_dx_for_vanilla(&mut self, dest: &std::path::Path) -> bool {
+    /// A DX install is built for one set of base files. If the vanilla
+    /// install it was built for has changed, stop using it and ask for a
+    /// fresh DX import; its cache is left on disk, never deleted here.
+    fn retire_mismatched_dx(&mut self, dest: &std::path::Path) {
         let Some(base_sha256) = self
             .settings
             .dx_installation
             .as_ref()
             .map(|key| key.base_sha256.clone())
         else {
-            return false;
-        };
-        let fingerprint = match sml2_dx::base_fingerprint(dest) {
-            Ok(fingerprint) => fingerprint,
-            Err(error) => {
-                self.settings.dx_mode = false;
-                self.library.dx_mode = false;
-                let message = error.to_string();
-                self.library.dx_error = message.clone();
-                self.dx_message = message;
-                return false;
-            }
-        };
-        if fingerprint == base_sha256 {
-            return false;
-        }
-        self.settings.dx_mode = false;
-        self.library.dx_mode = false;
-        true
-    }
-
-    fn delete_retired_dx(&mut self) {
-        let Some(key) = self.settings.dx_installation.clone() else {
             return;
         };
-        match crate::dx_import::cache_root().and_then(|root| {
-            let dir = root.join(key.directory_name());
-            match std::fs::remove_dir_all(&dir) {
-                Ok(()) => Ok(()),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-                Err(error) => Err(error.to_string()),
-            }
-        }) {
-            Ok(()) => {
-                self.settings.dx_installation = None;
-                self.dx_bundle = None;
-                match self.settings.save(&self.options.paths.settings) {
-                    Ok(()) => self.saved_settings = self.settings.clone(),
-                    Err(error) => {
-                        self.status = Some(format!("Settings could not be saved: {error}"));
-                    }
-                }
-            }
-            Err(error) => {
-                let message = format!("The old DX install could not be removed: {error}");
-                self.library.dx_error = message.clone();
-                self.dx_message = message;
-            }
+        let (message, retired) = match sml2_dx::base_fingerprint(dest) {
+            Ok(fingerprint) if fingerprint == base_sha256 => return,
+            Ok(_) => (
+                "The DX install was made for older game files. Import the DX ROM again."
+                    .to_string(),
+                true,
+            ),
+            Err(error) => (error.to_string(), false),
+        };
+        self.settings.dx_mode = false;
+        if retired {
+            self.settings.dx_installation = None;
+            self.dx_bundle = None;
         }
+        self.library.dx_mode = false;
+        self.library.dx_error = message.clone();
+        self.dx_message = message;
     }
 
     fn play_library(&mut self) {

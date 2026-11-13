@@ -1,7 +1,7 @@
 use crate::settings::VanillaInstall;
 use sml2_extract::vanilla::{
     IMPORTER_VERSION, IdentifyError, MAX_READ, Manifest, PublishError, SCHEMA, extract, identify,
-    publish_directory, sha256,
+    install_directory, sha256,
 };
 use std::fs::File;
 use std::io::Read;
@@ -22,15 +22,25 @@ pub fn read_rom(path: &Path) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-pub fn install_rom(dest: &Path, rom: &[u8]) -> Result<sml2_extract::vanilla::Commit, String> {
+/// Verify `rom` and make `dest` its install. Every supported ROM extracts to
+/// the same files, so an install that already passes [`check_install`] for
+/// this ROM is used as-is; only a missing, outdated or broken one is rebuilt.
+pub fn install_rom(dest: &Path, rom: &[u8]) -> Result<VanillaInstall, String> {
     let revision = identify(rom).map_err(identify_error)?;
-    let manifest = Manifest {
+    let identity = VanillaInstall {
         revision: revision.id.to_string(),
         sha256: sha256(rom),
+    };
+    if check_install(dest, &identity).is_ok() {
+        return Ok(identity);
+    }
+    let manifest = Manifest {
+        revision: identity.revision.clone(),
+        sha256: identity.sha256.clone(),
         importer_version: IMPORTER_VERSION,
         schema: SCHEMA,
     };
-    publish_directory(
+    install_directory(
         dest,
         &manifest,
         |stage| {
@@ -47,7 +57,8 @@ pub fn install_rom(dest: &Path, rom: &[u8]) -> Result<sml2_extract::vanilla::Com
         },
         validate_assets,
     )
-    .map_err(publish_error)
+    .map_err(publish_error)?;
+    Ok(identity)
 }
 
 pub fn check_install(dir: &Path, expected: &VanillaInstall) -> Result<(), String> {
@@ -103,8 +114,32 @@ mod tests {
         std::fs::remove_file(path).unwrap();
     }
 
+    /// Run with SML2_ROM=/path/to/baserom.gb cargo test -p sml2-desktop
+    /// an_install_is_reused -- --ignored
     #[test]
-    fn a_bad_level_does_not_replace_the_install() {
+    #[ignore = "requires the user-supplied original ROM"]
+    fn an_install_is_reused_and_only_a_broken_one_is_rebuilt() {
+        let rom = read_rom(Path::new(
+            &std::env::var_os("SML2_ROM").expect("set SML2_ROM"),
+        ))
+        .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let dest = root.path().join("vanilla");
+        let identity = install_rom(&dest, &rom).unwrap();
+        check_install(&dest, &identity).unwrap();
+        // A matching install is used as-is: nothing in it is rewritten.
+        std::fs::write(dest.join("marker.txt"), b"kept").unwrap();
+        assert_eq!(install_rom(&dest, &rom).unwrap(), identity);
+        assert_eq!(std::fs::read(dest.join("marker.txt")).unwrap(), b"kept");
+        // A broken one is rebuilt whole.
+        std::fs::write(dest.join("manifest.json"), b"{}").unwrap();
+        assert_eq!(install_rom(&dest, &rom).unwrap(), identity);
+        assert!(!dest.join("marker.txt").exists());
+        check_install(&dest, &identity).unwrap();
+    }
+
+    #[test]
+    fn an_unsupported_rom_leaves_the_install_alone() {
         let root = std::env::temp_dir().join(format!("sml2_install_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let dest = root.join("vanilla");

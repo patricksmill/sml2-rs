@@ -232,12 +232,11 @@ mod tests {
         let original_path = temp.path().join("original.gbc");
         std::fs::write(&original_path, &original).unwrap();
         let assets = temp.path().join("vanilla");
-        let commit = crate::vanilla_import::install_rom(
+        crate::vanilla_import::install_rom(
             &assets,
             &crate::vanilla_import::read_rom(&original_path).unwrap(),
         )
         .unwrap();
-        sml2_extract::vanilla::discard_backup(&commit);
         assert_eq!(
             std::fs::read(assets.join(sml2_dx::SOURCE_ROM)).unwrap(),
             original

@@ -13,8 +13,10 @@ cargo run -p sml2-desktop -- --play
 
 A normal launch opens the title with **Play**, **Settings**, **Quit**. If data is
 missing, Settings -> Game opens first: import the original **SML2 UE v1.0** ROM.
-Replacement/import validates the exact revision, runs in the background and can
-be cancelled; failure retains the previous installation. If the system picker
+Import verifies the exact revision and runs in the background. Every supported
+ROM extracts to the same files, so an install that already matches is used
+as-is; only a missing, outdated or broken one is rebuilt. A DX install made for
+older base files is set aside and asks for a fresh DX import. If the system picker
 returns no file, an in-app browser accepts navigation or a pasted path.
 
 Play enters file select. `--play` starts on the overworld; `--title` opens the
