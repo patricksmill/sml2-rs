@@ -25,12 +25,12 @@ mod controls;
 mod debug;
 mod dx;
 mod file_picker;
-mod filter_preview;
 mod installation;
 mod launcher;
 mod panels;
 mod pause_backdrop;
 mod pointer;
+mod settings_preview;
 mod startup;
 mod update_ui;
 pub(crate) use crate::ui::{colorized, theme};
@@ -78,8 +78,8 @@ pub struct DesktopApp {
     page: Page,
     /// "Reset all settings" was pressed once and waits for confirmation.
     reset_armed: bool,
-    /// The Display page's sample frame; `None` until the game data loads.
-    filter_preview: Option<filter_preview::FilterPreview>,
+    /// The settings pane's sample frames; `None` until the game data loads.
+    settings_preview: Option<settings_preview::SettingsPreview>,
     input: InputState,
     controllers: Controllers,
     menu: Menu,
@@ -161,7 +161,7 @@ impl DesktopApp {
             return_screen: Screen::Home,
             page: Page::Display,
             reset_armed: false,
-            filter_preview: None,
+            settings_preview: None,
             input: InputState::default(),
             controllers: Controllers::new(),
             menu: Menu::default(),
@@ -255,10 +255,10 @@ impl DesktopApp {
     fn load_game(&mut self) {
         match SessionAssets::load_from(&ExtractedContent::new(&self.options.assets)) {
             Ok(assets) => {
-                let (assets, preview) = filter_preview::FilterPreview::new(assets);
+                let (assets, preview) = settings_preview::SettingsPreview::new(assets);
                 match preview {
-                    Ok(preview) => self.filter_preview = Some(preview),
-                    Err(e) => eprintln!("Filter preview unavailable: {e}"),
+                    Ok(preview) => self.settings_preview = Some(preview),
+                    Err(e) => eprintln!("Settings preview unavailable: {e}"),
                 }
                 let game = Game::new(assets, self.options.paths.save.clone(), self.options.audio);
                 if let Some(reason) = game.save_blocked() {
@@ -946,10 +946,11 @@ impl DesktopApp {
             .resizable(false)
             .movable(false);
         let window = if settings {
-            // Leave room for the title bar and margins even at 480×400.
+            // Two panes like other recomps: grow with the window, never below the row
+            // minimum; leave room for the title bar and margins even at 480×400.
             let available = ctx.available_rect();
             window.constrain_to(available).fixed_size(egui::vec2(
-                theme::ROW_SIZE.x,
+                (available.width() * 0.85).clamp(theme::ROW_SIZE.x, 960.0),
                 (available.height() - 72.0).clamp(160.0, 600.0),
             ))
         } else {

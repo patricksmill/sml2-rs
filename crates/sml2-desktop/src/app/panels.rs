@@ -3,7 +3,7 @@ use super::{DesktopApp, Screen};
 use crate::library::Row;
 use crate::{
     input::{Action, Bindings, Button, PadButton},
-    menu::{pressed, release_focus},
+    menu::{Preview, pressed, release_focus},
     settings::{HudStyle, Zoom},
 };
 use eframe::egui::{self, Context, Ui, ViewportCommand};
@@ -149,7 +149,7 @@ impl DesktopApp {
                 self.reset_armed = false;
             }
         }
-        ui.set_width(theme::ROW_SIZE.x);
+        ui.set_width(ui.available_width());
         ui.spacing_mut().item_spacing.y = 6.0;
         let labels = Page::ALL.map(Page::label);
         let mut index = Page::ALL.iter().position(|p| *p == self.page).unwrap_or(0);
@@ -166,28 +166,60 @@ impl DesktopApp {
         let footer_height = theme::ROW_SIZE.y
             + ui.text_style_height(&egui::TextStyle::Body)
             + 2.0 * ui.spacing().item_spacing.y;
-        let mut page = egui::ScrollArea::vertical()
-            .id_salt(("settings-page", self.page))
-            .auto_shrink([false, false])
-            .min_scrolled_height(0.0)
-            .max_height((ui.available_height() - footer_height).max(0.0));
-        if self.page != previous_page {
-            page = page.vertical_scroll_offset(0.0);
-        }
-        page.show(ui, |ui| {
-            match self.page {
-                Page::Display => self.display_page(ctx, ui),
-                Page::Audio => self.audio_page(ui),
-                Page::Controls => self.controls_page(ui),
-                Page::Mods => {
-                    self.view_controls(ui);
-                    self.dx_controls(ui);
-                }
-                Page::Game => self.installation_page(ui),
-                Page::Debug => self.debug_page(ui),
+        let body = egui::vec2(
+            ui.available_width(),
+            (ui.available_height() - footer_height).max(0.0),
+        );
+        // Narrow windows stack the explanation under the list instead of beside it.
+        let two_pane = body.x >= 600.0;
+        let list_width = if two_pane {
+            (body.x * 0.55).floor()
+        } else {
+            body.x
+        };
+        ui.allocate_ui_with_layout(body, egui::Layout::left_to_right(egui::Align::Min), |ui| {
+            let mut page = egui::ScrollArea::vertical()
+                .id_salt(("settings-page", self.page))
+                .auto_shrink([false, false])
+                .min_scrolled_height(0.0)
+                .max_width(list_width)
+                .max_height(body.y);
+            if self.page != previous_page {
+                page = page.vertical_scroll_offset(0.0);
             }
-            if let Some(message) = &self.status {
-                theme::error(ui, message);
+            page.show(ui, |ui| {
+                // The scroll area inherits the row layout; pages stack top-down.
+                ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                    ui.set_width(ui.available_width());
+                    match self.page {
+                        Page::Display => self.display_page(ctx, ui),
+                        Page::Audio => self.audio_page(ui),
+                        Page::Controls => self.controls_page(ui),
+                        Page::Mods => {
+                            self.view_controls(ui);
+                            self.dx_controls(ui);
+                        }
+                        Page::Game => self.installation_page(ui),
+                        Page::Debug => self.debug_page(ui),
+                    }
+                    if let Some(message) = &self.status {
+                        theme::error(ui, message);
+                    }
+                    if !two_pane {
+                        self.detail_pane(ui);
+                    }
+                });
+            });
+            if two_pane {
+                ui.separator();
+                ui.allocate_ui_with_layout(
+                    ui.available_size(),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        ui.set_width(ui.available_width());
+                        self.detail_pane(ui);
+                    },
+                );
             }
         });
 
@@ -198,18 +230,49 @@ impl DesktopApp {
         theme::note(ui, "Esc: back · PgUp/PgDn or LB/RB: page");
     }
 
+    /// Explains the hovered or selected setting, with a live sample when it applies.
+    fn detail_pane(&mut self, ui: &mut Ui) {
+        let Some(detail) = self.menu.detail().cloned() else {
+            theme::note(ui, "Select a setting to see what it does.");
+            return;
+        };
+        ui.add_space(6.0);
+        ui.strong(&detail.title);
+        ui.add_space(4.0);
+        ui.label(&detail.text);
+        let view = self.view();
+        let caption = match detail.preview {
+            _ if self.settings.dx_mode && self.dx_bundle.is_some() => {
+                "DX Mode colors the levels; the sample shows the filter"
+            }
+            Some(Preview::Pixels) => "Confirm on this row to compare",
+            _ => "Left / right on this row to compare",
+        };
+        if let (Some(kind), Some(preview)) = (detail.preview, &mut self.settings_preview) {
+            ui.add_space(8.0);
+            preview.show(ui, kind, &self.settings, view, caption);
+        }
+    }
+
     fn display_page(&mut self, ctx: &Context, ui: &mut Ui) {
         theme::section(ui, "SCREEN");
         let fit = self.settings.zoom == Zoom::Auto;
         if self.menu.row(ui, "Fit to window", Value::Toggle(fit)) {
             self.fit_to_window(!fit);
         }
+        self.menu.describe(
+            "Scales the game to fill the window as you resize it. Turn it off to pick a fixed \
+             window scale instead. + / − change the zoom at any time.",
+        );
         if let Zoom::Integer(scale) = self.settings.zoom {
             let adjust = self.menu.choice(ui, "Window scale", format!("{scale}×"));
             if adjust != 0 {
                 let next = (i32::from(scale) - 1 + adjust).rem_euclid(8) + 1;
                 self.zoom(ctx, Some(next as u8));
             }
+            self.menu.describe(
+                "How many screen pixels each game pixel uses. The window resizes to match.",
+            );
         }
         if self.menu.row(
             ui,
@@ -218,12 +281,20 @@ impl DesktopApp {
         ) {
             self.settings.integer_scaling = !self.settings.integer_scaling;
         }
+        self.menu.describe_with_preview(
+            "Only scales the picture by whole numbers (2×, 3×, …) so every game pixel is the \
+             same size and sharp. Off fills more of the window, but some pixels end up a \
+             little wider or taller than others, which can look uneven when scrolling.",
+            Preview::Pixels,
+        );
         if self
             .menu
             .row(ui, "Fullscreen", Value::Toggle(self.settings.fullscreen))
         {
             self.fullscreen(ctx);
         }
+        self.menu
+            .describe("Fills the whole screen without window borders. F11 toggles it in game.");
         theme::section(ui, "HUD");
         let modern = self.settings.hud_style == HudStyle::Modern;
         let label = if modern { "Modern" } else { "Original" };
@@ -234,6 +305,12 @@ impl DesktopApp {
                 HudStyle::Modern
             };
         }
+        self.menu.describe_with_preview(
+            "Original draws the status bar as a strip along the bottom, like the Game Boy. \
+             Modern floats the same counters in the corners of the view: lives and coins top \
+             left, time top right. Gameplay is identical.",
+            Preview::Frame,
+        );
         theme::section(ui, "COLOR");
         let adjust = self
             .menu
@@ -241,16 +318,11 @@ impl DesktopApp {
         if adjust != 0 {
             self.cycle_filter(adjust);
         }
-        if let Some(preview) = &mut self.filter_preview {
-            ui.add_space(4.0);
-            let caption = if self.settings.dx_mode && self.dx_bundle.is_some() {
-                "DX Mode colors the levels; the filter covers everything else"
-            } else {
-                "Left / right on the filter row to compare"
-            };
-            preview.show(ui, self.settings.filter, caption);
-        }
-        theme::note(ui, "+ / − zoom · F11 fullscreen · F4 cycles filters.");
+        self.menu.describe_with_preview(
+            "Colors the four Game Boy shades, from the original screen tints to Super Game \
+             Boy palettes. F4 cycles filters in game.",
+            Preview::Frame,
+        );
     }
 
     /// Settings → Mods: the enlarged view.
@@ -263,11 +335,22 @@ impl DesktopApp {
         if adjust != 0 {
             self.settings.widescreen = widescreen.cycle(adjust);
         }
+        self.menu.describe_with_preview(
+            "Shows more of each level to the sides: 16:9, 21:9, or whatever shape the window \
+             is. A wider view spawns enemies and items earlier, so play differs from the \
+             original. Menus and cutscenes keep their original size.",
+            Preview::Frame,
+        );
         let zoom = self.settings.camera_zoom;
         let adjust = self.menu.choice(ui, "Camera zoom", zoom.label().into());
         if adjust != 0 {
             self.settings.camera_zoom = zoom.cycle(adjust);
         }
+        self.menu.describe_with_preview(
+            "Pulls the camera back to show more of the level above and below as well. Like \
+             widescreen, a larger view spawns enemies and items earlier.",
+            Preview::Frame,
+        );
         if self.menu.row(
             ui,
             "Motion smoothing",
@@ -275,12 +358,9 @@ impl DesktopApp {
         ) {
             self.settings.motion_smoothing = !self.settings.motion_smoothing;
         }
-        theme::note(
-            ui,
-            "A larger view also spawns enemies and items earlier, so play differs from the \
-             original while it is on. Menus and cutscenes keep their original size. Motion \
-             smoothing draws levels between frames on displays faster than 60 Hz, one frame \
-             behind.",
+        self.menu.describe(
+            "Draws levels between game frames on displays faster than 60 Hz for smoother \
+             scrolling. The picture runs one frame behind.",
         );
         theme::section(ui, "LEVELS");
         if self.menu.row(
@@ -290,8 +370,7 @@ impl DesktopApp {
         ) {
             self.settings.expanded_levels = !self.settings.expanded_levels;
         }
-        theme::note(
-            ui,
+        self.menu.describe(
             "Plays levels whose sections the original joined with pipe jumps as one \
              connected map. Off restores the original layouts. Takes effect when a level \
              starts.",
@@ -305,7 +384,12 @@ impl DesktopApp {
             ("Music", &mut self.settings.music_volume),
             ("Sound effects", &mut self.settings.effects_volume),
         ];
-        for (label, level) in levels {
+        let hints = [
+            "Overall loudness. Music and sound effects scale within it.",
+            "Background music, relative to the overall volume.",
+            "Jumps, coins, enemies and other sounds, relative to the overall volume.",
+        ];
+        for ((label, level), hint) in levels.into_iter().zip(hints) {
             let adjust = self.menu.row_adjustment();
             if self.menu.row(
                 ui,
@@ -317,6 +401,8 @@ impl DesktopApp {
                     .clamp(0.0, 10.0)
                     / 10.0;
             }
+            self.menu
+                .describe(&format!("{hint} Left / right adjust it in 10% steps."));
         }
         if self
             .menu
@@ -324,11 +410,8 @@ impl DesktopApp {
         {
             self.settings.muted = !self.settings.muted;
         }
-        theme::note(
-            ui,
-            "Left / right adjust a level in 10% steps. Music and sound effects scale \
-             within the overall volume.",
-        );
+        self.menu
+            .describe("Silences all sound without changing the levels above.");
     }
 
     fn controls_page(&mut self, ui: &mut Ui) {
@@ -341,6 +424,10 @@ impl DesktopApp {
             self.settings.preferred_controller = self.controllers.cycle(&mut self.input);
             self.input.suppress_until_release();
         }
+        self.menu.describe(
+            "The controller the game listens to. Confirm to switch between connected \
+             controllers. The keyboard always works.",
+        );
         let adjust = self.menu.row_adjustment();
         if self.menu.row(
             ui,
@@ -360,6 +447,10 @@ impl DesktopApp {
             .clamp(10.0, 80.0)
                 / 100.0;
         }
+        self.menu.describe(
+            "How far the analog stick must move before it counts as a direction. Raise it if \
+             Mario drifts on his own; lower it if the stick feels unresponsive.",
+        );
         if let Some(error) = &self.controllers.error {
             theme::error(ui, error);
         }
@@ -382,14 +473,18 @@ impl DesktopApp {
                 self.capture = Some(action);
                 self.input.suppress_until_release();
             }
+            self.menu.describe(
+                "Confirm, then press a key or controller button; Esc cancels. Rebinding keeps \
+                 the other device's controls.",
+            );
         }
         if self.menu.row(ui, "Reset controls", Value::None) && self.capture.is_none() {
             self.settings.bindings = Bindings::default();
             self.input.suppress_until_release();
         }
-        theme::note(
-            ui,
-            "Choose an action, then press a key or controller button; Esc cancels. Rebinding keeps the other device's controls. Controller Start opens the menu.",
+        self.menu.describe(
+            "Restores the default keyboard and controller bindings. Controller Start always \
+             opens the menu.",
         );
     }
 
@@ -401,16 +496,18 @@ impl DesktopApp {
         {
             self.debug = !self.debug;
         }
+        self.menu.describe(
+            "A window that warps between zones and levels and edits progress, coins and \
+             power-ups.",
+        );
         if self
             .menu
             .row(ui, "Pause game · F2", Value::Toggle(self.paused))
         {
             self.paused = !self.paused;
         }
-        theme::note(
-            ui,
-            "F3 steps one tick while paused. The panel warps between zones and levels, edits progress, coins and power-ups.",
-        );
+        self.menu
+            .describe("Freezes the game. F3 steps one tick at a time while paused.");
         theme::section(ui, "SETTINGS FILE");
         let label = if self.reset_armed {
             "Press again to reset everything"
@@ -425,7 +522,10 @@ impl DesktopApp {
                 self.reset_armed = true;
             }
         }
-        theme::note(ui, &format!("{}", self.options.paths.settings.display()));
+        self.menu.describe(&format!(
+            "Restores every setting to its default. Confirm twice. Settings are stored in {}.",
+            self.options.paths.settings.display()
+        ));
     }
 
     pub(super) fn debug_panel(&mut self, ctx: &Context) {

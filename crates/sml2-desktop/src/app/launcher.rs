@@ -1,6 +1,6 @@
 //! A still title scene and floating actions over its grass. The preview owns no save
 //! or audio output and never advances the title's attract-mode countdown.
-use super::{DesktopApp, Screen, colorized, filter_preview::FilterPreview};
+use super::{DesktopApp, Screen, colorized, settings_preview::SettingsPreview};
 use crate::settings::{Filter, Zoom};
 use eframe::egui::{
     self, Color32, ColorImage, Context, Rect, TextureHandle, TextureOptions, Ui, ViewportCommand,
@@ -37,8 +37,8 @@ impl DesktopApp {
         }
         match SessionAssets::load_from(&ExtractedContent::new(&self.options.assets)) {
             Ok(assets) => {
-                let (assets, preview) = FilterPreview::new(assets);
-                self.filter_preview = preview.ok();
+                let (assets, preview) = SettingsPreview::new(assets);
+                self.settings_preview = preview.ok();
                 let mut session = Session::new(assets);
                 session.enter_title();
                 self.launcher = Some(Launcher {

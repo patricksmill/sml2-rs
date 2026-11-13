@@ -12,7 +12,7 @@ mod filter;
 pub use filter::Filter;
 mod view;
 pub use sml2_runtime::render::HudStyle;
-pub use view::{CameraZoom, Widescreen};
+pub use view::{CameraZoom, Widescreen, view_size};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct VanillaInstall {

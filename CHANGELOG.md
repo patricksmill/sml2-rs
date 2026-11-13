@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Settings is a wider two-pane dialog: the right pane explains the hovered or
+  selected setting, with live previews for the status bar, widescreen, camera
+  zoom, palette filter and integer scaling.
+
 ## [v0.3.1] - 2026-11-13
 
 Safer saves, simpler ROM import, and Pumpkin Zone 2 camera fixes.

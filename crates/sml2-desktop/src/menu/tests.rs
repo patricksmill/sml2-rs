@@ -17,7 +17,9 @@ fn frame(
         |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
                 origin = ui.cursor().min;
-                direction = menu.choice(ui, "Camera zoom", "125%".into());
+                ui.allocate_ui(egui::vec2(440.0, 34.0), |ui| {
+                    direction = menu.choice(ui, "Camera zoom", "125%".into());
+                });
             });
         },
     );

@@ -16,6 +16,27 @@ pub struct Menu {
     enabled: bool,
     moved: bool,
     pub adjustment: i32,
+    /// The previous row's label and whether it is hovered, while it is selected or hovered.
+    last: Option<(String, bool)>,
+    detail: Option<Detail>,
+}
+
+/// What the settings detail pane explains: the hovered row, else the selected one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Detail {
+    pub title: String,
+    pub text: String,
+    pub preview: Option<Preview>,
+    hovered: bool,
+}
+
+/// The live sample shown under a row's explanation.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Preview {
+    /// The whole game frame with the current display settings.
+    Frame,
+    /// A magnified corner showing how game pixels map to screen pixels.
+    Pixels,
 }
 
 impl Default for Menu {
@@ -28,6 +49,8 @@ impl Default for Menu {
             enabled: true,
             moved: false,
             adjustment: 0,
+            last: None,
+            detail: None,
         }
     }
 }
@@ -39,6 +62,8 @@ impl Menu {
         self.adjustment = 0;
         self.enabled = false;
         self.moved = false;
+        self.last = None;
+        self.detail = None;
     }
     pub fn start(&mut self, input: &mut InputState) {
         self.enabled = true;
@@ -87,6 +112,8 @@ impl Menu {
             ],
         );
         self.row = 0;
+        self.last = None;
+        self.detail = None;
     }
     pub fn start_horizontal(&mut self, input: &mut InputState) {
         self.start(input);
@@ -109,9 +136,45 @@ impl Menu {
     /// A settings row; left/right adjustments are read with [`Self::row_adjustment`]
     /// before the call.
     pub fn row(&mut self, ui: &mut Ui, label: &str, value: Value) -> bool {
-        self.item(ui, |ui, selected| {
+        let activated = self.item(ui, |ui, selected| {
             theme::option_row(ui, label, &value, selected)
-        })
+        });
+        self.label_last(label);
+        activated
+    }
+
+    /// Explains the row just drawn in the detail pane when it is hovered or selected.
+    pub fn describe(&mut self, text: &str) {
+        self.set_detail(text, None);
+    }
+
+    /// Like [`Self::describe`], and asks the pane to show a live sample too.
+    pub fn describe_with_preview(&mut self, text: &str, preview: Preview) {
+        self.set_detail(text, Some(preview));
+    }
+
+    pub fn detail(&self) -> Option<&Detail> {
+        self.detail.as_ref()
+    }
+
+    fn label_last(&mut self, label: &str) {
+        if let Some((title, _)) = &mut self.last {
+            *title = label.to_string();
+        }
+    }
+
+    fn set_detail(&mut self, text: &str, preview: Option<Preview>) {
+        let Some((title, hovered)) = self.last.clone() else {
+            return;
+        };
+        if hovered || !self.detail.as_ref().is_some_and(|d| d.hovered) {
+            self.detail = Some(Detail {
+                title,
+                text: text.to_string(),
+                preview,
+                hovered,
+            });
+        }
     }
 
     /// Signed choice input: keyboard/controller arrows and the painted arrows
@@ -134,6 +197,7 @@ impl Menu {
             }
             response
         });
+        self.label_last(label);
         if pointer_direction != 0 {
             pointer_direction
         } else if adjustment != 0 {
@@ -171,6 +235,7 @@ impl Menu {
             response.scroll_to_me(Some(egui::Align::Center));
         }
         self.row += 1;
+        self.last = None;
         *current != before
     }
     fn item(&mut self, ui: &mut Ui, paint: impl FnOnce(&mut Ui, bool) -> Response) -> bool {
@@ -181,6 +246,8 @@ impl Menu {
         if selected && self.moved {
             response.scroll_to_me(Some(egui::Align::Center));
         }
+        let hovered = response.hovered();
+        self.last = (selected || hovered).then(|| (String::new(), hovered));
         // Keyboard/controller selection is owned by this menu, not stale egui focus.
         let clicked = response.clicked_by(egui::PointerButton::Primary);
         let activated = clicked || selected && self.confirm;

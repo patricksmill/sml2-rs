@@ -40,7 +40,8 @@ pub fn choice_arrows(ui: &Ui, rect: Rect, text: &str) -> (Pos2, Pos2) {
 
 /// Native button styling keeps hover, disabled and focus feedback consistent.
 pub fn option_row(ui: &mut Ui, label: &str, value: &Value, selected: bool) -> Response {
-    let response = ui.add_sized(ROW_SIZE, egui::Button::new("").selected(selected));
+    let size = Vec2::new(ui.available_width(), ROW_SIZE.y);
+    let response = ui.add_sized(size, egui::Button::new("").selected(selected));
     let rect = response.rect;
     if !ui.is_rect_visible(rect) {
         return response;

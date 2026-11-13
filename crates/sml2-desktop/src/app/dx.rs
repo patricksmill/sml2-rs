@@ -147,6 +147,8 @@ impl DesktopApp {
         if self.menu.choice(ui, "Character", character.label().into()) != 0 {
             self.settings.character = character.next();
         }
+        self.menu
+            .describe("Chooses whether you play as Mario or Luigi.");
     }
 
     /// One chooser at a time. A second request is ignored while an import is running.
