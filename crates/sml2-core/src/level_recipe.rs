@@ -16,7 +16,9 @@
 //! 3. Spawns and start blocks whose point lies in one move's source follow
 //!    it; a point in two moves' sources needs an explicit placement.
 //! 4. `open_camera` replaces every screen's locks with the world's own
-//!    edges. Then `paint` writes authored metatiles, `screens` sets locks
+//!    edges, except that a screen holding an exit-bell cell (`$4A`/`$4B`)
+//!    keeps its right, top and bottom locks, so the camera still stops at
+//!    the goal. Then `paint` writes authored metatiles, `screens` sets locks
 //!    and scenes, and `spawns`, `start` and `secret_start` place records
 //!    explicitly.
 //! 5. Spawns are stably re-sorted by X, the order the stream scan walks.
@@ -29,6 +31,10 @@ use crate::world::{SCREEN_CELLS, World};
 
 /// Schema id every recipe carries.
 pub const RECIPE_SCHEMA: &str = "sml2-expanded-level/1";
+
+/// Lock bits an open camera keeps on a goal screen: right, top and bottom.
+/// The left lock is dropped so the camera never slides into the goal.
+const GOAL_LOCKS: u8 = 0x0D;
 
 /// The authored rebuild of one level.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,8 +62,9 @@ pub struct LevelRecipe {
     pub start: Option<LevelStart>,
     #[serde(default)]
     pub secret_start: Option<LevelStart>,
-    /// Lock only the world's outer edges: the camera scrolls freely and stops
-    /// at the level's ends, top and bottom, with no room slides.
+    /// Lock only the world's outer edges and the goal screens' right, top and
+    /// bottom sides: the camera scrolls freely, with no room slides, and
+    /// stops at the level's ends, its top and bottom, and the goal.
     #[serde(default)]
     pub open_camera: bool,
 }
@@ -327,12 +334,21 @@ impl LevelRecipe {
                 usize::from(world.screens_wide),
                 usize::from(world.screens_high),
             );
+            let kept = edges.clone();
             for y in 0..high {
                 for x in 0..wide {
                     edges[screen(x, y)] = u8::from(x == wide - 1)
                         | u8::from(x == 0) << 1
                         | u8::from(y == 0) << 2
                         | u8::from(y == high - 1) << 3;
+                }
+            }
+            // `$1CBA`'s exit bell: keep the goal screen's right/top/bottom.
+            for (i, &cell) in cells.iter().enumerate() {
+                if cell & 0xFE == 0x4A {
+                    let (col, row) = (i % world.cells_wide(), i / world.cells_wide());
+                    let at = screen(col / SCREEN_CELLS, row / SCREEN_CELLS);
+                    edges[at] |= kept[at] & GOAL_LOCKS;
                 }
             }
         }
@@ -555,6 +571,32 @@ mod tests {
         );
         assert_eq!(at(7, 1), 0, "inside the world nothing locks");
         assert_eq!(at(5, 2), 0x01, "screen edits still apply after");
+    }
+
+    /// The exit bell's screen keeps its loaded right/top/bottom locks, also
+    /// after a whole-screen move; its left lock never returns.
+    #[test]
+    fn an_open_camera_keeps_the_goal_screens_locks() {
+        let mut src = source();
+        // Screens (7,1) and (3,0) load locks $07 and $03 (`i & $0F`).
+        src.layout.cells[20 * 256 + 120] = 0x4A;
+        src.layout.cells[5 * 256 + 50] = 0x4B;
+        let mut r = recipe([16, 4]);
+        r.open_camera = true;
+        r.moves.push(RegionMove {
+            from: [48, 0],
+            size: [16, 16],
+            to: [144, 48],
+        });
+        let out = r.apply(&src).unwrap();
+        let at = |x: usize, y: usize| out.edge_map[y * 16 + x];
+        assert_eq!(at(7, 1), 0x05, "right and top kept, left dropped");
+        assert_eq!(
+            at(9, 3),
+            0x01 | 0x08,
+            "moved goal: its right lock and the world's bottom"
+        );
+        assert_eq!(at(3, 0), 0x04, "the vacated screen is not a goal");
     }
 
     #[test]

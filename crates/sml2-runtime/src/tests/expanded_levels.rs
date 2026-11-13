@@ -592,3 +592,62 @@ fn the_rebuilt_pumpkin_zone_2_camera_stops_at_the_goal() {
     }
     assert!(reached_goal, "Mario reached the goal");
 }
+
+/// Each open-camera rebuild, with Mario standing in each exit bell
+/// (`$4A`/`$4B`): the camera's room ends where the ROM's ends at that goal,
+/// shifted by however far the rebuild moved it, instead of running on to the
+/// world's edge.
+#[test]
+fn open_camera_rebuilds_stop_at_every_goal_like_the_rom() {
+    use crate::session::FrameInput;
+    /// Mario placed so `$1CBA`'s exit probe (`x+16, y+28`) samples the
+    /// first `bell` cell; returns that cell's column and the camera's room.
+    fn at_goal(id: u8, rebuilt: bool, bell: u8) -> (usize, sml2_core::camera::Room) {
+        let mut session = crate::session::Session::new(SessionAssets::load().unwrap());
+        session.expanded_levels = rebuilt;
+        session.set_view((399, 180));
+        session.begin_level(id, 0).unwrap();
+        let crate::session::SessionState::InLevel(ctx) = &mut session.state else {
+            unreachable!()
+        };
+        let wide = ctx.layout_live.world.cells_wide();
+        let i = ctx
+            .layout_live
+            .cells
+            .iter()
+            .position(|&c| c == bell)
+            .unwrap();
+        let (col, row) = (i % wide, i / wide);
+        let (x, y) = ((col * 16 - 8) as u16, (row * 16 - 12) as u16);
+        (ctx.sim.x, ctx.sim.y, ctx.cam.x, ctx.cam.y) = (x, y, x, y);
+        ctx.cam.prev_mario_y_lo = y as u8;
+        ctx.cam.update_enables(x);
+        for _ in 0..4 {
+            session.advance(FrameInput::default());
+        }
+        let crate::session::SessionState::InLevel(ctx) = &session.state else {
+            panic!("left the level")
+        };
+        (col, ctx.cam.room())
+    }
+    let assets = SessionAssets::load().unwrap();
+    let mut goals = 0;
+    for recipe in assets.recipes.iter().filter(|r| r.open_camera) {
+        let id = recipe.level_id;
+        let rom = &assets.level(id).unwrap().layout.cells;
+        for bell in [0x4A, 0x4B].into_iter().filter(|b| rom.contains(b)) {
+            let (rom_col, rom_room) = at_goal(id, false, bell);
+            let (col, room) = at_goal(id, true, bell);
+            let shift = (col as i32 - rom_col as i32) * 16;
+            assert_eq!(
+                room.right as i32,
+                rom_room.right as i32 + shift,
+                "level {id} bell {bell:#X}: rebuilt room {:?}, ROM room {:?}",
+                room.bounds(),
+                rom_room.bounds()
+            );
+            goals += 1;
+        }
+    }
+    assert!(goals >= 4, "found {goals} goals");
+}

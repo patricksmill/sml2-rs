@@ -8,9 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- In widescreen and zoomed-out views, the camera stops at Pumpkin Zone 2's
-  goal (with Expanded levels on) instead of scrolling into the empty screens
-  past it.
+- In widescreen and zoomed-out views, rebuilt levels (Expanded levels on)
+  stop the camera at their goal, like the original, instead of scrolling
+  past it; Pumpkin Zone 2 showed the empty screens beyond its goal.
 - A save file that exists but can't be read, has the wrong size, or can't be
   resumed is no longer replaced by a blank save on the next save. The game
   explains the problem and saves nothing until the file is fixed or removed.
