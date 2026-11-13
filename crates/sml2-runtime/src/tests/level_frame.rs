@@ -51,6 +51,40 @@ fn diagnostic(ctx: LevelContext, frames: u64) -> PlayOutcome {
 }
 
 #[test]
+fn pumpkin_zone_2_jump_returns_to_the_starting_camera_height() {
+    use crate::session::FrameInput;
+    for rebuilt in [false, true] {
+        let mut session = Session::new(SessionAssets::load().unwrap());
+        session.expanded_levels = rebuilt;
+        session.begin_level(7, 0).unwrap();
+        for _ in 0..60 {
+            session.advance(FrameInput::default());
+        }
+        let SessionState::InLevel(ctx) = &session.state else {
+            panic!("expected level")
+        };
+        let start = (ctx.sim.y, ctx.cam.y);
+        for frame in 0..120 {
+            session.advance(FrameInput {
+                keys: PlayerKeys {
+                    a: frame < 16,
+                    ..Default::default()
+                },
+                div: 0,
+            });
+        }
+        let SessionState::InLevel(ctx) = &session.state else {
+            panic!("expected level")
+        };
+        assert_eq!(ctx.sim.y, start.0, "Mario lands on the same floor");
+        assert_eq!(
+            ctx.cam.y, start.1,
+            "rebuilt={rebuilt}: jump must not lower the resting camera"
+        );
+    }
+}
+
+#[test]
 fn native_pause_freezes_objects_on_the_following_frame_and_preserves_sfx() {
     let mut ctx = level();
     let phase = ctx.obj.phase;

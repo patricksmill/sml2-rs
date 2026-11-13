@@ -159,6 +159,11 @@ level needs four screen rows, so it cannot fit the ROM world.
      one fingerprint, `14fecf10e044917b`, covers vanilla and DX. Its DX palette
      triggers (pages 7 and 8) need no remap: the last one Mario passes before
      the room is page 8, the cave's own set.
+   - The surface (row 1, screens 0–12) keeps its bottom camera lock via
+     explicit recipe overrides. Opening that edge made a jump and landing
+     lower the resting camera by 39 pixels, exposing the rock below the floor.
+     The goal screen keeps its existing goal locks; the joined underground
+     pipe remains open.
    - Checked: Mario rides the joined pipe out of the moved cave mouth
      (column 189, row 59) with no scene running and reaches the `$4B` exit
      (`the_rebuilt_pumpkin_zone_2_secret_pipe_leads_to_the_secret_exit`).
