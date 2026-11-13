@@ -7,11 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.3.0] - 2026-11-12
+
+Extended scenery, a connected Pumpkin Zone 2, smoother room transitions, and in-game updates.
+
+### Added
+- Extended scenery for the introductory level and Pumpkin Zone 1–4.
+- Macro Zone 1–4 scenery, including its map and boss arena, verified in-game
+  by the maintainer.
+- Expanded Pumpkin Zone 2 joins its secret-pipe room and cave into one
+  connected layout, with separate scenery for the rebuilt map.
+- In-game update checks and verified downloads, plus Help and About menus.
+- Packaged Linux AppImage, Windows zip, and macOS app downloads with SHA-256
+  checksums.
+
 ### Fixed
+- Enlarged views blend across unlocked vertical room transitions, including
+  Macro Zone pipe descents.
+- Scenery Editor previews regional DX palettes correctly.
 - Walking out of Wario's Castle door with fewer than six coins no longer
   sends Mario straight back inside.
 - Mario is no longer cut off at the bottom while walking up to Wario's Castle
   door in widescreen and zoomed-out views.
+
+### Known issues
+- On some Linux/Wayland systems, fullscreen freezes rendering while audio
+  continues ([#1](https://github.com/patricksmill/sml2-rs/issues/1)).
+  This does not block this release. Run through XWayland as a workaround:
+  `env -u WAYLAND_DISPLAY -u WAYLAND_SOCKET ./AppRun` from an extracted
+  AppImage, or apply the same environment to the game executable.
 
 ## [v0.2.1] - 2026-11-02
 

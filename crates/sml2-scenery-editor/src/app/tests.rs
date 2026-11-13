@@ -25,6 +25,11 @@ pub(super) fn app() -> (EditorApp, Context, PathBuf) {
     let ctx = Context::default();
     let mut app = EditorApp::new(&ctx, options, Settings::default(), None);
     assert!(app.game.is_some(), "test requires extracted game data");
+    // Authoring tests start with an empty canvas, independent of release exports.
+    let assets = &mut app.game.as_mut().unwrap().session.assets;
+    let mut content = assets.level(0).unwrap().clone();
+    content.scenery = sml2_core::scenery::SceneryOverlay::empty();
+    assets.insert_level(0, content);
     app.editor = Default::default();
     app.screen = Screen::Home;
     (app, ctx, path)

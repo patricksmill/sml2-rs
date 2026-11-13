@@ -278,7 +278,9 @@ pub fn run_cli() -> Result<(), Box<dyn std::error::Error>> {
                     "title" => crate::session::Boot::Title,
                     "overworld" => crate::session::Boot::Overworld,
                     other => {
-                        return Err(format!("--boot must be title or overworld, got {other}").into());
+                        return Err(
+                            format!("--boot must be title or overworld, got {other}").into()
+                        );
                     }
                 };
             }

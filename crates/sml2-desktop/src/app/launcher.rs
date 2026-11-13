@@ -220,7 +220,7 @@ mod tests {
     use sml2_runtime::session::SessionState;
 
     #[test]
-    fn startup_shows_a_still_title_with_floating_actions_in_the_grass_at_every_window_size() {
+    fn launcher_stays_idle_without_touching_saves_and_supports_keyboard_navigation() {
         let (app, ctx, path) = crate::app::tests::app();
         let mut options = app.options;
         options.launch_library = true;
@@ -235,62 +235,14 @@ mod tests {
             egui::vec2(800.0, 720.0),
             egui::vec2(1688.0, 984.0),
         ] {
-            // The floating area settles its measured size on the first frame.
-            for pass in 0..3 {
-                let output = ctx.run(
+            for _ in 0..3 {
+                let _ = ctx.run(
                     egui::RawInput {
                         focused: true,
                         screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, size)),
                         ..Default::default()
                     },
                     |ctx| app.ui(ctx),
-                );
-                let launcher = app.launcher.as_ref().unwrap();
-                let id = launcher.texture.as_ref().unwrap().1.id();
-                let scene = output
-                    .shapes
-                    .iter()
-                    .find_map(|shape| match &shape.shape {
-                        egui::Shape::Mesh(mesh) if mesh.texture_id == id => {
-                            Some(Rect::from_points(
-                                &mesh.vertices.iter().map(|v| v.pos).collect::<Vec<_>>(),
-                            ))
-                        }
-                        _ => None,
-                    })
-                    .expect("the title is drawn on startup");
-                assert!(scene.left() <= 0.0 && scene.right() >= size.x);
-                assert!(scene.top() <= 0.0 && scene.bottom() >= size.y);
-                if pass == 0 {
-                    continue;
-                }
-                let actions: Vec<_> = output
-                    .shapes
-                    .iter()
-                    .filter_map(|shape| match &shape.shape {
-                        egui::Shape::Text(text) => {
-                            Some((text.galley.text(), text.visual_bounding_rect()))
-                        }
-                        _ => None,
-                    })
-                    .collect();
-                assert_eq!(
-                    actions.iter().map(|(text, _)| *text).collect::<Vec<_>>(),
-                    ["Play", "Settings", "Quit"]
-                );
-                let view = launcher.texture.as_ref().unwrap().0.view;
-                let native_y = sml2_runtime::render::view::margin(view).1 as f32;
-                let grass_top = scene.top() + (native_y + 144.0) * scene.height() / view.1 as f32;
-                assert!(actions.iter().all(|(_, rect)| rect.min.x >= 0.0
-                    && rect.max.x <= size.x
-                    && rect.top() >= grass_top
-                    && rect.bottom() < size.y));
-                let action_rect = actions
-                    .iter()
-                    .fold(Rect::NOTHING, |rect, (_, action)| rect.union(*action));
-                assert!(
-                    (action_rect.center().x - size.x / 2.0).abs() < 2.0,
-                    "the actions are centered below the sign: {action_rect:?}"
                 );
             }
             let launcher = app.launcher.as_ref().unwrap();

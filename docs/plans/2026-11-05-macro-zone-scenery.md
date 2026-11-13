@@ -1,6 +1,6 @@
 # Macro Zone scenery
 
-Scope confirmed: extend scenery to Macro Zone, continuing clockwise from Tree Zone. The user has painted all four levels, the map, and the boss arena; the six snapshots are registered for live review, not yet visually approved.
+Scope confirmed: extend scenery to Macro Zone, continuing clockwise from Tree Zone. The user has painted all four levels, the map, and the boss arena; all six snapshots are bundled and approved following the user's in-game verification for 0.3.0.
 
 ## Scope
 
@@ -24,6 +24,21 @@ Scope confirmed: extend scenery to Macro Zone, continuing clockwise from Tree Zo
 - Gameplay is unchanged; no expanded-level recipes are introduced.
 - Integration checks are executed and their actual results recorded when exports are integrated.
 
-## Next action
+## Status
 
-Inspect all six targets in the running desktop game, including scrolling, pipe-room transitions, regional palette changes, and the normal entrance to the boss arena. Use the existing F1 map/level warps to navigate. Further painting requires a fresh export and rebuild; approval follows the complete visual review.
+Visual review is complete, confirmed by the maintainer for 0.3.0. All six
+targets are bundled. Further painting requires a fresh export, rebuild, and
+visual approval; the existing approved scenes are not awaiting review.
+
+## 0.3.0 integration verification
+
+- `cargo test --workspace --locked --offline`: 2,289 passed, 24 ignored.
+- `cargo test --locked --offline -p sml2-desktop --no-default-features --lib`:
+  51 passed, 1 ignored.
+- `cargo fmt --all -- --check`: passed.
+- `bash captures/sweep.sh`: exited successfully with `gate done`; the gate
+  still reports replay mismatches, so this is not an emulator-exactness claim.
+- Runtime level 20 ran for 120 headless frames with `unported=[]`; the
+  bundled map/session also ran for 120 headless frames successfully.
+- Strict all-target workspace Clippy did not pass: existing test lint debt
+  spans core, extraction, and DX. This preparation does not resolve that debt.

@@ -8,6 +8,10 @@ use std::collections::BTreeSet;
 /// `(0, include_str!("../../../../assets/scenery/scenery-00.json")),`
 /// Keep this empty until scenery is explicitly selected for release.
 pub(super) const LEVELS: &[(u8, &str)] = &[
+    (
+        0,
+        include_str!("../../../../assets/scenery/scenery-00.json"),
+    ),
     // Tree Zone 1.
     (
         1,
@@ -22,6 +26,22 @@ pub(super) const LEVELS: &[(u8, &str)] = &[
     (
         5,
         include_str!("../../../../assets/scenery/scenery-05.json"),
+    ),
+    (
+        6,
+        include_str!("../../../../assets/scenery/scenery-06.json"),
+    ),
+    (
+        7,
+        include_str!("../../../../assets/scenery/scenery-07.json"),
+    ),
+    (
+        8,
+        include_str!("../../../../assets/scenery/scenery-08.json"),
+    ),
+    (
+        9,
+        include_str!("../../../../assets/scenery/scenery-09.json"),
     ),
     // Level 29, Tree Zone's bonus level (node 38 on map screen 2).
     (
@@ -59,6 +79,11 @@ pub(super) const EXPANDED: &[(u8, &str)] = &[
     (
         3,
         include_str!("../../../../assets/scenery/scenery-03-expanded.json"),
+    ),
+    // Pumpkin Zone 2, rebuilt by `assets/expanded/pumpkin-zone-2.json`.
+    (
+        7,
+        include_str!("../../../../assets/scenery/scenery-07-expanded.json"),
     ),
 ];
 

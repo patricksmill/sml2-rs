@@ -48,18 +48,25 @@ Both the desktop game and CLI load these registries through `SessionAssets`.
 Malformed files, repeated level registrations, and invalid metatile references
 are startup errors. Gameplay never reopens scenery files.
 
-## Macro Zone live review
+Levels 00 and 06–09 are bundled from the authored `scenery-00.json` and
+`scenery-06.json` through `scenery-09.json` exports. Further editor changes
+require a fresh export and rebuild.
+
+Expanded level 07 (Pumpkin Zone 2) bundles `scenery-07-expanded.json` in its
+rebuilt map's cells, separately from its original-layout scenery.
+
+## Macro Zone approval
 
 Macro Zone 1–4 (`scenery-20.json` through `scenery-23.json`), its map
 (`scenery-map-03.json`), and its boss arena (`scenery-arena-23-04.json`) are
-registered together for in-game visual review. These are snapshots of authored
-drafts; further editor changes need a fresh export and rebuild.
+bundled and visually approved by the maintainer following in-game verification
+for 0.3.0. Further editor changes need a fresh export, rebuild, and review.
 
 In the desktop game, press **F1**, then **Macro** to enter its map. Use the
 level picker and **Enter level** to jump to levels 20–23. Play level 23 through
 to its boss to review the arena in the normal transition. **F2** pauses and
 **F3** advances one tick for inspecting motion or palette transitions.
 
-Review the complete levels, pipe rooms, map, and boss arena in enlarged native
-and DX views before treating the scenery as visually approved. Successful
-loading and a few rendered frames alone do not establish complete coverage.
+The maintainer's in-game review satisfies the visual approval gate for these
+six bundled targets. Successful loading alone is not a substitute for visual
+review of future scenery changes.

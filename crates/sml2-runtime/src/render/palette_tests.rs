@@ -76,6 +76,7 @@ fn session_palette_level_composes_player_objects_boss_hud_priority_and_resets_so
     let SessionState::InLevel(ctx) = &mut session.state else {
         unreachable!()
     };
+    ctx.scenery = sml2_core::scenery::SceneryOverlay::empty();
     ctx.cam.x = 80;
     ctx.cam.y = 72;
     ctx.manifest.header.palettes[0] = 0xE4;

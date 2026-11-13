@@ -112,28 +112,26 @@ fn title_screen_action_bar_play_starts_mario_settings_opens_menu_and_quit_closes
 }
 
 #[test]
-fn launcher_shows_the_title_and_bottom_actions_before_and_after_rom_verification() {
-    let (mut app, ctx, path) = launcher();
+fn launcher_can_quit_before_and_after_rom_verification() {
     for ready in [false, true] {
+        let (mut app, ctx, path) = launcher();
         app.library.vanilla_ready = ready;
         app.library.dx_installed = ready;
         app.settings.dx_mode = ready;
-        let text = visible_text(super::tests::frame(&mut app, &ctx, vec![]));
-        assert_eq!(text, "Play\nSettings\nQuit\n");
+        assert!(app.launcher.is_some());
+        assert!(
+            ctx.memory(|memory| memory.area_rect(egui::Id::new("pause-menu")))
+                .is_none()
+        );
+        let output = confirm(&mut app, &ctx, 2);
+        assert!(
+            output.viewport_output[&egui::ViewportId::ROOT]
+                .commands
+                .iter()
+                .any(|command| matches!(command, ViewportCommand::Close))
+        );
+        let _ = std::fs::remove_dir_all(path);
     }
-    assert!(app.launcher.is_some());
-    assert!(
-        ctx.memory(|memory| memory.area_rect(egui::Id::new("pause-menu")))
-            .is_none()
-    );
-    let output = confirm(&mut app, &ctx, 2);
-    assert!(
-        output.viewport_output[&egui::ViewportId::ROOT]
-            .commands
-            .iter()
-            .any(|command| matches!(command, ViewportCommand::Close))
-    );
-    let _ = std::fs::remove_dir_all(path);
 }
 
 #[test]

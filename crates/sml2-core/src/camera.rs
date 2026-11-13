@@ -1504,7 +1504,11 @@ mod tests {
         };
         // sx = 0 - $B0 + $60 = -$50, which wraps to the byte $B0.
         assert_eq!(at_end_lock(true, 0x0000), 0, "left of the wide view");
-        assert_eq!(at_end_lock(true, 0x00F5), 1, "the real right edge still fires");
+        assert_eq!(
+            at_end_lock(true, 0x00F5),
+            1,
+            "the real right edge still fires"
+        );
         assert_eq!(at_end_lock(false, 0x0000), 1, "native reads the ROM byte");
     }
 

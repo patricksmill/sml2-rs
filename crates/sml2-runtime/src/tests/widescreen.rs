@@ -78,6 +78,10 @@ fn enlarged_views_keep_terrain_and_sprites_aligned_at_every_level_edge() {
 #[test]
 fn scenery_outside_the_level_is_hidden_by_the_bounded_camera() {
     let mut session = level(0);
+    let SessionState::InLevel(ctx) = &mut session.state else {
+        unreachable!()
+    };
+    ctx.scenery = SceneryOverlay::empty();
     let native = session.render_frame(NATIVE);
     let view = (384, 216);
     let plain = session.render_frame(view);
