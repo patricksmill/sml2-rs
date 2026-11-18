@@ -118,9 +118,9 @@ impl EditorApp {
                         assets.level(id).ok().map(|content| {
                             let rebuilt =
                                 expanded && matches!(assets.expanded_level(content), Some(Ok(_)));
-                            let file = &content.manifest.graphics.file;
+                            let name = sml2_runtime::scene_scenery::level_name(id);
                             let suffix = if rebuilt { " · expanded" } else { "" };
-                            (id, format!("{id:02} · {file}{suffix}"))
+                            (id, format!("{id:02} · {name}{suffix}"))
                         })
                     })
                     .collect();

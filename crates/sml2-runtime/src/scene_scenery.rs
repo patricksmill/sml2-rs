@@ -63,6 +63,31 @@ impl SceneTarget {
     }
 }
 
+/// A level ID's player-facing name, from the map node that opens it and the
+/// node band's screen owner. Secret levels borrow other zones' tilesets
+/// (level 30 uses Tree Zone 5's), so tileset names can't stand in for these.
+pub fn level_name(id: u8) -> String {
+    match id {
+        0 => "Introduction".into(),
+        1..=5 => format!("Tree Zone {id}"),
+        6..=9 => format!("Pumpkin Zone {}", id - 5),
+        10..=13 => format!("Mario Zone {}", id - 9),
+        14..=16 => format!("Turtle Zone {}", id - 13),
+        17 => "Hippo (overworld)".into(),
+        18 | 19 => format!("Space Zone {}", id - 17),
+        20..=23 => format!("Macro Zone {}", id - 19),
+        24 => "Wario's Castle".into(),
+        25 => "Overworld secret 1".into(),
+        26 => "Overworld secret 2".into(),
+        27 => "Pumpkin Zone secret 1".into(),
+        28 => "Space Zone secret".into(),
+        29 => "Tree Zone secret".into(),
+        30 => "Macro Zone secret".into(),
+        31 => "Pumpkin Zone secret 2".into(),
+        _ => format!("Level {id}"),
+    }
+}
+
 /// Approved fixed-scene exports. Register only files reviewed for release:
 /// `(SceneTarget::Map(9), include_str!("../../../assets/scenery/scenery-map-09.json"))`.
 /// Local authoring drafts are deliberately absent from this registry.

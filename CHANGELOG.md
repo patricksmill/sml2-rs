@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   zoomed-out views.
 
 ### Changed
+- Scenery Editor lists levels by zone and number (such as Macro Zone secret)
+  instead of their tileset name, which misnamed secret levels that borrow
+  another zone's graphics.
 - Settings is a wider two-pane dialog: the right pane explains the hovered or
   selected setting, with live previews for the status bar, widescreen, camera
   zoom, palette filter and integer scaling.
