@@ -939,6 +939,36 @@ fn minigame_surrounds_use_room_color_instead_of_unused_map_columns() {
 }
 
 #[test]
+fn map_return_flash_covers_the_enlarged_surround() {
+    let bundle = synthetic_bundle();
+    let mut game = session();
+    game.debug_warp_map(3, 0).unwrap();
+    game.set_scene_scenery(
+        sml2_runtime::scene_scenery::SceneTarget::Map(3),
+        Default::default(),
+    )
+    .unwrap();
+    let view = (384, 216);
+    for (frame, shade, rgb) in [
+        (20, 0, 255),
+        (23, 0, 247),
+        (26, 1, 165),
+        (29, 2, 82),
+        (32, 3, 0),
+    ] {
+        game.map_pan_return = Some(sml2_runtime::session::MapPanReturn { frame });
+        let native = game.render_frame(view);
+        let palette = game.render_palette_frame(view);
+        let dx = game.render_dx_frame(&bundle, Mario, view).unwrap();
+        for corner in [0, view.0 - 1, view.0 * (view.1 - 1), native.len() - 1] {
+            assert_eq!(native[corner], 255 - shade * 85, "native frame {frame}");
+            assert_eq!(palette[corner].shade, shade, "palette frame {frame}");
+            assert_eq!(dx[corner], [rgb; 3], "DX frame {frame}");
+        }
+    }
+}
+
+#[test]
 fn castle_reveal_and_game_over_use_their_own_dx_palettes() {
     let mut bundle = synthetic_bundle();
     for bank in [0x05, 0x0c, 0x26, 0x27] {

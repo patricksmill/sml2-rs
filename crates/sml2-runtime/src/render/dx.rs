@@ -381,7 +381,13 @@ impl Session {
             _ => &colors.bg_palettes,
         };
         let player = usize::from(character == Character::Luigi);
-        let mut bg_palettes = bg_palettes.to_vec();
+        let mut bg_palette_bytes = Vec::with_capacity(bg_palettes.len() + 2);
+        bg_palette_bytes.extend_from_slice(bg_palettes);
+        let mut bg_palettes = bg_palette_bytes;
+        // The extended surround is a scene color too: fade its black
+        // alongside the hardware palettes, then remove it before decoding.
+        let surround_offset = bg_palettes.len();
+        bg_palettes.extend_from_slice(&[0, 0]);
         let mut obj_palettes = colors.obj_palettes[player].clone();
         if let Some(transition) = &self.pending_level {
             bg_palettes = crate::session::dx_effects::map_exit(&bg_palettes, transition.frame, 9);
@@ -405,6 +411,11 @@ impl Session {
             bg_palettes = crate::session::dx_effects::white(bg_palettes.len());
             obj_palettes = crate::session::dx_effects::white(obj_palettes.len());
         }
+        let faded_black = sml2_core::hardware_palettes::rgb555(u16::from_le_bytes([
+            bg_palettes[surround_offset],
+            bg_palettes[surround_offset + 1],
+        ]));
+        bg_palettes.truncate(surround_offset);
         let palettes =
             CgbPalettes::from_bytes(&bg_palettes, &obj_palettes).map_err(|e| e.to_string())?;
         let space_path =
@@ -451,7 +462,7 @@ impl Session {
                 bg_palettes[offset + 1],
             ]))
         } else {
-            [0, 0, 0]
+            faded_black
         };
         self.overworld_view(map_sim, view, surround, |sim, size, layer| {
             let wave = self

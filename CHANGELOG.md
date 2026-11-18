@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selected setting, with live previews for the status bar, widescreen, camera
   zoom, palette filter and integer scaling.
 
+### Fixed
+- Map transition flashes now cover the full widescreen or zoomed-out view,
+  including the black surround, in both original and DX colors.
+
 ## [v0.3.1] - 2026-11-13
 
 Safer saves, simpler ROM import, and Pumpkin Zone 2 camera fixes.

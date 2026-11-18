@@ -192,11 +192,20 @@ impl Session {
             }
             SessionState::Overworld(map_sim) => {
                 let map_sim = self.shown_map(map_sim);
-                let surround = if (9..=14).contains(&map_sim.screen_id) {
-                    output.blank(0)
+                let surround_shade = if (9..=14).contains(&map_sim.screen_id) {
+                    0
                 } else {
-                    fill
+                    3
                 };
+                let surround_palette = self.map_pan_return.as_ref().map_or_else(
+                    || {
+                        self.pending_level
+                            .as_ref()
+                            .map_or(0xE4, |t| map_entry_palettes(t.frame, (0xE4, 0, 0)).0)
+                    },
+                    |pan| pan.palettes().0,
+                );
+                let surround = output.blank((surround_palette >> (surround_shade * 2)) & 3);
                 self.overworld_view(map_sim, view, surround, |sim, (w, h), layer| {
                     let assets = MapAssets {
                         tilemaps: &self.assets.overworld_tilemaps,
