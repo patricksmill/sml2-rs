@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Scenery around the Pumpkin Zone map and boss arena in widescreen and
+  zoomed-out views.
+
 ### Changed
 - Settings is a wider two-pane dialog: the right pane explains the hovered or
   selected setting, with live previews for the status bar, widescreen, camera

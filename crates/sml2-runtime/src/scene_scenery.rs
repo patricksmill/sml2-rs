@@ -72,6 +72,15 @@ const BUNDLED: &[(SceneTarget, &str)] = &[
         SceneTarget::Arena { level: 5, gfx: 0 },
         include_str!("../../../assets/scenery/scenery-arena-05-00.json"),
     ),
+    // Pumpkin Zone map and boss arena.
+    (
+        SceneTarget::Map(1),
+        include_str!("../../../assets/scenery/scenery-map-01.json"),
+    ),
+    (
+        SceneTarget::Arena { level: 9, gfx: 2 },
+        include_str!("../../../assets/scenery/scenery-arena-09-02.json"),
+    ),
     // Tree Zone map: a leaf scatter made only of the picture's own cells.
     (
         SceneTarget::Map(2),
