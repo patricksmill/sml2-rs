@@ -55,6 +55,9 @@ require a fresh export and rebuild.
 Expanded level 07 (Pumpkin Zone 2) bundles `scenery-07-expanded.json` in its
 rebuilt map's cells, separately from its original-layout scenery.
 
+Expanded level 10 (Mario Zone 1) bundles `scenery-10-expanded.json`, which
+fills the rebuilt map's outer sky and margins with blocks (metatile 24).
+
 ## Macro Zone approval
 
 Macro Zone 1–4 (`scenery-20.json` through `scenery-23.json`), its map

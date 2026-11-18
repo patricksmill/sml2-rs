@@ -85,6 +85,11 @@ pub(super) const EXPANDED: &[(u8, &str)] = &[
         7,
         include_str!("../../../../assets/scenery/scenery-07-expanded.json"),
     ),
+    // Mario Zone 1, rebuilt by `assets/expanded/mario-zone-1.json`.
+    (
+        10,
+        include_str!("../../../../assets/scenery/scenery-10-expanded.json"),
+    ),
 ];
 
 pub(super) fn apply(assets: &mut SessionAssets, entries: &[(u8, &str)]) -> Result<(), String> {
