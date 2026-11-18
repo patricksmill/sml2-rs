@@ -79,6 +79,10 @@ pub fn run(options: Options) -> Result<(), String> {
         eframe::NativeOptions {
             viewport,
             renderer: eframe::Renderer::Wgpu,
+            wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
+                on_surface_error: std::sync::Arc::new(surface_error_action),
+                ..Default::default()
+            },
             ..Default::default()
         },
         Box::new(move |cc| {
@@ -92,6 +96,52 @@ pub fn run(options: Options) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     let error = result.lock().map_err(|e| e.to_string())?.take();
     error.map_or(Ok(()), Err)
+}
+
+/// egui-wgpu's default drops the frame on every acquire error and rebuilds the
+/// swapchain only when the window size changes. On Linux an out-of-date or lost
+/// swapchain must be rebuilt here: a window that starts fullscreen never
+/// resizes, so it would drop every frame (issue #1), and each dropped frame
+/// leaks the textures egui uploaded before acquiring. Windows reports
+/// `Outdated` constantly while minimized at 0×0, where a rebuild at the last
+/// size would fail, so it keeps skipping.
+fn recreates_surface(error: &eframe::wgpu::SurfaceError, linux: bool) -> bool {
+    use eframe::wgpu::SurfaceError;
+    linux && matches!(error, SurfaceError::Outdated | SurfaceError::Lost)
+}
+
+fn surface_error_action(
+    error: eframe::wgpu::SurfaceError,
+) -> eframe::egui_wgpu::SurfaceErrorAction {
+    use eframe::egui_wgpu::SurfaceErrorAction;
+    use eframe::wgpu::SurfaceError;
+    use std::sync::atomic::{AtomicU8, Ordering};
+
+    let recreate = recreates_surface(&error, cfg!(target_os = "linux"));
+    // Report each kind once: no logger is installed, and this is the only
+    // evidence a user can paste from a dropped-frame report.
+    static REPORTED: AtomicU8 = AtomicU8::new(0);
+    let bit = 1
+        << match error {
+            SurfaceError::Timeout => 0,
+            SurfaceError::Outdated => 1,
+            SurfaceError::Lost => 2,
+            SurfaceError::OutOfMemory => 3,
+            SurfaceError::Other => 4,
+        };
+    if REPORTED.fetch_or(bit, Ordering::Relaxed) & bit == 0 {
+        let action = if recreate {
+            "rebuilding the surface"
+        } else {
+            "skipping the frame"
+        };
+        eprintln!("note: graphics frame dropped ({error}); {action}");
+    }
+    if recreate {
+        SurfaceErrorAction::RecreateSurface
+    } else {
+        SurfaceErrorAction::SkipFrame
+    }
 }
 
 /// winit gives Windows eframe's icon as the small (title bar) icon only; the
@@ -138,7 +188,24 @@ fn set_taskbar_icon(cc: &eframe::CreationContext<'_>) {
 
 #[cfg(test)]
 mod tests {
-    use super::Options;
+    use super::{Options, recreates_surface};
+    use eframe::wgpu::SurfaceError;
+
+    #[test]
+    fn linux_rebuilds_a_stale_swapchain_instead_of_dropping_frames_forever() {
+        for error in [SurfaceError::Outdated, SurfaceError::Lost] {
+            assert!(recreates_surface(&error, true));
+            // Minimized Windows windows report Outdated at 0x0.
+            assert!(!recreates_surface(&error, false));
+        }
+        for error in [
+            SurfaceError::Timeout,
+            SurfaceError::OutOfMemory,
+            SurfaceError::Other,
+        ] {
+            assert!(!recreates_surface(&error, true));
+        }
+    }
 
     #[test]
     fn launch_opens_the_in_game_title_directly() {
