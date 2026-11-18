@@ -12,6 +12,8 @@ pub(super) const RECIPES: &[&str] = &[
     include_str!("../../../../assets/expanded/tree-zone-3.json"),
     // Pumpkin Zone 2: the secret pipe joins its cave (vanilla and DX share its layout).
     include_str!("../../../../assets/expanded/pumpkin-zone-2.json"),
+    // Mario Zone 1: the shaft's pipe joins the bottom room (vanilla and DX share its layout).
+    include_str!("../../../../assets/expanded/mario-zone-1.json"),
 ];
 
 pub(super) fn parse(entries: &[&str]) -> Result<Vec<LevelRecipe>, String> {

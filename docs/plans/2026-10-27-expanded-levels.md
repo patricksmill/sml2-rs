@@ -174,6 +174,22 @@ level needs four screen rows, so it cannot fit the ROM world.
      on screen 13 and the world runs to 15
      (`open_camera_rebuilds_stop_at_every_goal_like_the_rom`,
      `the_rebuilt_pumpkin_zone_2_camera_stops_at_the_goal`).
+   - **Mario Zone 1 (ID 10) — complete.** The shaft's side pipe (row 0,
+     screen 1, mouth at column 30, rows 10-11) and the bottom room's (row 2,
+     screen 2, column 33, rows 42-43) are linked by scenes `$11` (`40 21`)
+     and `$12` (`40 02`). `assets/expanded/mario-zone-1.json` (16×5 screens)
+     moves screens 0-1 (the spawn room and shaft) down two screen rows, so
+     the mouths face each other across two wall cells, the same shape as the
+     ROM's own through-wall pipe at columns 95-98. No paint is needed; both
+     scenes are cleared and the camera opened. New and vacated cells are
+     blocks (metatile 24). DX changes 0 cells of this level and has no
+     palette triggers for it, so one fingerprint, `bd7df7eeef31bea9`, covers
+     vanilla and DX. The room's mouth sits above its floor, so normal play
+     only travels shaft to room.
+   - Checked: Mario comes out of the room's mouth exactly where the ROM puts
+     him, with no scene running, and starts two screen rows lower
+     (`the_rebuilt_mario_zone_1_shaft_pipe_joins_the_bottom_room`,
+     `the_rebuilt_mario_zone_1_starts_in_its_moved_spawn_room`).
 
 ## Inventory
 

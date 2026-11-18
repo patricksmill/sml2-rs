@@ -651,3 +651,98 @@ fn open_camera_rebuilds_stop_at_every_goal_like_the_rom() {
     }
     assert!(goals >= 4, "found {goals} goals");
 }
+
+/// Mario Zone 1 entered with expanded levels set to `rebuilt`, Mario and the
+/// camera placed at `at`, then `keys` held from frame 40 until he comes out
+/// of a side pipe. Returns his exit position and the scenes that ran.
+fn mario_zone_1_pipe(
+    rebuilt: bool,
+    at: ((u16, u16), (u16, u16)),
+    keys: sml2_core::player_sim::PlayerKeys,
+) -> ((u16, u16), Vec<u8>) {
+    use crate::session::FrameInput;
+    let mut session = crate::session::Session::new(SessionAssets::load().unwrap());
+    session.expanded_levels = rebuilt;
+    session.begin_level(10, 0).unwrap();
+    if rebuilt {
+        assert_eq!(level_world(&session), World::expanded(16, 5).unwrap());
+    }
+    let crate::session::SessionState::InLevel(ctx) = &mut session.state else {
+        unreachable!()
+    };
+    ((ctx.sim.x, ctx.sim.y), (ctx.cam.x, ctx.cam.y)) = at;
+    ctx.cam.update_enables(ctx.sim.x);
+    let mut scenes = Vec::new();
+    let mut entered = false;
+    for frame in 0..400 {
+        let keys = if frame >= 40 {
+            keys
+        } else {
+            Default::default()
+        };
+        session.advance(FrameInput { keys, div: 0 });
+        let crate::session::SessionState::InLevel(ctx) = &session.state else {
+            panic!("left the level")
+        };
+        if ctx.cam.scene_id != 0 {
+            scenes.push(ctx.cam.scene_id);
+        }
+        entered |= ctx.sim.pipe_dir != 0;
+        if entered && ctx.sim.pipe_dir == 0 {
+            return ((ctx.sim.x, ctx.sim.y), scenes);
+        }
+    }
+    panic!("Mario never came out of the pipe")
+}
+
+/// In the ROM, the shaft's side pipe (row 0, screen 1, mouth at column 30,
+/// rows 10-11) and the bottom room's (row 2, screen 2, column 33, rows 42-43)
+/// are linked by scenes `$11` (`40 21`) and `$12` (`40 02`). Rebuilt, the
+/// spawn room and shaft sit two screen rows lower, so the two mouths face each
+/// other across two wall cells like the ROM's own pipe at columns 95-98, and
+/// the side-pipe travel carries Mario through with no scene running. (The
+/// room's mouth sits above its floor, so normal play never enters it.)
+#[test]
+fn the_rebuilt_mario_zone_1_shaft_pipe_joins_the_bottom_room() {
+    let right = sml2_core::player_sim::PlayerKeys {
+        right: true,
+        ..Default::default()
+    };
+    // On the platform just left of the shaft's mouth.
+    let shaft = |dy: u16| ((0x1C0, 0x90 + dy), (0x1C8, 0xA0 + dy));
+    let (rom_exit, rom_scenes) = mario_zone_1_pipe(false, shaft(0), right);
+    assert!(
+        rom_scenes.contains(&0x11),
+        "the ROM teleports: {rom_scenes:?}"
+    );
+    let (exit, scenes) = mario_zone_1_pipe(true, shaft(0x200), right);
+    assert!(scenes.is_empty(), "no scene runs rebuilt: {scenes:?}");
+    // The bottom room did not move, so Mario comes out where the ROM puts him.
+    assert_eq!(exit, rom_exit);
+    assert_eq!(
+        (exit.0 >> 4, exit.1 >> 8),
+        (33, 2),
+        "out of the room's mouth"
+    );
+}
+
+/// The spawn room moved with the shaft: Mario starts and settles two screen
+/// rows lower than in the ROM, with the camera following.
+#[test]
+fn the_rebuilt_mario_zone_1_starts_in_its_moved_spawn_room() {
+    use crate::session::FrameInput;
+    let settle = |rebuilt: bool| {
+        let mut session = crate::session::Session::new(SessionAssets::load().unwrap());
+        session.expanded_levels = rebuilt;
+        session.begin_level(10, 0).unwrap();
+        for _ in 0..90 {
+            session.advance(FrameInput::default());
+        }
+        let crate::session::SessionState::InLevel(ctx) = &session.state else {
+            panic!("left the level")
+        };
+        ((ctx.sim.x, ctx.sim.y), ctx.cam.y)
+    };
+    let ((x, y), cam_y) = settle(false);
+    assert_eq!(settle(true), ((x, y + 0x200), cam_y + 0x200));
+}

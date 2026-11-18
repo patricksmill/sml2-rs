@@ -1,0 +1,15 @@
+{
+  "schema": "sml2-expanded-level/1",
+  "level_id": 10,
+  "sources": ["bd7df7eeef31bea9"],
+  "world": [16, 5],
+  "fill": 24,
+  "moves": [
+    { "from": [0, 0], "size": [32, 48], "to": [0, 32] }
+  ],
+  "screens": [
+    { "at": [1, 2], "scene": 0 },
+    { "at": [2, 2], "scene": 0 }
+  ],
+  "open_camera": true
+}
