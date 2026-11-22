@@ -51,8 +51,8 @@ fn groundwalker_init_preserves_unowned_bytes_and_maps_facing_for_unknown_states(
             expected[14] = 0x10;
             expected[18] = 0x4E;
             expected[15] = walk_state;
-            // Preserve the pre-pilot init's handling of unrelated flip bits.
-            expected[13] = (expected[13] & !0x20) | horizontal;
+            // ObjFaceMario ($5B3C6) writes the entire flip byte.
+            expected[13] = horizontal;
             expected[28] = 1;
             assert_eq!(run(slot, 1, player_x, &layout), (expected, facing));
         }

@@ -78,7 +78,7 @@ where
                 Ordering::Less | Ordering::Equal => (GroundWalkerState::WalkLeft, false),
             };
             actor.state = next_state;
-            actor.sprite_flip.set_horizontal(flip);
+            actor.sprite_flip = SpriteFlipFlags::from_bits(if flip { 0x20 } else { 0 });
             actor.pause_ticks = 1;
             GroundWalkerEffect::Initialized { facing }
         }

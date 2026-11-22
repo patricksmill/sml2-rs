@@ -49,9 +49,9 @@ Paced Walker follows the same pattern with its own state, movement budget,
 pause timer, and presentation fields. Shared sprite blinking takes only the
 sprite and cadence inputs, leaving unrelated actor fields at the boundary.
 
-These migrations preserve existing behavior: initialization changes only the
-horizontal flip bit. The source `$5B3C6` overwrites all flip bits; reconciling
-that inherited difference requires a separate behavior correction.
+Groundwalker initialization follows `$5B3C6` and writes the whole flip byte:
+`0x20` when Mario is to the right, otherwise zero. Paced Walker still updates
+only the horizontal bit during initialization.
 
 ## Verification and migration
 
