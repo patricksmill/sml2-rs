@@ -210,7 +210,7 @@ fn browser_selection_uses_existing_rom_validation_and_preserves_installation() {
     app.dx_worker = Some(Worker::choose_file(move || Some(rom)));
     wait_for_dx(&mut app);
     assert!(app.dx_picker.is_none());
-    assert!(app.dx_message.contains("Unsupported DX ROM"));
+    assert!(app.dx_message.contains("Unsupported DX ROM"), "{}", app.dx_message);
     assert_eq!(app.settings.dx_installation, Some(key));
     assert!(!path.join("save.sav").exists());
     let _ = std::fs::remove_dir_all(path);

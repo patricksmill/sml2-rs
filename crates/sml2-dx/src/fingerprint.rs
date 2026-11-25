@@ -17,6 +17,9 @@ fn fingerprint_with_limits(
     max_bytes: u64,
 ) -> Result<String, ImportError> {
     let bad = |s: &str| ImportError::InvalidBundle(s.into());
+    // The root the user named may be a link (a git worktree often links
+    // `extracted` to the main checkout); links inside it stay rejected.
+    let root = &fs::canonicalize(root)?;
     fn collect(
         root: &Path,
         dir: &Path,
@@ -139,6 +142,21 @@ mod tests {
         )
         .unwrap();
         assert!(base_fingerprint(root.path()).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fingerprint_follows_a_linked_root_to_the_same_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("extracted");
+        fs::create_dir_all(real.join("levels")).unwrap();
+        fs::write(real.join("levels/level01.manifest.json"), b"{}").unwrap();
+        let link = dir.path().join("linked");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        assert_eq!(
+            base_fingerprint(&link).unwrap(),
+            base_fingerprint(&real).unwrap()
+        );
     }
 
     #[test]
