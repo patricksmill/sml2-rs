@@ -1123,6 +1123,9 @@ impl Session {
     /// keeping its device, position and character. Returns whether a second
     /// player was actually promoted.
     pub fn drop_out_player_one(&mut self) -> bool {
+        if !self.local_multiplayer {
+            return false;
+        }
         let promoted = match &mut self.state {
             SessionState::InLevel(ctx) => ctx.promote_second_player(),
             _ => true,
@@ -1243,6 +1246,11 @@ impl Session {
                 self.prev_select2 = keys2.select;
                 (a, b, start, select)
             } else {
+                // Forget held keys so a rejoining Player 2's first press counts.
+                self.prev_a2 = false;
+                self.prev_b2 = false;
+                self.prev_start2 = false;
+                self.prev_select2 = false;
                 (false, false, false, false)
             };
 
@@ -1741,23 +1749,33 @@ impl Session {
                 if let Some(second) = ctx.second.as_mut() {
                     let sim2 = &mut second.sim;
                     if sim2.sfx0 != 0 {
-                        self.sound_driver.sfx_request_0 = sim2.sfx0;
+                        if self.sound_driver.sfx_request_0 == 0 {
+                            self.sound_driver.sfx_request_0 = sim2.sfx0;
+                        }
                         sim2.sfx0 = 0;
                     }
                     if sim2.sfx1 != 0 {
-                        self.sound_driver.sfx_request_1 = sim2.sfx1;
+                        if self.sound_driver.sfx_request_1 == 0 {
+                            self.sound_driver.sfx_request_1 = sim2.sfx1;
+                        }
                         sim2.sfx1 = 0;
                     }
                     if sim2.sfx2 != 0 {
-                        self.sound_driver.sfx_request_2 = sim2.sfx2;
+                        if self.sound_driver.sfx_request_2 == 0 {
+                            self.sound_driver.sfx_request_2 = sim2.sfx2;
+                        }
                         sim2.sfx2 = 0;
                     }
                     if sim2.music_request != 0 {
-                        self.sound_driver.music_request = sim2.music_request;
+                        if self.sound_driver.music_request == 0 {
+                            self.sound_driver.music_request = sim2.music_request;
+                        }
                         sim2.music_request = 0;
                     }
                     if sim2.sound_mode != 0 {
-                        self.sound_driver.sound_mode = sim2.sound_mode;
+                        if self.sound_driver.sound_mode == 0 {
+                            self.sound_driver.sound_mode = sim2.sound_mode;
+                        }
                         sim2.sound_mode = 0;
                     }
                     self.sound_driver.low_time_flag |= sim2.low_time_flag != 0;

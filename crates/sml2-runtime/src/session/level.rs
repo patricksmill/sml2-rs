@@ -27,8 +27,6 @@ pub struct TwoPlayerFrameInput {
 pub struct CoopFrameResult {
     /// Both players are out of play: restart the level's entry checkpoint.
     pub restart_checkpoint: bool,
-    /// The shared lives are exhausted; enter the GAME OVER screen.
-    pub game_over: bool,
 }
 
 /// The second local player inside a live level. Its `PlayerSim` is a full
@@ -1011,7 +1009,6 @@ impl LevelContext {
         }
         CoopFrameResult {
             restart_checkpoint: wiped,
-            game_over: false,
         }
     }
 
