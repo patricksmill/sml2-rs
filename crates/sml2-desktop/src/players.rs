@@ -169,22 +169,21 @@ impl Players {
                 self.p2_absent = false;
                 Some(DropOut::PlayerTwo)
             }
-            Some(device) if device == p1 => {
-                self.p1 = Some(p2);
-                self.p1_absent = self.p2_absent;
-                self.p2 = None;
-                self.p2_absent = false;
-                Some(DropOut::PlayerOnePromoted)
-            }
-            None => {
-                self.p1 = Some(p2);
-                self.p1_absent = self.p2_absent;
-                self.p2 = None;
-                self.p2_absent = false;
-                Some(DropOut::PlayerOnePromoted)
-            }
+            Some(device) if device == p1 => Some(self.promote_player_two(p2)),
+            None => Some(self.promote_player_two(p2)),
             Some(_) => None,
         }
+    }
+
+    /// Player 1 left: Player 2's device becomes Player 1. A Player 2 whose pad
+    /// vanished mid-level takes the keyboard, which Player 1's departure
+    /// always frees, instead of waiting on a reconnect nobody can dismiss.
+    fn promote_player_two(&mut self, p2: Device) -> DropOut {
+        self.p1 = Some(if self.p2_absent { Device::Keyboard } else { p2 });
+        self.p1_absent = false;
+        self.p2 = None;
+        self.p2_absent = false;
+        DropOut::PlayerOnePromoted
     }
 
     /// Back on the map after Player 2's pad vanished in a level: remove the
@@ -406,6 +405,23 @@ mod tests {
         p.join(Device::Pad(1));
         p.disconnect(Device::Pad(1), true);
         assert_eq!(p.remove_absent_player_two(), Some(Device::Pad(1)));
+        assert!(!p.two_players());
+    }
+
+    #[test]
+    fn dropping_player_one_while_player_twos_pad_is_gone_hands_over_the_keyboard() {
+        let mut p = players();
+        p.connect(Device::Pad(1));
+        p.connect(Device::Pad(2));
+        p.claim_player_one(Device::Pad(1));
+        p.join(Device::Pad(2));
+        p.disconnect(Device::Pad(2), true);
+        assert_eq!(
+            p.drop_out(Some(Device::Pad(1))),
+            Some(DropOut::PlayerOnePromoted)
+        );
+        assert!(!p.player_one_needs_reconnect(), "the keyboard is free");
+        assert_eq!(p.player_one(), Some(Device::Keyboard));
         assert!(!p.two_players());
     }
 
